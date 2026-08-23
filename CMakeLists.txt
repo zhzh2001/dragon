@@ -15,9 +15,13 @@ include(cmake/imgui.cmake)
 
 add_executable(dragon
   src/main.cpp
+  src/app.cpp
+  src/core/input.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp
   src/gfx/buffer.cpp
+  src/gfx/debug_draw.cpp
+  src/game/debug_camera.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -39,3 +43,9 @@ add_executable(test_math tests/test_math.cpp)
 target_include_directories(test_math PRIVATE src)
 target_compile_options(test_math PRIVATE -Wall -Wextra)
 add_test(NAME math COMMAND test_math)
+
+add_executable(test_camera tests/test_camera.cpp src/game/debug_camera.cpp src/core/input.cpp)
+target_include_directories(test_camera PRIVATE src)
+target_link_libraries(test_camera PRIVATE SDL3::SDL3)
+target_compile_options(test_camera PRIVATE -Wall -Wextra)
+add_test(NAME camera COMMAND test_camera)

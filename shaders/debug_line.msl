@@ -11,16 +11,14 @@ struct VertexOut {
     float3 color;
 };
 
-// Must match gfx::TriangleUniforms in main.cpp.
 struct Uniforms {
     float4x4 view_proj;
-    float4x4 model;
 };
 
 vertex VertexOut vs_main(VertexIn in [[stage_in]],
                          constant Uniforms& u [[buffer(0)]]) {
     VertexOut out;
-    out.clip_position = u.view_proj * (u.model * float4(in.position, 1.0));
+    out.clip_position = u.view_proj * float4(in.position, 1.0);
     out.color = in.color;
     return out;
 }
