@@ -1,0 +1,390 @@
+#include "game/flight.h"
+
+#include <SDL3/SDL_iostream.h>
+#include <SDL3/SDL_stdinc.h>
+
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+#include "core/log.h"
+#include "game/terrain.h"
+
+using core::Quat;
+using core::Vec3;
+
+namespace game {
+
+void FlightModel::reset(Vec3 position, Quat orientation, float airspeed) {
+    state_ = FlightState();
+    state_.position = position;
+    state_.orientation = core::normalize(orientation);
+    state_.velocity = core::quat_forward(state_.orientation) * airspeed;
+
+    // Derived telemetry has to be consistent immediately, not only after the
+    // first update. Otherwise anything that samples the state on the spawn frame
+    // -- the HUD, a test, a camera snap -- reads zeroes.
+    state_.airspeed = airspeed;
+    state_.climb_rate = state_.velocity.y;
+    state_.specific_energy =
+        position.y + core::length_sq(state_.velocity) / (2.0f * core::maxf(tuning.gravity, 0.01f));
+    state_.g_load = 1.0f;
+}
+
+void FlightModel::update(const FlightInput& input, const Terrain* terrain, float dt) {
+    if (dt <= 0.0f) return;
+
+    // Smooth the raw input. Control lag is what separates a dragon from a
+    // cursor: the body has inertia and the wings take time to bite.
+    state_.control.x = core::damp(state_.control.x, core::clampf(input.pitch, -1.0f, 1.0f),
+                                 tuning.control_lag, dt);
+    state_.control.y = core::damp(state_.control.y, core::clampf(input.yaw, -1.0f, 1.0f),
+                                 tuning.control_lag, dt);
+    state_.control.z = core::damp(state_.control.z, core::clampf(input.roll, -1.0f, 1.0f),
+                                 tuning.control_lag, dt);
+    state_.wing_tuck = core::damp(state_.wing_tuck, core::saturate(input.tuck), 0.12f, dt);
+    state_.wing_brake = core::damp(state_.wing_brake, core::saturate(input.brake), 0.10f, dt);
+
+    integrate_rotation(input, dt);
+    integrate_forces(input, dt);
+
+    state_.position += state_.velocity * dt;
+    resolve_ground(terrain, dt);
+
+    // Telemetry that only depends on the final state.
+    state_.climb_rate = state_.velocity.y;
+    state_.specific_energy =
+        state_.position.y + core::length_sq(state_.velocity) / (2.0f * tuning.gravity);
+    if (terrain) state_.ground_clearance = terrain->clearance_at(state_.position);
+}
+
+void FlightModel::integrate_forces(const FlightInput& input, float dt) {
+    const Vec3 forward = state_.forward();
+    const Vec3 up = state_.up();
+    const Vec3 right = state_.right();
+
+    const float airspeed = core::length(state_.velocity);
+    state_.airspeed = airspeed;
+
+    // Relative wind in body axes. Below a threshold there is no meaningful
+    // airflow, so aerodynamic forces vanish rather than producing garbage
+    // angles from a near-zero vector.
+    const bool has_airflow = airspeed > 0.5f;
+    const Vec3 flow = has_airflow ? state_.velocity / airspeed : forward;
+
+    const float along = core::dot(flow, forward);
+    const float vertical = core::dot(flow, up);
+    const float lateral = core::dot(flow, right);
+
+    // Positive angle of attack means the wind arrives from below the wing.
+    state_.angle_of_attack = has_airflow ? std::atan2(-vertical, along) : 0.0f;
+    state_.sideslip = has_airflow ? std::atan2(lateral, along) : 0.0f;
+
+    const float stall_angle = core::radians(tuning.stall_angle_deg);
+    const float aoa = state_.angle_of_attack;
+    const float aoa_abs = std::fabs(aoa);
+    state_.stalling = has_airflow && aoa_abs > stall_angle;
+
+    // Lift curve: linear to the stall angle, then collapsing to a fraction.
+    // Real wings do roughly this, and the shape is what makes a stall feel like
+    // losing the air rather than hitting a wall.
+    float lift_coefficient =
+        core::clampf(aoa / stall_angle, -1.0f, 1.0f) * tuning.lift_coefficient_max;
+    const float stall_falloff =
+        core::smoothstep(stall_angle, stall_angle * 2.1f, aoa_abs);
+    lift_coefficient *= core::lerpf(1.0f, tuning.post_stall_lift, stall_falloff);
+
+    // Wing configuration. Tucking sheds lift and drag together; braking flares
+    // for the opposite trade.
+    const float tuck = state_.wing_tuck;
+    const float brake = state_.wing_brake;
+    lift_coefficient *= (1.0f - tuck * tuning.tuck_lift_loss) * (1.0f + brake * tuning.brake_lift_gain);
+
+    // Dynamic pressure times area: the scale of every aerodynamic force.
+    const float q_area = 0.5f * tuning.air_density * airspeed * airspeed * tuning.wing_area;
+
+    float drag_coefficient = tuning.parasitic_drag +
+                             tuning.induced_drag_factor * lift_coefficient * lift_coefficient;
+    drag_coefficient *= (1.0f - tuck * tuning.tuck_drag_loss);
+    drag_coefficient *= (1.0f + brake * tuning.brake_drag_gain);
+
+    // Lift acts perpendicular to the relative wind, in the body's plane of
+    // symmetry -- not simply along body up, which is what makes banked turns
+    // curve the flight path on their own.
+    Vec3 lift_direction = up;
+    if (has_airflow) {
+        Vec3 span = core::cross(flow, up);
+        if (core::length_sq(span) > 1e-6f) {
+            lift_direction = core::normalize(core::cross(span, flow));
+        }
+    }
+
+    const float lift_magnitude = lift_coefficient * q_area;
+    const float drag_magnitude = drag_coefficient * q_area;
+    state_.lift = lift_magnitude;
+    state_.drag = drag_magnitude;
+
+    Vec3 lift_force = lift_direction * lift_magnitude;
+    Vec3 drag_force = has_airflow ? -flow * drag_magnitude : Vec3::zero();
+
+    // Wingbeats. The phase advances only while flapping, and thrust follows the
+    // downstroke, so the push arrives in pulses the animation can match.
+    float thrust_magnitude = tuning.glide_thrust;
+    const float flap_command = core::saturate(input.flap);
+    if (flap_command > 0.01f && tuning.flap_period > 0.0f) {
+        state_.flap_phase += dt / tuning.flap_period;
+        state_.flap_phase -= std::floor(state_.flap_phase);
+        // Thrust on the downstroke (first half of the cycle) only.
+        const float downstroke = std::sin(state_.flap_phase * core::TWO_PI);
+        thrust_magnitude += tuning.flap_peak_force * core::maxf(downstroke, 0.0f) * flap_command;
+    } else {
+        // Settle the wings to neutral rather than freezing mid-beat.
+        state_.flap_phase = core::damp(state_.flap_phase, 0.0f, 0.25f, dt);
+    }
+
+    // Low-speed assist: a gentle forward push so running out of airspeed means
+    // a mushy nose rather than an unrecoverable tumble.
+    if (airspeed < tuning.min_airspeed && !state_.grounded) {
+        const float deficit = 1.0f - airspeed / core::maxf(tuning.min_airspeed, 0.1f);
+        thrust_magnitude += tuning.min_airspeed_assist * deficit * deficit;
+    }
+
+    state_.thrust = thrust_magnitude;
+    Vec3 thrust_force = forward * thrust_magnitude;
+    Vec3 gravity_force = Vec3{0.0f, -tuning.gravity * tuning.mass, 0.0f};
+
+    debug_lift = lift_force;
+    debug_drag = drag_force;
+    debug_thrust = thrust_force;
+    debug_gravity = gravity_force;
+
+    const Vec3 total = lift_force + drag_force + thrust_force + gravity_force;
+    state_.velocity += (total / tuning.mass) * dt;
+
+    // G-load is what the pilot feels along body up: aerodynamic force only,
+    // since gravity is not felt in free fall.
+    state_.g_load = core::dot(lift_force + drag_force + thrust_force, up) /
+                    (tuning.mass * tuning.gravity);
+}
+
+void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
+    const Vec3 up = state_.up();
+    const Vec3 right = state_.right();
+
+    const float airspeed = core::length(state_.velocity);
+    // Control authority grows with airflow over the wings, but never to zero --
+    // a dragon can still throw its weight around at a hover.
+    const float authority =
+        core::lerpf(tuning.low_speed_authority, 1.0f,
+                    core::saturate(airspeed / core::maxf(tuning.authority_reference_speed, 1.0f)));
+
+    // Commanded body rates. Positive pitch about +X raises the nose; yaw right
+    // and roll right are both negative about their axes, given forward is -Z.
+    Vec3 commanded{state_.control.x * tuning.pitch_rate,
+                   -state_.control.y * tuning.yaw_rate,
+                   -state_.control.z * tuning.roll_rate};
+    commanded *= authority;
+
+    // --- assists, expressed as extra commanded rate ---
+
+    // Turn coordination: entering a bank should swing the nose around with it,
+    // otherwise the turn skids and reads as a slide rather than a turn.
+    const float bank = std::atan2(core::dot(right, Vec3::up()), core::dot(up, Vec3::up()));
+    commanded.y += -bank * tuning.turn_coordination * core::saturate(airspeed / 30.0f);
+
+    // Auto-level: only when the player is not asking for roll, so it assists
+    // rather than fights.
+    const float roll_released = 1.0f - core::saturate(std::fabs(state_.control.z) * 4.0f);
+    if (roll_released > 0.0f) {
+        commanded.z += bank * tuning.auto_level * roll_released;
+    }
+
+    // Weathercock stability: yaw the nose back into the airflow. This is the
+    // single term that most makes the dragon feel like it is flying through air.
+    const float airflow = core::saturate(airspeed / 25.0f);
+    commanded.y += -state_.sideslip * tuning.yaw_stability * airflow;
+
+    // Pitch stability opposes angle of attack, and stall recovery adds a hard
+    // nose-down push once the wing has let go.
+    commanded.x += -state_.angle_of_attack * tuning.pitch_stability * airflow;
+    if (state_.stalling) {
+        commanded.x += -core::signf(state_.angle_of_attack) * tuning.stall_recovery * airflow;
+    }
+
+    // Rate damping, so control inputs settle instead of ringing.
+    const Vec3 damping{tuning.pitch_damping, tuning.yaw_damping, tuning.roll_damping};
+    Vec3 target = commanded;
+    state_.angular_velocity.x =
+        core::damp(state_.angular_velocity.x, target.x, 1.0f / core::maxf(damping.x, 0.01f), dt);
+    state_.angular_velocity.y =
+        core::damp(state_.angular_velocity.y, target.y, 1.0f / core::maxf(damping.y, 0.01f), dt);
+    state_.angular_velocity.z =
+        core::damp(state_.angular_velocity.z, target.z, 1.0f / core::maxf(damping.z, 0.01f), dt);
+
+    // Body rates to world space, then integrate the orientation.
+    const Vec3 world_omega = core::rotate(state_.orientation, state_.angular_velocity);
+    state_.orientation = core::integrate(state_.orientation, world_omega, dt);
+}
+
+void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
+    if (!terrain) {
+        state_.grounded = false;
+        return;
+    }
+
+    const float ground_height = terrain->height_at(state_.position.x, state_.position.z);
+    const float resting_height = ground_height + tuning.ground_offset;
+
+    if (state_.position.y > resting_height) {
+        state_.grounded = false;
+        return;
+    }
+
+    const Vec3 normal = terrain->normal_at(state_.position.x, state_.position.z);
+    state_.position.y = resting_height;
+
+    // Remove the velocity going into the surface, keep what slides along it.
+    const float into_surface = core::dot(state_.velocity, normal);
+    if (into_surface < 0.0f) state_.velocity -= normal * into_surface;
+
+    // Ground friction, frame-rate independent.
+    const float retained = std::exp(-tuning.ground_friction * dt);
+    state_.velocity *= retained;
+
+    state_.grounded = true;
+    state_.stalling = false;
+}
+
+// ---------------------------------------------------------------- presets
+
+FlightTuning tuning_preset_glider() {
+    FlightTuning t;
+    // Big slow wings: floats, turns lazily, holds energy well.
+    t.wing_area = 56.0f;
+    t.lift_coefficient_max = 2.5f;
+    t.parasitic_drag = 0.036f;
+    t.pitch_rate = 1.1f;
+    t.roll_rate = 2.1f;
+    t.auto_level = 1.1f;
+    t.flap_peak_force = 7200.0f;
+    t.flap_period = 1.15f;
+    return t;
+}
+
+FlightTuning tuning_preset_agile() {
+    FlightTuning t;
+    // Small fast wings: twitchy, bleeds energy in turns, rewards precision.
+    t.mass = 620.0f;
+    t.wing_area = 30.0f;
+    t.lift_coefficient_max = 2.0f;
+    t.parasitic_drag = 0.055f;
+    t.induced_drag_factor = 0.075f;
+    t.pitch_rate = 2.0f;
+    t.yaw_rate = 0.75f;
+    t.roll_rate = 4.4f;
+    t.control_lag = 0.05f;
+    t.auto_level = 0.55f;
+    t.flap_peak_force = 8200.0f;
+    t.flap_period = 0.7f;
+    return t;
+}
+
+FlightTuning tuning_preset_heavy() {
+    FlightTuning t;
+    // Enormous and reluctant: high top speed, dreadful low-speed handling.
+    t.mass = 1500.0f;
+    t.wing_area = 62.0f;
+    t.lift_coefficient_max = 2.1f;
+    t.parasitic_drag = 0.052f;
+    t.pitch_rate = 0.95f;
+    t.yaw_rate = 0.4f;
+    t.roll_rate = 1.6f;
+    t.control_lag = 0.14f;
+    t.flap_peak_force = 17000.0f;
+    t.flap_period = 1.35f;
+    t.min_airspeed = 22.0f;
+    return t;
+}
+
+// ---------------------------------------------------------------- persistence
+
+namespace {
+
+// One entry per tunable field, so save and load can never disagree about the
+// set of keys.
+struct Field {
+    const char* name;
+    float FlightTuning::*member;
+};
+
+#define FIELD(name) {#name, &FlightTuning::name}
+const Field FIELDS[] = {
+    FIELD(mass),                 FIELD(wing_area),           FIELD(air_density),
+    FIELD(gravity),              FIELD(lift_coefficient_max), FIELD(stall_angle_deg),
+    FIELD(post_stall_lift),      FIELD(parasitic_drag),      FIELD(induced_drag_factor),
+    FIELD(flap_peak_force),      FIELD(flap_period),         FIELD(glide_thrust),
+    FIELD(tuck_lift_loss),       FIELD(tuck_drag_loss),      FIELD(brake_drag_gain),
+    FIELD(brake_lift_gain),      FIELD(pitch_rate),          FIELD(yaw_rate),
+    FIELD(roll_rate),            FIELD(control_lag),         FIELD(low_speed_authority),
+    FIELD(authority_reference_speed), FIELD(yaw_stability),  FIELD(pitch_stability),
+    FIELD(pitch_damping),        FIELD(yaw_damping),         FIELD(roll_damping),
+    FIELD(auto_level),           FIELD(turn_coordination),   FIELD(stall_recovery),
+    FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),
+    FIELD(ground_friction),      FIELD(safe_landing_speed),
+};
+#undef FIELD
+
+}  // namespace
+
+bool save_tuning(const FlightTuning& tuning, const char* path) {
+    std::string text = "# dragon flight tuning\n";
+    char line[128];
+    for (const Field& field : FIELDS) {
+        std::snprintf(line, sizeof(line), "%s %.6g\n", field.name, tuning.*field.member);
+        text += line;
+    }
+    if (!SDL_SaveFile(path, text.data(), text.size())) {
+        LOG_ERROR("could not write '%s': %s", path, SDL_GetError());
+        return false;
+    }
+    LOG_INFO("saved tuning -> %s", path);
+    return true;
+}
+
+bool load_tuning(FlightTuning& tuning, const char* path) {
+    size_t size = 0;
+    void* data = SDL_LoadFile(path, &size);
+    if (!data) {
+        LOG_WARN("no tuning file at '%s'", path);
+        return false;
+    }
+    std::string text(static_cast<char*>(data), size);
+    SDL_free(data);
+
+    int applied = 0;
+    size_t cursor = 0;
+    while (cursor < text.size()) {
+        size_t end = text.find('\n', cursor);
+        if (end == std::string::npos) end = text.size();
+        std::string line = text.substr(cursor, end - cursor);
+        cursor = end + 1;
+
+        if (line.empty() || line[0] == '#') continue;
+        size_t space = line.find(' ');
+        if (space == std::string::npos) continue;
+        std::string key = line.substr(0, space);
+        float value = float(SDL_atof(line.c_str() + space + 1));
+
+        for (const Field& field : FIELDS) {
+            if (key == field.name) {
+                tuning.*field.member = value;
+                ++applied;
+                break;
+            }
+        }
+    }
+    LOG_INFO("loaded %d tuning values from %s", applied, path);
+    return applied > 0;
+}
+
+}  // namespace game

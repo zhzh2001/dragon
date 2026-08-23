@@ -58,10 +58,10 @@ inline float damp(float cur, float target, float half_life, float dt) {
 
 struct Vec2 {
     float x = 0, y = 0;
-    Vec2() = default;
-    Vec2(float x_, float y_) : x(x_), y(y_) {}
-    float& operator[](int i) { return (&x)[i]; }
-    float  operator[](int i) const { return (&x)[i]; }
+    constexpr Vec2() = default;
+    constexpr Vec2(float x_, float y_) : x(x_), y(y_) {}
+    constexpr float& operator[](int i) { return (&x)[i]; }
+    constexpr float  operator[](int i) const { return (&x)[i]; }
 };
 
 inline Vec2 operator+(Vec2 a, Vec2 b) { return {a.x + b.x, a.y + b.y}; }
@@ -81,21 +81,21 @@ inline float length(Vec2 v) { return std::sqrt(dot(v, v)); }
 
 struct Vec3 {
     float x = 0, y = 0, z = 0;
-    Vec3() = default;
-    Vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
-    explicit Vec3(float s) : x(s), y(s), z(s) {}
-    float& operator[](int i) { return (&x)[i]; }
-    float  operator[](int i) const { return (&x)[i]; }
+    constexpr Vec3() = default;
+    constexpr Vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+    constexpr explicit Vec3(float s) : x(s), y(s), z(s) {}
+    constexpr float& operator[](int i) { return (&x)[i]; }
+    constexpr float  operator[](int i) const { return (&x)[i]; }
 
-    static Vec3 zero()    { return {0, 0, 0}; }
-    static Vec3 one()     { return {1, 1, 1}; }
-    static Vec3 unit_x()  { return {1, 0, 0}; }
-    static Vec3 unit_y()  { return {0, 1, 0}; }
-    static Vec3 unit_z()  { return {0, 0, 1}; }
+    static constexpr Vec3 zero()    { return {0, 0, 0}; }
+    static constexpr Vec3 one()     { return {1, 1, 1}; }
+    static constexpr Vec3 unit_x()  { return {1, 0, 0}; }
+    static constexpr Vec3 unit_y()  { return {0, 1, 0}; }
+    static constexpr Vec3 unit_z()  { return {0, 0, 1}; }
     // Engine convention: forward is -Z, up is +Y, right is +X.
-    static Vec3 forward() { return {0, 0, -1}; }
-    static Vec3 up()      { return {0, 1, 0}; }
-    static Vec3 right()   { return {1, 0, 0}; }
+    static constexpr Vec3 forward() { return {0, 0, -1}; }
+    static constexpr Vec3 up()      { return {0, 1, 0}; }
+    static constexpr Vec3 right()   { return {1, 0, 0}; }
 };
 
 inline Vec3 operator+(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
@@ -159,12 +159,12 @@ inline Vec3 damp(Vec3 cur, Vec3 target, float half_life, float dt) {
 
 struct Vec4 {
     float x = 0, y = 0, z = 0, w = 0;
-    Vec4() = default;
-    Vec4(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
-    Vec4(Vec3 v, float w_) : x(v.x), y(v.y), z(v.z), w(w_) {}
-    Vec3 xyz() const { return {x, y, z}; }
-    float& operator[](int i) { return (&x)[i]; }
-    float  operator[](int i) const { return (&x)[i]; }
+    constexpr Vec4() = default;
+    constexpr Vec4(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
+    constexpr Vec4(Vec3 v, float w_) : x(v.x), y(v.y), z(v.z), w(w_) {}
+    constexpr Vec3 xyz() const { return {x, y, z}; }
+    constexpr float& operator[](int i) { return (&x)[i]; }
+    constexpr float  operator[](int i) const { return (&x)[i]; }
 };
 
 inline Vec4 operator+(Vec4 a, Vec4 b) { return {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w}; }
@@ -177,10 +177,10 @@ inline float dot(Vec4 a, Vec4 b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.
 // Unit quaternion, (x,y,z) vector part + w scalar part.
 struct Quat {
     float x = 0, y = 0, z = 0, w = 1;
-    Quat() = default;
-    Quat(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
+    constexpr Quat() = default;
+    constexpr Quat(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
 
-    static Quat identity() { return {0, 0, 0, 1}; }
+    static constexpr Quat identity() { return {0, 0, 0, 1}; }
 
     static Quat from_axis_angle(Vec3 axis, float angle) {
         Vec3 n = normalize_or(axis, Vec3::unit_y());

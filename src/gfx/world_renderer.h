@@ -28,9 +28,14 @@ public:
 
     void draw_terrain(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
 
-    // Depth-only draw for the shadow pass.
+    // Lit opaque geometry with per-vertex albedo and procedural deformation.
+    void draw_mesh(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
+                   const ModelUniforms& model);
+
+    // Depth-only draw for the shadow pass. Applies the same deformation, so a
+    // flapping wing casts a flapping shadow.
     void draw_mesh_depth(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
-                         const core::Mat4& light_view_proj);
+                         const core::Mat4& light_view_proj, const ModelUniforms& model);
 
     bool wireframe = false;
 
@@ -39,6 +44,7 @@ private:
     PipelineHandle sky_ = INVALID_PIPELINE;
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
+    PipelineHandle mesh_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
     SceneUniforms scene_ = {};
 };

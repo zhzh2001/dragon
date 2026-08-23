@@ -29,7 +29,22 @@ Verify a visual change without a human at the keyboard:
 sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable PNG
 ```
 
-Tests: `./build/test_math` or `ctest --test-dir build`.
+Tests: `ctest --test-dir build` (math, camera, flight).
+
+## Controls
+
+| Input | Action |
+|---|---|
+| Left click | Capture the mouse and start flying |
+| Mouse | Virtual stick: X rolls, Y pitches (mouse up = nose up) |
+| W/S, A/D | Nudge the same stick (pitch, roll) |
+| Q/E | Rudder |
+| Space | Flap -- the only way energy enters the system |
+| Shift | Tuck wings and dive |
+| Ctrl | Flare and brake |
+| R | Respawn |
+| Tab | Toggle free-fly survey camera |
+| Esc | Release the mouse; again to quit |
 
 ## Conventions
 
@@ -92,4 +107,26 @@ tests/       plain executables, no framework
 - **M2** free-fly debug camera, immediate-mode debug line drawing, grid.
 - **M3** procedural valley terrain, analytic height queries, sky, height fog,
   directional light, directional shadow map.
-- **Next: M4** the energy flight model. The milestone everything else is for.
+- **M4** energy flight model, virtual-stick mouse control, greybox dragon with
+  shader-driven wing flap, chase camera, live telemetry. **Awaiting playtest.**
+- **Next: M5** the chase camera proper -- spring arm with terrain collision.
+
+## The flight model
+
+`game::FlightModel` integrates real forces: thrust, lift, drag, gravity. Diving
+buys speed, climbing spends it, hard turns bleed energy, and flapping is the only
+way energy enters the system. `FlightState::specific_energy` is the number a
+pilot actually manages.
+
+With the default tuning the envelope is roughly:
+
+| | |
+|---|---|
+| Best glide | ~21 m/s, sink ~2 m/s |
+| Cruise | 40-50 m/s, sink 10-15 m/s unless flapping |
+| Tucked dive | tops out near 130 m/s |
+| Stall | past 16 degrees angle of attack, recovers hands-off |
+
+Every coefficient is an ImGui slider, and `assets/flight_tuning.cfg` (flat
+`key value` text, not JSON -- no dependency, trivially diffable) persists a good
+session. Presets: glider, agile, heavy.

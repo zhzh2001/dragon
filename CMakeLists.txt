@@ -28,6 +28,9 @@ add_executable(dragon
   src/core/noise.cpp
   src/game/debug_camera.cpp
   src/game/terrain.cpp
+  src/game/flight.cpp
+  src/game/chase_camera.cpp
+  src/game/dragon_proxy.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -55,3 +58,16 @@ target_include_directories(test_camera PRIVATE src)
 target_link_libraries(test_camera PRIVATE SDL3::SDL3)
 target_compile_options(test_camera PRIVATE -Wall -Wextra)
 add_test(NAME camera COMMAND test_camera)
+
+add_executable(test_flight
+  tests/test_flight.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_flight PRIVATE src)
+target_link_libraries(test_flight PRIVATE SDL3::SDL3)
+target_compile_options(test_flight PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME flight COMMAND test_flight)
