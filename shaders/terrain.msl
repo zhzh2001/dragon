@@ -1,0 +1,131 @@
+#include "scene_common.msl"
+
+struct VertexIn {
+    float3 position [[attribute(0)]];
+    float3 normal   [[attribute(1)]];
+    float3 color    [[attribute(2)]];
+};
+
+struct VertexOut {
+    float4 clip_position [[position]];
+    float3 world_position;
+    float3 normal;
+    float3 tint;
+};
+
+vertex VertexOut vs_main(VertexIn in [[stage_in]],
+                         constant SceneUniforms& scene [[buffer(0)]]) {
+    VertexOut out;
+    out.clip_position = scene.view_proj * float4(in.position, 1.0);
+    out.world_position = in.position;
+    out.normal = in.normal;
+    out.tint = in.color;
+    return out;
+}
+
+// Cheap value noise for breaking up flat material bands. Not for shaping the
+// terrain -- purely a surface tint, so it can be crude and fast.
+static float hash21(float2 p) {
+    p = fract(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+static float value_noise(float2 p) {
+    float2 cell = floor(p);
+    float2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);  // smooth the interpolation
+    float a = hash21(cell);
+    float b = hash21(cell + float2(1.0, 0.0));
+    float c = hash21(cell + float2(0.0, 1.0));
+    float d = hash21(cell + float2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Terrain material from height and slope. Kept in the shader so it can be
+// retuned by saving the file while flying.
+static float3 terrain_albedo(float3 world_position, float3 normal,
+                             constant SceneUniforms& scene) {
+    const float3 SAND       = float3(0.52, 0.46, 0.34);
+    const float3 GRASS      = float3(0.15, 0.25, 0.11);
+    const float3 GRASS_DRY  = float3(0.28, 0.30, 0.15);
+    // Warm-toned rock, so it separates from the cool sky ambient instead of
+    // blending into the same grey.
+    const float3 ROCK       = float3(0.29, 0.255, 0.21);
+    const float3 ROCK_DARK  = float3(0.155, 0.135, 0.12);
+    const float3 SNOW       = float3(0.86, 0.88, 0.93);
+
+    float water_level = scene.terrain_params.x;
+    float snow_line   = scene.terrain_params.y;
+    float rock_slope  = scene.terrain_params.z;
+
+    float height = world_position.y;
+    // normal.y is 1 on flat ground and 0 on a vertical cliff.
+    float flatness = saturate(normal.y);
+
+    // Two noise octaves: broad patches of dry/lush ground, plus fine grain that
+    // keeps large flat areas from reading as a solid colour.
+    float patches = value_noise(world_position.xz * 0.0055);
+    float grain = value_noise(world_position.xz * 0.09);
+
+    float3 grass = mix(GRASS, GRASS_DRY, smoothstep(0.35, 0.75, patches));
+    float3 rock = mix(ROCK_DARK, ROCK, smoothstep(0.25, 0.8, patches));
+
+    // A narrow sand band right at the waterline, then grass above it.
+    float3 albedo = mix(SAND, grass, smoothstep(water_level, water_level + 10.0, height));
+
+    // Rock takes over on anything steep, and earlier at altitude where there is
+    // less soil to hold on.
+    float slope_blend = 1.0 - smoothstep(rock_slope, rock_slope + 0.22, flatness);
+    float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, height) * 0.6;
+    albedo = mix(albedo, rock, saturate(slope_blend + altitude_rockiness));
+
+    // Snow only settles where it is both high and not too steep. The noise makes
+    // the snow line ragged instead of a perfect contour.
+    float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
+    float snow_amount = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, height) *
+                        smoothstep(0.52, 0.78, flatness);
+    albedo = mix(albedo, SNOW, snow_amount);
+
+    // Fine grain last, so it varies every material rather than only the grass.
+    return albedo * (0.88 + 0.24 * grain);
+}
+
+fragment float4 fs_main(VertexOut in [[stage_in]],
+                        constant SceneUniforms& scene [[buffer(0)]],
+                        depth2d<float> shadow_map [[texture(0)]],
+                        sampler shadow_sampler [[sampler(0)]]) {
+    float3 normal = normalize(in.normal);
+    float3 to_sun = normalize(scene.sun.xyz);
+
+    float3 albedo = terrain_albedo(in.world_position, normal, scene) * in.tint;
+
+    // Direct sun, wrapped slightly so slopes turning away keep some shape
+    // instead of going flat black, then gated by the shadow map.
+    float wrapped = saturate((dot(normal, to_sun) + 0.25) / 1.25);
+    float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
+                                      shadow_sampler);
+    float3 direct = scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
+
+    // Hemispheric ambient: sky from above, bounced ground light from below.
+    float sky_amount = saturate(normal.y * 0.5 + 0.5);
+    float3 ambient = mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) *
+                     scene.terrain_params.w;
+
+    float3 lit = albedo * (direct + ambient);
+
+    // Exponential-squared height fog, thinning with altitude so mountain peaks
+    // stay legible while valley distance still reads.
+    float distance = length(in.world_position - scene.camera_position.xyz);
+    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
+    float fog = 1.0 - exp(-pow(distance * density, 2.0));
+
+    // Fog toward the actual sky colour along this view ray, so distant terrain
+    // dissolves into the sky rather than into a flat band.
+    float3 ray = normalize(in.world_position - scene.camera_position.xyz);
+    float3 fogged = mix(lit, sky_color(ray, scene), saturate(fog));
+
+    // Reinhard tonemap plus gamma. Keeps bright snow and sun glow from clipping.
+    float3 mapped = fogged / (1.0 + fogged);
+    return float4(pow(mapped, 1.0 / 2.2), 1.0);
+}

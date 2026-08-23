@@ -1,0 +1,100 @@
+// Shared scene uniforms. Must match gfx::SceneUniforms in scene_uniforms.h.
+//
+// Every vec3 is stored as a float4 because MSL aligns float3 to 16 bytes; using
+// float4 throughout removes any doubt about where a field actually lands.
+#pragma once
+
+#include <metal_stdlib>
+using namespace metal;
+
+struct SceneUniforms {
+    float4x4 view_proj;
+    float4x4 light_view_proj;
+
+    float4 camera_position;  // .xyz
+    float4 camera_right;     // .xyz
+    float4 camera_up;        // .xyz
+    float4 camera_forward;   // .xyz
+
+    // .xyz points FROM the surface TOWARD the sun. .w is intensity.
+    float4 sun;
+    float4 sun_color;      // .rgb
+    float4 sky_zenith;     // .rgb
+    float4 sky_horizon;    // .rgb
+    float4 fog_color;      // .rgb, .a = density (1/metres)
+
+    // x = tan(fov_y / 2), y = aspect, z = time (seconds), w = unused
+    float4 view_params;
+    // x = water level, y = snow line, z = rock slope threshold, w = ambient
+    float4 terrain_params;
+    // x = world-space size of one shadow texel, y = depth bias,
+    // z = strength (0 disables), w = one shadow texel in UV space
+    float4 shadow_params;
+};
+
+// Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
+//
+// The shadow map uses a conventional [0, 1] depth range, unlike the reversed-Z
+// main pass, so nearer-to-light means a smaller depth value.
+static inline float sun_visibility(float3 world_position, float3 normal,
+                                   constant SceneUniforms& scene,
+                                   depth2d<float> shadow_map, sampler shadow_sampler) {
+    float strength = scene.shadow_params.z;
+    if (strength <= 0.0) return 1.0;
+
+    // Offset along the normal before projecting. This removes most acne without
+    // the peter-panning a large constant depth bias would cause.
+    float texel_world = scene.shadow_params.x;
+    float3 offset_position = world_position + normal * texel_world * 1.5;
+
+    float4 light_clip = scene.light_view_proj * float4(offset_position, 1.0);
+    float3 light_ndc = light_clip.xyz / light_clip.w;
+
+    // Outside the shadow volume there is no information, so treat it as lit
+    // rather than guessing. Fog covers the transition at that distance.
+    if (any(abs(light_ndc.xy) > 1.0) || light_ndc.z < 0.0 || light_ndc.z > 1.0) return 1.0;
+
+    // NDC to UV, flipping Y because texture space runs downward.
+    float2 uv = light_ndc.xy * float2(0.5, -0.5) + 0.5;
+    float own_depth = light_ndc.z;
+
+    // Slope-scaled bias: surfaces the sun grazes need much more than flat ones.
+    float slope = saturate(1.0 - abs(dot(normal, normalize(scene.sun.xyz))));
+    float bias = scene.shadow_params.y * (0.35 + slope * 2.5);
+
+    // 3x3 PCF: enough to hide the texel grid without smearing contact shadows.
+    float step_uv = scene.shadow_params.w;
+    float lit = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float2 sample_uv = uv + float2(float(x), float(y)) * step_uv;
+            float stored = shadow_map.sample(shadow_sampler, sample_uv);
+            lit += (own_depth - bias <= stored) ? 1.0 : 0.0;
+        }
+    }
+    lit /= 9.0;
+
+    // strength controls how dark full shadow gets. Never fully black, or
+    // terrain in shadow loses all its shape.
+    return mix(1.0, lit, strength);
+}
+
+// Analytic sky. Also used by the fog in the terrain shader, so distant terrain
+// dissolves into exactly the colour of the sky behind it instead of into a flat
+// grey band.
+static inline float3 sky_color(float3 ray, constant SceneUniforms& scene) {
+    float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
+    float3 base = mix(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
+
+    // Below the horizon, fade toward the fog colour so terrain edges and the
+    // ground plane meet without a hard seam.
+    float below = saturate(-ray.y * 6.0);
+    base = mix(base, scene.fog_color.rgb, below * 0.7);
+
+    // Sun disc plus a wide forward-scattering glow.
+    float sun_dot = saturate(dot(ray, normalize(scene.sun.xyz)));
+    float glow = pow(sun_dot, 8.0) * 0.35 + pow(sun_dot, 256.0) * 3.0;
+    base += scene.sun_color.rgb * glow;
+
+    return base;
+}

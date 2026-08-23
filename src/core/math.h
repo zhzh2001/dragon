@@ -16,11 +16,28 @@ constexpr float RAD2DEG = 180.0f / PI;
 
 inline float radians(float deg) { return deg * DEG2RAD; }
 inline float degrees(float rad) { return rad * RAD2DEG; }
+inline float minf(float a, float b) { return a < b ? a : b; }
+inline float maxf(float a, float b) { return a > b ? a : b; }
 inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 inline float lerpf(float a, float b, float t) { return a + (b - a) * t; }
 inline float saturate(float v) { return clampf(v, 0.0f, 1.0f); }
 inline float signf(float v) { return v < 0.0f ? -1.0f : (v > 0.0f ? 1.0f : 0.0f); }
 inline float sqf(float v) { return v * v; }
+
+// Hermite blend with zero derivative at both ends. The workhorse for every
+// gameplay ramp: assist strength, valley walls, fog, blend weights.
+inline float smoothstep(float edge0, float edge1, float x) {
+    if (edge1 <= edge0) return x < edge0 ? 0.0f : 1.0f;
+    float t = clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// Remap x from [in0, in1] to [out0, out1], clamped at both ends.
+inline float remap(float x, float in0, float in1, float out0, float out1) {
+    if (in1 == in0) return out0;
+    float t = clampf((x - in0) / (in1 - in0), 0.0f, 1.0f);
+    return out0 + (out1 - out0) * t;
+}
 
 // Move `cur` toward `target` at most `max_delta`.
 inline float move_toward(float cur, float target, float max_delta) {

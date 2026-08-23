@@ -3,6 +3,8 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
 
+#include <unordered_set>
+
 #include "core/log.h"
 
 namespace gfx {
@@ -22,6 +24,66 @@ int64_t file_mtime(const std::string& path) {
     SDL_PathInfo info;
     if (!SDL_GetPathInfo(path.c_str(), &info)) return 0;
     return info.modify_time;
+}
+
+// Metal's runtime compiler resolves <system> headers but not local ones, since
+// a source string has no directory to resolve against. So we inline
+// `#include "file"` ourselves, which is what lets shaders share a common
+// header. `#pragma once` is honoured, and every file visited is appended to
+// `out_files` so hot reload can watch the whole dependency set.
+//
+// Returns false if any included file is missing.
+bool preprocess_shader(const std::string& root, const std::string& relative_path,
+                       std::unordered_set<std::string>& already_included,
+                       std::vector<std::string>& out_files, std::string& out_source) {
+    const std::string full_path = root + relative_path;
+    if (already_included.count(relative_path)) return true;  // #pragma once
+    already_included.insert(relative_path);
+
+    std::string source = read_file(full_path);
+    if (source.empty()) {
+        LOG_ERROR("shader include not found or empty: '%s'", full_path.c_str());
+        return false;
+    }
+    out_files.push_back(full_path);
+
+    // Line-by-line so we can rewrite includes and drop `#pragma once`.
+    size_t line_start = 0;
+    while (line_start <= source.size()) {
+        size_t line_end = source.find('\n', line_start);
+        if (line_end == std::string::npos) line_end = source.size();
+        std::string line = source.substr(line_start, line_end - line_start);
+
+        size_t first = line.find_first_not_of(" \t");
+        bool handled = false;
+        if (first != std::string::npos && line[first] == '#') {
+            const std::string directive = line.substr(first);
+            if (directive.rfind("#pragma once", 0) == 0) {
+                handled = true;  // meaningless once inlined
+            } else if (directive.rfind("#include \"", 0) == 0) {
+                size_t open_quote = directive.find('"');
+                size_t close_quote = directive.find('"', open_quote + 1);
+                if (close_quote != std::string::npos) {
+                    std::string included =
+                        directive.substr(open_quote + 1, close_quote - open_quote - 1);
+                    if (!preprocess_shader(root, included, already_included, out_files,
+                                           out_source)) {
+                        return false;
+                    }
+                    handled = true;
+                }
+            }
+        }
+
+        // Blank out handled lines rather than removing them, so reported error
+        // line numbers still line up with the file on disk.
+        out_source += handled ? "" : line;
+        out_source += '\n';
+
+        if (line_end == source.size()) break;
+        line_start = line_end + 1;
+    }
+    return true;
 }
 
 SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const std::string& source,
@@ -65,11 +127,26 @@ bool PipelineCache::build(Entry& entry) {
     SDL_GPUDevice* gpu = device_->gpu();
     const PipelineDesc& d = entry.desc;
 
-    std::string source = read_file(entry.full_path);
-    if (source.empty()) {
-        LOG_ERROR("[%s] could not read shader '%s'", d.name.c_str(), entry.full_path.c_str());
+    // Seed the watch list with the primary shader before doing anything else,
+    // so a pipeline whose file is missing still has something to watch and gets
+    // repaired when that file appears -- without re-reporting the error every
+    // poll in the meantime.
+    const std::string primary_path = shader_root_ + d.shader_path;
+    entry.sources.clear();
+    entry.sources.push_back({primary_path, file_mtime(primary_path)});
+
+    std::string source;
+    std::vector<std::string> files;
+    std::unordered_set<std::string> visited;
+    if (!preprocess_shader(shader_root_, d.shader_path, visited, files, source)) {
+        LOG_ERROR("[%s] could not read shader '%s'", d.name.c_str(), d.shader_path.c_str());
         return false;
     }
+
+    // Replace with the full dependency set, so editing a shared header reloads
+    // every pipeline that includes it.
+    entry.sources.clear();
+    for (const std::string& path : files) entry.sources.push_back({path, file_mtime(path)});
 
     SDL_GPUShader* vs = compile_shader(gpu, source, d.vs_entry.c_str(),
                                        SDL_GPU_SHADERSTAGE_VERTEX, d);
@@ -99,7 +176,9 @@ bool PipelineCache::build(Entry& entry) {
     }
 
     SDL_GPUColorTargetDescription color_target = {};
-    color_target.format = device_->scene_color_format();
+    color_target.format = d.color_format != SDL_GPU_TEXTUREFORMAT_INVALID
+                              ? d.color_format
+                              : device_->scene_color_format();
     color_target.blend_state = blend;
 
     SDL_GPUGraphicsPipelineCreateInfo info = {};
@@ -125,12 +204,14 @@ bool PipelineCache::build(Entry& entry) {
     // already there. Pairs with clear_depth = 0 in Device::begin_main_pass.
     info.depth_stencil_state.enable_depth_test = d.depth_test;
     info.depth_stencil_state.enable_depth_write = d.depth_write;
-    info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_GREATER;
+    info.depth_stencil_state.compare_op = d.depth_compare;
 
-    info.target_info.color_target_descriptions = &color_target;
-    info.target_info.num_color_targets = 1;
+    info.target_info.color_target_descriptions = d.no_color_target ? nullptr : &color_target;
+    info.target_info.num_color_targets = d.no_color_target ? 0 : 1;
     info.target_info.has_depth_stencil_target = true;
-    info.target_info.depth_stencil_format = device_->depth_format();
+    info.target_info.depth_stencil_format = d.depth_format != SDL_GPU_TEXTUREFORMAT_INVALID
+                                                ? d.depth_format
+                                                : device_->depth_format();
 
     SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 
@@ -152,9 +233,6 @@ bool PipelineCache::build(Entry& entry) {
 PipelineHandle PipelineCache::create(PipelineDesc desc) {
     Entry entry;
     entry.desc = std::move(desc);
-    entry.full_path = shader_root_ + entry.desc.shader_path;
-    entry.mtime = file_mtime(entry.full_path);
-
     bool ok = build(entry);
     entries_.push_back(std::move(entry));
     PipelineHandle handle = PipelineHandle(entries_.size() - 1);
@@ -177,9 +255,16 @@ SDL_GPUGraphicsPipeline* PipelineCache::get(PipelineHandle handle) const {
 int PipelineCache::poll_hot_reload() {
     int reloaded = 0;
     for (Entry& e : entries_) {
-        int64_t mtime = file_mtime(e.full_path);
-        if (mtime == 0 || mtime == e.mtime) continue;
-        e.mtime = mtime;
+        bool changed = false;
+        for (SourceFile& source : e.sources) {
+            int64_t mtime = file_mtime(source.path);
+            if (mtime != 0 && mtime != source.mtime) {
+                source.mtime = mtime;
+                changed = true;
+            }
+        }
+        if (!changed) continue;
+
         if (build(e)) {
             LOG_INFO("reloaded '%s'", e.desc.name.c_str());
             ++reloaded;

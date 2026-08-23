@@ -21,7 +21,13 @@ add_executable(dragon
   src/gfx/pipeline.cpp
   src/gfx/buffer.cpp
   src/gfx/debug_draw.cpp
+  src/gfx/mesh.cpp
+  src/gfx/scene_uniforms.cpp
+  src/gfx/world_renderer.cpp
+  src/gfx/shadow_map.cpp
+  src/core/noise.cpp
   src/game/debug_camera.cpp
+  src/game/terrain.cpp
   src/editor/imgui_layer.cpp
 )
 

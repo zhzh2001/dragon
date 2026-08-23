@@ -41,6 +41,18 @@ struct PipelineDesc {
     bool depth_test = true;
     bool depth_write = true;
     bool alpha_blend = false;
+
+    // Defaults to GREATER for the reversed-Z main pass. The shadow pass uses a
+    // conventional [0,1] depth range and so overrides this with LESS.
+    SDL_GPUCompareOp depth_compare = SDL_GPU_COMPAREOP_GREATER;
+
+    // Depth-only passes (shadow maps) have no colour attachment at all.
+    bool no_color_target = false;
+
+    // Overrides the colour target format. Zero means "use the scene format".
+    SDL_GPUTextureFormat color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    // Overrides the depth format. Zero means "use the device depth format".
+    SDL_GPUTextureFormat depth_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 };
 
 // Creates pipelines and rebuilds them when their shader source changes on disk.
@@ -68,11 +80,18 @@ public:
     int broken_count() const;
 
 private:
+    // A shader file and the modification time we last built it at.
+    struct SourceFile {
+        std::string path;
+        int64_t mtime = 0;
+    };
+
     struct Entry {
         PipelineDesc desc;
         SDL_GPUGraphicsPipeline* pipeline = nullptr;
-        std::string full_path;
-        int64_t mtime = 0;
+        // The shader itself plus every file it includes, so editing a shared
+        // header reloads all the pipelines that depend on it.
+        std::vector<SourceFile> sources;
     };
 
     // Returns false and leaves entry.pipeline untouched on compile failure, so

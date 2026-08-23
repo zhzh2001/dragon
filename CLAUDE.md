@@ -19,6 +19,8 @@ Useful flags:
 | `--headless` | No visible window; still renders offscreen. For automated checks. |
 | `--frames N` | Run exactly N frames then exit. |
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
+| `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
+| `--hide-ui` | Hide the ImGui panels, for world-only captures. |
 
 Verify a visual change without a human at the keyboard:
 
@@ -47,6 +49,18 @@ Tests: `./build/test_math` or `ctest --test-dir build`.
 - **Shaders**: MSL source in `shaders/`, read from the source tree at runtime and
   hot-reloaded on save (polled every 0.25s). A failed compile logs an error and
   keeps the last working pipeline, so a bad save never blanks the screen.
+  Metal's runtime compiler does not resolve local `#include`, so
+  `gfx::PipelineCache` inlines them itself and watches every included file.
+  Include `scene_common.msl` first -- it pulls in `<metal_stdlib>` and opens the
+  `metal` namespace.
+- **Shadows**: one directional map following the camera, using a conventional
+  [0,1] depth range with a LESS compare -- deliberately unlike the reversed-Z
+  main pass, since an independent pass is easier to debug with standard depth.
+- **Terrain height is analytic**: `Terrain::height_at` evaluates the same noise
+  the mesh was built from, so gameplay queries never touch triangles. Physics
+  (Jolt) is deferred until something actually needs swept or convex collision --
+  dragon-vs-dragon, projectiles, ragdolls. A heightfield collider would be pure
+  overhead for ground clearance.
 - **Tuning**: every gameplay constant belongs behind an ImGui slider. Feel is
   found by dragging sliders while playing, not by planning.
 
@@ -73,5 +87,9 @@ tests/       plain executables, no framework
 
 ## Status
 
-M1 done: window, GPU device, reversed-Z depth, offscreen render + blit,
-hot-reloadable MSL pipelines, ImGui, headless screenshots, math library + tests.
+- **M1** window, GPU device, reversed-Z depth, offscreen render + blit,
+  hot-reloadable MSL pipelines, ImGui, headless screenshots, math + tests.
+- **M2** free-fly debug camera, immediate-mode debug line drawing, grid.
+- **M3** procedural valley terrain, analytic height queries, sky, height fog,
+  directional light, directional shadow map.
+- **Next: M4** the energy flight model. The milestone everything else is for.

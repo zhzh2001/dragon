@@ -1,0 +1,22 @@
+#include <metal_stdlib>
+using namespace metal;
+
+// Depth-only pass for the directional shadow map. There is no colour target, so
+// the fragment stage returns void and exists only to let the pipeline validate.
+
+struct VertexIn {
+    float3 position [[attribute(0)]];
+    float3 normal   [[attribute(1)]];
+    float3 color    [[attribute(2)]];
+};
+
+struct ShadowUniforms {
+    float4x4 light_view_proj;
+};
+
+vertex float4 vs_main(VertexIn in [[stage_in]],
+                      constant ShadowUniforms& u [[buffer(0)]]) {
+    return u.light_view_proj * float4(in.position, 1.0);
+}
+
+fragment void fs_main() {}
