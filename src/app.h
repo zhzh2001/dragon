@@ -33,6 +33,12 @@ struct Options {
 
     // Hides the ImGui panels, for captures that should show only the world.
     bool hide_ui = false;
+
+    // --input pitch,roll,yaw,flap,tuck,brake holds a constant control input.
+    // Lets a specific flight state be captured and inspected without a human at
+    // the keyboard.
+    bool has_input_override = false;
+    float input_override[6] = {};
 };
 
 Options parse_options(int argc, char** argv);
@@ -81,24 +87,35 @@ private:
     game::DragonProxyDims dragon_dims_;
     gfx::Mesh dragon_mesh_;
 
-    // How the player commands the dragon. A flight game controlled only by
-    // keyboard misrepresents its own flight model, so the mouse drives a virtual
-    // stick and is the default.
+    // How the player commands the dragon.
+    //
+    // The stick is driven toward a *target* derived from whatever device is
+    // active, never accumulated from motion history. An accumulating stick means
+    // the neutral point drifts with everything you have ever done, which makes
+    // recovering from a bad attitude a fight against your own input rather than
+    // against the air.
     struct Controls {
-        bool mouse_stick = true;
-        float mouse_sensitivity = 0.0040f;  // stick units per pixel
-        // Half-life for the stick returning to centre. Keeps the stick from
-        // drifting off-centre over a long session without forcing constant
-        // mouse motion. Zero disables the return entirely.
-        float stick_return = 0.85f;
+        // Mouse steering is off by default: it needs accumulation to work at
+        // all, and accumulation is exactly what makes it hard to control.
+        bool mouse_stick = false;
+        float mouse_sensitivity = 0.0022f;
+        // Half-life for mouse deflection decaying back to centre. Short, so the
+        // mouse behaves like a spring-centred stick rather than a trackball.
+        float mouse_return = 0.35f;
+
+        // Half-life for the stick chasing its target. Small enough to feel
+        // immediate, large enough not to be a step input.
+        float stick_smoothing = 0.055f;
+
+        float gamepad_deadzone = 0.12f;
+        // Exponent applied to gamepad deflection. Above 1 this gives fine
+        // control near centre and full authority at the edge.
+        float gamepad_expo = 1.7f;
+
         bool invert_pitch = false;
-        // Roll is the right choice for a winged creature; yaw is offered because
-        // some players expect it and it costs nothing to try.
-        bool mouse_yaws = false;
-        float keyboard_pitch_rate = 2.4f;  // stick units per second
-        float keyboard_roll_rate = 3.2f;
     } controls_;
     core::Vec2 stick_ = core::Vec2{0.0f, 0.0f};
+    core::Vec2 mouse_deflection_ = core::Vec2{0.0f, 0.0f};
     bool mouse_captured_ = false;
     void set_mouse_captured(bool captured);
 

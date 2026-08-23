@@ -26,7 +26,7 @@ struct SceneUniforms {
     core::Vec4 sky_horizon; // .rgb
     core::Vec4 fog_color;   // .rgb, .a density (1/metres)
 
-    core::Vec4 view_params;     // x tan(fov/2), y aspect, z time, w unused
+    core::Vec4 view_params;     // x tan(fov/2), y aspect, z time, w terrain half extent
     core::Vec4 terrain_params;  // x water level, y snow line, z rock slope, w ambient
     core::Vec4 shadow_params;   // x texel size, y depth bias, z strength, w enabled
 };
@@ -55,11 +55,15 @@ struct Lighting {
     float sun_intensity = 1.95f;
     float sun_color[3] = {1.0f, 0.92f, 0.78f};
 
-    float sky_zenith[3] = {0.13f, 0.27f, 0.57f};
-    float sky_horizon[3] = {0.56f, 0.65f, 0.76f};
-    float fog_color[3] = {0.55f, 0.62f, 0.72f};
+    // LINEAR colours, not display colours. Everything now goes through the
+    // shared tonemap, and these same values double as the ambient term, which
+    // was always meant to be linear -- so the previous display-space values were
+    // making both the sky and the ambient light too bright.
+    float sky_zenith[3] = {0.012f, 0.058f, 0.303f};
+    float sky_horizon[3] = {0.284f, 0.397f, 0.556f};
+    float fog_color[3] = {0.274f, 0.356f, 0.492f};
     float fog_density = 0.00030f;
-    float ambient = 0.24f;
+    float ambient = 0.55f;
 
     core::Vec3 sun_direction() const {
         const float azimuth = core::radians(sun_azimuth_deg);
@@ -76,6 +80,9 @@ struct TerrainMaterial {
     float snow_line = 400.0f;
     // Lower means rock appears only on steeper ground, leaving more green.
     float rock_slope = 0.62f;
+    // Used to fade the terrain into the sky at the map boundary, so the map's
+    // hard edge is not visible as a cliff on the horizon.
+    float half_extent = 2500.0f;
 };
 
 // Assembles the per-frame uniform block. Shadow fields are filled from the

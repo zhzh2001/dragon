@@ -47,6 +47,18 @@ bool state_is_sane(const FlightModel& model) {
            std::fabs(std::sqrt(dot(s.orientation, s.orientation)) - 1.0f) < 1e-2f;
 }
 
+// Roll angle in degrees: 0 wings level, +-180 inverted. Sign follows the flight
+// model's convention, where a right bank is negative.
+//
+// Deliberately NOT acos(dot(body up, world up)): that conflates roll with pitch,
+// and reports a wings-level 40-degree dive as a 40-degree bank.
+float roll_degrees(const FlightModel& model) {
+    const Vec3 up = model.state().up();
+    const Vec3 right = model.state().right();
+    return degrees(std::atan2(dot(right, Vec3::up()), dot(up, Vec3::up())));
+}
+float abs_roll_degrees(const FlightModel& model) { return std::fabs(roll_degrees(model)); }
+
 FlightModel make_level_flyer(float airspeed = 45.0f) {
     FlightModel model;
     model.reset(Vec3{0.0f, 1000.0f, 0.0f}, Quat::identity(), airspeed);
@@ -192,14 +204,30 @@ void test_bank_turns_the_flight_path() {
     // Lift acts perpendicular to the relative wind, so a bank should turn the
     // velocity vector without any explicit "turn" code. This checks that the
     // lift direction is genuinely being computed from the airflow.
-    FlightModel model = make_level_flyer(50.0f);
-    const Vec3 start_heading = normalize(Vec3{model.state().velocity.x, 0.0f,
-                                              model.state().velocity.z});
+    // Start already banked 40 degrees right, so this measures the aerodynamics
+    // rather than the roll controller. Forward is -Z, so a positive rotation
+    // about it drops the right wing.
+    FlightModel model;
+    model.reset(Vec3{0.0f, 2000.0f, 0.0f},
+                Quat::from_axis_angle(Vec3::forward(), radians(40.0f)), 50.0f);
+    // Auto-level and the pitch assist exist to rescue the player, and here they
+    // would erase the very thing under test. Switched off so this measures the
+    // aerodynamics alone.
+    model.tuning.auto_level = 0.0f;
+    model.tuning.pitch_level = 0.0f;
 
+    std::printf("  starting roll %+.0f deg\n", roll_degrees(model));
+    CHECK(roll_degrees(model) < 0.0f);  // a right bank is negative
+
+    const Vec3 start_heading =
+        normalize(Vec3{model.state().velocity.x, 0.0f, model.state().velocity.z});
+
+    // Pitch only: no roll command at all, so the turn can only come from the
+    // banked lift vector.
     FlightInput bank;
-    bank.roll = 1.0f;   // roll right
-    bank.pitch = 0.35f;  // hold the nose up to sustain the turn
+    bank.pitch = 0.35f;
     run(model, bank, 5.0f);
+    std::printf("  after 5 s: roll %+.0f deg\n", roll_degrees(model));
 
     const Vec3 end_heading =
         normalize(Vec3{model.state().velocity.x, 0.0f, model.state().velocity.z});
@@ -211,9 +239,79 @@ void test_bank_turns_the_flight_path() {
     CHECK(model.state().position.x > 0.0f);
     CHECK(state_is_sane(model));
 
-    // Sideslip must stay small: a turn should be coordinated, not a skid.
+    // Sideslip must stay small: a turn should be coordinated, not a skid. This
+    // threshold is tight enough to catch a mis-tuned coordination term -- at
+    // zero coordination the same manoeuvre slips 11 degrees, and over-coordinated
+    // it slips the other way by more.
     std::printf("  sideslip %+.1f deg\n", degrees(model.state().sideslip));
-    CHECK(std::fabs(degrees(model.state().sideslip)) < 12.0f);
+    CHECK(std::fabs(degrees(model.state().sideslip)) < 6.0f);
+}
+
+void test_recovers_from_inverted() {
+    std::printf("recovers from belly-up on its own\n");
+    // Reported from playtest: the dragon rolls over easily and then cannot be
+    // recovered. Hands off, auto-level must roll it upright before it hits the
+    // ground -- otherwise an accidental roll is a death sentence.
+    FlightModel model;
+    // Rolled 175 degrees: inverted, but not exactly balanced on the singularity.
+    const Quat inverted = Quat::from_axis_angle(Vec3::forward(), radians(175.0f));
+    model.reset(Vec3{0.0f, 2000.0f, 0.0f}, inverted, 45.0f);
+
+    const float start_bank = abs_roll_degrees(model);
+    FlightInput released;
+    float recovered_after = -1.0f;
+    for (int i = 0; i < int(12.0f / DT); ++i) {
+        model.update(released, nullptr, DT);
+        if (recovered_after < 0.0f && abs_roll_degrees(model) < 25.0f) recovered_after = float(i) * DT;
+    }
+    std::printf("  bank %.0f -> %.0f deg, upright after %.1f s, lost %.0f m\n", start_bank,
+                abs_roll_degrees(model), recovered_after, 2000.0f - model.state().position.y);
+    CHECK(recovered_after > 0.0f);
+    // Five seconds is already a long time to be falling inverted.
+    CHECK(recovered_after < 5.0f);
+    CHECK(state_is_sane(model));
+}
+
+void test_roll_is_controllable() {
+    std::printf("a brief roll input does not flip the dragon\n");
+    // Reported from playtest: rolling is so fast that a tap puts you belly-up.
+    // A half-second of full roll should bank hard but stay the right way up.
+    FlightModel model = make_level_flyer(45.0f);
+    FlightInput roll;
+    roll.roll = 1.0f;
+    run(model, roll, 0.5f);
+    const float banked = abs_roll_degrees(model);
+
+    // Release and let it settle.
+    FlightInput released;
+    run(model, released, 6.0f);
+    std::printf("  0.5 s of full roll -> %.0f deg bank, settles to %.0f deg\n", banked,
+                abs_roll_degrees(model));
+    CHECK(banked < 90.0f);
+    CHECK(abs_roll_degrees(model) < 20.0f);
+    CHECK(state_is_sane(model));
+}
+
+void test_rudder_turns_the_nose() {
+    std::printf("rudder produces a real heading change\n");
+    // Reported from playtest: Q/E appears to do nothing. Weathercock stability
+    // cancels commanded yaw, so rudder needs to out-authority it.
+    FlightModel model = make_level_flyer(45.0f);
+    const Vec3 start = normalize(Vec3{model.state().forward().x, 0.0f, model.state().forward().z});
+
+    FlightInput rudder;
+    rudder.yaw = 1.0f;  // nose right
+    run(model, rudder, 3.0f);
+
+    const Vec3 end = normalize(Vec3{model.state().forward().x, 0.0f, model.state().forward().z});
+    const float turned = degrees(std::acos(clampf(dot(start, end), -1.0f, 1.0f)));
+    std::printf("  3 s of right rudder: %.0f deg of heading, slip %+.1f deg\n", turned,
+                degrees(model.state().sideslip));
+    // Enough to be unmistakably useful for fine aiming.
+    CHECK(turned > 15.0f);
+    // And it should turn the correct way: right rudder yaws toward +X.
+    CHECK(end.x > start.x);
+    CHECK(state_is_sane(model));
 }
 
 void test_extreme_inputs_stay_finite() {
@@ -341,6 +439,9 @@ int main() {
     test_stall_and_recovery();
     test_level_trim_exists();
     test_bank_turns_the_flight_path();
+    test_recovers_from_inverted();
+    test_roll_is_controllable();
+    test_rudder_turns_the_nose();
     test_extreme_inputs_stay_finite();
     test_ground_stops_the_dragon();
     test_presets_all_fly();

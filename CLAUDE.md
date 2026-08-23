@@ -31,20 +31,31 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 
 Tests: `ctest --test-dir build` (math, camera, flight).
 
+Verification without a human at the keyboard: `--headless --frames N
+--screenshot`, plus `--cam` to place the view, `--hide-ui`, and `--input
+pitch,roll,yaw,flap,tuck,brake` to hold a control input. That combination is how
+the wingbeat and the inverted recovery were checked.
+
 ## Controls
 
 | Input | Action |
 |---|---|
-| Left click | Capture the mouse and start flying |
-| Mouse | Virtual stick: X rolls, Y pitches (mouse up = nose up) |
-| W/S, A/D | Nudge the same stick (pitch, roll) |
+| W/S | Pitch (W = nose up) |
+| A/D | Roll |
 | Q/E | Rudder |
+| Gamepad left stick | Pitch and roll (absolute, best feel of the three) |
+| Gamepad A / triggers | Flap / tuck-dive and brake |
+| Mouse | Optional, off by default -- it has to accumulate to work, and that accumulation is what makes it hard to control |
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
 | R | Respawn |
-| Tab | Toggle free-fly survey camera |
-| Esc | Release the mouse; again to quit |
+| Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
+| Esc | Release the mouse if captured; again to quit |
+
+ImGui keyboard and gamepad navigation are deliberately disabled: with them on,
+ImGui claims those devices whenever a panel has focus and silently eats the
+flight controls.
 
 ## Conventions
 
@@ -107,8 +118,10 @@ tests/       plain executables, no framework
 - **M2** free-fly debug camera, immediate-mode debug line drawing, grid.
 - **M3** procedural valley terrain, analytic height queries, sky, height fog,
   directional light, directional shadow map.
-- **M4** energy flight model, virtual-stick mouse control, greybox dragon with
-  shader-driven wing flap, chase camera, live telemetry. **Awaiting playtest.**
+- **M4** energy flight model, greybox dragon with shader-driven wing flap, chase
+  camera, live telemetry.
+- **M4.1** playtest fixes: keyboard/gamepad controls, roll and inversion
+  recovery, asymmetric wingbeat, 5 km valley, shared tonemapping.
 - **Next: M5** the chase camera proper -- spring arm with terrain collision.
 
 ## The flight model
@@ -122,10 +135,20 @@ With the default tuning the envelope is roughly:
 
 | | |
 |---|---|
-| Best glide | ~21 m/s, sink ~2 m/s |
-| Cruise | 40-50 m/s, sink 10-15 m/s unless flapping |
-| Tucked dive | tops out near 130 m/s |
+| Hands-off glide | 26 m/s, sink 2.8 m/s, 9.3:1 |
+| Best glide | 27 m/s, sink 2.3 m/s, 11.6:1 |
+| Full flap, level | 51 m/s |
+| Tucked dive | 98 m/s (354 km/h) |
+| Flared brake | 8.5 m/s -- slow enough to land |
 | Stall | past 16 degrees angle of attack, recovers hands-off |
+| Inverted | recovers to level in ~1.7 s, losing ~35 m |
+
+Energy budget, in metres of specific energy per second -- flapping is the only
+positive entry, which is the whole design:
+
+| gliding | flapping | tucked | hard turn | braking |
+|---|---|---|---|---|
+| -3.1 | **+5.0** | -2.5 | -4.9 | -8.9 |
 
 Every coefficient is an ImGui slider, and `assets/flight_tuning.cfg` (flat
 `key value` text, not JSON -- no dependency, trivially diffable) persists a good

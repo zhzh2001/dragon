@@ -35,22 +35,39 @@ struct FlightTuning {
     float induced_drag_factor = 0.062f; // k in CD = CD0 + k*CL^2
 
     // ---- propulsion ----
-    float flap_peak_force = 9000.0f;  // N at the top of a downstroke
+    float flap_peak_force = 9000.0f;  // N at the peak of a downstroke
     float flap_period = 0.9f;         // seconds per wingbeat
     float glide_thrust = 0.0f;        // N, free forward push while gliding
+
+    // ---- wingbeat shape ----
+    // A real wingbeat is not a sine. The downstroke is the fast, powered half
+    // and the recovery is slower, and the wing travels further above the body
+    // than below it. Getting this wrong is immediately visible.
+    float flap_up_angle_deg = 54.0f;
+    float flap_down_angle_deg = -32.0f;
+    float flap_downstroke_fraction = 0.40f;
+    // Resting dihedral: gliding wings sit slightly raised, not dead flat.
+    float glide_dihedral_deg = 9.0f;
+    // Half-life for blending between gliding and beating, so starting and
+    // stopping a flap eases instead of snapping.
+    float flap_blend = 0.16f;
 
     // ---- wing states ----
     // Tucking trades lift for a much cleaner shape: the dive control, and the
     // core of energy management.
     float tuck_lift_loss = 0.80f;
-    float tuck_drag_loss = 0.62f;
+    // 0.62 gave a 480 km/h tucked dive, which outran the world. 0.35 keeps the
+    // dive dramatic at around 410 km/h without turning a valley into a corridor.
+    float tuck_drag_loss = 0.35f;
     // Air-braking flares the wings: enormous drag, some extra lift.
     float brake_drag_gain = 3.4f;
     float brake_lift_gain = 0.35f;
 
     // ---- control authority (rad/s of commanded body rate) ----
     float pitch_rate = 1.45f;
-    float yaw_rate = 0.55f;
+    // Rudder was near-useless at 0.55: weathercock stability cancelled almost
+    // all of it. It needs enough authority to be worth reaching for.
+    float yaw_rate = 0.95f;
     float roll_rate = 3.0f;
     // Control response half-life. Lower is twitchier.
     float control_lag = 0.075f;
@@ -70,12 +87,23 @@ struct FlightTuning {
 
     // ---- assists ----
     // Rolls the wings level when the player lets go of roll.
-    float auto_level = 0.85f;
+    float auto_level = 2.4f;
+    // Ceiling on the auto-level roll rate, so recovering from inverted is brisk
+    // without the game visibly yanking the controls away.
+    float auto_level_max_rate = 2.2f;
     // Adds yaw into a bank so turns come out coordinated rather than skidding.
-    float turn_coordination = 0.75f;
+    // 0.30 was found by sweep: below it turns skid outward, above it the nose
+    // over-yaws into the turn. Either way the turn *rate* barely changes, so
+    // this value buys cleanliness rather than performance.
+    float turn_coordination = 0.30f;
     // Pitches the nose down when stalled, so a stall is recoverable rather than
     // terminal.
     float stall_recovery = 1.4f;
+    // Eases the nose toward the horizon when the player is not commanding pitch.
+    // Without this, hands-off in a dive stays in the dive forever -- correct for
+    // an aircraft, but it makes an accidental attitude into a crash.
+    float pitch_level = 1.1f;
+    float pitch_level_max_rate = 0.7f;
     // Below this airspeed a gentle forward push prevents a helpless tumble.
     float min_airspeed = 14.0f;
     float min_airspeed_assist = 3200.0f;  // N
@@ -125,9 +153,14 @@ struct FlightState {
     bool stalling = false;
     bool grounded = false;
 
-    // Wingbeat phase in [0,1). Drives procedural wing animation later, which is
-    // why it lives in the state rather than staying private to the model.
+    // Wingbeat phase in [0,1), 0 at the top of the downstroke.
     float flap_phase = 0.0f;
+    // How much of a full beat is currently being flown: 0 gliding, 1 full.
+    float flap_amplitude = 0.0f;
+    // Final wing angle in radians, positive up. The renderer uses this
+    // directly, so the visible wing and the thrust it produces can never
+    // disagree -- and bots and replays get the same animation for free.
+    float wing_angle = 0.0f;
     // Smoothed control positions, for animating control surfaces and for the
     // camera to lead into turns.
     core::Vec3 control = core::Vec3::zero();  // x pitch, y yaw, z roll

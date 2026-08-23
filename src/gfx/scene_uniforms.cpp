@@ -27,8 +27,8 @@ SceneUniforms make_scene_uniforms(const Camera& camera, float aspect, const Ligh
     uniforms.fog_color = Vec4{lighting.fog_color[0], lighting.fog_color[1], lighting.fog_color[2],
                               lighting.fog_density};
 
-    uniforms.view_params =
-        Vec4{std::tan(core::radians(camera.fov_y_deg) * 0.5f), aspect, time_seconds, 0.0f};
+    uniforms.view_params = Vec4{std::tan(core::radians(camera.fov_y_deg) * 0.5f), aspect,
+                                time_seconds, material.half_extent};
     uniforms.terrain_params =
         Vec4{material.water_level, material.snow_line, material.rock_slope, lighting.ambient};
     // Overwritten by the caller once the shadow map has been updated.

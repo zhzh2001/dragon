@@ -12,8 +12,11 @@ bool ImGuiLayer::init(gfx::Device& device) {
     ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    // Keyboard and gamepad navigation are deliberately OFF. With them on, ImGui
+    // claims those devices for widget navigation whenever a panel has focus,
+    // which silently swallows flight controls -- and gamepad nav would take the
+    // left stick outright. The panels are mouse-driven tools; the keyboard and
+    // pad belong to the dragon.
     // No imgui.ini: window layout is part of the code, so a fresh clone looks
     // the same as a long-running one.
     io.IniFilename = nullptr;

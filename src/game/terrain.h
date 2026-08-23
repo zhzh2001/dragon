@@ -13,12 +13,20 @@ namespace game {
 struct TerrainSettings {
     uint32_t seed = 1337;
 
-    float half_extent = 1024.0f;  // metres from centre to edge
-    float cell_size = 4.0f;       // metres per quad edge
+    // 5 km across. At the dragon's cruise speed the previous 2 km valley took
+    // well under a minute to cross end to end, and the floor was only about 460 m
+    // wide -- roughly ten seconds at cruise, which read as a corridor rather
+    // than a landscape.
+    float half_extent = 2500.0f;  // metres from centre to edge
+    // 6 m cells over the larger extent cost about the same triangle budget as
+    // 4 m cells did over the old one.
+    float cell_size = 6.0f;       // metres per quad edge
 
     // Mountain walls: ridged noise, which gives sharp crests rather than dunes.
-    float mountain_height = 680.0f;
-    float mountain_scale = 1350.0f;  // metres per noise unit; larger = broader
+    float mountain_height = 900.0f;
+    // Scaled with the map, or the same noise frequency would turn the walls
+    // into a field of small bumps instead of a mountain range.
+    float mountain_scale = 2300.0f;  // metres per noise unit; larger = broader
     int mountain_octaves = 6;
 
     // Rolling detail laid over everything.
@@ -31,10 +39,10 @@ struct TerrainSettings {
     // Floor sits well above the water line so the valley reads as green
     // lowland rather than beach, leaving the shoreline material for the river.
     float valley_floor = 46.0f;
-    float valley_width = 230.0f;     // half-width of flat floor
-    float valley_falloff = 520.0f;   // distance over which walls rise
-    float valley_meander = 430.0f;   // how far the corridor wanders in X
-    float valley_period = 1700.0f;   // metres per meander cycle
+    float valley_width = 420.0f;     // half-width of flat floor
+    float valley_falloff = 950.0f;   // distance over which walls rise
+    float valley_meander = 820.0f;   // how far the corridor wanders in X
+    float valley_period = 3300.0f;   // metres per meander cycle
 
     float water_level = 34.0f;
 };

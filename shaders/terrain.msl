@@ -120,12 +120,21 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
     float fog = 1.0 - exp(-pow(distance * density, 2.0));
 
+    // The map has a hard edge, and from altitude you can see it as a cliff at
+    // the horizon. Ramp fog to full over the outermost band so the terrain
+    // dissolves into the sky instead of stopping.
+    float half_extent = scene.view_params.w;
+    if (half_extent > 0.0) {
+        // Chebyshev distance, because the map is square: this reaches 1 on all
+        // four edges at once rather than only at the corners.
+        float edge = max(abs(in.world_position.x), abs(in.world_position.z)) / half_extent;
+        fog = max(fog, smoothstep(0.80, 0.99, edge));
+    }
+
     // Fog toward the actual sky colour along this view ray, so distant terrain
     // dissolves into the sky rather than into a flat band.
     float3 ray = normalize(in.world_position - scene.camera_position.xyz);
     float3 fogged = mix(lit, sky_color(ray, scene), saturate(fog));
 
-    // Reinhard tonemap plus gamma. Keeps bright snow and sun glow from clipping.
-    float3 mapped = fogged / (1.0 + fogged);
-    return float4(pow(mapped, 1.0 / 2.2), 1.0);
+    return float4(tonemap(fogged), 1.0);
 }

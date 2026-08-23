@@ -2,7 +2,37 @@
 
 #include <cstring>
 
+#include "core/log.h"
+
 namespace core {
+
+const char* Input::gamepad_name() const {
+    if (!gamepad_) return "none";
+    const char* name = SDL_GetGamepadName(gamepad_);
+    return name ? name : "gamepad";
+}
+
+float Input::gamepad_axis(SDL_GamepadAxis axis, float deadzone) const {
+    if (!gamepad_) return 0.0f;
+    const float raw = float(SDL_GetGamepadAxis(gamepad_, axis)) / 32767.0f;
+    const float magnitude = std::fabs(raw);
+    if (magnitude <= deadzone) return 0.0f;
+    // Rescale so the value ramps from 0 at the deadzone edge instead of
+    // snapping to the deadzone value.
+    const float scaled = (magnitude - deadzone) / (1.0f - deadzone);
+    return signf(raw) * clampf(scaled, 0.0f, 1.0f);
+}
+
+float Input::gamepad_trigger(SDL_GamepadAxis axis, float deadzone) const {
+    if (!gamepad_) return 0.0f;
+    const float raw = float(SDL_GetGamepadAxis(gamepad_, axis)) / 32767.0f;
+    if (raw <= deadzone) return 0.0f;
+    return clampf((raw - deadzone) / (1.0f - deadzone), 0.0f, 1.0f);
+}
+
+bool Input::gamepad_button(SDL_GamepadButton button) const {
+    return gamepad_ && SDL_GetGamepadButton(gamepad_, button);
+}
 
 void Input::begin_frame() {
     std::memcpy(previous_, current_, sizeof(current_));
@@ -46,6 +76,25 @@ void Input::handle_event(const SDL_Event& event, bool consumed) {
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             std::memset(current_, 0, sizeof(current_));
             mouse_current_ = 0;
+            break;
+
+        case SDL_EVENT_GAMEPAD_ADDED:
+            if (!gamepad_) {
+                gamepad_ = SDL_OpenGamepad(event.gdevice.which);
+                if (gamepad_) {
+                    gamepad_id_ = event.gdevice.which;
+                    LOG_INFO("gamepad connected: %s", gamepad_name());
+                }
+            }
+            break;
+
+        case SDL_EVENT_GAMEPAD_REMOVED:
+            if (gamepad_ && event.gdevice.which == gamepad_id_) {
+                SDL_CloseGamepad(gamepad_);
+                gamepad_ = nullptr;
+                gamepad_id_ = 0;
+                LOG_INFO("gamepad disconnected");
+            }
             break;
 
         default:

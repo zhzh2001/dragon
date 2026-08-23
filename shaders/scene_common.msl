@@ -23,7 +23,8 @@ struct SceneUniforms {
     float4 sky_horizon;    // .rgb
     float4 fog_color;      // .rgb, .a = density (1/metres)
 
-    // x = tan(fov_y / 2), y = aspect, z = time (seconds), w = unused
+    // x = tan(fov_y / 2), y = aspect, z = time (seconds),
+    // w = terrain half extent in metres
     float4 view_params;
     // x = water level, y = snow line, z = rock slope threshold, w = ambient
     float4 terrain_params;
@@ -31,6 +32,17 @@ struct SceneUniforms {
     // z = strength (0 disables), w = one shadow texel in UV space
     float4 shadow_params;
 };
+
+// Reinhard tonemap plus gamma, shared by every shader that writes to the scene
+// target.
+//
+// It has to be shared: the sky was previously written untonemapped while terrain
+// was tonemapped, so terrain fogged "to the sky colour" did not actually match
+// the sky, and the mismatch showed up as a hard seam along the horizon.
+static inline float3 tonemap(float3 color) {
+    float3 mapped = color / (1.0 + color);
+    return pow(mapped, 1.0 / 2.2);
+}
 
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //

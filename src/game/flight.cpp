@@ -13,6 +13,25 @@
 using core::Quat;
 using core::Vec3;
 
+namespace {
+
+// Wing height through one beat, returning +1 fully raised and -1 fully lowered.
+//
+// Two cosine easings of unequal length: a short fast downstroke and a longer
+// recovery. Each segment has zero derivative at its ends, so the wing does not
+// visibly jerk at the reversal points.
+float wingbeat_curve(float phase, float downstroke_fraction) {
+    const float down = core::clampf(downstroke_fraction, 0.05f, 0.95f);
+    if (phase < down) {
+        const float t = phase / down;
+        return std::cos(t * core::PI);  // +1 down to -1
+    }
+    const float t = (phase - down) / (1.0f - down);
+    return -std::cos(t * core::PI);  // -1 back up to +1
+}
+
+}  // namespace
+
 namespace game {
 
 void FlightModel::reset(Vec3 position, Quat orientation, float airspeed) {
@@ -29,6 +48,7 @@ void FlightModel::reset(Vec3 position, Quat orientation, float airspeed) {
     state_.specific_energy =
         position.y + core::length_sq(state_.velocity) / (2.0f * core::maxf(tuning.gravity, 0.01f));
     state_.g_load = 1.0f;
+    state_.wing_angle = core::radians(tuning.glide_dihedral_deg);
 }
 
 void FlightModel::update(const FlightInput& input, const Terrain* terrain, float dt) {
@@ -127,20 +147,44 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
     Vec3 lift_force = lift_direction * lift_magnitude;
     Vec3 drag_force = has_airflow ? -flow * drag_magnitude : Vec3::zero();
 
-    // Wingbeats. The phase advances only while flapping, and thrust follows the
-    // downstroke, so the push arrives in pulses the animation can match.
+    // Wingbeats.
+    //
+    // Amplitude eases toward the command rather than switching, and the phase
+    // keeps advancing while any amplitude remains, so releasing the flap key
+    // finishes the current beat and settles into a glide instead of freezing the
+    // wings mid-stroke.
     float thrust_magnitude = tuning.glide_thrust;
     const float flap_command = core::saturate(input.flap);
-    if (flap_command > 0.01f && tuning.flap_period > 0.0f) {
+    state_.flap_amplitude =
+        core::damp(state_.flap_amplitude, flap_command, tuning.flap_blend, dt);
+
+    const float downstroke_fraction = core::clampf(tuning.flap_downstroke_fraction, 0.05f, 0.95f);
+    if (state_.flap_amplitude > 0.01f && tuning.flap_period > 0.0f) {
         state_.flap_phase += dt / tuning.flap_period;
         state_.flap_phase -= std::floor(state_.flap_phase);
-        // Thrust on the downstroke (first half of the cycle) only.
-        const float downstroke = std::sin(state_.flap_phase * core::TWO_PI);
-        thrust_magnitude += tuning.flap_peak_force * core::maxf(downstroke, 0.0f) * flap_command;
+
+        // Thrust comes from the downstroke, peaking mid-stroke where the wing is
+        // moving fastest. Tying it to the same phase the animation uses means the
+        // push you feel always matches the beat you see.
+        if (state_.flap_phase < downstroke_fraction) {
+            const float t = state_.flap_phase / downstroke_fraction;
+            thrust_magnitude +=
+                tuning.flap_peak_force * std::sin(t * core::PI) * state_.flap_amplitude;
+        }
     } else {
-        // Settle the wings to neutral rather than freezing mid-beat.
-        state_.flap_phase = core::damp(state_.flap_phase, 0.0f, 0.25f, dt);
+        // Start each new beat from the top of the downstroke.
+        state_.flap_phase = 0.0f;
     }
+
+    // Blend between the resting dihedral and the current point in the beat.
+    const float up_angle = core::radians(tuning.flap_up_angle_deg);
+    const float down_angle = core::radians(tuning.flap_down_angle_deg);
+    const float centre = (up_angle + down_angle) * 0.5f;
+    const float half_range = (up_angle - down_angle) * 0.5f;
+    const float beating =
+        centre + half_range * wingbeat_curve(state_.flap_phase, downstroke_fraction);
+    state_.wing_angle = core::lerpf(core::radians(tuning.glide_dihedral_deg), beating,
+                                    core::saturate(state_.flap_amplitude));
 
     // Low-speed assist: a gentle forward push so running out of airspeed means
     // a mushy nose rather than an unrecoverable tumble.
@@ -187,16 +231,42 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
 
     // --- assists, expressed as extra commanded rate ---
 
-    // Turn coordination: entering a bank should swing the nose around with it,
-    // otherwise the turn skids and reads as a slide rather than a turn.
+    // Bank angle, signed. Rolling right yaws the body so that the right wing
+    // drops, which makes dot(right, world up) negative -- so a right bank is a
+    // NEGATIVE bank angle here. Both assists below depend on that sign, and
+    // both had it backwards: auto-level was a positive feedback loop that rolled
+    // the dragon all the way inverted, and turn coordination was yawing out of
+    // the turn instead of into it.
     const float bank = std::atan2(core::dot(right, Vec3::up()), core::dot(up, Vec3::up()));
-    commanded.y += -bank * tuning.turn_coordination * core::saturate(airspeed / 30.0f);
 
-    // Auto-level: only when the player is not asking for roll, so it assists
-    // rather than fights.
+    // Turn coordination: entering a bank should swing the nose around with it,
+    // otherwise the turn skids and reads as a slide rather than a turn. Right
+    // bank (negative) needs right yaw (negative rate).
+    commanded.y += bank * tuning.turn_coordination * core::saturate(airspeed / 30.0f);
+
+    // Auto-level: roll back toward wings-level, but only when the player is not
+    // asking for roll, so it assists rather than fights.
+    //
+    // The error is dot(body right, world up) rather than the bank angle,
+    // because that degenerates gracefully: it goes to zero in a vertical dive,
+    // where rolling genuinely would not help, instead of commanding a large
+    // useless rate. Its one weakness is that it is also zero when exactly
+    // inverted, so past ninety degrees we command full deflection and commit to
+    // a direction rather than balancing on the singularity.
     const float roll_released = 1.0f - core::saturate(std::fabs(state_.control.z) * 4.0f);
     if (roll_released > 0.0f) {
-        commanded.z += bank * tuning.auto_level * roll_released;
+        const float right_up = core::dot(right, Vec3::up());
+        const float up_up = core::dot(up, Vec3::up());
+        float roll_error = -right_up;
+        if (up_up < 0.0f) {
+            // Inverted. Pick a side and hold it, biased by whichever way is
+            // already shorter.
+            roll_error = right_up > 0.0f ? -1.0f : 1.0f;
+        }
+        const float level_rate = core::clampf(roll_error * tuning.auto_level,
+                                              -tuning.auto_level_max_rate,
+                                              tuning.auto_level_max_rate);
+        commanded.z += level_rate * roll_released;
     }
 
     // Weathercock stability: yaw the nose back into the airflow. This is the
@@ -209,6 +279,19 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     commanded.x += -state_.angle_of_attack * tuning.pitch_stability * airflow;
     if (state_.stalling) {
         commanded.x += -core::signf(state_.angle_of_attack) * tuning.stall_recovery * airflow;
+    }
+
+    // Pitch attitude assist. Angle-of-attack stability says nothing about which
+    // way the nose is pointing, so a hands-off dive is a stable dive. This eases
+    // the nose toward the horizon instead, and only while the player is not
+    // asking for pitch.
+    const float pitch_released = 1.0f - core::saturate(std::fabs(state_.control.x) * 4.0f);
+    if (pitch_released > 0.0f) {
+        const Vec3 forward = state_.forward();
+        const float level_pitch = core::clampf(-forward.y * tuning.pitch_level,
+                                              -tuning.pitch_level_max_rate,
+                                              tuning.pitch_level_max_rate);
+        commanded.x += level_pitch * pitch_released * airflow;
     }
 
     // Rate damping, so control inputs settle instead of ringing.
@@ -323,12 +406,15 @@ const Field FIELDS[] = {
     FIELD(gravity),              FIELD(lift_coefficient_max), FIELD(stall_angle_deg),
     FIELD(post_stall_lift),      FIELD(parasitic_drag),      FIELD(induced_drag_factor),
     FIELD(flap_peak_force),      FIELD(flap_period),         FIELD(glide_thrust),
+    FIELD(flap_up_angle_deg),    FIELD(flap_down_angle_deg),
+    FIELD(flap_downstroke_fraction), FIELD(glide_dihedral_deg), FIELD(flap_blend),
     FIELD(tuck_lift_loss),       FIELD(tuck_drag_loss),      FIELD(brake_drag_gain),
     FIELD(brake_lift_gain),      FIELD(pitch_rate),          FIELD(yaw_rate),
     FIELD(roll_rate),            FIELD(control_lag),         FIELD(low_speed_authority),
     FIELD(authority_reference_speed), FIELD(yaw_stability),  FIELD(pitch_stability),
     FIELD(pitch_damping),        FIELD(yaw_damping),         FIELD(roll_damping),
-    FIELD(auto_level),           FIELD(turn_coordination),   FIELD(stall_recovery),
+    FIELD(auto_level),           FIELD(auto_level_max_rate), FIELD(turn_coordination),
+    FIELD(stall_recovery),       FIELD(pitch_level),         FIELD(pitch_level_max_rate),
     FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),
     FIELD(ground_friction),      FIELD(safe_landing_speed),
 };

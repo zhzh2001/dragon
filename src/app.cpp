@@ -25,6 +25,14 @@ Options parse_options(int argc, char** argv) {
             options.screenshot = argv[++i];
         } else if (arg == "--hide-ui") {
             options.hide_ui = true;
+        } else if (arg == "--input" && i + 1 < argc) {
+            float* v = options.input_override;
+            if (SDL_sscanf(argv[++i], "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4],
+                           &v[5]) == 6) {
+                options.has_input_override = true;
+            } else {
+                LOG_WARN("--input expects pitch,roll,yaw,flap,tuck,brake");
+            }
         } else if (arg == "--cam" && i + 1 < argc) {
             float v[6] = {};
             if (SDL_sscanf(argv[++i], "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4],
@@ -91,9 +99,9 @@ void App::respawn_dragon() {
     const float x = terrain_.valley_center_x(z);
     const float ground = terrain_.height_at(x, z);
 
-    const float ahead_z = z + 400.0f;
-    const core::Vec3 spawn{x, ground + 150.0f, z};
-    const core::Vec3 look{terrain_.valley_center_x(ahead_z), ground + 130.0f, ahead_z};
+    const float ahead_z = z + 700.0f;
+    const core::Vec3 spawn{x, ground + 170.0f, z};
+    const core::Vec3 look{terrain_.valley_center_x(ahead_z), ground + 150.0f, ahead_z};
 
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
     chase_.snap_to(flight_.state());
@@ -111,62 +119,101 @@ void App::set_mouse_captured(bool captured) {
     if (!options_.headless) SDL_SetWindowRelativeMouseMode(device_.window(), captured);
 }
 
-// Integrates the virtual stick. Mouse motion deflects it and it eases back
-// toward centre, which gives the analogue resolution a keyboard cannot while
-// still recovering from a long drag in one direction.
+// Drives the stick toward a target assembled from whichever device is active.
+//
+// Nothing here accumulates except the optional mouse deflection, which decays.
+// Releasing every control always returns the stick to exactly centre, which is
+// what makes a bad attitude recoverable.
 void App::update_stick(float dt) {
-    if (free_camera_ || !controls_.mouse_stick || !mouse_captured_) {
-        // Ease the stick out rather than snapping, so releasing the mouse does
-        // not jolt the dragon.
-        stick_ = core::Vec2{core::damp(stick_.x, 0.0f, 0.12f, dt),
-                            core::damp(stick_.y, 0.0f, 0.12f, dt)};
-        return;
+    core::Vec2 target{0.0f, 0.0f};
+
+    if (!free_camera_) {
+        // Gamepad left stick is absolute, which is why it is the best of the
+        // three: the physical stick position *is* the command.
+        if (input_.has_gamepad()) {
+            const float raw_x =
+                input_.gamepad_axis(SDL_GAMEPAD_AXIS_LEFTX, controls_.gamepad_deadzone);
+            const float raw_y =
+                input_.gamepad_axis(SDL_GAMEPAD_AXIS_LEFTY, controls_.gamepad_deadzone);
+            // Expo curve preserves sign while softening the centre.
+            target.x = core::signf(raw_x) * std::pow(std::fabs(raw_x), controls_.gamepad_expo);
+            target.y = core::signf(raw_y) * std::pow(std::fabs(raw_y), controls_.gamepad_expo);
+        }
+
+        // Keyboard is a digital stick: held means full deflection. The smoothing
+        // below turns that into a ramp rather than a step.
+        if (!ui_.wants_keyboard()) {
+            target.x += input_.axis(SDL_SCANCODE_A, SDL_SCANCODE_D);
+            target.y += input_.axis(SDL_SCANCODE_S, SDL_SCANCODE_W);
+        }
+
+        if (controls_.mouse_stick && mouse_captured_ && !ui_.wants_mouse()) {
+            const core::Vec2 delta = input_.mouse_delta();
+            mouse_deflection_.x = core::clampf(
+                mouse_deflection_.x + delta.x * controls_.mouse_sensitivity, -1.0f, 1.0f);
+            mouse_deflection_.y = core::clampf(
+                mouse_deflection_.y + delta.y * controls_.mouse_sensitivity, -1.0f, 1.0f);
+            target.x += mouse_deflection_.x;
+            target.y += mouse_deflection_.y;
+        }
     }
 
-    const core::Vec2 delta = input_.mouse_delta();
-    stick_.x = core::clampf(stick_.x + delta.x * controls_.mouse_sensitivity, -1.0f, 1.0f);
-    stick_.y = core::clampf(stick_.y + delta.y * controls_.mouse_sensitivity, -1.0f, 1.0f);
+    // The mouse spring always relaxes, even while the mouse is driving, so
+    // deflection reflects recent motion rather than the whole session.
+    mouse_deflection_.x = core::damp(mouse_deflection_.x, 0.0f, controls_.mouse_return, dt);
+    mouse_deflection_.y = core::damp(mouse_deflection_.y, 0.0f, controls_.mouse_return, dt);
 
-    if (controls_.stick_return > 0.0f) {
-        stick_.x = core::damp(stick_.x, 0.0f, controls_.stick_return, dt);
-        stick_.y = core::damp(stick_.y, 0.0f, controls_.stick_return, dt);
-    }
+    // Clamp the combined target to the unit disc, so diagonal input is not
+    // stronger than cardinal input.
+    const float magnitude = core::length(core::Vec3{target.x, target.y, 0.0f});
+    if (magnitude > 1.0f) target *= 1.0f / magnitude;
 
-    // Keyboard nudges the same stick, so the two schemes compose instead of
-    // fighting over the input.
-    const float keyboard_pitch = input_.axis(SDL_SCANCODE_S, SDL_SCANCODE_W);
-    const float keyboard_roll = input_.axis(SDL_SCANCODE_A, SDL_SCANCODE_D);
-    if (keyboard_pitch != 0.0f) {
-        stick_.y = core::clampf(stick_.y - keyboard_pitch * controls_.keyboard_pitch_rate * dt,
-                                -1.0f, 1.0f);
-    }
-    if (keyboard_roll != 0.0f) {
-        stick_.x = core::clampf(stick_.x + keyboard_roll * controls_.keyboard_roll_rate * dt,
-                                -1.0f, 1.0f);
-    }
+    stick_.x = core::damp(stick_.x, target.x, controls_.stick_smoothing, dt);
+    stick_.y = core::damp(stick_.y, target.y, controls_.stick_smoothing, dt);
 }
 
 game::FlightInput App::read_flight_input() const {
     game::FlightInput in;
-    if (ui_.wants_keyboard()) return in;
 
-    // Mouse up is nose up by default, which reads as "point where you look" in
-    // third person. invert_pitch gives the flight-sim pull-back-to-climb feel.
-    const float pitch_sign = controls_.invert_pitch ? 1.0f : -1.0f;
-    in.pitch = stick_.y * pitch_sign;
-    if (controls_.mouse_yaws) {
-        in.yaw = stick_.x;
-    } else {
-        in.roll = stick_.x;
+    if (options_.has_input_override) {
+        const float* v = options_.input_override;
+        in.pitch = v[0];
+        in.roll = v[1];
+        in.yaw = v[2];
+        in.flap = v[3];
+        in.tuck = v[4];
+        in.brake = v[5];
+        return in;
     }
 
-    // Q/E is always rudder, regardless of what the stick's X axis is doing.
-    in.yaw += input_.axis(SDL_SCANCODE_Q, SDL_SCANCODE_E);
-    in.yaw = core::clampf(in.yaw, -1.0f, 1.0f);
+    if (free_camera_) return in;
 
-    in.flap = input_.down(SDL_SCANCODE_SPACE) ? 1.0f : 0.0f;
-    in.tuck = (input_.down(SDL_SCANCODE_LSHIFT) || input_.down(SDL_SCANCODE_RSHIFT)) ? 1.0f : 0.0f;
-    in.brake = (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL)) ? 1.0f : 0.0f;
+    // W pitches the nose up. invert_pitch gives the flight-sim
+    // pull-back-to-climb feel instead.
+    in.pitch = stick_.y * (controls_.invert_pitch ? -1.0f : 1.0f);
+    in.roll = stick_.x;
+
+    const bool keyboard_free = !ui_.wants_keyboard();
+    if (keyboard_free) {
+        in.yaw = input_.axis(SDL_SCANCODE_Q, SDL_SCANCODE_E);
+        in.flap = input_.down(SDL_SCANCODE_SPACE) ? 1.0f : 0.0f;
+        in.tuck =
+            (input_.down(SDL_SCANCODE_LSHIFT) || input_.down(SDL_SCANCODE_RSHIFT)) ? 1.0f : 0.0f;
+        in.brake =
+            (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL)) ? 1.0f : 0.0f;
+    }
+
+    if (input_.has_gamepad()) {
+        // Shoulders rudder, triggers are the two energy verbs, A flaps. Laid out
+        // so the things you hold continuously sit under the fingers that can
+        // hold them.
+        const float pad_yaw = (input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) ? 1.0f : 0.0f) -
+                              (input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ? 1.0f : 0.0f);
+        in.yaw = core::clampf(in.yaw + pad_yaw, -1.0f, 1.0f);
+        in.flap = core::maxf(in.flap, input_.gamepad_button(SDL_GAMEPAD_BUTTON_SOUTH) ? 1.0f : 0.0f);
+        in.tuck = core::maxf(in.tuck, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+        in.brake = core::maxf(in.brake, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+    }
     return in;
 }
 
@@ -175,13 +222,9 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     gfx::ModelUniforms model;
     model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one());
 
-    // Wing angle from the flap oscillator, plus a static dihedral so gliding
-    // wings sit slightly raised rather than dead flat.
-    const float beat = std::sin(s.flap_phase * core::TWO_PI);
-    const bool flapping = s.flap_phase > 0.001f;
-    const float flap_angle = flapping ? beat * core::radians(46.0f) : core::radians(7.0f);
-
-    model.wing = core::Vec4{flap_angle, s.wing_tuck, dragon_dims_.wing_root,
+    // The flight model already produced the wing angle, so the wing you see and
+    // the thrust it generated cannot disagree.
+    model.wing = core::Vec4{s.wing_angle, s.wing_tuck, dragon_dims_.wing_root,
                             dragon_dims_.wing_span};
 
     // Tail and neck lag into the turn. A crude stand-in for the spring chains
@@ -199,6 +242,7 @@ void App::regenerate_terrain() {
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
     material_.rock_slope = 0.62f;
+    material_.half_extent = terrain_settings_.half_extent;
     // High enough that snow reads as mountain caps rather than covering the
     // whole upper valley.
     material_.snow_line = core::lerpf(terrain_.min_height(), terrain_.max_height(), 0.74f);
@@ -209,8 +253,8 @@ void App::frame_camera_on_valley() {
     const float z = -terrain_settings_.half_extent * 0.55f;
     const float x = terrain_.valley_center_x(z);
     const float ground = terrain_.height_at(x, z);
-    Vec3 eye{x, ground + 120.0f, z};
-    const float look_z = z + 500.0f;
+    Vec3 eye{x, ground + 220.0f, z};
+    const float look_z = z + 900.0f;
     Vec3 target{terrain_.valley_center_x(look_z), ground + 40.0f, look_z};
     camera_.set_position(eye, target);
 }
@@ -254,15 +298,24 @@ void App::pump_events() {
 
     if (input_.pressed(SDL_SCANCODE_TAB)) {
         free_camera_ = !free_camera_;
-        if (free_camera_) set_mouse_captured(false);
+        if (free_camera_) {
+            set_mouse_captured(false);
+            // Detach where the chase camera already is, so the view is
+            // continuous instead of teleporting to wherever the free camera was
+            // last parked.
+            const gfx::Camera& from = chase_.camera();
+            camera_.set_position(from.position, from.position + from.forward() * 60.0f);
+        }
     }
     if (input_.pressed(SDL_SCANCODE_R)) respawn_dragon();
 
-    // Clicking in the world takes the mouse for flying.
+    // Only mouse steering needs the pointer; keyboard and gamepad leave it free
+    // so the tuning panel stays usable while flying.
     if (!free_camera_ && controls_.mouse_stick && !ui_.wants_mouse() &&
         input_.mouse_pressed(SDL_BUTTON_LEFT)) {
         set_mouse_captured(true);
     }
+    if (!controls_.mouse_stick && mouse_captured_) set_mouse_captured(false);
 
     // In free-camera mode, hold right mouse to look. Relative mode hides the
     // cursor and delivers unbounded deltas, so the view can turn past the
@@ -424,13 +477,15 @@ void App::build_ui(float dt) {
                                     3000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("hill height", &terrain_settings_.hill_height, 0.0f, 90.0f,
                                     "%.0f m");
-        dirty |= ImGui::SliderFloat("valley width", &terrain_settings_.valley_width, 60.0f, 800.0f,
+        dirty |= ImGui::SliderFloat("valley width", &terrain_settings_.valley_width, 60.0f, 1400.0f,
                                     "%.0f m");
         dirty |= ImGui::SliderFloat("valley falloff", &terrain_settings_.valley_falloff, 100.0f,
-                                    1200.0f, "%.0f m");
+                                    2000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("valley meander", &terrain_settings_.valley_meander, 0.0f,
-                                    900.0f, "%.0f m");
-        dirty |= ImGui::SliderFloat("cell size", &terrain_settings_.cell_size, 2.0f, 16.0f,
+                                    1600.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("half extent", &terrain_settings_.half_extent, 500.0f, 4000.0f,
+                                    "%.0f m");
+        dirty |= ImGui::SliderFloat("cell size", &terrain_settings_.cell_size, 3.0f, 20.0f,
                                     "%.0f m");
         if (dirty && !ImGui::IsAnyItemActive()) regenerate_terrain();
 
@@ -456,7 +511,7 @@ void App::build_ui(float dt) {
         ImGui::Checkbox("enabled", &shadow_.enabled);
         ImGui::Text("%ux%u, %.2f m/texel", shadow_.resolution(), shadow_.resolution(),
                     shadow_.extent * 2.0f / float(shadow_.resolution()));
-        ImGui::SliderFloat("extent", &shadow_.extent, 200.0f, 2000.0f, "%.0f m");
+        ImGui::SliderFloat("extent", &shadow_.extent, 200.0f, 3000.0f, "%.0f m");
         ImGui::SliderFloat("bias", &shadow_.depth_bias, 0.0f, 0.01f, "%.5f");
         ImGui::SliderFloat("strength", &shadow_.strength, 0.0f, 1.0f);
     }
@@ -508,19 +563,23 @@ void App::build_flight_ui() {
 
     if (ImGui::Button("respawn (R)")) respawn_dragon();
 
-    if (!mouse_captured_ && !free_camera_) {
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "click the world to fly");
-    }
-
     if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("stick  %+.2f  %+.2f", stick_.x, stick_.y);
-        ImGui::Checkbox("mouse stick", &controls_.mouse_stick);
-        ImGui::SameLine();
+        ImGui::Text("stick  roll %+.2f   pitch %+.2f", stick_.x, stick_.y);
+        ImGui::Text("gamepad: %s", input_.gamepad_name());
         ImGui::Checkbox("invert pitch", &controls_.invert_pitch);
-        ImGui::Checkbox("mouse X yaws instead of rolls", &controls_.mouse_yaws);
-        ImGui::SliderFloat("mouse sensitivity", &controls_.mouse_sensitivity, 0.0005f, 0.015f,
-                           "%.4f");
-        ImGui::SliderFloat("stick return", &controls_.stick_return, 0.0f, 3.0f, "%.2f s");
+        ImGui::SliderFloat("stick smoothing", &controls_.stick_smoothing, 0.0f, 0.3f, "%.3f s");
+        ImGui::SliderFloat("gamepad deadzone", &controls_.gamepad_deadzone, 0.0f, 0.4f);
+        ImGui::SliderFloat("gamepad expo", &controls_.gamepad_expo, 1.0f, 3.0f);
+        ImGui::Separator();
+        ImGui::Checkbox("mouse steering (accumulates)", &controls_.mouse_stick);
+        if (controls_.mouse_stick) {
+            if (!mouse_captured_) {
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "click the world to capture");
+            }
+            ImGui::SliderFloat("mouse sensitivity", &controls_.mouse_sensitivity, 0.0003f, 0.008f,
+                               "%.4f");
+            ImGui::SliderFloat("mouse recentre", &controls_.mouse_return, 0.05f, 2.0f, "%.2f s");
+        }
     }
 
     if (ImGui::CollapsingHeader("Telemetry", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -602,9 +661,10 @@ void App::build_flight_ui() {
     }
 
     ImGui::Separator();
-    ImGui::TextDisabled("mouse steers, W/S + A/D also work");
+    ImGui::TextDisabled("W/S pitch, A/D roll, Q/E rudder");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
-    ImGui::TextDisabled("Q/E rudder, R respawn, esc frees the mouse");
+    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake");
+    ImGui::TextDisabled("R respawn, tab free camera, esc quit");
     ImGui::End();
 }
 

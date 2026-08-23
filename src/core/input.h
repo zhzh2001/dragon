@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gamepad.h>
 
 #include "core/math.h"
 
@@ -29,6 +30,19 @@ public:
         return (down(positive) ? 1.0f : 0.0f) - (down(negative) ? 1.0f : 0.0f);
     }
 
+    // ---- gamepad ----
+    // Polled rather than event-driven: for continuous axes the current value is
+    // all anyone wants, and polling avoids tracking per-axis state.
+    bool has_gamepad() const { return gamepad_ != nullptr; }
+    const char* gamepad_name() const;
+
+    // Axis in [-1, 1] with the deadzone removed and rescaled, so the usable
+    // range starts at 0 rather than jumping at the deadzone edge.
+    float gamepad_axis(SDL_GamepadAxis axis, float deadzone = 0.12f) const;
+    // Triggers report [0, 1].
+    float gamepad_trigger(SDL_GamepadAxis axis, float deadzone = 0.06f) const;
+    bool gamepad_button(SDL_GamepadButton button) const;
+
     bool mouse_down(int button) const { return mouse_current_ & SDL_BUTTON_MASK(button); }
     bool mouse_pressed(int button) const {
         return (mouse_current_ & SDL_BUTTON_MASK(button)) &&
@@ -46,6 +60,11 @@ private:
     uint32_t mouse_previous_ = 0;
     Vec2 mouse_delta_;
     float wheel_ = 0.0f;
+
+    // First connected pad wins. Multiple pads would only matter for local
+    // multiplayer, which this game will never have.
+    SDL_Gamepad* gamepad_ = nullptr;
+    SDL_JoystickID gamepad_id_ = 0;
 };
 
 }  // namespace core

@@ -75,6 +75,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 ray = normalize(in.world_position - scene.camera_position.xyz);
     float3 fogged = mix(lit, sky_color(ray, scene), saturate(fog));
 
-    float3 mapped = fogged / (1.0 + fogged);
-    return float4(pow(mapped, 1.0 / 2.2), 1.0);
+    return float4(tonemap(fogged), 1.0);
 }
