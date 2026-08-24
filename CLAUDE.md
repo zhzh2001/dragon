@@ -160,34 +160,62 @@ rotation**. Replacing the bind rotation destroys the rest pose, and a real rig's
 bones each point along their own axis, so "rotate about local Z" means something
 different for every bone.
 
-### Getting a usable asset: do NOT route it through Blender's FBX importer
+### Getting a usable asset: download glTF, never route it through Blender
 
-Drop a rigged `.glb` or `.gltf` at `assets/dragon.glb` and it is used
-automatically, falling back to the generated rig if anything is wrong. The
-loader handles the awkward parts (file-supplied inverse binds, scene transform
-above the skin, side detection by subtree, facing and scale derived from the
-rig). What it cannot fix is an asset that arrived broken.
+Drop a rigged `.glb` at `assets/dragon.glb` and it is used automatically, falling
+back to the generated rig if anything is wrong. See ATTRIBUTION.md for the model
+currently in use and how to obtain it.
 
-**Sketchfab models delivered as FBX are mangled by Blender's FBX importer.** This
-was established by rendering the dragon in Blender's own viewport, dragon meshes
-only, across eight frames of its animation: broken at every frame, before any
-processing of mine. Sketchfab's own viewer shows the same model correctly. The
-signature is roughly sixty auto-generated `*_end_*` leaf bones plus a handful of
-vertices flung far from the body, which is the classic FBX bone-orientation
-import failure -- normally cured by importing with `ignore_leaf_bones` and
-`automatic_bone_orientation`, neither of which the download tool exposes, and it
-deletes the source `.fbx` afterwards.
+**Download the glTF variant from the model's Sketchfab page. Do not use the
+original FBX.** Blender's FBX importer mangles this rig, which was established by
+rendering the model in Blender's own viewport across eight frames of its
+animation -- broken at every frame, before any processing, while Sketchfab's
+viewer shows it correctly. The signature is around sixty auto-generated `*_end_*`
+leaf bones plus vertices flung far from the body. The glTF download needs no
+Blender step at all: no pose bake, no bone reduction, no export options to get
+wrong.
 
-So: **download the glTF variant from the model's Sketchfab page directly** (the
-Download button offers glTF alongside the original format) and drop it in
-`assets/`. That bypasses Blender entirely. No pose bake, no bone surgery, no
-export options to get wrong.
+`artifacts/dragon_broken_fbx_import.glb` is kept as the counter-example.
 
-`artifacts/dragon_broken_fbx_import.glb` is kept as the counter-example. It
-parses, validates, and skins to identity at bind pose -- every automated check
-passes -- and still renders as a tangle of sheets. No loader-side test can catch
-"the rig was mangled on import", so a new asset needs a look, not just a green
-test. Two dead ends recorded so they are not repeated: cutting a rig down to fit
-a joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS
-is 256 for this reason), and picking a pose-bake frame by proxy metrics rather
-than by rendering candidates and looking at them.
+### How the loader reads a skin
+
+Joint bind transforms are derived from the file's **inverse bind matrices**, not
+from the node hierarchy's TRS. An inverse bind matrix is by definition the
+inverse of that joint's bind world transform, so inverting it recovers that
+transform exactly, and building the skeleton from those makes "skinning at the
+bind pose is the identity" true by construction for any exporter.
+
+This matters because reading node TRS means reconstructing the same information
+through a chain of conventions -- which node absorbs the scene transform, whether
+the mesh node's own transform is divided out -- and two different assets
+disagreed about those conventions. One skinned perfectly while the other was
+deformed by 12% of its size, and a "fix" derived from the glTF spec's skinning
+formula broke the one that had been working. Nothing can disagree about
+`inverse(inverseBind)`.
+
+The loader rejects an asset whose bind pose does not reconcile, reporting how far
+skinning moves the average vertex at rest. That check cannot false-positive on a
+legitimately-shaped creature, unlike the vertex-spread and bone-distance
+heuristics it replaced -- a wing membrane is legitimately far from the bone that
+drives it. What no automated check can catch is a rig that was mangled before it
+reached the file, so a new asset still needs a look.
+
+### Driving an arbitrary rig
+
+`anim::map_dragon_joints` identifies the neck, tail, wing and leg chains by name
+then structure. Wings are a shared root chain plus any number of finger chains,
+and sides come from the mean X of a bone's *subtree* -- this asset labels its +X
+wing "_L" and puts both wing roots on the centreline.
+
+Rotations are applied about **body-space axes, composed with each joint's bind
+rotation**, and **normalized across the chain**. All three matter: replacing the
+bind rotation destroys the rest pose, a real rig's bones each point along their
+own axis, and rotations down a chain add up -- so applying the flap angle at
+every bone makes total bend depend on how many bones the rig happens to have. The
+generated rig has two bones per wing and the imported one has five, which put the
+imported dragon's wings in a steep V at rest.
+
+Two dead ends, recorded so they are not repeated: cutting a rig down to fit a
+joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS is
+256 for this reason), and picking a pose-bake frame by proxy metrics rather than
+by rendering candidates and looking at them.

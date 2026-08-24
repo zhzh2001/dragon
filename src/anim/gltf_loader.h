@@ -28,10 +28,9 @@ struct GltfLoadResult {
     // orientation without guessing.
     core::Vec3 bounds_min = core::Vec3::zero();
     core::Vec3 bounds_max = core::Vec3::zero();
-    // Median distance from a vertex to the bone that dominates it, as a fraction
-    // of the model's size. Small means the mesh and skeleton agree about where
-    // the creature is; large means the rest pose is a tangle.
-    float median_bone_distance = 0.0f;
+    // Average movement of a vertex when skinned at the bind pose, as a fraction
+    // of the model's size. Should be ~0: at rest, skinning is the identity.
+    float bind_pose_error = 0.0f;
 };
 
 GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,

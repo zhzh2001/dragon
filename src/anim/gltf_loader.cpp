@@ -53,6 +53,14 @@ Transform decompose(const float m[16]) {
     return t;
 }
 
+Transform decompose_matrix(const Mat4& m) {
+    float raw[16];
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) raw[c * 4 + r] = m.col[c][r];
+    }
+    return decompose(raw);
+}
+
 Transform node_local_transform(const cgltf_node* node) {
     if (node->has_matrix) return decompose(node->matrix);
     Transform t;
@@ -63,17 +71,18 @@ Transform node_local_transform(const cgltf_node* node) {
     return t;
 }
 
-// World transform of a node, accumulated all the way to the scene root.
-//
-// A skin's topmost joint needs this, not its local transform: exporters routinely
-// leave scale and orientation on nodes *above* the skeleton (this asset arrived
-// with both on a parent empty from the Sketchfab import), and using the local
-// transform silently drops them. That produced a model in the wrong units whose
-// wings both mapped to the same side.
-Transform node_world_transform(const cgltf_node* node) {
+Mat4 mat4_from_gltf(const float m[16]) {
+    Mat4 out;
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) out.col[c][r] = m[c * 4 + r];
+    }
+    return out;
+}
+
+Mat4 node_world_matrix(const cgltf_node* node) {
     float world[16];
     cgltf_node_transform_world(node, world);
-    return decompose(world);
+    return mat4_from_gltf(world);
 }
 
 std::string joint_name(const cgltf_node* node, size_t index) {
@@ -115,12 +124,43 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
 
     // ---- skeleton ----
     //
+    // Joint bind transforms are derived from the file's inverse bind matrices
+    // rather than from the node hierarchy's TRS.
+    //
+    // The inverse bind matrix IS the inverse of the joint's bind world transform,
+    // by definition, so inverting it gives that transform exactly. Building the
+    // skeleton from those makes "skinning at the bind pose is the identity" true
+    // by construction, for any exporter, whatever transforms it left on ancestor
+    // nodes. Reading node TRS instead means reconstructing the same information
+    // through a chain of conventions -- which node absorbs the scene transform,
+    // whether the mesh node's transform is divided out -- and getting any of it
+    // wrong silently deforms the whole model. Two different assets disagreed
+    // about those conventions; neither can disagree about this.
+    //
     // glTF joint order is arbitrary, but this engine requires parents to precede
-    // children so world transforms resolve in one pass. So joints are emitted in
-    // dependency order, and a map records where each landed.
+    // children, so joints are emitted in dependency order.
     out_skeleton = Skeleton();
     std::vector<int> gltf_to_skeleton(skin->joints_count, NO_PARENT);
     std::vector<bool> emitted(skin->joints_count, false);
+
+    const bool have_inverse_binds =
+        skin->inverse_bind_matrices && skin->inverse_bind_matrices->count >= skin->joints_count;
+
+    std::vector<Mat4> bind_world(skin->joints_count, Mat4::identity());
+    std::vector<Mat4> inverse_bind(skin->joints_count, Mat4::identity());
+    if (have_inverse_binds) {
+        for (size_t i = 0; i < skin->joints_count; ++i) {
+            float m[16];
+            cgltf_accessor_read_float(skin->inverse_bind_matrices, i, m, 16);
+            inverse_bind[i] = mat4_from_gltf(m);
+            bind_world[i] = core::inverse(inverse_bind[i]);
+        }
+    } else {
+        for (size_t i = 0; i < skin->joints_count; ++i) {
+            bind_world[i] = node_world_matrix(skin->joints[i]);
+            inverse_bind[i] = core::inverse(bind_world[i]);
+        }
+    }
 
     auto find_joint_index = [&](const cgltf_node* node) -> int {
         if (!node) return -1;
@@ -130,9 +170,6 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
         return -1;  // not part of the skin
     };
 
-    // Repeated passes: emit any joint whose parent is already emitted (or is
-    // outside the skin, making it a root). Terminates because the hierarchy is a
-    // forest.
     size_t remaining = skin->joints_count;
     while (remaining > 0) {
         bool progress = false;
@@ -143,12 +180,14 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             if (parent_gltf >= 0 && !emitted[size_t(parent_gltf)]) continue;
 
             const int parent = parent_gltf >= 0 ? gltf_to_skeleton[size_t(parent_gltf)] : NO_PARENT;
-            // A joint whose parent lies outside the skin absorbs everything
-            // above it, so the whole scene transform is accounted for exactly
-            // once.
-            const Transform local = parent == NO_PARENT ? node_world_transform(node)
-                                                        : node_local_transform(node);
-            gltf_to_skeleton[i] = out_skeleton.add_joint(joint_name(node, i), parent, local);
+            // Local transform relative to the parent's bind world, so the
+            // hierarchy reproduces bind_world exactly.
+            const Mat4 local_matrix =
+                parent_gltf >= 0
+                    ? core::inverse(bind_world[size_t(parent_gltf)]) * bind_world[i]
+                    : bind_world[i];
+            gltf_to_skeleton[i] =
+                out_skeleton.add_joint(joint_name(node, i), parent, decompose_matrix(local_matrix));
             emitted[i] = true;
             --remaining;
             progress = true;
@@ -159,26 +198,11 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             return result;
         }
     }
-    // Prefer the file's inverse bind matrices over recomputing them. The two are
-    // meant to agree, but only the file's are guaranteed to match the space the
-    // mesh vertices were written in.
-    bool used_file_inverse_binds = false;
-    if (skin->inverse_bind_matrices &&
-        skin->inverse_bind_matrices->count >= skin->joints_count) {
-        used_file_inverse_binds = true;
-        for (size_t i = 0; i < skin->joints_count; ++i) {
-            float m[16];
-            cgltf_accessor_read_float(skin->inverse_bind_matrices, i, m, 16);
-            Mat4 inverse_bind;
-            for (int c = 0; c < 4; ++c) {
-                for (int r = 0; r < 4; ++r) inverse_bind.col[c][r] = m[c * 4 + r];
-            }
-            out_skeleton.set_inverse_bind(gltf_to_skeleton[i], inverse_bind);
-        }
-    } else {
-        out_skeleton.finalize();
+
+    for (size_t i = 0; i < skin->joints_count; ++i) {
+        out_skeleton.set_inverse_bind(gltf_to_skeleton[i], inverse_bind[i]);
     }
-    LOG_INFO("inverse bind matrices: %s", used_file_inverse_binds ? "from file" : "recomputed");
+    LOG_INFO("inverse bind matrices: %s", have_inverse_binds ? "from file" : "derived from nodes");
 
     // ---- mesh ----
     out_mesh = SkinnedMeshData();
@@ -267,52 +291,49 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                              core::smoothstep(0.25f, 0.75f, t));
     }
 
-    // Sanity-check the rest pose.
+    // Check that the skin actually reconciles with the node hierarchy.
     //
-    // A rig can be authored so that it only looks right under its animation:
-    // constraints and IK place the bones, and the stored rest pose is a tangle.
-    // Such an asset parses, validates, and skins to identity at bind -- and still
-    // renders as garbage. Worth diagnosing here rather than leaving someone to
-    // wonder whether the skinning is broken.
+    // The property that matters: at the bind pose, skinning must reproduce the
+    // vertices exactly. skinning[j] = world_bind[j] * inverseBind[j], so if the
+    // file's inverse binds and the hierarchy agree this is the identity and every
+    // vertex lands where it started. When they disagree the whole model is
+    // silently deformed, which is what a missing term in the skinning formula
+    // looks like.
     //
-    // The test that actually means something: every vertex should lie near the
-    // bone that moves it. A mesh and a skeleton that disagree about where the
-    // creature is are not a usable rest pose. Measuring the spread of the vertex
-    // cloud instead does not work -- a winged animal legitimately keeps most of
-    // its vertices in a narrow band while its wings span the width.
+    // This replaced a heuristic on how far vertices sit from their bones, which
+    // false-positived on perfectly good assets -- a wing membrane is legitimately
+    // far from the bone that drives it.
     {
+        Pose bind;
+        bind.reset_to_bind(out_skeleton);
+        std::vector<Mat4> world, skinning;
+        compute_world_matrices(out_skeleton, bind, world);
+        compute_skinning_matrices(out_skeleton, world, skinning);
+
         const Vec3 extent = result.bounds_max - result.bounds_min;
         const float scale = core::maxf(core::maxf(extent.x, extent.y), extent.z);
-        std::vector<float> distances;
-        distances.reserve(out_mesh.vertices.size());
-        for (const SkinnedVertex& v : out_mesh.vertices) {
-            // Dominant influence: the joint that actually decides where this
-            // vertex goes.
-            int dominant = v.joints[0];
-            float best = v.weights[0];
-            for (int i = 1; i < 4; ++i) {
-                if (v.weights[i] > best) {
-                    best = v.weights[i];
-                    dominant = v.joints[i];
-                }
+        double total = 0.0;
+        size_t counted = 0;
+        for (size_t i = 0; i < out_mesh.vertices.size(); i += 7) {
+            const SkinnedVertex& v = out_mesh.vertices[i];
+            Vec3 blended = Vec3::zero();
+            for (int k = 0; k < 4; ++k) {
+                if (v.weights[k] <= 0.0f) continue;
+                blended += core::transform_point(skinning[v.joints[k]], v.position) * v.weights[k];
             }
-            const Vec3 bone = out_skeleton.world_bind(dominant).translation_part();
-            distances.push_back(core::length(v.position - bone));
+            total += double(core::length(blended - v.position));
+            ++counted;
         }
-        std::sort(distances.begin(), distances.end());
-        const float median = distances[distances.size() / 2];
-        result.median_bone_distance = scale > 1e-6f ? median / scale : 1.0f;
+        result.bind_pose_error =
+            counted > 0 && scale > 1e-6f ? float(total / double(counted)) / scale : 0.0f;
 
-        // A tenth of the model's size is already generous: real rigs sit well
-        // under a few percent.
-        if (result.median_bone_distance > 0.10f) {
+        if (result.bind_pose_error > 0.01f) {
             char message[256];
             std::snprintf(message, sizeof(message),
-                          "rest pose looks wrong: the median vertex sits %.0f%% of the model's "
-                          "size away from the bone that moves it. This rig probably relies on "
-                          "constraints or animation to hold its shape -- bake a good pose as the "
-                          "rest pose before exporting.",
-                          result.median_bone_distance * 100.0f);
+                          "bind pose does not reconcile: skinning at rest moves the average "
+                          "vertex by %.1f%% of the model's size, so the file's inverse bind "
+                          "matrices disagree with its node hierarchy.",
+                          result.bind_pose_error * 100.0f);
             result.error = message;
             LOG_WARN("%s", result.error.c_str());
             return result;

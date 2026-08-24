@@ -7,3 +7,11 @@ compile_commands.json
 # Written at runtime. A record is personal, and committing the autopilot's time
 # as though it were the player's would be wrong.
 assets/best_times.txt
+
+# Model assets are large (65 MB each with textures), re-downloadable, and
+# NonCommercial-licensed. Kept out of the repo rather than redistributed; see
+# ATTRIBUTION.md for where to get them.
+assets/*.glb
+assets/*.gltf
+assets/black_dragon_with_idle_animation/
+.DS_Store

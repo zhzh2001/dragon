@@ -339,12 +339,28 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const float sign = side == 0 ? 1.0f : -1.0f;
 
         // Walk outward from the shoulder, then continue into every finger.
-        // Rotation decays and lag accumulates with depth, which is what gives a
-        // beat its whip rather than making the wing a hinged plank.
+        //
+        // Rotations down a chain ADD UP, so applying the flap angle at each bone
+        // makes the total bend depend on how many bones the rig happens to have.
+        // The generated rig has two per wing and the imported one has five, which
+        // put the imported dragon's wings in a steep V at rest. Contributions are
+        // normalized so the wingtip ends up rotated by the flap angle itself,
+        // whatever the chain length.
+        const size_t root_len = joints_.wing_root[side].size();
+        size_t longest_finger = 1;
+        for (const std::vector<int>& finger : joints_.wing_fingers[side]) {
+            longest_finger = finger.size() > longest_finger ? finger.size() : longest_finger;
+        }
+        float decay_total = 0.0f;
+        for (size_t k = 0; k < root_len + longest_finger; ++k) {
+            decay_total += std::pow(tuning.outboard_decay, float(k));
+        }
+        const float normalize = decay_total > 1e-4f ? 1.0f / decay_total : 1.0f;
+
         int depth = 0;
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
-            const float decay = std::pow(tuning.outboard_decay, float(depth));
+            const float decay = std::pow(tuning.outboard_decay, float(depth)) * normalize;
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
             const float flap_angle = base * decay * lag * sign;
 
@@ -353,10 +369,12 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float progress = chain_length > 1
                                        ? float(index_in_chain) / float(chain_length - 1)
                                        : 1.0f;
-            const float sweep =
-                core::radians(tuning.tuck_sweep_deg) * tuck * sign * (0.4f + 0.6f * progress);
-            const float fold = core::radians(tuning.tuck_fold_deg) * tuck * progress * sign;
-            const float flare_angle = core::radians(tuning.brake_flare_deg) * flare * sign;
+            const float sweep = core::radians(tuning.tuck_sweep_deg) * tuck * sign *
+                                (0.4f + 0.6f * progress) * normalize;
+            const float fold =
+                core::radians(tuning.tuck_fold_deg) * tuck * progress * sign * normalize;
+            const float flare_angle =
+                core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
 
             // Flap is a rotation about the body's forward axis; sweep is about
             // the body's up axis.
