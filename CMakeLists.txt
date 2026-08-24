@@ -22,6 +22,7 @@ add_executable(dragon
   src/gfx/buffer.cpp
   src/gfx/debug_draw.cpp
   src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
   src/gfx/shadow_map.cpp
@@ -31,6 +32,9 @@ add_executable(dragon
   src/game/flight.cpp
   src/game/chase_camera.cpp
   src/game/dragon_proxy.cpp
+  src/game/course.cpp
+  src/game/rally.cpp
+  src/game/autopilot.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -65,6 +69,7 @@ add_executable(test_flight
   src/game/terrain.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
   src/gfx/buffer.cpp
 )
 target_include_directories(test_flight PRIVATE src)
@@ -79,9 +84,27 @@ add_executable(test_camera_rig
   src/game/terrain.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
   src/gfx/buffer.cpp
 )
 target_include_directories(test_camera_rig PRIVATE src)
 target_link_libraries(test_camera_rig PRIVATE SDL3::SDL3)
 target_compile_options(test_camera_rig PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME camera_rig COMMAND test_camera_rig)
+
+add_executable(test_rally
+  tests/test_rally.cpp
+  src/game/course.cpp
+  src/game/rally.cpp
+  src/game/autopilot.cpp
+  src/game/autopilot.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_rally PRIVATE src)
+target_link_libraries(test_rally PRIVATE SDL3::SDL3)
+target_compile_options(test_rally PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME rally COMMAND test_rally)

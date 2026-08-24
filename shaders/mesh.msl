@@ -14,6 +14,7 @@ struct VertexOut {
     float3 world_position;
     float3 world_normal;
     float3 albedo;
+    float emissive;
 };
 
 vertex VertexOut vs_main(VertexIn in [[stage_in]],
@@ -41,7 +42,8 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
     // Uniform scale only, so the upper 3x3 rotates normals correctly without an
     // inverse transpose.
     out_vertex.world_normal = normalize((model.model * float4(local_normal, 0.0)).xyz);
-    out_vertex.albedo = in.color;
+    out_vertex.albedo = in.color * model.tint.rgb;
+    out_vertex.emissive = model.tint.a;
     out_vertex.clip_position = scene.view_proj * world;
     return out_vertex;
 }
@@ -67,7 +69,9 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 ambient =
         mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) * scene.terrain_params.w;
 
-    float3 lit = in.albedo * (direct + ambient);
+    // Emissive is added after lighting and before fog, so a glowing checkpoint
+    // still fades into the distance rather than punching through the haze.
+    float3 lit = in.albedo * (direct + ambient) + in.albedo * in.emissive;
 
     float distance = length(in.world_position - scene.camera_position.xyz);
     float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);

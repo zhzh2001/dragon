@@ -6,6 +6,7 @@
 
 #include "core/log.h"
 #include "core/math.h"
+#include "gfx/primitives.h"
 #include "imgui.h"
 
 using core::Quat;
@@ -30,6 +31,8 @@ Options parse_options(int argc, char** argv) {
             else if (mode == "cinematic") options.camera_mode = 2;
             else if (mode == "fp") options.first_person = true;
             else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
+        } else if (arg == "--autopilot") {
+            options.autopilot = true;
         } else if (arg == "--hide-ui") {
             options.hide_ui = true;
         } else if (arg == "--input" && i + 1 < argc) {
@@ -83,6 +86,15 @@ bool App::init(const Options& options) {
     // good session's numbers survive a rebuild.
     game::load_tuning(flight_.tuning, ASSET_ROOT "/flight_tuning.cfg");
 
+    // A unit-radius torus scaled per ring: one mesh, any checkpoint size.
+    ring_mesh_.upload(device_.gpu(),
+                      gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
+                      "checkpoint_ring");
+    rebuild_courses();
+    best_times_.load(ASSET_ROOT "/best_times.txt");
+    select_course(0);
+
+    autopilot_ = options.autopilot;
     apply_camera_preset(options.camera_mode);
     chase_.first_person = options.first_person;
     respawn_dragon();
@@ -100,6 +112,26 @@ bool App::init(const Options& options) {
     return true;
 }
 
+void App::rebuild_courses() {
+    const float extent = terrain_settings_.half_extent;
+    courses_.clear();
+    courses_.push_back(game::make_valley_run(terrain_, extent));
+    courses_.push_back(game::make_canyon_weave(terrain_, extent));
+    courses_.push_back(game::make_summit_climb(terrain_, extent));
+
+    // A hand-authored course on disk takes precedence over the generated set.
+    game::Course custom;
+    if (game::load_course(custom, ASSET_ROOT "/course.txt")) courses_.push_back(custom);
+}
+
+void App::select_course(int index) {
+    if (courses_.empty()) return;
+    current_course_ = core::clampf(float(index), 0.0f, float(courses_.size() - 1));
+    rally_.set_course(courses_[size_t(current_course_)]);
+    // Records outlive a course switch, so restore the one for this course.
+    rally_.set_best_time(best_times_.best(rally_.course().name));
+}
+
 void App::respawn_dragon() {
     // Airborne in the valley corridor, already at a comfortable cruise, facing
     // along the valley. Starting from a stall on the ground would make every
@@ -109,13 +141,40 @@ void App::respawn_dragon() {
     const float ground = terrain_.height_at(x, z);
 
     const float ahead_z = z + 700.0f;
-    const core::Vec3 spawn{x, ground + 170.0f, z};
-    const core::Vec3 look{terrain_.valley_center_x(ahead_z), ground + 150.0f, ahead_z};
+    core::Vec3 spawn{x, ground + 170.0f, z};
+    core::Vec3 look{terrain_.valley_center_x(ahead_z), ground + 150.0f, ahead_z};
+
+    // With a course loaded, start on a run-up to the first ring rather than in
+    // the middle of the valley. A flying start is part of the time trial, so the
+    // approach has to be somewhere you can actually build speed.
+    if (!rally_.course().rings.empty()) {
+        const game::Ring& first = rally_.course().rings.front();
+        const core::Vec3 approach = first.normal();  // the way you fly through it
+        spawn = first.position - approach * 420.0f;
+        const float ground_here = terrain_.height_at(spawn.x, spawn.z);
+        spawn.y = core::maxf(spawn.y, ground_here + 60.0f);
+        look = first.position;
+    }
 
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
     chase_.snap_to(flight_.state());
+    rally_.restart();
+    split_flash_ = 0.0f;
+    miss_flash_ = 0.0f;
     trail_count_ = 0;
     trail_cursor_ = 0;
+}
+
+gfx::ModelUniforms App::ghost_model_uniforms(const game::GhostSample& sample) const {
+    gfx::ModelUniforms model;
+    model.model = core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one());
+    model.wing = core::Vec4{sample.wing_angle, sample.wing_tuck, dragon_dims_.wing_root,
+                            dragon_dims_.wing_span};
+    model.pose = core::Vec4{0.0f, 0.0f, 0.0f, game::dragon_wing_hinge_y(dragon_dims_)};
+    // Cool and slightly emissive, so the ghost reads as a recording rather than
+    // as a second dragon in the world.
+    model.tint = core::Vec4{0.35f, 0.62f, 0.95f, 0.28f};
+    return model;
 }
 
 const gfx::Camera& App::active_camera() const {
@@ -217,6 +276,22 @@ void App::apply_camera_preset(int index) {
 game::FlightInput App::read_flight_input() const {
     game::FlightInput in;
 
+    if (autopilot_) {
+        // Aim at the next checkpoint, or hold the last heading once the run is
+        // over. The autopilot flies through the same FlightInput a player uses,
+        // so it cannot cheat the flight model.
+        const game::Ring* target = rally_.next_ring();
+        const core::Vec3 aim =
+            target ? target->position
+                   : flight_.state().position + flight_.state().forward() * 500.0f;
+        // Passing the ring's normal makes it line up on the approach axis rather
+        // than cutting across the plane and clipping the rim.
+        const core::Vec3 approach = target ? target->normal() : core::Vec3::zero();
+        const core::Vec3 position = flight_.state().position;
+        return game::steer_through(flight_.state(), aim, approach, autopilot_tuning_,
+                                   terrain_.height_at(position.x, position.z));
+    }
+
     if (options_.has_input_override) {
         const float* v = options_.input_override;
         in.pitch = v[0];
@@ -305,6 +380,7 @@ void App::shutdown() {
     if (device_.gpu()) SDL_WaitForGPUIdle(device_.gpu());
     terrain_mesh_.release(device_.gpu());
     dragon_mesh_.release(device_.gpu());
+    ring_mesh_.release(device_.gpu());
     shadow_.shutdown(device_);
     debug_.shutdown();
     pipelines_.shutdown();
@@ -392,6 +468,24 @@ void App::update(float dt) {
     chase_.update(flight_.state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
+    rally_.update(flight_.state(), dt);
+    if (rally_.just_passed_ring()) split_flash_ = 1.6f;
+    if (rally_.just_missed_ring()) miss_flash_ = 1.2f;
+    split_flash_ = core::maxf(split_flash_ - dt, 0.0f);
+    miss_flash_ = core::maxf(miss_flash_ - dt, 0.0f);
+
+    // Record the result BEFORE any restart. restart() clears the one-frame
+    // just_finished flag, so an auto-restart placed above this silently ate
+    // every record the autopilot set.
+    if (rally_.just_finished() && rally_.last_run_was_record()) {
+        best_times_.submit(rally_.course().name, rally_.last_run_time());
+        best_times_.save(ASSET_ROOT "/best_times.txt");
+    }
+
+    // The autopilot laps the course, which is what lets a ghost exist in a
+    // headless capture and doubles as a soak test.
+    if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
+
     push_telemetry(flight_.state());
 
     // Breadcrumb trail, at a fixed spatial-ish rate rather than per frame.
@@ -475,6 +569,22 @@ void App::draw_flight_debug() {
         debug_.sphere(s.position, 6.0f, Vec3{0.9f, 0.75f, 0.35f}, 20, true);
     }
 
+    if (show_ring_path_) {
+        const game::Course& course = rally_.course();
+        for (size_t i = 1; i < course.rings.size(); ++i) {
+            const bool ahead = int(i) > rally_.next_ring_index();
+            debug_.line(course.rings[i - 1].position, course.rings[i].position,
+                        ahead ? Vec3{0.28f, 0.40f, 0.55f} : Vec3{0.14f, 0.18f, 0.20f});
+        }
+        // A dropped line from the live ring to the ground: altitude is the
+        // hardest part of a checkpoint to judge from a distance.
+        if (const game::Ring* next = rally_.next_ring()) {
+            const float ground = terrain_.height_at(next->position.x, next->position.z);
+            debug_.line(next->position, Vec3{next->position.x, ground, next->position.z},
+                        Vec3{0.85f, 0.62f, 0.2f});
+        }
+    }
+
     if (show_camera_rig_) {
         // The spring arm made visible: pivot, arm, and aim point. Seeing the arm
         // shorten against a ridge is the only way to tell a collision response
@@ -495,6 +605,7 @@ void App::build_ui(float dt) {
     if (options_.hide_ui) return;
 
     build_flight_ui();
+    build_rally_ui();
 
     ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
@@ -599,7 +710,12 @@ void App::build_ui(float dt) {
                                     "%.0f m");
         dirty |= ImGui::SliderFloat("cell size", &terrain_settings_.cell_size, 3.0f, 20.0f,
                                     "%.0f m");
-        if (dirty && !ImGui::IsAnyItemActive()) regenerate_terrain();
+        if (dirty && !ImGui::IsAnyItemActive()) {
+            regenerate_terrain();
+            // Generated courses follow the terrain, so they are stale now.
+            rebuild_courses();
+            select_course(current_course_);
+        }
 
         ImGui::SliderFloat("snow line", &material_.snow_line, 0.0f, 900.0f, "%.0f m");
         ImGui::SliderFloat("rock slope", &material_.rock_slope, 0.3f, 0.95f);
@@ -650,6 +766,268 @@ void App::build_ui(float dt) {
         ImGui::TextDisabled("hold right-mouse to look");
     }
     ImGui::TextDisabled("tab toggles free camera, esc quits");
+    ImGui::End();
+}
+
+namespace {
+
+// Projects a world point to screen pixels. Returns false when the point is
+// behind the camera, where a projection would fold it back onto the screen at a
+// mirrored position.
+bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float width, float height,
+                       ImVec2& out) {
+    const core::Vec4 clip = view_proj * core::Vec4{world, 1.0f};
+    if (clip.w <= 1e-4f) return false;
+    const float ndc_x = clip.x / clip.w;
+    const float ndc_y = clip.y / clip.w;
+    out = ImVec2((ndc_x * 0.5f + 0.5f) * width, (1.0f - (ndc_y * 0.5f + 0.5f)) * height);
+    return true;
+}
+
+}  // namespace
+
+// The playing HUD, drawn with ImGui's foreground draw list rather than as
+// windows. It needs shapes and free positioning, not widgets, and this avoids
+// building a 2D renderer for it.
+void App::draw_hud() {
+    if (!show_hud_ || options_.hide_ui) return;
+
+    const game::Course& course = rally_.course();
+    if (course.rings.empty()) return;
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const float width = float(device_.width());
+    const float height = float(device_.height());
+    const core::Mat4 view_proj = active_camera().view_projection(device_.aspect());
+
+    const ImU32 WHITE = IM_COL32(255, 255, 255, 230);
+    const ImU32 DIM = IM_COL32(210, 220, 235, 150);
+    const ImU32 GOLD = IM_COL32(255, 190, 70, 235);
+    const ImU32 AHEAD = IM_COL32(120, 235, 140, 240);
+    const ImU32 BEHIND = IM_COL32(255, 120, 100, 240);
+
+    // ---- next checkpoint marker ----
+    if (const game::Ring* next = rally_.next_ring()) {
+        ImVec2 screen;
+        const bool on_screen = project_to_screen(view_proj, next->position, width, height, screen) &&
+                               screen.x > 0.0f && screen.x < width && screen.y > 0.0f &&
+                               screen.y < height;
+        const float range = core::distance(flight_.state().position, next->position);
+
+        if (on_screen) {
+            // A reticle scaled to the ring's apparent size, so it frames the
+            // checkpoint instead of hiding it.
+            const float apparent = core::clampf(next->radius / core::maxf(range, 1.0f) * height *
+                                                    0.5f,
+                                                14.0f, 260.0f);
+            draw->AddCircle(screen, apparent, GOLD, 40, 2.0f);
+            // Corner ticks read as a target even when the circle is large.
+            for (int i = 0; i < 4; ++i) {
+                const float angle = core::PI * 0.25f + core::PI * 0.5f * float(i);
+                const ImVec2 inner(screen.x + std::cos(angle) * apparent * 0.72f,
+                                   screen.y + std::sin(angle) * apparent * 0.72f);
+                const ImVec2 outer(screen.x + std::cos(angle) * apparent * 1.05f,
+                                   screen.y + std::sin(angle) * apparent * 1.05f);
+                draw->AddLine(inner, outer, GOLD, 2.0f);
+            }
+            char label[32];
+            std::snprintf(label, sizeof(label), "%.0f m", range);
+            draw->AddText(ImVec2(screen.x + apparent + 8.0f, screen.y - 8.0f), GOLD, label);
+        } else {
+            // Off screen: an arrow pinned near the edge, pointing the shortest
+            // way to turn. Without this, losing a checkpoint means flying in
+            // circles hunting for it.
+            const gfx::Camera& camera = active_camera();
+            const core::Vec3 to_ring = next->position - camera.position;
+            const float right = core::dot(to_ring, camera.right());
+            const float up = core::dot(to_ring, camera.up());
+            const float ahead = core::dot(to_ring, camera.forward());
+
+            core::Vec2 direction{right, -up};
+            // Behind the camera, the shortest turn is sideways, so bias the
+            // arrow outward rather than letting it collapse to the centre.
+            if (ahead < 0.0f && core::length(core::Vec3{direction.x, direction.y, 0.0f}) < 1e-3f) {
+                direction = core::Vec2{1.0f, 0.0f};
+            }
+            const float length = core::length(core::Vec3{direction.x, direction.y, 0.0f});
+            if (length > 1e-4f) direction *= 1.0f / length;
+
+            const ImVec2 centre(width * 0.5f, height * 0.5f);
+            const float radius = core::minf(width, height) * 0.36f;
+            const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
+            const float angle = std::atan2(direction.y, direction.x);
+            const ImVec2 left(tip.x + std::cos(angle + 2.5f) * 22.0f,
+                              tip.y + std::sin(angle + 2.5f) * 22.0f);
+            const ImVec2 back(tip.x + std::cos(angle - 2.5f) * 22.0f,
+                              tip.y + std::sin(angle - 2.5f) * 22.0f);
+            draw->AddTriangleFilled(tip, left, back, GOLD);
+
+            char label[32];
+            std::snprintf(label, sizeof(label), "%.0f m", range);
+            draw->AddText(ImVec2(tip.x - 18.0f, tip.y + 22.0f), GOLD, label);
+        }
+    }
+
+    // ---- timer block, top centre ----
+    const float timer_x = width * 0.5f;
+    char line[64];
+
+    // Scaled text rather than the default UI size: a HUD timer is read at a
+    // glance while flying, not studied.
+    ImFont* font = ImGui::GetFont();
+    constexpr float TIMER_SIZE = 38.0f;
+    constexpr float LABEL_SIZE = 16.0f;
+    auto centred = [&](const char* text, float size, float y, ImU32 colour) {
+        const float w = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text).x;
+        draw->AddText(font, size, ImVec2(timer_x - w * 0.5f, y), colour, text);
+    };
+
+    const std::string elapsed = game::format_time(rally_.elapsed());
+
+    // Panel behind the readout, so it stays legible over snow and sky alike.
+    draw->AddRectFilled(ImVec2(timer_x - 150.0f, 8.0f), ImVec2(timer_x + 150.0f, 118.0f),
+                        IM_COL32(10, 14, 20, 155), 8.0f);
+
+    centred(elapsed.c_str(), TIMER_SIZE, 12.0f,
+            rally_.phase() == game::RunPhase::Running ? WHITE : DIM);
+
+    std::snprintf(line, sizeof(line), "checkpoint %d / %zu", rally_.rings_passed(),
+                  course.rings.size());
+    centred(line, LABEL_SIZE, 56.0f, DIM);
+
+    if (rally_.best_time() > 0.0f) {
+        std::snprintf(line, sizeof(line), "best %s", game::format_time(rally_.best_time()).c_str());
+    } else {
+        std::snprintf(line, sizeof(line), "no record yet");
+    }
+    centred(line, LABEL_SIZE, 74.0f, DIM);
+
+    switch (rally_.phase()) {
+        case game::RunPhase::Ready:
+            centred("fly through the first ring to start", LABEL_SIZE, 94.0f, GOLD);
+            break;
+        case game::RunPhase::Finished:
+            centred(rally_.last_run_was_record() ? "NEW RECORD  --  R to run again"
+                                                 : "finished  --  R to run again",
+                    LABEL_SIZE, 94.0f, rally_.last_run_was_record() ? AHEAD : DIM);
+            break;
+        case game::RunPhase::Running:
+            break;
+    }
+
+    // ---- split delta flash ----
+    // Only meaningful once there is a ghost to be measured against.
+    if (split_flash_ > 0.0f && rally_.has_ghost() && rally_.last_split_delta() != 0.0f) {
+        const float delta = rally_.last_split_delta();
+        std::snprintf(line, sizeof(line), "%+.2f s", delta);
+        const ImU32 colour = delta < 0.0f ? AHEAD : BEHIND;
+        // Fade out over the flash, so it draws the eye and then gets out of it.
+        const float alpha = core::saturate(split_flash_ / 1.6f);
+        const ImU32 faded = (colour & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
+        centred(line, 26.0f, 124.0f, faded);
+    }
+
+    if (miss_flash_ > 0.0f) {
+        std::snprintf(line, sizeof(line), "missed by %.0f m", rally_.last_miss_distance());
+        const float alpha = core::saturate(miss_flash_ / 1.2f);
+        const ImU32 faded = (BEHIND & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
+        centred(line, 20.0f, 156.0f, faded);
+    }
+
+    // ---- airspeed, bottom centre ----
+    std::snprintf(line, sizeof(line), "%.0f m/s", flight_.state().airspeed);
+    centred(line, 24.0f, height - 46.0f, WHITE);
+}
+
+void App::build_rally_ui() {
+    ImGui::SetNextWindowPos(ImVec2(392.0f, float(device_.height()) - 236.0f),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Rally");
+
+    for (size_t i = 0; i < courses_.size(); ++i) {
+        const bool selected = int(i) == current_course_;
+        const float best = best_times_.best(courses_[i].name);
+        char label[96];
+        std::snprintf(label, sizeof(label), "%s  (%.1f km)  %s", courses_[i].name.c_str(),
+                      courses_[i].path_length() / 1000.0f,
+                      best > 0.0f ? game::format_time(best).c_str() : "--");
+        if (ImGui::RadioButton(label, selected) && !selected) {
+            select_course(int(i));
+            respawn_dragon();
+        }
+    }
+
+    ImGui::Separator();
+    ImGui::Text("%s", rally_.phase() == game::RunPhase::Ready
+                          ? "ready"
+                          : (rally_.phase() == game::RunPhase::Running ? "running" : "finished"));
+    ImGui::Text("%s   checkpoint %d / %zu", game::format_time(rally_.elapsed()).c_str(),
+                rally_.rings_passed(), rally_.course().rings.size());
+    if (ImGui::Button("restart run (R)")) respawn_dragon();
+
+    ImGui::Checkbox("autopilot", &autopilot_);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(flies the course itself)");
+
+    ImGui::Checkbox("HUD", &show_hud_);
+    ImGui::SameLine();
+    ImGui::Checkbox("ghost", &show_ghost_);
+    ImGui::SameLine();
+    ImGui::Checkbox("route", &show_ring_path_);
+
+    if (rally_.has_ghost()) {
+        ImGui::Text("ghost: %s over %zu samples",
+                    game::format_time(rally_.best_ghost().duration).c_str(),
+                    rally_.best_ghost().samples.size());
+    } else {
+        ImGui::TextDisabled("no ghost yet -- finish a run");
+    }
+
+    if (ImGui::CollapsingHeader("Splits")) {
+        const std::vector<float>& splits = rally_.splits();
+        for (size_t i = 0; i < splits.size(); ++i) {
+            float delta = 0.0f;
+            if (rally_.has_ghost() && i < rally_.best_ghost().ring_times.size()) {
+                delta = splits[i] - rally_.best_ghost().ring_times[i];
+            }
+            if (delta != 0.0f) {
+                ImGui::TextColored(delta < 0.0f ? ImVec4(0.45f, 0.9f, 0.5f, 1.0f)
+                                                : ImVec4(1.0f, 0.5f, 0.4f, 1.0f),
+                                   "%2zu  %s  %+.2f", i + 1, game::format_time(splits[i]).c_str(),
+                                   delta);
+            } else {
+                ImGui::Text("%2zu  %s", i + 1, game::format_time(splits[i]).c_str());
+            }
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Course tools")) {
+        // Enough authoring to capture a line you found by flying it, which is
+        // how a good course actually gets designed.
+        if (ImGui::Button("append ring here")) {
+            game::Course edited = rally_.course();
+            game::Ring ring;
+            ring.position = flight_.state().position;
+            ring.orientation = flight_.state().orientation;
+            ring.radius = 32.0f;
+            edited.rings.push_back(ring);
+            courses_[size_t(current_course_)] = edited;
+            rally_.set_course(edited);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("drop last")) {
+            game::Course edited = rally_.course();
+            if (!edited.rings.empty()) edited.rings.pop_back();
+            courses_[size_t(current_course_)] = edited;
+            rally_.set_course(edited);
+        }
+        if (ImGui::Button("save as assets/course.txt")) {
+            game::save_course(rally_.course(), ASSET_ROOT "/course.txt");
+        }
+        ImGui::TextDisabled("saved courses load on next start");
+    }
+
     ImGui::End();
 }
 
@@ -810,6 +1188,16 @@ void App::render() {
                                gfx::ModelUniforms());
         world_.draw_mesh_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
                                dragon_model);
+        // Only the live checkpoint casts a shadow. Shadowing all of them costs
+        // little but reads as clutter, and the shadow's job here is to tell you
+        // where the next ring is relative to the ground.
+        if (const game::Ring* next = rally_.next_ring()) {
+            gfx::ModelUniforms model;
+            model.model = core::Mat4::trs(next->position, next->orientation,
+                                          core::Vec3(next->radius / RING_MESH_RADIUS));
+            world_.draw_mesh_depth(device_, shadow_pass, ring_mesh_, shadow_.light_view_proj(),
+                                   model);
+        }
         device_.end_pass(shadow_pass);
     }
 
@@ -821,6 +1209,37 @@ void App::render() {
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
     world_.draw_mesh(device_, pass, dragon_mesh_, dragon_model);
+
+    // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
+    // rings that instancing would be premature.
+    const game::Course& course = rally_.course();
+    for (size_t i = 0; i < course.rings.size(); ++i) {
+        const game::Ring& ring = course.rings[i];
+        const int index = int(i);
+        gfx::ModelUniforms model;
+        model.model = core::Mat4::trs(ring.position, ring.orientation,
+                                      core::Vec3(ring.radius / RING_MESH_RADIUS));
+        if (index < rally_.next_ring_index()) {
+            // Passed: still visible so the flown line can be read, but clearly
+            // spent.
+            model.tint = core::Vec4{0.16f, 0.20f, 0.22f, 0.0f};
+        } else if (index == rally_.next_ring_index()) {
+            // The live one pulses, which is what makes it findable at distance
+            // against cluttered terrain.
+            const float pulse = 0.55f + 0.45f * std::sin(time_seconds_ * 4.0f);
+            model.tint = core::Vec4{1.0f, 0.72f, 0.22f, 0.5f + pulse * 0.9f};
+        } else {
+            model.tint = core::Vec4{0.30f, 0.45f, 0.62f, 0.06f};
+        }
+        world_.draw_mesh(device_, pass, ring_mesh_, model);
+    }
+
+    // Ghost of the best run, flying its own recording alongside.
+    game::GhostSample ghost;
+    if (show_ghost_ && rally_.ghost_pose(ghost)) {
+        world_.draw_mesh(device_, pass, dragon_mesh_, ghost_model_uniforms(ghost));
+    }
+
     debug_.draw(device_, pass, camera.view_projection(aspect));
     device_.end_pass(pass);
 
@@ -859,6 +1278,9 @@ void App::run() {
         if (device_.begin_frame()) {
             ui_.begin_frame();
             build_ui(dt);
+            // The HUD goes on the foreground draw list, so it must be built
+            // inside the ImGui frame but layers above every panel.
+            draw_hud();
             render();
             device_.end_frame();
         }

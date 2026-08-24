@@ -32,9 +32,10 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 Tests: `ctest --test-dir build` (math, camera, flight).
 
 Verification without a human at the keyboard: `--headless --frames N
---screenshot`, plus `--cam` to place the view, `--hide-ui`, and `--input
-pitch,roll,yaw,flap,tuck,brake` to hold a control input. That combination is how
-the wingbeat and the inverted recovery were checked.
+--screenshot`, plus `--cam` to place the view, `--cam-mode`, `--hide-ui`,
+`--input pitch,roll,yaw,flap,tuck,brake` to hold a control input, and
+`--autopilot` to fly the selected course unattended. That combination is how the
+wingbeat, the inverted recovery, and every generated course were checked.
 
 ## Controls
 
@@ -49,7 +50,7 @@ the wingbeat and the inverted recovery were checked.
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
-| R | Respawn |
+| R | Restart the run |
 | Right-drag / right stick | Free look -- orbit the view without steering |
 | V | First person, from behind the dragon's head |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
@@ -126,9 +127,42 @@ tests/       plain executables, no framework
 - **M4.1** playtest fixes: keyboard/gamepad controls, roll and inversion
   recovery, asymmetric wingbeat, 5 km valley, shared tonemapping.
 - **M5** chase camera: terrain-swept spring arm, turn lead, free look, first
-  person, three presets. **Awaiting playtest.**
+  person, three presets.
+- **M8** Dragon Rally: checkpoints, timing, splits, ghost replays, three
+  generated courses, HUD, autopilot. **Awaiting playtest.**
 - **Next: M6** a real rigged dragon with procedural wing, neck and tail
-  animation -- or M8 (Dragon Rally), if the flight core is judged done.
+  animation -- or M11, first combat.
+
+## The rally
+
+`game::Course` holds checkpoints; `game::Rally` runs the clock. A flying start
+rather than a countdown: the clock begins when you cross the first ring, so
+choosing your entry speed and line is part of the skill.
+
+Ring tests are **segment based**, not point based. At 100 m/s a 60 Hz frame
+covers 1.7 m, so a point-in-volume test would simply miss a thin checkpoint --
+the fastest runs would be the ones that failed to register.
+
+Ghosts record the best run, never the last, at a fixed 30 Hz, including wing
+angle so the replay is visibly flying rather than sliding along a path.
+
+### Generated courses must be *flyable*, not just well-formed
+
+Two passes run over every generated course, and both exist because a course
+failed without them:
+
+- `limit_climb` caps the rise per leg. The dragon gains about 5 m/s of energy
+  flapping at 45 m/s forward, so it sustains a gradient near 0.11. The first
+  Summit Climb demanded 0.51 on one leg -- not hard, impossible.
+- `clear_line_of_flight` raises rings until the *chord* between consecutive rings
+  clears the terrain. Rings being individually clear says nothing about the line
+  between them, and a path curving round a mountain produces chords straight
+  through it.
+
+`game::steer_toward` / `steer_through` is a PD controller that flies the course
+unattended. It is both the test harness -- "the autopilot completes every course"
+is an assertion -- and the seed of the bot AI, since it commands the same
+`FlightInput` a player does and cannot cheat the flight model.
 
 ## The camera
 

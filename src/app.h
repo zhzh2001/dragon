@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "core/input.h"
 #include "core/math.h"
@@ -8,7 +9,10 @@
 #include "game/chase_camera.h"
 #include "game/debug_camera.h"
 #include "game/dragon_proxy.h"
+#include "game/autopilot.h"
+#include "game/course.h"
 #include "game/flight.h"
+#include "game/rally.h"
 #include "game/terrain.h"
 #include "gfx/debug_draw.h"
 #include "gfx/device.h"
@@ -43,6 +47,10 @@ struct Options {
     // the keyboard.
     bool has_input_override = false;
     float input_override[6] = {};
+
+    // --autopilot flies the selected course unattended. Used to verify the whole
+    // rally loop headlessly, and it doubles as the seed of the bot AI.
+    bool autopilot = false;
 };
 
 Options parse_options(int argc, char** argv);
@@ -72,6 +80,11 @@ private:
     const gfx::Camera& active_camera() const;
     void draw_flight_debug();
     void build_flight_ui();
+    void build_rally_ui();
+    void draw_hud();
+    void select_course(int index);
+    void rebuild_courses();
+    gfx::ModelUniforms ghost_model_uniforms(const game::GhostSample& sample) const;
 
     Options options_;
 
@@ -92,6 +105,23 @@ private:
     game::ChaseCamera chase_;
     game::DragonProxyDims dragon_dims_;
     gfx::Mesh dragon_mesh_;
+
+    // ---- rally ----
+    game::Rally rally_;
+    std::vector<game::Course> courses_;
+    int current_course_ = 0;
+    game::BestTimes best_times_;
+    gfx::Mesh ring_mesh_;
+    // Unit-radius torus, scaled per ring, so one mesh serves every checkpoint.
+    static constexpr float RING_MESH_RADIUS = 1.0f;
+    bool show_hud_ = true;
+    bool show_ghost_ = true;
+    bool show_ring_path_ = true;
+    bool autopilot_ = false;
+    game::AutopilotTuning autopilot_tuning_;
+    // Time remaining on the split-delta flash after passing a checkpoint.
+    float split_flash_ = 0.0f;
+    float miss_flash_ = 0.0f;
 
     // How the player commands the dragon.
     //

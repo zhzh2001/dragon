@@ -68,10 +68,13 @@ struct ChaseCameraTuning {
     float free_look_pitch_limit = 72.0f;
 
     // ---- shake ----
-    // Scaled by speed and g-load. A little sells velocity; a lot is unreadable.
-    float shake_speed = 0.055f;
-    float shake_g = 0.045f;
-    float shake_max = 1.4f;  // degrees
+    // Scaled by speed and g-load. A little sells velocity; a lot is unreadable,
+    // and the first pass was far too much -- at cruise it sat pinned at the
+    // ceiling, so the shake was effectively constant instead of expressive.
+    // These values are barely perceptible at cruise and noticeable in a dive.
+    float shake_speed = 0.010f;
+    float shake_g = 0.015f;
+    float shake_max = 0.45f;  // degrees
 };
 
 // Whole-camera configurations, for comparing feels rather than parameters.

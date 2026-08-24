@@ -3,3 +3,7 @@ build/
 compile_commands.json
 .DS_Store
 *.dSYM/
+
+# Written at runtime. A record is personal, and committing the autopilot's time
+# as though it were the player's would be wrong.
+assets/best_times.txt

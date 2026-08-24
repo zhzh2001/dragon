@@ -14,8 +14,13 @@ struct ModelUniforms {
     // z = wing root |x|, w = wing span |x|
     float4 wing;
     // x = tail/neck lateral bend (radians), y = pitch of the body relative to
-    // the flight path, z = brake flare 0..1, w = unused
+    // the flight path, z = brake flare 0..1, w = wing hinge height above the
+    // body centreline
     float4 pose;
+    // rgb multiplies vertex colour, a is an unlit emissive add. Must match
+    // gfx::ModelUniforms exactly -- a mismatch here is a shader compile error at
+    // startup, which the pipeline cache reports rather than crashing on.
+    float4 tint;
 };
 
 // Bends a local-space vertex according to the current wing state. Vertices

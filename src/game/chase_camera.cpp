@@ -11,8 +11,12 @@ namespace {
 
 // Cheap deterministic wobble for camera shake. Two incommensurable sines per
 // axis, so it never settles into a visible rhythm.
+//
+// Frequencies are deliberately low (roughly 0.7 and 1.5 Hz). The first version
+// ran at 2 and 5 Hz, which reads as the camera rattling rather than as air
+// moving over a large animal.
 float wobble(float t, float seed) {
-    return std::sin(t * 13.7f + seed) * 0.6f + std::sin(t * 31.3f + seed * 2.7f) * 0.4f;
+    return std::sin(t * 4.3f + seed) * 0.62f + std::sin(t * 9.7f + seed * 2.7f) * 0.38f;
 }
 
 }  // namespace
@@ -33,7 +37,7 @@ ChaseCameraTuning camera_preset_action() {
     t.roll_inheritance = 0.55f;
     t.fov_base_deg = 70.0f;
     t.fov_speed_gain = 0.28f;
-    t.shake_speed = 0.09f;
+    t.shake_speed = 0.020f;
     return t;
 }
 
@@ -51,7 +55,7 @@ ChaseCameraTuning camera_preset_cinematic() {
     t.roll_inheritance = 0.12f;
     t.fov_base_deg = 52.0f;
     t.fov_speed_gain = 0.12f;
-    t.shake_speed = 0.02f;
+    t.shake_speed = 0.005f;
     t.shake_g = 0.0f;
     return t;
 }
