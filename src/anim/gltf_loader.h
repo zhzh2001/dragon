@@ -28,10 +28,10 @@ struct GltfLoadResult {
     // orientation without guessing.
     core::Vec3 bounds_min = core::Vec3::zero();
     core::Vec3 bounds_max = core::Vec3::zero();
-    // Fraction of the model's widest extent spanned by the middle half of its
-    // vertices. Near 1 is a solid shape; near 0 means the rest pose is a tangle
-    // that only its animation resolves.
-    float rest_pose_bulk_fraction = 0.0f;
+    // Median distance from a vertex to the bone that dominates it, as a fraction
+    // of the model's size. Small means the mesh and skeleton agree about where
+    // the creature is; large means the rest pose is a tangle.
+    float median_bone_distance = 0.0f;
 };
 
 GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,

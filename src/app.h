@@ -60,6 +60,7 @@ struct Options {
     // the rig rather than at the world.
     bool inspect = false;
     float inspect_angle_deg = 35.0f;
+    float inspect_distance = 30.0f;
 
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.

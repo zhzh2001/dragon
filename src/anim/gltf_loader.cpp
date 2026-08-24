@@ -269,36 +269,50 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
 
     // Sanity-check the rest pose.
     //
-    // A rig can be authored so that it only looks correct under its animation:
-    // constraints and IK place the bones, and the stored rest mesh is a
-    // spread-out tangle. Such an asset loads and validates perfectly and then
-    // renders as garbage, so it is worth diagnosing here rather than leaving
-    // someone to wonder whether the skinning is broken.
+    // A rig can be authored so that it only looks right under its animation:
+    // constraints and IK place the bones, and the stored rest pose is a tangle.
+    // Such an asset parses, validates, and skins to identity at bind -- and still
+    // renders as garbage. Worth diagnosing here rather than leaving someone to
+    // wonder whether the skinning is broken.
     //
-    // The test: on the widest axis, the middle half of the vertices should span a
-    // meaningful fraction of the total extent. A dragon whose body occupies 0.4%
-    // of its own bounding box is not in a usable rest pose.
+    // The test that actually means something: every vertex should lie near the
+    // bone that moves it. A mesh and a skeleton that disagree about where the
+    // creature is are not a usable rest pose. Measuring the spread of the vertex
+    // cloud instead does not work -- a winged animal legitimately keeps most of
+    // its vertices in a narrow band while its wings span the width.
     {
         const Vec3 extent = result.bounds_max - result.bounds_min;
-        const int axis = extent.x >= extent.y && extent.x >= extent.z ? 0
-                         : (extent.y >= extent.z ? 1 : 2);
-        const float total = extent[axis];
-        std::vector<float> values;
-        values.reserve(out_mesh.vertices.size());
-        for (const SkinnedVertex& v : out_mesh.vertices) values.push_back(v.position[axis]);
-        std::sort(values.begin(), values.end());
-        const float q1 = values[values.size() / 4];
-        const float q3 = values[(values.size() * 3) / 4];
-        const float bulk_fraction = total > 1e-6f ? (q3 - q1) / total : 0.0f;
-        result.rest_pose_bulk_fraction = bulk_fraction;
-        if (bulk_fraction < 0.04f) {
+        const float scale = core::maxf(core::maxf(extent.x, extent.y), extent.z);
+        std::vector<float> distances;
+        distances.reserve(out_mesh.vertices.size());
+        for (const SkinnedVertex& v : out_mesh.vertices) {
+            // Dominant influence: the joint that actually decides where this
+            // vertex goes.
+            int dominant = v.joints[0];
+            float best = v.weights[0];
+            for (int i = 1; i < 4; ++i) {
+                if (v.weights[i] > best) {
+                    best = v.weights[i];
+                    dominant = v.joints[i];
+                }
+            }
+            const Vec3 bone = out_skeleton.world_bind(dominant).translation_part();
+            distances.push_back(core::length(v.position - bone));
+        }
+        std::sort(distances.begin(), distances.end());
+        const float median = distances[distances.size() / 2];
+        result.median_bone_distance = scale > 1e-6f ? median / scale : 1.0f;
+
+        // A tenth of the model's size is already generous: real rigs sit well
+        // under a few percent.
+        if (result.median_bone_distance > 0.10f) {
             char message[256];
             std::snprintf(message, sizeof(message),
-                          "rest pose looks degenerate: the middle half of the vertices span only "
-                          "%.1f%% of the model's own extent. This rig probably relies on "
-                          "constraints or animation to hold its shape; bake a good pose as the "
+                          "rest pose looks wrong: the median vertex sits %.0f%% of the model's "
+                          "size away from the bone that moves it. This rig probably relies on "
+                          "constraints or animation to hold its shape -- bake a good pose as the "
                           "rest pose before exporting.",
-                          bulk_fraction * 100.0f);
+                          result.median_bone_distance * 100.0f);
             result.error = message;
             LOG_WARN("%s", result.error.c_str());
             return result;

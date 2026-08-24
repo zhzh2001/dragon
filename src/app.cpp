@@ -40,6 +40,9 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.inspect_angle_deg = float(SDL_atof(argv[++i]));
             }
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                options.inspect_distance = float(SDL_atof(argv[++i]));
+            }
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -117,15 +120,29 @@ bool App::init(const Options& options) {
             // recentre, because an asset's origin is wherever its author left it
             // -- this one sits over a hundred units from its own geometry. Both
             // are starting points, refined by eye with the sliders.
-            // Size by the LONGEST axis, not the wingspan. Scaling by X assumed
-            // the widest part was the span; on this asset the nose-to-tail axis
-            // is 2.4x wider than that, so the dragon came out 46 m long and the
-            // inspection camera ended up inside it.
+            // Match the wingspan the flight model assumes: 40 m^2 of wing over
+            // roughly a 19 m span. Scaling by the wingspan rather than the
+            // overall length keeps the aerodynamics and the visuals agreeing.
             const core::Vec3 extent = loaded.bounds_max - loaded.bounds_min;
-            const float longest = core::maxf(core::maxf(extent.x, extent.y), extent.z);
-            asset_.scale = longest > 0.1f ? 24.0f / longest : 1.0f;
+            asset_.scale = extent.x > 0.1f ? 19.0f / extent.x : 1.0f;
+
+            // This asset faces +Z; the engine's forward is -Z. Determined from
+            // the rig rather than by eye: its head bone sits at positive Z and
+            // its tail tip at negative Z.
+            const int head = dragon_joints_.head;
+            const int tail = dragon_joints_.tail.empty() ? anim::NO_PARENT : dragon_joints_.tail.back();
+            if (head != anim::NO_PARENT && tail != anim::NO_PARENT) {
+                const float head_z = dragon_skeleton_.world_bind(head).translation_part().z;
+                const float tail_z = dragon_skeleton_.world_bind(tail).translation_part().z;
+                if (head_z > tail_z) {
+                    asset_.yaw_deg = 180.0f;
+                    LOG_INFO("asset faces +Z (head %.2f, tail %.2f); yawing 180", head_z, tail_z);
+                }
+            }
+
             const core::Vec3 centre = (loaded.bounds_min + loaded.bounds_max) * 0.5f;
-            asset_.offset = centre * -asset_.scale;
+            asset_.offset = core::rotate(
+                core::from_euler(0.0f, core::radians(asset_.yaw_deg), 0.0f), centre * -asset_.scale);
             LOG_INFO("asset alignment: scale %.4f, offset (%.2f %.2f %.2f)", asset_.scale,
                      asset_.offset.x, asset_.offset.y, asset_.offset.z);
         }
@@ -560,8 +577,9 @@ void App::update(float dt) {
         const game::FlightState& s = flight_.state();
         const float angle = core::radians(options_.inspect_angle_deg);
         const core::Vec3 offset = core::rotate(s.orientation,
-                                               core::Vec3{std::sin(angle) * 44.0f, 11.0f,
-                                                          std::cos(angle) * 44.0f});
+                                               core::Vec3{std::sin(angle) * options_.inspect_distance,
+                                                          options_.inspect_distance * 0.25f,
+                                                          std::cos(angle) * options_.inspect_distance});
         camera_.set_position(s.position + offset, s.position);
         free_camera_ = true;
     }

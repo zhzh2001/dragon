@@ -160,119 +160,26 @@ rotation**. Replacing the bind rotation destroys the rest pose, and a real rig's
 bones each point along their own axis, so "rotate about local Z" means something
 different for every bone.
 
-### The current asset does not work, and why
+### Preparing an asset in Blender
 
-`assets/dragon.glb` (see ATTRIBUTION.md) loads and validates perfectly and still
-renders as a tangle: its **rest pose is degenerate**. Half its vertices sit inside
-0.4% of its own bounding box, because the rig relies on constraints and its idle
-animation to hold the dragon's shape. The loader now detects this and refuses the
-asset with that diagnosis rather than drawing garbage.
+`assets/dragon.glb` (see ATTRIBUTION.md) needed three steps beyond a plain
+export, and each was found by the asset failing without it:
 
-The fix is a Blender step, not a code one: import fresh with constraints intact,
-scrub to a frame where the dragon looks right, apply the armature modifier to the
-mesh and then *Apply Pose as Rest Pose*, and re-export.
+1. **Bake a good pose as the rest pose.** This rig's stored rest pose is a tangle
+   -- constraints and its idle animation are what hold the dragon's shape. Import
+   with constraints intact, then for each mesh duplicate the Armature modifier and
+   apply one copy (baking the deformation into the vertices), then in pose mode
+   *Apply Pose as Rest Pose*. Only then are mesh and skeleton consistent.
+2. **Do not export with `export_apply=True`.** It applies the Armature modifier,
+   baking whatever pose is current into the vertices and *then* writing skin data
+   on top of it.
+3. **Reduce the bone count.** 232 bones exceeds the 64-joint skinning budget.
+   Dissolve control, IK, facial and toe bones, transferring each one's vertex
+   weights to its nearest surviving ancestor first.
 
-## Animation
-
-`anim::Skeleton` keeps joints topologically sorted (parent index always less than
-child), so world transforms resolve in one forward pass with no recursion.
-Skinning matrix is `world_current * inverse_bind`, which means a joint left at its
-bind pose contributes exactly the identity -- `tests/test_anim.cpp` asserts that
-to 1e-4, because if it does not hold the mesh moves the instant it is skinned and
-the error is a subtle offset rather than an obvious explosion.
-
-`anim::DragonRig` turns flight state into a pose, with no animation clips:
-
-- **Wings** read `FlightState::wing_angle` directly, so the wing that is drawn
-  and the thrust that was generated cannot disagree. Outboard segments lag the
-  inboard ones, which is what gives a beat its whip instead of looking like a
-  hinged plank.
-- **Neck and tail** are spring chains driven by the body's angular velocity,
-  deflecting more toward the tip. This is the signature detail: a turn reads as
-  the whole animal committing rather than a rigid model banking.
-- **Legs** tuck in flight and extend as the ground approaches.
-
-Skinning matrices go to the GPU as a uniform block of `MAX_JOINTS` (64), padded
-with identity -- a partial push would leave the previous draw's matrices in the
-unused slots. The shadow pass applies the same blend, so a folded wing casts a
-folded shadow.
-
-## The rally
-
-`game::Course` holds checkpoints; `game::Rally` runs the clock. A flying start
-rather than a countdown: the clock begins when you cross the first ring, so
-choosing your entry speed and line is part of the skill.
-
-Ring tests are **segment based**, not point based. At 100 m/s a 60 Hz frame
-covers 1.7 m, so a point-in-volume test would simply miss a thin checkpoint --
-the fastest runs would be the ones that failed to register.
-
-Ghosts record the best run, never the last, at a fixed 30 Hz, including wing
-angle so the replay is visibly flying rather than sliding along a path.
-
-### Generated courses must be *flyable*, not just well-formed
-
-Two passes run over every generated course, and both exist because a course
-failed without them:
-
-- `limit_climb` caps the rise per leg. The dragon gains about 5 m/s of energy
-  flapping at 45 m/s forward, so it sustains a gradient near 0.11. The first
-  Summit Climb demanded 0.51 on one leg -- not hard, impossible.
-- `clear_line_of_flight` raises rings until the *chord* between consecutive rings
-  clears the terrain. Rings being individually clear says nothing about the line
-  between them, and a path curving round a mountain produces chords straight
-  through it.
-
-`game::steer_toward` / `steer_through` is a PD controller that flies the course
-unattended. It is both the test harness -- "the autopilot completes every course"
-is an assertion -- and the seed of the bot AI, since it commands the same
-`FlightInput` a player does and cannot cheat the flight model.
-
-## The camera
-
-`game::ChaseCamera`. The arm is *swept* against the terrain, not merely clamped:
-a clamp alone happily places the camera on the far side of a ridge, showing the
-inside of a mountain. The arm shortens fast (clipping is instantly ugly) and
-extends slowly (snapping out is jarring), then the final position is hard-clamped
-above ground as a last resort -- being inside a mountain for even a few frames is
-worse than a small jolt.
-
-Roll inheritance is partial by design and full inheritance is not offered: it is
-nauseating, and it hides the horizon, which is the player's main reference for
-reading their own attitude.
-
-`tests/test_camera_rig.cpp` flies scripted manoeuvres and asserts what a player
-would actually notice: never underground across six terrain-hugging cases and all
-three presets, the dragon never off screen through rolls and loops, no
-single-frame jump over 6 m, first person rigidly attached, free look not steering
-the dragon, and no drift when parked on a slope.
-
-## The flight model
-
-`game::FlightModel` integrates real forces: thrust, lift, drag, gravity. Diving
-buys speed, climbing spends it, hard turns bleed energy, and flapping is the only
-way energy enters the system. `FlightState::specific_energy` is the number a
-pilot actually manages.
-
-With the default tuning the envelope is roughly:
-
-| | |
-|---|---|
-| Hands-off glide | 26 m/s, sink 2.8 m/s, 9.3:1 |
-| Best glide | 27 m/s, sink 2.3 m/s, 11.6:1 |
-| Full flap, level | 51 m/s |
-| Tucked dive | 98 m/s (354 km/h) |
-| Flared brake | 8.5 m/s -- slow enough to land |
-| Stall | past 16 degrees angle of attack, recovers hands-off |
-| Inverted | recovers to level in ~1.7 s, losing ~35 m |
-
-Energy budget, in metres of specific energy per second -- flapping is the only
-positive entry, which is the whole design:
-
-| gliding | flapping | tucked | hard turn | braking |
-|---|---|---|---|---|
-| -3.1 | **+5.0** | -2.5 | -4.9 | -8.9 |
-
-Every coefficient is an ImGui slider, and `assets/flight_tuning.cfg` (flat
-`key value` text, not JSON -- no dependency, trivially diffable) persists a good
-session. Presets: glider, agile, heavy.
+The loader validates the result: every vertex should lie near the bone that moves
+it, and an asset whose median vertex sits more than 10% of the model's size from
+its dominant bone is refused with that diagnosis rather than rendered as garbage.
+Facing and scale are then derived from the rig -- the head bone's Z against the
+tail's decides whether a 180-degree yaw is needed, and the wingspan is scaled to
+the 19 m the flight model's 40 m^2 of wing assumes.
