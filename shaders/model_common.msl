@@ -13,4 +13,6 @@ struct ModelUniforms {
     float4x4 model;
     // rgb multiplies vertex colour, a is an unlit emissive add.
     float4 tint;
+    // x: 1 when a base-colour texture is bound, 0 to use the vertex colour.
+    float4 material;
 };

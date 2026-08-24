@@ -84,17 +84,41 @@ struct RigTuning {
     float tuck_fold_deg = 62.0f;
     float brake_flare_deg = 30.0f;
 
-    // ---- neck and tail spring chains ----
-    // The signature detail: neck and tail lag the body's rotation, so a turn
-    // reads as the whole animal committing rather than a rigid model banking.
-    float chain_stiffness = 42.0f;
-    float chain_damping = 9.0f;
-    // Radians of deflection per rad/s of body angular velocity.
-    float tail_response = 0.55f;
-    float neck_response = 0.30f;
-    // Later joints deflect more, accumulating down the chain.
-    float chain_falloff = 1.25f;
-    float chain_limit_deg = 26.0f;
+    // ---- neck and tail dynamics ----
+    //
+    // The neck and tail are simulated as chains of point masses in the dragon's
+    // own frame, subject to the pseudo-forces that frame implies. That is what
+    // makes them trail behind a turn, swing wide under centrifugal load, whip on
+    // a direction reversal and settle afterwards -- none of which a bend
+    // proportional to turn rate can do, because in a steady turn that bend is
+    // constant and the animal looks rigid.
+    //
+    // Spring pulling each segment back toward its bind pose -- the animal's
+    // muscle tone. Deflection under an acceleration is roughly a/k, so at 90 a
+    // 10 m/s^2 load moved the tail by a tenth of a metre and it read as rigid.
+    // At 12 a hard turn still only moved the tail a quarter of a metre on a 19 m
+    // dragon, which reads as rigid at chase distance. 6 makes it legible.
+    float chain_stiffness = 6.0f;
+    float chain_damping = 2.2f;
+    // How strongly the frame's own acceleration is felt. 1 is physically
+    // faithful; lower tames a very whippy tail.
+    float chain_inertia = 1.0f;
+    // Gravity's effect, as a fraction of g. A real tail is partly held up by
+    // muscle, so full gravity looks dead.
+    float chain_gravity = 0.35f;
+    // Aerodynamic drag against the relative airflow, which streams the chain aft
+    // at speed. Deliberately small: the airflow past a body-fixed point is the
+    // full airspeed, so even a modest coefficient is a large force.
+    float chain_drag = 0.05f;
+    // Ceilings, so a violent attitude cannot blow the simulation up. Without
+    // these a 70 rad/s tumble produces accelerations in the tens of thousands
+    // and the chain leaves for good.
+    float chain_max_acceleration = 400.0f;
+    float chain_max_speed = 120.0f;
+    // Maximum bend between adjacent segments, so the chain cannot fold through
+    // itself.
+    float chain_max_bend_deg = 32.0f;
+    int chain_iterations = 4;
 
     // ---- legs ----
     float leg_tuck_deg = 62.0f;  // folded in flight, extended on the ground
@@ -105,6 +129,13 @@ struct RigTuning {
 class DragonRig {
 public:
     void init(const Skeleton& skeleton, const DragonJoints& joints);
+
+    // Metres per model unit. The chain simulation mixes real-world accelerations
+    // (gravity, the body's own acceleration) with joint positions, so those have
+    // to be in the same units. An imported asset is routinely authored at eight
+    // model units per metre, which made every force a factor of eight too weak
+    // and the tail look rigid.
+    void set_model_scale(float metres_per_unit);
     void update(const game::FlightState& state, float dt);
 
     const Pose& pose() const { return pose_; }
@@ -115,11 +146,13 @@ public:
     RigTuning tuning;
 
 private:
-    // One axis of one spring joint.
-    struct Spring {
-        float angle = 0.0f;
-        float velocity = 0.0f;
-        void step(float target, float stiffness, float damping, float dt);
+    // A chain simulated as point masses in the dragon's own frame.
+    struct ChainDynamics {
+        std::vector<core::Vec3> position;  // body-local, simulated
+        std::vector<core::Vec3> velocity;
+        std::vector<core::Vec3> rest;      // body-local bind positions
+        std::vector<float> segment;        // rest length to the previous point
+        bool initialized = false;
     };
 
     // Applies a rotation about a body-space axis to one joint, composed with
@@ -135,10 +168,17 @@ private:
                       float angle_b);
 
     void drive_wings(const game::FlightState& state);
-    void drive_chain(const std::vector<int>& chain, std::vector<Spring>& yaw,
-                     std::vector<Spring>& pitch, float response, const game::FlightState& state,
-                     float dt);
+    void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
+    // Integrates the chain, then turns the simulated shape back into joint
+    // rotations.
+    void drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
+                     const game::FlightState& state, core::Vec3 frame_acceleration,
+                     core::Vec3 angular_acceleration, float dt);
     void drive_legs(const game::FlightState& state, float dt);
+    // Applies a body-space rotation to one joint, composed with its bind
+    // rotation. `parent_extra` is the rotation already applied to its ancestors,
+    // needed so the delta lands in the right frame.
+    void rotate_joint_quat(int joint, const core::Quat& delta, const core::Quat& parent_extra);
 
     const Skeleton* skeleton_ = nullptr;
     DragonJoints joints_;
@@ -149,8 +189,12 @@ private:
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
 
-    std::vector<Spring> tail_yaw_, tail_pitch_;
-    std::vector<Spring> neck_yaw_, neck_pitch_;
+    ChainDynamics tail_sim_, neck_sim_;
+    float model_scale_ = 1.0f;
+    // Previous frame's motion, for deriving the accelerations the chains feel.
+    core::Vec3 previous_velocity_ = core::Vec3::zero();
+    core::Vec3 previous_angular_velocity_ = core::Vec3::zero();
+    bool have_previous_ = false;
     float leg_extend_ = 0.0f;
 };
 

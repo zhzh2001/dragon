@@ -147,9 +147,20 @@ bool App::init(const Options& options) {
                      asset_.offset.x, asset_.offset.y, asset_.offset.z);
         }
 
+        // Upload whatever base-colour textures came with the model.
+        model_sampler_ = gfx::create_model_sampler(device_.gpu());
+        for (size_t i = 0; i < loaded.textures.size(); ++i) {
+            const std::string name = "dragon_base_" + std::to_string(i);
+            dragon_textures_.push_back(
+                gfx::create_texture_from_image(device_.gpu(), loaded.textures[i], name.c_str()));
+        }
+
         dragon_mesh_.upload(device_.gpu(), mesh_data, "dragon");
         dragon_rig_.init(dragon_skeleton_, dragon_joints_);
         ghost_rig_.init(dragon_skeleton_, dragon_joints_);
+        // The chain dynamics need to know how big the dragon is in metres.
+        dragon_rig_.set_model_scale(asset_.scale);
+        ghost_rig_.set_model_scale(asset_.scale);
     }
 
     // A tuning file next to the assets overrides the built-in defaults, so a
@@ -484,6 +495,12 @@ void App::shutdown() {
     terrain_mesh_.release(device_.gpu());
     dragon_mesh_.release(device_.gpu());
     ring_mesh_.release(device_.gpu());
+    for (SDL_GPUTexture* texture : dragon_textures_) {
+        if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
+    }
+    dragon_textures_.clear();
+    if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
+    world_.shutdown(device_);
     shadow_.shutdown(device_);
     debug_.shutdown();
     pipelines_.shutdown();
@@ -1407,7 +1424,7 @@ void App::render() {
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
     world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,
-                        dragon_rig_.skinning_matrices());
+                        dragon_rig_.skinning_matrices(), dragon_textures_, model_sampler_);
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
     // rings that instancing would be premature.
@@ -1436,6 +1453,8 @@ void App::render() {
     // Ghost of the best run, flying its own recording alongside.
     game::GhostSample ghost;
     if (show_ghost_ && rally_.ghost_pose(ghost)) {
+        // The ghost is drawn untextured on purpose: its blue tint is what
+        // distinguishes a replay from the living dragon.
         world_.draw_skinned(device_, pass, dragon_mesh_, ghost_model_uniforms(ghost),
                             ghost_rig_.skinning_matrices());
     }

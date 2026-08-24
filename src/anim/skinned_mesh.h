@@ -17,6 +17,7 @@ struct SkinnedVertex {
     core::Vec3 position;
     core::Vec3 normal;
     core::Vec3 color;
+    core::Vec2 uv;
     // Joint indices as bytes: MAX_JOINTS is 64, so a byte is ample.
     uint8_t joints[4] = {0, 0, 0, 0};
     // Should sum to 1. Normalized on insert, because weights that do not sum to
@@ -24,14 +25,23 @@ struct SkinnedVertex {
     float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 };
 
+// A run of indices sharing one material, so each can bind its own texture.
+struct SkinnedSubmesh {
+    uint32_t index_offset = 0;
+    uint32_t index_count = 0;
+    // Index into the model's texture list; -1 draws untextured.
+    int base_color_texture = -1;
+};
+
 struct SkinnedMeshData {
     std::vector<SkinnedVertex> vertices;
     std::vector<uint32_t> indices;
+    std::vector<SkinnedSubmesh> submeshes;
 
     void recompute_normals();
     // Adds a vertex, normalizing its weights and dropping any that are zero.
-    uint32_t add(core::Vec3 position, core::Vec3 color, const int (&joint_indices)[4],
-                 const float (&joint_weights)[4]);
+    uint32_t add(core::Vec3 position, core::Vec3 color, core::Vec2 uv,
+                 const int (&joint_indices)[4], const float (&joint_weights)[4]);
 };
 
 class SkinnedMesh {
@@ -41,6 +51,7 @@ public:
     void bind(SDL_GPURenderPass* pass) const;
 
     uint32_t index_count() const { return index_count_; }
+    const std::vector<SkinnedSubmesh>& submeshes() const { return submeshes_; }
     bool valid() const { return vertex_buffer_ && index_buffer_; }
 
     static std::vector<SDL_GPUVertexBufferDescription> buffer_descriptions();
@@ -50,6 +61,7 @@ private:
     SDL_GPUBuffer* vertex_buffer_ = nullptr;
     SDL_GPUBuffer* index_buffer_ = nullptr;
     uint32_t index_count_ = 0;
+    std::vector<SkinnedSubmesh> submeshes_;
 };
 
 }  // namespace anim

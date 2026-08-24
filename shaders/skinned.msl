@@ -15,8 +15,9 @@ struct VertexIn {
     float3 position    [[attribute(0)]];
     float3 normal      [[attribute(1)]];
     float3 color       [[attribute(2)]];
-    uchar4 joint_index [[attribute(3)]];
-    float4 weight      [[attribute(4)]];
+    float2 uv          [[attribute(3)]];
+    uchar4 joint_index [[attribute(4)]];
+    float4 weight      [[attribute(5)]];
 };
 
 struct VertexOut {
@@ -24,6 +25,7 @@ struct VertexOut {
     float3 world_position;
     float3 world_normal;
     float3 albedo;
+    float2 uv;
     float emissive;
 };
 
@@ -50,6 +52,7 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
     out.world_position = world.xyz;
     out.world_normal = normalize((model.model * float4(skinned_normal, 0.0)).xyz);
     out.albedo = in.color * model.tint.rgb;
+    out.uv = in.uv;
     out.emissive = model.tint.a;
     out.clip_position = scene.view_proj * world;
     return out;
@@ -57,8 +60,11 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
 
 fragment float4 fs_main(VertexOut in [[stage_in]],
                         constant SceneUniforms& scene [[buffer(0)]],
+                        constant ModelUniforms& model [[buffer(1)]],
                         depth2d<float> shadow_map [[texture(0)]],
-                        sampler shadow_sampler [[sampler(0)]]) {
+                        sampler shadow_sampler [[sampler(0)]],
+                        texture2d<float> base_colour [[texture(1)]],
+                        sampler base_sampler [[sampler(1)]]) {
     float3 normal = normalize(in.world_normal);
     float3 to_sun = normalize(scene.sun.xyz);
 
@@ -76,7 +82,13 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 ambient =
         mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) * scene.terrain_params.w;
 
-    float3 lit = in.albedo * (direct + ambient) + in.albedo * in.emissive;
+    // The texture is sRGB, so the sample arrives already linear.
+    float3 albedo = in.albedo;
+    if (model.material.x > 0.5) {
+        albedo *= base_colour.sample(base_sampler, in.uv).rgb;
+    }
+
+    float3 lit = albedo * (direct + ambient) + albedo * in.emissive;
 
     float distance = length(in.world_position - scene.camera_position.xyz);
     float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);

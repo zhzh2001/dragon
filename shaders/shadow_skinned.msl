@@ -13,8 +13,9 @@ struct VertexIn {
     float3 position    [[attribute(0)]];
     float3 normal      [[attribute(1)]];
     float3 color       [[attribute(2)]];
-    uchar4 joint_index [[attribute(3)]];
-    float4 weight      [[attribute(4)]];
+    float2 uv          [[attribute(3)]];
+    uchar4 joint_index [[attribute(4)]];
+    float4 weight      [[attribute(5)]];
 };
 
 struct ShadowUniforms {

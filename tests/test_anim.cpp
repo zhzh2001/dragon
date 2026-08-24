@@ -131,7 +131,7 @@ void test_weight_normalization() {
     {
         const int joints[4] = {0, 1, -1, -1};
         const float weights[4] = {3.0f, 1.0f, 0.0f, 0.0f};  // deliberately unnormalized
-        const uint32_t index = mesh.add(Vec3::zero(), Vec3::one(), joints, weights);
+        const uint32_t index = mesh.add(Vec3::zero(), Vec3::one(), Vec2{0.0f, 0.0f}, joints, weights);
         const anim::SkinnedVertex& v = mesh.vertices[index];
         float total = v.weights[0] + v.weights[1] + v.weights[2] + v.weights[3];
         std::printf("  3:1 becomes %.2f:%.2f (sum %.3f)\n", v.weights[0], v.weights[1], total);
@@ -143,7 +143,7 @@ void test_weight_normalization() {
         // No influence at all must not collapse the vertex to the origin.
         const int joints[4] = {-1, -1, -1, -1};
         const float weights[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        const uint32_t index = mesh.add(Vec3{5, 5, 5}, Vec3::one(), joints, weights);
+        const uint32_t index = mesh.add(Vec3{5, 5, 5}, Vec3::one(), Vec2{0.0f, 0.0f}, joints, weights);
         const anim::SkinnedVertex& v = mesh.vertices[index];
         CHECK(near(v.weights[0], 1.0f));
         CHECK(v.joints[0] == 0);

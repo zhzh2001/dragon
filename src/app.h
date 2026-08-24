@@ -21,6 +21,7 @@
 #include "gfx/pipeline.h"
 #include "gfx/scene_uniforms.h"
 #include "gfx/shadow_map.h"
+#include "gfx/texture.h"
 #include "gfx/world_renderer.h"
 
 namespace app {
@@ -128,6 +129,8 @@ private:
     // The ghost needs its own rig: the spring chains carry state, so one rig
     // cannot serve two dragons.
     anim::DragonRig ghost_rig_;
+    std::vector<SDL_GPUTexture*> dragon_textures_;
+    SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
 
     // An imported asset arrives in whatever scale and orientation its author

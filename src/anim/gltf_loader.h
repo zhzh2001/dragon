@@ -5,6 +5,7 @@
 
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
+#include "gfx/texture.h"
 
 namespace anim {
 
@@ -31,6 +32,10 @@ struct GltfLoadResult {
     // Average movement of a vertex when skinned at the bind pose, as a fraction
     // of the model's size. Should be ~0: at rest, skinning is the identity.
     float bind_pose_error = 0.0f;
+
+    // Base-colour images referenced by the mesh's submeshes, decoded but not yet
+    // uploaded -- the loader has no GPU device and should not need one.
+    std::vector<gfx::ImageData> textures;
 };
 
 GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,

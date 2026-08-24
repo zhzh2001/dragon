@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 #include "core/log.h"
 
@@ -88,6 +89,25 @@ Mat4 node_world_matrix(const cgltf_node* node) {
 std::string joint_name(const cgltf_node* node, size_t index) {
     if (node->name && node->name[0]) return node->name;
     return "joint_" + std::to_string(index);
+}
+
+// Maps a primitive's base-colour image to a slot in the result's texture list,
+// decoding it on first use so an image shared by several materials is decoded
+// once.
+int base_colour_image_index(const cgltf_data* data, const cgltf_primitive* primitive,
+                            std::vector<std::pair<const cgltf_image*, int>>& slots) {
+    if (!primitive->material || !primitive->material->has_pbr_metallic_roughness) return -1;
+    const cgltf_texture* texture =
+        primitive->material->pbr_metallic_roughness.base_color_texture.texture;
+    if (!texture || !texture->image) return -1;
+    const cgltf_image* image = texture->image;
+    for (const auto& slot : slots) {
+        if (slot.first == image) return slot.second;
+    }
+    (void)data;
+    const int index = int(slots.size());
+    slots.emplace_back(image, index);
+    return index;
 }
 
 }  // namespace
@@ -206,6 +226,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
 
     // ---- mesh ----
     out_mesh = SkinnedMeshData();
+    std::vector<std::pair<const cgltf_image*, int>> image_slots;
     result.bounds_min = Vec3{1e30f, 1e30f, 1e30f};
     result.bounds_max = Vec3{-1e30f, -1e30f, -1e30f};
 
@@ -219,6 +240,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             const cgltf_accessor* normals = nullptr;
             const cgltf_accessor* joints = nullptr;
             const cgltf_accessor* weights = nullptr;
+            const cgltf_accessor* uvs = nullptr;
             for (size_t a = 0; a < primitive->attributes_count; ++a) {
                 const cgltf_attribute* attribute = &primitive->attributes[a];
                 switch (attribute->type) {
@@ -226,6 +248,10 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                     case cgltf_attribute_type_normal: normals = attribute->data; break;
                     case cgltf_attribute_type_joints: joints = attribute->data; break;
                     case cgltf_attribute_type_weights: weights = attribute->data; break;
+                    case cgltf_attribute_type_texcoord:
+                        // Only the set the base-colour texture actually uses.
+                        if (attribute->index == 0) uvs = attribute->data;
+                        break;
                     default: break;
                 }
             }
@@ -252,17 +278,22 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                     mapped[i] = g < gltf_to_skeleton.size() ? gltf_to_skeleton[g] : 0;
                 }
 
+                float uv[2] = {0.0f, 0.0f};
+                if (uvs) cgltf_accessor_read_float(uvs, v, uv, 2);
+
                 const Vec3 local{position[0], position[1], position[2]};
                 // No textures yet, so shade by height within the model: a
                 // lighter underside is most of what reads as a creature rather
                 // than a silhouette.
-                const uint32_t index = out_mesh.add(local, Vec3::one(), mapped, weight);
+                const uint32_t index =
+                    out_mesh.add(local, Vec3::one(), core::Vec2{uv[0], uv[1]}, mapped, weight);
                 out_mesh.vertices[index].normal = Vec3{normal[0], normal[1], normal[2]};
 
                 result.bounds_min = core::minv(result.bounds_min, local);
                 result.bounds_max = core::maxv(result.bounds_max, local);
             }
 
+            const uint32_t index_start = uint32_t(out_mesh.indices.size());
             if (primitive->indices) {
                 for (size_t i = 0; i < primitive->indices->count; ++i) {
                     out_mesh.indices.push_back(
@@ -271,7 +302,32 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             } else {
                 for (size_t i = 0; i < count; ++i) out_mesh.indices.push_back(base + uint32_t(i));
             }
+
+            // One submesh per primitive, so each keeps its own material.
+            SkinnedSubmesh submesh;
+            submesh.index_offset = index_start;
+            submesh.index_count = uint32_t(out_mesh.indices.size()) - index_start;
+            submesh.base_color_texture = base_colour_image_index(data, primitive, image_slots);
+            out_mesh.submeshes.push_back(submesh);
         }
+    }
+
+    // Decode the base-colour images before releasing the glTF data: the image
+    // bytes live in a buffer that cgltf_free releases, so decoding afterwards
+    // reads freed memory. It even looked plausible -- every material appeared to
+    // share one image, because the freed pointers happened to compare equal.
+    result.textures.resize(image_slots.size());
+    for (const auto& slot : image_slots) {
+        const cgltf_image* image = slot.first;
+        if (!image->buffer_view || !image->buffer_view->buffer ||
+            !image->buffer_view->buffer->data) {
+            LOG_WARN("image %d is not embedded; skipping", slot.second);
+            continue;
+        }
+        const uint8_t* bytes = static_cast<const uint8_t*>(image->buffer_view->buffer->data) +
+                               image->buffer_view->offset;
+        result.textures[size_t(slot.second)] =
+            gfx::decode_image(bytes, image->buffer_view->size);
     }
 
     cgltf_free(data);
@@ -344,10 +400,9 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
     result.joint_count = out_skeleton.count();
     result.vertex_count = out_mesh.vertices.size();
     result.triangle_count = out_mesh.indices.size() / 3;
-    LOG_INFO("glTF '%s': %d joints, %zu verts, %zu tris, bounds (%.1f %.1f %.1f)..(%.1f %.1f %.1f)",
-             path, result.joint_count, result.vertex_count, result.triangle_count,
-             result.bounds_min.x, result.bounds_min.y, result.bounds_min.z, result.bounds_max.x,
-             result.bounds_max.y, result.bounds_max.z);
+    LOG_INFO("glTF '%s': %d joints, %zu verts, %zu tris, %zu submesh(es), %zu texture(s)", path,
+             result.joint_count, result.vertex_count, result.triangle_count,
+             out_mesh.submeshes.size(), result.textures.size());
     return result;
 }
 

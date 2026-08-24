@@ -15,6 +15,7 @@ namespace gfx {
 class WorldRenderer {
 public:
     bool init(Device* device, PipelineCache* pipelines);
+    void shutdown(Device& device);
 
     // Call once per frame before drawing, then draw_* inside the main pass.
     void set_scene(const SceneUniforms& scene) { scene_ = scene; }
@@ -39,8 +40,12 @@ public:
                          const core::Mat4& light_view_proj, const ModelUniforms& model);
 
     // Skinned geometry. `joints` are skinning matrices, at most anim::MAX_JOINTS.
+    // `textures` are base-colour textures indexed by each submesh; pass an empty
+    // list to draw untextured.
     void draw_skinned(Device& device, SDL_GPURenderPass* pass, const anim::SkinnedMesh& mesh,
-                      const ModelUniforms& model, const std::vector<core::Mat4>& joints);
+                      const ModelUniforms& model, const std::vector<core::Mat4>& joints,
+                      const std::vector<SDL_GPUTexture*>& textures = {},
+                      SDL_GPUSampler* sampler = nullptr);
     void draw_skinned_depth(Device& device, SDL_GPURenderPass* pass,
                             const anim::SkinnedMesh& mesh, const core::Mat4& light_view_proj,
                             const ModelUniforms& model, const std::vector<core::Mat4>& joints);
@@ -56,6 +61,11 @@ private:
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
+    // 1x1 white, for submeshes with no base-colour texture. A sampler slot must
+    // be filled, and the shadow map cannot serve: it is a depth texture and the
+    // shader declares a colour one.
+    SDL_GPUTexture* white_ = nullptr;
+    SDL_GPUSampler* white_sampler_ = nullptr;
     SceneUniforms scene_ = {};
 };
 

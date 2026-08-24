@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "anim/skeleton.h"
+#include "gfx/texture.h"
 
 namespace gfx {
 namespace {
@@ -57,8 +58,8 @@ PipelineDesc make_skinned_desc() {
     desc.name = "skinned";
     desc.shader_path = "skinned.msl";
     desc.vs_uniform_buffers = 3;  // 0 scene, 1 model, 2 skinning matrices
-    desc.fs_uniform_buffers = 1;
-    desc.fs_samplers = 1;
+    desc.fs_uniform_buffers = 2;  // 0 scene, 1 model
+    desc.fs_samplers = 2;         // 0 shadow map, 1 base colour
     desc.vertex_buffers = anim::SkinnedMesh::buffer_descriptions();
     desc.vertex_attributes = anim::SkinnedMesh::attributes();
     // Membranes are thin and two-sided, and the fragment shader flips normals
@@ -102,8 +103,13 @@ SkinBlock make_skin_block(const std::vector<core::Mat4>& joints) {
 }  // namespace
 
 bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
-    (void)device;
     pipelines_ = pipelines;
+
+    ImageData white;
+    white.width = white.height = 1;
+    white.rgba = {255, 255, 255, 255};
+    white_ = create_texture_from_image(device->gpu(), white, "white");
+    white_sampler_ = create_model_sampler(device->gpu());
     sky_ = pipelines_->create(make_sky_desc());
     terrain_ = pipelines_->create(make_terrain_desc(false));
     terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
@@ -111,6 +117,13 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     skinned_ = pipelines_->create(make_skinned_desc());
     return sky_ != INVALID_PIPELINE && terrain_ != INVALID_PIPELINE && mesh_ != INVALID_PIPELINE &&
            skinned_ != INVALID_PIPELINE;
+}
+
+void WorldRenderer::shutdown(Device& device) {
+    if (white_) SDL_ReleaseGPUTexture(device.gpu(), white_);
+    if (white_sampler_) SDL_ReleaseGPUSampler(device.gpu(), white_sampler_);
+    white_ = nullptr;
+    white_sampler_ = nullptr;
 }
 
 void WorldRenderer::draw_sky(Device& device, SDL_GPURenderPass* pass) {
@@ -165,7 +178,9 @@ void WorldRenderer::draw_mesh(Device& device, SDL_GPURenderPass* pass, const Mes
 
 void WorldRenderer::draw_skinned(Device& device, SDL_GPURenderPass* pass,
                                  const anim::SkinnedMesh& mesh, const ModelUniforms& model,
-                                 const std::vector<core::Mat4>& joints) {
+                                 const std::vector<core::Mat4>& joints,
+                                 const std::vector<SDL_GPUTexture*>& textures,
+                                 SDL_GPUSampler* sampler) {
     SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(skinned_);
     if (!pipeline || !pass || !mesh.valid()) return;
 
@@ -173,19 +188,38 @@ void WorldRenderer::draw_skinned(Device& device, SDL_GPURenderPass* pass,
 
     SDL_BindGPUGraphicsPipeline(pass, pipeline);
     SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene_, sizeof(SceneUniforms));
-    SDL_PushGPUVertexUniformData(device.cmd(), 1, &model, sizeof(ModelUniforms));
     SDL_PushGPUVertexUniformData(device.cmd(), 2, &block, sizeof(SkinBlock));
     SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene_, sizeof(SceneUniforms));
-
-    if (shadow_map_ && shadow_map_->texture()) {
-        SDL_GPUTextureSamplerBinding binding = {};
-        binding.texture = shadow_map_->texture();
-        binding.sampler = shadow_map_->sampler();
-        SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
-    }
-
     mesh.bind(pass);
-    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
+
+    SDL_GPUTexture* shadow_texture = shadow_map_ ? shadow_map_->texture() : nullptr;
+    SDL_GPUSampler* shadow_sampler = shadow_map_ ? shadow_map_->sampler() : nullptr;
+
+    for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
+        if (submesh.index_count == 0) continue;
+
+        SDL_GPUTexture* base_colour = nullptr;
+        if (submesh.base_color_texture >= 0 &&
+            size_t(submesh.base_color_texture) < textures.size()) {
+            base_colour = textures[size_t(submesh.base_color_texture)];
+        }
+
+        ModelUniforms submesh_model = model;
+        submesh_model.material.x = base_colour && sampler ? 1.0f : 0.0f;
+        SDL_PushGPUVertexUniformData(device.cmd(), 1, &submesh_model, sizeof(ModelUniforms));
+        SDL_PushGPUFragmentUniformData(device.cmd(), 1, &submesh_model, sizeof(ModelUniforms));
+
+        SDL_GPUTextureSamplerBinding bindings[2] = {};
+        bindings[0].texture = shadow_texture;
+        bindings[0].sampler = shadow_sampler;
+        bindings[1].texture = base_colour ? base_colour : white_;
+        bindings[1].sampler = base_colour && sampler ? sampler : white_sampler_;
+        if (bindings[0].texture && bindings[1].texture) {
+            SDL_BindGPUFragmentSamplers(pass, 0, bindings, 2);
+        }
+
+        SDL_DrawGPUIndexedPrimitives(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
+    }
 }
 
 void WorldRenderer::draw_skinned_depth(Device& device, SDL_GPURenderPass* pass,

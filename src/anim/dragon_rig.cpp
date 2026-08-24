@@ -58,7 +58,7 @@ void skin_tube(SkinnedMeshData& mesh, const Skeleton& skeleton, const std::vecto
             const int joint_b = chain[link + 1 < chain.size() ? link + 1 : link];
             const int indices[4] = {joint_a, joint_b, -1, -1};
             const float weights[4] = {0.75f, 0.25f, 0.0f, 0.0f};
-            mesh.add(position, color, indices, weights);
+            mesh.add(position, color, core::Vec2{0.0f, 0.0f}, indices, weights);
         }
     }
 
@@ -87,7 +87,7 @@ void skin_tube(SkinnedMeshData& mesh, const Skeleton& skeleton, const std::vecto
                              radii.back() * 1.6f;
         const int indices[4] = {last, -1, -1, -1};
         const float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-        const uint32_t tip_index = mesh.add(tip, top_color, indices, weights);
+        const uint32_t tip_index = mesh.add(tip, top_color, core::Vec2{0.5f, 0.5f}, indices, weights);
         for (int side = 0; side < sides; ++side) {
             const uint32_t next_side = uint32_t((side + 1) % sides);
             mesh.indices.push_back(ring_starts.back() + uint32_t(side));
@@ -134,8 +134,8 @@ void skin_wing(SkinnedMeshData& mesh, const Skeleton& skeleton, const DragonShap
         const int inboard = i > 0 ? stations[i - 1].bone : station.bone;
         const int indices[4] = {station.bone, inboard, -1, -1};
         const float weights[4] = {0.72f, 0.28f, 0.0f, 0.0f};
-        leading.push_back(mesh.add(station.leading, WING_EDGE, indices, weights));
-        trailing.push_back(mesh.add(station.trailing, WING_COLOR, indices, weights));
+        leading.push_back(mesh.add(station.leading, WING_EDGE, core::Vec2{0.0f, float(i) / 3.0f}, indices, weights));
+        trailing.push_back(mesh.add(station.trailing, WING_COLOR, core::Vec2{1.0f, float(i) / 3.0f}, indices, weights));
     }
 
     for (size_t i = 0; i + 1 < stations.size(); ++i) {
@@ -270,12 +270,15 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
 
 // ---------------------------------------------------------------- rig
 
-void DragonRig::Spring::step(float target, float stiffness, float damping, float dt) {
-    // Critically-damped-ish spring, integrated semi-implicitly so it stays
-    // stable at large stiffness without needing substeps.
-    velocity += (target - angle) * stiffness * dt;
-    velocity -= velocity * core::minf(damping * dt, 1.0f);
-    angle += velocity * dt;
+void DragonRig::set_model_scale(float metres_per_unit) {
+    model_scale_ = metres_per_unit > 1e-6f ? metres_per_unit : 1.0f;
+    // Rest positions are cached in metres, so the chains must be rebuilt.
+    if (skeleton_) {
+        setup_chain(tail_sim_, joints_.tail);
+        std::vector<int> neck_with_head = joints_.neck;
+        if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
+        setup_chain(neck_sim_, neck_with_head);
+    }
 }
 
 void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
@@ -300,10 +303,12 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
                                 : core::conjugate(world_rotation[size_t(parent)]);
     }
 
-    tail_yaw_.assign(joints.tail.size(), Spring());
-    tail_pitch_.assign(joints.tail.size(), Spring());
-    neck_yaw_.assign(joints.neck.size(), Spring());
-    neck_pitch_.assign(joints.neck.size(), Spring());
+    setup_chain(tail_sim_, joints.tail);
+    // The head rides on the end of the neck, so it is simulated as part of it.
+    std::vector<int> neck_with_head = joints.neck;
+    if (joints.head != NO_PARENT) neck_with_head.push_back(joints.head);
+    setup_chain(neck_sim_, neck_with_head);
+    have_previous_ = false;
 
     compute_world_matrices(skeleton, pose_, world_);
     compute_skinning_matrices(skeleton, world_, skinning_);
@@ -398,26 +403,165 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     }
 }
 
-void DragonRig::drive_chain(const std::vector<int>& chain, std::vector<Spring>& yaw,
-                            std::vector<Spring>& pitch, float response,
-                            const game::FlightState& state, float dt) {
-    // Body angular velocity is the driver: the chain trails whichever way the
-    // body is rotating. Deflection accumulates along the chain, so the tip moves
-    // furthest -- that is what makes it read as inertia rather than as a bend.
-    const float limit = core::radians(tuning.chain_limit_deg);
-    for (size_t i = 0; i < chain.size(); ++i) {
-        const float depth = std::pow(float(i + 1) / float(chain.size()), tuning.chain_falloff);
-        // Yaw follows the body's yaw rate, pitch follows its pitch rate, both
-        // opposed because the chain lags behind the turn.
-        const float yaw_target =
-            core::clampf(-state.angular_velocity.y * response * depth, -limit, limit);
-        const float pitch_target =
-            core::clampf(-state.angular_velocity.x * response * depth, -limit, limit);
+void DragonRig::setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const {
+    sim = ChainDynamics();
+    if (chain.size() < 2 || !skeleton_) return;
+    // Simulated in metres, so the forces and the geometry agree. Only the
+    // resulting directions are used, so the choice of unit does not otherwise
+    // matter -- but mixing two of them does.
+    for (const int joint : chain) {
+        sim.rest.push_back(skeleton_->world_bind(joint).translation_part() * model_scale_);
+    }
+    sim.position = sim.rest;
+    sim.velocity.assign(sim.rest.size(), Vec3::zero());
+    sim.segment.assign(sim.rest.size(), 0.0f);
+    for (size_t i = 1; i < sim.rest.size(); ++i) {
+        sim.segment[i] = core::distance(sim.rest[i - 1], sim.rest[i]);
+    }
+    sim.initialized = true;
+}
 
-        yaw[i].step(yaw_target, tuning.chain_stiffness, tuning.chain_damping, dt);
-        pitch[i].step(pitch_target, tuning.chain_stiffness, tuning.chain_damping, dt);
+void DragonRig::rotate_joint_quat(int joint, const Quat& delta, const Quat& parent_extra) {
+    if (joint == NO_PARENT || size_t(joint) >= pose_.local.size()) return;
+    // `delta` is a world-space rotation to add at this joint, but the ancestors
+    // have already been rotated by `parent_extra`. Expressing delta in the
+    // pre-rotation frame keeps the two from compounding twice.
+    const Quat in_parent_frame =
+        core::normalize(core::conjugate(parent_extra) * delta * parent_extra);
+    // parent_bind_inverse_ maps a body-space axis into the parent's frame;
+    // conjugating the whole rotation by it is the quaternion equivalent of what
+    // rotate_joint does with a single axis.
+    const Quat body_to_parent = parent_bind_inverse_[size_t(joint)];
+    const Quat delta_parent =
+        core::normalize(body_to_parent * in_parent_frame * core::conjugate(body_to_parent));
 
-        rotate_joint(chain[i], Vec3::unit_y(), yaw[i].angle, Vec3::unit_x(), pitch[i].angle);
+    Transform local = skeleton_->joint(joint).local_bind;
+    local.rotation = core::normalize(delta_parent * local.rotation);
+    pose_.local[size_t(joint)] = local;
+}
+
+void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
+                            const game::FlightState& state, Vec3 frame_acceleration,
+                            Vec3 angular_acceleration, float dt) {
+    if (!sim.initialized || chain.size() < 2) return;
+
+    const Vec3 omega = state.angular_velocity;
+
+    // Gravity, expressed in the dragon's frame.
+    const Vec3 gravity_local =
+        core::rotate(core::conjugate(state.orientation), Vec3{0.0f, -9.81f, 0.0f}) *
+        tuning.chain_gravity;
+
+    // Airflow in the dragon's frame, for drag. A tail streams backwards at speed
+    // for the same reason a windsock does.
+    const Vec3 airflow_local = core::rotate(core::conjugate(state.orientation), -state.velocity);
+
+    const size_t count = sim.position.size();
+    for (size_t i = 1; i < count; ++i) {  // index 0 is pinned to the body
+        const Vec3 r = sim.position[i];
+        const Vec3 v = sim.velocity[i];
+
+        // Pseudo-forces of a rotating, accelerating reference frame. These are
+        // what a tail actually feels, and they are why it swings outward in a
+        // turn rather than merely lagging.
+        const Vec3 centrifugal = -core::cross(omega, core::cross(omega, r));
+        const Vec3 euler = -core::cross(angular_acceleration, r);
+        const Vec3 coriolis = -2.0f * core::cross(omega, v);
+        const Vec3 linear = -frame_acceleration;
+
+        Vec3 acceleration = gravity_local +
+                            (centrifugal + euler + coriolis + linear) * tuning.chain_inertia;
+
+        // Spring back toward the bind pose, so the chain has a shape to return
+        // to rather than dangling.
+        acceleration += (sim.rest[i] - r) * tuning.chain_stiffness;
+        acceleration -= v * tuning.chain_damping;
+
+        // Drag against the relative airflow, which damps oscillation and
+        // streams the chain aft at speed.
+        const Vec3 relative = airflow_local - v;
+        acceleration += relative * tuning.chain_drag;
+
+        // Clamp before integrating: pseudo-forces grow with the square of
+        // angular velocity, so a tumble would otherwise be unbounded.
+        const float acceleration_magnitude = core::length(acceleration);
+        if (acceleration_magnitude > tuning.chain_max_acceleration) {
+            acceleration *= tuning.chain_max_acceleration / acceleration_magnitude;
+        }
+
+        Vec3 next_velocity = v + acceleration * dt;
+        const float speed = core::length(next_velocity);
+        if (speed > tuning.chain_max_speed) {
+            next_velocity *= tuning.chain_max_speed / speed;
+        }
+        if (!std::isfinite(next_velocity.x) || !std::isfinite(next_velocity.y) ||
+            !std::isfinite(next_velocity.z)) {
+            next_velocity = Vec3::zero();
+        }
+
+        sim.velocity[i] = next_velocity;
+        sim.position[i] = r + next_velocity * dt;
+        if (!std::isfinite(sim.position[i].x) || !std::isfinite(sim.position[i].y) ||
+            !std::isfinite(sim.position[i].z)) {
+            sim.position[i] = sim.rest[i];
+            sim.velocity[i] = Vec3::zero();
+        }
+    }
+
+    // The root of the chain never moves relative to the body.
+    sim.position[0] = sim.rest[0];
+    sim.velocity[0] = Vec3::zero();
+
+    // Constraints: keep the segments their original length, and stop the chain
+    // folding back through itself.
+    const float max_bend = std::cos(core::radians(tuning.chain_max_bend_deg));
+    for (int iteration = 0; iteration < tuning.chain_iterations; ++iteration) {
+        for (size_t i = 1; i < count; ++i) {
+            Vec3 direction = sim.position[i] - sim.position[i - 1];
+            const float length = core::length(direction);
+            if (length < 1e-5f) {
+                direction = core::normalize_or(sim.rest[i] - sim.rest[i - 1], Vec3::forward());
+            } else {
+                direction = direction / length;
+            }
+
+            if (i >= 2) {
+                // Limit the angle against the previous segment.
+                const Vec3 previous = core::normalize_or(
+                    sim.position[i - 1] - sim.position[i - 2], direction);
+                if (core::dot(previous, direction) < max_bend) {
+                    // Rotate the direction back toward the previous segment
+                    // until it is inside the cone.
+                    const Vec3 axis = core::cross(previous, direction);
+                    if (core::length_sq(axis) > 1e-8f) {
+                        direction = core::rotate(
+                            core::Quat::from_axis_angle(core::normalize(axis),
+                                                        core::radians(tuning.chain_max_bend_deg)),
+                            previous);
+                    } else {
+                        direction = previous;
+                    }
+                }
+            }
+            sim.position[i] = sim.position[i - 1] + direction * sim.segment[i];
+        }
+    }
+
+    // ---- turn the simulated shape back into joint rotations ----
+    //
+    // Walk outward, tracking the rotation already applied to the ancestors so
+    // each joint only has to account for its own segment.
+    Quat accumulated = Quat::identity();
+    for (size_t i = 0; i + 1 < count; ++i) {
+        const Vec3 bind_direction =
+            core::normalize_or(sim.rest[i + 1] - sim.rest[i], Vec3::forward());
+        const Vec3 current = core::rotate(accumulated, bind_direction);
+        const Vec3 target =
+            core::normalize_or(sim.position[i + 1] - sim.position[i], current);
+
+        const Quat delta = core::rotation_between(current, target);
+        rotate_joint_quat(chain[i], delta, accumulated);
+        accumulated = core::normalize(delta * accumulated);
     }
 }
 
@@ -443,9 +587,25 @@ void DragonRig::drive_legs(const game::FlightState& state, float dt) {
 void DragonRig::update(const game::FlightState& state, float dt) {
     if (!skeleton_ || dt <= 0.0f) return;
 
+    // Accelerations are what the chains actually respond to, and the flight model
+    // reports velocities, so they are differenced here.
+    Vec3 frame_acceleration = Vec3::zero();
+    Vec3 angular_acceleration = Vec3::zero();
+    if (have_previous_) {
+        const Vec3 world_acceleration = (state.velocity - previous_velocity_) / dt;
+        frame_acceleration = core::rotate(core::conjugate(state.orientation), world_acceleration);
+        angular_acceleration = (state.angular_velocity - previous_angular_velocity_) / dt;
+    }
+    previous_velocity_ = state.velocity;
+    previous_angular_velocity_ = state.angular_velocity;
+    have_previous_ = true;
+
     drive_wings(state);
-    drive_chain(joints_.tail, tail_yaw_, tail_pitch_, tuning.tail_response, state, dt);
-    drive_chain(joints_.neck, neck_yaw_, neck_pitch_, tuning.neck_response, state, dt);
+
+    std::vector<int> neck_with_head = joints_.neck;
+    if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
+    drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration, dt);
+    drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration, dt);
     drive_legs(state, dt);
 
     compute_world_matrices(*skeleton_, pose_, world_);

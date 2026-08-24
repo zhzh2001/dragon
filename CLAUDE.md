@@ -200,6 +200,25 @@ heuristics it replaced -- a wing membrane is legitimately far from the bone that
 drives it. What no automated check can catch is a rig that was mangled before it
 reached the file, so a new asset still needs a look.
 
+### Textures
+
+`anim::load_skinned_gltf` decodes each material's base-colour image with
+stb_image and returns them undecoded of any GPU dependency; the app uploads them
+via `gfx::create_texture_from_image`, which builds a full mip chain -- a 4K
+texture seen across a valley aliases into shimmering noise without one, and that
+reads as a broken model rather than a sampling artefact.
+
+The mesh is split into **submeshes**, one per glTF primitive, so each can bind its
+own texture. A submesh with no material still has to fill the sampler slot, so the
+renderer binds a 1x1 white texture and `ModelUniforms::material.x` says whether
+the sample should be used. The shadow map cannot serve as that placeholder: it is
+a depth texture and the shader declares a colour one.
+
+Images must be decoded **before** `cgltf_free`. Their bytes live in a buffer that
+free releases, and reading afterwards is a use-after-free that looked plausible --
+every material appeared to share one image, because the freed pointers happened
+to compare equal.
+
 ### Driving an arbitrary rig
 
 `anim::map_dragon_joints` identifies the neck, tail, wing and leg chains by name

@@ -9,12 +9,13 @@ using core::Vec3;
 
 namespace anim {
 
-uint32_t SkinnedMeshData::add(Vec3 position, Vec3 color, const int (&joint_indices)[4],
-                              const float (&joint_weights)[4]) {
+uint32_t SkinnedMeshData::add(Vec3 position, Vec3 color, core::Vec2 uv,
+                              const int (&joint_indices)[4], const float (&joint_weights)[4]) {
     SkinnedVertex vertex;
     vertex.position = position;
     vertex.normal = Vec3::up();  // replaced by recompute_normals
     vertex.color = color;
+    vertex.uv = uv;
 
     float total = 0.0f;
     for (int i = 0; i < 4; ++i) {
@@ -79,8 +80,10 @@ bool SkinnedMesh::upload(SDL_GPUDevice* gpu, const SkinnedMeshData& data, const 
     }
 
     index_count_ = uint32_t(data.indices.size());
-    LOG_INFO("skinned mesh '%s': %zu verts, %u indices", debug_name, data.vertices.size(),
-             index_count_);
+    submeshes_ = data.submeshes;
+    if (submeshes_.empty()) submeshes_.push_back({0, index_count_, -1});
+    LOG_INFO("skinned mesh '%s': %zu verts, %u indices, %zu submesh(es)", debug_name,
+             data.vertices.size(), index_count_, submeshes_.size());
     return true;
 }
 
@@ -123,8 +126,9 @@ std::vector<SDL_GPUVertexAttribute> SkinnedMesh::attributes() {
     push(0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, position));
     push(1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, normal));
     push(2, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, color));
-    push(3, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints));
-    push(4, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights));
+    push(3, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(SkinnedVertex, uv));
+    push(4, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints));
+    push(5, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights));
     return attributes;
 }
 
