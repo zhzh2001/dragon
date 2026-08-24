@@ -334,6 +334,12 @@ void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
     const float retained = std::exp(-tuning.ground_friction * dt);
     state_.velocity *= retained;
 
+    // Static friction: come to a genuine stop rather than creeping downhill.
+    if (core::length_sq(state_.velocity) <
+        core::sqf(core::maxf(tuning.ground_stop_speed, 0.0f))) {
+        state_.velocity = Vec3::zero();
+    }
+
     state_.grounded = true;
     state_.stalling = false;
 }
@@ -416,7 +422,7 @@ const Field FIELDS[] = {
     FIELD(auto_level),           FIELD(auto_level_max_rate), FIELD(turn_coordination),
     FIELD(stall_recovery),       FIELD(pitch_level),         FIELD(pitch_level_max_rate),
     FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),
-    FIELD(ground_friction),      FIELD(safe_landing_speed),
+    FIELD(ground_friction),      FIELD(ground_stop_speed),   FIELD(safe_landing_speed),
 };
 #undef FIELD
 

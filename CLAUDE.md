@@ -50,6 +50,9 @@ the wingbeat and the inverted recovery were checked.
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
 | R | Respawn |
+| Right-drag / right stick | Free look -- orbit the view without steering |
+| V | First person, from behind the dragon's head |
+| 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
 | Esc | Release the mouse if captured; again to quit |
 
@@ -122,7 +125,29 @@ tests/       plain executables, no framework
   camera, live telemetry.
 - **M4.1** playtest fixes: keyboard/gamepad controls, roll and inversion
   recovery, asymmetric wingbeat, 5 km valley, shared tonemapping.
-- **Next: M5** the chase camera proper -- spring arm with terrain collision.
+- **M5** chase camera: terrain-swept spring arm, turn lead, free look, first
+  person, three presets. **Awaiting playtest.**
+- **Next: M6** a real rigged dragon with procedural wing, neck and tail
+  animation -- or M8 (Dragon Rally), if the flight core is judged done.
+
+## The camera
+
+`game::ChaseCamera`. The arm is *swept* against the terrain, not merely clamped:
+a clamp alone happily places the camera on the far side of a ridge, showing the
+inside of a mountain. The arm shortens fast (clipping is instantly ugly) and
+extends slowly (snapping out is jarring), then the final position is hard-clamped
+above ground as a last resort -- being inside a mountain for even a few frames is
+worse than a small jolt.
+
+Roll inheritance is partial by design and full inheritance is not offered: it is
+nauseating, and it hides the horizon, which is the player's main reference for
+reading their own attitude.
+
+`tests/test_camera_rig.cpp` flies scripted manoeuvres and asserts what a player
+would actually notice: never underground across six terrain-hugging cases and all
+three presets, the dragon never off screen through rolls and loops, no
+single-frame jump over 6 m, first person rigidly attached, free look not steering
+the dragon, and no drift when parked on a slope.
 
 ## The flight model
 

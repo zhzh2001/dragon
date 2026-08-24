@@ -71,3 +71,17 @@ target_include_directories(test_flight PRIVATE src)
 target_link_libraries(test_flight PRIVATE SDL3::SDL3)
 target_compile_options(test_flight PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME flight COMMAND test_flight)
+
+add_executable(test_camera_rig
+  tests/test_camera_rig.cpp
+  src/game/chase_camera.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_camera_rig PRIVATE src)
+target_link_libraries(test_camera_rig PRIVATE SDL3::SDL3)
+target_compile_options(test_camera_rig PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME camera_rig COMMAND test_camera_rig)

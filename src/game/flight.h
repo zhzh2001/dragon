@@ -111,6 +111,10 @@ struct FlightTuning {
     // ---- ground ----
     float ground_offset = 2.2f;   // body centre height when resting
     float ground_friction = 1.8f;
+    // Static friction. Sliding friction alone is multiplicative, so it can never
+    // fully cancel the component of gravity along a slope -- a landed dragon
+    // slides downhill forever, slowly. Below this speed it simply stops.
+    float ground_stop_speed = 1.6f;
     // Landing softer than this keeps you intact; harder is a crash.
     float safe_landing_speed = 18.0f;
 };

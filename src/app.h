@@ -34,6 +34,10 @@ struct Options {
     // Hides the ImGui panels, for captures that should show only the world.
     bool hide_ui = false;
 
+    // --cam-mode chase|action|cinematic|fp selects the camera for a capture.
+    int camera_mode = 0;
+    bool first_person = false;
+
     // --input pitch,roll,yaw,flap,tuck,brake holds a constant control input.
     // Lets a specific flight state be captured and inspected without a human at
     // the keyboard.
@@ -62,6 +66,8 @@ private:
     void respawn_dragon();
     void update_stick(float dt);
     game::FlightInput read_flight_input() const;
+    core::Vec2 read_free_look(float dt) const;
+    void apply_camera_preset(int index);
     gfx::ModelUniforms dragon_model_uniforms() const;
     const gfx::Camera& active_camera() const;
     void draw_flight_debug();
@@ -113,6 +119,11 @@ private:
         float gamepad_expo = 1.7f;
 
         bool invert_pitch = false;
+
+        // Free look, in degrees. The mouse figure is per pixel of right-drag;
+        // the gamepad figure is per second at full stick deflection.
+        float free_look_mouse = 0.16f;
+        float free_look_gamepad = 110.0f;
     } controls_;
     core::Vec2 stick_ = core::Vec2{0.0f, 0.0f};
     core::Vec2 mouse_deflection_ = core::Vec2{0.0f, 0.0f};
@@ -121,6 +132,8 @@ private:
 
     // Free-fly is for surveying the world; the chase camera is the game.
     bool free_camera_ = false;
+    int camera_preset_ = 0;  // 0 chase, 1 action, 2 cinematic
+    bool show_camera_rig_ = false;
     bool show_forces_ = false;
     bool show_flight_path_ = true;
 

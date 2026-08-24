@@ -23,6 +23,13 @@ Options parse_options(int argc, char** argv) {
             options.frames = SDL_atoi(argv[++i]);
         } else if (arg == "--screenshot" && i + 1 < argc) {
             options.screenshot = argv[++i];
+        } else if (arg == "--cam-mode" && i + 1 < argc) {
+            const std::string mode = argv[++i];
+            if (mode == "chase") options.camera_mode = 0;
+            else if (mode == "action") options.camera_mode = 1;
+            else if (mode == "cinematic") options.camera_mode = 2;
+            else if (mode == "fp") options.first_person = true;
+            else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
         } else if (arg == "--hide-ui") {
             options.hide_ui = true;
         } else if (arg == "--input" && i + 1 < argc) {
@@ -54,7 +61,7 @@ bool App::init(const Options& options) {
     options_ = options;
 
     gfx::Device::Config config;
-    config.title = "Dragon Engine -- M4";
+    config.title = "Dragon Engine -- M5";
     config.width = 1280;
     config.height = 720;
     config.headless = options.headless;
@@ -76,6 +83,8 @@ bool App::init(const Options& options) {
     // good session's numbers survive a rebuild.
     game::load_tuning(flight_.tuning, ASSET_ROOT "/flight_tuning.cfg");
 
+    apply_camera_preset(options.camera_mode);
+    chase_.first_person = options.first_person;
     respawn_dragon();
 
     if (options.has_camera) {
@@ -170,6 +179,39 @@ void App::update_stick(float dt) {
 
     stick_.x = core::damp(stick_.x, target.x, controls_.stick_smoothing, dt);
     stick_.y = core::damp(stick_.y, target.y, controls_.stick_smoothing, dt);
+}
+
+// Free look, in degrees for this frame. Right-drag with the mouse, or the
+// gamepad's right stick.
+core::Vec2 App::read_free_look(float dt) const {
+    if (free_camera_) return core::Vec2{0.0f, 0.0f};
+
+    core::Vec2 look{0.0f, 0.0f};
+
+    // Right-drag is free for looking because flight steering does not use the
+    // mouse by default.
+    if (!controls_.mouse_stick && input_.mouse_down(SDL_BUTTON_RIGHT) && !ui_.wants_mouse()) {
+        const core::Vec2 delta = input_.mouse_delta();
+        look.x += delta.x * controls_.free_look_mouse;
+        look.y += delta.y * controls_.free_look_mouse;
+    }
+
+    if (input_.has_gamepad()) {
+        look.x += input_.gamepad_axis(SDL_GAMEPAD_AXIS_RIGHTX, controls_.gamepad_deadzone) *
+                  controls_.free_look_gamepad * dt;
+        look.y += input_.gamepad_axis(SDL_GAMEPAD_AXIS_RIGHTY, controls_.gamepad_deadzone) *
+                  controls_.free_look_gamepad * dt;
+    }
+    return look;
+}
+
+void App::apply_camera_preset(int index) {
+    camera_preset_ = index;
+    switch (index) {
+        case 1: chase_.tuning = game::camera_preset_action(); break;
+        case 2: chase_.tuning = game::camera_preset_cinematic(); break;
+        default: chase_.tuning = game::camera_preset_chase(); break;
+    }
 }
 
 game::FlightInput App::read_flight_input() const {
@@ -308,6 +350,10 @@ void App::pump_events() {
         }
     }
     if (input_.pressed(SDL_SCANCODE_R)) respawn_dragon();
+    if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
+    if (input_.pressed(SDL_SCANCODE_1)) apply_camera_preset(0);
+    if (input_.pressed(SDL_SCANCODE_2)) apply_camera_preset(1);
+    if (input_.pressed(SDL_SCANCODE_3)) apply_camera_preset(2);
 
     // Only mouse steering needs the pointer; keyboard and gamepad leave it free
     // so the tuning panel stays usable while flying.
@@ -317,11 +363,12 @@ void App::pump_events() {
     }
     if (!controls_.mouse_stick && mouse_captured_) set_mouse_captured(false);
 
-    // In free-camera mode, hold right mouse to look. Relative mode hides the
-    // cursor and delivers unbounded deltas, so the view can turn past the
-    // window edge.
-    const bool want_look =
-        free_camera_ && input_.mouse_down(SDL_BUTTON_RIGHT) && !ui_.wants_mouse();
+    // Right mouse means "look around" in both modes: it turns the survey camera
+    // in free-camera mode and orbits the chase camera otherwise. Relative mode
+    // hides the cursor and delivers unbounded deltas, so the view can keep
+    // turning past the window edge.
+    const bool want_look = input_.mouse_down(SDL_BUTTON_RIGHT) && !ui_.wants_mouse() &&
+                           !controls_.mouse_stick;
     if (want_look != mouse_look_) {
         mouse_look_ = want_look;
         if (!options_.headless) SDL_SetWindowRelativeMouseMode(device_.window(), mouse_look_);
@@ -342,7 +389,7 @@ void App::update(float dt) {
     // The dragon always flies, even while the free camera is being used to look
     // at it -- otherwise you cannot inspect a manoeuvre from outside.
     flight_.update(read_flight_input(), &terrain_, dt);
-    chase_.update(flight_.state(), &terrain_, dt);
+    chase_.update(flight_.state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
     push_telemetry(flight_.state());
@@ -427,6 +474,20 @@ void App::draw_flight_debug() {
     if (free_camera_) {
         debug_.sphere(s.position, 6.0f, Vec3{0.9f, 0.75f, 0.35f}, 20, true);
     }
+
+    if (show_camera_rig_) {
+        // The spring arm made visible: pivot, arm, and aim point. Seeing the arm
+        // shorten against a ridge is the only way to tell a collision response
+        // from a tuning problem.
+        const Vec3 pivot = chase_.pivot();
+        const Vec3 eye = chase_.camera().position;
+        const bool blocked = chase_.arm_is_blocked();
+        debug_.sphere(pivot, 1.2f, Vec3{0.4f, 0.8f, 0.9f}, 12, true);
+        debug_.line(pivot, eye, blocked ? Vec3{0.95f, 0.45f, 0.3f} : Vec3{0.4f, 0.8f, 0.9f}, true);
+        debug_.sphere(eye, 1.6f, Vec3{0.9f, 0.9f, 0.5f}, 12, true);
+        debug_.cross(chase_.camera().position + chase_.camera().forward() * 30.0f, 2.5f,
+                     Vec3{0.9f, 0.6f, 0.9f}, true);
+    }
 }
 
 void App::build_ui(float dt) {
@@ -443,16 +504,67 @@ void App::build_ui(float dt) {
     ImGui::Text("%.2f ms  (%.0f fps)   %ux%u", ms, ms > 0.0f ? 1000.0f / ms : 0.0f,
                 device_.width(), device_.height());
 
-    if (ImGui::CollapsingHeader("Camera")) {
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+        game::ChaseCameraTuning& c = chase_.tuning;
+
+        if (ImGui::RadioButton("chase (1)", camera_preset_ == 0)) apply_camera_preset(0);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("action (2)", camera_preset_ == 1)) apply_camera_preset(1);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("cinematic (3)", camera_preset_ == 2)) apply_camera_preset(2);
+
+        ImGui::Checkbox("first person (V)", &chase_.first_person);
+        ImGui::SameLine();
         ImGui::Checkbox("free camera (tab)", &free_camera_);
-        ImGui::SliderFloat("chase distance", &chase_.tuning.distance, 6.0f, 60.0f, "%.1f m");
-        ImGui::SliderFloat("chase height", &chase_.tuning.height, 0.0f, 20.0f, "%.1f m");
-        ImGui::SliderFloat("look ahead", &chase_.tuning.look_ahead, 0.0f, 40.0f, "%.1f m");
-        ImGui::SliderFloat("position lag", &chase_.tuning.position_lag, 0.0f, 0.5f, "%.3f s");
-        ImGui::SliderFloat("aim lag", &chase_.tuning.aim_lag, 0.0f, 0.5f, "%.3f s");
-        ImGui::SliderFloat("roll inherit", &chase_.tuning.roll_inheritance, 0.0f, 1.0f);
-        ImGui::SliderFloat("fov base", &chase_.tuning.fov_base_deg, 40.0f, 100.0f, "%.0f deg");
-        ImGui::SliderFloat("fov speed gain", &chase_.tuning.fov_speed_gain, 0.0f, 0.5f);
+
+        // Watching the arm shorten is how a collision response is told apart
+        // from a tuning problem.
+        ImGui::Text("arm %.1f / %.1f m%s", chase_.arm_length(), chase_.requested_arm_length(),
+                    chase_.arm_is_blocked() ? "  BLOCKED" : "");
+        const core::Vec2 look = chase_.free_look_angles();
+        ImGui::Text("free look %+.0f  %+.0f deg", look.x, look.y);
+        ImGui::Checkbox("show camera rig", &show_camera_rig_);
+
+        if (ImGui::TreeNode("Arm")) {
+            ImGui::SliderFloat("distance", &c.distance, 5.0f, 60.0f, "%.1f m");
+            ImGui::SliderFloat("distance/speed", &c.distance_speed_gain, 0.0f, 0.4f);
+            ImGui::SliderFloat("height", &c.height, 0.0f, 20.0f, "%.1f m");
+            ImGui::SliderFloat("pivot forward", &c.pivot_forward, -5.0f, 10.0f, "%.1f m");
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Aim & lag")) {
+            ImGui::SliderFloat("look ahead", &c.look_ahead, 0.0f, 40.0f, "%.1f m");
+            ImGui::SliderFloat("turn lead", &c.look_ahead_turn, 0.0f, 30.0f, "%.1f m/(rad/s)");
+            ImGui::SliderFloat("aim height bias", &c.look_down_bias, -20.0f, 20.0f, "%.1f m");
+            ImGui::SliderFloat("position lag", &c.position_lag, 0.0f, 0.6f, "%.3f s");
+            ImGui::SliderFloat("aim lag", &c.aim_lag, 0.0f, 0.4f, "%.3f s");
+            ImGui::SliderFloat("roll inherit", &c.roll_inheritance, 0.0f, 1.0f);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Field of view")) {
+            ImGui::SliderFloat("fov base", &c.fov_base_deg, 40.0f, 100.0f, "%.0f deg");
+            ImGui::SliderFloat("fov/speed", &c.fov_speed_gain, 0.0f, 0.6f);
+            ImGui::SliderFloat("fov max", &c.fov_max_deg, 60.0f, 120.0f, "%.0f deg");
+            ImGui::SliderFloat("fov lag", &c.fov_lag, 0.0f, 1.0f, "%.2f s");
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Collision")) {
+            ImGui::SliderFloat("ground margin", &c.collision_margin, 0.5f, 20.0f, "%.1f m");
+            ImGui::SliderFloat("shorten lag", &c.collision_shorten_lag, 0.0f, 0.2f, "%.3f s");
+            ImGui::SliderFloat("extend lag", &c.collision_extend_lag, 0.0f, 1.5f, "%.2f s");
+            ImGui::SliderFloat("min distance", &c.min_distance, 1.0f, 20.0f, "%.1f m");
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Free look & shake")) {
+            ImGui::SliderFloat("mouse deg/px", &controls_.free_look_mouse, 0.02f, 0.6f, "%.3f");
+            ImGui::SliderFloat("pad deg/s", &controls_.free_look_gamepad, 20.0f, 300.0f, "%.0f");
+            ImGui::SliderFloat("recentre", &c.free_look_return, 0.0f, 4.0f, "%.2f s");
+            ImGui::SliderFloat("shake/speed", &c.shake_speed, 0.0f, 0.3f);
+            ImGui::SliderFloat("shake/g", &c.shake_g, 0.0f, 0.3f);
+            ImGui::SliderFloat("shake max", &c.shake_max, 0.0f, 5.0f, "%.1f deg");
+            ImGui::TreePop();
+        }
+
         ImGui::Separator();
         ImGui::SliderFloat("free cam speed", &camera_.speed, 1.0f, 400.0f, "%.0f m/s");
         if (ImGui::Button("frame valley")) frame_camera_on_valley();
@@ -664,7 +776,8 @@ void App::build_flight_ui() {
     ImGui::TextDisabled("W/S pitch, A/D roll, Q/E rudder");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
     ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake");
-    ImGui::TextDisabled("R respawn, tab free camera, esc quit");
+    ImGui::TextDisabled("R respawn, V first person, 1/2/3 camera");
+    ImGui::TextDisabled("right-drag or right stick to look around");
     ImGui::End();
 }
 
