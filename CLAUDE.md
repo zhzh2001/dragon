@@ -162,24 +162,33 @@ different for every bone.
 
 ### Preparing an asset in Blender
 
-`assets/dragon.glb` (see ATTRIBUTION.md) needed three steps beyond a plain
-export, and each was found by the asset failing without it:
+`assets/dragon.glb` (see ATTRIBUTION.md) needs exactly two steps beyond a plain
+export, and getting either wrong produces a dragon that is *nearly* right:
 
-1. **Bake a good pose as the rest pose.** This rig's stored rest pose is a tangle
-   -- constraints and its idle animation are what hold the dragon's shape. Import
-   with constraints intact, then for each mesh duplicate the Armature modifier and
-   apply one copy (baking the deformation into the vertices), then in pose mode
-   *Apply Pose as Rest Pose*. Only then are mesh and skeleton consistent.
-2. **Do not export with `export_apply=True`.** It applies the Armature modifier,
-   baking whatever pose is current into the vertices and *then* writing skin data
-   on top of it.
-3. **Reduce the bone count.** 232 bones exceeds the 64-joint skinning budget.
-   Dissolve control, IK, facial and toe bones, transferring each one's vertex
-   weights to its nearest surviving ancestor first.
+1. **Bake the animated pose as the rest pose.** This asset's stored mesh data is
+   a tangle; the armature's deformation is what produces the dragon. Measured at
+   frame 1: the raw mesh is 1950 x 4697 x 3325 and the deformed mesh is
+   269 x 126 x 32. So import with constraints intact, set the frame, for each
+   mesh duplicate the Armature modifier and apply one copy (baking the
+   deformation into the vertices), then in pose mode *Apply Pose as Rest Pose*.
+2. **Export with `export_apply=False`.** Applying modifiers bakes whatever pose
+   is current into the vertices and *then* writes skin data on top.
+
+Two things that look like good ideas and are not:
+
+- **Do not cut the rig down to fit a joint budget.** Dissolving control, IK,
+  facial and toe bones and transferring their vertex weights to surviving
+  ancestors is what produced visibly glitchy wings and a glitchy snout. Raising
+  `MAX_JOINTS` to 256 costs 16 KB of uniform per draw and keeps the asset intact.
+- **Do not pick the bake frame by proxy metrics.** Scoring frames on wingspan
+  picked frame 250, whose 3.7x-wider "span" was the wings being flung apart by
+  bad constraint evaluation, not spread wings. Frame 1 -- the flat, wide, thin
+  extent of a gliding dragon -- is the neutral pose. Render candidates and look
+  at them.
 
 The loader validates the result: every vertex should lie near the bone that moves
 it, and an asset whose median vertex sits more than 10% of the model's size from
 its dominant bone is refused with that diagnosis rather than rendered as garbage.
-Facing and scale are then derived from the rig -- the head bone's Z against the
-tail's decides whether a 180-degree yaw is needed, and the wingspan is scaled to
-the 19 m the flight model's 40 m^2 of wing assumes.
+Facing and scale are derived from the rig -- the head bone's Z against the tail's
+decides whether a 180-degree yaw is needed, and the wingspan is scaled to the
+19 m that the flight model's 40 m^2 of wing assumes.

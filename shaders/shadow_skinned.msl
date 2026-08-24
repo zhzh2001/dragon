@@ -3,7 +3,7 @@
 // Depth-only skinned pass. Applies the same blend as skinned.msl, so a folded
 // wing casts a folded shadow -- the ground shadow is the player's altitude cue,
 // and a shadow that does not match the pose reads as a bug in the flight model.
-constexpr constant uint MAX_JOINTS = 64;
+constexpr constant uint MAX_JOINTS = 256;
 
 struct SkinUniforms {
     float4x4 joints[MAX_JOINTS];

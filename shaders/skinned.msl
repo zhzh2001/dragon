@@ -2,10 +2,10 @@
 
 // Skinned character rendering.
 //
-// Joint matrices arrive as a uniform array rather than a storage buffer: a rig
-// this size costs 4 KB, and a uniform push avoids maintaining a per-frame buffer.
-// Must match anim::MAX_JOINTS.
-constexpr constant uint MAX_JOINTS = 64;
+// Joint matrices arrive as a uniform array rather than a storage buffer: 16 KB
+// per draw, which avoids maintaining a per-frame buffer. Must match
+// anim::MAX_JOINTS.
+constexpr constant uint MAX_JOINTS = 256;
 
 struct SkinUniforms {
     float4x4 joints[MAX_JOINTS];

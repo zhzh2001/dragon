@@ -8,9 +8,17 @@
 namespace anim {
 
 constexpr int NO_PARENT = -1;
-// Skinning matrices travel to the GPU in a uniform block, so the count is fixed.
-// A dragon rig needs around 30; 64 leaves room without wasting much.
-constexpr int MAX_JOINTS = 64;
+// Skinning matrices travel to the GPU in a fixed-size uniform block.
+//
+// 256 rather than something snug: real rigs are full of IK, control and facial
+// bones, and this asset ships 232. Cutting a rig down to fit meant transferring
+// vertex weights between bones and reparenting the survivors, which is exactly
+// the kind of surgery that produces subtly glitchy wings and snouts. 16 KB of
+// uniform per draw is a much better trade than mangling the asset.
+//
+// Joint indices are bytes in the vertex format, so 256 is also the ceiling that
+// costs nothing.
+constexpr int MAX_JOINTS = 256;
 
 struct Joint {
     std::string name;
