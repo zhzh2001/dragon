@@ -160,35 +160,34 @@ rotation**. Replacing the bind rotation destroys the rest pose, and a real rig's
 bones each point along their own axis, so "rotate about local Z" means something
 different for every bone.
 
-### Preparing an asset in Blender
+### Getting a usable asset: do NOT route it through Blender's FBX importer
 
-`assets/dragon.glb` (see ATTRIBUTION.md) needs exactly two steps beyond a plain
-export, and getting either wrong produces a dragon that is *nearly* right:
+Drop a rigged `.glb` or `.gltf` at `assets/dragon.glb` and it is used
+automatically, falling back to the generated rig if anything is wrong. The
+loader handles the awkward parts (file-supplied inverse binds, scene transform
+above the skin, side detection by subtree, facing and scale derived from the
+rig). What it cannot fix is an asset that arrived broken.
 
-1. **Bake the animated pose as the rest pose.** This asset's stored mesh data is
-   a tangle; the armature's deformation is what produces the dragon. Measured at
-   frame 1: the raw mesh is 1950 x 4697 x 3325 and the deformed mesh is
-   269 x 126 x 32. So import with constraints intact, set the frame, for each
-   mesh duplicate the Armature modifier and apply one copy (baking the
-   deformation into the vertices), then in pose mode *Apply Pose as Rest Pose*.
-2. **Export with `export_apply=False`.** Applying modifiers bakes whatever pose
-   is current into the vertices and *then* writes skin data on top.
+**Sketchfab models delivered as FBX are mangled by Blender's FBX importer.** This
+was established by rendering the dragon in Blender's own viewport, dragon meshes
+only, across eight frames of its animation: broken at every frame, before any
+processing of mine. Sketchfab's own viewer shows the same model correctly. The
+signature is roughly sixty auto-generated `*_end_*` leaf bones plus a handful of
+vertices flung far from the body, which is the classic FBX bone-orientation
+import failure -- normally cured by importing with `ignore_leaf_bones` and
+`automatic_bone_orientation`, neither of which the download tool exposes, and it
+deletes the source `.fbx` afterwards.
 
-Two things that look like good ideas and are not:
+So: **download the glTF variant from the model's Sketchfab page directly** (the
+Download button offers glTF alongside the original format) and drop it in
+`assets/`. That bypasses Blender entirely. No pose bake, no bone surgery, no
+export options to get wrong.
 
-- **Do not cut the rig down to fit a joint budget.** Dissolving control, IK,
-  facial and toe bones and transferring their vertex weights to surviving
-  ancestors is what produced visibly glitchy wings and a glitchy snout. Raising
-  `MAX_JOINTS` to 256 costs 16 KB of uniform per draw and keeps the asset intact.
-- **Do not pick the bake frame by proxy metrics.** Scoring frames on wingspan
-  picked frame 250, whose 3.7x-wider "span" was the wings being flung apart by
-  bad constraint evaluation, not spread wings. Frame 1 -- the flat, wide, thin
-  extent of a gliding dragon -- is the neutral pose. Render candidates and look
-  at them.
-
-The loader validates the result: every vertex should lie near the bone that moves
-it, and an asset whose median vertex sits more than 10% of the model's size from
-its dominant bone is refused with that diagnosis rather than rendered as garbage.
-Facing and scale are derived from the rig -- the head bone's Z against the tail's
-decides whether a 180-degree yaw is needed, and the wingspan is scaled to the
-19 m that the flight model's 40 m^2 of wing assumes.
+`artifacts/dragon_broken_fbx_import.glb` is kept as the counter-example. It
+parses, validates, and skins to identity at bind pose -- every automated check
+passes -- and still renders as a tangle of sheets. No loader-side test can catch
+"the rig was mangled on import", so a new asset needs a look, not just a green
+test. Two dead ends recorded so they are not repeated: cutting a rig down to fit
+a joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS
+is 256 for this reason), and picking a pose-bake frame by proxy metrics rather
+than by rendering candidates and looking at them.
