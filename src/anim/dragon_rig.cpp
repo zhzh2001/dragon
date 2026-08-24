@@ -203,17 +203,15 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
                                              offset(Vec3{sign * shape.wing_upper, 0, 0}));
         const int wrist = skeleton.add_joint("wrist" + suffix, elbow,
                                              offset(Vec3{sign * shape.wing_fore, 0, 0}));
-        j.wing[side][0] = shoulder;
-        j.wing[side][1] = elbow;
-        j.wing[side][2] = wrist;
+        j.wing_root[side] = {shoulder, elbow};
+        j.wing_fingers[side] = {{wrist}};
 
         const int hip = skeleton.add_joint(
             "hip" + suffix, j.root,
             offset(Vec3{sign * shape.body_radius * 0.6f, -shape.body_radius * 0.4f, 0.0f}));
         const int knee =
             skeleton.add_joint("knee" + suffix, hip, offset(Vec3{0, -shape.leg_upper, 0}));
-        j.leg[side][0] = hip;
-        j.leg[side][1] = knee;
+        j.leg[side] = {hip, knee};
     }
 
     skeleton.finalize();
@@ -254,14 +252,16 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
 
     // Legs.
     for (int side = 0; side < 2; ++side) {
-        std::vector<int> leg{j.leg[side][0], j.leg[side][1]};
         std::vector<float> radii{shape.body_radius * 0.26f, shape.body_radius * 0.17f};
-        skin_tube(out_mesh, skeleton, leg, radii, 8, LEG_COLOR, LEG_COLOR, true);
+        skin_tube(out_mesh, skeleton, j.leg[side], radii, 8, LEG_COLOR, LEG_COLOR, true);
     }
 
     // Wings.
-    skin_wing(out_mesh, skeleton, shape, j.wing[0], 1.0f);
-    skin_wing(out_mesh, skeleton, shape, j.wing[1], -1.0f);
+    for (int side = 0; side < 2; ++side) {
+        const int bones[3] = {j.wing_root[side][0], j.wing_root[side][1],
+                              j.wing_fingers[side][0][0]};
+        skin_wing(out_mesh, skeleton, shape, bones, side == 0 ? 1.0f : -1.0f);
+    }
 
     out_mesh.recompute_normals();
     LOG_INFO("dragon rig: %d joints, %zu verts, %zu tris", skeleton.count(),
@@ -283,6 +283,23 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     joints_ = joints;
     pose_.reset_to_bind(skeleton);
 
+    // Accumulate world bind rotations, then keep each joint's parent's inverse.
+    // A local rotation is expressed in the parent's frame, so that inverse is
+    // what turns a body-space axis into a usable one.
+    const int count = skeleton.count();
+    std::vector<Quat> world_rotation(size_t(count), Quat::identity());
+    parent_bind_inverse_.assign(size_t(count), Quat::identity());
+    for (int i = 0; i < count; ++i) {
+        const Quat local = skeleton.joint(i).local_bind.rotation;
+        const int parent = skeleton.joint(i).parent;
+        world_rotation[size_t(i)] =
+            parent == NO_PARENT ? core::normalize(local)
+                                : core::normalize(world_rotation[size_t(parent)] * local);
+        parent_bind_inverse_[size_t(i)] =
+            parent == NO_PARENT ? Quat::identity()
+                                : core::conjugate(world_rotation[size_t(parent)]);
+    }
+
     tail_yaw_.assign(joints.tail.size(), Spring());
     tail_pitch_.assign(joints.tail.size(), Spring());
     neck_yaw_.assign(joints.neck.size(), Spring());
@@ -290,6 +307,25 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
 
     compute_world_matrices(skeleton, pose_, world_);
     compute_skinning_matrices(skeleton, world_, skinning_);
+}
+
+void DragonRig::rotate_joint(int joint, Vec3 body_axis, float angle) {
+    if (joint == NO_PARENT || size_t(joint) >= pose_.local.size()) return;
+    const Vec3 axis = core::rotate(parent_bind_inverse_[size_t(joint)], body_axis);
+    Transform local = skeleton_->joint(joint).local_bind;
+    // Composed with the bind rotation, not substituted for it.
+    local.rotation = core::normalize(Quat::from_axis_angle(axis, angle) * local.rotation);
+    pose_.local[size_t(joint)] = local;
+}
+
+void DragonRig::rotate_joint(int joint, Vec3 axis_a, float angle_a, Vec3 axis_b, float angle_b) {
+    if (joint == NO_PARENT || size_t(joint) >= pose_.local.size()) return;
+    const Quat& to_parent = parent_bind_inverse_[size_t(joint)];
+    const Quat a = Quat::from_axis_angle(core::rotate(to_parent, axis_a), angle_a);
+    const Quat b = Quat::from_axis_angle(core::rotate(to_parent, axis_b), angle_b);
+    Transform local = skeleton_->joint(joint).local_bind;
+    local.rotation = core::normalize(a * b * local.rotation);
+    pose_.local[size_t(joint)] = local;
 }
 
 void DragonRig::drive_wings(const game::FlightState& state) {
@@ -301,37 +337,46 @@ void DragonRig::drive_wings(const game::FlightState& state) {
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
-        // Rotating about local Z raises and lowers the wing, since the wing bones
-        // run along X.
-        const float shoulder_angle = base * sign;
-        // Outboard segments lag, which is what gives the beat its whip.
-        const float elbow_angle =
-            base * tuning.elbow_ratio * sign * (1.0f - tuning.wing_phase_lag);
-        const float wrist_angle =
-            base * tuning.wrist_ratio * sign * (1.0f - tuning.wing_phase_lag * 2.0f);
 
-        // Folding sweeps the wing back about local Y and closes the joints.
-        const float sweep = core::radians(tuning.tuck_sweep_deg) * tuck * sign;
-        const float fold = core::radians(tuning.tuck_fold_deg) * tuck;
-        const float flare_angle = core::radians(tuning.brake_flare_deg) * flare;
+        // Walk outward from the shoulder, then continue into every finger.
+        // Rotation decays and lag accumulates with depth, which is what gives a
+        // beat its whip rather than making the wing a hinged plank.
+        int depth = 0;
+        auto apply = [&](int joint, int index_in_chain, int chain_length) {
+            if (joint == NO_PARENT) return;
+            const float decay = std::pow(tuning.outboard_decay, float(depth));
+            const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
+            const float flap_angle = base * decay * lag * sign;
 
-        Transform shoulder = skeleton_->joint(joints_.wing[side][0]).local_bind;
-        shoulder.rotation = core::normalize(
-            Quat::from_axis_angle(Vec3::unit_y(), sweep * 0.45f) *
-            Quat::from_axis_angle(Vec3::unit_z(), shoulder_angle - flare_angle * sign));
-        pose_.local[size_t(joints_.wing[side][0])] = shoulder;
+            // Folding sweeps back about local Y and closes progressively toward
+            // the tip, which is how a wing actually stows.
+            const float progress = chain_length > 1
+                                       ? float(index_in_chain) / float(chain_length - 1)
+                                       : 1.0f;
+            const float sweep =
+                core::radians(tuning.tuck_sweep_deg) * tuck * sign * (0.4f + 0.6f * progress);
+            const float fold = core::radians(tuning.tuck_fold_deg) * tuck * progress * sign;
+            const float flare_angle = core::radians(tuning.brake_flare_deg) * flare * sign;
 
-        Transform elbow = skeleton_->joint(joints_.wing[side][1]).local_bind;
-        elbow.rotation = core::normalize(
-            Quat::from_axis_angle(Vec3::unit_y(), sweep * 0.7f + fold * sign) *
-            Quat::from_axis_angle(Vec3::unit_z(), elbow_angle));
-        pose_.local[size_t(joints_.wing[side][1])] = elbow;
+            // Flap is a rotation about the body's forward axis; sweep is about
+            // the body's up axis.
+            rotate_joint(joint, Vec3::unit_y(), sweep + fold, Vec3::unit_z(),
+                         flap_angle - flare_angle);
+            ++depth;
+        };
 
-        Transform wrist = skeleton_->joint(joints_.wing[side][2]).local_bind;
-        wrist.rotation = core::normalize(
-            Quat::from_axis_angle(Vec3::unit_y(), sweep + fold * 1.3f * sign) *
-            Quat::from_axis_angle(Vec3::unit_z(), wrist_angle));
-        pose_.local[size_t(joints_.wing[side][2])] = wrist;
+        const std::vector<int>& root = joints_.wing_root[side];
+        for (size_t i = 0; i < root.size(); ++i) apply(root[i], int(i), int(root.size()));
+
+        // Every finger restarts from the shared root's depth, so they fold
+        // together rather than fanning out unevenly.
+        const int root_depth = depth;
+        for (const std::vector<int>& finger : joints_.wing_fingers[side]) {
+            depth = root_depth;
+            for (size_t i = 0; i < finger.size(); ++i) {
+                apply(finger[i], int(i), int(finger.size()));
+            }
+        }
     }
 }
 
@@ -354,10 +399,7 @@ void DragonRig::drive_chain(const std::vector<int>& chain, std::vector<Spring>& 
         yaw[i].step(yaw_target, tuning.chain_stiffness, tuning.chain_damping, dt);
         pitch[i].step(pitch_target, tuning.chain_stiffness, tuning.chain_damping, dt);
 
-        Transform local = skeleton_->joint(chain[i]).local_bind;
-        local.rotation = core::normalize(Quat::from_axis_angle(Vec3::unit_y(), yaw[i].angle) *
-                                         Quat::from_axis_angle(Vec3::unit_x(), pitch[i].angle));
-        pose_.local[size_t(chain[i])] = local;
+        rotate_joint(chain[i], Vec3::unit_y(), yaw[i].angle, Vec3::unit_x(), pitch[i].angle);
     }
 }
 
@@ -370,13 +412,13 @@ void DragonRig::drive_legs(const game::FlightState& state, float dt) {
 
     const float tuck_angle = core::radians(tuning.leg_tuck_deg) * (1.0f - leg_extend_);
     for (int side = 0; side < 2; ++side) {
-        Transform hip = skeleton_->joint(joints_.leg[side][0]).local_bind;
-        hip.rotation = Quat::from_axis_angle(Vec3::unit_x(), tuck_angle);
-        pose_.local[size_t(joints_.leg[side][0])] = hip;
-
-        Transform knee = skeleton_->joint(joints_.leg[side][1]).local_bind;
-        knee.rotation = Quat::from_axis_angle(Vec3::unit_x(), -tuck_angle * 1.15f);
-        pose_.local[size_t(joints_.leg[side][1])] = knee;
+        // Alternating sign down the chain, so the leg folds like a knee rather
+        // than curling into a spiral.
+        float sign = 1.0f;
+        for (const int joint : joints_.leg[side]) {
+            rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign);
+            sign *= -1.15f;
+        }
     }
 }
 
@@ -390,6 +432,203 @@ void DragonRig::update(const game::FlightState& state, float dt) {
 
     compute_world_matrices(*skeleton_, pose_, world_);
     compute_skinning_matrices(*skeleton_, world_, skinning_);
+}
+
+}  // namespace anim
+
+// ---------------------------------------------------------------- name mapping
+
+namespace anim {
+
+namespace {
+
+std::string lowered(const std::string& text) {
+    std::string out = text;
+    for (char& c : out) {
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    }
+    return out;
+}
+
+bool contains_any(const std::string& haystack, const std::vector<const char*>& needles) {
+    for (const char* needle : needles) {
+        if (haystack.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
+
+std::vector<int> collect(const Skeleton& skeleton, const std::vector<const char*>& include,
+                         const std::vector<const char*>& exclude = {}) {
+    std::vector<int> found;
+    for (int i = 0; i < skeleton.count(); ++i) {
+        const std::string name = lowered(skeleton.joint(i).name);
+        if (contains_any(name, include) && !contains_any(name, exclude)) found.push_back(i);
+    }
+    return found;
+}
+
+// Orders a set of joints into a parent-to-child chain. Anything not reachable
+// from the base is dropped, so a stray match cannot corrupt the chain.
+std::vector<int> order_chain(const Skeleton& skeleton, const std::vector<int>& members) {
+    std::vector<int> chain;
+    if (members.empty()) return chain;
+
+    auto in_members = [&](int index) {
+        for (const int m : members) {
+            if (m == index) return true;
+        }
+        return false;
+    };
+
+    int base = NO_PARENT;
+    for (const int m : members) {
+        if (!in_members(skeleton.joint(m).parent)) {
+            base = m;
+            break;
+        }
+    }
+    if (base == NO_PARENT) return chain;
+
+    int current = base;
+    while (current != NO_PARENT) {
+        chain.push_back(current);
+        int next = NO_PARENT;
+        for (const int m : members) {
+            if (skeleton.joint(m).parent == current) {
+                next = m;
+                break;
+            }
+        }
+        current = next;
+    }
+    return chain;
+}
+
+std::vector<int> children_of(const Skeleton& skeleton, int parent) {
+    std::vector<int> found;
+    for (int i = 0; i < skeleton.count(); ++i) {
+        if (skeleton.joint(i).parent == parent) found.push_back(i);
+    }
+    return found;
+}
+
+// Mean X of a joint and everything below it.
+//
+// Which side a wing belongs to cannot be read from its root bone: on this asset
+// both wing roots sit at x = 0.06, on the centreline, and the side only becomes
+// apparent out at the finger bones. The subtree tells the truth.
+float subtree_mean_x(const Skeleton& skeleton, int root) {
+    float total = 0.0f;
+    int count = 0;
+    std::vector<int> stack{root};
+    while (!stack.empty()) {
+        const int current = stack.back();
+        stack.pop_back();
+        total += skeleton.world_bind(current).translation_part().x;
+        ++count;
+        for (int i = 0; i < skeleton.count(); ++i) {
+            if (skeleton.joint(i).parent == current) stack.push_back(i);
+        }
+    }
+    return count > 0 ? total / float(count) : 0.0f;
+}
+
+int ancestor_depth(const Skeleton& skeleton, int joint) {
+    int depth = 0;
+    while (joint != NO_PARENT) {
+        joint = skeleton.joint(joint).parent;
+        ++depth;
+    }
+    return depth;
+}
+
+// Follows a chain down while each joint has exactly one child.
+std::vector<int> descend_single(const Skeleton& skeleton, int start) {
+    std::vector<int> chain;
+    int current = start;
+    while (current != NO_PARENT) {
+        chain.push_back(current);
+        const std::vector<int> children = children_of(skeleton, current);
+        if (children.size() != 1) break;
+        current = children[0];
+    }
+    return chain;
+}
+
+}  // namespace
+
+DragonJoints map_dragon_joints(const Skeleton& skeleton) {
+    DragonJoints j;
+
+    for (int i = 0; i < skeleton.count(); ++i) {
+        if (skeleton.joint(i).parent == NO_PARENT) {
+            j.root = i;
+            break;
+        }
+    }
+
+    // Chest: whichever body bone the wings and neck hang off. Named variously,
+    // so several spellings are tried.
+    const std::vector<int> chest = collect(skeleton, {"breast", "chest", "spine", "torso"});
+    j.chest = chest.empty() ? j.root : chest.back();
+
+    // "skin" and "ik" bones share the neck's name but are helpers, not the chain.
+    j.neck = order_chain(skeleton, collect(skeleton, {"neck"}, {"skin", "ik_", "_end"}));
+    const std::vector<int> head = collect(skeleton, {"head"}, {"ik", "_end", "target"});
+    j.head = head.empty() ? NO_PARENT : head.front();
+    j.tail = order_chain(skeleton, collect(skeleton, {"tail"}, {"cont", "_end"}));
+
+    // Wings. Side comes from the bind position's X sign rather than from the
+    // name: riggers label sides from the creature's point of view or the
+    // viewer's, inconsistently, and this model calls its +X wing "_L".
+    const std::vector<int> wing_candidates =
+        collect(skeleton, {"w_c", "wing", "shoulder"}, {"_end"});
+    for (int side = 0; side < 2; ++side) {
+        int best = NO_PARENT;
+        int best_depth = 0;
+        for (const int candidate : wing_candidates) {
+            if ((subtree_mean_x(skeleton, candidate) > 0.0f) != (side == 0)) continue;
+            // Prefer the candidate nearest the root: the shared base of the
+            // wing, not a bone partway along it.
+            const int depth = ancestor_depth(skeleton, candidate);
+            if (best == NO_PARENT || depth < best_depth) {
+                best = candidate;
+                best_depth = depth;
+            }
+        }
+        if (best == NO_PARENT) continue;
+
+        // Shared arm first: descend while there is exactly one child. Where it
+        // branches, each branch is a finger.
+        j.wing_root[side] = descend_single(skeleton, best);
+        const int branch_point = j.wing_root[side].back();
+        for (const int finger_base : children_of(skeleton, branch_point)) {
+            j.wing_fingers[side].push_back(descend_single(skeleton, finger_base));
+        }
+        // A wing with no branches (a simple three-bone arm) keeps its last bone
+        // as a single "finger", so downstream code always has one.
+        if (j.wing_fingers[side].empty() && j.wing_root[side].size() > 1) {
+            j.wing_fingers[side].push_back({j.wing_root[side].back()});
+            j.wing_root[side].pop_back();
+        }
+    }
+
+    // Legs, again sided by bind position.
+    const std::vector<int> leg_candidates =
+        collect(skeleton, {"oberschenkel", "thigh", "upperleg", "hip", "femur"}, {"_end"});
+    for (int side = 0; side < 2; ++side) {
+        for (const int candidate : leg_candidates) {
+            if ((subtree_mean_x(skeleton, candidate) > 0.0f) != (side == 0)) continue;
+            j.leg[side] = descend_single(skeleton, candidate);
+            break;
+        }
+    }
+
+    LOG_INFO("mapped rig: neck %zu, tail %zu, wing root %zu/%zu, fingers %zu/%zu, legs %zu/%zu",
+             j.neck.size(), j.tail.size(), j.wing_root[0].size(), j.wing_root[1].size(),
+             j.wing_fingers[0].size(), j.wing_fingers[1].size(), j.leg[0].size(),
+             j.leg[1].size());
+    return j;
 }
 
 }  // namespace anim

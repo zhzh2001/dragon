@@ -7,6 +7,7 @@
 #include "core/math.h"
 #include "editor/imgui_layer.h"
 #include "anim/dragon_rig.h"
+#include "anim/gltf_loader.h"
 #include "game/chase_camera.h"
 #include "game/debug_camera.h"
 #include "game/autopilot.h"
@@ -50,6 +51,10 @@ struct Options {
 
     // --course N selects a course by index for a capture or an autopilot run.
     int course_index = 0;
+
+    // --bind-pose freezes the rig, so an imported asset can be checked against
+    // its authored rest pose before animation is blamed for anything.
+    bool bind_pose = false;
 
     // --inspect frames the dragon closely from a fixed offset, for looking at
     // the rig rather than at the world.
@@ -123,6 +128,26 @@ private:
     // cannot serve two dragons.
     anim::DragonRig ghost_rig_;
     bool show_skeleton_ = false;
+
+    // An imported asset arrives in whatever scale and orientation its author
+    // used. Rather than guess at load time, the correction is a live transform
+    // so it can be aligned by eye and then written down.
+    struct AssetTransform {
+        float scale = 1.0f;
+        float yaw_deg = 0.0f;
+        float pitch_deg = 0.0f;
+        float roll_deg = 0.0f;
+        core::Vec3 offset = core::Vec3::zero();
+
+        core::Mat4 matrix() const {
+            const core::Quat rotation =
+                core::from_euler(core::radians(pitch_deg), core::radians(yaw_deg),
+                                 core::radians(roll_deg));
+            return core::Mat4::trs(offset, rotation, core::Vec3(scale));
+        }
+    } asset_;
+    bool using_imported_dragon_ = false;
+    std::string dragon_source_ = "generated";
 
     // ---- rally ----
     game::Rally rally_;

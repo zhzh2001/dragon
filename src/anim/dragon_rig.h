@@ -36,10 +36,29 @@ struct DragonJoints {
     std::vector<int> neck;  // base to head
     int head = NO_PARENT;
     std::vector<int> tail;  // base to tip
-    // [side][segment], side 0 is right (+X). Segments: shoulder, elbow, wrist.
-    int wing[2][3] = {{NO_PARENT, NO_PARENT, NO_PARENT}, {NO_PARENT, NO_PARENT, NO_PARENT}};
-    int leg[2][2] = {{NO_PARENT, NO_PARENT}, {NO_PARENT, NO_PARENT}};
+
+    // Side 0 is right (+X).
+    //
+    // Wings are a shared root chain plus any number of finger chains, not a
+    // fixed shoulder/elbow/wrist. A real membrane wing has three or four fingers
+    // sharing one arm, and a generated placeholder has one -- the same structure
+    // describes both, so the animation code does not care which it is driving.
+    std::vector<int> wing_root[2];                 // shoulder outward
+    std::vector<std::vector<int>> wing_fingers[2];  // each finger, base to tip
+    std::vector<int> leg[2];                        // hip outward
+
+    bool valid() const {
+        return root != NO_PARENT && !wing_root[0].empty() && !wing_root[1].empty();
+    }
 };
+
+// Identifies the named chains in an arbitrary skeleton by matching bone names.
+//
+// This is what lets an imported rig be driven by the same procedural animation as
+// the generated one. Matching is case-insensitive substring matching against
+// several spellings, because riggers name things in whatever language and
+// convention they please -- this model, for instance, uses German for its legs.
+DragonJoints map_dragon_joints(const Skeleton& skeleton);
 
 // Builds the skeleton and a matching skinned mesh.
 //
@@ -57,8 +76,9 @@ struct RigTuning {
     // Each segment lags the one inboard of it, which is what gives a wingbeat
     // its whip instead of looking like a hinged plank.
     float wing_phase_lag = 0.16f;
-    float elbow_ratio = 0.55f;
-    float wrist_ratio = 0.40f;
+    // How much of the flap each successive outboard segment keeps. Below 1 the
+    // shoulder does most of the work, which is what a wing actually does.
+    float outboard_decay = 0.68f;
     // Folding: how far the wing sweeps back and closes when tucked.
     float tuck_sweep_deg = 78.0f;
     float tuck_fold_deg = 62.0f;
@@ -89,6 +109,8 @@ public:
 
     const Pose& pose() const { return pose_; }
     const std::vector<core::Mat4>& skinning_matrices() const { return skinning_; }
+    // Joint world transforms, for debug drawing the skeleton.
+    const std::vector<core::Mat4>& world_matrices() const { return world_; }
 
     RigTuning tuning;
 
@@ -100,6 +122,18 @@ private:
         void step(float target, float stiffness, float damping, float dt);
     };
 
+    // Applies a rotation about a body-space axis to one joint, composed with
+    // that joint's bind rotation rather than replacing it.
+    //
+    // Both halves matter for an imported rig. Replacing the bind rotation
+    // destroys the rest pose, and a real rig's bones point along their own axes
+    // -- rotating about the joint's local Z means something different for every
+    // bone. Expressing the axis in body terms makes the animation independent of
+    // how the skeleton was authored.
+    void rotate_joint(int joint, core::Vec3 body_axis, float angle);
+    void rotate_joint(int joint, core::Vec3 axis_a, float angle_a, core::Vec3 axis_b,
+                      float angle_b);
+
     void drive_wings(const game::FlightState& state);
     void drive_chain(const std::vector<int>& chain, std::vector<Spring>& yaw,
                      std::vector<Spring>& pitch, float response, const game::FlightState& state,
@@ -108,6 +142,9 @@ private:
 
     const Skeleton* skeleton_ = nullptr;
     DragonJoints joints_;
+    // World bind rotation of each joint's parent, inverted. Converts a body-space
+    // axis into the space a local rotation is expressed in.
+    std::vector<core::Quat> parent_bind_inverse_;
     Pose pose_;
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;

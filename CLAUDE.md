@@ -131,11 +131,46 @@ tests/       plain executables, no framework
 - **M8** Dragon Rally: checkpoints, timing, splits, ghost replays, three
   generated courses, HUD, autopilot.
 - **M8.1** difficulty assists: bank limit, auto-flap, inverted pitch by default.
-- **M6** skeleton, GPU skinning, and the procedural dragon rig. The animation
-  *system* is complete and driven by flight state. Still a generated placeholder
-  mesh -- importing an external model needs a glTF loader and a licensing
-  decision. **Awaiting playtest and that decision.**
-- **Next:** glTF skinned import, or M11 (first combat).
+- **M6** skeleton, GPU skinning, the procedural dragon rig, and a glTF skinned
+  loader. The animation system drives an arbitrary imported skeleton, not just
+  the generated one.
+- **Next:** a usable dragon asset (see below), or M11 (first combat).
+
+## Importing a rigged model
+
+`anim::load_skinned_gltf` reads any rigged glTF; `anim::map_dragon_joints`
+identifies the neck, tail, wing and leg chains in an arbitrary skeleton so the
+same procedural animation drives it. Drop a file at `assets/dragon.glb` and it is
+used automatically, falling back to the generated rig if anything is wrong.
+
+Three things learned the hard way, all now handled:
+
+- **Use the file's inverse bind matrices, not recomputed ones.** An exporter may
+  write mesh vertices in a space that does not coincide with the joint hierarchy,
+  and the file's matrices are what reconcile the two.
+- **A joint whose parent lies outside the skin must absorb the whole scene
+  transform above it.** Exporters routinely leave scale and orientation on nodes
+  above the skeleton.
+- **Sides cannot be read from bone names or from a bone's own position.** This
+  asset labels its +X wing "_L", and both wing roots sit on the centreline -- the
+  side only shows in the subtree, so that is what gets measured.
+
+The rig applies rotations about **body-space axes, composed with each joint's bind
+rotation**. Replacing the bind rotation destroys the rest pose, and a real rig's
+bones each point along their own axis, so "rotate about local Z" means something
+different for every bone.
+
+### The current asset does not work, and why
+
+`assets/dragon.glb` (see ATTRIBUTION.md) loads and validates perfectly and still
+renders as a tangle: its **rest pose is degenerate**. Half its vertices sit inside
+0.4% of its own bounding box, because the rig relies on constraints and its idle
+animation to hold the dragon's shape. The loader now detects this and refuses the
+asset with that diagnosis rather than drawing garbage.
+
+The fix is a Blender step, not a code one: import fresh with constraints intact,
+scrub to a frame where the dragon looks right, apply the armature modifier to the
+mesh and then *Apply Pose as Rest Pose*, and re-export.
 
 ## Animation
 

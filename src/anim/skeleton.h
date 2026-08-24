@@ -31,8 +31,21 @@ public:
     // invariant by construction.
     int add_joint(const std::string& name, int parent, const core::Transform& local_bind);
 
-    // Computes every inverse bind matrix. Call once after the last add_joint.
+    // Computes every inverse bind matrix from the hierarchy. Call once after the
+    // last add_joint, unless the matrices are supplied explicitly.
     void finalize();
+
+    // Sets a joint's inverse bind matrix directly.
+    //
+    // glTF supplies these, and they must be used rather than recomputed: an
+    // exporter may write mesh vertices in a space that does not coincide with
+    // the joint hierarchy, and the file's matrices are what reconcile the two.
+    // Recomputing them from the nodes looks correct right up until the mesh is
+    // authored in a different space, at which point vertices fly away from their
+    // bones.
+    void set_inverse_bind(int index, const core::Mat4& inverse_bind) {
+        joints_[size_t(index)].inverse_bind = inverse_bind;
+    }
 
     int find(const std::string& name) const;
     int count() const { return int(joints_.size()); }

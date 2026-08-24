@@ -12,6 +12,7 @@ endif()
 find_package(SDL3 REQUIRED CONFIG)
 
 include(cmake/imgui.cmake)
+include(cmake/cgltf.cmake)
 
 add_executable(dragon
   src/main.cpp
@@ -26,6 +27,7 @@ add_executable(dragon
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
+  src/anim/gltf_loader.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
   src/gfx/shadow_map.cpp
@@ -42,7 +44,7 @@ add_executable(dragon
 )
 
 target_include_directories(dragon PRIVATE src)
-target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui)
+target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf)
 
 # Shaders are read from the source tree at runtime so hot reload edits the same
 # files we author. A shipping build would copy them next to the binary instead.
@@ -106,7 +108,6 @@ add_executable(test_rally
   src/game/course.cpp
   src/game/rally.cpp
   src/game/autopilot.cpp
-  src/game/autopilot.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp
@@ -120,6 +121,7 @@ add_test(NAME rally COMMAND test_rally)
 
 add_executable(test_anim
   tests/test_anim.cpp
+  src/anim/gltf_loader.cpp
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
@@ -130,6 +132,6 @@ add_executable(test_anim
   src/gfx/buffer.cpp
 )
 target_include_directories(test_anim PRIVATE src)
-target_link_libraries(test_anim PRIVATE SDL3::SDL3)
+target_link_libraries(test_anim PRIVATE SDL3::SDL3 cgltf)
 target_compile_options(test_anim PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME anim COMMAND test_anim)

@@ -194,9 +194,14 @@ void test_dragon_rig_builds() {
     CHECK(joints.head != anim::NO_PARENT);
     CHECK(joints.neck.size() == size_t(shape.neck_joints));
     CHECK(joints.tail.size() == size_t(shape.tail_joints));
+    CHECK(joints.valid());
     for (int side = 0; side < 2; ++side) {
-        for (int segment = 0; segment < 3; ++segment) {
-            CHECK(joints.wing[side][segment] != anim::NO_PARENT);
+        CHECK(!joints.wing_root[side].empty());
+        CHECK(!joints.wing_fingers[side].empty());
+        CHECK(!joints.leg[side].empty());
+        for (const int bone : joints.wing_root[side]) CHECK(bone != anim::NO_PARENT);
+        for (const std::vector<int>& finger : joints.wing_fingers[side]) {
+            for (const int bone : finger) CHECK(bone != anim::NO_PARENT);
         }
     }
 
@@ -219,8 +224,10 @@ void test_dragon_rig_builds() {
     CHECK(max_index < skeleton.count());
 
     // Left and right wings must be mirrored, or the dragon flies crooked.
-    const Vec3 right_tip = skeleton.world_bind(joints.wing[0][2]).translation_part();
-    const Vec3 left_tip = skeleton.world_bind(joints.wing[1][2]).translation_part();
+    const int right_wingtip = joints.wing_fingers[0].back().back();
+    const int left_wingtip = joints.wing_fingers[1].back().back();
+    const Vec3 right_tip = skeleton.world_bind(right_wingtip).translation_part();
+    const Vec3 left_tip = skeleton.world_bind(left_wingtip).translation_part();
     std::printf("  wing tips at x %+.2f and %+.2f\n", right_tip.x, left_tip.x);
     CHECK(near(right_tip.x, -left_tip.x, 1e-3f));
     CHECK(right_tip.x > 0.0f);
@@ -241,16 +248,17 @@ void test_rig_responds_to_flight() {
     game::FlightState level;
     level.wing_angle = 0.0f;
     rig.update(level, 1.0f / 60.0f);
-    const Vec3 flat_tip = transform_point(
-        rig.skinning_matrices()[size_t(joints.wing[0][2])],
-        skeleton.world_bind(joints.wing[0][2]).translation_part());
+    const int wingtip = joints.wing_fingers[0].back().back();
+    const Vec3 flat_tip =
+        transform_point(rig.skinning_matrices()[size_t(wingtip)],
+                        skeleton.world_bind(wingtip).translation_part());
 
     game::FlightState raised;
     raised.wing_angle = radians(50.0f);
     for (int i = 0; i < 30; ++i) rig.update(raised, 1.0f / 60.0f);
-    const Vec3 raised_tip = transform_point(
-        rig.skinning_matrices()[size_t(joints.wing[0][2])],
-        skeleton.world_bind(joints.wing[0][2]).translation_part());
+    const Vec3 raised_tip =
+        transform_point(rig.skinning_matrices()[size_t(wingtip)],
+                        skeleton.world_bind(wingtip).translation_part());
 
     std::printf("  wrist rises %.2f m when the wing angle goes to 50 deg\n",
                 raised_tip.y - flat_tip.y);

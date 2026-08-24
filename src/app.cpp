@@ -33,6 +33,8 @@ Options parse_options(int argc, char** argv) {
             else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
         } else if (arg == "--course" && i + 1 < argc) {
             options.course_index = SDL_atoi(argv[++i]);
+        } else if (arg == "--bind-pose") {
+            options.bind_pose = true;
         } else if (arg == "--inspect") {
             options.inspect = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -89,7 +91,45 @@ bool App::init(const Options& options) {
 
     {
         anim::SkinnedMeshData mesh_data;
-        anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
+
+        // Prefer an imported model, fall back to the generated one. The rig is
+        // driven the same way either way -- it only needs to know which joints
+        // form the neck, tail and wings, and map_dragon_joints works that out
+        // from an arbitrary skeleton.
+        const anim::GltfLoadResult loaded =
+            anim::load_skinned_gltf(ASSET_ROOT "/dragon.glb", dragon_skeleton_, mesh_data);
+        if (loaded.ok) {
+            dragon_joints_ = anim::map_dragon_joints(dragon_skeleton_);
+            using_imported_dragon_ = dragon_joints_.valid();
+            if (!using_imported_dragon_) {
+                LOG_WARN("imported skeleton has no recognisable wings; falling back");
+            }
+        } else {
+            LOG_INFO("no imported dragon (%s); using the generated rig", loaded.error.c_str());
+        }
+
+        if (!using_imported_dragon_) {
+            anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
+            dragon_source_ = "generated";
+        } else {
+            dragon_source_ = "assets/dragon.glb";
+            // Scale so the wingspan matches what the flight model assumes, and
+            // recentre, because an asset's origin is wherever its author left it
+            // -- this one sits over a hundred units from its own geometry. Both
+            // are starting points, refined by eye with the sliders.
+            // Size by the LONGEST axis, not the wingspan. Scaling by X assumed
+            // the widest part was the span; on this asset the nose-to-tail axis
+            // is 2.4x wider than that, so the dragon came out 46 m long and the
+            // inspection camera ended up inside it.
+            const core::Vec3 extent = loaded.bounds_max - loaded.bounds_min;
+            const float longest = core::maxf(core::maxf(extent.x, extent.y), extent.z);
+            asset_.scale = longest > 0.1f ? 24.0f / longest : 1.0f;
+            const core::Vec3 centre = (loaded.bounds_min + loaded.bounds_max) * 0.5f;
+            asset_.offset = centre * -asset_.scale;
+            LOG_INFO("asset alignment: scale %.4f, offset (%.2f %.2f %.2f)", asset_.scale,
+                     asset_.offset.x, asset_.offset.y, asset_.offset.z);
+        }
+
         dragon_mesh_.upload(device_.gpu(), mesh_data, "dragon");
         dragon_rig_.init(dragon_skeleton_, dragon_joints_);
         ghost_rig_.init(dragon_skeleton_, dragon_joints_);
@@ -109,8 +149,8 @@ bool App::init(const Options& options) {
     apply_assist_preset(0);
 
     autopilot_ = options.autopilot;
-    // Inspecting the rig means wanting to see the rig.
-    if (options.inspect) show_skeleton_ = true;
+    // Skeleton overlay is opt-in even when inspecting: for an imported rig it
+    // obscures the very mesh being checked.
     apply_camera_preset(options.camera_mode);
     chase_.first_person = options.first_person;
     respawn_dragon();
@@ -212,7 +252,8 @@ void App::respawn_dragon() {
 
 gfx::ModelUniforms App::ghost_model_uniforms(const game::GhostSample& sample) const {
     gfx::ModelUniforms model;
-    model.model = core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one());
+    model.model =
+        core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one()) * asset_.matrix();
     // Cool and slightly emissive, so the ghost reads as a recording rather than
     // as a second dragon in the world.
     model.tint = core::Vec4{0.35f, 0.62f, 0.95f, 0.28f};
@@ -391,7 +432,9 @@ game::FlightInput App::read_flight_input() const {
 gfx::ModelUniforms App::dragon_model_uniforms() const {
     const game::FlightState& s = flight_.state();
     gfx::ModelUniforms model;
-    model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one());
+    // The asset correction is applied inside the dragon's own frame, so it
+    // aligns the model to the engine without disturbing the flight transform.
+    model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
     return model;
 }
 
@@ -517,8 +560,8 @@ void App::update(float dt) {
         const game::FlightState& s = flight_.state();
         const float angle = core::radians(options_.inspect_angle_deg);
         const core::Vec3 offset = core::rotate(s.orientation,
-                                               core::Vec3{std::sin(angle) * 26.0f, 7.0f,
-                                                          std::cos(angle) * 26.0f});
+                                               core::Vec3{std::sin(angle) * 44.0f, 11.0f,
+                                                          std::cos(angle) * 44.0f});
         camera_.set_position(s.position + offset, s.position);
         free_camera_ = true;
     }
@@ -541,7 +584,7 @@ void App::update(float dt) {
     // headless capture and doubles as a soak test.
     if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
 
-    dragon_rig_.update(flight_.state(), dt);
+    if (!options_.bind_pose) dragon_rig_.update(flight_.state(), dt);
 
     // The ghost's rig is driven from its recording, reconstructed as a flight
     // state. Only the fields the rig reads need to be real.
@@ -600,27 +643,29 @@ void App::push_telemetry(const game::FlightState& state) {
 void App::draw_skeleton_debug() {
     if (!show_skeleton_) return;
     const game::FlightState& s = flight_.state();
-    const core::Mat4 to_world = core::Mat4::trs(s.position, s.orientation, core::Vec3::one());
+    const core::Mat4 to_world =
+        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
     const std::vector<core::Mat4>& skinning = dragon_rig_.skinning_matrices();
     if (skinning.empty()) return;
 
+    // Joint positions come from the rig's world matrices directly. Deriving them
+    // by pushing a bind position through the skinning matrix only works when the
+    // inverse binds were recomputed from the hierarchy -- an imported rig uses
+    // the file's, and that assumption collapsed every bone onto one point.
+    const std::vector<core::Mat4>& world = dragon_rig_.world_matrices();
+    if (world.empty()) return;
     for (int i = 0; i < dragon_skeleton_.count(); ++i) {
-        // The rig exposes skinning matrices, so recover the animated joint
-        // position by pushing its bind position through them.
-        const core::Vec3 bind =
-            dragon_skeleton_.world_bind(i).translation_part();
         const core::Vec3 posed =
-            core::transform_point(to_world, core::transform_point(skinning[size_t(i)], bind));
-
+            core::transform_point(to_world, world[size_t(i)].translation_part());
         const int parent = dragon_skeleton_.joint(i).parent;
         if (parent != anim::NO_PARENT) {
-            const core::Vec3 parent_bind = dragon_skeleton_.world_bind(parent).translation_part();
-            const core::Vec3 parent_posed = core::transform_point(
-                to_world, core::transform_point(skinning[size_t(parent)], parent_bind));
+            const core::Vec3 parent_posed =
+                core::transform_point(to_world, world[size_t(parent)].translation_part());
             debug_.line(parent_posed, posed, Vec3{0.95f, 0.85f, 0.35f}, true);
         }
         debug_.cross(posed, 0.22f, Vec3{0.4f, 0.9f, 0.95f}, true);
     }
+    (void)skinning;
 }
 
 void App::draw_flight_debug() {
@@ -1268,6 +1313,17 @@ void App::build_flight_ui() {
 
     if (ImGui::CollapsingHeader("Debug draw", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("skeleton", &show_skeleton_);
+        ImGui::TextDisabled("model: %s (%d joints)", dragon_source_.c_str(),
+                            dragon_skeleton_.count());
+        if (ImGui::TreeNode("Asset alignment")) {
+            ImGui::SliderFloat("scale", &asset_.scale, 0.01f, 4.0f, "%.4f");
+            ImGui::SliderFloat("yaw", &asset_.yaw_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("pitch", &asset_.pitch_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("roll", &asset_.roll_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("offset y", &asset_.offset.y, -10.0f, 10.0f, "%.2f m");
+            ImGui::SliderFloat("offset z", &asset_.offset.z, -10.0f, 10.0f, "%.2f m");
+            ImGui::TreePop();
+        }
         ImGui::Checkbox("force vectors", &show_forces_);
         ImGui::Checkbox("flight path", &show_flight_path_);
         ImGui::Checkbox("ground probe", &show_ground_probe_);
