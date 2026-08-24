@@ -35,6 +35,7 @@ public:
     SDL_GPUSampler* sampler() const { return sampler_; }
     const core::Mat4& light_view_proj() const { return light_view_proj_; }
     uint32_t resolution() const { return resolution_; }
+    SDL_GPUTextureFormat format() const { return format_; }
 
     // Half-width of the shadowed region, in metres. Larger covers more of the
     // valley at the cost of resolution.

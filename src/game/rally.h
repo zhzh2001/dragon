@@ -21,6 +21,9 @@ struct GhostSample {
     core::Quat orientation = core::Quat::identity();
     float wing_angle = 0.0f;
     float wing_tuck = 0.0f;
+    // Recorded so the ghost's neck and tail lag through its turns exactly as the
+    // living dragon's do. Without it a replay banks like a rigid model.
+    core::Vec3 angular_velocity = core::Vec3::zero();
 };
 
 // A completed run, replayable.

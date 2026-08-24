@@ -1,11 +1,8 @@
 #include "model_common.msl"
 
-// Depth-only pass for the directional shadow map. There is no colour target, so
-// the fragment stage returns void and exists only for pipeline validation.
-//
-// It applies the same vertex deformation as mesh.msl, so the dragon's shadow
-// matches its actual wing pose. That shadow is a primary altitude cue when
-// flying low, so a mismatch would read as a bug in the flight model.
+// Depth-only pass for the directional shadow map, for rigid geometry. There is
+// no colour target, so the fragment stage returns void and exists only for
+// pipeline validation. Skinned casters use shadow_skinned.msl.
 
 struct VertexIn {
     float3 position [[attribute(0)]];
@@ -20,8 +17,7 @@ struct ShadowUniforms {
 vertex float4 vs_main(VertexIn in [[stage_in]],
                       constant ShadowUniforms& shadow [[buffer(0)]],
                       constant ModelUniforms& model [[buffer(1)]]) {
-    float3 local = deform_vertex(in.position, model);
-    return shadow.light_view_proj * (model.model * float4(local, 1.0));
+    return shadow.light_view_proj * (model.model * float4(in.position, 1.0));
 }
 
 fragment void fs_main() {}

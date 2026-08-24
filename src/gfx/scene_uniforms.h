@@ -36,12 +36,6 @@ struct SceneUniforms {
 // Must match `ModelUniforms` in shaders/model_common.msl exactly.
 struct ModelUniforms {
     core::Mat4 model = core::Mat4::identity();
-    // x flap angle (radians, + wings up), y tuck 0..1,
-    // z wing root |x|, w wing span |x|
-    core::Vec4 wing = core::Vec4{0.0f, 0.0f, 1.0f, 1.0f};
-    // x lateral tail/neck bend (radians), y body pitch vs flight path,
-    // z brake flare 0..1, w wing hinge height above the body centreline
-    core::Vec4 pose = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     // rgb multiplies vertex colour, a is an unlit emissive add. Lets one mesh
     // serve many states -- the next checkpoint glows, the rest do not -- without
     // needing a material system.

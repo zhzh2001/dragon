@@ -1,5 +1,6 @@
 #pragma once
 
+#include "anim/skinned_mesh.h"
 #include "gfx/device.h"
 #include "gfx/mesh.h"
 #include "gfx/pipeline.h"
@@ -37,6 +38,13 @@ public:
     void draw_mesh_depth(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
                          const core::Mat4& light_view_proj, const ModelUniforms& model);
 
+    // Skinned geometry. `joints` are skinning matrices, at most anim::MAX_JOINTS.
+    void draw_skinned(Device& device, SDL_GPURenderPass* pass, const anim::SkinnedMesh& mesh,
+                      const ModelUniforms& model, const std::vector<core::Mat4>& joints);
+    void draw_skinned_depth(Device& device, SDL_GPURenderPass* pass,
+                            const anim::SkinnedMesh& mesh, const core::Mat4& light_view_proj,
+                            const ModelUniforms& model, const std::vector<core::Mat4>& joints);
+
     bool wireframe = false;
 
 private:
@@ -45,6 +53,8 @@ private:
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
     PipelineHandle mesh_ = INVALID_PIPELINE;
+    PipelineHandle skinned_ = INVALID_PIPELINE;
+    PipelineHandle skinned_depth_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
     SceneUniforms scene_ = {};
 };

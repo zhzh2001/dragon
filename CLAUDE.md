@@ -108,7 +108,7 @@ src/core/    math, logging
 src/gfx/     GPU device, pipeline cache + hot reload, buffer upload
 src/editor/  ImGui integration
 src/scene/   (empty) entity storage, transform hierarchy
-src/anim/    (empty) skinning, procedural wings, IK
+src/anim/    skeleton, skinned mesh, procedural dragon rig
 src/phys/    (empty) Jolt integration
 src/game/    (empty) flight model, camera, AI, gameplay
 shaders/     MSL, hot-reloaded
@@ -129,9 +129,38 @@ tests/       plain executables, no framework
 - **M5** chase camera: terrain-swept spring arm, turn lead, free look, first
   person, three presets.
 - **M8** Dragon Rally: checkpoints, timing, splits, ghost replays, three
-  generated courses, HUD, autopilot. **Awaiting playtest.**
-- **Next: M6** a real rigged dragon with procedural wing, neck and tail
-  animation -- or M11, first combat.
+  generated courses, HUD, autopilot.
+- **M8.1** difficulty assists: bank limit, auto-flap, inverted pitch by default.
+- **M6** skeleton, GPU skinning, and the procedural dragon rig. The animation
+  *system* is complete and driven by flight state. Still a generated placeholder
+  mesh -- importing an external model needs a glTF loader and a licensing
+  decision. **Awaiting playtest and that decision.**
+- **Next:** glTF skinned import, or M11 (first combat).
+
+## Animation
+
+`anim::Skeleton` keeps joints topologically sorted (parent index always less than
+child), so world transforms resolve in one forward pass with no recursion.
+Skinning matrix is `world_current * inverse_bind`, which means a joint left at its
+bind pose contributes exactly the identity -- `tests/test_anim.cpp` asserts that
+to 1e-4, because if it does not hold the mesh moves the instant it is skinned and
+the error is a subtle offset rather than an obvious explosion.
+
+`anim::DragonRig` turns flight state into a pose, with no animation clips:
+
+- **Wings** read `FlightState::wing_angle` directly, so the wing that is drawn
+  and the thrust that was generated cannot disagree. Outboard segments lag the
+  inboard ones, which is what gives a beat its whip instead of looking like a
+  hinged plank.
+- **Neck and tail** are spring chains driven by the body's angular velocity,
+  deflecting more toward the tip. This is the signature detail: a turn reads as
+  the whole animal committing rather than a rigid model banking.
+- **Legs** tuck in flight and extend as the ground approaches.
+
+Skinning matrices go to the GPU as a uniform block of `MAX_JOINTS` (64), padded
+with identity -- a partial push would leave the previous draw's matrices in the
+unused slots. The shadow pass applies the same blend, so a folded wing casts a
+folded shadow.
 
 ## The rally
 

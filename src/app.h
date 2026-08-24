@@ -6,9 +6,9 @@
 #include "core/input.h"
 #include "core/math.h"
 #include "editor/imgui_layer.h"
+#include "anim/dragon_rig.h"
 #include "game/chase_camera.h"
 #include "game/debug_camera.h"
-#include "game/dragon_proxy.h"
 #include "game/autopilot.h"
 #include "game/course.h"
 #include "game/flight.h"
@@ -51,6 +51,11 @@ struct Options {
     // --course N selects a course by index for a capture or an autopilot run.
     int course_index = 0;
 
+    // --inspect frames the dragon closely from a fixed offset, for looking at
+    // the rig rather than at the world.
+    bool inspect = false;
+    float inspect_angle_deg = 35.0f;
+
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.
     bool autopilot = false;
@@ -88,6 +93,7 @@ private:
     void select_course(int index);
     void rebuild_courses();
     gfx::ModelUniforms ghost_model_uniforms(const game::GhostSample& sample) const;
+    void draw_skeleton_debug();
 
     Options options_;
 
@@ -106,8 +112,17 @@ private:
 
     game::FlightModel flight_;
     game::ChaseCamera chase_;
-    game::DragonProxyDims dragon_dims_;
-    gfx::Mesh dragon_mesh_;
+    // The dragon is a real skinned rig now: skeleton, skinned mesh, and
+    // procedural animation driven by flight state.
+    anim::DragonShape dragon_shape_;
+    anim::Skeleton dragon_skeleton_;
+    anim::DragonJoints dragon_joints_;
+    anim::SkinnedMesh dragon_mesh_;
+    anim::DragonRig dragon_rig_;
+    // The ghost needs its own rig: the spring chains carry state, so one rig
+    // cannot serve two dragons.
+    anim::DragonRig ghost_rig_;
+    bool show_skeleton_ = false;
 
     // ---- rally ----
     game::Rally rally_;

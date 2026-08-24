@@ -20,28 +20,12 @@ struct VertexOut {
 vertex VertexOut vs_main(VertexIn in [[stage_in]],
                          constant SceneUniforms& scene [[buffer(0)]],
                          constant ModelUniforms& model [[buffer(1)]]) {
-    float3 local = deform_vertex(in.position, model);
-
-    // The deformation makes the mesh's authored normals wrong. Recovering them
-    // properly means differentiating the deformation; for a greybox placeholder,
-    // rotating the normal by the same wing angle is close enough and costs
-    // nothing. The real rig will compute these from the skeleton.
-    float3 local_normal = in.normal;
-    const float out = abs(in.position.x) - model.wing.z;
-    if (out > 0.0) {
-        const float t = saturate(out / max(model.wing.w - model.wing.z, 0.001));
-        const float angle = model.wing.x * t;
-        const float c = cos(angle), s = sin(angle);
-        local_normal = float3(local_normal.x * c - local_normal.y * s,
-                              local_normal.x * s + local_normal.y * c, local_normal.z);
-    }
-
     VertexOut out_vertex;
-    float4 world = model.model * float4(local, 1.0);
+    float4 world = model.model * float4(in.position, 1.0);
     out_vertex.world_position = world.xyz;
     // Uniform scale only, so the upper 3x3 rotates normals correctly without an
     // inverse transpose.
-    out_vertex.world_normal = normalize((model.model * float4(local_normal, 0.0)).xyz);
+    out_vertex.world_normal = normalize((model.model * float4(in.normal, 0.0)).xyz);
     out_vertex.albedo = in.color * model.tint.rgb;
     out_vertex.emissive = model.tint.a;
     out_vertex.clip_position = scene.view_proj * world;

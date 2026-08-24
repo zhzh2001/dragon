@@ -33,6 +33,7 @@ GhostSample GhostRun::pose_at(float time) const {
     out.orientation = core::slerp(a.orientation, b.orientation, t);
     out.wing_angle = core::lerpf(a.wing_angle, b.wing_angle, t);
     out.wing_tuck = core::lerpf(a.wing_tuck, b.wing_tuck, t);
+    out.angular_velocity = core::lerp(a.angular_velocity, b.angular_velocity, t);
     return out;
 }
 
@@ -120,6 +121,7 @@ void Rally::update(const FlightState& state, float dt) {
             sample.orientation = state.orientation;
             sample.wing_angle = state.wing_angle;
             sample.wing_tuck = state.wing_tuck;
+            sample.angular_velocity = state.angular_velocity;
             recording_.samples.push_back(sample);
         }
     }

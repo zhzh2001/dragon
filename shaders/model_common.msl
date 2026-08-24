@@ -7,68 +7,10 @@
 
 #include "scene_common.msl"
 
-// Must match gfx::ModelUniforms in world_renderer.h.
+// Must match gfx::ModelUniforms exactly -- a mismatch is a shader compile error
+// at startup, which the pipeline cache reports rather than crashing on.
 struct ModelUniforms {
     float4x4 model;
-    // x = flap angle (radians, + is wings up), y = tuck 0..1,
-    // z = wing root |x|, w = wing span |x|
-    float4 wing;
-    // x = tail/neck lateral bend (radians), y = pitch of the body relative to
-    // the flight path, z = brake flare 0..1, w = wing hinge height above the
-    // body centreline
-    float4 pose;
-    // rgb multiplies vertex colour, a is an unlit emissive add. Must match
-    // gfx::ModelUniforms exactly -- a mismatch here is a shader compile error at
-    // startup, which the pipeline cache reports rather than crashing on.
+    // rgb multiplies vertex colour, a is an unlit emissive add.
     float4 tint;
 };
-
-// Bends a local-space vertex according to the current wing state. Vertices
-// inboard of the wing root are untouched, so the body stays rigid.
-static inline float3 deform_vertex(float3 position, constant ModelUniforms& model) {
-    const float flap_angle = model.wing.x;
-    const float tuck = model.wing.y;
-    const float root = model.wing.z;
-    const float span = model.wing.w;
-    const float bend = model.pose.x;
-    const float flare = model.pose.z;
-    const float hinge_y = model.pose.w;
-
-    float3 p = position;
-
-    // --- wings ---
-    const float side = p.x >= 0.0 ? 1.0 : -1.0;
-    const float out = abs(p.x) - root;
-    if (out > 0.0) {
-        // Normalized distance along the wing, so the tip travels furthest and
-        // the root barely moves. That is what reads as a wing rather than a
-        // rotating plank.
-        const float t = saturate(out / max(span - root, 0.001));
-        const float angle = flap_angle * t;
-
-        // Rotate about the body's forward axis, hinged at the shoulder. The
-        // vertex's own height above the hinge rotates with it, so the wing's
-        // dihedral survives being flapped instead of flattening out.
-        const float dy = p.y - hinge_y;
-        const float c = cos(angle), s = sin(angle);
-        const float rotated_out = out * c - dy * s;
-        const float rotated_up = out * s + dy * c;
-        p.x = side * (root + rotated_out * (1.0 - tuck * 0.55));
-        p.y = hinge_y + rotated_up;
-
-        // Tucking sweeps the wing back along the body; flaring pulls it forward
-        // and down like an airbrake.
-        p.z += tuck * out * 0.85;
-        p.z -= flare * out * 0.22;
-        p.y -= flare * out * 0.18;
-    }
-
-    // --- tail and neck lateral bend ---
-    // Anything far fore or aft swings sideways, which is the spring-chain lag
-    // that will later make turns look alive.
-    const float longitudinal = p.z;
-    const float bend_weight = longitudinal * longitudinal * 0.02;
-    p.x += bend * bend_weight * sign(longitudinal);
-
-    return p;
-}

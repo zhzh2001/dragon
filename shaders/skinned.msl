@@ -1,0 +1,86 @@
+#include "model_common.msl"
+
+// Skinned character rendering.
+//
+// Joint matrices arrive as a uniform array rather than a storage buffer: a rig
+// this size costs 4 KB, and a uniform push avoids maintaining a per-frame buffer.
+// Must match anim::MAX_JOINTS.
+constexpr constant uint MAX_JOINTS = 64;
+
+struct SkinUniforms {
+    float4x4 joints[MAX_JOINTS];
+};
+
+struct VertexIn {
+    float3 position    [[attribute(0)]];
+    float3 normal      [[attribute(1)]];
+    float3 color       [[attribute(2)]];
+    uchar4 joint_index [[attribute(3)]];
+    float4 weight      [[attribute(4)]];
+};
+
+struct VertexOut {
+    float4 clip_position [[position]];
+    float3 world_position;
+    float3 world_normal;
+    float3 albedo;
+    float emissive;
+};
+
+vertex VertexOut vs_main(VertexIn in [[stage_in]],
+                         constant SceneUniforms& scene [[buffer(0)]],
+                         constant ModelUniforms& model [[buffer(1)]],
+                         constant SkinUniforms& skin [[buffer(2)]]) {
+    // Linear blend skinning. Weights are normalized on the CPU, so no rescaling
+    // is needed here.
+    float4x4 blended = skin.joints[in.joint_index.x] * in.weight.x;
+    blended += skin.joints[in.joint_index.y] * in.weight.y;
+    blended += skin.joints[in.joint_index.z] * in.weight.z;
+    blended += skin.joints[in.joint_index.w] * in.weight.w;
+
+    float4 skinned_position = blended * float4(in.position, 1.0);
+    // Blending matrices this way is only correct for rotation and uniform scale,
+    // which is all a rig uses. Rotating the normal by the same blend is the usual
+    // approximation and is right up to non-uniform scale.
+    float3 skinned_normal = (blended * float4(in.normal, 0.0)).xyz;
+
+    float4 world = model.model * skinned_position;
+
+    VertexOut out;
+    out.world_position = world.xyz;
+    out.world_normal = normalize((model.model * float4(skinned_normal, 0.0)).xyz);
+    out.albedo = in.color * model.tint.rgb;
+    out.emissive = model.tint.a;
+    out.clip_position = scene.view_proj * world;
+    return out;
+}
+
+fragment float4 fs_main(VertexOut in [[stage_in]],
+                        constant SceneUniforms& scene [[buffer(0)]],
+                        depth2d<float> shadow_map [[texture(0)]],
+                        sampler shadow_sampler [[sampler(0)]]) {
+    float3 normal = normalize(in.world_normal);
+    float3 to_sun = normalize(scene.sun.xyz);
+
+    // Wing membranes are thin and seen from both sides, so light whichever face
+    // is actually turned toward the viewer.
+    float3 to_camera = normalize(scene.camera_position.xyz - in.world_position);
+    if (dot(normal, to_camera) < 0.0) normal = -normal;
+
+    float wrapped = saturate((dot(normal, to_sun) + 0.2) / 1.2);
+    float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
+                                      shadow_sampler);
+    float3 direct = scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
+
+    float sky_amount = saturate(normal.y * 0.5 + 0.5);
+    float3 ambient =
+        mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) * scene.terrain_params.w;
+
+    float3 lit = in.albedo * (direct + ambient) + in.albedo * in.emissive;
+
+    float distance = length(in.world_position - scene.camera_position.xyz);
+    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
+    float fog = 1.0 - exp(-pow(distance * density, 2.0));
+    float3 ray = normalize(in.world_position - scene.camera_position.xyz);
+    return float4(tonemap(mix(lit, sky_color(ray, scene), saturate(fog))), 1.0);
+}

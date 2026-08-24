@@ -33,6 +33,11 @@ Options parse_options(int argc, char** argv) {
             else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
         } else if (arg == "--course" && i + 1 < argc) {
             options.course_index = SDL_atoi(argv[++i]);
+        } else if (arg == "--inspect") {
+            options.inspect = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                options.inspect_angle_deg = float(SDL_atof(argv[++i]));
+            }
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -66,7 +71,7 @@ bool App::init(const Options& options) {
     options_ = options;
 
     gfx::Device::Config config;
-    config.title = "Dragon Engine -- M5";
+    config.title = "Dragon Engine -- M6";
     config.width = 1280;
     config.height = 720;
     config.headless = options.headless;
@@ -82,7 +87,13 @@ bool App::init(const Options& options) {
 
     regenerate_terrain();
 
-    dragon_mesh_.upload(device_.gpu(), game::make_dragon_proxy(dragon_dims_), "dragon_proxy");
+    {
+        anim::SkinnedMeshData mesh_data;
+        anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
+        dragon_mesh_.upload(device_.gpu(), mesh_data, "dragon");
+        dragon_rig_.init(dragon_skeleton_, dragon_joints_);
+        ghost_rig_.init(dragon_skeleton_, dragon_joints_);
+    }
 
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
@@ -98,6 +109,8 @@ bool App::init(const Options& options) {
     apply_assist_preset(0);
 
     autopilot_ = options.autopilot;
+    // Inspecting the rig means wanting to see the rig.
+    if (options.inspect) show_skeleton_ = true;
     apply_camera_preset(options.camera_mode);
     chase_.first_person = options.first_person;
     respawn_dragon();
@@ -200,9 +213,6 @@ void App::respawn_dragon() {
 gfx::ModelUniforms App::ghost_model_uniforms(const game::GhostSample& sample) const {
     gfx::ModelUniforms model;
     model.model = core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one());
-    model.wing = core::Vec4{sample.wing_angle, sample.wing_tuck, dragon_dims_.wing_root,
-                            dragon_dims_.wing_span};
-    model.pose = core::Vec4{0.0f, 0.0f, 0.0f, game::dragon_wing_hinge_y(dragon_dims_)};
     // Cool and slightly emissive, so the ghost reads as a recording rather than
     // as a second dragon in the world.
     model.tint = core::Vec4{0.35f, 0.62f, 0.95f, 0.28f};
@@ -382,17 +392,6 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     const game::FlightState& s = flight_.state();
     gfx::ModelUniforms model;
     model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one());
-
-    // The flight model already produced the wing angle, so the wing you see and
-    // the thrust it generated cannot disagree.
-    model.wing = core::Vec4{s.wing_angle, s.wing_tuck, dragon_dims_.wing_root,
-                            dragon_dims_.wing_span};
-
-    // Tail and neck lag into the turn. A crude stand-in for the spring chains
-    // that will drive them properly, but it already makes turns read as intent.
-    const float bend = -s.control.z * 0.30f - s.control.y * 0.20f;
-    model.pose = core::Vec4{bend, s.angle_of_attack, s.wing_brake,
-                            game::dragon_wing_hinge_y(dragon_dims_)};
     return model;
 }
 
@@ -512,6 +511,18 @@ void App::update(float dt) {
     chase_.update(flight_.state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
+    // Inspection view: a tight orbit locked to the dragon, for looking at the
+    // rig rather than at the world.
+    if (options_.inspect) {
+        const game::FlightState& s = flight_.state();
+        const float angle = core::radians(options_.inspect_angle_deg);
+        const core::Vec3 offset = core::rotate(s.orientation,
+                                               core::Vec3{std::sin(angle) * 26.0f, 7.0f,
+                                                          std::cos(angle) * 26.0f});
+        camera_.set_position(s.position + offset, s.position);
+        free_camera_ = true;
+    }
+
     rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
     if (rally_.just_missed_ring()) miss_flash_ = 1.2f;
@@ -529,6 +540,22 @@ void App::update(float dt) {
     // The autopilot laps the course, which is what lets a ghost exist in a
     // headless capture and doubles as a soak test.
     if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
+
+    dragon_rig_.update(flight_.state(), dt);
+
+    // The ghost's rig is driven from its recording, reconstructed as a flight
+    // state. Only the fields the rig reads need to be real.
+    game::GhostSample ghost_sample;
+    if (show_ghost_ && rally_.ghost_pose(ghost_sample)) {
+        game::FlightState ghost_state;
+        ghost_state.position = ghost_sample.position;
+        ghost_state.orientation = ghost_sample.orientation;
+        ghost_state.wing_angle = ghost_sample.wing_angle;
+        ghost_state.wing_tuck = ghost_sample.wing_tuck;
+        ghost_state.angular_velocity = ghost_sample.angular_velocity;
+        ghost_state.ground_clearance = 1000.0f;  // never extends its legs
+        ghost_rig_.update(ghost_state, dt);
+    }
 
     push_telemetry(flight_.state());
 
@@ -553,6 +580,7 @@ void App::update(float dt) {
     }
 
     draw_flight_debug();
+    draw_skeleton_debug();
 }
 
 void App::push_telemetry(const game::FlightState& state) {
@@ -564,6 +592,35 @@ void App::push_telemetry(const game::FlightState& state) {
     telemetry_.climb[i] = state.climb_rate;
     telemetry_.energy[i] = state.specific_energy;
     telemetry_.cursor = (i + 1) % TELEMETRY_SAMPLES;
+}
+
+// Draws the rig as bones in world space. The fastest way to tell a skinning
+// problem from an animation problem: if the bones look right and the mesh does
+// not, the weights are wrong.
+void App::draw_skeleton_debug() {
+    if (!show_skeleton_) return;
+    const game::FlightState& s = flight_.state();
+    const core::Mat4 to_world = core::Mat4::trs(s.position, s.orientation, core::Vec3::one());
+    const std::vector<core::Mat4>& skinning = dragon_rig_.skinning_matrices();
+    if (skinning.empty()) return;
+
+    for (int i = 0; i < dragon_skeleton_.count(); ++i) {
+        // The rig exposes skinning matrices, so recover the animated joint
+        // position by pushing its bind position through them.
+        const core::Vec3 bind =
+            dragon_skeleton_.world_bind(i).translation_part();
+        const core::Vec3 posed =
+            core::transform_point(to_world, core::transform_point(skinning[size_t(i)], bind));
+
+        const int parent = dragon_skeleton_.joint(i).parent;
+        if (parent != anim::NO_PARENT) {
+            const core::Vec3 parent_bind = dragon_skeleton_.world_bind(parent).translation_part();
+            const core::Vec3 parent_posed = core::transform_point(
+                to_world, core::transform_point(skinning[size_t(parent)], parent_bind));
+            debug_.line(parent_posed, posed, Vec3{0.95f, 0.85f, 0.35f}, true);
+        }
+        debug_.cross(posed, 0.22f, Vec3{0.4f, 0.9f, 0.95f}, true);
+    }
 }
 
 void App::draw_flight_debug() {
@@ -608,8 +665,9 @@ void App::draw_flight_debug() {
                      Vec3{0.3f, 0.85f, 0.95f}, true);
     }
 
-    // In free-camera mode the dragon needs a marker, or it is easy to lose.
-    if (free_camera_) {
+    // In free-camera mode the dragon needs a marker, or it is easy to lose. Not
+    // while inspecting it, where the marker is the only thing in the way.
+    if (free_camera_ && !options_.inspect) {
         debug_.sphere(s.position, 6.0f, Vec3{0.9f, 0.75f, 0.35f}, 20, true);
     }
 
@@ -1209,6 +1267,7 @@ void App::build_flight_ui() {
     }
 
     if (ImGui::CollapsingHeader("Debug draw", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("skeleton", &show_skeleton_);
         ImGui::Checkbox("force vectors", &show_forces_);
         ImGui::Checkbox("flight path", &show_flight_path_);
         ImGui::Checkbox("ground probe", &show_ground_probe_);
@@ -1251,8 +1310,8 @@ void App::render() {
         SDL_GPURenderPass* shadow_pass = shadow_.begin_pass(device_);
         world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                gfx::ModelUniforms());
-        world_.draw_mesh_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
-                               dragon_model);
+        world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
+                                  dragon_model, dragon_rig_.skinning_matrices());
         // Only the live checkpoint casts a shadow. Shadowing all of them costs
         // little but reads as clutter, and the shadow's job here is to tell you
         // where the next ring is relative to the ground.
@@ -1273,7 +1332,8 @@ void App::render() {
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
-    world_.draw_mesh(device_, pass, dragon_mesh_, dragon_model);
+    world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,
+                        dragon_rig_.skinning_matrices());
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
     // rings that instancing would be premature.
@@ -1302,7 +1362,8 @@ void App::render() {
     // Ghost of the best run, flying its own recording alongside.
     game::GhostSample ghost;
     if (show_ghost_ && rally_.ghost_pose(ghost)) {
-        world_.draw_mesh(device_, pass, dragon_mesh_, ghost_model_uniforms(ghost));
+        world_.draw_skinned(device_, pass, dragon_mesh_, ghost_model_uniforms(ghost),
+                            ghost_rig_.skinning_matrices());
     }
 
     debug_.draw(device_, pass, camera.view_projection(aspect));
