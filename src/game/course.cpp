@@ -134,12 +134,18 @@ Course make_valley_run(const Terrain& terrain, float half_extent) {
     for (int i = 0; i < COUNT; ++i) {
         const float z = start_z + step * float(i);
         const float x = terrain.valley_center_x(z);
-        const float height = 110.0f + std::sin(float(i) * 0.9f) * 55.0f;
-        points.push_back(place_above_terrain(terrain, x, z, height, 45.0f));
+        // Every checkpoint must sit above the autopilot's terrain-avoidance
+        // floor (AutopilotTuning::min_clearance, 90 m). Below it the controller
+        // is asked to descend to a ring and climb away from the ground at the
+        // same time, and the conflict is unstable -- it flew fine with jittered
+        // frames and touched down with steady ones, which is the signature of a
+        // fight rather than a bug.
+        const float height = 150.0f + std::sin(float(i) * 0.9f) * 50.0f;
+        points.push_back(place_above_terrain(terrain, x, z, height, 100.0f));
     }
 
-    limit_climb(points, terrain, 45.0f);
-    clear_line_of_flight(points, terrain, 45.0f);
+    limit_climb(points, terrain, 100.0f);
+    clear_line_of_flight(points, terrain, 100.0f);
 
     for (size_t i = 0; i < points.size(); ++i) {
         // Face each ring along the path through it: toward the next point, or
@@ -155,9 +161,16 @@ Course make_canyon_weave(const Terrain& terrain, float half_extent) {
     Course course;
     course.name = "Canyon Weave";
 
-    // Alternating side to side and lower down, so it demands real banking and
-    // punishes carrying too much speed into a turn.
-    constexpr int COUNT = 14;
+    // Alternating side to side, so it demands real banking and punishes carrying
+    // too much speed into a turn.
+    //
+    // The lateral offset is the difficulty dial here, and it was set too high.
+    // At 270 m over 308 m of spacing each leg ran 41 degrees off axis, so every
+    // checkpoint needed an 82 degree direction change while lining up on the
+    // ring's axis -- past what a bank-limited turn can do cleanly, so the
+    // approach became a hunt. 210 m over longer legs keeps it demanding and
+    // flyable.
+    constexpr int COUNT = 12;
     const float span = half_extent * 1.6f;
     const float start_z = -span * 0.5f;
     const float step = span / float(COUNT - 1);
@@ -166,12 +179,16 @@ Course make_canyon_weave(const Terrain& terrain, float half_extent) {
     for (int i = 0; i < COUNT; ++i) {
         const float z = start_z + step * float(i);
         const float side = (i % 2 == 0) ? 1.0f : -1.0f;
-        const float x = terrain.valley_center_x(z) + side * 240.0f;
-        points.push_back(place_above_terrain(terrain, x, z, 70.0f, 40.0f));
+        const float x = terrain.valley_center_x(z) + side * 210.0f;
+        // This is the lowest and tightest course, and hard turns cost about
+        // 4.9 m/s of energy each, so altitude drains across a run. 70 m left
+        // only 21 m of clearance at the low point between rings; 170 m leaves
+        // room to lose some and recover.
+        points.push_back(place_above_terrain(terrain, x, z, 170.0f, 110.0f));
     }
 
-    limit_climb(points, terrain, 40.0f);
-    clear_line_of_flight(points, terrain, 40.0f);
+    limit_climb(points, terrain, 110.0f);
+    clear_line_of_flight(points, terrain, 110.0f);
 
     for (size_t i = 0; i < points.size(); ++i) {
         Vec3 direction =
@@ -210,11 +227,11 @@ Course make_summit_climb(const Terrain& terrain, float half_extent) {
         const float x = terrain.valley_center_x(z) + std::sin(t * core::TWO_PI * 1.5f) * 260.0f;
         // 80 m to 620 m above the valley floor: about 0.07 average gradient over
         // the whole path, inside what the dragon can sustain.
-        points.push_back(place_above_terrain(terrain, x, z, 80.0f + t * 540.0f, 60.0f));
+        points.push_back(place_above_terrain(terrain, x, z, 110.0f + t * 540.0f, 100.0f));
     }
 
-    limit_climb(points, terrain, 55.0f);
-    clear_line_of_flight(points, terrain, 55.0f);
+    limit_climb(points, terrain, 100.0f);
+    clear_line_of_flight(points, terrain, 100.0f);
 
     for (size_t i = 0; i < points.size(); ++i) {
         Vec3 direction =

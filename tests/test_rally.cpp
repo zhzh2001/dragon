@@ -340,21 +340,48 @@ struct AutoRun {
     int frames_grounded = 0;
 };
 
-AutoRun autopilot_run(const game::Terrain& terrain, const game::Course& course, float limit) {
-    game::Rally rally;
-    rally.set_course(course);
+// `dt_jitter` fakes the uneven frame times of a real windowed session. Worth
+// testing separately: the flight model integrates explicitly, so behaviour that
+// is safe at a rock-steady 60 Hz can clip terrain when a frame hitches.
+// A competent pilot's bank ceiling. Discovered the hard way: with no ceiling the
+// autopilot banks steeply enough that lift goes mostly horizontal, so pulling
+// back turns instead of climbing and it sinks into terrain -- the classic
+// descending spiral. So a bank limit is not training wheels, it is airmanship,
+// and bots fly with one. The "expert" player preset removes it as a deliberate
+// choice, and an expert player can indeed spiral into a hillside.
+constexpr float PILOT_BANK_LIMIT = 75.0f;
 
-    const Ring& first = course.rings.front();
+// `bank_limit` mirrors whatever ceiling the pilot is flying with.
+AutoRun autopilot_run(const game::Terrain& terrain, const game::Course& course, float limit,
+                      float dt_jitter = 0.0f, float bank_limit = 0.0f, float ring_scale = 1.0f) {
+    game::Course scaled = course;
+    for (Ring& ring : scaled.rings) ring.radius *= ring_scale;
+
+    game::Rally rally;
+    rally.set_course(scaled);
+
+    const Ring& first = scaled.rings.front();
     Vec3 spawn = first.position - first.normal() * 420.0f;
     spawn.y = maxf(spawn.y, terrain.height_at(spawn.x, spawn.z) + 60.0f);
 
     game::FlightModel model;
+    model.tuning.bank_limit_deg = bank_limit;
     model.reset(spawn, look_rotation(first.position - spawn, Vec3::up()), 42.0f);
 
     game::AutopilotTuning tuning;
     AutoRun result;
-    const float dt = 1.0f / 60.0f;
-    for (int i = 0; i < int(limit / dt); ++i) {
+    const float base_dt = 1.0f / 60.0f;
+    // Deterministic pseudo-jitter, so a failure is reproducible.
+    uint32_t noise = 0x9E3779B9u;
+    float clock = 0.0f;
+    for (int i = 0; clock < limit; ++i) {
+        float dt = base_dt;
+        if (dt_jitter > 0.0f) {
+            noise = noise * 1664525u + 1013904223u;
+            const float unit = float((noise >> 8) & 0xFFFF) / 65535.0f;
+            dt = base_dt * (1.0f + unit * dt_jitter);
+        }
+        clock += dt;
         const Ring* target = rally.next_ring();
         const Vec3 aim =
             target ? target->position : model.state().position + model.state().forward() * 500.0f;
@@ -379,6 +406,62 @@ AutoRun autopilot_run(const game::Terrain& terrain, const game::Course& course, 
     return result;
 }
 
+void test_autopilot_survives_uneven_frames() {
+    std::printf("the autopilot survives uneven frame times\n");
+    // Reported from playtest: the autopilot crashed on Canyon Weave. It never
+    // did at a fixed 60 Hz, and Canyon Weave was the course flying closest to
+    // the ground -- so frame-time sensitivity was the suspect.
+    game::TerrainSettings settings;
+    settings.half_extent = 2500.0f;
+    settings.cell_size = 6.0f;
+    game::Terrain terrain;
+    terrain.generate(settings);
+
+    const game::Course courses[3] = {game::make_valley_run(terrain, settings.half_extent),
+                                     game::make_canyon_weave(terrain, settings.half_extent),
+                                     game::make_summit_climb(terrain, settings.half_extent)};
+
+    // Up to 5x the nominal frame time, which is a bad hitch, not a bad machine.
+    for (const game::Course& course : courses) {
+        const AutoRun run = autopilot_run(terrain, course, 400.0f, 4.0f, PILOT_BANK_LIMIT);
+        std::printf("  %-14s %s  %2d/%2zu rings, min clearance %.0f m%s\n", course.name.c_str(),
+                    run.finished ? "finished" : "TIMED OUT", run.rings, course.rings.size(),
+                    run.min_clearance, run.frames_grounded > 0 ? "  (HIT GROUND)" : "");
+        CHECK(run.finished);
+        CHECK(run.frames_grounded == 0);
+        // Real margin, not a near miss. 22 m was the previous figure and it was
+        // inside the autopilot's own avoidance threshold.
+        CHECK(run.min_clearance > 25.0f);
+    }
+}
+
+void test_relaxed_difficulty_is_completable() {
+    std::printf("every course is completable on relaxed assists\n");
+    // The point of a difficulty setting is that it makes the game *easier*, not
+    // that it makes it impossible. A bank limit widens every turn -- radius goes
+    // as v^2/(g tan bank) -- so a course that needs tight turns can become
+    // unflyable with the assist on. Only a test catches that.
+    game::TerrainSettings settings;
+    settings.half_extent = 2500.0f;
+    settings.cell_size = 6.0f;
+    game::Terrain terrain;
+    terrain.generate(settings);
+
+    const game::Course courses[3] = {game::make_valley_run(terrain, settings.half_extent),
+                                     game::make_canyon_weave(terrain, settings.half_extent),
+                                     game::make_summit_climb(terrain, settings.half_extent)};
+
+    for (const game::Course& course : courses) {
+        // Relaxed: 70 degree bank ceiling, checkpoints 1.5x.
+        const AutoRun run = autopilot_run(terrain, course, 450.0f, 0.0f, 70.0f, 1.5f);
+        std::printf("  %-14s %s  %2d/%2zu rings, min clearance %.0f m%s\n", course.name.c_str(),
+                    run.finished ? "finished" : "TIMED OUT", run.rings, course.rings.size(),
+                    run.min_clearance, run.frames_grounded > 0 ? "  (HIT GROUND)" : "");
+        CHECK(run.finished);
+        CHECK(run.frames_grounded == 0);
+    }
+}
+
 void test_autopilot_completes_every_course() {
     std::printf("the autopilot can fly every generated course\n");
     game::TerrainSettings settings;
@@ -392,7 +475,7 @@ void test_autopilot_completes_every_course() {
                                      game::make_summit_climb(terrain, settings.half_extent)};
 
     for (const game::Course& course : courses) {
-        const AutoRun run = autopilot_run(terrain, course, 400.0f);
+        const AutoRun run = autopilot_run(terrain, course, 400.0f, 0.0f, PILOT_BANK_LIMIT);
         std::printf("  %-14s %s  %s  %2d/%2zu rings, min clearance %.0f m%s\n",
                     course.name.c_str(), run.finished ? "finished" : "TIMED OUT",
                     game::format_time(run.time).c_str(), run.rings, course.rings.size(),
@@ -402,7 +485,7 @@ void test_autopilot_completes_every_course() {
         // A course nobody can finish is not a course.
         CHECK(run.rings == int(course.rings.size()));
         // And it must be flyable without scraping the ground.
-        CHECK(run.min_clearance > 5.0f);
+        CHECK(run.min_clearance > 25.0f);
     }
 }
 
@@ -424,6 +507,7 @@ void test_autopilot_control_is_smooth() {
     Vec3 spawn = first.position - first.normal() * 420.0f;
     spawn.y = maxf(spawn.y, terrain.height_at(spawn.x, spawn.z) + 60.0f);
     game::FlightModel model;
+    model.tuning.bank_limit_deg = PILOT_BANK_LIMIT;
     model.reset(spawn, look_rotation(first.position - spawn, Vec3::up()), 42.0f);
 
     game::AutopilotTuning tuning;
@@ -466,6 +550,8 @@ int main() {
     test_generated_courses_are_flyable();
     test_course_round_trip();
     test_autopilot_completes_every_course();
+    test_autopilot_survives_uneven_frames();
+    test_relaxed_difficulty_is_completable();
     test_autopilot_control_is_smooth();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

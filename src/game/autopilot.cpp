@@ -22,6 +22,15 @@ FlightInput steer_toward(const FlightState& state, Vec3 target, const AutopilotT
                          float ground_height) {
     FlightInput input;
 
+    // Terrain avoidance, applied by moving the goal rather than by seizing the
+    // controls. The first version overrode pitch and roll directly, which fought
+    // the PD loop below and switched behaviour discontinuously -- it flew into
+    // the ground on some courses and not others depending on nothing more than
+    // frame timing.
+    const float clearance = state.position.y - ground_height;
+    const float shortfall = tuning.min_clearance - clearance;
+    if (shortfall > 0.0f) target.y += shortfall * tuning.avoid_lift;
+
     const Vec3 to_target = target - state.position;
     const Vec3 desired = core::normalize_or(to_target, state.forward());
 
@@ -64,17 +73,25 @@ FlightInput steer_toward(const FlightState& state, Vec3 target, const AutopilotT
     // Brake if badly overspeed, so a long dive does not overshoot every ring.
     if (state.airspeed > tuning.max_speed * 1.15f) input.brake = 0.6f;
 
-    // Terrain avoidance overrides everything: pull up hard and flap. Without
-    // this an autopilot chasing a low checkpoint flies straight into a hillside.
-    const float clearance = state.position.y - ground_height;
-    if (clearance < tuning.min_clearance) {
-        const float urgency = core::saturate(1.0f - clearance / core::maxf(tuning.min_clearance, 1.0f));
-        input.pitch = core::maxf(input.pitch, urgency);
+    // Low on altitude: never dive, and always spend energy on climbing.
+    if (shortfall > 0.0f) {
         input.flap = 1.0f;
         input.tuck = 0.0f;
-        // Level the wings while climbing away: banking here just delays the
-        // recovery.
-        input.roll *= 1.0f - urgency;
+        input.brake = 0.0f;
+    }
+
+    // Critically low, and only then, take the bank out directly. In a steep bank
+    // the lift vector is mostly horizontal, so pulling back turns instead of
+    // climbing -- the classic descending spiral -- and the lifted aim point
+    // alone cannot fix that, because the dragon is already pointing where it
+    // needs to go. The roll has to be commanded out.
+    const float critical =
+        core::saturate(1.0f - clearance / core::maxf(tuning.min_clearance * 0.55f, 1.0f));
+    if (critical > 0.0f) {
+        const float bank = std::atan2(core::dot(state.right(), Vec3::up()),
+                                      core::dot(state.up(), Vec3::up()));
+        const float level_command = core::clampf(-bank * 1.6f, -1.0f, 1.0f);
+        input.roll = core::lerpf(input.roll, level_command, critical);
     }
     return input;
 }

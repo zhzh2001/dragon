@@ -292,6 +292,56 @@ void test_roll_is_controllable() {
     CHECK(state_is_sane(model));
 }
 
+void test_bank_limit_prevents_inversion() {
+    std::printf("holding a turn settles into a bank instead of rolling over\n");
+    // Reported from playtest: turning either misses the target or flips the
+    // dragon belly-up. Holding roll used to roll continuously, because
+    // auto-level only engaged once the player let go.
+    FlightModel model = make_level_flyer(45.0f);
+    FlightInput hard_turn;
+    hard_turn.roll = 1.0f;
+    hard_turn.pitch = 0.4f;
+
+    float peak_roll = 0.0f;
+    for (int i = 0; i < int(20.0f / DT); ++i) {
+        model.update(hard_turn, nullptr, DT);
+        peak_roll = maxf(peak_roll, abs_roll_degrees(model));
+    }
+    std::printf("  20 s of full roll: peak %.0f deg, settled %.0f deg (limit %.0f)\n", peak_roll,
+                abs_roll_degrees(model), model.tuning.bank_limit_deg);
+    // Never past vertical, so lift never points at the ground.
+    CHECK(peak_roll < 90.0f);
+    // And it holds a useful bank rather than being flattened out.
+    CHECK(abs_roll_degrees(model) > 40.0f);
+    CHECK(state_is_sane(model));
+
+    // The turn must still actually turn: a bank limit that stops the dragon
+    // turning would be a worse cure than the disease.
+    const Vec3 heading = normalize(Vec3{model.state().forward().x, 0.0f,
+                                        model.state().forward().z});
+    FlightModel fresh = make_level_flyer(45.0f);
+    const Vec3 start = normalize(Vec3{fresh.state().forward().x, 0.0f,
+                                      fresh.state().forward().z});
+    run(fresh, hard_turn, 6.0f);
+    const Vec3 after = normalize(Vec3{fresh.state().forward().x, 0.0f, fresh.state().forward().z});
+    const float turned = degrees(std::acos(clampf(dot(start, after), -1.0f, 1.0f)));
+    std::printf("  6 s of turning: %.0f deg of heading change\n", turned);
+    CHECK(turned > 45.0f);
+    (void)heading;
+
+    // With the limit off, the same input should roll right over -- confirming
+    // the assist is what prevents it, not some other term.
+    FlightModel unlimited = make_level_flyer(45.0f);
+    unlimited.tuning.bank_limit_deg = 0.0f;
+    float unlimited_peak = 0.0f;
+    for (int i = 0; i < int(20.0f / DT); ++i) {
+        unlimited.update(hard_turn, nullptr, DT);
+        unlimited_peak = maxf(unlimited_peak, abs_roll_degrees(unlimited));
+    }
+    std::printf("  same input with the limit off: peak %.0f deg\n", unlimited_peak);
+    CHECK(unlimited_peak > 120.0f);
+}
+
 void test_rudder_turns_the_nose() {
     std::printf("rudder produces a real heading change\n");
     // Reported from playtest: Q/E appears to do nothing. Weathercock stability
@@ -440,6 +490,7 @@ int main() {
     test_level_trim_exists();
     test_bank_turns_the_flight_path();
     test_recovers_from_inverted();
+    test_bank_limit_prevents_inversion();
     test_roll_is_controllable();
     test_rudder_turns_the_nose();
     test_extreme_inputs_stay_finite();

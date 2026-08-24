@@ -86,6 +86,17 @@ struct FlightTuning {
     float roll_damping = 2.6f;
 
     // ---- assists ----
+    // Soft ceiling on bank angle, in degrees. Zero disables it.
+    //
+    // Without this, holding roll to turn keeps rolling: past vertical you end up
+    // inverted with lift pointing at the ground. That is the single biggest
+    // source of crashes for someone who has not flown a flight sim before.
+    // Approaching the limit fades roll authority out; past it the wings are
+    // actively levelled even while roll is held, so a turn settles into a bank
+    // instead of becoming a barrel roll.
+    float bank_limit_deg = 68.0f;
+    float bank_limit_recovery = 1.7f;
+
     // Rolls the wings level when the player lets go of roll.
     float auto_level = 2.4f;
     // Ceiling on the auto-level roll rate, so recovering from inverted is brisk

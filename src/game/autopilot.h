@@ -32,8 +32,12 @@ struct AutopilotTuning {
     // range and is capped.
     float axis_lead_fraction = 0.55f;
     float axis_lead_max = 240.0f;
-    // Never fly below this clearance if a terrain probe is supplied.
-    float min_clearance = 45.0f;
+    // Terrain avoidance. Below `min_clearance` the aim point is lifted by the
+    // shortfall times `avoid_lift`, rather than the controls being overridden.
+    // An override fights the PD loop and switches modes, which oscillates; a
+    // lifted target keeps one coherent controller.
+    float min_clearance = 90.0f;
+    float avoid_lift = 3.0f;
 };
 
 // `ground_height` is the terrain height directly below the dragon, or a very

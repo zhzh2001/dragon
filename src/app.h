@@ -48,6 +48,9 @@ struct Options {
     bool has_input_override = false;
     float input_override[6] = {};
 
+    // --course N selects a course by index for a capture or an autopilot run.
+    int course_index = 0;
+
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.
     bool autopilot = false;
@@ -119,6 +122,25 @@ private:
     bool show_ring_path_ = true;
     bool autopilot_ = false;
     game::AutopilotTuning autopilot_tuning_;
+
+    // Difficulty assists.
+    //
+    // A tighter bank limit is NOT easier: turn radius goes as v^2/(g tan bank),
+    // so 70 degrees turns in 80 m where 55 degrees needs 145 m. What a new pilot
+    // needs is a bank deep enough to turn inside a checkpoint gap, plus a barrier
+    // that stops the roll continuing past vertical. So the presets keep the bank
+    // generous and vary the checkpoint size instead.
+    struct Assists {
+        bool auto_flap = true;
+        // Flap harder the further below this the airspeed is.
+        float auto_flap_speed = 48.0f;
+        // And always flap when this close to the ground, which is where running
+        // out of energy actually kills you.
+        float auto_flap_clearance = 75.0f;
+        float ring_radius_scale = 1.5f;
+    } assists_;
+    int assist_preset_ = 0;  // 0 relaxed, 1 standard, 2 expert
+    void apply_assist_preset(int index);
     // Time remaining on the split-delta flash after passing a checkpoint.
     float split_flash_ = 0.0f;
     float miss_flash_ = 0.0f;
@@ -148,7 +170,10 @@ private:
         // control near centre and full authority at the edge.
         float gamepad_expo = 1.7f;
 
-        bool invert_pitch = false;
+        // Default on: W lowers the nose, S raises it, which is the flight-stick
+        // convention most people expect from a flying game. It flips the gamepad
+        // pitch axis too.
+        bool invert_pitch = true;
 
         // Free look, in degrees. The mouse figure is per pixel of right-drag;
         // the gamepad figure is per second at full stick deflection.

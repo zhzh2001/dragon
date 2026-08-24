@@ -269,6 +269,26 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
         commanded.z += level_rate * roll_released;
     }
 
+    // Bank limit. Applied after auto-level so it has the final say, and unlike
+    // auto-level it works even while the player is holding roll -- that is the
+    // whole point.
+    if (tuning.bank_limit_deg > 0.0f) {
+        const float limit = core::radians(tuning.bank_limit_deg);
+        // The fade has to start well before the limit. Roll rate is around
+        // 170 deg/s and the rate damping has a ~0.4 s half-life, so a narrow
+        // window is crossed before the command can reverse -- the first attempt
+        // used 14 degrees and overshot to 92, past vertical, which is exactly
+        // the failure this assist exists to prevent.
+        const float over =
+            core::smoothstep(limit - core::radians(30.0f), limit, std::fabs(bank));
+        if (over > 0.0f) {
+            // commanded.z and bank share a sign when the roll command is
+            // deepening the bank rather than recovering from it.
+            if (commanded.z * bank > 0.0f) commanded.z *= (1.0f - over);
+            commanded.z += -core::signf(bank) * over * tuning.bank_limit_recovery;
+        }
+    }
+
     // Weathercock stability: yaw the nose back into the airflow. This is the
     // single term that most makes the dragon feel like it is flying through air.
     const float airflow = core::saturate(airspeed / 25.0f);
@@ -419,6 +439,7 @@ const Field FIELDS[] = {
     FIELD(roll_rate),            FIELD(control_lag),         FIELD(low_speed_authority),
     FIELD(authority_reference_speed), FIELD(yaw_stability),  FIELD(pitch_stability),
     FIELD(pitch_damping),        FIELD(yaw_damping),         FIELD(roll_damping),
+    FIELD(bank_limit_deg),       FIELD(bank_limit_recovery),
     FIELD(auto_level),           FIELD(auto_level_max_rate), FIELD(turn_coordination),
     FIELD(stall_recovery),       FIELD(pitch_level),         FIELD(pitch_level_max_rate),
     FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),

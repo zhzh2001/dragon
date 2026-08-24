@@ -31,6 +31,8 @@ Options parse_options(int argc, char** argv) {
             else if (mode == "cinematic") options.camera_mode = 2;
             else if (mode == "fp") options.first_person = true;
             else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
+        } else if (arg == "--course" && i + 1 < argc) {
+            options.course_index = SDL_atoi(argv[++i]);
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -92,7 +94,8 @@ bool App::init(const Options& options) {
                       "checkpoint_ring");
     rebuild_courses();
     best_times_.load(ASSET_ROOT "/best_times.txt");
-    select_course(0);
+    current_course_ = options.course_index;
+    apply_assist_preset(0);
 
     autopilot_ = options.autopilot;
     apply_camera_preset(options.camera_mode);
@@ -124,10 +127,39 @@ void App::rebuild_courses() {
     if (game::load_course(custom, ASSET_ROOT "/course.txt")) courses_.push_back(custom);
 }
 
+void App::apply_assist_preset(int index) {
+    assist_preset_ = index;
+    game::FlightTuning& t = flight_.tuning;
+    switch (index) {
+        case 1:  // standard
+            t.bank_limit_deg = 78.0f;
+            assists_.auto_flap = true;
+            assists_.ring_radius_scale = 1.1f;
+            break;
+        case 2:  // expert -- no bank barrier, no auto-flap, tighter checkpoints
+            t.bank_limit_deg = 0.0f;
+            assists_.auto_flap = false;
+            assists_.ring_radius_scale = 0.85f;
+            break;
+        default:  // relaxed
+            t.bank_limit_deg = 70.0f;
+            assists_.auto_flap = true;
+            assists_.ring_radius_scale = 1.5f;
+            break;
+    }
+    // Checkpoint size is part of the difficulty, so reselecting applies it.
+    select_course(current_course_);
+}
+
 void App::select_course(int index) {
     if (courses_.empty()) return;
-    current_course_ = core::clampf(float(index), 0.0f, float(courses_.size() - 1));
-    rally_.set_course(courses_[size_t(current_course_)]);
+    current_course_ = int(core::clampf(float(index), 0.0f, float(courses_.size() - 1)));
+
+    // Scale checkpoint radii for difficulty. Missing a ring by a metre is a
+    // frustration; the challenge should be the line between them.
+    game::Course scaled = courses_[size_t(current_course_)];
+    for (game::Ring& ring : scaled.rings) ring.radius *= assists_.ring_radius_scale;
+    rally_.set_course(scaled);
     // Records outlive a course switch, so restore the one for this course.
     rally_.set_best_time(best_times_.best(rally_.course().name));
 }
@@ -318,6 +350,18 @@ game::FlightInput App::read_flight_input() const {
             (input_.down(SDL_SCANCODE_LSHIFT) || input_.down(SDL_SCANCODE_RSHIFT)) ? 1.0f : 0.0f;
         in.brake =
             (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL)) ? 1.0f : 0.0f;
+    }
+
+    // Auto-flap. Holding a key to stay airborne is busywork rather than skill,
+    // and forgetting it is the most common way a new pilot ends up in the ground.
+    // Proportional rather than on/off, so it only supplies the energy actually
+    // missing and leaves the dive-and-climb trade intact.
+    if (assists_.auto_flap) {
+        const game::FlightState& s = flight_.state();
+        const float deficit = (assists_.auto_flap_speed - s.airspeed) / 14.0f;
+        float assist = core::saturate(deficit);
+        if (s.ground_clearance < assists_.auto_flap_clearance) assist = 1.0f;
+        in.flap = core::maxf(in.flap, assist);
     }
 
     if (input_.has_gamepad()) {
@@ -1053,10 +1097,30 @@ void App::build_flight_ui() {
 
     if (ImGui::Button("respawn (R)")) respawn_dragon();
 
+    if (ImGui::CollapsingHeader("Assists", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::RadioButton("relaxed", assist_preset_ == 0)) apply_assist_preset(0);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("standard", assist_preset_ == 1)) apply_assist_preset(1);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("expert", assist_preset_ == 2)) apply_assist_preset(2);
+
+        ImGui::SliderFloat("bank limit", &t.bank_limit_deg, 0.0f, 90.0f,
+                           t.bank_limit_deg > 0.0f ? "%.0f deg" : "off");
+        ImGui::Checkbox("auto flap", &assists_.auto_flap);
+        if (assists_.auto_flap) {
+            ImGui::SliderFloat("auto flap speed", &assists_.auto_flap_speed, 20.0f, 80.0f,
+                               "%.0f m/s");
+        }
+        if (ImGui::SliderFloat("checkpoint size", &assists_.ring_radius_scale, 0.6f, 2.2f,
+                               "x%.2f")) {
+            select_course(current_course_);
+        }
+    }
+
     if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("stick  roll %+.2f   pitch %+.2f", stick_.x, stick_.y);
         ImGui::Text("gamepad: %s", input_.gamepad_name());
-        ImGui::Checkbox("invert pitch", &controls_.invert_pitch);
+        ImGui::Checkbox("invert pitch (W lowers the nose)", &controls_.invert_pitch);
         ImGui::SliderFloat("stick smoothing", &controls_.stick_smoothing, 0.0f, 0.3f, "%.3f s");
         ImGui::SliderFloat("gamepad deadzone", &controls_.gamepad_deadzone, 0.0f, 0.4f);
         ImGui::SliderFloat("gamepad expo", &controls_.gamepad_expo, 1.0f, 3.0f);
@@ -1151,7 +1215,8 @@ void App::build_flight_ui() {
     }
 
     ImGui::Separator();
-    ImGui::TextDisabled("W/S pitch, A/D roll, Q/E rudder");
+    ImGui::TextDisabled(controls_.invert_pitch ? "W nose down, S nose up, A/D roll"
+                                              : "W nose up, S nose down, A/D roll");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
     ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake");
     ImGui::TextDisabled("R respawn, V first person, 1/2/3 camera");
