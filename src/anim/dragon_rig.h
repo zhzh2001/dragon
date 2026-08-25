@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "anim/animation.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
 #include "game/flight.h"
@@ -120,6 +121,16 @@ struct RigTuning {
     float chain_max_bend_deg = 32.0f;
     int chain_iterations = 4;
 
+    // ---- authored base motion ----
+    //
+    // The rig drives what flight determines -- wings, neck, tail, leg tuck -- and
+    // leaves everything else alone. An authored clip underneath supplies the
+    // detail nobody wants to write procedurally: toes, jaw, small shifts of the
+    // body. Without it the extremities are perfectly still, which reads as
+    // uncanny even when the big motions are right.
+    float base_clip_weight = 1.0f;
+    float base_clip_rate = 1.0f;
+
     // ---- legs ----
     float leg_tuck_deg = 62.0f;  // folded in flight, extended on the ground
 };
@@ -136,6 +147,11 @@ public:
     // model units per metre, which made every force a factor of eight too weak
     // and the tail look rigid.
     void set_model_scale(float metres_per_unit);
+
+    // Authored motion layered under the procedural pose. Not owned; must outlive
+    // the rig. Null disables it.
+    void set_base_clip(const AnimationClip* clip) { base_clip_ = clip; }
+    bool has_base_clip() const { return base_clip_ && base_clip_->valid(); }
     void update(const game::FlightState& state, float dt);
 
     const Pose& pose() const { return pose_; }
@@ -163,7 +179,9 @@ private:
     // -- rotating about the joint's local Z means something different for every
     // bone. Expressing the axis in body terms makes the animation independent of
     // how the skeleton was authored.
-    void rotate_joint(int joint, core::Vec3 body_axis, float angle);
+    // `onto_current` composes with whatever is already in the pose -- the
+    // authored clip -- instead of starting from the bind rotation.
+    void rotate_joint(int joint, core::Vec3 body_axis, float angle, bool onto_current = false);
     void rotate_joint(int joint, core::Vec3 axis_a, float angle_a, core::Vec3 axis_b,
                       float angle_b);
 
@@ -191,6 +209,8 @@ private:
 
     ChainDynamics tail_sim_, neck_sim_;
     float model_scale_ = 1.0f;
+    const AnimationClip* base_clip_ = nullptr;
+    float clip_time_ = 0.0f;
     // Previous frame's motion, for deriving the accelerations the chains feel.
     core::Vec3 previous_velocity_ = core::Vec3::zero();
     core::Vec3 previous_angular_velocity_ = core::Vec3::zero();

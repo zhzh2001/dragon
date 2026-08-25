@@ -59,7 +59,7 @@ PipelineDesc make_skinned_desc() {
     desc.shader_path = "skinned.msl";
     desc.vs_uniform_buffers = 3;  // 0 scene, 1 model, 2 skinning matrices
     desc.fs_uniform_buffers = 2;  // 0 scene, 1 model
-    desc.fs_samplers = 2;         // 0 shadow map, 1 base colour
+    desc.fs_samplers = 4;  // 0 shadow map, 1 base colour, 2 normal, 3 ORM
     desc.vertex_buffers = anim::SkinnedMesh::buffer_descriptions();
     desc.vertex_attributes = anim::SkinnedMesh::attributes();
     // Membranes are thin and two-sided, and the fragment shader flips normals
@@ -198,24 +198,36 @@ void WorldRenderer::draw_skinned(Device& device, SDL_GPURenderPass* pass,
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
         if (submesh.index_count == 0) continue;
 
-        SDL_GPUTexture* base_colour = nullptr;
-        if (submesh.base_color_texture >= 0 &&
-            size_t(submesh.base_color_texture) < textures.size()) {
-            base_colour = textures[size_t(submesh.base_color_texture)];
-        }
+        auto lookup = [&textures](int slot) -> SDL_GPUTexture* {
+            if (slot < 0 || size_t(slot) >= textures.size()) return nullptr;
+            return textures[size_t(slot)];
+        };
+        SDL_GPUTexture* base_colour = lookup(submesh.base_color_texture);
+        SDL_GPUTexture* normal_map = lookup(submesh.normal_texture);
+        SDL_GPUTexture* orm_map = lookup(submesh.orm_texture);
 
         ModelUniforms submesh_model = model;
         submesh_model.material.x = base_colour && sampler ? 1.0f : 0.0f;
+        submesh_model.material.y = normal_map && sampler ? 1.0f : 0.0f;
+        submesh_model.material.z = orm_map && sampler ? 1.0f : 0.0f;
         SDL_PushGPUVertexUniformData(device.cmd(), 1, &submesh_model, sizeof(ModelUniforms));
         SDL_PushGPUFragmentUniformData(device.cmd(), 1, &submesh_model, sizeof(ModelUniforms));
 
-        SDL_GPUTextureSamplerBinding bindings[2] = {};
+        // Every slot the pipeline declares has to be bound whether or not the
+        // submesh has that map, so a missing one gets the 1x1 white texture and
+        // is switched off by the material flags above.
+        SDL_GPUTextureSamplerBinding bindings[4] = {};
         bindings[0].texture = shadow_texture;
         bindings[0].sampler = shadow_sampler;
-        bindings[1].texture = base_colour ? base_colour : white_;
-        bindings[1].sampler = base_colour && sampler ? sampler : white_sampler_;
+        auto bind_map = [&](int index, SDL_GPUTexture* texture) {
+            bindings[index].texture = texture ? texture : white_;
+            bindings[index].sampler = texture && sampler ? sampler : white_sampler_;
+        };
+        bind_map(1, base_colour);
+        bind_map(2, normal_map);
+        bind_map(3, orm_map);
         if (bindings[0].texture && bindings[1].texture) {
-            SDL_BindGPUFragmentSamplers(pass, 0, bindings, 2);
+            SDL_BindGPUFragmentSamplers(pass, 0, bindings, 4);
         }
 
         SDL_DrawGPUIndexedPrimitives(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);

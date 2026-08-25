@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "anim/animation.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
 #include "gfx/texture.h"
@@ -33,9 +34,18 @@ struct GltfLoadResult {
     // of the model's size. Should be ~0: at rest, skinning is the identity.
     float bind_pose_error = 0.0f;
 
-    // Base-colour images referenced by the mesh's submeshes, decoded but not yet
-    // uploaded -- the loader has no GPU device and should not need one.
+    // Images referenced by the mesh's submeshes, decoded but not yet uploaded --
+    // the loader has no GPU device and should not need one.
     std::vector<gfx::ImageData> textures;
+    // Parallel to `textures`: whether each is colour (sRGB) or data (linear).
+    // The loader knows this from the glTF slot the image was found in; nothing
+    // downstream can work it out from the pixels.
+    std::vector<uint8_t> texture_srgb;
+
+    // Authored motion, if the file carries any. Used as a base pose that the
+    // procedural rig then overrides for whatever flight drives, so secondary
+    // detail the artist animated -- toes, jaw, small body motion -- survives.
+    std::vector<AnimationClip> animations;
 };
 
 GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,

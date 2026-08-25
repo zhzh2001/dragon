@@ -134,7 +134,9 @@ tests/       plain executables, no framework
 - **M6** skeleton, GPU skinning, the procedural dragon rig, and a glTF skinned
   loader. The animation system drives an arbitrary imported skeleton, not just
   the generated one.
-- **Next:** a usable dragon asset (see below), or M11 (first combat).
+- **M6.1** the real dragon: glTF skinned load, inertial neck/tail chains, full
+  PBR material set, and the file's authored clip layered under the rig.
+- **Next:** M11 (first combat), or M7 polish (thermals, particles, audio).
 
 ## Importing a rigged model
 
@@ -200,19 +202,35 @@ heuristics it replaced -- a wing membrane is legitimately far from the bone that
 drives it. What no automated check can catch is a rig that was mangled before it
 reached the file, so a new asset still needs a look.
 
-### Textures
+### Textures and materials
 
-`anim::load_skinned_gltf` decodes each material's base-colour image with
-stb_image and returns them undecoded of any GPU dependency; the app uploads them
-via `gfx::create_texture_from_image`, which builds a full mip chain -- a 4K
-texture seen across a valley aliases into shimmering noise without one, and that
-reads as a broken model rather than a sampling artefact.
+`anim::load_skinned_gltf` decodes each material's images with stb_image and
+returns them free of any GPU dependency; the app uploads them via
+`gfx::create_texture_from_image`, which builds a full mip chain -- a 4K texture
+seen across a valley aliases into shimmering noise without one, and that reads as
+a broken model rather than a sampling artefact.
+
+Three maps are read per material: base colour, normal, and glTF's packed
+occlusion-roughness-metallic (R/G/B). **Colour space is not optional and is not
+recoverable from the pixels** -- base colour uploads as sRGB, the other two as
+linear. A normal map read through the sRGB curve gives wrong directions and a
+roughness map read that way is far too glossy; both look like shading bugs. The
+loader records the space per image in `GltfLoadResult::texture_srgb`, since only
+it knows which glTF slot each image came from.
+
+Normal mapping needs a tangent frame, taken straight from glTF's `TANGENT`
+attribute (xyzw, w = handedness) rather than derived. A submesh without tangents
+gets no normal map -- on this asset that is the eyes, which ship neither.
 
 The mesh is split into **submeshes**, one per glTF primitive, so each can bind its
-own texture. A submesh with no material still has to fill the sampler slot, so the
-renderer binds a 1x1 white texture and `ModelUniforms::material.x` says whether
-the sample should be used. The shadow map cannot serve as that placeholder: it is
-a depth texture and the shader declares a colour one.
+own textures. A submesh missing a given map still has to fill the sampler slot, so
+the renderer binds a 1x1 white texture and `ModelUniforms::material` (x colour,
+y normal, z ORM) says which samples to actually use. The shadow map cannot serve
+as that placeholder: it is a depth texture and the shader declares a colour one.
+
+Shading is one GGX specular lobe over the wrapped diffuse term -- no IBL, no
+environment probe. Enough to separate wet horn from matte membrane, which is all
+the roughness map is being asked for.
 
 Images must be decoded **before** `cgltf_free`. Their bytes live in a buffer that
 free releases, and reading afterwards is a use-after-free that looked plausible --
@@ -233,6 +251,24 @@ own axis, and rotations down a chain add up -- so applying the flap angle at
 every bone makes total bend depend on how many bones the rig happens to have. The
 generated rig has two bones per wing and the imported one has five, which put the
 imported dragon's wings in a steep V at rest.
+
+### Authored motion under the procedural rig
+
+The rig drives what flight determines -- wings, neck, tail, leg tuck -- and the
+file's own clip supplies everything else: toes, jaw, small shifts of the body.
+Without that layer the extremities are perfectly still, which reads as uncanny
+even when the big motions are correct.
+
+`DragonRig::update` resets to bind, samples the clip, then lets the procedural
+pass override. Joints the rig owns are rebuilt **from bind**, so the clip cannot
+fight them; the leg tuck instead **composes onto** the clip (`rotate_joint`'s
+`onto_current`) so the feet keep their authored motion while still folding.
+
+Only **rotation** tracks are imported. Translation and scale tracks would import
+root motion -- fighting the flight model for control of where the dragon is --
+and stretch bones the skinning assumes are rigid. Before trusting a clip, check
+that it carries no rotation on the root or pelvis; this one does not, so it is
+pure body-local detail.
 
 Two dead ends, recorded so they are not repeated: cutting a rig down to fit a
 joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS is

@@ -129,6 +129,7 @@ std::vector<SDL_GPUVertexAttribute> SkinnedMesh::attributes() {
     push(3, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(SkinnedVertex, uv));
     push(4, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints));
     push(5, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights));
+    push(6, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, tangent));
     return attributes;
 }
 

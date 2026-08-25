@@ -91,22 +91,25 @@ std::string joint_name(const cgltf_node* node, size_t index) {
     return "joint_" + std::to_string(index);
 }
 
-// Maps a primitive's base-colour image to a slot in the result's texture list,
-// decoding it on first use so an image shared by several materials is decoded
-// once.
-int base_colour_image_index(const cgltf_data* data, const cgltf_primitive* primitive,
-                            std::vector<std::pair<const cgltf_image*, int>>& slots) {
-    if (!primitive->material || !primitive->material->has_pbr_metallic_roughness) return -1;
-    const cgltf_texture* texture =
-        primitive->material->pbr_metallic_roughness.base_color_texture.texture;
-    if (!texture || !texture->image) return -1;
-    const cgltf_image* image = texture->image;
+// One entry per distinct image the model needs, in the order they are first
+// referenced. `srgb` records the colour space, which follows from the glTF slot
+// the image appeared in and cannot be recovered from the pixels later.
+struct ImageSlot {
+    const cgltf_image* image;
+    int index;
+    bool srgb;
+};
+
+// Maps a texture reference to a slot, deduplicating so an image shared by
+// several materials -- which this model does -- is decoded and uploaded once.
+int image_index(const cgltf_texture_view& view, bool srgb, std::vector<ImageSlot>& slots) {
+    if (!view.texture || !view.texture->image) return -1;
+    const cgltf_image* image = view.texture->image;
     for (const auto& slot : slots) {
-        if (slot.first == image) return slot.second;
+        if (slot.image == image) return slot.index;
     }
-    (void)data;
     const int index = int(slots.size());
-    slots.emplace_back(image, index);
+    slots.push_back({image, index, srgb});
     return index;
 }
 
@@ -226,7 +229,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
 
     // ---- mesh ----
     out_mesh = SkinnedMeshData();
-    std::vector<std::pair<const cgltf_image*, int>> image_slots;
+    std::vector<ImageSlot> image_slots;
     result.bounds_min = Vec3{1e30f, 1e30f, 1e30f};
     result.bounds_max = Vec3{-1e30f, -1e30f, -1e30f};
 
@@ -241,6 +244,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             const cgltf_accessor* joints = nullptr;
             const cgltf_accessor* weights = nullptr;
             const cgltf_accessor* uvs = nullptr;
+            const cgltf_accessor* tangents = nullptr;
             for (size_t a = 0; a < primitive->attributes_count; ++a) {
                 const cgltf_attribute* attribute = &primitive->attributes[a];
                 switch (attribute->type) {
@@ -252,6 +256,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                         // Only the set the base-colour texture actually uses.
                         if (attribute->index == 0) uvs = attribute->data;
                         break;
+                    case cgltf_attribute_type_tangent: tangents = attribute->data; break;
                     default: break;
                 }
             }
@@ -288,6 +293,14 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                 const uint32_t index =
                     out_mesh.add(local, Vec3::one(), core::Vec2{uv[0], uv[1]}, mapped, weight);
                 out_mesh.vertices[index].normal = Vec3{normal[0], normal[1], normal[2]};
+                if (tangents) {
+                    // glTF stores tangents as xyzw with w = +/-1 handedness, which
+                    // is exactly what the shader wants; no derivation needed.
+                    float tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+                    cgltf_accessor_read_float(tangents, v, tangent, 4);
+                    out_mesh.vertices[index].tangent =
+                        core::Vec4{tangent[0], tangent[1], tangent[2], tangent[3]};
+                }
 
                 result.bounds_min = core::minv(result.bounds_min, local);
                 result.bounds_max = core::maxv(result.bounds_max, local);
@@ -307,8 +320,72 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             SkinnedSubmesh submesh;
             submesh.index_offset = index_start;
             submesh.index_count = uint32_t(out_mesh.indices.size()) - index_start;
-            submesh.base_color_texture = base_colour_image_index(data, primitive, image_slots);
+            if (primitive->material) {
+                const cgltf_material* material = primitive->material;
+                if (material->has_pbr_metallic_roughness) {
+                    const cgltf_pbr_metallic_roughness& pbr = material->pbr_metallic_roughness;
+                    submesh.base_color_texture =
+                        image_index(pbr.base_color_texture, true, image_slots);
+                    submesh.orm_texture =
+                        image_index(pbr.metallic_roughness_texture, false, image_slots);
+                }
+                // A normal map is useless without tangents, and this model only
+                // ships them on the body meshes -- the eyes have neither.
+                if (tangents) {
+                    submesh.normal_texture =
+                        image_index(material->normal_texture, false, image_slots);
+                }
+            }
             out_mesh.submeshes.push_back(submesh);
+        }
+    }
+
+    // ---- animations ----
+    for (size_t a = 0; a < data->animations_count; ++a) {
+        const cgltf_animation* animation = &data->animations[a];
+        AnimationClip clip;
+        clip.name = animation->name ? animation->name : ("clip_" + std::to_string(a));
+
+        for (size_t c = 0; c < animation->channels_count; ++c) {
+            const cgltf_animation_channel* channel = &animation->channels[c];
+            if (channel->target_path != cgltf_animation_path_type_rotation) continue;
+            if (!channel->target_node || !channel->sampler) continue;
+
+            int joint = NO_PARENT;
+            for (size_t i = 0; i < skin->joints_count; ++i) {
+                if (skin->joints[i] == channel->target_node) {
+                    joint = gltf_to_skeleton[i];
+                    break;
+                }
+            }
+            if (joint == NO_PARENT) continue;  // targets something outside the skin
+
+            const cgltf_animation_sampler* sampler = channel->sampler;
+            RotationTrack track;
+            track.joint = joint;
+            track.step = sampler->interpolation == cgltf_interpolation_type_step;
+
+            const size_t keys = sampler->input->count;
+            track.times.reserve(keys);
+            track.rotations.reserve(keys);
+            for (size_t k = 0; k < keys; ++k) {
+                float t = 0.0f;
+                cgltf_accessor_read_float(sampler->input, k, &t, 1);
+                float q[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                // Cubic spline samplers store tangents either side of the value;
+                // reading the plain value gives a usable linear approximation.
+                cgltf_accessor_read_float(sampler->output, k, q, 4);
+                track.times.push_back(t);
+                track.rotations.push_back(core::normalize(Quat{q[0], q[1], q[2], q[3]}));
+                clip.duration = core::maxf(clip.duration, t);
+            }
+            if (!track.times.empty()) clip.tracks.push_back(std::move(track));
+        }
+
+        if (clip.valid()) {
+            LOG_INFO("animation '%s': %zu rotation tracks, %.2f s", clip.name.c_str(),
+                     clip.tracks.size(), clip.duration);
+            result.animations.push_back(std::move(clip));
         }
     }
 
@@ -317,16 +394,18 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
     // reads freed memory. It even looked plausible -- every material appeared to
     // share one image, because the freed pointers happened to compare equal.
     result.textures.resize(image_slots.size());
+    result.texture_srgb.assign(image_slots.size(), 1);
     for (const auto& slot : image_slots) {
-        const cgltf_image* image = slot.first;
+        result.texture_srgb[size_t(slot.index)] = slot.srgb ? 1 : 0;
+        const cgltf_image* image = slot.image;
         if (!image->buffer_view || !image->buffer_view->buffer ||
             !image->buffer_view->buffer->data) {
-            LOG_WARN("image %d is not embedded; skipping", slot.second);
+            LOG_WARN("image %d is not embedded; skipping", slot.index);
             continue;
         }
         const uint8_t* bytes = static_cast<const uint8_t*>(image->buffer_view->buffer->data) +
                                image->buffer_view->offset;
-        result.textures[size_t(slot.second)] =
+        result.textures[size_t(slot.index)] =
             gfx::decode_image(bytes, image->buffer_view->size);
     }
 

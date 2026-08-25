@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "anim/animation.h"
 #include "anim/dragon_rig.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
@@ -301,6 +302,149 @@ void test_rig_responds_to_flight() {
     CHECK(finite);
 }
 
+// A clip's job is to reproduce its keys exactly, interpolate between them, and
+// hold rather than wrap at the ends of a track. Getting the last one wrong makes
+// a limb snap back to its first key on the final frame of every loop.
+void test_animation_track_sampling() {
+    std::printf("rotation tracks sample and hold correctly\n");
+    anim::RotationTrack track;
+    track.joint = 3;
+    track.times = {0.0f, 1.0f, 2.0f};
+    const Quat a = Quat::identity();
+    const Quat b = Quat::from_axis_angle(Vec3::unit_y(), radians(90.0f));
+    const Quat c = Quat::from_axis_angle(Vec3::unit_y(), radians(180.0f));
+    track.rotations = {a, b, c};
+
+    // Keys reproduce exactly.
+    CHECK(near(rotate(track.sample(0.0f), Vec3::unit_z()), rotate(a, Vec3::unit_z())));
+    CHECK(near(rotate(track.sample(1.0f), Vec3::unit_z()), rotate(b, Vec3::unit_z())));
+
+    // Halfway between two keys is halfway round the arc.
+    const Vec3 half = rotate(track.sample(0.5f), Vec3::unit_z());
+    CHECK(near(half, rotate(Quat::from_axis_angle(Vec3::unit_y(), radians(45.0f)), Vec3::unit_z()),
+               1e-3f));
+
+    // Outside the track, the endpoints hold.
+    CHECK(near(rotate(track.sample(-5.0f), Vec3::unit_z()), rotate(a, Vec3::unit_z())));
+    CHECK(near(rotate(track.sample(99.0f), Vec3::unit_z()), rotate(c, Vec3::unit_z())));
+
+    // Step tracks jump rather than blend.
+    track.step = true;
+    CHECK(near(rotate(track.sample(0.5f), Vec3::unit_z()), rotate(a, Vec3::unit_z())));
+    CHECK(near(rotate(track.sample(1.75f), Vec3::unit_z()), rotate(b, Vec3::unit_z())));
+}
+
+void test_animation_clip_loops() {
+    std::printf("clips loop and only touch the joints they track\n");
+    Skeleton skeleton;
+    skeleton.add_joint("root", anim::NO_PARENT, at(Vec3::zero()));
+    skeleton.add_joint("a", 0, at(Vec3{0.0f, 1.0f, 0.0f}));
+    skeleton.add_joint("b", 1, at(Vec3{0.0f, 1.0f, 0.0f}));
+    skeleton.finalize();
+
+    anim::AnimationClip clip;
+    clip.name = "spin";
+    clip.duration = 2.0f;
+    anim::RotationTrack track;
+    track.joint = 1;
+    track.times = {0.0f, 1.0f, 2.0f};
+    track.rotations = {Quat::identity(),
+                       Quat::from_axis_angle(Vec3::unit_x(), radians(60.0f)),
+                       Quat::identity()};
+    clip.tracks.push_back(track);
+    CHECK(clip.valid());
+
+    Pose pose;
+    pose.reset_to_bind(skeleton);
+    clip.sample(1.0f, pose);
+    // The tracked joint moved...
+    CHECK(!near(rotate(pose.local[1].rotation, Vec3::unit_y()), Vec3::unit_y(), 1e-3f));
+    // ...and the untracked ones were left at bind, so a clip can be layered
+    // under procedural motion without disturbing what it does not animate.
+    CHECK(near(rotate(pose.local[2].rotation, Vec3::unit_y()), Vec3::unit_y()));
+
+    // A time one full duration later must give the same pose.
+    Pose looped;
+    looped.reset_to_bind(skeleton);
+    clip.sample(1.0f + clip.duration * 3.0f, looped);
+    CHECK(near(rotate(looped.local[1].rotation, Vec3::unit_y()),
+               rotate(pose.local[1].rotation, Vec3::unit_y()), 1e-3f));
+
+    // Negative time is as legal as any other: the clock may run backwards.
+    Pose backwards;
+    backwards.reset_to_bind(skeleton);
+    clip.sample(1.0f - clip.duration, backwards);
+    CHECK(near(rotate(backwards.local[1].rotation, Vec3::unit_y()),
+               rotate(pose.local[1].rotation, Vec3::unit_y()), 1e-3f));
+}
+
+// The point of the base-clip layer: joints the rig does not drive should pick up
+// the authored motion, while the ones it does drive stay under its control.
+void test_base_clip_layers_under_rig() {
+    std::printf("an authored clip animates what the rig does not own\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    // A clip that swings the head, which the rig leaves alone.
+    anim::AnimationClip clip;
+    clip.name = "nod";
+    clip.duration = 1.0f;
+    anim::RotationTrack track;
+    track.joint = joints.head;
+    track.times = {0.0f, 0.5f, 1.0f};
+    track.rotations = {Quat::identity(),
+                       Quat::from_axis_angle(Vec3::unit_x(), radians(35.0f)),
+                       Quat::identity()};
+    clip.tracks.push_back(track);
+
+    game::FlightState state;
+    state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    CHECK(!rig.has_base_clip());
+    rig.set_base_clip(&clip);
+    CHECK(rig.has_base_clip());
+
+    auto head_direction = [&](anim::DragonRig& r) {
+        const Mat4& m = r.world_matrices()[size_t(joints.head)];
+        return normalize(Vec3{m.col[1].x, m.col[1].y, m.col[1].z});
+    };
+
+    rig.update(state, 0.0f);
+    const Vec3 start = head_direction(rig);
+    rig.update(state, 0.5f);
+    const Vec3 mid = head_direction(rig);
+    CHECK(!near(start, mid, 1e-2f));
+
+    // Weight zero must restore exactly the un-layered behaviour, so the slider
+    // is an honest A/B rather than an approximation of one.
+    anim::DragonRig plain;
+    plain.init(skeleton, joints);
+    plain.update(state, 0.5f);
+
+    anim::DragonRig muted;
+    muted.init(skeleton, joints);
+    muted.set_base_clip(&clip);
+    muted.tuning.base_clip_weight = 0.0f;
+    muted.update(state, 0.5f);
+    CHECK(near(head_direction(muted), head_direction(plain)));
+
+    // Every matrix stays finite with a clip layered in.
+    bool finite = true;
+    for (const Mat4& m : rig.skinning_matrices()) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (!std::isfinite(m.col[c][r])) finite = false;
+            }
+        }
+    }
+    CHECK(finite);
+}
+
 }  // namespace
 
 int main() {
@@ -311,6 +455,9 @@ int main() {
     test_blended_skinning_preserves_shape();
     test_dragon_rig_builds();
     test_rig_responds_to_flight();
+    test_animation_track_sampling();
+    test_animation_clip_loops();
+    test_base_clip_layers_under_rig();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

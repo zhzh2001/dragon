@@ -24,8 +24,13 @@ ImageData decode_image(const uint8_t* bytes, size_t size);
 // Mips are not optional here: a 4K dragon texture viewed from across a valley
 // aliases into shimmering noise without them, and that reads as the model being
 // broken rather than as a sampling artefact.
+//
+// `srgb` must be true for base colour and false for data maps. A normal map
+// decoded through the sRGB curve gives wrong directions, and a roughness map
+// read that way is visibly too glossy -- both look like shading bugs rather than
+// like a colour-space mistake, so the distinction is worth being explicit about.
 SDL_GPUTexture* create_texture_from_image(SDL_GPUDevice* gpu, const ImageData& image,
-                                          const char* debug_name);
+                                          const char* debug_name, bool srgb = true);
 
 // Anisotropic, repeating sampler suited to model albedo.
 SDL_GPUSampler* create_model_sampler(SDL_GPUDevice* gpu);

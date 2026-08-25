@@ -314,11 +314,13 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     compute_skinning_matrices(skeleton, world_, skinning_);
 }
 
-void DragonRig::rotate_joint(int joint, Vec3 body_axis, float angle) {
+void DragonRig::rotate_joint(int joint, Vec3 body_axis, float angle, bool onto_current) {
     if (joint == NO_PARENT || size_t(joint) >= pose_.local.size()) return;
     const Vec3 axis = core::rotate(parent_bind_inverse_[size_t(joint)], body_axis);
-    Transform local = skeleton_->joint(joint).local_bind;
-    // Composed with the bind rotation, not substituted for it.
+    // Composing onto the current pose keeps the authored clip's motion and adds
+    // to it; starting from bind replaces the clip for joints the rig owns.
+    Transform local =
+        onto_current ? pose_.local[size_t(joint)] : skeleton_->joint(joint).local_bind;
     local.rotation = core::normalize(Quat::from_axis_angle(axis, angle) * local.rotation);
     pose_.local[size_t(joint)] = local;
 }
@@ -578,7 +580,9 @@ void DragonRig::drive_legs(const game::FlightState& state, float dt) {
         // than curling into a spiral.
         float sign = 1.0f;
         for (const int joint : joints_.leg[side]) {
-            rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign);
+            // Added to the authored pose rather than replacing it, so the feet
+            // keep whatever motion the clip gives them while still tucking.
+            rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign, true);
             sign *= -1.15f;
         }
     }
@@ -599,6 +603,21 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     previous_velocity_ = state.velocity;
     previous_angular_velocity_ = state.angular_velocity;
     have_previous_ = true;
+
+    // Authored motion first: it fills in every joint the procedural rig does not
+    // own, and the rig then overrides the ones flight determines.
+    pose_.reset_to_bind(*skeleton_);
+    if (base_clip_ && base_clip_->valid() && tuning.base_clip_weight > 0.0f) {
+        clip_time_ += dt * tuning.base_clip_rate;
+        if (tuning.base_clip_weight >= 0.999f) {
+            base_clip_->sample(clip_time_, pose_);
+        } else {
+            Pose clip_pose;
+            clip_pose.reset_to_bind(*skeleton_);
+            base_clip_->sample(clip_time_, clip_pose);
+            blend_poses(pose_, clip_pose, tuning.base_clip_weight, pose_);
+        }
+    }
 
     drive_wings(state);
 

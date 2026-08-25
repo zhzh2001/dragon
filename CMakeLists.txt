@@ -29,6 +29,7 @@ add_executable(dragon
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
+  src/anim/animation.cpp
   src/anim/gltf_loader.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
@@ -80,6 +81,7 @@ add_executable(test_flight
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
+  src/anim/animation.cpp
   src/gfx/buffer.cpp
 )
 target_include_directories(test_flight PRIVATE src)
@@ -98,6 +100,7 @@ add_executable(test_camera_rig
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
+  src/anim/animation.cpp
   src/gfx/buffer.cpp
 )
 target_include_directories(test_camera_rig PRIVATE src)
@@ -123,6 +126,7 @@ add_test(NAME rally COMMAND test_rally)
 
 add_executable(test_anim
   tests/test_anim.cpp
+  src/anim/animation.cpp
   src/anim/gltf_loader.cpp
   src/gfx/texture.cpp
   src/anim/skeleton.cpp

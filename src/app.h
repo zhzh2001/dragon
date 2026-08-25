@@ -129,6 +129,7 @@ private:
     // The ghost needs its own rig: the spring chains carry state, so one rig
     // cannot serve two dragons.
     anim::DragonRig ghost_rig_;
+    std::vector<anim::AnimationClip> dragon_animations_;
     std::vector<SDL_GPUTexture*> dragon_textures_;
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;

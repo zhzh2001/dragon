@@ -40,9 +40,10 @@ struct ModelUniforms {
     // serve many states -- the next checkpoint glows, the rest do not -- without
     // needing a material system.
     core::Vec4 tint = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
-    // x: 1 when a base-colour texture is bound, 0 to fall back to vertex colour.
-    // Needed because a submesh without a material still has to bind *something*
-    // to satisfy the pipeline's sampler slot.
+    // Which material maps are real for this draw: x base colour, y normal,
+    // z occlusion-roughness-metallic. Needed because a submesh without a given
+    // map still has to bind *something* to satisfy the pipeline's sampler slot,
+    // and the shader has to know to ignore it.
     core::Vec4 material = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 

@@ -147,12 +147,15 @@ bool App::init(const Options& options) {
                      asset_.offset.x, asset_.offset.y, asset_.offset.z);
         }
 
-        // Upload whatever base-colour textures came with the model.
+        // Upload whatever textures came with the model. The loader recorded the
+        // colour space of each, which is not something the pixels reveal.
         model_sampler_ = gfx::create_model_sampler(device_.gpu());
         for (size_t i = 0; i < loaded.textures.size(); ++i) {
-            const std::string name = "dragon_base_" + std::to_string(i);
-            dragon_textures_.push_back(
-                gfx::create_texture_from_image(device_.gpu(), loaded.textures[i], name.c_str()));
+            const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
+            const std::string name =
+                "dragon_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
+            dragon_textures_.push_back(gfx::create_texture_from_image(
+                device_.gpu(), loaded.textures[i], name.c_str(), srgb));
         }
 
         dragon_mesh_.upload(device_.gpu(), mesh_data, "dragon");
@@ -161,6 +164,12 @@ bool App::init(const Options& options) {
         // The chain dynamics need to know how big the dragon is in metres.
         dragon_rig_.set_model_scale(asset_.scale);
         ghost_rig_.set_model_scale(asset_.scale);
+
+        if (!loaded.animations.empty()) {
+            dragon_animations_ = loaded.animations;
+            dragon_rig_.set_base_clip(&dragon_animations_.front());
+            ghost_rig_.set_base_clip(&dragon_animations_.front());
+        }
     }
 
     // A tuning file next to the assets overrides the built-in defaults, so a

@@ -29,7 +29,7 @@ ImageData decode_image(const uint8_t* bytes, size_t size) {
 }
 
 SDL_GPUTexture* create_texture_from_image(SDL_GPUDevice* gpu, const ImageData& image,
-                                          const char* debug_name) {
+                                          const char* debug_name, bool srgb) {
     if (!image.valid()) return nullptr;
 
     uint32_t levels = 1;
@@ -40,7 +40,8 @@ SDL_GPUTexture* create_texture_from_image(SDL_GPUDevice* gpu, const ImageData& i
 
     SDL_GPUTextureCreateInfo info = {};
     info.type = SDL_GPU_TEXTURETYPE_2D;
-    info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
+    info.format = srgb ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB
+                       : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     // COLOR_TARGET as well as SAMPLER: SDL generates mips by rendering into the
     // smaller levels, so the texture has to be usable as a render target.
     info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
