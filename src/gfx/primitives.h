@@ -19,4 +19,8 @@ MeshData make_torus(float radius, float tube_radius, core::Vec3 color, int ring_
 MeshData make_annulus(float inner_radius, float outer_radius, core::Vec3 color,
                       int segments = 48);
 
+// UV sphere centred on the origin. Used for anything roughly round that does not
+// deserve an asset: projectiles, target drones, blast markers.
+MeshData make_sphere(float radius, core::Vec3 color, int segments = 16, int rings = 10);
+
 }  // namespace gfx

@@ -22,6 +22,9 @@ Useful flags:
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
 
+`--combat` arms the dragon and spawns a wave; `--attack` also holds breath and
+fires, which is how the flame and the projectiles get onto a screenshot.
+
 Verify a visual change without a human at the keyboard:
 
 ```sh
@@ -55,6 +58,9 @@ wingbeat, the inverted recovery, and every generated course were checked.
 | V | First person, from behind the dragon's head |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
+| F / left mouse | Fire breath (hold) -- gamepad LB |
+| G | Fireball -- gamepad RB |
+| X | Boost -- gamepad X |
 | Esc | Release the mouse if captured; again to quit |
 
 ImGui keyboard and gamepad navigation are deliberately disabled: with them on,
@@ -136,7 +142,47 @@ tests/       plain executables, no framework
   the generated one.
 - **M6.1** the real dragon: glTF skinned load, inertial neck/tail chains, full
   PBR material set, and the file's authored clip layered under the rig.
-- **Next:** M11 (first combat), or M7 polish (thermals, particles, audio).
+- **M11** combat core: fire breath, fireballs, boost, health and regeneration,
+  practice sentinels that shoot back, and the combat HUD.
+- **Next:** M12 readability (soft lock-on, damage numbers) and M14 bots, or M7
+  polish (thermals, particles, audio).
+
+## Combat
+
+`game::Combat` owns player resources, projectiles and the targets, and reads a
+`CombatInput` -- so a bot will drive it through exactly the same struct the
+player fills. It renders nothing and reads input from nothing.
+
+Three decisions that are the milestone:
+
+- **Hitboxes are generous and swept.** A fireball covers 3.5 m per frame at
+  210 m/s; a point test tunnels straight through a target it visibly struck, so
+  every hit is a swept-sphere test against the segment the projectile actually
+  travelled. A near miss still lands reduced damage out to the blast radius. A
+  3D dogfight is hard enough to read without demanding pixel accuracy, and a
+  shot that clearly hit but did not is the worst thing an air combat game can do.
+- **Boost is a flight force, not a combat one.** `Combat` owns the cooldown and
+  reports `boost_active()`; `FlightInput::boost` applies it. Everything that
+  pushes the dragon forward stays in the flight model.
+- **The breath meter latches and does not refill while held.** Without both, an
+  empty meter under a held button crosses the restart threshold every few frames
+  and produces a stutter of single-frame damage.
+
+Sentinels are **not AI**: they fly a fixed orbit and fire on a timer with
+deliberate aim spread. They exist so health, aim and the cooldown rhythm can be
+tuned against something that shoots back. M14's bots replace them, driving the
+same flight model the player uses.
+
+A bug worth remembering: `spawn_wave` originally set a sentinel's orbit but never
+its `position`, so a freshly spawned or respawned one sat at the **world origin**
+-- a live, shootable target in the middle of the map -- until its first update
+moved it. The respawn path returns early, so nothing else would have placed it.
+Initialise derived state at spawn, not on the first tick.
+
+Fire is drawn **unlit** (`ModelUniforms::material.w`). The shared tonemap ends in
+a gamma encode, so anything bright desaturates toward white; adding two units of
+sunlight on top of a flame turns it into a white balloon. A light source should
+not also be lit.
 
 ## Importing a rigged model
 

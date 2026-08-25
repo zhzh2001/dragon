@@ -90,4 +90,43 @@ MeshData make_annulus(float inner_radius, float outer_radius, Vec3 color, int se
     return mesh;
 }
 
+MeshData make_sphere(float radius, Vec3 color, int segments, int rings) {
+    MeshData mesh;
+    if (segments < 3) segments = 3;
+    if (rings < 2) rings = 2;
+
+    // Poles are duplicated per column rather than shared. A shared pole vertex
+    // needs one normal for many triangles, which pinches the shading; the extra
+    // vertices are free at these counts.
+    for (int r = 0; r <= rings; ++r) {
+        const float v = core::PI * float(r) / float(rings);
+        const float sin_v = std::sin(v), cos_v = std::cos(v);
+        for (int s = 0; s <= segments; ++s) {
+            const float u = core::TWO_PI * float(s) / float(segments);
+            const Vec3 normal{sin_v * std::cos(u), cos_v, sin_v * std::sin(u)};
+
+            MeshVertex vertex;
+            vertex.position = normal * radius;
+            vertex.normal = normal;
+            vertex.color = color;
+            mesh.vertices.push_back(vertex);
+        }
+    }
+
+    const int stride = segments + 1;
+    for (int r = 0; r < rings; ++r) {
+        for (int s = 0; s < segments; ++s) {
+            const uint32_t a = uint32_t(r * stride + s);
+            const uint32_t b = uint32_t(a + uint32_t(stride));
+            mesh.indices.push_back(a);
+            mesh.indices.push_back(b);
+            mesh.indices.push_back(a + 1);
+            mesh.indices.push_back(a + 1);
+            mesh.indices.push_back(b);
+            mesh.indices.push_back(b + 1);
+        }
+    }
+    return mesh;
+}
+
 }  // namespace gfx

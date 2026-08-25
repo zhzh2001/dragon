@@ -43,6 +43,11 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.inspect_distance = float(SDL_atof(argv[++i]));
             }
+        } else if (arg == "--combat") {
+            options.combat = true;
+        } else if (arg == "--attack") {
+            options.combat = true;
+            options.attack = true;
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -180,6 +185,9 @@ bool App::init(const Options& options) {
     ring_mesh_.upload(device_.gpu(),
                       gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
                       "checkpoint_ring");
+    // A unit sphere scaled per use: projectiles, sentinels, blast markers.
+    sphere_mesh_.upload(device_.gpu(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
+                        "unit_sphere");
     rebuild_courses();
     best_times_.load(ASSET_ROOT "/best_times.txt");
     current_course_ = options.course_index;
@@ -191,6 +199,13 @@ bool App::init(const Options& options) {
     apply_camera_preset(options.camera_mode);
     chase_.first_person = options.first_person;
     respawn_dragon();
+
+    // After the spawn: the arena is built around where the dragon actually
+    // starts, so a headless combat run opens with targets in front of it.
+    if (options.combat) {
+        combat_enabled_ = true;
+        combat_.reset(&terrain_, flight_.state().position, 20260824u);
+    }
 
     if (options.has_camera) {
         camera_.set_position(options.camera_position, options.camera_target);
@@ -280,6 +295,9 @@ void App::respawn_dragon() {
 
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
     chase_.snap_to(flight_.state());
+    // Health and breath come back, but the sentinels do not: dying should cost
+    // the progress made against a wave, not reset the fight.
+    combat_.revive();
     rally_.restart();
     split_flash_ = 0.0f;
     miss_flash_ = 0.0f;
@@ -439,6 +457,10 @@ game::FlightInput App::read_flight_input() const {
         in.brake =
             (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL)) ? 1.0f : 0.0f;
     }
+
+    // Combat boost is an ability with its own cooldown, so the flight model only
+    // ever sees whether it is currently firing.
+    in.boost = combat_.boost_active() ? 1.0f : 0.0f;
 
     // Auto-flap. Holding a key to stay airborne is busywork rather than skill,
     // and forgetting it is the most common way a new pilot ends up in the ground.
@@ -609,6 +631,18 @@ void App::update(float dt) {
         camera_.set_position(s.position + offset, s.position);
         free_camera_ = true;
     }
+
+    if (combat_enabled_) {
+        const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
+        if (events.had_hit) {
+            hit_marker_ = 0.35f;
+            hit_marker_position_ = events.last_hit;
+        }
+        if (events.damage_taken > 0.0f) damage_flash_ = 1.0f;
+        if (events.player_died) respawn_dragon();
+    }
+    hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
+    damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
 
     rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
@@ -798,6 +832,7 @@ void App::build_ui(float dt) {
     build_flight_ui();
     build_rally_ui();
     build_dragon_ui();
+    build_combat_ui();
 
     ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
@@ -983,6 +1018,8 @@ bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float widt
 // building a 2D renderer for it.
 void App::draw_hud() {
     if (!show_hud_ || options_.hide_ui) return;
+
+    if (combat_enabled_) draw_combat_hud();
 
     const game::Course& course = rally_.course();
     if (course.rings.empty()) return;
@@ -1274,7 +1311,7 @@ void App::build_dragon_ui() {
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
     }
 
-    if (ImGui::CollapsingHeader("Legs & authored motion", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Legs & authored motion")) {
         ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
         if (dragon_rig_.has_base_clip()) {
             ImGui::TextDisabled("clip '%s'", dragon_animations_.front().name.c_str());
@@ -1291,6 +1328,330 @@ void App::build_dragon_ui() {
     // A replay must animate exactly like the live dragon, or the ghost stops
     // being a fair comparison.
     ghost_rig_.tuning = rig;
+    ImGui::End();
+}
+
+// Combat is deliberately on separate bindings from flight, and on buttons that
+// do not already mean something: the flight controls were fought over once
+// already and are not worth disturbing.
+game::CombatInput App::read_combat_input() const {
+    game::CombatInput in;
+    if (!combat_enabled_) return in;
+
+    if (options_.attack) {
+        in.breath = true;
+        in.fire = true;  // the cooldown decides the actual rate
+        return in;
+    }
+
+    if (free_camera_ || autopilot_) return in;
+
+    const bool ui_has_mouse = ui_.wants_mouse();
+    // Left mouse only doubles as breath while mouse steering is off, which it is
+    // by default; with it on the button is already the steering capture.
+    in.breath = input_.down(SDL_SCANCODE_F) ||
+                (!controls_.mouse_stick && !ui_has_mouse && input_.mouse_down(SDL_BUTTON_LEFT)) ||
+                input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    in.fire = input_.pressed(SDL_SCANCODE_G) ||
+              input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    in.boost = input_.pressed(SDL_SCANCODE_LSHIFT) && false;  // shift is tuck-dive
+    in.boost = input_.pressed(SDL_SCANCODE_X) ||
+               input_.gamepad_button(SDL_GAMEPAD_BUTTON_WEST);
+    return in;
+}
+
+// Sentinels, projectiles and the flame, drawn with the one unit sphere. Colour
+// carries all the meaning here: hostile fire has to be distinguishable from
+// your own at a glance and at speed.
+void App::draw_combat(SDL_GPURenderPass* pass) {
+    if (!combat_enabled_ || !sphere_mesh_.valid()) return;
+
+    // `unlit` drops the sun and ambient terms: fire is a light source, not a
+    // surface, and lighting it as one washes the colour out to white.
+    auto draw_ball = [&](core::Vec3 position, float radius, core::Vec3 colour, float emissive,
+                         bool unlit = false) {
+        gfx::ModelUniforms model;
+        model.model =
+            core::Mat4::trs(position, core::Quat::identity(), core::Vec3{radius, radius, radius});
+        model.tint = core::Vec4{colour.x, colour.y, colour.z, emissive};
+        model.material.w = unlit ? 1.0f : 0.0f;
+        world_.draw_mesh(device_, pass, sphere_mesh_, model);
+    };
+
+    for (const game::Sentinel& sentinel : combat_.sentinels()) {
+        if (!sentinel.alive) continue;
+        // Flashes white when hit. At 500 m a health bar is unreadable but a
+        // flash is not, and knowing a shot landed is what lets you commit.
+        const float flash = sentinel.hit_flash;
+        const float health = sentinel.max_health > 0.0f ? sentinel.health / sentinel.max_health : 0.0f;
+        const core::Vec3 base{0.72f, 0.24f, 0.18f};
+        const core::Vec3 colour = core::lerp(base, core::Vec3::one(), flash);
+        draw_ball(sentinel.position, combat_.tuning.sentinel_radius, colour, 0.18f + flash * 0.8f);
+        // A smaller inner sphere shrinks as it takes damage: a health readout
+        // that needs no UI and works at any distance or angle.
+        draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health,
+                  core::Vec3{1.0f, 0.70f, 0.16f}, 1.0f, true);
+    }
+
+    for (const game::Projectile& projectile : combat_.projectiles()) {
+        if (!projectile.alive) continue;
+        const bool mine = projectile.team == game::Team::Player;
+        const core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f}
+                                       : core::Vec3{0.35f, 0.65f, 1.0f};
+        // A hot core inside a larger, dimmer glow: the shape that reads as a
+        // burning projectile rather than as a coloured marble.
+        draw_ball(projectile.position, projectile.radius * 1.9f, colour, 0.5f, true);
+        draw_ball(projectile.position, projectile.radius * 0.8f,
+                  core::Vec3{1.0f, 0.88f, 0.62f}, 1.6f, true);
+    }
+
+    // The flame: a line of spheres widening down the cone. It is drawn from the
+    // same origin and axis the damage test uses, so what looks engulfed is.
+    if (combat_.breathing()) {
+        const float range = combat_.tuning.breath_range;
+        const float spread = std::tan(core::radians(combat_.tuning.breath_half_angle_deg));
+        const int puffs = 22;
+        for (int i = 1; i <= puffs; ++i) {
+            const float t = float(i) / float(puffs);
+            const float distance = range * t;
+            // Flicker, so the stream is alive rather than a string of beads.
+            // Per-puff phase, otherwise the whole flame pulses as one object.
+            const float flicker =
+                0.86f + 0.14f * std::sin(time_seconds_ * 26.0f + float(i) * 1.7f);
+            const core::Vec3 position =
+                combat_.breath_origin() + combat_.breath_direction() * distance;
+            // Well inside the damage cone rather than filling it: a flame that
+            // exactly fills its hitbox looks like a cone, not like fire.
+            const float radius = core::maxf(distance * spread * 0.55f, 0.5f) * flicker;
+            // White-hot at the mouth, cooling through orange to deep red.
+            const core::Vec3 colour =
+                core::lerp(core::Vec3{1.0f, 0.88f, 0.60f}, core::Vec3{0.98f, 0.22f, 0.04f}, t * t);
+            // Falls away sharply so the white-hot core stays small, but never to
+            // nothing: the shared tonemap turns a dim saturated colour muddy, and
+            // the tail of a flame should still glow rather than look like soot.
+            const float emissive = 2.4f * (1.0f - t) * (1.0f - t) + 0.45f;
+            draw_ball(position, radius, colour, emissive, true);
+        }
+    }
+
+    if (hit_marker_ > 0.0f) {
+        draw_ball(hit_marker_position_, 4.0f * (1.0f + (0.35f - hit_marker_) * 6.0f),
+                  core::Vec3{1.0f, 0.92f, 0.80f}, hit_marker_ * 4.0f, true);
+    }
+}
+
+// Combat readouts. Everything here answers a question the player has while
+// being shot at: how much have I got left, can I shoot yet, and where is the
+// thing hitting me. A number they have to read is a number they will not read.
+void App::draw_combat_hud() {
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const float width = float(device_.width());
+    const float height = float(device_.height());
+    const core::Mat4 view_proj = active_camera().view_projection(device_.aspect());
+
+    // ---- taking fire ----
+    // A full-screen vignette rather than a number: peripheral, unmissable, and
+    // it does not compete with the thing you are trying to aim at.
+    if (damage_flash_ > 0.0f) {
+        const float strength = core::saturate(damage_flash_);
+        const ImU32 edge = IM_COL32(190, 30, 25, int(120.0f * strength));
+        const float band = height * 0.22f;
+        draw->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(width, band), edge, edge,
+                                      IM_COL32(190, 30, 25, 0), IM_COL32(190, 30, 25, 0));
+        draw->AddRectFilledMultiColor(ImVec2(0, height - band), ImVec2(width, height),
+                                      IM_COL32(190, 30, 25, 0), IM_COL32(190, 30, 25, 0), edge,
+                                      edge);
+    }
+
+    // ---- health and breath ----
+    const float bar_width = 260.0f;
+    const float bar_height = 14.0f;
+    const float x = width * 0.5f - bar_width * 0.5f;
+    const float y = height - 96.0f;
+
+    auto bar = [&](float top, float fraction, ImU32 fill, const char* label) {
+        draw->AddRectFilled(ImVec2(x, top), ImVec2(x + bar_width, top + bar_height),
+                            IM_COL32(10, 14, 20, 170), 3.0f);
+        draw->AddRectFilled(ImVec2(x, top),
+                            ImVec2(x + bar_width * core::saturate(fraction), top + bar_height),
+                            fill, 3.0f);
+        draw->AddRect(ImVec2(x, top), ImVec2(x + bar_width, top + bar_height),
+                      IM_COL32(255, 255, 255, 60), 3.0f);
+        draw->AddText(ImVec2(x - 62.0f, top - 1.0f), IM_COL32(220, 230, 245, 190), label);
+    };
+
+    const float health = combat_.health_fraction();
+    // Red below a third: the threshold where disengaging is the right call.
+    const ImU32 health_colour = health > 0.33f ? IM_COL32(90, 200, 110, 220)
+                                               : IM_COL32(225, 70, 55, 235);
+    bar(y, health, health_colour, "HEALTH");
+    bar(y + bar_height + 6.0f, combat_.breath(),
+        combat_.breathing() ? IM_COL32(255, 150, 40, 230) : IM_COL32(230, 190, 90, 190), "BREATH");
+
+    // ---- ability readiness ----
+    // Filling back to full is the cue, so it can be read at a glance without
+    // parsing a countdown.
+    auto pip = [&](float centre_x, float ready, const char* label, ImU32 colour) {
+        const float radius = 15.0f;
+        const ImVec2 middle(centre_x, y + 58.0f);
+        draw->AddCircleFilled(middle, radius, IM_COL32(10, 14, 20, 170), 20);
+        if (ready >= 1.0f) {
+            draw->AddCircleFilled(middle, radius - 3.0f, colour, 20);
+        } else {
+            draw->PathArcTo(middle, radius - 3.0f, -core::HALF_PI,
+                            -core::HALF_PI + core::TWO_PI * ready, 20);
+            draw->PathLineTo(middle);
+            draw->PathFillConvex(IM_COL32(colour >> IM_COL32_R_SHIFT & 0xff,
+                                          colour >> IM_COL32_G_SHIFT & 0xff,
+                                          colour >> IM_COL32_B_SHIFT & 0xff, 110));
+        }
+        draw->AddCircle(middle, radius, IM_COL32(255, 255, 255, 70), 20);
+        const ImVec2 size = ImGui::CalcTextSize(label);
+        draw->AddText(ImVec2(middle.x - size.x * 0.5f, middle.y - size.y * 0.5f),
+                      IM_COL32(255, 255, 255, 230), label);
+    };
+    pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
+    pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
+
+    // ---- target markers ----
+    // Off-screen threats get an arrow at the screen edge. A 3D dogfight is
+    // illegible without this: an enemy you cannot locate is not a fight, it is
+    // damage arriving from nowhere.
+    const core::Vec3 eye = active_camera().position;
+    for (const game::Sentinel& sentinel : combat_.sentinels()) {
+        if (!sentinel.alive) continue;
+        const float range = core::distance(flight_.state().position, sentinel.position);
+
+        ImVec2 screen;
+        const bool on_screen =
+            project_to_screen(view_proj, sentinel.position, width, height, screen) &&
+            screen.x > 4.0f && screen.x < width - 4.0f && screen.y > 4.0f && screen.y < height - 4.0f;
+
+        const ImU32 colour = IM_COL32(255, 110, 90, 210);
+        if (on_screen) {
+            // Brackets rather than a box: they read as a target at any size and
+            // do not obscure what they surround.
+            const float size = core::clampf(2600.0f / core::maxf(range, 1.0f), 10.0f, 60.0f);
+            const float arm = size * 0.35f;
+            const ImVec2 corners[4] = {ImVec2(screen.x - size, screen.y - size),
+                                       ImVec2(screen.x + size, screen.y - size),
+                                       ImVec2(screen.x + size, screen.y + size),
+                                       ImVec2(screen.x - size, screen.y + size)};
+            const ImVec2 steps[4] = {ImVec2(arm, arm), ImVec2(-arm, arm), ImVec2(-arm, -arm),
+                                     ImVec2(arm, -arm)};
+            for (int i = 0; i < 4; ++i) {
+                draw->AddLine(corners[i], ImVec2(corners[i].x + steps[i].x, corners[i].y), colour,
+                              1.8f);
+                draw->AddLine(corners[i], ImVec2(corners[i].x, corners[i].y + steps[i].y), colour,
+                              1.8f);
+            }
+            char label[32];
+            std::snprintf(label, sizeof(label), "%.0f m", range);
+            draw->AddText(ImVec2(screen.x + size + 5.0f, screen.y - 7.0f),
+                          IM_COL32(255, 200, 190, 190), label);
+        } else {
+            // Direction to it, projected onto the screen plane and pinned to the
+            // edge of a circle around the centre.
+            const core::Vec3 to_target = sentinel.position - eye;
+            const gfx::Camera& camera = active_camera();
+            const float right = core::dot(to_target, camera.right());
+            const float up = core::dot(to_target, camera.up());
+            const float ahead = core::dot(to_target, camera.forward());
+            core::Vec2 direction{right, -up};
+            // Behind the camera the projection flips, so it is mirrored back.
+            if (ahead < 0.0f) direction = core::Vec2{-direction.x, -direction.y};
+            const float span = core::length(direction);
+            if (span < 1e-3f) continue;
+            direction = core::Vec2{direction.x / span, direction.y / span};
+
+            const float radius = core::minf(width, height) * 0.36f;
+            const ImVec2 centre(width * 0.5f, height * 0.5f);
+            const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
+            const ImVec2 perpendicular(-direction.y, direction.x);
+            const float wing = 8.0f;
+            draw->AddTriangleFilled(
+                tip,
+                ImVec2(tip.x - direction.x * 16.0f + perpendicular.x * wing,
+                       tip.y - direction.y * 16.0f + perpendicular.y * wing),
+                ImVec2(tip.x - direction.x * 16.0f - perpendicular.x * wing,
+                       tip.y - direction.y * 16.0f - perpendicular.y * wing),
+                colour);
+        }
+    }
+
+    if (!combat_.alive()) {
+        const char* text = "DOWNED";
+        const ImVec2 size = ImGui::CalcTextSize(text);
+        draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, height * 0.42f),
+                      IM_COL32(255, 80, 70, 240), text);
+    }
+}
+
+void App::build_combat_ui() {
+    game::CombatTuning& t = combat_.tuning;
+
+    ImGui::SetNextWindowPos(ImVec2(408.0f, 396.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(384, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Combat");
+
+    if (ImGui::Checkbox("combat enabled", &combat_enabled_) && combat_enabled_) {
+        combat_.reset(&terrain_, flight_.state().position, 20260824u);
+    }
+    if (!combat_enabled_) {
+        ImGui::TextDisabled("switch on to spawn sentinels and arm the dragon");
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Text("health %5.0f / %.0f   breath %3.0f%%", combat_.health(), t.max_health,
+                combat_.breath() * 100.0f);
+    ImGui::Text("sentinels %d alive   %d destroyed", combat_.sentinels_alive(), combat_.kills());
+    ImGui::TextDisabled("F or LMB breath, G fireball, X boost");
+    ImGui::TextDisabled("gamepad: LB breath, RB fireball, X boost");
+
+    if (ImGui::Button("respawn wave")) combat_.spawn_wave(5);
+    ImGui::SameLine();
+    if (ImGui::Button("restock (+3)")) combat_.spawn_wave(3);
+    ImGui::SameLine();
+    if (ImGui::Button("heal")) combat_.revive();
+
+    if (ImGui::CollapsingHeader("Fireball")) {
+        ImGui::SliderFloat("speed", &t.fireball_speed, 60.0f, 500.0f, "%.0f m/s");
+        ImGui::SliderFloat("damage", &t.fireball_damage, 1.0f, 100.0f, "%.0f");
+        ImGui::SliderFloat("hit radius", &t.fireball_radius, 0.5f, 12.0f, "%.1f m");
+        ImGui::SliderFloat("blast radius", &t.fireball_blast_radius, 0.0f, 40.0f, "%.0f m");
+        ImGui::SliderFloat("cooldown", &t.fireball_cooldown, 0.1f, 3.0f, "%.2f s");
+        ImGui::SliderFloat("gravity", &t.fireball_gravity, 0.0f, 20.0f, "%.1f m/s2");
+    }
+
+    if (ImGui::CollapsingHeader("Breath")) {
+        ImGui::SliderFloat("range", &t.breath_range, 20.0f, 300.0f, "%.0f m");
+        ImGui::SliderFloat("half angle", &t.breath_half_angle_deg, 2.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("damage/s", &t.breath_damage_per_second, 5.0f, 200.0f, "%.0f");
+        ImGui::SliderFloat("drain/s", &t.breath_drain, 0.05f, 1.0f, "%.2f");
+        ImGui::SliderFloat("regen/s", &t.breath_regen, 0.02f, 1.0f, "%.2f");
+    }
+
+    if (ImGui::CollapsingHeader("Boost & survivability")) {
+        ImGui::SliderFloat("boost force", &flight_.tuning.boost_force, 0.0f, 80000.0f, "%.0f N");
+        ImGui::SliderFloat("boost duration", &t.boost_duration, 0.1f, 4.0f, "%.2f s");
+        ImGui::SliderFloat("boost cooldown", &t.boost_cooldown, 0.5f, 20.0f, "%.1f s");
+        ImGui::SliderFloat("max health", &t.max_health, 20.0f, 400.0f, "%.0f");
+        ImGui::SliderFloat("health regen/s", &t.health_regen, 0.0f, 40.0f, "%.0f");
+        ImGui::SliderFloat("regen delay", &t.regen_delay, 0.0f, 20.0f, "%.1f s");
+    }
+
+    if (ImGui::CollapsingHeader("Sentinels")) {
+        ImGui::SliderFloat("health", &t.sentinel_health, 10.0f, 400.0f, "%.0f");
+        ImGui::SliderFloat("radius", &t.sentinel_radius, 2.0f, 25.0f, "%.0f m");
+        ImGui::SliderFloat("fire interval", &t.sentinel_fire_interval, 0.3f, 10.0f, "%.1f s");
+        ImGui::SliderFloat("shot speed", &t.sentinel_projectile_speed, 40.0f, 400.0f, "%.0f m/s");
+        ImGui::SliderFloat("shot damage", &t.sentinel_damage, 1.0f, 60.0f, "%.0f");
+        // The difficulty dial. Zero spread is not hard, it is unfair.
+        ImGui::SliderFloat("aim spread", &t.sentinel_spread, 0.0f, 80.0f, "%.0f m");
+        ImGui::SliderFloat("range", &t.sentinel_range, 100.0f, 3000.0f, "%.0f m");
+    }
+
     ImGui::End();
 }
 
@@ -1531,6 +1892,8 @@ void App::render() {
         }
         world_.draw_mesh(device_, pass, ring_mesh_, model);
     }
+
+    draw_combat(pass);
 
     // Ghost of the best run, flying its own recording alongside.
     game::GhostSample ghost;

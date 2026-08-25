@@ -38,6 +38,9 @@ struct FlightTuning {
     float flap_peak_force = 9000.0f;  // N at the peak of a downstroke
     float flap_period = 0.9f;         // seconds per wingbeat
     float glide_thrust = 0.0f;        // N, free forward push while gliding
+    // Combat boost. Large enough to break an overshoot or close a gap, brief
+    // enough that it cannot be flown on -- energy still has to be earned.
+    float boost_force = 26000.0f;
 
     // ---- wingbeat shape ----
     // A real wingbeat is not a sine. The downstroke is the fast, powered half
@@ -139,6 +142,9 @@ struct FlightInput {
     float flap = 0.0f;   // 0..1, hold to beat wings
     float tuck = 0.0f;   // 0..1, fold wings and dive
     float brake = 0.0f;  // 0..1, flare and slow
+    // 0..1, a burst of thrust. Combat owns the cooldown; the force belongs here
+    // so that everything pushing the dragon forward lives in one place.
+    float boost = 0.0f;
 };
 
 // Everything the flight model produces. The derived fields exist for telemetry

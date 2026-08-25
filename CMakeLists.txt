@@ -43,6 +43,7 @@ add_executable(dragon
   src/game/course.cpp
   src/game/rally.cpp
   src/game/autopilot.cpp
+  src/game/combat.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -142,3 +143,18 @@ target_include_directories(test_anim PRIVATE src)
 target_link_libraries(test_anim PRIVATE SDL3::SDL3 cgltf stb)
 target_compile_options(test_anim PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME anim COMMAND test_anim)
+
+add_executable(test_combat
+  tests/test_combat.cpp
+  src/game/combat.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_combat PRIVATE src)
+target_link_libraries(test_combat PRIVATE SDL3::SDL3)
+target_compile_options(test_combat PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME combat COMMAND test_combat)

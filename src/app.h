@@ -9,6 +9,7 @@
 #include "anim/dragon_rig.h"
 #include "anim/gltf_loader.h"
 #include "game/chase_camera.h"
+#include "game/combat.h"
 #include "game/debug_camera.h"
 #include "game/autopilot.h"
 #include "game/course.h"
@@ -66,6 +67,13 @@ struct Options {
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.
     bool autopilot = false;
+
+    // --combat arms the dragon and spawns a wave, for verifying combat without
+    // a human at the keyboard.
+    bool combat = false;
+    // --attack holds breath and fires continuously. The combat equivalent of
+    // --input: it puts the flame and the projectiles on screen for a capture.
+    bool attack = false;
 };
 
 Options parse_options(int argc, char** argv);
@@ -97,6 +105,10 @@ private:
     void build_flight_ui();
     void build_rally_ui();
     void build_dragon_ui();
+    void build_combat_ui();
+    game::CombatInput read_combat_input() const;
+    void draw_combat(SDL_GPURenderPass* pass);
+    void draw_combat_hud();
     void draw_hud();
     void select_course(int index);
     void rebuild_courses();
@@ -120,6 +132,16 @@ private:
 
     game::FlightModel flight_;
     game::ChaseCamera chase_;
+
+    // Combat. Off until switched on: the rally is still the default activity,
+    // and sentinels shooting at a player trying to set a lap time is nobody's
+    // idea of a good race.
+    game::Combat combat_;
+    bool combat_enabled_ = false;
+    gfx::Mesh sphere_mesh_;
+    float hit_marker_ = 0.0f;
+    core::Vec3 hit_marker_position_ = core::Vec3::zero();
+    float damage_flash_ = 0.0f;
     // The dragon is a real skinned rig now: skeleton, skinned mesh, and
     // procedural animation driven by flight state.
     anim::DragonShape dragon_shape_;

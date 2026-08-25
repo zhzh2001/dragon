@@ -15,6 +15,10 @@ struct VertexOut {
     float3 world_normal;
     float3 albedo;
     float emissive;
+    // Carried as a varying rather than read from ModelUniforms: the fragment
+    // stage does not bind the model block, and one interpolant is cheaper than
+    // adding a binding to every pipeline that uses this shader.
+    float unlit;
 };
 
 vertex VertexOut vs_main(VertexIn in [[stage_in]],
@@ -28,6 +32,7 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
     out_vertex.world_normal = normalize((model.model * float4(in.normal, 0.0)).xyz);
     out_vertex.albedo = in.color * model.tint.rgb;
     out_vertex.emissive = model.tint.a;
+    out_vertex.unlit = model.material.w;
     out_vertex.clip_position = scene.view_proj * world;
     return out_vertex;
 }
@@ -55,7 +60,13 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
 
     // Emissive is added after lighting and before fog, so a glowing checkpoint
     // still fades into the distance rather than punching through the haze.
-    float3 lit = in.albedo * (direct + ambient) + in.albedo * in.emissive;
+    //
+    // material.w marks the object as unlit: its colour is purely emissive, with
+    // no sun or ambient term at all. Fire needs this. The shared tonemap ends in
+    // a gamma encode, so a bright surface desaturates toward white -- adding two
+    // units of sunlight on top of a flame turns it into a white balloon.
+    float3 lit = in.albedo * in.emissive;
+    if (in.unlit < 0.5) lit += in.albedo * (direct + ambient);
 
     float distance = length(in.world_position - scene.camera_position.xyz);
     float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);

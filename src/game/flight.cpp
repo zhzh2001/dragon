@@ -193,6 +193,10 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
         thrust_magnitude += tuning.min_airspeed_assist * deficit * deficit;
     }
 
+    // Boost is unconditional: it is an ability with a cooldown, and having it
+    // quietly do nothing at low speed or while stalled would make it unreadable.
+    thrust_magnitude += tuning.boost_force * core::saturate(input.boost);
+
     state_.thrust = thrust_magnitude;
     Vec3 thrust_force = forward * thrust_magnitude;
     Vec3 gravity_force = Vec3{0.0f, -tuning.gravity * tuning.mass, 0.0f};
@@ -432,6 +436,7 @@ const Field FIELDS[] = {
     FIELD(gravity),              FIELD(lift_coefficient_max), FIELD(stall_angle_deg),
     FIELD(post_stall_lift),      FIELD(parasitic_drag),      FIELD(induced_drag_factor),
     FIELD(flap_peak_force),      FIELD(flap_period),         FIELD(glide_thrust),
+    FIELD(boost_force),
     FIELD(flap_up_angle_deg),    FIELD(flap_down_angle_deg),
     FIELD(flap_downstroke_fraction), FIELD(glide_dihedral_deg), FIELD(flap_blend),
     FIELD(tuck_lift_loss),       FIELD(tuck_drag_loss),      FIELD(brake_drag_gain),
