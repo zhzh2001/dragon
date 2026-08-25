@@ -365,7 +365,8 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // drawn and the thrust that was generated cannot disagree. On top of it,
     // load flex: the wings bow upward under g, which is what makes a hard pull
     // look like it costs something. load_smoothed_ is maintained in update().
-    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_;
+    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
+                       core::radians(tuning.tuck_droop_deg) * state.wing_tuck;
     const float tuck = state.wing_tuck;
     const float flare = state.wing_brake;
     // Roll lean is deliberately NOT mirrored between sides: the same rotation
@@ -478,17 +479,22 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                             Vec3 angular_acceleration, core::Vec2 steer_deg, float dt) {
     if (!sim.initialized || chain.size() < 2) return;
 
-    // Active steering: rotate the chain's target shape about its root. The
-    // spring then pulls the simulation toward the deflected shape, so the
-    // deflection eases in, overshoots and settles exactly like every passive
-    // motion -- one integrator, one look.
+    // Active steering: curl the chain's target shape. The full deflection is
+    // spread down the chain, each segment rotated a little more than the one
+    // before it, because that is how a tail moves -- it curves, it does not
+    // hinge at the root like a door. The spring then pulls the simulation
+    // toward the curled shape, so the deflection eases in, overshoots and
+    // settles exactly like every passive motion -- one integrator, one look.
     std::vector<Vec3> target = sim.rest;
     if (std::fabs(steer_deg.x) > 1e-3f || std::fabs(steer_deg.y) > 1e-3f) {
-        const Quat bias =
-            core::Quat::from_axis_angle(Vec3::unit_y(), core::radians(steer_deg.y)) *
-            core::Quat::from_axis_angle(Vec3::unit_x(), core::radians(steer_deg.x));
+        const float segments = float(target.size() - 1);
+        const Quat per_segment =
+            core::Quat::from_axis_angle(Vec3::unit_y(), core::radians(steer_deg.y) / segments) *
+            core::Quat::from_axis_angle(Vec3::unit_x(), core::radians(steer_deg.x) / segments);
+        Quat cumulative = Quat::identity();
         for (size_t i = 1; i < target.size(); ++i) {
-            target[i] = target[0] + core::rotate(bias, sim.rest[i] - target[0]);
+            cumulative = core::normalize(per_segment * cumulative);
+            target[i] = target[i - 1] + core::rotate(cumulative, sim.rest[i] - sim.rest[i - 1]);
         }
     }
 
@@ -524,10 +530,30 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         acceleration += (target[i] - r) * tuning.chain_stiffness;
         acceleration -= v * tuning.chain_damping;
 
-        // Drag against the relative airflow, which damps oscillation and
-        // streams the chain aft at speed.
+        // Drag against the relative airflow: a linear term that damps slow
+        // motion plus the physical v^2 term. Slender-body drag acts across the
+        // chain, not along it -- flow along a neck pointed into the wind
+        // produces almost nothing, flow across a hanging tail is what aligns
+        // it. Without the decomposition, cruise airflow along the neck was a
+        // 9 m/s^2 force folding it backwards. The quadratic normal term is why
+        // the tail hangs at a hover and pulls dead straight in a dive without
+        // either posture being authored.
         const Vec3 relative = airflow_local - v;
-        acceleration += relative * tuning.chain_drag;
+        const Vec3 along = core::normalize_or(r - sim.position[i - 1], Vec3::forward());
+        const Vec3 normal_flow = relative - along * core::dot(relative, along);
+        const Vec3 axial_flow = relative - normal_flow;
+        // The v^2 term only where it is restoring. A segment pointing
+        // downstream (the tail) is aerodynamically stable and the flow
+        // straightens it; one pointing upstream (the neck) is the arrow flying
+        // backwards -- unstable, and left to physics it flutters metres wide at
+        // dive speed. A real animal holds an upstream limb with muscle, so the
+        // destabilizing aero is suppressed rather than simulated.
+        const float downstream =
+            core::saturate(core::dot(core::normalize_or(relative, Vec3::zero()), along));
+        acceleration += normal_flow * (tuning.chain_drag + downstream *
+                                       core::length(normal_flow) * tuning.chain_drag_v2);
+        // A sliver of axial drag for damping; a real slender body has ~10x less.
+        acceleration += axial_flow * tuning.chain_drag * 0.1f;
 
         // Clamp before integrating: pseudo-forces grow with the square of
         // angular velocity, so a tumble would otherwise be unbounded.
@@ -612,22 +638,65 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     }
 }
 
-void DragonRig::drive_legs(const game::FlightState& state, float dt) {
+void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_acceleration,
+                           Vec3 angular_acceleration, float dt) {
     // Tucked in flight, extended for landing. Anticipates by extending as the
     // ground gets close rather than waiting for contact.
     const float wants_extend =
         state.grounded || state.ground_clearance < 25.0f ? 1.0f : 0.0f;
     leg_extend_ = core::damp(leg_extend_, wants_extend, 0.22f, dt);
 
+    // The pendulum: each leg hangs in the effective gravity of the dragon's
+    // frame -- true gravity plus the pseudo-forces of rotation and acceleration
+    // at the hip -- held toward its pose by a muscle spring. Standing-in-a-bus
+    // physics: braking floats the legs forward, a turn slings them outward.
+    const Vec3 gravity_local =
+        core::rotate(core::conjugate(state.orientation), Vec3{0.0f, -9.81f, 0.0f});
+    const Vec3 omega = state.angular_velocity;
+    const float max_swing = core::radians(tuning.leg_sway_max_deg);
+
     const float tuck_angle = core::radians(tuning.leg_tuck_deg) * (1.0f - leg_extend_);
     for (int side = 0; side < 2; ++side) {
-        // Alternating sign down the chain, so the leg folds like a knee rather
-        // than curling into a spiral.
+        if (joints_.leg[side].empty()) continue;
+
+        const Vec3 hip = skeleton_->world_bind(joints_.leg[side].front()).translation_part() *
+                         model_scale_;
+        const Vec3 centrifugal = -core::cross(omega, core::cross(omega, hip));
+        const Vec3 euler = -core::cross(angular_acceleration, hip);
+        const Vec3 effective =
+            gravity_local + (centrifugal + euler - frame_acceleration) * tuning.leg_sway_response;
+
+        // Where the pendulum would hang: angles of the effective gravity off
+        // body-down. atan2 against the downward component keeps them stable
+        // even when the frame briefly outweighs gravity.
+        const float down = core::maxf(-effective.y, 3.0f);
+        core::Vec2 desired{core::clampf(std::atan2(-effective.z, down), -max_swing, max_swing),
+                           core::clampf(std::atan2(effective.x, down), -max_swing, max_swing)};
+        // Planted feet do not swing.
+        desired = desired * (1.0f - leg_extend_);
+
+        core::Vec2& swing = leg_swing_[side];
+        core::Vec2& velocity = leg_swing_velocity_[side];
+        velocity += (desired - swing) * (tuning.leg_sway_stiffness * dt);
+        velocity = velocity * core::maxf(1.0f - tuning.leg_sway_damping * dt, 0.0f);
+        swing += velocity * dt;
+        if (!std::isfinite(swing.x) || !std::isfinite(swing.y)) {
+            swing = core::Vec2{0.0f, 0.0f};
+            velocity = core::Vec2{0.0f, 0.0f};
+        }
+
+        // The whole leg swings at the hip; the tuck fold continues down the
+        // chain. Both compose onto the authored pose, so the feet keep the
+        // clip's motion through all of it.
         float sign = 1.0f;
+        bool first = true;
         for (const int joint : joints_.leg[side]) {
-            // Added to the authored pose rather than replacing it, so the feet
-            // keep whatever motion the clip gives them while still tucking.
             rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign, true);
+            if (first) {
+                rotate_joint(joint, Vec3::unit_x(), swing.x, true);
+                rotate_joint(joint, Vec3::unit_z(), swing.y, true);
+                first = false;
+            }
             sign *= -1.15f;
         }
     }
@@ -704,9 +773,12 @@ void DragonRig::update(const game::FlightState& state, float dt) {
         state.control.x * tuning.tail_elevator_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
 
-    // The neck leads the manoeuvre and lowers into the wind at speed.
+    // The neck leads the manoeuvre and lowers into the wind at speed -- and a
+    // deliberate tuck streamlines regardless of how fast the dive is yet, the
+    // way a stooping raptor commits to the shape before the speed arrives.
     const float streamline =
-        core::saturate(state.airspeed / core::maxf(tuning.streamline_speed, 1.0f));
+        core::maxf(core::saturate(state.airspeed / core::maxf(tuning.streamline_speed, 1.0f)),
+                   state.wing_tuck * 0.9f);
     const core::Vec2 neck_steer{
         state.control.x * tuning.neck_lead_deg - streamline * tuning.neck_streamline_deg, 0.0f};
 
@@ -714,7 +786,7 @@ void DragonRig::update(const game::FlightState& state, float dt) {
                 tail_steer, dt);
     drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
                 neck_steer, dt);
-    drive_legs(state, dt);
+    drive_legs(state, frame_acceleration, angular_acceleration, dt);
 
     compute_world_matrices(*skeleton_, pose_, world_);
     // The head aim needs posed world matrices to measure against, and changing

@@ -44,6 +44,7 @@ add_executable(dragon
   src/game/rally.cpp
   src/game/autopilot.cpp
   src/game/combat.cpp
+  src/game/studio.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -127,6 +128,7 @@ add_test(NAME rally COMMAND test_rally)
 
 add_executable(test_anim
   tests/test_anim.cpp
+  src/game/studio.cpp
   src/anim/animation.cpp
   src/anim/gltf_loader.cpp
   src/gfx/texture.cpp

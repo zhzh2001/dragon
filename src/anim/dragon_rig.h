@@ -81,8 +81,13 @@ struct RigTuning {
     // shoulder does most of the work, which is what a wing actually does.
     float outboard_decay = 0.68f;
     // Folding: how far the wing sweeps back and closes when tucked.
-    float tuck_sweep_deg = 78.0f;
-    float tuck_fold_deg = 62.0f;
+    float tuck_sweep_deg = 88.0f;
+    float tuck_fold_deg = 52.0f;
+    // Tucked wings also pull down against the flanks. Sweep and fold both act
+    // in the horizontal plane; without the droop the folded wing stays at glide
+    // dihedral and the membrane drapes below the body -- half-folded, not a
+    // stoop.
+    float tuck_droop_deg = 22.0f;
     float brake_flare_deg = 30.0f;
 
     // ---- neck and tail dynamics ----
@@ -107,10 +112,13 @@ struct RigTuning {
     // Gravity's effect, as a fraction of g. A real tail is partly held up by
     // muscle, so full gravity looks dead.
     float chain_gravity = 0.35f;
-    // Aerodynamic drag against the relative airflow, which streams the chain aft
-    // at speed. Deliberately small: the airflow past a body-fixed point is the
-    // full airspeed, so even a modest coefficient is a large force.
-    float chain_drag = 0.05f;
+    // Aerodynamic drag against the relative airflow. The linear term damps slow
+    // motion; the quadratic term is the real physics -- drag grows with the
+    // square of airspeed -- and it is what makes the tail hang at a hover,
+    // stream level at cruise and pull dead straight in a dive, three postures
+    // from one force law instead of one linear compromise between them.
+    float chain_drag = 0.04f;
+    float chain_drag_v2 = 0.010f;
     // Ceilings, so a violent attitude cannot blow the simulation up. Without
     // these a 70 rad/s tumble produces accelerations in the tens of thousands
     // and the chain leaves for good.
@@ -175,6 +183,15 @@ struct RigTuning {
 
     // ---- legs ----
     float leg_tuck_deg = 62.0f;  // folded in flight, extended on the ground
+    // The legs are pendulums. They hang from the hips and feel the same frame
+    // pseudo-forces the chains do, held by a muscle spring: they swing outward
+    // in a turn, trail under acceleration and float forward under braking. A
+    // leg that stays rigidly perpendicular to the wings through a hard turn is
+    // the single clearest tell that the body is a fuselage.
+    float leg_sway_response = 1.0f;
+    float leg_sway_max_deg = 26.0f;
+    float leg_sway_stiffness = 16.0f;
+    float leg_sway_damping = 6.0f;
 };
 
 // Turns flight state into a pose. Holds the spring-chain state, so it must be
@@ -252,7 +269,8 @@ private:
     void drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                      const game::FlightState& state, core::Vec3 frame_acceleration,
                      core::Vec3 angular_acceleration, core::Vec2 steer_deg, float dt);
-    void drive_legs(const game::FlightState& state, float dt);
+    void drive_legs(const game::FlightState& state, core::Vec3 frame_acceleration,
+                    core::Vec3 angular_acceleration, float dt);
     // Turns the head toward `aim_target_`, after the chains have posed it.
     void aim_head(const game::FlightState& state);
     // Applies a body-space rotation to one joint, composed with its bind
@@ -274,6 +292,10 @@ private:
     // ease rather than jitter with every force spike.
     float load_smoothed_ = 0.0f;
     float intensity_smoothed_ = 0.0f;
+    // Pendulum state per leg: x swing about body X (fore-aft), y about body Z
+    // (lateral), in radians.
+    core::Vec2 leg_swing_[2] = {};
+    core::Vec2 leg_swing_velocity_[2] = {};
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     core::Vec3 aim_target_ = core::Vec3::zero();

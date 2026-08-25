@@ -10,6 +10,7 @@
 
 #include "anim/animation.h"
 #include "anim/dragon_rig.h"
+#include "game/studio.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
 
@@ -757,6 +758,112 @@ void test_idle_clip_fades_with_intensity() {
     CHECK(head_deflection(grounded) > 30.0f);
 }
 
+// The studio's one promise: its states are dynamically consistent, so the rig
+// reacts exactly as it would in flight. A scenario whose angular velocity did
+// not match its own orientation curve would exercise the chains with forces
+// that no real manoeuvre produces.
+void test_studio_states_are_consistent() {
+    std::printf("studio scenarios are dynamically consistent\n");
+    const Vec3 centre{0.0f, 200.0f, 0.0f};
+
+    // Steady left turn: body yaw rate must match v/R for the scripted turn
+    // (35 m/s around 90 m), expressed about the banked body's axes.
+    const game::FlightState turn =
+        game::studio_state(game::StudioScenario::TurnLeft, 3.0f, centre, 0.0f);
+    CHECK(near(length(turn.angular_velocity), 35.0f / 90.0f, 0.01f));
+    CHECK(near(length(turn.velocity), 35.0f, 0.1f));
+    // Velocity is horizontal in a level turn.
+    CHECK(std::fabs(turn.velocity.y) < 0.5f);
+
+    // The dive points steeply down and does not rotate.
+    const game::FlightState dive =
+        game::studio_state(game::StudioScenario::Dive, 2.0f, centre, 0.0f);
+    CHECK(dive.velocity.y < -60.0f);
+    CHECK(length(dive.angular_velocity) < 0.01f);
+    CHECK(near(dive.wing_tuck, 1.0f));
+
+    // The pull-out actually pitches during the pull, and loads more than 2 g.
+    const game::FlightState pull =
+        game::studio_state(game::StudioScenario::PullOut, 3.8f, centre, 0.0f);
+    CHECK(pull.angular_velocity.x > 0.2f);  // nose-up rate
+    CHECK(pull.g_load > 2.0f);
+
+    // Every scenario stays finite over a full loop.
+    for (int scenario = 0; scenario < int(game::StudioScenario::Count); ++scenario) {
+        for (float t = 0.0f; t < 12.0f; t += 0.37f) {
+            const game::FlightState s =
+                game::studio_state(game::StudioScenario(scenario), t, centre, 100.0f);
+            CHECK(std::isfinite(s.velocity.x + s.velocity.y + s.velocity.z +
+                                s.angular_velocity.x + s.angular_velocity.y +
+                                s.angular_velocity.z + s.g_load));
+        }
+    }
+}
+
+void test_legs_swing_with_the_frame() {
+    std::printf("legs are pendulums: outward in a turn, forward under braking\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    auto foot_after = [&](auto state_at) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        for (int i = 0; i < 300; ++i) rig.update(state_at(float(i) / 60.0f), 1.0f / 60.0f);
+        return rig.world_matrices()[size_t(joints.leg[0].back())].col[3].xyz();
+    };
+
+    game::FlightState cruise;
+    cruise.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    cruise.airspeed = 30.0f;
+    // Well clear of the ground: near it the legs extend for landing and are
+    // deliberately excluded from the pendulum.
+    cruise.ground_clearance = 300.0f;
+    const Vec3 neutral = foot_after([&](float) { return cruise; });
+
+    // A COORDINATED turn must NOT swing the legs laterally: gravity plus
+    // centrifugal force point through the body's floor -- that is what
+    // coordinated means, and it is why passengers do not lean in a banked
+    // aircraft. The legs press harder, they do not deflect.
+    const Vec3 coordinated = foot_after([&](float t) {
+        return game::studio_state(game::StudioScenario::TurnLeft, t, Vec3::zero(), -500.0f);
+    });
+    CHECK(std::fabs(coordinated.x - neutral.x) < 0.4f);
+
+    // A flat skidding turn is what swings them: the body yaws and the velocity
+    // curves, but there is no bank, so the centripetal force is fully lateral
+    // in the body frame and the feet hang toward the outside of the turn.
+    // The state has to be dynamically consistent -- the body yawing WITH its
+    // velocity -- or the pseudo-force spins through every direction and the
+    // measurement means nothing.
+    const float skid_rate = 0.45f;
+    const Vec3 skidding = foot_after([&](float t) {
+        game::FlightState s = cruise;
+        const float heading = skid_rate * t;
+        s.orientation = Quat::from_axis_angle(Vec3::unit_y(), heading);
+        s.velocity = rotate(s.orientation, Vec3::forward()) * 30.0f;
+        s.angular_velocity = Vec3{0.0f, skid_rate, 0.0f};
+        s.airspeed = 30.0f;
+        return s;
+    });
+    // Turning left (nose swinging left), centrifugal slings the feet right: +X.
+    CHECK(skidding.x > neutral.x + 0.05f);
+
+    // Sustained deceleration: feet float forward (-Z), standing-in-a-bus
+    // physics. Decelerating for the whole sample, so the pendulum is measured
+    // deflected rather than after it has settled back.
+    const Vec3 braking = foot_after([&](float t) {
+        game::FlightState s = cruise;
+        const float v = 62.0f - 6.0f * t;
+        s.velocity = Vec3{0.0f, 0.0f, -v};
+        s.airspeed = v;
+        return s;
+    });
+    CHECK(braking.z < neutral.z - 0.02f);
+}
+
 }  // namespace
 
 int main() {
@@ -775,6 +882,8 @@ int main() {
     test_body_responds_to_control_input();
     test_wings_carry_the_load();
     test_idle_clip_fades_with_intensity();
+    test_studio_states_are_consistent();
+    test_legs_swing_with_the_frame();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

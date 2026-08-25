@@ -10,6 +10,7 @@
 #include "anim/gltf_loader.h"
 #include "game/chase_camera.h"
 #include "game/combat.h"
+#include "game/studio.h"
 #include "game/debug_camera.h"
 #include "game/autopilot.h"
 #include "game/course.h"
@@ -71,6 +72,10 @@ struct Options {
     // --combat arms the dragon and spawns a wave, for verifying combat without
     // a human at the keyboard.
     bool combat = false;
+    // --studio N drops into the animation studio playing scenario N: the dragon
+    // pinned in place flying a scripted, repeatable manoeuvre, for looking at
+    // the rig instead of chasing it.
+    int studio_scenario = -1;  // -1 = off
     // --attack holds breath and fires continuously. The combat equivalent of
     // --input: it puts the flame and the projectiles on screen for a capture.
     bool attack = false;
@@ -136,6 +141,20 @@ private:
     // Combat. Off until switched on: the rally is still the default activity,
     // and sentinels shooting at a player trying to set a lap time is nobody's
     // idea of a good race.
+    // Animation studio: scripted manoeuvres replace the flight state that the
+    // rig, the dragon transform and the chase camera see. Flight, rally and
+    // combat idle while it is up.
+    bool studio_active_ = false;
+    int studio_scenario_ = 0;
+    float studio_time_ = 0.0f;
+    float studio_time_scale_ = 1.0f;
+    core::Vec3 studio_centre_ = core::Vec3::zero();
+    game::FlightState studio_state_;
+    const game::FlightState& dragon_state() const {
+        return studio_active_ ? studio_state_ : flight_.state();
+    }
+    void build_studio_ui();
+
     game::Combat combat_;
     bool combat_enabled_ = false;
     gfx::Mesh sphere_mesh_;

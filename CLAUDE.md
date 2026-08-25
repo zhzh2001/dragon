@@ -24,6 +24,8 @@ Useful flags:
 
 `--combat` arms the dragon and spawns a wave; `--attack` also holds breath and
 fires, which is how the flame and the projectiles get onto a screenshot.
+`--studio N` opens the animation studio playing scenario N (0 glide, 1 flap,
+2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack, 9 grounded).
 
 Verify a visual change without a human at the keyboard:
 
@@ -334,6 +336,18 @@ every bone makes total bend depend on how many bones the rig happens to have. Th
 generated rig has two bones per wing and the imported one has five, which put the
 imported dragon's wings in a steep V at rest.
 
+### The animation studio
+
+Judging animation from live flight means chasing a manoeuvre with the camera
+while also flying it, and no two takes match. The studio (`--studio N`, or the
+Studio panel) pins the dragon at one spot and plays a scripted manoeuvre on
+loop. Each scenario is **dynamically consistent**: orientation is a pure
+function of time and the body-frame angular velocity is finite-differenced from
+that same curve, so a scenario cannot lie about its own rotation and every
+physically based response reacts exactly as it would in flight. Nothing
+downstream of the rig reads position kinematics, so pinning the position is
+safe. Combat, rally and the HUD idle while the studio is up.
+
 ### Flight response: the active posture layer
 
 The chains are passive -- they lag, swing wide and settle. On top of them sits
@@ -348,6 +362,29 @@ eases, overshoots and settles through the same integrator as everything
 passive -- one system, one look. The wing roll lean is deliberately not
 mirrored between sides: the same rotation about the body axis on both wings is
 exactly the antisymmetric shape that produces a roll.
+
+The **legs are pendulums**: they hang from the hips in the effective gravity of
+the dragon's frame -- true gravity plus the frame's pseudo-forces at the hip --
+held toward the tuck pose by a muscle spring. Braking floats them forward, a
+skid slings them outward, and near the ground they extend and stop swinging. A
+subtlety worth keeping: in a **coordinated** turn the legs deliberately do NOT
+swing laterally, because gravity plus centrifugal force point through the body's
+floor -- that is what coordinated means. The tell the pendulum fixes is the
+skid, the roll transient and the brake.
+
+**Chain aero drag is quadratic and slender-body**: the v^2 term acts across a
+segment, not along it, and only where it is restoring. A segment pointing
+downstream (the tail) is straightened by the flow; one pointing upstream (the
+neck) is the arrow flying backwards -- aerodynamically unstable, and left to raw
+physics it flutters metres wide at dive speed, so the destabilizing case is
+suppressed the way real muscle would. One force law gives a tail that hangs at a
+hover, streams level at cruise and pulls dead straight in a dive. Chain steering
+**curls** progressively down the chain rather than rotating rigidly at the root:
+a tail curves, it does not hinge like a door.
+
+Tucking adds **droop** (`tuck_droop_deg`): sweep and fold both act in the
+horizontal plane, so without it a folded wing stays at glide dihedral and the
+membrane drapes below the body -- half-folded, not a stoop.
 
 The **ground-idle clip fades with flight intensity** (`clip_flight_fade`) --
 max of speed, g excess, turn rate, tuck and brake, smoothed. Toes curling and a

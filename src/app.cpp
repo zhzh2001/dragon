@@ -43,6 +43,8 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.inspect_distance = float(SDL_atof(argv[++i]));
             }
+        } else if (arg == "--studio" && i + 1 < argc) {
+            options.studio_scenario = SDL_atoi(argv[++i]);
         } else if (arg == "--combat") {
             options.combat = true;
         } else if (arg == "--attack") {
@@ -199,6 +201,12 @@ bool App::init(const Options& options) {
     apply_camera_preset(options.camera_mode);
     chase_.first_person = options.first_person;
     respawn_dragon();
+
+    if (options.studio_scenario >= 0) {
+        studio_active_ = true;
+        studio_scenario_ = options.studio_scenario % int(game::StudioScenario::Count);
+        studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
+    }
 
     // After the spawn: the arena is built around where the dragon actually
     // starts, so a headless combat run opens with targets in front of it.
@@ -490,7 +498,7 @@ game::FlightInput App::read_flight_input() const {
 }
 
 gfx::ModelUniforms App::dragon_model_uniforms() const {
-    const game::FlightState& s = flight_.state();
+    const game::FlightState& s = dragon_state();
     gfx::ModelUniforms model;
     // The asset correction is applied inside the dragon's own frame, so it
     // aligns the model to the engine without disturbing the flight transform.
@@ -618,13 +626,27 @@ void App::update(float dt) {
     // The dragon always flies, even while the free camera is being used to look
     // at it -- otherwise you cannot inspect a manoeuvre from outside.
     flight_.update(read_flight_input(), &terrain_, dt);
-    chase_.update(flight_.state(), &terrain_, read_free_look(dt), dt);
+
+    if (studio_active_) {
+        studio_time_ += dt * studio_time_scale_;
+        const auto scenario = game::StudioScenario(studio_scenario_);
+        const float ground = terrain_.height_at(studio_centre_.x, studio_centre_.z);
+        studio_state_ = game::studio_state(scenario, studio_time_, studio_centre_, ground);
+        if (scenario == game::StudioScenario::Attack) {
+            dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
+        }
+    }
+
+    chase_.update(dragon_state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
     // Inspection view: a tight orbit locked to the dragon, for looking at the
     // rig rather than at the world.
     if (options_.inspect) {
-        const game::FlightState& s = flight_.state();
+        // dragon_state(), not flight_.state(): in the studio the dragon is
+        // rendered at the pinned studio pose, and a camera orbiting the live
+        // flight model would be looking at empty sky.
+        const game::FlightState& s = dragon_state();
         const float angle = core::radians(options_.inspect_angle_deg);
         const core::Vec3 offset = core::rotate(s.orientation,
                                                core::Vec3{std::sin(angle) * options_.inspect_distance,
@@ -634,7 +656,7 @@ void App::update(float dt) {
         free_camera_ = true;
     }
 
-    if (combat_enabled_) {
+    if (combat_enabled_ && !studio_active_) {
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
 
         // The head turns toward whatever is locked, so the dragon visibly looks
@@ -663,7 +685,7 @@ void App::update(float dt) {
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
     damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
 
-    rally_.update(flight_.state(), dt);
+    if (!studio_active_) rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
     if (rally_.just_missed_ring()) miss_flash_ = 1.2f;
     split_flash_ = core::maxf(split_flash_ - dt, 0.0f);
@@ -681,7 +703,7 @@ void App::update(float dt) {
     // headless capture and doubles as a soak test.
     if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
 
-    if (!options_.bind_pose) dragon_rig_.update(flight_.state(), dt);
+    if (!options_.bind_pose) dragon_rig_.update(dragon_state(), dt);
 
     // The ghost's rig is driven from its recording, reconstructed as a flight
     // state. Only the fields the rig reads need to be real.
@@ -739,7 +761,7 @@ void App::push_telemetry(const game::FlightState& state) {
 // not, the weights are wrong.
 void App::draw_skeleton_debug() {
     if (!show_skeleton_) return;
-    const game::FlightState& s = flight_.state();
+    const game::FlightState& s = dragon_state();
     const core::Mat4 to_world =
         core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
     const std::vector<core::Mat4>& skinning = dragon_rig_.skinning_matrices();
@@ -864,6 +886,7 @@ void App::build_ui(float dt) {
     build_rally_ui();
     build_dragon_ui();
     build_combat_ui();
+    build_studio_ui();
 
     ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
@@ -1051,7 +1074,7 @@ bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float widt
 // windows. It needs shapes and free positioning, not widgets, and this avoids
 // building a 2D renderer for it.
 void App::draw_hud() {
-    if (!show_hud_ || options_.hide_ui) return;
+    if (!show_hud_ || options_.hide_ui || studio_active_) return;
 
     if (combat_enabled_) draw_combat_hud();
 
@@ -1297,6 +1320,43 @@ void App::build_rally_ui() {
 // Animation and material tuning for the dragon itself. Kept out of the Flight
 // window because these are looked at while parked and staring at the model,
 // not while flying it.
+// The studio panel: pick a manoeuvre, read what to look for, drag the rig
+// sliders in the Dragon panel while it loops.
+void App::build_studio_ui() {
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) * 0.5f - 190.0f, 12.0f),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Studio");
+
+    if (ImGui::Checkbox("animation studio", &studio_active_) && studio_active_) {
+        studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
+        studio_time_ = 0.0f;
+    }
+    if (studio_active_) {
+        const int count = int(game::StudioScenario::Count);
+        if (ImGui::BeginCombo("scenario",
+                              game::studio_scenario_name(game::StudioScenario(studio_scenario_)))) {
+            for (int i = 0; i < count; ++i) {
+                if (ImGui::Selectable(game::studio_scenario_name(game::StudioScenario(i)),
+                                      i == studio_scenario_)) {
+                    studio_scenario_ = i;
+                    studio_time_ = 0.0f;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::TextWrapped("look for: %s",
+                           game::studio_scenario_notes(game::StudioScenario(studio_scenario_)));
+        ImGui::SliderFloat("time scale", &studio_time_scale_, 0.05f, 2.0f);
+        if (ImGui::Button("restart")) studio_time_ = 0.0f;
+        ImGui::SameLine();
+        ImGui::TextDisabled("t = %.1f s   tab for free camera", studio_time_);
+    } else {
+        ImGui::TextDisabled("scripted manoeuvres for inspecting the rig");
+    }
+    ImGui::End();
+}
+
 void App::build_dragon_ui() {
     anim::RigTuning& rig = dragon_rig_.tuning;
 
@@ -1330,6 +1390,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("phase lag", &rig.wing_phase_lag, 0.0f, 1.5f);
         ImGui::SliderFloat("tuck sweep", &rig.tuck_sweep_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("tuck fold", &rig.tuck_fold_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("brake flare", &rig.brake_flare_deg, 0.0f, 90.0f, "%.0f deg");
     }
 
@@ -2017,8 +2078,10 @@ void App::render() {
                         dragon_rig_.skinning_matrices(), dragon_textures_, model_sampler_);
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
-    // rings that instancing would be premature.
-    const game::Course& course = rally_.course();
+    // rings that instancing would be premature. Hidden in the studio, whose
+    // whole point is an uncluttered look at the dragon.
+    static const game::Course no_course;
+    const game::Course& course = studio_active_ ? no_course : rally_.course();
     for (size_t i = 0; i < course.rings.size(); ++i) {
         const game::Ring& ring = course.rings[i];
         const int index = int(i);
