@@ -312,6 +312,31 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
 
     compute_world_matrices(skeleton, pose_, world_);
     compute_skinning_matrices(skeleton, world_, skinning_);
+
+    // Which way the head points, measured rather than assumed. Prefer the
+    // direction to a child bone -- a snout or jaw -- and fall back to the
+    // direction the neck grew, which is where the head faces on any sane rig.
+    head_axis_local_ = Vec3::forward();
+    if (joints.head != NO_PARENT) {
+        const Vec3 head_position = world_[size_t(joints.head)].col[3].xyz();
+        Vec3 direction = Vec3::zero();
+        for (int i = 0; i < count; ++i) {
+            if (skeleton.joint(i).parent != joints.head) continue;
+            direction = world_[size_t(i)].col[3].xyz() - head_position;
+            break;
+        }
+        if (core::length_sq(direction) < 1e-8f) {
+            const int parent = skeleton.joint(joints.head).parent;
+            if (parent != NO_PARENT) {
+                direction = head_position - world_[size_t(parent)].col[3].xyz();
+            }
+        }
+        if (core::length_sq(direction) > 1e-8f) {
+            const Quat head_world = core::quat_from_matrix(world_[size_t(joints.head)]);
+            head_axis_local_ = core::normalize(
+                core::rotate(core::conjugate(head_world), core::normalize(direction)));
+        }
+    }
 }
 
 void DragonRig::rotate_joint(int joint, Vec3 body_axis, float angle, bool onto_current) {
@@ -628,7 +653,57 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     drive_legs(state, dt);
 
     compute_world_matrices(*skeleton_, pose_, world_);
+    // The head aim needs posed world matrices to measure against, and changing
+    // the head changes its subtree, so the matrices are rebuilt afterwards. Two
+    // passes over the hierarchy is nothing next to the skinning it feeds.
+    if (aim_active_ && joints_.head != NO_PARENT) {
+        aim_head(state);
+        compute_world_matrices(*skeleton_, pose_, world_);
+    }
     compute_skinning_matrices(*skeleton_, world_, skinning_);
+    aim_active_ = false;
+}
+
+core::Vec3 DragonRig::head_position() const {
+    if (joints_.head == NO_PARENT || size_t(joints_.head) >= world_.size()) return Vec3::zero();
+    return world_[size_t(joints_.head)].col[3].xyz();
+}
+
+void DragonRig::aim_head(const game::FlightState& state) {
+    const size_t head = size_t(joints_.head);
+    const int parent = skeleton_->joint(joints_.head).parent;
+    if (parent == NO_PARENT) return;
+
+    // Everything is done in model space, which is what world_ is expressed in;
+    // the aim target arrives in world space, so it comes back through the body
+    // transform first.
+    const Vec3 target_body =
+        core::rotate(core::conjugate(state.orientation), aim_target_ - state.position);
+
+    const Quat head_world = core::quat_from_matrix(world_[head]);
+    const Vec3 head_position = world_[head].col[3].xyz();
+    const Vec3 current = core::normalize_or(core::rotate(head_world, head_axis_local_),
+                                            Vec3::forward());
+    const Vec3 desired = core::normalize_or(target_body - head_position, current);
+
+    // Clamped, then eased. A neck that can swivel to any angle stops reading as
+    // a neck, and snapping to the target loses the sense of a creature choosing
+    // to look.
+    Quat turn = core::rotation_between(current, desired);
+    const float angle = 2.0f * std::acos(core::clampf(std::fabs(turn.w), -1.0f, 1.0f));
+    const float limit = core::radians(tuning.head_aim_max_deg);
+    float blend = core::saturate(tuning.head_aim_blend);
+    if (angle > limit && angle > 1e-4f) blend *= limit / angle;
+    turn = core::slerp(Quat::identity(), turn, blend);
+
+    // world_new = turn * world_old, and world = parent_world * local, so the
+    // turn has to be carried into the parent's frame before it can be applied to
+    // the local rotation.
+    const Quat parent_world = core::quat_from_matrix(world_[size_t(parent)]);
+    const Quat parent_inverse = core::conjugate(parent_world);
+    Transform local = pose_.local[head];
+    local.rotation = core::normalize(parent_inverse * turn * parent_world * local.rotation);
+    pose_.local[head] = local;
 }
 
 }  // namespace anim

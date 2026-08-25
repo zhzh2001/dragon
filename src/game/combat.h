@@ -20,7 +20,7 @@ struct CombatTuning {
     // ---- fireball ----
     // Fast enough to lead a target rather than lob at it, slow enough that a
     // banking dragon can still slip the shot.
-    float fireball_speed = 210.0f;
+    float fireball_speed = 260.0f;
     float fireball_damage = 30.0f;
     // Deliberately generous. A 3D dogfight is hard enough to read without
     // pixel-accurate hitboxes, and a shot that "clearly hit" but did not is the
@@ -38,7 +38,7 @@ struct CombatTuning {
     // ---- fire breath ----
     // Short ranged and continuous, so it trades reach for the ability to hold a
     // target under damage while manoeuvring. The fireball is the opposite.
-    float breath_range = 95.0f;
+    float breath_range = 155.0f;
     float breath_half_angle_deg = 12.0f;
     float breath_damage_per_second = 60.0f;
     // Meter is 0..1. Drain and regen are per second.
@@ -57,16 +57,39 @@ struct CombatTuning {
     float health_regen = 6.0f;     // per second, once regen starts
     float regen_delay = 6.0f;      // seconds without damage before it starts
 
+    // ---- targeting ----
+    //
+    // A 3D dogfight against a small fast target is close to unaimable without
+    // help: the nose has to lead a mark that is also manoeuvring, at a range
+    // where a degree of error is tens of metres. So the dragon picks a target
+    // and the shot bends toward it.
+    float lock_cone_deg = 30.0f;   // half angle to acquire
+    // Held well outside the acquisition cone, so a target does not drop the
+    // instant it slides off the nose during a turn.
+    float lock_hold_cone_deg = 65.0f;
+    float lock_range = 1600.0f;
+    // 0 aims purely down the nose, 1 aims perfectly at the intercept.
+    //
+    // High by default, and deliberately so: the residual error is what the
+    // player sees. At 0.7 a shot 14 degrees off the nose at 500 m still misses
+    // by 37 m, which reads as the assist doing nothing at all. At 0.9 the same
+    // shot lands. Lower it for a harder aiming game, not to make it fairer.
+    float aim_assist = 0.90f;
+    // The breath cone is a visible object for as long as it is held, so its
+    // assist is capped by angle as well as by strength. A fireball bending 30
+    // degrees is invisible; a flame doing it looks like a garden hose.
+    float breath_assist_max_deg = 16.0f;
+
     // ---- sentinels ----
     float sentinel_health = 60.0f;
     float sentinel_radius = 7.0f;
-    float sentinel_fire_interval = 2.6f;
+    float sentinel_fire_interval = 3.2f;
     float sentinel_projectile_speed = 150.0f;
     float sentinel_damage = 12.0f;
     // Aim error in metres at the target point, before lead. The difficulty dial:
     // bots that never miss are not hard, they are unfair.
     float sentinel_spread = 18.0f;
-    float sentinel_range = 900.0f;
+    float sentinel_range = 700.0f;
     float sentinel_respawn = 8.0f;
 };
 
@@ -123,6 +146,11 @@ struct CombatEvents {
     // World position of the most recent hit the player scored, for a marker.
     core::Vec3 last_hit = core::Vec3::zero();
     bool had_hit = false;
+    // Where the damage came from, so the HUD can point at the attacker. Being
+    // hit by something you cannot locate is the least readable thing in an
+    // aerial fight.
+    core::Vec3 damage_from = core::Vec3::zero();
+    bool took_damage = false;
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
@@ -162,6 +190,20 @@ public:
     int sentinels_alive() const;
     int kills() const { return kills_; }
 
+    // ---- targeting ----
+    // Index into sentinels(), or -1. Sticky: acquired inside a narrow cone and
+    // held inside a much wider one.
+    int locked_index() const { return locked_; }
+    bool has_lock() const { return locked_ >= 0; }
+    // Current position of the locked target, and where a fireball has to be
+    // aimed to meet it. Exposed so the HUD draws exactly what the shot will do.
+    core::Vec3 lock_position() const;
+    core::Vec3 lock_intercept() const { return lock_intercept_; }
+    // Direction the next fireball will travel, and the axis of the breath cone.
+    // Both blend the nose toward the lock by `aim_assist`.
+    core::Vec3 fireball_direction(const FlightState& player) const;
+    core::Vec3 breath_direction_for(const FlightState& player) const;
+
     // Tip and axis of the breath cone this frame. Only meaningful while
     // breathing(); the renderer uses it directly so the flame drawn and the
     // volume that damages can never disagree.
@@ -180,6 +222,10 @@ private:
     void apply_breath(float dt, const FlightState& player, CombatEvents& events);
     void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events);
     float random_unit();
+    void update_lock(const FlightState& player);
+    core::Vec3 muzzle(const FlightState& player) const;
+    core::Vec3 assisted_direction(const FlightState& player, core::Vec3 target,
+                                  float max_turn_deg) const;
 
     const Terrain* terrain_ = nullptr;
     core::Vec3 arena_centre_ = core::Vec3::zero();
@@ -196,6 +242,8 @@ private:
     float boost_timer_ = 0.0f;
     float boost_cooldown_timer_ = 0.0f;
     int kills_ = 0;
+    int locked_ = -1;
+    core::Vec3 lock_intercept_ = core::Vec3::zero();
 
     core::Vec3 breath_origin_ = core::Vec3::zero();
     core::Vec3 breath_direction_ = core::Vec3::forward();
@@ -213,5 +261,15 @@ bool point_in_cone(core::Vec3 point, core::Vec3 tip, core::Vec3 axis, float half
 // projectile cannot pass through a target between two frames. Returns the
 // fraction along the segment at which they are nearest, clamped to [0,1].
 float closest_point_fraction(core::Vec3 from, core::Vec3 to, core::Vec3 point);
+
+// Where to aim a projectile of `speed` so it meets a target moving at constant
+// velocity.
+//
+// Solved by iteration rather than by the quadratic: the closed form needs
+// special cases for a target faster than the projectile and for a zero
+// discriminant, and three passes of "guess the flight time, move the target,
+// re-measure" converges well inside a pixel at these speeds.
+core::Vec3 intercept_point(core::Vec3 origin, core::Vec3 target, core::Vec3 target_velocity,
+                           float speed, int iterations = 3);
 
 }  // namespace game

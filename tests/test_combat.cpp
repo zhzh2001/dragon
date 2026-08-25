@@ -402,10 +402,177 @@ void test_no_nans_under_abuse() {
     CHECK(finite);
 }
 
+void test_intercept_point() {
+    std::printf("intercept prediction actually meets a moving target\n");
+    const Vec3 origin = Vec3::zero();
+    const float speed = 200.0f;
+
+    // A stationary target needs no lead.
+    const Vec3 still{0.0f, 0.0f, -500.0f};
+    CHECK(near(length(game::intercept_point(origin, still, Vec3::zero(), speed) - still), 0.0f,
+               0.01f));
+
+    // A crossing target does. Verify by flying the shot: aim at the predicted
+    // point, then check the target is there when the projectile arrives.
+    const Vec3 target{0.0f, 0.0f, -500.0f};
+    const Vec3 velocity{60.0f, 0.0f, 0.0f};
+    const Vec3 aim = game::intercept_point(origin, target, velocity, speed);
+    const float flight_time = length(aim - origin) / speed;
+    const Vec3 where_it_will_be = target + velocity * flight_time;
+    CHECK(near(length(aim - where_it_will_be), 0.0f, 0.5f));
+    // And the lead is on the side the target is going.
+    CHECK(aim.x > target.x);
+
+    // Degenerate speed must not divide by zero.
+    CHECK(near(length(game::intercept_point(origin, target, velocity, 0.0f) - target), 0.0f));
+}
+
+void test_lock_acquires_and_holds() {
+    std::printf("lock acquires inside the cone and holds outside it\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 41u);
+    retire_all(combat);
+    combat.sentinels()[0].alive = true;
+    combat.sentinels()[0].respawn_timer = 0.0f;
+    combat.sentinels()[0].health = combat.tuning.sentinel_health;
+
+    auto place = [&](Vec3 position) {
+        game::Sentinel& sentinel = combat.sentinels()[0];
+        sentinel.position = position;
+        sentinel.centre = position;
+        sentinel.orbit_radius = 0.0f;
+        sentinel.orbit_speed = 0.0f;
+        sentinel.bob = 0.0f;
+        sentinel.fire_timer = 1e6f;
+    };
+
+    // Dead ahead: acquired.
+    place(Vec3{0.0f, 0.0f, -400.0f});
+    combat.update(1.0f / 60.0f, player_at(Vec3::zero()), CombatInput{});
+    CHECK(combat.has_lock());
+    CHECK(combat.locked_index() == 0);
+
+    // Now well outside the acquisition cone but inside the hold cone: the lock
+    // must survive, which is the whole point of the hysteresis.
+    const float hold_angle = radians(combat.tuning.lock_cone_deg + 15.0f);
+    place(Vec3{std::sin(hold_angle) * 400.0f, 0.0f, -std::cos(hold_angle) * 400.0f});
+    combat.update(1.0f / 60.0f, player_at(Vec3::zero()), CombatInput{});
+    CHECK(combat.has_lock());
+
+    // Directly behind: dropped.
+    place(Vec3{0.0f, 0.0f, 400.0f});
+    combat.update(1.0f / 60.0f, player_at(Vec3::zero()), CombatInput{});
+    CHECK(!combat.has_lock());
+
+    // A target starting outside the acquisition cone is never picked up.
+    const float wide = radians(combat.tuning.lock_cone_deg + 12.0f);
+    place(Vec3{std::sin(wide) * 400.0f, 0.0f, -std::cos(wide) * 400.0f});
+    combat.update(1.0f / 60.0f, player_at(Vec3::zero()), CombatInput{});
+    CHECK(!combat.has_lock());
+
+    // Beyond lock range, dead ahead: also not picked up.
+    place(Vec3{0.0f, 0.0f, -(combat.tuning.lock_range + 500.0f)});
+    combat.update(1.0f / 60.0f, player_at(Vec3::zero()), CombatInput{});
+    CHECK(!combat.has_lock());
+}
+
+// The reason aim assist exists: a shot that the player pointed roughly at a
+// target should connect. This is the test that would have caught "I only land
+// very few attacks".
+void test_aim_assist_lands_an_off_axis_shot() {
+    std::printf("aim assist turns a near miss into a hit\n");
+    auto shots_that_hit = [&](float assist, float off_axis_degrees, float range) {
+        const float off_axis = radians(off_axis_degrees);
+        const Vec3 target{std::sin(off_axis) * range, 0.0f, -std::cos(off_axis) * range};
+        Combat combat;
+        combat.reset(nullptr, Vec3::zero(), 47u);
+        combat.tuning.aim_assist = assist;
+        combat.tuning.fireball_blast_radius = 0.0f;
+        combat.tuning.sentinel_health = 1e6f;  // survives, so every hit is counted
+        retire_all(combat);
+        game::Sentinel& sentinel = combat.sentinels()[0];
+        sentinel.alive = true;
+        sentinel.respawn_timer = 0.0f;
+        sentinel.health = combat.tuning.sentinel_health;
+        sentinel.max_health = combat.tuning.sentinel_health;
+        sentinel.position = target;
+        sentinel.centre = target;
+        sentinel.orbit_radius = 0.0f;
+        sentinel.orbit_speed = 0.0f;
+        sentinel.bob = 0.0f;
+        sentinel.fire_timer = 1e6f;
+
+        const FlightState player = player_at(Vec3::zero());
+        CombatInput fire;
+        fire.fire = true;
+        int hits = 0;
+        for (int i = 0; i < 400; ++i) {
+            hits += combat.update(1.0f / 60.0f, player, i == 0 ? fire : CombatInput{}).hits_dealt;
+        }
+        return hits;
+    };
+
+    // 14 degrees off the nose at 500 m is about 120 m of miss: hopeless unaided,
+    // certain with full assist.
+    CHECK(shots_that_hit(0.0f, 14.0f, 500.0f) == 0);
+    CHECK(shots_that_hit(1.0f, 14.0f, 500.0f) == 1);
+
+    // The case that matters: a shot the player would call "on target" -- inside
+    // the lock cone at a normal engagement range -- has to land on the default
+    // setting, or the assist is decoration. Partial assist leaves residual
+    // error proportional to range, and that residual is the whole experience.
+    Combat defaults;
+    CHECK(shots_that_hit(defaults.tuning.aim_assist, 10.0f, 400.0f) == 1);
+    CHECK(shots_that_hit(defaults.tuning.aim_assist, 6.0f, 700.0f) == 1);
+}
+
+// Breath follows the same assisted axis, so the flame drawn is the flame that
+// damages. A target just outside the raw cone but inside the assisted one must
+// burn.
+void test_breath_follows_the_lock() {
+    std::printf("breath sweeps onto the locked target\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 53u);
+    retire_all(combat);
+    game::Sentinel& sentinel = combat.sentinels()[0];
+    sentinel.alive = true;
+    sentinel.respawn_timer = 0.0f;
+    sentinel.health = combat.tuning.sentinel_health;
+    sentinel.max_health = combat.tuning.sentinel_health;
+
+    // Outside the 12 degree breath cone, inside the 30 degree lock cone.
+    const float angle = radians(20.0f);
+    const float range = combat.tuning.breath_range * 0.6f;
+    sentinel.position = Vec3{std::sin(angle) * range, 0.0f, -std::cos(angle) * range};
+    sentinel.centre = sentinel.position;
+    sentinel.orbit_radius = 0.0f;
+    sentinel.orbit_speed = 0.0f;
+    sentinel.bob = 0.0f;
+    sentinel.fire_timer = 1e6f;
+
+    const FlightState player = player_at(Vec3::zero());
+    CombatInput hold;
+    hold.breath = true;
+
+    combat.tuning.aim_assist = 1.0f;
+    combat.update(0.2f, player, hold);
+    CHECK(combat.has_lock());
+    CHECK(combat.sentinels()[0].health < combat.tuning.sentinel_health);
+    // And the cone really is pointing at it, not merely reporting a hit.
+    CHECK(game::point_in_cone(combat.sentinels()[0].position, combat.breath_origin(),
+                              combat.breath_direction(),
+                              radians(combat.tuning.breath_half_angle_deg),
+                              combat.tuning.breath_range));
+}
+
 }  // namespace
 
 int main() {
     test_cone();
+    test_intercept_point();
+    test_lock_acquires_and_holds();
+    test_aim_assist_lands_an_off_axis_shot();
+    test_breath_follows_the_lock();
     test_closest_point_fraction();
     test_fireball_hits_and_kills();
     test_projectile_does_not_tunnel();

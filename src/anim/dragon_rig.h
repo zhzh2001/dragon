@@ -131,6 +131,15 @@ struct RigTuning {
     float base_clip_weight = 1.0f;
     float base_clip_rate = 1.0f;
 
+    // ---- head aim ----
+    //
+    // While attacking, the head turns toward the target. This is readability as
+    // much as flourish: the fire leaves along the aim axis, and a head pointing
+    // somewhere else makes the shot look like it came from nowhere, which reads
+    // as the animation fighting the aim.
+    float head_aim_blend = 0.85f;
+    float head_aim_max_deg = 60.0f;
+
     // ---- legs ----
     float leg_tuck_deg = 62.0f;  // folded in flight, extended on the ground
 };
@@ -147,6 +156,18 @@ public:
     // model units per metre, which made every force a factor of eight too weak
     // and the tail look rigid.
     void set_model_scale(float metres_per_unit);
+
+    // Where the head should look, in world space. Cleared every frame it is not
+    // set, so the head falls back to the chain simulation when not attacking.
+    void set_aim_target(core::Vec3 world_point) {
+        aim_target_ = world_point;
+        aim_active_ = true;
+    }
+    void clear_aim_target() { aim_active_ = false; }
+
+    // Where the mouth actually is, in world space -- the head joint's origin
+    // after animation. For drawing anything that should issue from it.
+    core::Vec3 head_position() const;
 
     // Authored motion layered under the procedural pose. Not owned; must outlive
     // the rig. Null disables it.
@@ -193,6 +214,8 @@ private:
                      const game::FlightState& state, core::Vec3 frame_acceleration,
                      core::Vec3 angular_acceleration, float dt);
     void drive_legs(const game::FlightState& state, float dt);
+    // Turns the head toward `aim_target_`, after the chains have posed it.
+    void aim_head(const game::FlightState& state);
     // Applies a body-space rotation to one joint, composed with its bind
     // rotation. `parent_extra` is the rotation already applied to its ancestors,
     // needed so the delta lands in the right frame.
@@ -210,6 +233,12 @@ private:
     ChainDynamics tail_sim_, neck_sim_;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
+    core::Vec3 aim_target_ = core::Vec3::zero();
+    bool aim_active_ = false;
+    // The head's own forward axis, in its local frame, measured from the bind
+    // pose. A rig's bones each point along their own axis, so this cannot be
+    // assumed.
+    core::Vec3 head_axis_local_ = core::Vec3::forward();
     float clip_time_ = 0.0f;
     // Previous frame's motion, for deriving the accelerations the chains feel.
     core::Vec3 previous_velocity_ = core::Vec3::zero();

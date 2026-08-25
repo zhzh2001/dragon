@@ -394,10 +394,11 @@ core::Vec2 App::read_free_look(float dt) const {
     }
 
     if (input_.has_gamepad()) {
+        const float invert = controls_.invert_free_look_y ? -1.0f : 1.0f;
         look.x += input_.gamepad_axis(SDL_GAMEPAD_AXIS_RIGHTX, controls_.gamepad_deadzone) *
                   controls_.free_look_gamepad * dt;
         look.y += input_.gamepad_axis(SDL_GAMEPAD_AXIS_RIGHTY, controls_.gamepad_deadzone) *
-                  controls_.free_look_gamepad * dt;
+                  controls_.free_look_gamepad * dt * invert;
     }
     return look;
 }
@@ -578,6 +579,7 @@ void App::pump_events() {
     }
     if (input_.pressed(SDL_SCANCODE_R)) respawn_dragon();
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
+    if (input_.pressed(SDL_SCANCODE_F1)) show_panels_ = !show_panels_;
     if (input_.pressed(SDL_SCANCODE_1)) apply_camera_preset(0);
     if (input_.pressed(SDL_SCANCODE_2)) apply_camera_preset(1);
     if (input_.pressed(SDL_SCANCODE_3)) apply_camera_preset(2);
@@ -634,15 +636,32 @@ void App::update(float dt) {
 
     if (combat_enabled_) {
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
+
+        // The head turns toward whatever is locked, so the dragon visibly looks
+        // at what it is about to burn. Read after the update so the head and the
+        // aim agree on the same frame, and consumed by the rig further down.
+        if (combat_.has_lock()) {
+            dragon_rig_.set_aim_target(combat_.lock_position());
+        } else {
+            dragon_rig_.clear_aim_target();
+        }
+
         if (events.had_hit) {
             hit_marker_ = 0.35f;
             hit_marker_position_ = events.last_hit;
         }
-        if (events.damage_taken > 0.0f) damage_flash_ = 1.0f;
+        if (events.damage_taken > 0.0f) {
+            damage_flash_ = 1.0f;
+            // Held well past the flash: the point is to let the player turn and
+            // find the shooter, which takes longer than the hit registers.
+            damage_direction_ = events.damage_from;
+            damage_marker_ = 3.0f;
+        }
         if (events.player_died) respawn_dragon();
     }
     hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
+    damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
 
     rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
@@ -829,6 +848,18 @@ void App::build_ui(float dt) {
     (void)dt;
     if (options_.hide_ui) return;
 
+    // The tuning panels cover most of the screen, which is right while tuning
+    // and useless while playing. One key clears the lot; the HUD stays.
+    if (!show_panels_) {
+        ImDrawList* draw = ImGui::GetForegroundDrawList();
+        draw->AddText(ImVec2(12.0f, float(device_.height()) - 22.0f),
+                      IM_COL32(200, 210, 225, 130), "F1  panels");
+        return;
+    }
+
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(12.0f, float(device_.height()) - 22.0f),
+                                            IM_COL32(200, 210, 225, 110), "F1  hide panels");
+
     build_flight_ui();
     build_rally_ui();
     build_dragon_ui();
@@ -836,6 +867,9 @@ void App::build_ui(float dt) {
 
     ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
+    // Collapsed by default: it is the tallest panel and holds the settings
+    // touched least often, so it is most of the clutter and none of the play.
+    ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Engine");
 
     const float ms = average_frame_ms();
@@ -1397,12 +1431,29 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         if (!projectile.alive) continue;
         const bool mine = projectile.team == game::Team::Player;
         const core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f}
-                                       : core::Vec3{0.35f, 0.65f, 1.0f};
+                                       : core::Vec3{0.45f, 0.80f, 1.0f};
+        // Incoming fire is drawn much larger than it is. Its hitbox is 2.5 m,
+        // which at 400 m is a couple of pixels -- invisible, and being hit by
+        // something invisible is the least readable thing in the game. Player
+        // fire needs no such help: you know where you shot.
+        const float scale = mine ? 1.0f : 3.2f;
         // A hot core inside a larger, dimmer glow: the shape that reads as a
         // burning projectile rather than as a coloured marble.
-        draw_ball(projectile.position, projectile.radius * 1.9f, colour, 0.5f, true);
-        draw_ball(projectile.position, projectile.radius * 0.8f,
-                  core::Vec3{1.0f, 0.88f, 0.62f}, 1.6f, true);
+        draw_ball(projectile.position, projectile.radius * 1.9f * scale, colour, 0.5f, true);
+        draw_ball(projectile.position, projectile.radius * 0.8f * scale,
+                  mine ? core::Vec3{1.0f, 0.88f, 0.62f} : core::Vec3{0.85f, 0.96f, 1.0f}, 1.6f,
+                  true);
+        // A short tracer behind it, so the eye can follow the line back to
+        // whoever fired it.
+        if (!mine) {
+            const core::Vec3 back = core::normalize_or(projectile.velocity, core::Vec3::zero());
+            for (int i = 1; i <= 3; ++i) {
+                const float t = float(i) / 4.0f;
+                draw_ball(projectile.position - back * (18.0f * float(i)),
+                          projectile.radius * 1.5f * scale * (1.0f - t), colour,
+                          0.45f * (1.0f - t), true);
+            }
+        }
     }
 
     // The flame: a line of spheres widening down the cone. It is drawn from the
@@ -1527,7 +1578,10 @@ void App::draw_combat_hud() {
             project_to_screen(view_proj, sentinel.position, width, height, screen) &&
             screen.x > 4.0f && screen.x < width - 4.0f && screen.y > 4.0f && screen.y < height - 4.0f;
 
-        const ImU32 colour = IM_COL32(255, 110, 90, 210);
+        const bool locked = combat_.locked_index() == int(&sentinel - combat_.sentinels().data());
+        // The locked target is unmistakable. Everything else is a faint mark:
+        // if every target looks equally important, none of them read.
+        const ImU32 colour = locked ? IM_COL32(255, 205, 70, 245) : IM_COL32(255, 110, 90, 150);
         if (on_screen) {
             // Brackets rather than a box: they read as a target at any size and
             // do not obscure what they surround.
@@ -1548,7 +1602,21 @@ void App::draw_combat_hud() {
             char label[32];
             std::snprintf(label, sizeof(label), "%.0f m", range);
             draw->AddText(ImVec2(screen.x + size + 5.0f, screen.y - 7.0f),
-                          IM_COL32(255, 200, 190, 190), label);
+                          locked ? IM_COL32(255, 225, 160, 230) : IM_COL32(255, 200, 190, 150),
+                          label);
+            if (locked) {
+                draw->AddCircle(ImVec2(screen.x, screen.y), size * 1.35f, colour, 24, 1.4f);
+                // Where the shot is actually going. Drawing the lead point makes
+                // the assist legible instead of magic -- and when the assist is
+                // turned down, it shows exactly how much lead is left to the
+                // player.
+                ImVec2 lead;
+                if (project_to_screen(view_proj, combat_.lock_intercept(), width, height, lead)) {
+                    draw->AddLine(ImVec2(screen.x, screen.y), lead,
+                                  IM_COL32(255, 225, 160, 110), 1.2f);
+                    draw->AddCircleFilled(lead, 3.5f, IM_COL32(255, 240, 190, 220), 12);
+                }
+            }
         } else {
             // Direction to it, projected onto the screen plane and pinned to the
             // edge of a circle around the centre.
@@ -1579,6 +1647,32 @@ void App::draw_combat_hud() {
         }
     }
 
+    // Where the last hit came from, held for a few seconds. A hit you cannot
+    // locate is not a fight, it is damage arriving from nowhere -- and this is
+    // the one indicator that turns "randomly hit" into "turn left".
+    if (damage_marker_ > 0.0f) {
+        const gfx::Camera& camera = active_camera();
+        const core::Vec3 to_source = damage_direction_ - camera.position;
+        const float right = core::dot(to_source, camera.right());
+        const float up = core::dot(to_source, camera.up());
+        const float ahead = core::dot(to_source, camera.forward());
+        core::Vec2 direction{right, -up};
+        if (ahead < 0.0f) direction = core::Vec2{-direction.x, -direction.y};
+        const float span = core::length(direction);
+        if (span > 1e-3f) {
+            direction = core::Vec2{direction.x / span, direction.y / span};
+            const float fade = core::saturate(damage_marker_ / 3.0f);
+            const int alpha = int(210.0f * fade);
+            const ImVec2 centre(width * 0.5f, height * 0.5f);
+            const float radius = core::minf(width, height) * 0.30f;
+            // A thick arc rather than an arrow: it reads at the very edge of
+            // attention, which is where a player looking at their target is.
+            const float angle = std::atan2(direction.y, direction.x);
+            draw->PathArcTo(centre, radius, angle - 0.34f, angle + 0.34f, 20);
+            draw->PathStroke(IM_COL32(255, 90, 70, alpha), 0, 7.0f);
+        }
+    }
+
     if (!combat_.alive()) {
         const char* text = "DOWNED";
         const ImVec2 size = ImGui::CalcTextSize(text);
@@ -1606,8 +1700,44 @@ void App::build_combat_ui() {
     ImGui::Text("health %5.0f / %.0f   breath %3.0f%%", combat_.health(), t.max_health,
                 combat_.breath() * 100.0f);
     ImGui::Text("sentinels %d alive   %d destroyed", combat_.sentinels_alive(), combat_.kills());
+    if (combat_.has_lock()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "LOCK on sentinel %d at %.0f m",
+                           combat_.locked_index(),
+                           core::distance(flight_.state().position, combat_.lock_position()));
+    } else {
+        ImGui::TextDisabled("no lock -- put a target inside %.0f deg of the nose",
+                            t.lock_cone_deg);
+    }
     ImGui::TextDisabled("F or LMB breath, G fireball, X boost");
     ImGui::TextDisabled("gamepad: LB breath, RB fireball, X boost");
+
+    // The two dials that decide whether combat is fun, at the top level rather
+    // than buried: aim assist is how easy hitting is, spread is how hard being
+    // hit is. Both were previously inside a collapsed header, which is the same
+    // as not existing.
+    ImGui::Separator();
+    ImGui::SliderFloat("aim assist", &t.aim_assist, 0.0f, 1.0f);
+    ImGui::SliderFloat("enemy aim spread", &t.sentinel_spread, 0.0f, 80.0f, "%.0f m");
+    ImGui::TextDisabled("higher assist = easier to hit; higher spread = easier to survive");
+    if (ImGui::Button("forgiving")) {
+        t.aim_assist = 1.0f;
+        t.sentinel_spread = 40.0f;
+        t.sentinel_fire_interval = 4.5f;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("standard")) {
+        game::CombatTuning defaults;
+        t.aim_assist = defaults.aim_assist;
+        t.sentinel_spread = defaults.sentinel_spread;
+        t.sentinel_fire_interval = defaults.sentinel_fire_interval;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("sharp")) {
+        t.aim_assist = 0.45f;
+        t.sentinel_spread = 7.0f;
+        t.sentinel_fire_interval = 2.0f;
+    }
+    ImGui::Separator();
 
     if (ImGui::Button("respawn wave")) combat_.spawn_wave(5);
     ImGui::SameLine();
@@ -1625,7 +1755,8 @@ void App::build_combat_ui() {
     }
 
     if (ImGui::CollapsingHeader("Breath")) {
-        ImGui::SliderFloat("range", &t.breath_range, 20.0f, 300.0f, "%.0f m");
+        ImGui::SliderFloat("range", &t.breath_range, 20.0f, 400.0f, "%.0f m");
+        ImGui::SliderFloat("assist cap", &t.breath_assist_max_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("half angle", &t.breath_half_angle_deg, 2.0f, 40.0f, "%.0f deg");
         ImGui::SliderFloat("damage/s", &t.breath_damage_per_second, 5.0f, 200.0f, "%.0f");
         ImGui::SliderFloat("drain/s", &t.breath_drain, 0.05f, 1.0f, "%.2f");
@@ -1641,14 +1772,18 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("regen delay", &t.regen_delay, 0.0f, 20.0f, "%.1f s");
     }
 
+    if (ImGui::CollapsingHeader("Targeting")) {
+        ImGui::SliderFloat("lock cone", &t.lock_cone_deg, 4.0f, 80.0f, "%.0f deg");
+        ImGui::SliderFloat("lock hold cone", &t.lock_hold_cone_deg, 10.0f, 170.0f, "%.0f deg");
+        ImGui::SliderFloat("lock range", &t.lock_range, 200.0f, 4000.0f, "%.0f m");
+    }
+
     if (ImGui::CollapsingHeader("Sentinels")) {
         ImGui::SliderFloat("health", &t.sentinel_health, 10.0f, 400.0f, "%.0f");
         ImGui::SliderFloat("radius", &t.sentinel_radius, 2.0f, 25.0f, "%.0f m");
         ImGui::SliderFloat("fire interval", &t.sentinel_fire_interval, 0.3f, 10.0f, "%.1f s");
         ImGui::SliderFloat("shot speed", &t.sentinel_projectile_speed, 40.0f, 400.0f, "%.0f m/s");
         ImGui::SliderFloat("shot damage", &t.sentinel_damage, 1.0f, 60.0f, "%.0f");
-        // The difficulty dial. Zero spread is not hard, it is unfair.
-        ImGui::SliderFloat("aim spread", &t.sentinel_spread, 0.0f, 80.0f, "%.0f m");
         ImGui::SliderFloat("range", &t.sentinel_range, 100.0f, 3000.0f, "%.0f m");
     }
 
@@ -1701,6 +1836,7 @@ void App::build_flight_ui() {
         ImGui::Text("stick  roll %+.2f   pitch %+.2f", stick_.x, stick_.y);
         ImGui::Text("gamepad: %s", input_.gamepad_name());
         ImGui::Checkbox("invert pitch (W lowers the nose)", &controls_.invert_pitch);
+        ImGui::Checkbox("invert free look Y (right stick)", &controls_.invert_free_look_y);
         ImGui::SliderFloat("stick smoothing", &controls_.stick_smoothing, 0.0f, 0.3f, "%.3f s");
         ImGui::SliderFloat("gamepad deadzone", &controls_.gamepad_deadzone, 0.0f, 0.4f);
         ImGui::SliderFloat("gamepad expo", &controls_.gamepad_expo, 1.0f, 3.0f);

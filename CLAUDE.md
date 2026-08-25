@@ -54,10 +54,11 @@ wingbeat, the inverted recovery, and every generated course were checked.
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
 | R | Restart the run |
-| Right-drag / right stick | Free look -- orbit the view without steering |
+| Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | V | First person, from behind the dragon's head |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
+| F1 | Hide every ImGui panel (the HUD stays) |
 | F / left mouse | Fire breath (hold) -- gamepad LB |
 | G | Fireball -- gamepad RB |
 | X | Boost -- gamepad X |
@@ -153,6 +154,36 @@ tests/       plain executables, no framework
 `CombatInput` -- so a bot will drive it through exactly the same struct the
 player fills. It renders nothing and reads input from nothing.
 
+### Targeting
+
+Aiming a small fast target in three dimensions is close to impossible unaided:
+a degree of nose error is tens of metres at engagement range, and the target is
+manoeuvring too. So the dragon **picks a target and the shot bends toward it**.
+
+- The lock is **sticky**: acquired only inside a narrow cone off the nose, held
+  until it falls well outside a much wider one, so a turn does not drop it.
+- `aim_assist` is the fraction of the way from the nose to the intercept, and it
+  is **0.9 by default**. What the player experiences is the *residual*: at 0.7 a
+  shot 14 degrees off the nose at 500 m still misses by 37 m, which reads as the
+  assist doing nothing. Turn it down for a harder aiming game, not to be fairer.
+- The aim solution leads the target **and compensates for the drop**. At 700 m
+  the flight time is 2.7 s and the fireball falls 15 m -- more than the target is
+  tall, so without this every long shot passes underneath for a reason the player
+  cannot see.
+- The **breath cone follows the same assisted axis**, so the flame drawn is the
+  flame that damages -- no hidden widening. Its assist is additionally capped by
+  angle (`breath_assist_max_deg`), because a fireball bending 30 degrees is
+  invisible while a flame doing it looks like a garden hose.
+- The rig **turns the head toward the lock** (`DragonRig::set_aim_target`). This
+  is readability, not flourish: fire leaves along the aim axis, and a head
+  pointing elsewhere makes the shot look like it came from nowhere.
+
+Being hit has to be locatable. `CombatEvents::damage_from` reports where the
+round came from, the HUD holds an arc at the screen edge pointing at it for three
+seconds, and **incoming fire is drawn about three times its true size** -- a
+2.5 m hitbox at 400 m is a couple of pixels, and being hit by something invisible
+is the least readable thing in the game. Player fire needs no such help.
+
 Three decisions that are the milestone:
 
 - **Hitboxes are generous and swept.** A fireball covers 3.5 m per frame at
@@ -178,6 +209,11 @@ its `position`, so a freshly spawned or respawned one sat at the **world origin*
 -- a live, shootable target in the middle of the map -- until its first update
 moved it. The respawn path returns early, so nothing else would have placed it.
 Initialise derived state at spawn, not on the first tick.
+
+**Put the difficulty dials where they can be found.** `aim_assist` and
+`sentinel_spread` decide whether combat is fun, and they spent a session inside a
+collapsed ImGui header, which is the same as not existing. They are now at the
+top of the panel with forgiving/standard/sharp presets beside them.
 
 Fire is drawn **unlit** (`ModelUniforms::material.w`). The shared tonemap ends in
 a gamma encode, so anything bright desaturates toward white; adding two units of

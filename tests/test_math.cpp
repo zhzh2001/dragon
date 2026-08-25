@@ -225,7 +225,38 @@ void test_damping() {
 
 }  // namespace
 
+// Round-tripping a rotation through a matrix. The 180-degree neighbourhood is
+// the whole point: the naive w-from-trace formula divides by something
+// approaching zero there and returns garbage.
+void test_quat_from_matrix() {
+    std::printf("quaternion <-> matrix round trip\n");
+    const Vec3 axes[5] = {Vec3::unit_x(), Vec3::unit_y(), Vec3::unit_z(),
+                          normalize(Vec3{1.0f, 2.0f, -3.0f}), normalize(Vec3{-4.0f, 1.0f, 0.5f})};
+    const float angles[7] = {0.0f, 15.0f, 90.0f, 179.0f, 180.0f, 181.0f, 275.0f};
+    for (const Vec3& axis : axes) {
+        for (const float degrees_angle : angles) {
+            const Quat q = Quat::from_axis_angle(axis, radians(degrees_angle));
+            const Quat back = quat_from_matrix(Mat4::trs(Vec3{3.0f, -1.0f, 2.0f}, q, Vec3::one()));
+            // Compare by action, not by components: q and -q are the same
+            // rotation and either is a correct answer.
+            for (const Vec3& probe : axes) {
+                CHECK(near(rotate(q, probe), rotate(back, probe), 1e-3f));
+            }
+        }
+    }
+
+    // Uniform scale must not leak into the rotation.
+    const Quat q = Quat::from_axis_angle(normalize(Vec3{1.0f, 1.0f, 0.0f}), radians(70.0f));
+    const Quat scaled = quat_from_matrix(Mat4::trs(Vec3::zero(), q, Vec3(4.0f)));
+    CHECK(near(rotate(q, Vec3::unit_z()), rotate(scaled, Vec3::unit_z()), 1e-3f));
+    CHECK(near(length(Vec3{scaled.x, scaled.y, scaled.z}) * 0.0f + 1.0f,
+               std::sqrt(scaled.x * scaled.x + scaled.y * scaled.y + scaled.z * scaled.z +
+                         scaled.w * scaled.w),
+               1e-4f));
+}
+
 int main() {
+    test_quat_from_matrix();
     test_vec3();
     test_quat_basics();
     test_quat_frames();

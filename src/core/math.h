@@ -374,6 +374,36 @@ inline Vec3 transform_point(const Mat4& m, Vec3 p) { return (m * Vec4{p, 1.0f}).
 // Transform a direction (w = 0), so translation is skipped.
 inline Vec3 transform_dir(const Mat4& m, Vec3 d) { return (m * Vec4{d, 0.0f}).xyz(); }
 
+// Rotation part of a transform matrix, as a quaternion.
+//
+// The columns are normalized first, so a matrix carrying uniform scale -- which
+// every joint matrix in a rig might -- still yields a unit rotation. Shepperd's
+// method: pick the branch whose divisor is largest, since the naive
+// w-from-trace formula loses all precision as the rotation approaches 180
+// degrees and the trace approaches -1.
+inline Quat quat_from_matrix(const Mat4& m) {
+    const Vec3 x = normalize_or(Vec3{m.col[0].x, m.col[0].y, m.col[0].z}, Vec3::unit_x());
+    const Vec3 y = normalize_or(Vec3{m.col[1].x, m.col[1].y, m.col[1].z}, Vec3::unit_y());
+    const Vec3 z = normalize_or(Vec3{m.col[2].x, m.col[2].y, m.col[2].z}, Vec3::unit_z());
+
+    const float trace = x.x + y.y + z.z;
+    Quat q;
+    if (trace > 0.0f) {
+        const float s = std::sqrt(trace + 1.0f) * 2.0f;
+        q = Quat{(y.z - z.y) / s, (z.x - x.z) / s, (x.y - y.x) / s, 0.25f * s};
+    } else if (x.x > y.y && x.x > z.z) {
+        const float s = std::sqrt(1.0f + x.x - y.y - z.z) * 2.0f;
+        q = Quat{0.25f * s, (y.x + x.y) / s, (z.x + x.z) / s, (y.z - z.y) / s};
+    } else if (y.y > z.z) {
+        const float s = std::sqrt(1.0f + y.y - x.x - z.z) * 2.0f;
+        q = Quat{(y.x + x.y) / s, 0.25f * s, (z.y + y.z) / s, (z.x - x.z) / s};
+    } else {
+        const float s = std::sqrt(1.0f + z.z - x.x - y.y) * 2.0f;
+        q = Quat{(z.x + x.z) / s, (z.y + y.z) / s, 0.25f * s, (x.y - y.x) / s};
+    }
+    return normalize(q);
+}
+
 inline Mat4 transpose(const Mat4& m) {
     Mat4 r;
     for (int c = 0; c < 4; ++c)

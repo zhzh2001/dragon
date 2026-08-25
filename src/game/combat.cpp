@@ -49,6 +49,17 @@ float closest_point_fraction(Vec3 from, Vec3 to, Vec3 point) {
     return core::clampf(core::dot(point - from, segment) / squared, 0.0f, 1.0f);
 }
 
+Vec3 intercept_point(Vec3 origin, Vec3 target, Vec3 target_velocity, float speed,
+                     int iterations) {
+    if (speed <= 1e-3f) return target;
+    float flight_time = core::length(target - origin) / speed;
+    for (int i = 0; i < iterations; ++i) {
+        const Vec3 predicted = target + target_velocity * flight_time;
+        flight_time = core::length(predicted - origin) / speed;
+    }
+    return target + target_velocity * flight_time;
+}
+
 float Combat::random_unit() {
     // xorshift32: the sentinels only need spread that does not repeat visibly,
     // and a deterministic sequence makes a headless run reproducible.
@@ -58,6 +69,112 @@ float Combat::random_unit() {
     return float(rng_ & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
 }
 
+Vec3 Combat::muzzle(const FlightState& player) const { return muzzle_of(player); }
+
+Vec3 Combat::lock_position() const {
+    if (locked_ < 0 || size_t(locked_) >= sentinels_.size()) return Vec3::zero();
+    return sentinels_[size_t(locked_)].position;
+}
+
+// Blends the nose toward a point. Rotating between the two directions rather
+// than lerping the vectors keeps the result a rotation of fixed magnitude, so
+// the assist feels the same at every range instead of stronger up close.
+Vec3 Combat::assisted_direction(const FlightState& player, Vec3 target,
+                                float max_turn_deg) const {
+    const Vec3 nose = player.forward();
+    if (locked_ < 0) return nose;
+    const Vec3 toward = target - muzzle(player);
+    if (core::length_sq(toward) < 1e-6f) return nose;
+
+    const core::Quat full = core::rotation_between(nose, core::normalize(toward));
+    float fraction = core::saturate(tuning.aim_assist);
+    // Cap by angle as well as by strength, so a target far off the nose is
+    // helped by a plausible amount rather than by whatever it takes.
+    const float angle = 2.0f * std::acos(core::clampf(std::fabs(full.w), -1.0f, 1.0f));
+    const float limit = core::radians(core::maxf(max_turn_deg, 0.0f));
+    if (angle * fraction > limit && angle > 1e-4f) fraction = limit / angle;
+
+    return core::normalize_or(
+        core::rotate(core::slerp(core::Quat::identity(), full, fraction), nose), nose);
+}
+
+Vec3 Combat::fireball_direction(const FlightState& player) const {
+    // A fireball's turn is invisible -- it leaves and is gone -- so the only
+    // limit that matters is the lock cone that let the target be picked at all.
+    return assisted_direction(player, lock_intercept_, tuning.lock_hold_cone_deg);
+}
+
+Vec3 Combat::breath_direction_for(const FlightState& player) const {
+    // Breath aims at where the target *is*, not where it will be: the stream is
+    // continuous, so there is nothing to lead.
+    return assisted_direction(player, lock_position(), tuning.breath_assist_max_deg);
+}
+
+// Picks and holds a target. Sticky by design: acquired only inside a narrow cone
+// off the nose, but kept until it falls well outside a much wider one, so a
+// target does not blink out the moment a turn swings the nose past it.
+void Combat::update_lock(const FlightState& player) {
+    const Vec3 origin = muzzle(player);
+
+    // Lead the target, then raise the aim by however far the shot will fall on
+    // the way. Without this the assist is still wrong at range for a reason the
+    // player cannot see: at 700 m the flight time is 2.7 s and the drop is 15 m,
+    // which is larger than the target, so every long shot passes underneath.
+    auto solve_aim = [&](const Sentinel& target) {
+        Vec3 aim = intercept_point(origin, target.position, target.velocity,
+                                   tuning.fireball_speed);
+        for (int i = 0; i < 2; ++i) {
+            const float flight_time =
+                core::length(aim - origin) / core::maxf(tuning.fireball_speed, 1.0f);
+            aim.y = target.position.y + target.velocity.y * flight_time +
+                    0.5f * tuning.fireball_gravity * flight_time * flight_time;
+        }
+        return aim;
+    };
+    const Vec3 nose = player.forward();
+    const float acquire = std::cos(core::radians(core::clampf(tuning.lock_cone_deg, 1.0f, 89.0f)));
+    const float hold = std::cos(core::radians(core::clampf(tuning.lock_hold_cone_deg, 1.0f, 179.0f)));
+
+    auto alignment = [&](const Sentinel& sentinel, float& out_range) {
+        const Vec3 offset = sentinel.position - origin;
+        out_range = core::length(offset);
+        if (out_range < 1e-3f) return 1.0f;
+        return core::dot(offset / out_range, nose);
+    };
+
+    // Keep the current lock if it is still worth keeping.
+    if (locked_ >= 0 && size_t(locked_) < sentinels_.size()) {
+        const Sentinel& current = sentinels_[size_t(locked_)];
+        float range = 0.0f;
+        if (current.alive && alignment(current, range) >= hold && range <= tuning.lock_range * 1.25f) {
+            lock_intercept_ = solve_aim(current);
+            return;
+        }
+        locked_ = -1;
+    }
+
+    // Otherwise take the best-aligned candidate inside the acquisition cone.
+    // Alignment rather than distance: the target you are pointing at is the one
+    // you meant, even if something else is closer.
+    float best = acquire;
+    int best_index = -1;
+    for (size_t i = 0; i < sentinels_.size(); ++i) {
+        const Sentinel& sentinel = sentinels_[i];
+        if (!sentinel.alive) continue;
+        float range = 0.0f;
+        const float aligned = alignment(sentinel, range);
+        if (range > tuning.lock_range || aligned < best) continue;
+        best = aligned;
+        best_index = int(i);
+    }
+    locked_ = best_index;
+    if (locked_ >= 0) {
+        lock_intercept_ = solve_aim(sentinels_[size_t(locked_)]);
+    } else {
+        lock_intercept_ = origin + nose * 400.0f;
+    }
+}
+
 void Combat::reset(const Terrain* terrain, Vec3 arena_centre, uint32_t seed) {
     terrain_ = terrain;
     arena_centre_ = arena_centre;
@@ -65,6 +182,7 @@ void Combat::reset(const Terrain* terrain, Vec3 arena_centre, uint32_t seed) {
     projectiles_.clear();
     sentinels_.clear();
     kills_ = 0;
+    locked_ = -1;
     revive();
     spawn_wave(5);
 }
@@ -229,6 +347,10 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
             if (sweep_hit(player.position, 6.5f, distance)) {
                 health_ -= projectile.damage;
                 events.damage_taken += projectile.damage;
+                // Where the round came from, not where it hit: the HUD has to
+                // point the player at the shooter.
+                events.damage_from = previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f;
+                events.took_damage = true;
                 time_since_damage_ = 0.0f;
                 consumed = true;
                 if (health_ <= 0.0f) {
@@ -302,8 +424,10 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
 }
 
 void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& events) {
-    breath_origin_ = muzzle_of(player);
-    breath_direction_ = player.forward();
+    breath_origin_ = muzzle(player);
+    // The cone follows the assist, so the flame the player sees is the flame
+    // that does the damage -- there is no hidden bend and no invisible widening.
+    breath_direction_ = breath_direction_for(player);
     if (!breathing_) return;
 
     const float half_angle = core::radians(tuning.breath_half_angle_deg);
@@ -329,6 +453,10 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     if (dt <= 0.0f) return events;
 
     const bool player_alive = health_ > 0.0f;
+
+    // Before anything reads the aim: firing, the breath cone and the HUD all
+    // depend on this frame's lock.
+    update_lock(player);
 
     // ---- cooldowns ----
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
@@ -369,8 +497,9 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         // Inherits the dragon's velocity, so a shot fired from a dive is
         // genuinely faster. Aiming then means pointing the nose, which is what
         // the player thinks they are doing.
-        const Vec3 velocity = player.velocity + player.forward() * tuning.fireball_speed;
-        fire_projectile(muzzle_of(player), velocity, tuning.fireball_damage,
+        const Vec3 velocity =
+            player.velocity + fireball_direction(player) * tuning.fireball_speed;
+        fire_projectile(muzzle(player), velocity, tuning.fireball_damage,
                         tuning.fireball_radius, tuning.fireball_blast_radius, Team::Player);
     }
 

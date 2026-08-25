@@ -509,6 +509,91 @@ void test_base_clip_layers_under_rig() {
     CHECK(finite);
 }
 
+// The head aim exists for readability: fire leaves along the aim axis, and a
+// head pointing elsewhere makes the shot look like it came from nowhere.
+void test_head_aims_at_a_target() {
+    std::printf("the head turns toward an aim target\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    CHECK(joints.head != anim::NO_PARENT);
+
+    game::FlightState state;
+    state.velocity = Vec3{0.0f, 0.0f, -40.0f};
+
+    // The head's own forward axis is whatever the rig says it is, so measure the
+    // rest direction rather than assuming one.
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    for (int i = 0; i < 30; ++i) rig.update(state, 1.0f / 60.0f);
+
+    // Rotating a joint does not move its origin, so the head's *orientation* is
+    // what has to be measured -- a neck-to-head offset cannot see this at all.
+    // The look axis is derived from the rest pose rather than assumed, exactly
+    // because a real rig's bones each point along their own axis.
+    const Quat rest_rotation = quat_from_matrix(rig.world_matrices()[size_t(joints.head)]);
+    const Vec3 rest_look =
+        normalize(rig.head_position() -
+                  rig.world_matrices()[size_t(joints.neck.back())].col[3].xyz());
+    const Vec3 look_axis_local = normalize(rotate(conjugate(rest_rotation), rest_look));
+
+    auto head_direction = [&](anim::DragonRig& r) {
+        return normalize(
+            rotate(quat_from_matrix(r.world_matrices()[size_t(joints.head)]), look_axis_local));
+    };
+    const Vec3 rest = head_direction(rig);
+
+    // A target hard to the right and level. In body space the dragon faces -Z,
+    // so this is roughly 50 degrees off the nose.
+    const Vec3 target = state.position + Vec3{120.0f, 0.0f, -100.0f};
+    const Vec3 wanted = normalize(target - rig.head_position());
+
+    for (int i = 0; i < 60; ++i) {
+        rig.set_aim_target(target);
+        rig.update(state, 1.0f / 60.0f);
+    }
+    const Vec3 aimed = head_direction(rig);
+
+    // Closer to the target than it was, and actually moved.
+    CHECK(dot(aimed, wanted) > dot(rest, wanted));
+    CHECK(!near(aimed, rest, 1e-2f));
+
+    // Releasing the aim lets it come back: set_aim_target is per frame, so not
+    // calling it is how "stop looking" is expressed.
+    for (int i = 0; i < 120; ++i) rig.update(state, 1.0f / 60.0f);
+    CHECK(dot(head_direction(rig), wanted) < dot(aimed, wanted));
+
+    // The limit is respected: even aiming straight backwards must not swivel the
+    // head all the way round.
+    anim::DragonRig limited;
+    limited.init(skeleton, joints);
+    limited.tuning.head_aim_max_deg = 25.0f;
+    for (int i = 0; i < 30; ++i) limited.update(state, 1.0f / 60.0f);
+    const Vec3 limited_rest = head_direction(limited);
+    for (int i = 0; i < 120; ++i) {
+        limited.set_aim_target(state.position + Vec3{0.0f, 0.0f, 200.0f});  // behind
+        limited.update(state, 1.0f / 60.0f);
+    }
+    const float swing =
+        degrees(std::acos(clampf(dot(limited_rest, head_direction(limited)), -1.0f, 1.0f)));
+    // The cap is applied per frame against the remaining error, so the head
+    // settles at the cap rather than stepping by it. A little slack for the
+    // chain, which is also moving.
+    CHECK(swing < limited.tuning.head_aim_max_deg + 12.0f);
+
+    bool finite = true;
+    for (const Mat4& m : limited.skinning_matrices()) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (!std::isfinite(m.col[c][r])) finite = false;
+            }
+        }
+    }
+    CHECK(finite);
+}
+
 }  // namespace
 
 int main() {
@@ -523,6 +608,7 @@ int main() {
     test_animation_clip_loops();
     test_clip_rest_reproduces_bind();
     test_base_clip_layers_under_rig();
+    test_head_aims_at_a_target();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

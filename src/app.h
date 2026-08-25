@@ -142,6 +142,11 @@ private:
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;
+    core::Vec3 damage_direction_ = core::Vec3::zero();
+    float damage_marker_ = 0.0f;
+    // Master switch for every ImGui panel. The tuning UI covers most of the
+    // screen, which is fine while tuning and useless while playing.
+    bool show_panels_ = true;
     // The dragon is a real skinned rig now: skeleton, skinned mesh, and
     // procedural animation driven by flight state.
     anim::DragonShape dragon_shape_;
@@ -224,6 +229,11 @@ private:
     struct Controls {
         // Mouse steering is off by default: it needs accumulation to work at
         // all, and accumulation is exactly what makes it hard to control.
+        // Free look pitch on the right stick. Inverted by default: pushing the
+        // stick away tilts the view up, which is what a stick means to anyone who
+        // has flown one.
+        bool invert_free_look_y = true;
+
         bool mouse_stick = false;
         float mouse_sensitivity = 0.0022f;
         // Half-life for mouse deflection decaying back to centre. Short, so the
