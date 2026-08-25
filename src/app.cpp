@@ -797,6 +797,7 @@ void App::build_ui(float dt) {
 
     build_flight_ui();
     build_rally_ui();
+    build_dragon_ui();
 
     ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
@@ -1222,6 +1223,77 @@ void App::build_rally_ui() {
     ImGui::End();
 }
 
+// Animation and material tuning for the dragon itself. Kept out of the Flight
+// window because these are looked at while parked and staring at the model,
+// not while flying it.
+void App::build_dragon_ui() {
+    anim::RigTuning& rig = dragon_rig_.tuning;
+
+    // Right of the Engine window and above Rally. Placement matters: the first
+    // version of this panel opened underneath Engine and was invisible, which
+    // is indistinguishable from not having built it at all.
+    ImGui::SetNextWindowPos(ImVec2(408.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(384, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Dragon");
+
+    ImGui::TextDisabled("%s, %d joints, %zu submesh(es)", dragon_source_.c_str(),
+                        dragon_skeleton_.count(), dragon_mesh_.submeshes().size());
+
+    if (ImGui::CollapsingHeader("Material maps", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Toggling one at a time is the only honest way to see what it does.
+        ImGui::Checkbox("base colour", &material_toggles_.base_colour);
+        ImGui::Checkbox("normal map", &material_toggles_.normal_map);
+        ImGui::Checkbox("roughness / metallic / occlusion", &material_toggles_.orm_map);
+        if (!material_toggles_.base_colour || !material_toggles_.normal_map ||
+            !material_toggles_.orm_map) {
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "a map is switched off");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("all on")) material_toggles_ = gfx::MaterialToggles{};
+        }
+        ImGui::TextDisabled("%zu texture(s) loaded", dragon_textures_.size());
+    }
+
+    if (ImGui::CollapsingHeader("Wings")) {
+        ImGui::SliderFloat("flap amplitude", &rig.flap_shoulder_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("outboard decay", &rig.outboard_decay, 0.0f, 2.0f);
+        ImGui::SliderFloat("phase lag", &rig.wing_phase_lag, 0.0f, 1.5f);
+        ImGui::SliderFloat("tuck sweep", &rig.tuck_sweep_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("tuck fold", &rig.tuck_fold_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("brake flare", &rig.brake_flare_deg, 0.0f, 90.0f, "%.0f deg");
+    }
+
+    if (ImGui::CollapsingHeader("Neck & tail dynamics", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // These are the two that decide the whole feel: stiffness sets how far
+        // the chain swings out, damping how long it rings afterwards.
+        ImGui::SliderFloat("stiffness", &rig.chain_stiffness, 1.0f, 60.0f, "%.1f");
+        ImGui::SliderFloat("damping", &rig.chain_damping, 0.2f, 20.0f, "%.2f");
+        ImGui::SliderFloat("inertia", &rig.chain_inertia, 0.0f, 3.0f);
+        ImGui::SliderFloat("gravity", &rig.chain_gravity, 0.0f, 2.0f);
+        ImGui::SliderFloat("drag", &rig.chain_drag, 0.0f, 0.5f);
+        ImGui::SliderFloat("max bend", &rig.chain_max_bend_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
+    }
+
+    if (ImGui::CollapsingHeader("Legs & authored motion", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
+        if (dragon_rig_.has_base_clip()) {
+            ImGui::TextDisabled("clip '%s'", dragon_animations_.front().name.c_str());
+            // Weight 0 is the honest A/B: it restores exactly the un-layered rig.
+            ImGui::SliderFloat("clip weight", &rig.base_clip_weight, 0.0f, 1.0f);
+            ImGui::SliderFloat("clip rate", &rig.base_clip_rate, 0.0f, 3.0f);
+        } else {
+            ImGui::TextDisabled("no authored clip in this model");
+        }
+    }
+
+    ImGui::Checkbox("show skeleton", &show_skeleton_);
+
+    // A replay must animate exactly like the live dragon, or the ghost stops
+    // being a fair comparison.
+    ghost_rig_.tuning = rig;
+    ImGui::End();
+}
+
 void App::build_flight_ui() {
     const game::FlightState& s = flight_.state();
     game::FlightTuning& t = flight_.tuning;
@@ -1397,6 +1469,7 @@ void App::render() {
                                      shadow_.enabled ? shadow_.strength : 0.0f,
                                      1.0f / float(shadow_.resolution())};
     world_.set_scene(scene);
+    world_.set_material_toggles(material_toggles_);
 
     // Debug geometry has to be uploaded before any render pass opens, because
     // the upload itself is a copy pass.

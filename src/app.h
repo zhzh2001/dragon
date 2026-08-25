@@ -96,6 +96,7 @@ private:
     void draw_flight_debug();
     void build_flight_ui();
     void build_rally_ui();
+    void build_dragon_ui();
     void draw_hud();
     void select_course(int index);
     void rebuild_courses();
@@ -133,6 +134,7 @@ private:
     std::vector<SDL_GPUTexture*> dragon_textures_;
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
+    gfx::MaterialToggles material_toggles_;
 
     // An imported asset arrives in whatever scale and orientation its author
     // used. Rather than guess at load time, the correction is a live transform

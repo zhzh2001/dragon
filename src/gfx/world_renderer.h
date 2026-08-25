@@ -12,6 +12,15 @@ namespace gfx {
 // Draws the world: sky, then opaque geometry. Owns the pipelines and the
 // per-frame uniform block, so gameplay code hands it a camera and a mesh and
 // does not touch the GPU API.
+// Per-map switches for the model's material set, so each can be turned off and
+// compared in place. A normal or roughness map is very hard to judge without an
+// A/B: the eye accepts almost any plausible surface until it sees the other one.
+struct MaterialToggles {
+    bool base_colour = true;
+    bool normal_map = true;
+    bool orm_map = true;
+};
+
 class WorldRenderer {
 public:
     bool init(Device* device, PipelineCache* pipelines);
@@ -27,6 +36,9 @@ public:
 
     // Terrain samples the shadow map, so the renderer needs to know about it.
     void set_shadow_map(ShadowMap* shadow_map) { shadow_map_ = shadow_map; }
+
+    // Debug only; every map is on in normal use.
+    void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
 
     void draw_terrain(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
 
@@ -61,6 +73,7 @@ private:
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
+    MaterialToggles material_toggles_;
     // 1x1 white, for submeshes with no base-colour texture. A sampler slot must
     // be filled, and the shadow map cannot serve: it is a depth texture and the
     // shader declares a colour one.

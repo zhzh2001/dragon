@@ -202,9 +202,12 @@ void WorldRenderer::draw_skinned(Device& device, SDL_GPURenderPass* pass,
             if (slot < 0 || size_t(slot) >= textures.size()) return nullptr;
             return textures[size_t(slot)];
         };
-        SDL_GPUTexture* base_colour = lookup(submesh.base_color_texture);
-        SDL_GPUTexture* normal_map = lookup(submesh.normal_texture);
-        SDL_GPUTexture* orm_map = lookup(submesh.orm_texture);
+        SDL_GPUTexture* base_colour =
+            material_toggles_.base_colour ? lookup(submesh.base_color_texture) : nullptr;
+        SDL_GPUTexture* normal_map =
+            material_toggles_.normal_map ? lookup(submesh.normal_texture) : nullptr;
+        SDL_GPUTexture* orm_map =
+            material_toggles_.orm_map ? lookup(submesh.orm_texture) : nullptr;
 
         ModelUniforms submesh_model = model;
         submesh_model.material.x = base_colour && sampler ? 1.0f : 0.0f;
