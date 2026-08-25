@@ -267,17 +267,23 @@ void test_rig_responds_to_flight() {
                 raised_tip.y - flat_tip.y);
     CHECK(raised_tip.y > flat_tip.y + 0.5f);
 
-    // The tail must lag a sustained turn. This is the signature detail of the
-    // whole rig, so it gets an assertion rather than a look.
+    // The tail must whip when a turn begins. At a steady spin rate with no
+    // airflow the correct steady state is a radial tail with NO lateral offset
+    // (Coriolis needs motion, centrifugal is radial), so the thing to assert is
+    // the transient: the Euler-force kick at onset throws the tip sideways.
     game::FlightState turning;
     turning.angular_velocity = Vec3{0.0f, 1.0f, 0.0f};  // yawing
-    for (int i = 0; i < 120; ++i) rig.update(turning, 1.0f / 60.0f);
     const int tail_tip = joints.tail.back();
     const Vec3 tail_bind = skeleton.world_bind(tail_tip).translation_part();
-    const Vec3 tail_posed = transform_point(rig.skinning_matrices()[size_t(tail_tip)], tail_bind);
-    std::printf("  tail tip deflects %.2f m laterally under a 1 rad/s yaw\n",
-                std::fabs(tail_posed.x - tail_bind.x));
-    CHECK(std::fabs(tail_posed.x - tail_bind.x) > 0.25f);
+    float peak_whip = 0.0f;
+    for (int i = 0; i < 120; ++i) {
+        rig.update(turning, 1.0f / 60.0f);
+        const Vec3 posed =
+            transform_point(rig.skinning_matrices()[size_t(tail_tip)], tail_bind);
+        peak_whip = maxf(peak_whip, std::fabs(posed.x - tail_bind.x));
+    }
+    std::printf("  tail tip whips %.2f m at the onset of a 1 rad/s yaw\n", peak_whip);
+    CHECK(peak_whip > 0.25f);
 
     // And it must settle back, not oscillate forever: a spring chain with the
     // damping wrong rings indefinitely.

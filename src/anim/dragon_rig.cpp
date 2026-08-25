@@ -321,6 +321,42 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
         foot_joints_.emplace_back(root, 0);
     }
 
+    // Re-anchor each foot to the nearest leg-chain end. The feet are IK targets
+    // parented to the body: without this, posing the legs leaves every foot
+    // nailed to its bind position in space. Matching by bind distance rather
+    // than by name survives this asset's naming (Hand_* for the front feet).
+    // Helpers binding at the origin carry no meaningful anchor and are skipped.
+    foot_attach_.clear();
+    std::vector<int> anchors;
+    for (int side = 0; side < 2; ++side) {
+        if (!joints.leg[side].empty()) anchors.push_back(joints.leg[side].back());
+        if (!joints.front_leg[side].empty()) anchors.push_back(joints.front_leg[side].back());
+    }
+    for (const int foot : joints.foot_roots) {
+        const Vec3 foot_position = skeleton.world_bind(foot).translation_part();
+        if (core::length_sq(foot_position) < 1e-4f || anchors.empty()) continue;
+        int best = anchors.front();
+        float best_distance = 1e9f;
+        for (const int anchor : anchors) {
+            const float distance =
+                core::distance(skeleton.world_bind(anchor).translation_part(), foot_position);
+            if (distance < best_distance) {
+                best_distance = distance;
+                best = anchor;
+            }
+        }
+        FootAttach attach;
+        attach.foot = foot;
+        attach.anchor = best;
+        const Quat anchor_rotation = core::quat_from_matrix(skeleton.world_bind(best));
+        const Quat foot_rotation = core::quat_from_matrix(skeleton.world_bind(foot));
+        attach.offset = core::rotate(core::conjugate(anchor_rotation),
+                                     foot_position -
+                                         skeleton.world_bind(best).translation_part());
+        attach.rotation = core::normalize(core::conjugate(anchor_rotation) * foot_rotation);
+        foot_attach_.push_back(attach);
+    }
+
     setup_chain(tail_sim_, joints.tail);
     // The head rides on the end of the neck, so it is simulated as part of it.
     std::vector<int> neck_with_head = joints.neck;
@@ -419,12 +455,27 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         }
         const float normalize = decay_total > 1e-4f ? 1.0f / decay_total : 1.0f;
 
+        // On the upstroke the flap redistributes outboard: the humerus barely
+        // elevates and the wrist leads, which is how a real bird raises its
+        // wings -- and it is what keeps the two inner membranes from crossing
+        // above the spine at the top of the beat. Total tip rotation is
+        // unchanged; only the shape of the wing changes.
+        const float shoulder_cut = 0.65f * upstroke;
+        auto flap_share_at = [&](size_t k) {
+            return std::pow(tuning.outboard_decay, float(k)) *
+                   (k < 2 ? 1.0f - shoulder_cut : 1.0f);
+        };
+        float flap_total = 0.0f;
+        for (size_t k = 0; k < root_len + longest_finger; ++k) flap_total += flap_share_at(k);
+        const float flap_normalize = flap_total > 1e-4f ? 1.0f / flap_total : 1.0f;
+
         int depth = 0;
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
             const float decay = std::pow(tuning.outboard_decay, float(depth)) * normalize;
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
-            const float flap_angle = (base * sign + roll_lean) * decay * lag;
+            const float flap_angle = (base * sign + roll_lean) *
+                                     flap_share_at(size_t(depth)) * flap_normalize * lag;
 
             // Folding sweeps back about local Y and closes progressively toward
             // the tip, which is how a wing actually stows.
@@ -553,9 +604,17 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         const Vec3 coriolis = -2.0f * core::cross(omega, v);
         const Vec3 linear = -frame_acceleration;
 
-        Vec3 acceleration =
-            gravity_local + (centrifugal + euler + coriolis + linear) *
-                                (tuning.chain_inertia * feel.inertia);
+        // Axial inertial force is mostly suppressed: transverse forces bend a
+        // spine, axial compression only buckles it, and muscle resists exactly
+        // that. Without this a braking dragon's neck folded under its chest.
+        const Vec3 along_chain =
+            core::normalize_or(sim.position[i] - sim.position[i - 1], Vec3::forward());
+        Vec3 inertial = (centrifugal + euler + coriolis + linear) *
+                        (tuning.chain_inertia * feel.inertia);
+        const Vec3 axial = along_chain * core::dot(inertial, along_chain);
+        inertial += axial * (tuning.chain_axial_response - 1.0f);
+
+        Vec3 acceleration = gravity_local + inertial;
 
         // Spring back toward the (possibly steered) target shape, so the chain
         // has a shape to return to rather than dangling.
@@ -571,7 +630,7 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         // the tail hangs at a hover and pulls dead straight in a dive without
         // either posture being authored.
         const Vec3 relative = airflow_local - v;
-        const Vec3 along = core::normalize_or(r - sim.position[i - 1], Vec3::forward());
+        const Vec3 along = along_chain;
         const Vec3 normal_flow = relative - along * core::dot(relative, along);
         const Vec3 axial_flow = relative - normal_flow;
         // The v^2 term only where it is restoring. A segment pointing
@@ -755,6 +814,45 @@ float DragonRig::flight_intensity(const game::FlightState& state) const {
     return state.grounded ? 0.0f : intensity;
 }
 
+// Moves each body-parented foot root to the end of its posed leg, as if it were
+// parented there, blended by `airborne` so the authored planted stance wins on
+// the ground. Needs world matrices for the current pose; leaves them stale.
+void DragonRig::attach_feet(float airborne) {
+    const float follow = core::saturate(tuning.foot_follow) * airborne;
+    if (follow <= 0.001f) return;
+    for (const FootAttach& attach : foot_attach_) {
+        const int parent = skeleton_->joint(attach.foot).parent;
+        if (parent == NO_PARENT) continue;
+
+        const core::Mat4& anchor_world = world_[size_t(attach.anchor)];
+        const Quat anchor_rotation = core::quat_from_matrix(anchor_world);
+        const Vec3 target_position =
+            anchor_world.col[3].xyz() + core::rotate(anchor_rotation, attach.offset);
+        const Quat target_rotation = core::normalize(anchor_rotation * attach.rotation);
+
+        const core::Mat4& parent_world = world_[size_t(parent)];
+        const Quat parent_rotation = core::quat_from_matrix(parent_world);
+        const Quat parent_inverse = core::conjugate(parent_rotation);
+        // The parent is the body joint that absorbs the scene's SCALE (that is
+        // how this asset's bind pose reconciles -- see the loader notes), and a
+        // local position lives in the parent's scaled space. Dropping the
+        // divide sent every foot to within a metre of the origin.
+        const Vec3 scale{core::length(parent_world.col[0].xyz()),
+                         core::length(parent_world.col[1].xyz()),
+                         core::length(parent_world.col[2].xyz())};
+        Vec3 local_position =
+            core::rotate(parent_inverse, target_position - parent_world.col[3].xyz());
+        local_position.x /= core::maxf(scale.x, 1e-6f);
+        local_position.y /= core::maxf(scale.y, 1e-6f);
+        local_position.z /= core::maxf(scale.z, 1e-6f);
+        const Quat local_rotation = core::normalize(parent_inverse * target_rotation);
+
+        Transform& local = pose_.local[size_t(attach.foot)];
+        local.position = core::lerp(local.position, local_position, follow);
+        local.rotation = core::normalize(core::slerp(local.rotation, local_rotation, follow));
+    }
+}
+
 void DragonRig::update(const game::FlightState& state, float dt) {
     if (!skeleton_ || dt <= 0.0f) return;
 
@@ -831,6 +929,19 @@ void DragonRig::update(const game::FlightState& state, float dt) {
                 neck_steer, ChainFeel{tuning.neck_stiffness_scale, tuning.neck_gravity_scale},
                 dt);
     drive_legs(state, frame_acceleration, angular_acceleration, dt);
+
+    // Feet: first anchor them to the posed legs (needs world matrices), then
+    // the relaxed hang and claw curl compose on top.
+    compute_world_matrices(*skeleton_, pose_, world_);
+    const float airborne = 1.0f - leg_extend_;
+    attach_feet(airborne);
+    if (airborne > 0.001f) {
+        const float root_angle = core::radians(tuning.foot_hang_deg) * airborne;
+        const float curl_angle = core::radians(tuning.toe_curl_deg) * airborne;
+        for (const auto& [joint, depth] : foot_joints_) {
+            rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
+        }
+    }
 
     compute_world_matrices(*skeleton_, pose_, world_);
     // The head aim needs posed world matrices to measure against, and changing

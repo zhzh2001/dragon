@@ -411,10 +411,28 @@ frame's pseudo-forces. Under braking a full-inertia neck buckled under the
 chest; a real animal holds its head as a stable platform for the eyes.
 
 **This asset parents all four feet directly to the body root** (IK targets),
-so no leg motion ever moves them -- once the idle fades they freeze in their
-standing bind pose. `map_dragon_joints` finds the foot roots by name and the
-rig gives them a flight hang: ankle dropped, claws part-curled, zero when
-grounded (`foot_hang_deg`, `toe_curl_deg`).
+so no leg motion ever moves them -- pose the legs however you like, the feet
+stay nailed to their bind position in space, which was the whole
+standing-in-air look. In flight each foot is therefore **re-anchored to the end
+of its leg chain** (`foot_follow`): matched by bind distance, its bind offset
+carried in the anchor's frame, converted back to a body-local transform each
+frame -- and that conversion must divide by the parent's scale, because the
+joint below the root absorbs the scene's scale and a local position lives in
+scaled space; dropping the divide sent every foot to within a metre of the
+origin. On the ground the authored planted stance wins. The hang and claw curl
+(`foot_hang_deg`, `toe_curl_deg`) compose on top.
+
+**Axial chain forces are mostly suppressed** (`chain_axial_response`):
+transverse forces bend a spine, axial compression only buckles it, and muscle
+resists exactly that. A braking dragon's neck under full axial pseudo-force
+folded under its chest. Note the correct steady state of a constant spin with
+no airflow is a radial tail with NO lateral offset -- the test asserts the
+onset whip, not a sustained deflection that would be wrong physics.
+
+**The upstroke redistributes outboard**: past 20 degrees of elevation the
+shoulder's share of the flap shrinks and the wrist leads, real bird
+kinematics, keeping the inner membranes from crossing above the spine while
+the tip still reaches the full angle.
 
 **Muscle tone** (`chain_tone`): chain stiffness scales with flight intensity,
 damping with its square root to stay near critical. That is what keeps the tail

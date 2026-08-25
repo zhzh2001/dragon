@@ -127,6 +127,12 @@ struct RigTuning {
     // from one force law instead of one linear compromise between them.
     float chain_drag = 0.04f;
     float chain_drag_v2 = 0.010f;
+    // How much of an axial (along-the-chain) inertial force the chain feels.
+    // Transverse forces bend a spine; axial compression only buckles it, and
+    // muscle resists exactly that -- a braking dragon's neck under full axial
+    // pseudo-force folded under its chest.
+    float chain_axial_response = 0.15f;
+
     // Ceilings, so a violent attitude cannot blow the simulation up. Without
     // these a 70 rad/s tumble produces accelerations in the tens of thousands
     // and the chain leaves for good.
@@ -226,6 +232,12 @@ struct RigTuning {
     // body, so nothing else would ever move them once the ground idle fades.
     float foot_hang_deg = 30.0f;
     float toe_curl_deg = 16.0f;
+    // How strongly the feet ride their legs in flight. This asset's feet are IK
+    // targets parented to the BODY: pose the legs however you like, the feet
+    // stay nailed to their bind position in space -- the standing-in-air look.
+    // In flight each foot is re-anchored to the end of its leg chain; on the
+    // ground the authored planted stance wins.
+    float foot_follow = 1.0f;
 };
 
 // Turns flight state into a pose. Holds the spring-chain state, so it must be
@@ -343,6 +355,16 @@ private:
     // Every joint under a foot root, with its depth below the root -- the toes,
     // for the hanging curl.
     std::vector<std::pair<int, int>> foot_joints_;
+    // A body-parented foot root re-anchored to the end of a leg chain, with its
+    // bind-pose offset expressed in that anchor's frame.
+    struct FootAttach {
+        int foot = NO_PARENT;
+        int anchor = NO_PARENT;
+        core::Vec3 offset = core::Vec3::zero();
+        core::Quat rotation = core::Quat::identity();
+    };
+    std::vector<FootAttach> foot_attach_;
+    void attach_feet(float airborne);
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     core::Vec3 aim_target_ = core::Vec3::zero();
