@@ -34,7 +34,8 @@ void AnimationClip::sample(float time, Pose& pose) const {
 
     for (const RotationTrack& track : tracks) {
         if (track.joint < 0 || size_t(track.joint) >= pose.local.size()) continue;
-        pose.local[size_t(track.joint)].rotation = track.sample(local);
+        core::Quat& rotation = pose.local[size_t(track.joint)].rotation;
+        rotation = core::normalize(rotation * track.sample(local));
     }
 }
 

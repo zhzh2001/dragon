@@ -334,6 +334,70 @@ void test_animation_track_sampling() {
     CHECK(near(rotate(track.sample(1.75f), Vec3::unit_z()), rotate(b, Vec3::unit_z())));
 }
 
+// The bug this pins: track keys are deltas from the joint's rest, composed onto
+// the bind rotation. Written as absolute rotations instead, a clip silently
+// discards whatever the bind pose held -- for the real asset, the scene
+// transform absorbed by the joint under the root, which rolled the whole dragon
+// onto its back while every individual bone still moved plausibly.
+void test_clip_rest_reproduces_bind() {
+    std::printf("a clip at rest reproduces the bind pose exactly\n");
+    Skeleton skeleton;
+    skeleton.add_joint("root", anim::NO_PARENT, at(Vec3::zero()));
+    // A bind rotation nothing in the clip knows about, standing in for the
+    // absorbed scene transform on the real asset.
+    Transform tilted;
+    tilted.position = Vec3{0.0f, 1.0f, 0.0f};
+    tilted.rotation = Quat::from_axis_angle(normalize(Vec3{0.3f, 1.0f, 0.2f}), radians(149.0f));
+    skeleton.add_joint("body", 0, tilted);
+    skeleton.add_joint("limb", 1, at(Vec3{0.0f, 1.0f, 0.0f}));
+    skeleton.finalize();
+
+    // A track that holds its rest value, exactly like the real asset's body
+    // joint: constant, and therefore invisible to any measure of how much a
+    // track *changes* over time.
+    anim::AnimationClip clip;
+    clip.name = "still";
+    clip.duration = 1.0f;
+    anim::RotationTrack held;
+    held.joint = 1;
+    held.times = {0.0f, 1.0f};
+    held.rotations = {Quat::identity(), Quat::identity()};
+    clip.tracks.push_back(held);
+
+    Pose bind, sampled;
+    bind.reset_to_bind(skeleton);
+    sampled.reset_to_bind(skeleton);
+    clip.sample(0.4f, sampled);
+
+    std::vector<Mat4> bind_world(size_t(skeleton.count()));
+    std::vector<Mat4> sampled_world(bind_world.size());
+    anim::compute_world_matrices(skeleton, bind, bind_world);
+    anim::compute_world_matrices(skeleton, sampled, sampled_world);
+    for (size_t j = 0; j < bind_world.size(); ++j) {
+        for (int c = 0; c < 4; ++c) {
+            CHECK(near(Vec3{bind_world[j].col[c].x, bind_world[j].col[c].y,
+                            bind_world[j].col[c].z},
+                       Vec3{sampled_world[j].col[c].x, sampled_world[j].col[c].y,
+                            sampled_world[j].col[c].z}));
+        }
+    }
+
+    // A non-identity delta must rotate *relative* to the bind rotation, never
+    // replace it -- so the child ends up somewhere the bind rotation still
+    // influences.
+    clip.tracks[0].rotations = {Quat::from_axis_angle(Vec3::unit_x(), radians(30.0f)),
+                                Quat::from_axis_angle(Vec3::unit_x(), radians(30.0f))};
+    Pose moved;
+    moved.reset_to_bind(skeleton);
+    clip.sample(0.4f, moved);
+    CHECK(!near(rotate(moved.local[1].rotation, Vec3::unit_y()),
+                rotate(bind.local[1].rotation, Vec3::unit_y()), 1e-3f));
+    // The delta is applied in the bone's own frame, so bind then delta.
+    const Quat expected = normalize(tilted.rotation * clip.tracks[0].rotations[0]);
+    CHECK(near(rotate(moved.local[1].rotation, Vec3::unit_y()),
+               rotate(expected, Vec3::unit_y())));
+}
+
 void test_animation_clip_loops() {
     std::printf("clips loop and only touch the joints they track\n");
     Skeleton skeleton;
@@ -457,6 +521,7 @@ int main() {
     test_rig_responds_to_flight();
     test_animation_track_sampling();
     test_animation_clip_loops();
+    test_clip_rest_reproduces_bind();
     test_base_clip_layers_under_rig();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

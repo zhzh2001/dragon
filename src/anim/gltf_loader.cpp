@@ -365,6 +365,25 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             track.joint = joint;
             track.step = sampler->interpolation == cgltf_interpolation_type_step;
 
+            // Keys are stored as a delta from the node's own rest rotation, not
+            // as the absolute rotation the file holds.
+            //
+            // The skeleton's bind rotations come from the inverse bind matrices,
+            // which for this asset do not agree with the node hierarchy's TRS --
+            // the joint below the root absorbs a whole scene transform that the
+            // node's own rotation knows nothing about. Writing the file's
+            // absolute rotation over that bind rotation discards the absorbed
+            // transform and rolls the entire dragon onto its back. A delta is
+            // immune to the disagreement: at the clip's rest key it is the
+            // identity, so the bind pose is reproduced exactly no matter which
+            // convention built the skeleton.
+            const cgltf_node* node = channel->target_node;
+            const Quat rest = node->has_rotation
+                                  ? core::normalize(Quat{node->rotation[0], node->rotation[1],
+                                                         node->rotation[2], node->rotation[3]})
+                                  : Quat::identity();
+            const Quat rest_inverse = core::conjugate(rest);
+
             const size_t keys = sampler->input->count;
             track.times.reserve(keys);
             track.rotations.reserve(keys);
@@ -376,7 +395,11 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                 // reading the plain value gives a usable linear approximation.
                 cgltf_accessor_read_float(sampler->output, k, q, 4);
                 track.times.push_back(t);
-                track.rotations.push_back(core::normalize(Quat{q[0], q[1], q[2], q[3]}));
+                // Post-multiplied, so the delta is expressed in the bone's own
+                // frame -- which is what "this bone rotated" means, and is what
+                // survives the two conventions describing that frame differently.
+                track.rotations.push_back(
+                    core::normalize(rest_inverse * core::normalize(Quat{q[0], q[1], q[2], q[3]})));
                 clip.duration = core::maxf(clip.duration, t);
             }
             if (!track.times.empty()) clip.tracks.push_back(std::move(track));

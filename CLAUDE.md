@@ -266,9 +266,20 @@ fight them; the leg tuck instead **composes onto** the clip (`rotate_joint`'s
 
 Only **rotation** tracks are imported. Translation and scale tracks would import
 root motion -- fighting the flight model for control of where the dragon is --
-and stretch bones the skinning assumes are rigid. Before trusting a clip, check
-that it carries no rotation on the root or pelvis; this one does not, so it is
-pure body-local detail.
+and stretch bones the skinning assumes are rigid.
+
+**Track keys are stored as deltas from each joint's rest rotation and composed
+onto the bind rotation**, never written over it. The skeleton's bind rotations
+come from the inverse bind matrices, which for this asset do not agree with the
+node hierarchy's TRS -- the joint below the root absorbs a whole scene transform
+its own node rotation knows nothing about. An absolute rotation discards that
+transform and rolls the entire dragon onto its back, while every individual bone
+still moves plausibly. A delta is identity at the clip's rest key, so the bind
+pose is reproduced exactly whatever convention built the skeleton.
+
+That bug hid from a check that measured how much each track *changes*: the
+offending joint's track is constant, so it read as zero motion. **Compare a
+clip's rest pose against the bind pose, not a track against itself.**
 
 Two dead ends, recorded so they are not repeated: cutting a rig down to fit a
 joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS is
