@@ -47,6 +47,9 @@ struct DragonJoints {
     std::vector<int> wing_root[2];                 // shoulder outward
     std::vector<std::vector<int>> wing_fingers[2];  // each finger, base to tip
     std::vector<int> leg[2];                        // hip outward
+    // Foot roots (this asset parents every foot straight to the body -- an IK
+    // rig's world-space targets), each with its toe chains hanging beneath.
+    std::vector<int> foot_roots;
 
     bool valid() const {
         return root != NO_PARENT && !wing_root[0].empty() && !wing_root[1].empty();
@@ -125,9 +128,21 @@ struct RigTuning {
     float chain_max_acceleration = 400.0f;
     float chain_max_speed = 120.0f;
     // Maximum bend between adjacent segments, so the chain cannot fold through
-    // itself.
-    float chain_max_bend_deg = 32.0f;
+    // itself. Tight: a spine can bend a long way in total, but never sharply at
+    // one vertebra -- and an accordioned tail was exactly what a looser limit
+    // produced under hard manoeuvres.
+    float chain_max_bend_deg = 20.0f;
     int chain_iterations = 4;
+    // Muscle tone: chains stiffen with flight intensity, the way an animal
+    // tenses under load. At tone 2 a full-intensity manoeuvre triples the
+    // stiffness, which is what keeps the tail a rudder instead of a streamer in
+    // a dive or a hard pull.
+    float chain_tone = 2.0f;
+    // The neck is muscle wrapped around a spine and carries the head the animal
+    // aims with; it is far stiffer and far better supported than the tail.
+    // Scales applied on top of the shared chain parameters.
+    float neck_stiffness_scale = 2.5f;
+    float neck_gravity_scale = 0.35f;
 
     // ---- flight response ----
     //
@@ -140,14 +155,14 @@ struct RigTuning {
     // flight model already exposes. Deflection with yaw and roll input swings it
     // toward the outside of the commanded turn; pitch input works it as an
     // elevator, tail dropping as the nose rises.
-    float tail_rudder_deg = 22.0f;
-    float tail_elevator_deg = 14.0f;
+    float tail_rudder_deg = 16.0f;
+    float tail_elevator_deg = 8.0f;
     // The neck leads: nose-up input curls the head up before the body follows.
     // Anticipation, the oldest animation principle there is.
     float neck_lead_deg = 10.0f;
     // And at speed the neck lowers into the wind. Full effect at
     // `streamline_speed` and above.
-    float neck_streamline_deg = 8.0f;
+    float neck_streamline_deg = 5.0f;
     float streamline_speed = 60.0f;
     // Wings bow upward under load: degrees of extra dihedral per g above 1.
     // The one signal that makes a hard pull look like it costs something.
@@ -165,12 +180,12 @@ struct RigTuning {
     // uncanny even when the big motions are right.
     float base_clip_weight = 1.0f;
     float base_clip_rate = 1.0f;
-    // How much of the clip survives hard flight. The clip is a ground idle --
-    // toes curling, jaw working, small shifts of weight -- which is right in a
-    // calm glide and absurd in a 100 m/s dive, where a real animal goes tense
-    // and still. 0 keeps the idle at full strength always; 1 removes it entirely
-    // at full intensity.
-    float clip_flight_fade = 0.7f;
+    // The clip is a GROUND idle -- toes gripping, jaw working, weight shifting
+    // -- so it belongs on the ground. Airborne it is nearly gone: a trace
+    // survives in a calm glide so the extremities are not dead still, and even
+    // that fades to nothing as flight gets violent.
+    float clip_air_weight = 0.15f;
+    float clip_flight_fade = 1.0f;
 
     // ---- head aim ----
     //
@@ -192,6 +207,11 @@ struct RigTuning {
     float leg_sway_max_deg = 26.0f;
     float leg_sway_stiffness = 16.0f;
     float leg_sway_damping = 6.0f;
+    // In flight the feet hang: ankle dropped, claws part-curled -- a perched
+    // bird's relaxed foot, not a planted one. This asset parents its feet to the
+    // body, so nothing else would ever move them once the ground idle fades.
+    float foot_hang_deg = 30.0f;
+    float toe_curl_deg = 16.0f;
 };
 
 // Turns flight state into a pose. Holds the spring-chain state, so it must be
@@ -259,6 +279,11 @@ private:
     void drive_wings(const game::FlightState& state);
     // 0 calm glide .. 1 flat out: how hard the flight state is working the body.
     float flight_intensity(const game::FlightState& state) const;
+    // Per-chain feel on top of the shared parameters.
+    struct ChainFeel {
+        float stiffness = 1.0f;
+        float gravity = 1.0f;
+    };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
     // rotations.
@@ -268,7 +293,8 @@ private:
     // dynamics instead of overwriting them.
     void drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                      const game::FlightState& state, core::Vec3 frame_acceleration,
-                     core::Vec3 angular_acceleration, core::Vec2 steer_deg, float dt);
+                     core::Vec3 angular_acceleration, core::Vec2 steer_deg, ChainFeel feel,
+                     float dt);
     void drive_legs(const game::FlightState& state, core::Vec3 frame_acceleration,
                     core::Vec3 angular_acceleration, float dt);
     // Turns the head toward `aim_target_`, after the chains have posed it.
@@ -296,6 +322,9 @@ private:
     // (lateral), in radians.
     core::Vec2 leg_swing_[2] = {};
     core::Vec2 leg_swing_velocity_[2] = {};
+    // Every joint under a foot root, with its depth below the root -- the toes,
+    // for the hanging curl.
+    std::vector<std::pair<int, int>> foot_joints_;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     core::Vec3 aim_target_ = core::Vec3::zero();

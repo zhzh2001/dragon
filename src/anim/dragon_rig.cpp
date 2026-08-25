@@ -303,6 +303,24 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
                                 : core::conjugate(world_rotation[size_t(parent)]);
     }
 
+    // Feet and toes, with depth below their root, for the hanging curl. The
+    // *_end_* leaves are export artifacts with no skin weights; harmless to
+    // rotate, cheaper to skip.
+    foot_joints_.clear();
+    for (const int root : joints.foot_roots) {
+        for (int i = 0; i < count; ++i) {
+            if (skeleton.joint(i).name.find("_end_") != std::string::npos) continue;
+            int depth = 0;
+            int parent = i;
+            while (parent != NO_PARENT && parent != root) {
+                parent = skeleton.joint(parent).parent;
+                ++depth;
+            }
+            if (parent == root) foot_joints_.emplace_back(i, depth);
+        }
+        foot_joints_.emplace_back(root, 0);
+    }
+
     setup_chain(tail_sim_, joints.tail);
     // The head rides on the end of the neck, so it is simulated as part of it.
     std::vector<int> neck_with_head = joints.neck;
@@ -476,8 +494,16 @@ void DragonRig::rotate_joint_quat(int joint, const Quat& delta, const Quat& pare
 
 void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                             const game::FlightState& state, Vec3 frame_acceleration,
-                            Vec3 angular_acceleration, core::Vec2 steer_deg, float dt) {
+                            Vec3 angular_acceleration, core::Vec2 steer_deg, ChainFeel feel,
+                            float dt) {
     if (!sim.initialized || chain.size() < 2) return;
+
+    // Muscle tone: the animal tenses with the manoeuvre. Damping rises with the
+    // square root of the same factor, keeping the response near critically
+    // damped instead of increasingly ringy as it stiffens.
+    const float tone = 1.0f + tuning.chain_tone * intensity_smoothed_;
+    const float stiffness = tuning.chain_stiffness * feel.stiffness * tone;
+    const float damping = tuning.chain_damping * std::sqrt(feel.stiffness * tone);
 
     // Active steering: curl the chain's target shape. The full deflection is
     // spread down the chain, each segment rotated a little more than the one
@@ -503,7 +529,7 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     // Gravity, expressed in the dragon's frame.
     const Vec3 gravity_local =
         core::rotate(core::conjugate(state.orientation), Vec3{0.0f, -9.81f, 0.0f}) *
-        tuning.chain_gravity;
+        (tuning.chain_gravity * feel.gravity);
 
     // Airflow in the dragon's frame, for drag. A tail streams backwards at speed
     // for the same reason a windsock does.
@@ -527,8 +553,8 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
 
         // Spring back toward the (possibly steered) target shape, so the chain
         // has a shape to return to rather than dangling.
-        acceleration += (target[i] - r) * tuning.chain_stiffness;
-        acceleration -= v * tuning.chain_damping;
+        acceleration += (target[i] - r) * stiffness;
+        acceleration -= v * damping;
 
         // Drag against the relative airflow: a linear term that damps slow
         // motion plus the physical v^2 term. Slender-body drag acts across the
@@ -688,6 +714,7 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // The whole leg swings at the hip; the tuck fold continues down the
         // chain. Both compose onto the authored pose, so the feet keep the
         // clip's motion through all of it.
+        (void)0;
         float sign = 1.0f;
         bool first = true;
         for (const int joint : joints_.leg[side]) {
@@ -742,12 +769,15 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     // Authored motion first: it fills in every joint the procedural rig does not
     // own, and the rig then overrides the ones flight determines.
     pose_.reset_to_bind(*skeleton_);
-    // The clip is a ground idle, so it fades as flight works the body harder: a
-    // real animal goes tense and still in a dive, and toes curling at 100 m/s
-    // read as someone else's animation playing on the wrong creature.
-    const float clip_weight =
-        tuning.base_clip_weight *
+    // The clip is a GROUND idle: full strength standing (leg_extend_ is the
+    // smoothed on-the-ground signal), a trace in a calm glide, gone entirely
+    // under hard flight. Toes gripping ground at 100 m/s read as someone else's
+    // animation playing on the wrong creature.
+    const float airborne_weight =
+        tuning.clip_air_weight *
         (1.0f - core::saturate(tuning.clip_flight_fade) * intensity_smoothed_);
+    const float clip_weight =
+        tuning.base_clip_weight * core::lerpf(airborne_weight, 1.0f, leg_extend_);
     if (base_clip_ && base_clip_->valid() && clip_weight > 0.001f) {
         clip_time_ += dt * tuning.base_clip_rate;
         if (clip_weight >= 0.999f) {
@@ -783,9 +813,10 @@ void DragonRig::update(const game::FlightState& state, float dt) {
         state.control.x * tuning.neck_lead_deg - streamline * tuning.neck_streamline_deg, 0.0f};
 
     drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration,
-                tail_steer, dt);
+                tail_steer, ChainFeel{}, dt);
     drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
-                neck_steer, dt);
+                neck_steer, ChainFeel{tuning.neck_stiffness_scale, tuning.neck_gravity_scale},
+                dt);
     drive_legs(state, frame_acceleration, angular_acceleration, dt);
 
     compute_world_matrices(*skeleton_, pose_, world_);
@@ -1032,10 +1063,27 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
     }
 
-    LOG_INFO("mapped rig: neck %zu, tail %zu, wing root %zu/%zu, fingers %zu/%zu, legs %zu/%zu",
+    // Foot roots: this asset parents each foot straight to the body (IK
+    // targets), so they are found by name and never as leg descendants. Nested
+    // matches are toes and belong to their root's subtree, not this list.
+    const std::vector<int> foot_candidates =
+        collect(skeleton, {"hand", "food", "foot", "fuss", "paw"}, {"_end", "ik_", "target"});
+    for (const int candidate : foot_candidates) {
+        bool nested = false;
+        for (int p = skeleton.joint(candidate).parent; p != NO_PARENT;
+             p = skeleton.joint(p).parent) {
+            for (const int other : foot_candidates) {
+                if (other == p) nested = true;
+            }
+        }
+        if (!nested) j.foot_roots.push_back(candidate);
+    }
+
+    LOG_INFO("mapped rig: neck %zu, tail %zu, wing root %zu/%zu, fingers %zu/%zu, legs %zu/%zu, "
+             "feet %zu",
              j.neck.size(), j.tail.size(), j.wing_root[0].size(), j.wing_root[1].size(),
              j.wing_fingers[0].size(), j.wing_fingers[1].size(), j.leg[0].size(),
-             j.leg[1].size());
+             j.leg[1].size(), j.foot_roots.size());
     return j;
 }
 

@@ -1403,6 +1403,9 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("gravity", &rig.chain_gravity, 0.0f, 2.0f);
         ImGui::SliderFloat("drag", &rig.chain_drag, 0.0f, 0.5f);
         ImGui::SliderFloat("max bend", &rig.chain_max_bend_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("muscle tone", &rig.chain_tone, 0.0f, 6.0f);
+        ImGui::SliderFloat("neck stiffness x", &rig.neck_stiffness_scale, 0.5f, 8.0f);
+        ImGui::SliderFloat("neck gravity x", &rig.neck_gravity_scale, 0.0f, 1.5f);
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
     }
 
@@ -1415,6 +1418,8 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("wing load flex", &rig.wing_load_flex_deg, 0.0f, 20.0f, "%.0f deg/g");
         ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
+        ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -60.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("toe curl", &rig.toe_curl_deg, -45.0f, 45.0f, "%.0f deg");
     }
 
     if (ImGui::CollapsingHeader("Legs & authored motion")) {
@@ -1424,6 +1429,8 @@ void App::build_dragon_ui() {
             // Weight 0 is the honest A/B: it restores exactly the un-layered rig.
             ImGui::SliderFloat("clip weight", &rig.base_clip_weight, 0.0f, 1.0f);
             ImGui::SliderFloat("clip rate", &rig.base_clip_rate, 0.0f, 3.0f);
+            // How much ground idle survives in the air at all.
+            ImGui::SliderFloat("airborne weight", &rig.clip_air_weight, 0.0f, 1.0f);
         } else {
             ImGui::TextDisabled("no authored clip in this model");
         }

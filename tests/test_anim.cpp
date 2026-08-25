@@ -739,6 +739,7 @@ void test_idle_clip_fades_with_intensity() {
     calm.velocity = Vec3{0.0f, 0.0f, -30.0f};
     calm.airspeed = 30.0f;
     calm.g_load = 1.0f;
+    calm.ground_clearance = 300.0f;
 
     game::FlightState violent = calm;
     violent.velocity = Vec3{0.0f, 0.0f, -100.0f};
@@ -748,9 +749,11 @@ void test_idle_clip_fades_with_intensity() {
 
     const float calm_deflection = head_deflection(calm);
     const float violent_deflection = head_deflection(violent);
-    // Mostly intact when calm, mostly suppressed when violent.
-    CHECK(calm_deflection > 25.0f);
-    CHECK(violent_deflection < calm_deflection * 0.55f);
+    // The idle is a GROUND clip: airborne only a trace survives even in a calm
+    // glide, and violence removes that too.
+    CHECK(calm_deflection > 2.0f);
+    CHECK(calm_deflection < 15.0f);
+    CHECK(violent_deflection < calm_deflection * 0.5f);
 
     // On the ground the idle is exactly right, so nothing fades.
     game::FlightState grounded;

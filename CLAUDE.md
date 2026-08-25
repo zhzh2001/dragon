@@ -386,10 +386,26 @@ Tucking adds **droop** (`tuck_droop_deg`): sweep and fold both act in the
 horizontal plane, so without it a folded wing stays at glide dihedral and the
 membrane drapes below the body -- half-folded, not a stoop.
 
-The **ground-idle clip fades with flight intensity** (`clip_flight_fade`) --
-max of speed, g excess, turn rate, tuck and brake, smoothed. Toes curling and a
-jaw working are right in a calm glide and absurd in a 100 m/s dive, where a
-real animal goes tense and still. Grounded, nothing fades.
+**The authored clip is a ground idle and is gated to the ground**: full
+strength standing (via the smoothed ground-proximity signal), ~15% in a calm
+glide, and that trace fades to zero with flight intensity (max of speed, g
+excess, turn rate, tuck, brake -- max, not sum). Toes gripping ground at
+100 m/s read as someone else's animation on the wrong creature.
+
+**This asset parents all four feet directly to the body root** (IK targets),
+so no leg motion ever moves them -- once the idle fades they freeze in their
+standing bind pose. `map_dragon_joints` finds the foot roots by name and the
+rig gives them a flight hang: ankle dropped, claws part-curled, zero when
+grounded (`foot_hang_deg`, `toe_curl_deg`).
+
+**Muscle tone** (`chain_tone`): chain stiffness scales with flight intensity,
+damping with its square root to stay near critical. That is what keeps the tail
+a rudder rather than a streamer in a dive or a hard pull. The **neck has its
+own profile** (`neck_stiffness_scale`, `neck_gravity_scale`): it is muscle
+wrapped around a spine carrying the head the animal aims with, several times
+stiffer and better supported than the tail. And `chain_max_bend_deg` is tight
+(20 degrees): a spine bends a long way in total but never sharply at one
+vertebra -- a looser limit accordioned the tail under hard manoeuvres.
 
 ### Authored motion under the procedural rig
 
