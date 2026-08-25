@@ -391,6 +391,11 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // about the body's forward axis on both wings tips one up and one down,
     // which is exactly the shape that produces a roll.
     const float roll_lean = core::radians(tuning.wing_roll_lean_deg) * state.control.z;
+    // Upstroke flex: as the wing rises past ~20 degrees the wrist folds in --
+    // real bird kinematics, and it keeps two raised wings from crossing over
+    // the spine at the top of the beat.
+    const float upstroke = core::smoothstep(core::radians(20.0f), core::radians(50.0f), base);
+    const float upstroke_fold = core::radians(tuning.upstroke_fold_deg) * upstroke;
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
@@ -428,8 +433,8 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                                        : 1.0f;
             const float sweep = core::radians(tuning.tuck_sweep_deg) * tuck * sign *
                                 (0.4f + 0.6f * progress) * normalize;
-            const float fold =
-                core::radians(tuning.tuck_fold_deg) * tuck * progress * sign * normalize;
+            const float fold = (core::radians(tuning.tuck_fold_deg) * tuck +
+                                upstroke_fold * progress) * progress * sign * normalize;
             const float flare_angle =
                 core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
 
@@ -548,8 +553,9 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         const Vec3 coriolis = -2.0f * core::cross(omega, v);
         const Vec3 linear = -frame_acceleration;
 
-        Vec3 acceleration = gravity_local +
-                            (centrifugal + euler + coriolis + linear) * tuning.chain_inertia;
+        Vec3 acceleration =
+            gravity_local + (centrifugal + euler + coriolis + linear) *
+                                (tuning.chain_inertia * feel.inertia);
 
         // Spring back toward the (possibly steered) target shape, so the chain
         // has a shape to return to rather than dangling.
@@ -681,7 +687,8 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
     const Vec3 omega = state.angular_velocity;
     const float max_swing = core::radians(tuning.leg_sway_max_deg);
 
-    const float tuck_angle = core::radians(tuning.leg_tuck_deg) * (1.0f - leg_extend_);
+    const float airborne = 1.0f - leg_extend_;
+    const float tuck_angle = core::radians(tuning.leg_tuck_deg) * airborne;
     for (int side = 0; side < 2; ++side) {
         if (joints_.leg[side].empty()) continue;
 
@@ -711,21 +718,27 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
             velocity = core::Vec2{0.0f, 0.0f};
         }
 
-        // The whole leg swings at the hip; the tuck fold continues down the
-        // chain. Both compose onto the authored pose, so the feet keep the
-        // clip's motion through all of it.
-        (void)0;
-        float sign = 1.0f;
-        bool first = true;
-        for (const int joint : joints_.leg[side]) {
-            rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign, true);
-            if (first) {
-                rotate_joint(joint, Vec3::unit_x(), swing.x, true);
-                rotate_joint(joint, Vec3::unit_z(), swing.y, true);
-                first = false;
+        // The whole limb trails aft at the hip -- a flying quadruped presses its
+        // legs back along the body, it does not dangle them like landing gear --
+        // then the fold bends the knee, and the pendulum swing rides on top.
+        // Everything composes onto the authored pose.
+        const float trail = core::radians(tuning.leg_trail_deg) * airborne;
+        auto drive_limb = [&](const std::vector<int>& chain, float trail_angle) {
+            float sign = 1.0f;
+            bool first = true;
+            for (const int joint : chain) {
+                rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign, true);
+                if (first) {
+                    rotate_joint(joint, Vec3::unit_x(), trail_angle + swing.x, true);
+                    rotate_joint(joint, Vec3::unit_z(), swing.y, true);
+                    first = false;
+                }
+                sign *= -1.15f;
             }
-            sign *= -1.15f;
-        }
+        };
+        drive_limb(joints_.leg[side], trail);
+        drive_limb(joints_.front_leg[side],
+                   core::radians(tuning.front_leg_trail_deg) * airborne);
     }
 }
 
@@ -1063,6 +1076,24 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
     }
 
+    // Forelegs: shoulder-rooted chains. "ik_" is deliberately NOT excluded here
+    // -- on this asset the deforming forearm bone is named ik_underarm.
+    const std::vector<int> arm_candidates =
+        collect(skeleton, {"upper_arm", "oberarm", "foreleg"}, {"_end"});
+    for (int side = 0; side < 2; ++side) {
+        for (const int candidate : arm_candidates) {
+            if ((subtree_mean_x(skeleton, candidate) > 0.0f) != (side == 0)) continue;
+            j.front_leg[side] = descend_single(skeleton, candidate);
+            // descend_single happily walks into export-artifact leaves.
+            while (!j.front_leg[side].empty() &&
+                   skeleton.joint(j.front_leg[side].back()).name.find("_end_") !=
+                       std::string::npos) {
+                j.front_leg[side].pop_back();
+            }
+            break;
+        }
+    }
+
     // Foot roots: this asset parents each foot straight to the body (IK
     // targets), so they are found by name and never as leg descendants. Nested
     // matches are toes and belong to their root's subtree, not this list.
@@ -1080,10 +1111,11 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
     }
 
     LOG_INFO("mapped rig: neck %zu, tail %zu, wing root %zu/%zu, fingers %zu/%zu, legs %zu/%zu, "
-             "feet %zu",
+             "front legs %zu/%zu, feet %zu",
              j.neck.size(), j.tail.size(), j.wing_root[0].size(), j.wing_root[1].size(),
              j.wing_fingers[0].size(), j.wing_fingers[1].size(), j.leg[0].size(),
-             j.leg[1].size(), j.foot_roots.size());
+             j.leg[1].size(), j.front_leg[0].size(), j.front_leg[1].size(),
+             j.foot_roots.size());
     return j;
 }
 

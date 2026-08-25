@@ -46,7 +46,10 @@ struct FlightTuning {
     // A real wingbeat is not a sine. The downstroke is the fast, powered half
     // and the recovery is slower, and the wing travels further above the body
     // than below it. Getting this wrong is immediately visible.
-    float flap_up_angle_deg = 54.0f;
+    // 54 crossed the raised wings over the spine at the top of the beat, which
+    // is impossible anatomy on any real flyer -- the stroke reads just as
+    // strong from the deeper downstroke.
+    float flap_up_angle_deg = 44.0f;
     float flap_down_angle_deg = -32.0f;
     float flap_downstroke_fraction = 0.40f;
     // Resting dihedral: gliding wings sit slightly raised, not dead flat.

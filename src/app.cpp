@@ -1391,6 +1391,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("tuck sweep", &rig.tuck_sweep_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("tuck fold", &rig.tuck_fold_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 45.0f, "%.0f deg");
+        ImGui::SliderFloat("upstroke fold", &rig.upstroke_fold_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("brake flare", &rig.brake_flare_deg, 0.0f, 90.0f, "%.0f deg");
     }
 
@@ -1406,6 +1407,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("muscle tone", &rig.chain_tone, 0.0f, 6.0f);
         ImGui::SliderFloat("neck stiffness x", &rig.neck_stiffness_scale, 0.5f, 8.0f);
         ImGui::SliderFloat("neck gravity x", &rig.neck_gravity_scale, 0.0f, 1.5f);
+        ImGui::SliderFloat("neck brace", &rig.neck_inertia_scale, 0.0f, 1.0f);
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
     }
 
@@ -1418,6 +1420,8 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("wing load flex", &rig.wing_load_flex_deg, 0.0f, 20.0f, "%.0f deg/g");
         ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
+        ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("toe curl", &rig.toe_curl_deg, -45.0f, 45.0f, "%.0f deg");
     }

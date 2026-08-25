@@ -46,7 +46,8 @@ struct DragonJoints {
     // describes both, so the animation code does not care which it is driving.
     std::vector<int> wing_root[2];                 // shoulder outward
     std::vector<std::vector<int>> wing_fingers[2];  // each finger, base to tip
-    std::vector<int> leg[2];                        // hip outward
+    std::vector<int> leg[2];                        // hind leg, hip outward
+    std::vector<int> front_leg[2];                  // foreleg, shoulder outward
     // Foot roots (this asset parents every foot straight to the body -- an IK
     // rig's world-space targets), each with its toe chains hanging beneath.
     std::vector<int> foot_roots;
@@ -92,6 +93,10 @@ struct RigTuning {
     // stoop.
     float tuck_droop_deg = 22.0f;
     float brake_flare_deg = 30.0f;
+    // On the upstroke the wrist flexes and the wing part-folds -- real bird
+    // kinematics, and what keeps the two raised wings from crossing over the
+    // spine at the top of the beat.
+    float upstroke_fold_deg = 24.0f;
 
     // ---- neck and tail dynamics ----
     //
@@ -143,6 +148,9 @@ struct RigTuning {
     // Scales applied on top of the shared chain parameters.
     float neck_stiffness_scale = 2.5f;
     float neck_gravity_scale = 0.35f;
+    // The neck braces against frame accelerations rather than flailing with
+    // them -- the head must stay a stable platform for the eyes.
+    float neck_inertia_scale = 0.35f;
 
     // ---- flight response ----
     //
@@ -207,6 +215,12 @@ struct RigTuning {
     float leg_sway_max_deg = 26.0f;
     float leg_sway_stiffness = 16.0f;
     float leg_sway_damping = 6.0f;
+    // In flight the legs trail: the whole limb rotates aft at the hip, then the
+    // fold bends the knee. Trailing is what a flying quadruped actually does --
+    // legs pressed back along the body -- where a pure fold leaves them dangling
+    // beneath it like landing gear.
+    float leg_trail_deg = 38.0f;
+    float front_leg_trail_deg = 30.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
     // bird's relaxed foot, not a planted one. This asset parents its feet to the
     // body, so nothing else would ever move them once the ground idle fades.
@@ -283,6 +297,10 @@ private:
     struct ChainFeel {
         float stiffness = 1.0f;
         float gravity = 1.0f;
+        // How much of the frame's pseudo-forces the chain feels. Below 1 the
+        // animal braces: a neck held rigid against a deceleration instead of
+        // buckling under the chest.
+        float inertia = 1.0f;
     };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint

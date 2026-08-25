@@ -811,9 +811,14 @@ void test_legs_swing_with_the_frame() {
     anim::SkinnedMeshData mesh;
     anim::build_dragon(shape, skeleton, joints, mesh);
 
+    // Trail zeroed: the pendulum's response directions are only unambiguous
+    // when the limb hangs, and the trail posture differs between rigs. The
+    // trail itself is checked separately, by displacement.
     auto foot_after = [&](auto state_at) {
         anim::DragonRig rig;
         rig.init(skeleton, joints);
+        rig.tuning.leg_trail_deg = 0.0f;
+        rig.tuning.front_leg_trail_deg = 0.0f;
         for (int i = 0; i < 300; ++i) rig.update(state_at(float(i) / 60.0f), 1.0f / 60.0f);
         return rig.world_matrices()[size_t(joints.leg[0].back())].col[3].xyz();
     };
@@ -865,6 +870,16 @@ void test_legs_swing_with_the_frame() {
         return s;
     });
     CHECK(braking.z < neutral.z - 0.02f);
+
+    // The trail itself: airborne legs sit well away from where they stand.
+    auto foot_with_trail = [&](float trail_deg) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.tuning.leg_trail_deg = trail_deg;
+        for (int i = 0; i < 300; ++i) rig.update(cruise, 1.0f / 60.0f);
+        return rig.world_matrices()[size_t(joints.leg[0].back())].col[3].xyz();
+    };
+    CHECK(length(foot_with_trail(38.0f) - foot_with_trail(0.0f)) > 0.3f);
 }
 
 }  // namespace

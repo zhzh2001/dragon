@@ -392,6 +392,24 @@ glide, and that trace fades to zero with flight intensity (max of speed, g
 excess, turn rate, tuck, brake -- max, not sum). Toes gripping ground at
 100 m/s read as someone else's animation on the wrong creature.
 
+**Limbs in flight trail, they do not dangle.** The whole leg rotates aft at
+the hip (`leg_trail_deg`) before the fold bends the knee -- a flying quadruped
+presses its legs back along the body, and a pure fold leaves them hanging like
+landing gear. The forelegs are their own chains (`upper_arm` -> `ik_underarm`
+on this asset -- the `ik_` prefix is on a *deforming* bone here, so it is not
+excluded from that search) and trail the same way. The correct trail sign was
+settled by rendering both and looking, not by deriving it.
+
+**The upstroke folds the wrist** (`upstroke_fold_deg`): as the wing rises past
+~20 degrees it progressively part-folds, which is real bird kinematics and what
+keeps two raised wings from crossing over the spine at the top of the beat --
+that, plus a flap-up ceiling of 44 degrees (`flap_up_angle_deg`), because 54
+put the membranes through each other in any front view.
+
+**The neck braces** (`neck_inertia_scale`): it feels only a third of the
+frame's pseudo-forces. Under braking a full-inertia neck buckled under the
+chest; a real animal holds its head as a stable platform for the eyes.
+
 **This asset parents all four feet directly to the body root** (IK targets),
 so no leg motion ever moves them -- once the idle fades they freeze in their
 standing bind pose. `map_dragon_joints` finds the foot roots by name and the

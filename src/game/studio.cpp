@@ -36,6 +36,18 @@ Quat orientation_at(StudioScenario scenario, float t) {
             return Quat::from_axis_angle(Vec3::unit_y(), heading) *
                    Quat::from_axis_angle(Vec3::unit_z(), bank);
         }
+        case StudioScenario::Attack: {
+            // A weaving pursuit: gentle rolling turns while the head stays
+            // pinned on the mark. The contrast between a busy body and a locked
+            // head is the whole point of the scenario.
+            const float phase = core::TWO_PI * t / 4.0f;
+            const float bank = core::radians(30.0f) * std::sin(phase);
+            const float heading = 0.28f * -std::cos(phase);
+            const float pitch = core::radians(6.0f) * std::sin(phase * 0.5f);
+            return Quat::from_axis_angle(Vec3::unit_y(), heading) *
+                   Quat::from_axis_angle(Vec3::unit_x(), pitch) *
+                   Quat::from_axis_angle(Vec3::unit_z(), bank);
+        }
         case StudioScenario::Dive:
             return Quat::from_axis_angle(Vec3::unit_x(), core::radians(-55.0f));
         case StudioScenario::PullOut: {
@@ -78,7 +90,7 @@ float speed_at(StudioScenario scenario, float t) {
             // Ping-pong between fast and slow, so the deceleration the legs and
             // chains feel is smooth and periodic rather than a loop-point snap.
             return 29.0f + 11.0f * std::cos(core::TWO_PI * t / 4.0f);
-        case StudioScenario::Attack: return 30.0f;
+        case StudioScenario::Attack: return 36.0f;
         case StudioScenario::Grounded: return 0.0f;
         default: return 26.0f;
     }
@@ -120,7 +132,7 @@ const char* studio_scenario_notes(StudioScenario scenario) {
         case StudioScenario::Brake:
             return "flare: legs swing forward under the deceleration";
         case StudioScenario::Attack:
-            return "head tracks the orbiting mark; body stays on course";
+            return "body weaves, head stays pinned on the mark -- they must decouple";
         case StudioScenario::Grounded:
             return "wings stowed, legs planted, idle clip at full strength";
         default: return "";
@@ -128,9 +140,10 @@ const char* studio_scenario_notes(StudioScenario scenario) {
 }
 
 Vec3 studio_attack_target(float t, Vec3 centre) {
-    // Orbits across the dragon's nose, wide enough to work the whole aim range.
-    return centre + Vec3{70.0f * std::sin(0.55f * t), 18.0f * std::sin(0.9f * t),
-                         -130.0f};
+    // Orbits across the dragon's nose, wide and quick enough that the head has
+    // to sweep visibly to hold it while the body weaves the other way.
+    return centre + Vec3{85.0f * std::sin(0.8f * t), 25.0f * std::sin(1.3f * t),
+                         -120.0f};
 }
 
 FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float ground_y) {
@@ -171,7 +184,7 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             const float phase = state.flap_phase;
             const float beat = phase < 0.4f ? std::cos(core::PI * phase / 0.4f)
                                             : -std::cos(core::PI * (phase - 0.4f) / 0.6f);
-            state.wing_angle = core::radians(11.0f) + core::radians(43.0f) * beat;
+            state.wing_angle = core::radians(8.0f) + core::radians(36.0f) * beat;
             break;
         }
         case StudioScenario::TurnLeft:
@@ -212,9 +225,13 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             state.control = Vec3{0.35f * state.wing_brake, 0.0f, 0.0f};
             break;
         }
-        case StudioScenario::Attack:
-            state.control = Vec3{0.0f, 0.1f * std::sin(0.5f * t), 0.0f};
+        case StudioScenario::Attack: {
+            const float phase = core::TWO_PI * t / 4.0f;
+            state.control = Vec3{0.1f * std::sin(phase * 0.5f), 0.3f * std::cos(phase),
+                                 0.55f * std::cos(phase)};
+            state.g_load = 1.0f + 0.35f * std::fabs(std::sin(phase));
             break;
+        }
         case StudioScenario::Grounded:
             state.position.y = ground_y + 2.5f;  // hips above the feet
             state.velocity = Vec3::zero();
