@@ -6,6 +6,7 @@
 // make the whole thing trustworthy.
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 #include "anim/animation.h"
 #include "anim/dragon_rig.h"
@@ -594,6 +595,168 @@ void test_head_aims_at_a_target() {
     CHECK(finite);
 }
 
+// The active flight responses: the tail steers, the neck leads, the wings carry
+// load. Each is measured in steady state, where the passive dynamics have
+// settled and any deflection left is the active one.
+void test_body_responds_to_control_input() {
+    std::printf("tail and neck deflect with control input\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState cruise;
+    cruise.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    cruise.airspeed = 30.0f;
+
+    auto settled_rig = [&](const game::FlightState& state) {
+        auto rig = std::make_unique<anim::DragonRig>();
+        rig->init(skeleton, joints);
+        for (int i = 0; i < 240; ++i) rig->update(state, 1.0f / 60.0f);
+        return rig;
+    };
+    auto tail_tip = [&](anim::DragonRig& r) {
+        return r.world_matrices()[size_t(joints.tail.back())].col[3].xyz();
+    };
+    auto head_of = [&](anim::DragonRig& r) {
+        return r.world_matrices()[size_t(joints.head)].col[3].xyz();
+    };
+
+    const auto neutral = settled_rig(cruise);
+
+    // Held right-yaw input: the tail swings left (-X), toward the outside of
+    // the commanded turn, even though nothing is rotating yet.
+    game::FlightState yawing = cruise;
+    yawing.control = Vec3{0.0f, 1.0f, 0.0f};
+    const auto ruddered = settled_rig(yawing);
+    CHECK(tail_tip(*ruddered).x < tail_tip(*neutral).x - 0.2f);
+
+    // Held nose-up input: the tail drops and the head rises -- elevator and
+    // anticipation respectively.
+    game::FlightState pulling = cruise;
+    pulling.control = Vec3{1.0f, 0.0f, 0.0f};
+    const auto flared = settled_rig(pulling);
+    CHECK(tail_tip(*flared).y < tail_tip(*neutral).y - 0.1f);
+    CHECK(head_of(*flared).y > head_of(*neutral).y + 0.05f);
+
+    // At speed the neck lowers into the wind.
+    game::FlightState fast = cruise;
+    fast.velocity = Vec3{0.0f, 0.0f, -90.0f};
+    fast.airspeed = 90.0f;
+    const auto streamlined = settled_rig(fast);
+    CHECK(head_of(*streamlined).y < head_of(*neutral).y - 0.02f);
+}
+
+void test_wings_carry_the_load() {
+    std::printf("wings flex up under g and lean with roll input\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState cruise;
+    cruise.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    cruise.airspeed = 30.0f;
+    cruise.g_load = 1.0f;
+
+    auto wingtips = [&](const game::FlightState& state, Vec3& left, Vec3& right) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        for (int i = 0; i < 240; ++i) rig.update(state, 1.0f / 60.0f);
+        const std::vector<int>& chain0 = rig.world_matrices().empty()
+                                             ? joints.wing_root[0]
+                                             : joints.wing_root[0];
+        (void)chain0;
+        const int tip0 = joints.wing_fingers[0].front().back();
+        const int tip1 = joints.wing_fingers[1].front().back();
+        right = rig.world_matrices()[size_t(tip0)].col[3].xyz();
+        left = rig.world_matrices()[size_t(tip1)].col[3].xyz();
+    };
+
+    Vec3 left_1g, right_1g;
+    wingtips(cruise, left_1g, right_1g);
+
+    // A 3 g pull bows both wingtips upward.
+    game::FlightState pulling = cruise;
+    pulling.g_load = 3.0f;
+    Vec3 left_3g, right_3g;
+    wingtips(pulling, left_3g, right_3g);
+    CHECK(left_3g.y > left_1g.y + 0.1f);
+    CHECK(right_3g.y > right_1g.y + 0.1f);
+
+    // Roll input tips the wings the same way around the body axis: one rises,
+    // the other falls. That asymmetry is the roll.
+    game::FlightState rolling = cruise;
+    rolling.control = Vec3{0.0f, 0.0f, 1.0f};
+    Vec3 left_roll, right_roll;
+    wingtips(rolling, left_roll, right_roll);
+    const float delta_left = left_roll.y - left_1g.y;
+    const float delta_right = right_roll.y - right_1g.y;
+    CHECK(delta_left * delta_right < 0.0f);  // opposite directions
+}
+
+void test_idle_clip_fades_with_intensity() {
+    std::printf("the ground idle fades as flight gets violent\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    // A clip that holds the head 40 degrees off bind: any surviving clip weight
+    // shows up as head deflection, so the fade is directly measurable.
+    anim::AnimationClip clip;
+    clip.name = "held";
+    clip.duration = 1.0f;
+    anim::RotationTrack track;
+    track.joint = joints.head;
+    track.times = {0.0f, 1.0f};
+    track.rotations = {Quat::from_axis_angle(Vec3::unit_x(), radians(40.0f)),
+                       Quat::from_axis_angle(Vec3::unit_x(), radians(40.0f))};
+    clip.tracks.push_back(track);
+
+    auto head_deflection = [&](const game::FlightState& state) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_base_clip(&clip);
+        for (int i = 0; i < 240; ++i) rig.update(state, 1.0f / 60.0f);
+        const Quat head = quat_from_matrix(rig.world_matrices()[size_t(joints.head)]);
+
+        anim::DragonRig bare;
+        bare.init(skeleton, joints);
+        for (int i = 0; i < 240; ++i) bare.update(state, 1.0f / 60.0f);
+        const Quat rest = quat_from_matrix(bare.world_matrices()[size_t(joints.head)]);
+
+        const Vec3 probe = Vec3::unit_y();
+        return degrees(std::acos(clampf(dot(rotate(head, probe), rotate(rest, probe)),
+                                        -1.0f, 1.0f)));
+    };
+
+    game::FlightState calm;
+    calm.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    calm.airspeed = 30.0f;
+    calm.g_load = 1.0f;
+
+    game::FlightState violent = calm;
+    violent.velocity = Vec3{0.0f, 0.0f, -100.0f};
+    violent.airspeed = 100.0f;
+    violent.wing_tuck = 1.0f;
+    violent.g_load = 2.5f;
+
+    const float calm_deflection = head_deflection(calm);
+    const float violent_deflection = head_deflection(violent);
+    // Mostly intact when calm, mostly suppressed when violent.
+    CHECK(calm_deflection > 25.0f);
+    CHECK(violent_deflection < calm_deflection * 0.55f);
+
+    // On the ground the idle is exactly right, so nothing fades.
+    game::FlightState grounded;
+    grounded.grounded = true;
+    CHECK(head_deflection(grounded) > 30.0f);
+}
+
 }  // namespace
 
 int main() {
@@ -609,6 +772,9 @@ int main() {
     test_clip_rest_reproduces_bind();
     test_base_clip_layers_under_rig();
     test_head_aims_at_a_target();
+    test_body_responds_to_control_input();
+    test_wings_carry_the_load();
+    test_idle_clip_fades_with_intensity();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

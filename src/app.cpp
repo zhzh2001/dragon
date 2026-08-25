@@ -1345,6 +1345,17 @@ void App::build_dragon_ui() {
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
     }
 
+    if (ImGui::CollapsingHeader("Flight response", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("active posture, on top of the passive dynamics");
+        ImGui::SliderFloat("tail rudder", &rig.tail_rudder_deg, 0.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("tail elevator", &rig.tail_elevator_deg, 0.0f, 45.0f, "%.0f deg");
+        ImGui::SliderFloat("neck lead", &rig.neck_lead_deg, 0.0f, 30.0f, "%.0f deg");
+        ImGui::SliderFloat("neck streamline", &rig.neck_streamline_deg, 0.0f, 25.0f, "%.0f deg");
+        ImGui::SliderFloat("wing load flex", &rig.wing_load_flex_deg, 0.0f, 20.0f, "%.0f deg/g");
+        ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
+        ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
+    }
+
     if (ImGui::CollapsingHeader("Legs & authored motion")) {
         ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
         if (dragon_rig_.has_base_clip()) {

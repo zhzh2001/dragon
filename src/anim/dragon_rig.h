@@ -121,6 +121,33 @@ struct RigTuning {
     float chain_max_bend_deg = 32.0f;
     int chain_iterations = 4;
 
+    // ---- flight response ----
+    //
+    // The chains above are passive -- they lag, swing and settle. These are the
+    // active responses: a flying animal steers with its tail, leads a manoeuvre
+    // with its head, and its wings visibly carry the load. Without them the body
+    // reads as a fuselage that happens to have dynamics bolted on.
+    //
+    // Tail as a control surface, driven by the smoothed control positions the
+    // flight model already exposes. Deflection with yaw and roll input swings it
+    // toward the outside of the commanded turn; pitch input works it as an
+    // elevator, tail dropping as the nose rises.
+    float tail_rudder_deg = 22.0f;
+    float tail_elevator_deg = 14.0f;
+    // The neck leads: nose-up input curls the head up before the body follows.
+    // Anticipation, the oldest animation principle there is.
+    float neck_lead_deg = 10.0f;
+    // And at speed the neck lowers into the wind. Full effect at
+    // `streamline_speed` and above.
+    float neck_streamline_deg = 8.0f;
+    float streamline_speed = 60.0f;
+    // Wings bow upward under load: degrees of extra dihedral per g above 1.
+    // The one signal that makes a hard pull look like it costs something.
+    float wing_load_flex_deg = 7.0f;
+    // Asymmetric wing lean with roll input -- both wings rotate the same way
+    // about the body axis, which is exactly what produces a roll.
+    float wing_roll_lean_deg = 9.0f;
+
     // ---- authored base motion ----
     //
     // The rig drives what flight determines -- wings, neck, tail, leg tuck -- and
@@ -130,6 +157,12 @@ struct RigTuning {
     // uncanny even when the big motions are right.
     float base_clip_weight = 1.0f;
     float base_clip_rate = 1.0f;
+    // How much of the clip survives hard flight. The clip is a ground idle --
+    // toes curling, jaw working, small shifts of weight -- which is right in a
+    // calm glide and absurd in a 100 m/s dive, where a real animal goes tense
+    // and still. 0 keeps the idle at full strength always; 1 removes it entirely
+    // at full intensity.
+    float clip_flight_fade = 0.7f;
 
     // ---- head aim ----
     //
@@ -207,12 +240,18 @@ private:
                       float angle_b);
 
     void drive_wings(const game::FlightState& state);
+    // 0 calm glide .. 1 flat out: how hard the flight state is working the body.
+    float flight_intensity(const game::FlightState& state) const;
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
     // rotations.
+    // `steer_deg` actively deflects the chain's target shape: x pitches it about
+    // the body's X axis, y swings it about Y. The spring then pulls the chain
+    // toward the deflected shape, so steering composes with the passive
+    // dynamics instead of overwriting them.
     void drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                      const game::FlightState& state, core::Vec3 frame_acceleration,
-                     core::Vec3 angular_acceleration, float dt);
+                     core::Vec3 angular_acceleration, core::Vec2 steer_deg, float dt);
     void drive_legs(const game::FlightState& state, float dt);
     // Turns the head toward `aim_target_`, after the chains have posed it.
     void aim_head(const game::FlightState& state);
@@ -231,6 +270,10 @@ private:
     std::vector<core::Mat4> skinning_;
 
     ChainDynamics tail_sim_, neck_sim_;
+    // Smoothed g deviation and flight intensity, so wing flex and the clip fade
+    // ease rather than jitter with every force spike.
+    float load_smoothed_ = 0.0f;
+    float intensity_smoothed_ = 0.0f;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     core::Vec3 aim_target_ = core::Vec3::zero();

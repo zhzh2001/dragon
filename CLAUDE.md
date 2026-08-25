@@ -334,6 +334,26 @@ every bone makes total bend depend on how many bones the rig happens to have. Th
 generated rig has two bones per wing and the imported one has five, which put the
 imported dragon's wings in a steep V at rest.
 
+### Flight response: the active posture layer
+
+The chains are passive -- they lag, swing wide and settle. On top of them sits
+an active layer, because a flying animal is not a fuselage with dynamics bolted
+on: the **tail steers** (rudder with yaw/roll input, elevator with pitch), the
+**neck leads a manoeuvre** and lowers into the wind at speed, and the **wings
+bow upward under g** and lean asymmetrically with roll input.
+
+Steering deflects the chain's *target shape* rather than its joints, so the
+spring pulls the simulation toward the deflected pose and the active motion
+eases, overshoots and settles through the same integrator as everything
+passive -- one system, one look. The wing roll lean is deliberately not
+mirrored between sides: the same rotation about the body axis on both wings is
+exactly the antisymmetric shape that produces a roll.
+
+The **ground-idle clip fades with flight intensity** (`clip_flight_fade`) --
+max of speed, g excess, turn rate, tuck and brake, smoothed. Toes curling and a
+jaw working are right in a calm glide and absurd in a 100 m/s dive, where a
+real animal goes tense and still. Grounded, nothing fades.
+
 ### Authored motion under the procedural rig
 
 The rig drives what flight determines -- wings, neck, tail, leg tuck -- and the

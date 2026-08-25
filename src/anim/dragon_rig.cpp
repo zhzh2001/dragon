@@ -362,10 +362,16 @@ void DragonRig::rotate_joint(int joint, Vec3 axis_a, float angle_a, Vec3 axis_b,
 
 void DragonRig::drive_wings(const game::FlightState& state) {
     // The flight model already produced the wing angle, so the wing that is
-    // drawn and the thrust that was generated cannot disagree.
-    const float base = state.wing_angle;
+    // drawn and the thrust that was generated cannot disagree. On top of it,
+    // load flex: the wings bow upward under g, which is what makes a hard pull
+    // look like it costs something. load_smoothed_ is maintained in update().
+    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_;
     const float tuck = state.wing_tuck;
     const float flare = state.wing_brake;
+    // Roll lean is deliberately NOT mirrored between sides: the same rotation
+    // about the body's forward axis on both wings tips one up and one down,
+    // which is exactly the shape that produces a roll.
+    const float roll_lean = core::radians(tuning.wing_roll_lean_deg) * state.control.z;
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
@@ -394,7 +400,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             if (joint == NO_PARENT) return;
             const float decay = std::pow(tuning.outboard_decay, float(depth)) * normalize;
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
-            const float flap_angle = base * decay * lag * sign;
+            const float flap_angle = (base * sign + roll_lean) * decay * lag;
 
             // Folding sweeps back about local Y and closes progressively toward
             // the tip, which is how a wing actually stows.
@@ -469,8 +475,22 @@ void DragonRig::rotate_joint_quat(int joint, const Quat& delta, const Quat& pare
 
 void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                             const game::FlightState& state, Vec3 frame_acceleration,
-                            Vec3 angular_acceleration, float dt) {
+                            Vec3 angular_acceleration, core::Vec2 steer_deg, float dt) {
     if (!sim.initialized || chain.size() < 2) return;
+
+    // Active steering: rotate the chain's target shape about its root. The
+    // spring then pulls the simulation toward the deflected shape, so the
+    // deflection eases in, overshoots and settles exactly like every passive
+    // motion -- one integrator, one look.
+    std::vector<Vec3> target = sim.rest;
+    if (std::fabs(steer_deg.x) > 1e-3f || std::fabs(steer_deg.y) > 1e-3f) {
+        const Quat bias =
+            core::Quat::from_axis_angle(Vec3::unit_y(), core::radians(steer_deg.y)) *
+            core::Quat::from_axis_angle(Vec3::unit_x(), core::radians(steer_deg.x));
+        for (size_t i = 1; i < target.size(); ++i) {
+            target[i] = target[0] + core::rotate(bias, sim.rest[i] - target[0]);
+        }
+    }
 
     const Vec3 omega = state.angular_velocity;
 
@@ -499,9 +519,9 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         Vec3 acceleration = gravity_local +
                             (centrifugal + euler + coriolis + linear) * tuning.chain_inertia;
 
-        // Spring back toward the bind pose, so the chain has a shape to return
-        // to rather than dangling.
-        acceleration += (sim.rest[i] - r) * tuning.chain_stiffness;
+        // Spring back toward the (possibly steered) target shape, so the chain
+        // has a shape to return to rather than dangling.
+        acceleration += (target[i] - r) * tuning.chain_stiffness;
         acceleration -= v * tuning.chain_damping;
 
         // Drag against the relative airflow, which damps oscillation and
@@ -613,6 +633,19 @@ void DragonRig::drive_legs(const game::FlightState& state, float dt) {
     }
 }
 
+float DragonRig::flight_intensity(const game::FlightState& state) const {
+    // Whichever signal is working the body hardest wins. Max rather than sum:
+    // a fast, hard-turning dive should read as 1, not 3.
+    const float speed = core::saturate((state.airspeed - 28.0f) / 45.0f);
+    const float load = core::saturate(std::fabs(state.g_load - 1.0f) / 1.5f);
+    const float turning = core::saturate(core::length(state.angular_velocity) / 1.2f);
+    float intensity = core::maxf(core::maxf(speed, load), turning);
+    intensity = core::maxf(intensity, state.wing_tuck);
+    intensity = core::maxf(intensity, state.wing_brake);
+    // On the ground nothing is working: the idle is exactly right there.
+    return state.grounded ? 0.0f : intensity;
+}
+
 void DragonRig::update(const game::FlightState& state, float dt) {
     if (!skeleton_ || dt <= 0.0f) return;
 
@@ -629,18 +662,32 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     previous_angular_velocity_ = state.angular_velocity;
     have_previous_ = true;
 
+    // Wing load flex reads the g excess, smoothed because g_load is assembled
+    // from this frame's forces and single-frame spikes would make the wings
+    // twitch. Clamped low because negative g beyond a gentle unload folds the
+    // wings under the body, which reads as broken rather than as pushing over.
+    load_smoothed_ = core::damp(load_smoothed_,
+                                core::clampf(state.g_load - 1.0f, -0.6f, 2.5f), 0.12f, dt);
+    intensity_smoothed_ = core::damp(intensity_smoothed_, flight_intensity(state), 0.35f, dt);
+
     // Authored motion first: it fills in every joint the procedural rig does not
     // own, and the rig then overrides the ones flight determines.
     pose_.reset_to_bind(*skeleton_);
-    if (base_clip_ && base_clip_->valid() && tuning.base_clip_weight > 0.0f) {
+    // The clip is a ground idle, so it fades as flight works the body harder: a
+    // real animal goes tense and still in a dive, and toes curling at 100 m/s
+    // read as someone else's animation playing on the wrong creature.
+    const float clip_weight =
+        tuning.base_clip_weight *
+        (1.0f - core::saturate(tuning.clip_flight_fade) * intensity_smoothed_);
+    if (base_clip_ && base_clip_->valid() && clip_weight > 0.001f) {
         clip_time_ += dt * tuning.base_clip_rate;
-        if (tuning.base_clip_weight >= 0.999f) {
+        if (clip_weight >= 0.999f) {
             base_clip_->sample(clip_time_, pose_);
         } else {
             Pose clip_pose;
             clip_pose.reset_to_bind(*skeleton_);
             base_clip_->sample(clip_time_, clip_pose);
-            blend_poses(pose_, clip_pose, tuning.base_clip_weight, pose_);
+            blend_poses(pose_, clip_pose, clip_weight, pose_);
         }
     }
 
@@ -648,8 +695,25 @@ void DragonRig::update(const game::FlightState& state, float dt) {
 
     std::vector<int> neck_with_head = joints_.neck;
     if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
-    drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration, dt);
-    drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration, dt);
+
+    // The tail steers. Yaw and roll input swing it toward the outside of the
+    // commanded turn (a rudder pushing the tail across the airflow); pitch
+    // input works it as an elevator, dropping the tail as the nose rises. The
+    // control positions are already smoothed by the flight model.
+    const core::Vec2 tail_steer{
+        state.control.x * tuning.tail_elevator_deg,
+        -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
+
+    // The neck leads the manoeuvre and lowers into the wind at speed.
+    const float streamline =
+        core::saturate(state.airspeed / core::maxf(tuning.streamline_speed, 1.0f));
+    const core::Vec2 neck_steer{
+        state.control.x * tuning.neck_lead_deg - streamline * tuning.neck_streamline_deg, 0.0f};
+
+    drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration,
+                tail_steer, dt);
+    drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
+                neck_steer, dt);
     drive_legs(state, dt);
 
     compute_world_matrices(*skeleton_, pose_, world_);
