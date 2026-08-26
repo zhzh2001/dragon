@@ -152,7 +152,10 @@ struct RigTuning {
     // The neck is muscle wrapped around a spine and carries the head the animal
     // aims with; it is far stiffer and far better supported than the tail.
     // Scales applied on top of the shared chain parameters.
-    float neck_stiffness_scale = 2.5f;
+    // At metre scale the frame's pseudo-forces (a 17 m/s^2 brake surge, a 3 g
+    // pull) overwhelm a soft spring: deflection is roughly a/k, and 2.5x left
+    // the head a metre out of line on a 2.4 m neck.
+    float neck_stiffness_scale = 6.0f;
     float neck_gravity_scale = 0.35f;
     // The neck braces against frame accelerations rather than flailing with
     // them -- the head must stay a stable platform for the eyes -- and it is
@@ -279,14 +282,6 @@ public:
     bool has_base_clip() const { return base_clip_ && base_clip_->valid(); }
     void update(const game::FlightState& state, float dt);
 
-    const Pose& pose() const { return pose_; }
-    const std::vector<core::Mat4>& skinning_matrices() const { return skinning_; }
-    // Joint world transforms, for debug drawing the skeleton.
-    const std::vector<core::Mat4>& world_matrices() const { return world_; }
-
-    RigTuning tuning;
-
-private:
     // A chain simulated as point masses in the dragon's own frame.
     struct ChainDynamics {
         std::vector<core::Vec3> position;  // body-local, simulated
@@ -295,6 +290,20 @@ private:
         std::vector<float> segment;        // rest length to the previous point
         bool initialized = false;
     };
+
+    const Pose& pose() const { return pose_; }
+    const std::vector<core::Mat4>& skinning_matrices() const { return skinning_; }
+    // Joint world transforms, for debug drawing the skeleton.
+    const std::vector<core::Mat4>& world_matrices() const { return world_; }
+    // Raw chain states, for probes: the rig's output should be a faithful
+    // reconstruction of these, and a probe that can see both can tell a broken
+    // constraint from a broken reconstruction.
+    const ChainDynamics& neck_sim() const { return neck_sim_; }
+    const ChainDynamics& tail_sim() const { return tail_sim_; }
+
+    RigTuning tuning;
+
+private:
 
     // Applies a rotation about a body-space axis to one joint, composed with
     // that joint's bind rotation rather than replacing it.

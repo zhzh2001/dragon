@@ -682,6 +682,10 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     // folding back through itself.
     const float max_bend = std::cos(core::radians(tuning.chain_max_bend_deg));
     for (int iteration = 0; iteration < tuning.chain_iterations; ++iteration) {
+        // The articulation range is a TOTAL budget spent walking out the chain,
+        // not a per-segment allowance -- per-segment, seven neck links at 30
+        // degrees each still folded the head 169 degrees backwards.
+        float range_budget = core::radians(feel.range_deg);
         for (size_t i = 1; i < count; ++i) {
             Vec3 direction = sim.position[i] - sim.position[i - 1];
             const float length = core::length(direction);
@@ -692,27 +696,45 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
             }
 
             {
-                // Range of motion: clamp against the (steered) target shape.
-                // This is the muscle's hard limit -- whatever kick or attractor
-                // the dynamics found, the chain cannot leave its articulation
-                // range, which is what categorically prevents the folded-under-
-                // the-chest states that only ever appeared minutes into a run.
+                // Range of motion: clamp against the (steered) target shape,
+                // spending the shared budget. This is the muscle's hard limit --
+                // whatever kick or attractor the dynamics find, the head cannot
+                // deviate further from the rest line than the whole chain's
+                // budget allows.
                 const Vec3 target_direction = core::normalize_or(
                     target[i] - target[i - 1], direction);
-                const float range = core::radians(feel.range_deg);
-                if (core::dot(target_direction, direction) < std::cos(range)) {
+                const float deviation = std::acos(core::clampf(
+                    core::dot(target_direction, direction), -1.0f, 1.0f));
+                if (deviation > range_budget) {
                     const Vec3 axis = core::cross(target_direction, direction);
                     if (core::length_sq(axis) > 1e-8f) {
                         direction = core::rotate(
-                            core::Quat::from_axis_angle(core::normalize(axis), range),
+                            core::Quat::from_axis_angle(core::normalize(axis), range_budget),
                             target_direction);
                     } else {
                         direction = target_direction;
                     }
-                    // Kill the velocity component that drove past the limit, or
-                    // the spring fights a phantom momentum forever.
+                    // Kill the velocity that drove past the limit, or the
+                    // spring fights a phantom momentum forever.
                     sim.velocity[i] = sim.velocity[i] * 0.5f;
+                    range_budget = 0.0f;
+                } else {
+                    range_budget -= deviation;
                 }
+#ifdef CHAIN_CLAMP_DEBUG
+                if (i == 1) {
+                    const Vec3 rest_dir =
+                        core::normalize_or(sim.rest[i] - sim.rest[i - 1], Vec3::forward());
+                    const Vec3 target_dir =
+                        core::normalize_or(target[i] - target[i - 1], rest_dir);
+                    const float target_off = core::degrees(std::acos(core::clampf(
+                        core::dot(target_dir, rest_dir), -1.0f, 1.0f)));
+                    if (target_off > 20.0f) {
+                        std::printf("TARGET OFF seg1: %.1f deg  steer=(%.1f, %.1f)\n",
+                                    target_off, steer_deg.x, steer_deg.y);
+                    }
+                }
+#endif
             }
 
             if (i >= 2) {
@@ -954,11 +976,25 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     const core::Vec2 neck_steer{
         state.control.x * tuning.neck_lead_deg - streamline * tuning.neck_streamline_deg, 0.0f};
 
+    // Named fields, not positional braces: a positional initializer here once
+    // silently dropped the neck's brace, aero gate and articulation range when
+    // the struct grew, and every fix routed through them became dead code.
+    ChainFeel tail_feel;
+    tail_feel.damping = tuning.tail_damping_scale;
+    tail_feel.range_deg = tuning.tail_range_deg;
+
+    ChainFeel neck_feel;
+    neck_feel.stiffness = tuning.neck_stiffness_scale;
+    neck_feel.gravity = tuning.neck_gravity_scale;
+    neck_feel.inertia = tuning.neck_inertia_scale;
+    neck_feel.damping = tuning.neck_damping_scale;
+    neck_feel.aero = 0.1f;
+    neck_feel.range_deg = tuning.neck_range_deg;
+
     drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration,
-                tail_steer, ChainFeel{}, dt);
+                tail_steer, tail_feel, dt);
     drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
-                neck_steer, ChainFeel{tuning.neck_stiffness_scale, tuning.neck_gravity_scale},
-                dt);
+                neck_steer, neck_feel, dt);
     drive_legs(state, frame_acceleration, angular_acceleration, dt);
 
     // Feet: first anchor them to the posed legs (needs world matrices), then

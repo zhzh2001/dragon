@@ -430,6 +430,15 @@ thigh ~100 degrees in a dive, pointing the shin up and parking the re-anchored
 feet above the wings; a stoop stows the legs under the body, not rotated past
 it.
 
+**A positional brace initializer silently disconnected all of this once.**
+`ChainFeel{stiffness, gravity}` kept compiling as the struct grew, so the
+neck's brace, aero gate and articulation range were defaults (range 178
+degrees) for three commits of "fixes" that were dead code -- every keyframe
+check was watching an unfixed sim. The call sites now assign named fields.
+When a fix does not change behaviour, first verify its values actually reach
+the code that runs: the neck-position recorder in the transcripts caught this
+by showing the sim violating a clamp that provably worked in isolation.
+
 **Chains have an articulation range** (`neck_range_deg`, `tail_range_deg`): no
 segment may deviate further from its steered rest direction than muscle allows,
 whatever the forces say. And the **v^2 aero gate is per-chain, not
