@@ -1408,6 +1408,8 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("neck stiffness x", &rig.neck_stiffness_scale, 0.5f, 8.0f);
         ImGui::SliderFloat("neck gravity x", &rig.neck_gravity_scale, 0.0f, 1.5f);
         ImGui::SliderFloat("neck brace", &rig.neck_inertia_scale, 0.0f, 1.0f);
+        ImGui::SliderFloat("neck damping x", &rig.neck_damping_scale, 0.5f, 5.0f);
+        ImGui::SliderFloat("tail damping x", &rig.tail_damping_scale, 0.5f, 5.0f);
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
     }
 

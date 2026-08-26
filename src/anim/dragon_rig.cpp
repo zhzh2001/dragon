@@ -559,7 +559,8 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     // damped instead of increasingly ringy as it stiffens.
     const float tone = 1.0f + tuning.chain_tone * intensity_smoothed_;
     const float stiffness = tuning.chain_stiffness * feel.stiffness * tone;
-    const float damping = tuning.chain_damping * std::sqrt(feel.stiffness * tone);
+    const float damping =
+        tuning.chain_damping * feel.damping * std::sqrt(feel.stiffness * tone);
 
     // Active steering: curl the chain's target shape. The full deflection is
     // spread down the chain, each segment rotated a little more than the one
@@ -781,7 +782,12 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // legs back along the body, it does not dangle them like landing gear --
         // then the fold bends the knee, and the pendulum swing rides on top.
         // Everything composes onto the authored pose.
-        const float trail = core::radians(tuning.leg_trail_deg) * airborne;
+        // Trail backs off as the tuck deepens: fold plus full trail rotated the
+        // thigh ~100 degrees in a dive, pointing the shin up and parking the
+        // anchored feet above the wings. A stoop stows the legs under the
+        // body, not rotated past it.
+        const float trail = core::radians(tuning.leg_trail_deg) * airborne *
+                            (1.0f - 0.7f * state.wing_tuck);
         auto drive_limb = [&](const std::vector<int>& chain, float trail_angle) {
             float sign = 1.0f;
             bool first = true;

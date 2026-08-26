@@ -422,6 +422,14 @@ scaled space; dropping the divide sent every foot to within a metre of the
 origin. On the ground the authored planted stance wins. The hang and claw curl
 (`foot_hang_deg`, `toe_curl_deg`) compose on top.
 
+**The neck is heavy**: overdamped (`neck_damping_scale`), low inertial
+response (`neck_inertia_scale` 0.18), and a small lead angle -- it moves slowly
+and settles without ringing, the feel of muscle rather than a spring. And the
+**leg trail backs off as the tuck deepens**: fold plus full trail rotated the
+thigh ~100 degrees in a dive, pointing the shin up and parking the re-anchored
+feet above the wings; a stoop stows the legs under the body, not rotated past
+it.
+
 **Axial chain forces are mostly suppressed** (`chain_axial_response`):
 transverse forces bend a spine, axial compression only buckles it, and muscle
 resists exactly that. A braking dragon's neck under full axial pseudo-force

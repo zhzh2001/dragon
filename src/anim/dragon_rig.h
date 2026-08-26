@@ -155,8 +155,11 @@ struct RigTuning {
     float neck_stiffness_scale = 2.5f;
     float neck_gravity_scale = 0.35f;
     // The neck braces against frame accelerations rather than flailing with
-    // them -- the head must stay a stable platform for the eyes.
-    float neck_inertia_scale = 0.35f;
+    // them -- the head must stay a stable platform for the eyes -- and it is
+    // heavy: overdamped, so it moves slowly and settles without ringing.
+    float neck_inertia_scale = 0.18f;
+    float neck_damping_scale = 2.2f;
+    float tail_damping_scale = 1.25f;
 
     // ---- flight response ----
     //
@@ -173,7 +176,7 @@ struct RigTuning {
     float tail_elevator_deg = 8.0f;
     // The neck leads: nose-up input curls the head up before the body follows.
     // Anticipation, the oldest animation principle there is.
-    float neck_lead_deg = 10.0f;
+    float neck_lead_deg = 6.0f;
     // And at speed the neck lowers into the wind. Full effect at
     // `streamline_speed` and above.
     float neck_streamline_deg = 5.0f;
@@ -313,6 +316,10 @@ private:
         // animal braces: a neck held rigid against a deceleration instead of
         // buckling under the chest.
         float inertia = 1.0f;
+        // Extra damping on top of the shared value. Above critical the chain
+        // moves slowly and settles without ringing -- the feel of a heavy,
+        // muscular limb rather than a spring.
+        float damping = 1.0f;
     };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
