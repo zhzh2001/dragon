@@ -80,7 +80,9 @@ struct RigTuning {
     float flap_shoulder_deg = 52.0f;
     // Each segment lags the one inboard of it, which is what gives a wingbeat
     // its whip instead of looking like a hinged plank.
-    float wing_phase_lag = 0.16f;
+    // Higher lag makes the wing whip through the beat rather than rotate as a
+    // rigid plank -- the tip visibly trails the shoulder.
+    float wing_phase_lag = 0.26f;
     // How much of the flap each successive outboard segment keeps. Below 1 the
     // shoulder does most of the work, which is what a wing actually does.
     float outboard_decay = 0.68f;

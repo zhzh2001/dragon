@@ -48,9 +48,9 @@ wingbeat, the inverted recovery, and every generated course were checked.
 |---|---|
 | W/S | Pitch (W = nose up) |
 | A/D | Roll |
-| Q/E | Rudder |
+| Q/E | Rudder -- gamepad d-pad left/right |
 | Gamepad left stick | Pitch and roll (absolute, best feel of the three) |
-| Gamepad A / triggers | Flap / tuck-dive and brake |
+| Gamepad A / triggers | Flap / tuck-dive (RT) and brake (LT) |
 | Mouse | Optional, off by default -- it has to accumulate to work, and that accumulation is what makes it hard to control |
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
@@ -200,6 +200,20 @@ Three decisions that are the milestone:
 - **The breath meter latches and does not refill while held.** Without both, an
   empty meter under a held button crosses the restart threshold every few frames
   and produces a stutter of single-frame damage.
+
+**One gamepad button, one meaning.** The shoulders once carried rudder and
+combat simultaneously: firing a fireball also yawed the dragon, and holding
+breath dragged it into a slip that bled energy -- which the player read as
+"auto-flap is broken", not as a binding conflict. Rudder lives on the d-pad
+now. And auto-flap also protects against unintended sink (descending fast with
+neither tuck nor brake held): a fight at healthy airspeed glides steadily
+downhill, and a pilot busy aiming does not notice until the ground does.
+
+Projectiles are drawn as **one opaque bolt** stretched along velocity, its
+readability exaggeration tapered off near the camera. Both lessons were paid
+for: a nested "glow" shell just occludes its own core in a forward opaque
+pipeline, and a shot passing the chase camera at 3x exaggeration is a
+screen-filling balloon that reads as a volley of different-sized projectiles.
 
 Sentinels are **not AI**: they fly a fixed orbit and fire on a timer with
 deliberate aim spread. They exist so health, aim and the cooldown rhythm can be

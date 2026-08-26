@@ -479,16 +479,24 @@ game::FlightInput App::read_flight_input() const {
         const game::FlightState& s = flight_.state();
         const float deficit = (assists_.auto_flap_speed - s.airspeed) / 14.0f;
         float assist = core::saturate(deficit);
+        // Sink protection: a fight at healthy airspeed still glides steadily
+        // downhill, and a pilot busy aiming does not notice until the ground
+        // does. Flap against an unintended descent -- unintended meaning no
+        // tuck and no brake held.
+        if (in.tuck < 0.1f && in.brake < 0.1f) {
+            assist = core::maxf(assist, core::saturate((-s.climb_rate - 4.0f) / 8.0f));
+        }
         if (s.ground_clearance < assists_.auto_flap_clearance) assist = 1.0f;
         in.flap = core::maxf(in.flap, assist);
     }
 
     if (input_.has_gamepad()) {
-        // Shoulders rudder, triggers are the two energy verbs, A flaps. Laid out
-        // so the things you hold continuously sit under the fingers that can
-        // hold them.
-        const float pad_yaw = (input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) ? 1.0f : 0.0f) -
-                              (input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ? 1.0f : 0.0f);
+        // D-pad rudder, triggers are the two energy verbs, A flaps. The
+        // shoulders belong to combat: with rudder there too, firing a fireball
+        // also yawed the dragon right, and holding breath dragged it left --
+        // which bled energy and read as the assists being broken.
+        const float pad_yaw = (input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) ? 1.0f : 0.0f) -
+                              (input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_LEFT) ? 1.0f : 0.0f);
         in.yaw = core::clampf(in.yaw + pad_yaw, -1.0f, 1.0f);
         in.flap = core::maxf(in.flap, input_.gamepad_button(SDL_GAMEPAD_BUTTON_SOUTH) ? 1.0f : 0.0f);
         in.tuck = core::maxf(in.tuck, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
@@ -1523,24 +1531,30 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // which at 400 m is a couple of pixels -- invisible, and being hit by
         // something invisible is the least readable thing in the game. Player
         // fire needs no such help: you know where you shot.
-        const float scale = mine ? 1.0f : 3.2f;
-        // A hot core inside a larger, dimmer glow: the shape that reads as a
-        // burning projectile rather than as a coloured marble.
-        draw_ball(projectile.position, projectile.radius * 1.9f * scale, colour, 0.5f, true);
-        draw_ball(projectile.position, projectile.radius * 0.8f * scale,
-                  mine ? core::Vec3{1.0f, 0.88f, 0.62f} : core::Vec3{0.85f, 0.96f, 1.0f}, 1.6f,
-                  true);
-        // A short tracer behind it, so the eye can follow the line back to
-        // whoever fired it.
-        if (!mine) {
-            const core::Vec3 back = core::normalize_or(projectile.velocity, core::Vec3::zero());
-            for (int i = 1; i <= 3; ++i) {
-                const float t = float(i) / 4.0f;
-                draw_ball(projectile.position - back * (18.0f * float(i)),
-                          projectile.radius * 1.5f * scale * (1.0f - t), colour,
-                          0.45f * (1.0f - t), true);
-            }
-        }
+        // Readability scale, tapered off up close: the exaggeration exists so a
+        // 2.5 m round is visible at 400 m, and a shot passing the camera at
+        // full exaggeration is a screen-filling balloon.
+        const float camera_distance =
+            core::distance(active_camera().position, projectile.position);
+        const float taper = core::smoothstep(5.0f, 250.0f, camera_distance);
+        const float scale = mine ? 1.0f : core::lerpf(0.8f, 2.2f, taper);
+        // One bolt stretched along its velocity, not a string of spheres: the
+        // earlier sphere tracer read as a volley of shrinking projectiles.
+        const core::Quat heading = core::look_rotation(
+            core::normalize_or(projectile.velocity, core::Vec3::forward()), core::Vec3::up());
+        // One opaque bolt -- a nested "glow" shell just occludes anything inside
+        // it in a forward opaque pipeline, leaving a flat pale balloon. Heat is
+        // carried by emissive brightness instead.
+        const core::Vec3 hot = mine ? core::Vec3{1.0f, 0.62f, 0.22f}
+                                    : core::Vec3{0.62f, 0.82f, 1.0f};
+        gfx::ModelUniforms model;
+        const float radius = projectile.radius * 0.8f * scale;
+        model.model = core::Mat4::trs(projectile.position, heading,
+                                      core::Vec3{radius, radius, radius * 2.4f});
+        model.tint = core::Vec4{hot.x, hot.y, hot.z, 2.2f};
+        model.material.w = 1.0f;
+        world_.draw_mesh(device_, pass, sphere_mesh_, model);
+        (void)colour;
     }
 
     // The flame: a line of spheres widening down the cone. It is drawn from the
@@ -2033,7 +2047,7 @@ void App::build_flight_ui() {
     ImGui::TextDisabled(controls_.invert_pitch ? "W nose down, S nose up, A/D roll"
                                               : "W nose up, S nose down, A/D roll");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
-    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake");
+    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake, d-pad rudder");
     ImGui::TextDisabled("R respawn, V first person, 1/2/3 camera");
     ImGui::TextDisabled("right-drag or right stick to look around");
     ImGui::End();

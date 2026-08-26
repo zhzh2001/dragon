@@ -49,8 +49,10 @@ struct FlightTuning {
     // 54 crossed the raised wings over the spine at the top of the beat, which
     // is impossible anatomy on any real flyer -- the stroke reads just as
     // strong from the deeper downstroke.
-    float flap_up_angle_deg = 44.0f;
-    float flap_down_angle_deg = -32.0f;
+    float flap_up_angle_deg = 50.0f;
+    // A deep downstroke is where the power reads; the upstroke redistribution
+    // in the rig keeps the raised wings clear of each other.
+    float flap_down_angle_deg = -42.0f;
     float flap_downstroke_fraction = 0.40f;
     // Resting dihedral: gliding wings sit slightly raised, not dead flat.
     float glide_dihedral_deg = 9.0f;
