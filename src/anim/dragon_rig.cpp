@@ -641,7 +641,8 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
         // dive speed. A real animal holds an upstream limb with muscle, so the
         // destabilizing aero is suppressed rather than simulated.
         const float downstream =
-            core::saturate(core::dot(core::normalize_or(relative, Vec3::zero()), along));
+            core::saturate(core::dot(core::normalize_or(relative, Vec3::zero()), along)) *
+            feel.aero;
         acceleration += normal_flow * (tuning.chain_drag + downstream *
                                        core::length(normal_flow) * tuning.chain_drag_v2);
         // A sliver of axial drag for damping; a real slender body has ~10x less.
@@ -688,6 +689,30 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                 direction = core::normalize_or(sim.rest[i] - sim.rest[i - 1], Vec3::forward());
             } else {
                 direction = direction / length;
+            }
+
+            {
+                // Range of motion: clamp against the (steered) target shape.
+                // This is the muscle's hard limit -- whatever kick or attractor
+                // the dynamics found, the chain cannot leave its articulation
+                // range, which is what categorically prevents the folded-under-
+                // the-chest states that only ever appeared minutes into a run.
+                const Vec3 target_direction = core::normalize_or(
+                    target[i] - target[i - 1], direction);
+                const float range = core::radians(feel.range_deg);
+                if (core::dot(target_direction, direction) < std::cos(range)) {
+                    const Vec3 axis = core::cross(target_direction, direction);
+                    if (core::length_sq(axis) > 1e-8f) {
+                        direction = core::rotate(
+                            core::Quat::from_axis_angle(core::normalize(axis), range),
+                            target_direction);
+                    } else {
+                        direction = target_direction;
+                    }
+                    // Kill the velocity component that drove past the limit, or
+                    // the spring fights a phantom momentum forever.
+                    sim.velocity[i] = sim.velocity[i] * 0.5f;
+                }
             }
 
             if (i >= 2) {

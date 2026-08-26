@@ -430,6 +430,16 @@ thigh ~100 degrees in a dive, pointing the shin up and parking the re-anchored
 feet above the wings; a stoop stows the legs under the body, not rotated past
 it.
 
+**Chains have an articulation range** (`neck_range_deg`, `tail_range_deg`): no
+segment may deviate further from its steered rest direction than muscle allows,
+whatever the forces say. And the **v^2 aero gate is per-chain, not
+per-instant** (`ChainFeel::aero`): gating on the momentary direction created a
+trap where a surge that folded the neck backward made it read as "downstream",
+and the drag then pinned it folded under the chest like a windsock -- a stable
+attractor that only appeared MINUTES into a run. Every fresh-start keyframe
+check missed it; the user's screenshot at t=94 s found it. **Verify long runs,
+not just cold starts.**
+
 **Axial chain forces are mostly suppressed** (`chain_axial_response`):
 transverse forces bend a spine, axial compression only buckles it, and muscle
 resists exactly that. A braking dragon's neck under full axial pseudo-force

@@ -160,6 +160,11 @@ struct RigTuning {
     float neck_inertia_scale = 0.18f;
     float neck_damping_scale = 2.2f;
     float tail_damping_scale = 1.25f;
+    // Hard articulation limits, total deviation from the rest shape. The neck
+    // is tight -- big head turns are the aim system's job, not the sim's; the
+    // tail keeps room to whip.
+    float neck_range_deg = 30.0f;
+    float tail_range_deg = 80.0f;
 
     // ---- flight response ----
     //
@@ -320,6 +325,16 @@ private:
         // moves slowly and settles without ringing -- the feel of a heavy,
         // muscular limb rather than a spring.
         float damping = 1.0f;
+        // How much v^2 aerodynamic streaming this chain is allowed. Per-chain,
+        // NOT per-instant: gating on the momentary direction created a trap
+        // where a surge that folded the neck backward made it "downstream" and
+        // the drag then pinned it folded under the body like a windsock. A
+        // neck is never a windsock; muscle owns it at every angle.
+        float aero = 1.0f;
+        // Range of motion: no segment may deviate further than this from its
+        // (steered) rest direction, whatever the forces say. Muscle has a
+        // range, and every long-run failure mode ends outside it.
+        float range_deg = 178.0f;
     };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
