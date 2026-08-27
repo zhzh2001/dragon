@@ -124,6 +124,12 @@ struct Projectile {
 // tuned against something that shoots back, which is the only way to know
 // whether the combat core feels right.
 struct Sentinel {
+    // External hostiles (the M14 bots) reuse this slot for everything combat
+    // knows how to do -- health, lock-on, projectile sweeps, hit flash, HUD
+    // brackets, kill counting -- while their position and velocity are driven
+    // by a real FlightModel outside, and they fire through fire_hostile()
+    // instead of the orbit timer.
+    bool external = false;
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
     float health = 0.0f;
@@ -218,6 +224,17 @@ public:
     // Spawns a ring of sentinels around the arena centre. Called by reset, and
     // again from the UI to restock.
     void spawn_wave(int count);
+
+    // ---- external hostiles (bots) ----
+    // Claims a slot; returns its index into sentinels().
+    int spawn_external(float health, float radius);
+    // Per-frame: where the bot's flight model actually put it.
+    void drive_external(int index, core::Vec3 position, core::Vec3 velocity);
+    // A hostile round fired by an external pilot.
+    void fire_hostile(core::Vec3 position, core::Vec3 velocity, float damage);
+    // The bot flew into a mountain; combat records the kill the usual way.
+    void kill_external(int index);
+    void clear_hostiles();
 
 private:
     void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,

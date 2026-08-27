@@ -262,6 +262,42 @@ void Combat::spawn_wave(int count) {
     }
 }
 
+int Combat::spawn_external(float health, float radius) {
+    Sentinel bot;
+    bot.external = true;
+    bot.health = health;
+    bot.max_health = health;
+    bot.alive = true;
+    // The caller drives position before the first update; parked far away so a
+    // one-frame-old slot cannot be shot at the origin.
+    bot.position = arena_centre_ + Vec3{0.0f, 4000.0f, 0.0f};
+    sentinels_.push_back(bot);
+    return int(sentinels_.size()) - 1;
+}
+
+void Combat::drive_external(int index, Vec3 position, Vec3 velocity) {
+    if (index < 0 || size_t(index) >= sentinels_.size()) return;
+    sentinels_[size_t(index)].position = position;
+    sentinels_[size_t(index)].velocity = velocity;
+}
+
+void Combat::fire_hostile(Vec3 position, Vec3 velocity, float damage) {
+    fire_projectile(position, velocity, damage, 2.5f, 0.0f, Team::Hostile);
+}
+
+void Combat::kill_external(int index) {
+    if (index < 0 || size_t(index) >= sentinels_.size()) return;
+    Sentinel& bot = sentinels_[size_t(index)];
+    if (!bot.alive) return;
+    CombatEvents ignored;
+    damage_sentinel(bot, bot.health + 1.0f, ignored);
+}
+
+void Combat::clear_hostiles() {
+    sentinels_.clear();
+    locked_ = -1;
+}
+
 int Combat::sentinels_alive() const {
     int count = 0;
     for (const Sentinel& sentinel : sentinels_) {
@@ -413,16 +449,22 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
             sentinel.respawn_timer -= dt;
             if (sentinel.respawn_timer <= 0.0f) {
                 sentinel.alive = true;
-                sentinel.health = tuning.sentinel_health;
-                sentinel.max_health = tuning.sentinel_health;
+                sentinel.health = sentinel.max_health;
                 sentinel.fire_timer = tuning.sentinel_fire_interval;
-                // Back on its orbit, not at the origin: this branch returns
-                // early, so nothing else would place it this frame.
-                sentinel.position = orbit_position(sentinel);
-                sentinel.velocity = Vec3::zero();
+                if (!sentinel.external) {
+                    // Back on its orbit, not at the origin: this branch returns
+                    // early, so nothing else would place it this frame.
+                    sentinel.position = orbit_position(sentinel);
+                    sentinel.velocity = Vec3::zero();
+                }
+                // An external slot is repositioned by its owner, which watches
+                // for the alive flag coming back.
             }
             continue;
         }
+
+        // External hostiles fly and fight through their own pilot.
+        if (sentinel.external) continue;
 
         // Fixed orbit, no steering. Motion exists to make the target lead a
         // shot, not to be clever.

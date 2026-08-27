@@ -50,6 +50,9 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--attack") {
             options.combat = true;
             options.attack = true;
+        } else if (arg == "--bots" && i + 1 < argc) {
+            options.combat = true;
+            options.bots = SDL_atoi(argv[++i]);
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -213,6 +216,7 @@ bool App::init(const Options& options) {
     if (options.combat) {
         combat_enabled_ = true;
         combat_.reset(&terrain_, flight_.state().position, 20260824u);
+        if (options.bots > 0) spawn_bots(options.bots);
     }
 
     if (options.has_camera) {
@@ -682,6 +686,7 @@ void App::update(float dt) {
                            (cycle_down && !cycle_button_was_down_);
         cycle_button_was_down_ = cycle_down;
 
+        update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
 
         // The head turns toward whatever is locked, so the dragon visibly looks
@@ -1477,6 +1482,99 @@ void App::build_dragon_ui() {
     ImGui::End();
 }
 
+// ---------------------------------------------------------------- bots (M14)
+
+// Puts a bot on the edge of the fight: a random bearing from the player, well
+// out, above the terrain, pointed inward.
+void App::place_bot(BotShip& bot, uint32_t seed) {
+    uint32_t rng = seed ? seed : 1u;
+    auto unit = [&rng]() {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        return float(rng & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
+    };
+    const game::FlightState& player = flight_.state();
+    const float bearing = unit() * core::PI;
+    core::Vec3 spawn = player.position +
+                       core::Vec3{std::sin(bearing), 0.0f, std::cos(bearing)} *
+                           (650.0f + 150.0f * unit());
+    const float ground = terrain_.height_at(spawn.x, spawn.z);
+    spawn.y = core::maxf(player.position.y + 60.0f * unit(), ground + 150.0f);
+    bot.flight.reset(spawn, core::look_rotation(player.position - spawn, core::Vec3::up()),
+                     45.0f);
+    bot.pilot.reset(seed * 2654435761u + 1u);
+    bot.was_alive = true;
+}
+
+void App::spawn_bots(int count) {
+    combat_.clear_hostiles();
+    bots_.clear();
+    for (int i = 0; i < count; ++i) {
+        auto bot = std::make_unique<BotShip>();
+        bot->slot = combat_.spawn_external(80.0f, 6.5f);
+        bot->rig.init(dragon_skeleton_, dragon_joints_);
+        bot->rig.set_model_scale(asset_.scale);
+        if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
+        bot->rig.tuning = dragon_rig_.tuning;
+        place_bot(*bot, uint32_t(20260826 + i * 977));
+        bot->last_health = 80.0f;
+        bots_.push_back(std::move(bot));
+    }
+}
+
+void App::update_bots(float dt) {
+    for (auto& bot : bots_) {
+        if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
+        game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
+
+        // Death and respawn ride Combat's timer; the app owns where the body
+        // comes back and in what state.
+        if (!slot.alive) {
+            bot->was_alive = false;
+            continue;
+        }
+        if (!bot->was_alive) {
+            place_bot(*bot, uint32_t(SDL_GetTicksNS() & 0xffffffu) | 1u);
+            bot->last_health = slot.health;
+        }
+
+        // Damage since last frame is the pilot's cue to jink.
+        if (slot.health < bot->last_health - 0.01f) bot->pilot.notify_hit();
+        bot->last_health = slot.health;
+
+        const game::FlightState& self = bot->flight.state();
+        // Terrain as seen along the flight path, not just below: avoidance that
+        // only looks down flies into rising slopes at speed.
+        const core::Vec3 ahead = self.position + self.velocity * 2.0f;
+        const float ground =
+            core::maxf(terrain_.height_at(self.position.x, self.position.z),
+                       terrain_.height_at(ahead.x, ahead.z));
+        const game::BotDecision decision =
+            bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground);
+        bot->flight.update(decision.flight, &terrain_, dt);
+
+        // A dragon that flies into the mountain dies of it, exactly like the
+        // player would. Combat records the kill and starts the respawn clock.
+        if (bot->flight.state().grounded) {
+            combat_.kill_external(bot->slot);
+            bot->was_alive = false;
+            continue;
+        }
+
+        combat_.drive_external(bot->slot, bot->flight.state().position,
+                               bot->flight.state().velocity);
+        if (decision.fire) {
+            const core::Vec3 muzzle = bot->flight.state().position +
+                                      bot->flight.state().forward() * 7.5f;
+            combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
+        }
+
+        bot->rig.update(bot->flight.state(), dt);
+        bot->was_alive = true;
+    }
+}
+
 // Combat is deliberately on separate bindings from flight, and on buttons that
 // do not already mean something: the flight controls were fought over once
 // already and are not worth disturbing.
@@ -1862,11 +1960,27 @@ void App::build_combat_ui() {
     }
     ImGui::Separator();
 
-    if (ImGui::Button("respawn wave")) combat_.spawn_wave(5);
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::SliderInt("##botcount", &bot_count_, 1, 4);
     ImGui::SameLine();
-    if (ImGui::Button("restock (+3)")) combat_.spawn_wave(3);
+    if (ImGui::Button("spawn bots")) spawn_bots(bot_count_);
+    ImGui::SameLine();
+    if (ImGui::Button("sentinels")) {
+        bots_.clear();
+        combat_.clear_hostiles();
+        combat_.spawn_wave(5);
+    }
     ImGui::SameLine();
     if (ImGui::Button("heal")) combat_.revive();
+    for (size_t i = 0; i < bots_.size(); ++i) {
+        const auto& bot = bots_[i];
+        if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
+        const game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
+        ImGui::TextDisabled("bot %zu  %-7s  %5.0f hp  %4.0f m/s  %s", i,
+                            slot.alive ? bot->pilot.state_name() : "down", slot.health,
+                            bot->flight.state().airspeed,
+                            combat_.locked_index() == bot->slot ? "LOCKED" : "");
+    }
 
     if (ImGui::CollapsingHeader("Fireball")) {
         ImGui::SliderFloat("speed", &t.fireball_speed, 60.0f, 500.0f, "%.0f m/s");
@@ -2107,6 +2221,16 @@ void App::render() {
                                gfx::ModelUniforms());
         world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
                                   dragon_model, dragon_rig_.skinning_matrices());
+        for (const auto& bot : bots_) {
+            if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
+            const game::FlightState& s = bot->flight.state();
+            gfx::ModelUniforms bot_model;
+            bot_model.model =
+                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+            world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_,
+                                      shadow_.light_view_proj(), bot_model,
+                                      bot->rig.skinning_matrices());
+        }
         // Only the live checkpoint casts a shadow. Shadowing all of them costs
         // little but reads as clutter, and the shadow's job here is to tell you
         // where the next ring is relative to the ground.
@@ -2154,6 +2278,21 @@ void App::render() {
             model.tint = core::Vec4{0.30f, 0.45f, 0.62f, 0.06f};
         }
         world_.draw_mesh(device_, pass, ring_mesh_, model);
+    }
+
+    // Bot dragons: the real model, warmed slightly red so a target reads as a
+    // target at a glance without a hint of UI.
+    for (const auto& bot : bots_) {
+        if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
+        const game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
+        if (!slot.alive) continue;
+        const game::FlightState& s = bot->flight.state();
+        gfx::ModelUniforms bot_model;
+        bot_model.model =
+            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+        bot_model.tint = core::Vec4{1.0f, 0.72f, 0.66f, 0.10f + slot.hit_flash * 1.2f};
+        world_.draw_skinned(device_, pass, dragon_mesh_, bot_model,
+                            bot->rig.skinning_matrices(), dragon_textures_, model_sampler_);
     }
 
     draw_combat(pass);

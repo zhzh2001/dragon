@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,7 @@
 #include "anim/dragon_rig.h"
 #include "anim/gltf_loader.h"
 #include "game/chase_camera.h"
+#include "game/bot.h"
 #include "game/combat.h"
 #include "game/studio.h"
 #include "game/debug_camera.h"
@@ -79,6 +81,8 @@ struct Options {
     // --attack holds breath and fires continuously. The combat equivalent of
     // --input: it puts the flame and the projectiles on screen for a capture.
     bool attack = false;
+    // --bots N replaces the sentinels with N bot dragons at startup.
+    int bots = 0;
 };
 
 Options parse_options(int argc, char** argv);
@@ -157,6 +161,24 @@ private:
 
     game::Combat combat_;
     bool combat_enabled_ = false;
+
+    // M14: bot dragons. Each flies its own FlightModel through a BotPilot and
+    // occupies an external hostile slot in Combat, which handles its health,
+    // lock-on, hits and respawn timing. Pointers because DragonRig carries
+    // simulation state that must not be copied about by vector growth.
+    struct BotShip {
+        game::FlightModel flight;
+        game::BotPilot pilot;
+        anim::DragonRig rig;
+        int slot = -1;
+        bool was_alive = true;
+        float last_health = 0.0f;
+    };
+    std::vector<std::unique_ptr<BotShip>> bots_;
+    int bot_count_ = 2;
+    void spawn_bots(int count);
+    void place_bot(BotShip& bot, uint32_t seed);
+    void update_bots(float dt);
     gfx::Mesh sphere_mesh_;
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();

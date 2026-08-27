@@ -24,6 +24,7 @@ Useful flags:
 
 `--combat` arms the dragon and spawns a wave; `--attack` also holds breath and
 fires, which is how the flame and the projectiles get onto a screenshot.
+`--bots N` spawns N bot dragons instead of sentinels.
 `--studio N` opens the animation studio playing scenario N (0 glide, 1 flap,
 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack, 9 grounded).
 
@@ -148,8 +149,13 @@ tests/       plain executables, no framework
   PBR material set, and the file's authored clip layered under the rig.
 - **M11** combat core: fire breath, fireballs, boost, health and regeneration,
   practice sentinels that shoot back, and the combat HUD.
-- **Next:** M12 readability (soft lock-on, damage numbers) and M14 bots, or M7
-  polish (thermals, particles, audio).
+- **M12** combat readability: sticky lock-on with aim assist and drop
+  compensation, target cycling, threat direction, difficulty presets.
+- **M14** bot dragons: a BotPilot state machine (attack / extend / evade)
+  steering the same flight model the player flies, honest gunnery, terrain
+  doctrine, spawn/respawn through Combat's external hostile slots.
+- **Next:** M15 match loop (scores, rounds, loadouts), or M7 polish (thermals,
+  particles, audio).
 
 ## Combat
 
@@ -227,6 +233,32 @@ readability exaggeration tapered off near the camera. Both lessons were paid
 for: a nested "glow" shell just occludes its own core in a forward opaque
 pipeline, and a shot passing the chase camera at 3x exaggeration is a
 screen-filling balloon that reads as a volley of different-sized projectiles.
+
+## Bots (M14)
+
+`game::BotPilot` is a pilot, not a puppeteer: it reads the world and emits the
+same `FlightInput`/fire decisions a player produces, flown by its own
+`FlightModel`. Difficulty is **honest imperfection** -- the player is *sampled*
+every `reaction_interval` and extrapolated in between, so a break inside the
+reaction window genuinely defeats its aim; spread is error in the firing
+solution, not damage dice; and the nose must actually point at the solution,
+because bots aim by flying.
+
+The state machine is the fight's rhythm: **attack** (fly at the intercept,
+fire in the cone), **extend** (out past the merge, turn, come back with
+energy -- passes, not orbiting), **evade** (a jink on taking a hit). Three
+doctrine rules earned by failing tests: the attack clock only runs inside gun
+range, because timing out of a stern chase oscillates forever (nine seconds
+closing, seven extending, no progress); terrain must be sampled **ahead along
+the velocity**, not just below, or bots fly into rising slopes; and the aim
+point is floor-clamped over the terrain, because following a player into the
+weeds is how bots die of enthusiasm.
+
+Each bot occupies an **external hostile slot in Combat** (`spawn_external` /
+`drive_external` / `fire_hostile`), so health, lock-on, projectile sweeps, hit
+flash, HUD brackets, kills and respawn timing all come free; the app owns the
+body -- flight, rig, rendering (drawn as the real dragon, warmed slightly red)
+-- and repositions it when the slot comes back alive.
 
 Sentinels are **not AI**: they fly a fixed orbit and fire on a timer with
 deliberate aim spread. They exist so health, aim and the cooldown rhythm can be
