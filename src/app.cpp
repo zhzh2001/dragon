@@ -471,6 +471,16 @@ game::FlightInput App::read_flight_input() const {
     // ever sees whether it is currently firing.
     in.boost = combat_.boost_active() ? 1.0f : 0.0f;
 
+    if (input_.has_gamepad()) {
+        in.tuck = core::maxf(in.tuck, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+    }
+    // Tuck commits the nose. Folding the wings only sheds lift: at level
+    // attitude that is a slow flat mush, and "the dive button dives slower than
+    // pushing the stick" is exactly how it played. The stick still overrides --
+    // the assist fades with any deliberate pitch input.
+    in.pitch += assists_.tuck_nose_over * in.tuck * -(1.0f - core::minf(std::fabs(in.pitch), 1.0f));
+    in.pitch = core::clampf(in.pitch, -1.0f, 1.0f);
+
     // Auto-flap. Holding a key to stay airborne is busywork rather than skill,
     // and forgetting it is the most common way a new pilot ends up in the ground.
     // Proportional rather than on/off, so it only supplies the energy actually
@@ -499,7 +509,6 @@ game::FlightInput App::read_flight_input() const {
                               (input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_LEFT) ? 1.0f : 0.0f);
         in.yaw = core::clampf(in.yaw + pad_yaw, -1.0f, 1.0f);
         in.flap = core::maxf(in.flap, input_.gamepad_button(SDL_GAMEPAD_BUTTON_SOUTH) ? 1.0f : 0.0f);
-        in.tuck = core::maxf(in.tuck, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
         in.brake = core::maxf(in.brake, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     }
     return in;
@@ -665,6 +674,14 @@ void App::update(float dt) {
     }
 
     if (combat_enabled_ && !studio_active_) {
+        // Relock is edge-triggered; Input tracks key edges but only held state
+        // for gamepad buttons, so the edge is derived here.
+        const bool cycle_down = input_.has_gamepad() &&
+                                input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_STICK);
+        cycle_requested_ = input_.pressed(SDL_SCANCODE_T) ||
+                           (cycle_down && !cycle_button_was_down_);
+        cycle_button_was_down_ = cycle_down;
+
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
 
         // The head turns toward whatever is locked, so the dragon visibly looks
@@ -1486,6 +1503,7 @@ game::CombatInput App::read_combat_input() const {
     in.boost = input_.pressed(SDL_SCANCODE_LSHIFT) && false;  // shift is tuck-dive
     in.boost = input_.pressed(SDL_SCANCODE_X) ||
                input_.gamepad_button(SDL_GAMEPAD_BUTTON_WEST);
+    in.cycle_target = cycle_requested_;
     return in;
 }
 
@@ -1513,9 +1531,13 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // flash is not, and knowing a shot landed is what lets you commit.
         const float flash = sentinel.hit_flash;
         const float health = sentinel.max_health > 0.0f ? sentinel.health / sentinel.max_health : 0.0f;
+        // A hit flashes HOT ORANGE, because the other bright thing a sentinel
+        // does -- firing -- puts a blue-white bolt on top of it, and two white
+        // flashes are indistinguishable at range.
         const core::Vec3 base{0.72f, 0.24f, 0.18f};
-        const core::Vec3 colour = core::lerp(base, core::Vec3::one(), flash);
-        draw_ball(sentinel.position, combat_.tuning.sentinel_radius, colour, 0.18f + flash * 0.8f);
+        const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, flash);
+        draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
+                  colour, 0.18f + flash * 1.6f);
         // A smaller inner sphere shrinks as it takes damage: a health readout
         // that needs no UI and works at any distance or angle.
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health,
@@ -1809,8 +1831,8 @@ void App::build_combat_ui() {
         ImGui::TextDisabled("no lock -- put a target inside %.0f deg of the nose",
                             t.lock_cone_deg);
     }
-    ImGui::TextDisabled("F or LMB breath, G fireball, X boost");
-    ImGui::TextDisabled("gamepad: LB breath, RB fireball, X boost");
+    ImGui::TextDisabled("F or LMB breath, G fireball, X boost, T relock");
+    ImGui::TextDisabled("gamepad: LB breath, RB fireball, X boost, R-stick click relock");
 
     // The two dials that decide whether combat is fun, at the top level rather
     // than buried: aim assist is how easy hitting is, spread is how hard being
@@ -1877,6 +1899,8 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("lock cone", &t.lock_cone_deg, 4.0f, 80.0f, "%.0f deg");
         ImGui::SliderFloat("lock hold cone", &t.lock_hold_cone_deg, 10.0f, 170.0f, "%.0f deg");
         ImGui::SliderFloat("lock range", &t.lock_range, 200.0f, 4000.0f, "%.0f m");
+        ImGui::SliderFloat("lock distance weight", &t.lock_distance_weight, 0.0f, 0.1f,
+                           "%.3f deg/m");
     }
 
     if (ImGui::CollapsingHeader("Sentinels")) {

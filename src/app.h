@@ -161,6 +161,10 @@ private:
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;
+    // Edge detection for gamepad buttons, which core::Input only reports as
+    // held state.
+    bool cycle_button_was_down_ = false;
+    bool cycle_requested_ = false;
     core::Vec3 damage_direction_ = core::Vec3::zero();
     float damage_marker_ = 0.0f;
     // Master switch for every ImGui panel. The tuning UI covers most of the
@@ -225,6 +229,9 @@ private:
     // generous and vary the checkpoint size instead.
     struct Assists {
         bool auto_flap = true;
+        // How hard holding tuck noses the dragon over when the stick is
+        // neutral. 0 restores fold-only tuck.
+        float tuck_nose_over = 0.45f;
         // Flap harder the further below this the airspeed is.
         float auto_flap_speed = 48.0f;
         // And always flap when this close to the ground, which is where running

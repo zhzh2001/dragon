@@ -1,6 +1,9 @@
 #include "game/combat.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 #include "game/terrain.h"
 
@@ -132,40 +135,69 @@ void Combat::update_lock(const FlightState& player) {
         return aim;
     };
     const Vec3 nose = player.forward();
-    const float acquire = std::cos(core::radians(core::clampf(tuning.lock_cone_deg, 1.0f, 89.0f)));
     const float hold = std::cos(core::radians(core::clampf(tuning.lock_hold_cone_deg, 1.0f, 179.0f)));
 
-    auto alignment = [&](const Sentinel& sentinel, float& out_range) {
+    auto angle_to = [&](const Sentinel& sentinel, float& out_range) {
         const Vec3 offset = sentinel.position - origin;
         out_range = core::length(offset);
-        if (out_range < 1e-3f) return 1.0f;
-        return core::dot(offset / out_range, nose);
+        if (out_range < 1e-3f) return 0.0f;
+        return core::degrees(std::acos(core::clampf(core::dot(offset / out_range, nose),
+                                                    -1.0f, 1.0f)));
     };
+    // Lower is better: degrees off the nose plus a distance penalty, so a close
+    // target slightly off the nose beats a speck on the horizon dead ahead.
+    auto score_of = [&](const Sentinel& sentinel) {
+        float range = 0.0f;
+        const float angle = angle_to(sentinel, range);
+        if (angle > tuning.lock_cone_deg || range > tuning.lock_range) return 1e9f;
+        return angle + range * tuning.lock_distance_weight;
+    };
+
+    // Manual relock: jump to the next candidate by score, wrapping, so tapping
+    // the button walks every target in the cone.
+    if (want_cycle_) {
+        want_cycle_ = false;
+        std::vector<std::pair<float, int>> candidates;
+        for (size_t i = 0; i < sentinels_.size(); ++i) {
+            if (!sentinels_[i].alive) continue;
+            const float score = score_of(sentinels_[i]);
+            if (score < 1e8f) candidates.emplace_back(score, int(i));
+        }
+        if (!candidates.empty()) {
+            std::sort(candidates.begin(), candidates.end());
+            int position = -1;
+            for (size_t i = 0; i < candidates.size(); ++i) {
+                if (candidates[i].second == locked_) position = int(i);
+            }
+            locked_ = candidates[size_t((position + 1)) % candidates.size()].second;
+            lock_intercept_ = solve_aim(sentinels_[size_t(locked_)]);
+            return;
+        }
+    }
 
     // Keep the current lock if it is still worth keeping.
     if (locked_ >= 0 && size_t(locked_) < sentinels_.size()) {
         const Sentinel& current = sentinels_[size_t(locked_)];
         float range = 0.0f;
-        if (current.alive && alignment(current, range) >= hold && range <= tuning.lock_range * 1.25f) {
+        const float angle = angle_to(current, range);
+        if (current.alive && std::cos(core::radians(angle)) >= hold &&
+            range <= tuning.lock_range * 1.25f) {
             lock_intercept_ = solve_aim(current);
             return;
         }
         locked_ = -1;
     }
 
-    // Otherwise take the best-aligned candidate inside the acquisition cone.
-    // Alignment rather than distance: the target you are pointing at is the one
-    // you meant, even if something else is closer.
-    float best = acquire;
+    // Otherwise the best-scoring candidate in the acquisition cone.
+    float best = 1e8f;
     int best_index = -1;
     for (size_t i = 0; i < sentinels_.size(); ++i) {
-        const Sentinel& sentinel = sentinels_[i];
-        if (!sentinel.alive) continue;
-        float range = 0.0f;
-        const float aligned = alignment(sentinel, range);
-        if (range > tuning.lock_range || aligned < best) continue;
-        best = aligned;
-        best_index = int(i);
+        if (!sentinels_[i].alive) continue;
+        const float score = score_of(sentinels_[i]);
+        if (score < best) {
+            best = score;
+            best_index = int(i);
+        }
     }
     locked_ = best_index;
     if (locked_ >= 0) {
@@ -456,6 +488,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
 
     // Before anything reads the aim: firing, the breath cone and the HUD all
     // depend on this frame's lock.
+    if (input.cycle_target) want_cycle_ = true;
     update_lock(player);
 
     // ---- cooldowns ----

@@ -51,6 +51,7 @@ wingbeat, the inverted recovery, and every generated course were checked.
 | Q/E | Rudder -- gamepad d-pad left/right |
 | Gamepad left stick | Pitch and roll (absolute, best feel of the three) |
 | Gamepad A / triggers | Flap / tuck-dive (RT) and brake (LT) |
+| T / right-stick click | Relock onto the next target |
 | Mouse | Optional, off by default -- it has to accumulate to work, and that accumulation is what makes it hard to control |
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
@@ -164,6 +165,10 @@ manoeuvring too. So the dragon **picks a target and the shot bends toward it**.
 
 - The lock is **sticky**: acquired only inside a narrow cone off the nose, held
   until it falls well outside a much wider one, so a turn does not drop it.
+- Scoring is **angle plus a distance penalty** (`lock_distance_weight`):
+  alignment alone locked a 1500 m speck dead ahead over a close target ten
+  degrees off the nose, which is never the one the player meant. T or a
+  right-stick click **relocks** onto the next candidate by score, wrapping.
 - `aim_assist` is the fraction of the way from the nose to the intercept, and it
   is **0.9 by default**. What the player experiences is the *residual*: at 0.7 a
   shot 14 degrees off the nose at 500 m still misses by 37 m, which reads as the
@@ -200,6 +205,14 @@ Three decisions that are the milestone:
 - **The breath meter latches and does not refill while held.** Without both, an
   empty meter under a held button crosses the restart threshold every few frames
   and produces a stutter of single-frame damage.
+
+**Tuck commits the nose** (`Assists::tuck_nose_over`): folding the wings only
+sheds lift, and at level attitude that is a slow flat mush -- the dive button
+dived slower than pushing the stick. Holding tuck now pitches down unless the
+stick overrides; measured, RT alone reaches 78 m/s in 8 s where stick-down
+alone reaches 57. A **hit flashes hot orange**, because the other bright thing
+a sentinel does -- firing -- puts a blue-white bolt on top of it, and two white
+flashes are indistinguishable at range.
 
 **One gamepad button, one meaning.** The shoulders once carried rudder and
 combat simultaneously: firing a fireball also yawed the dragon, and holding

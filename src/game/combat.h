@@ -64,10 +64,14 @@ struct CombatTuning {
     // where a degree of error is tens of metres. So the dragon picks a target
     // and the shot bends toward it.
     float lock_cone_deg = 30.0f;   // half angle to acquire
-    // Held well outside the acquisition cone, so a target does not drop the
-    // instant it slides off the nose during a turn.
-    float lock_hold_cone_deg = 65.0f;
+    // Held outside the acquisition cone, so a turn does not drop the target --
+    // but not so wide that the lock lives far off-screen.
+    float lock_hold_cone_deg = 50.0f;
     float lock_range = 1600.0f;
+    // Lock scoring is angle plus distance: alignment alone locks a 1500 m speck
+    // dead ahead over a close target ten degrees off the nose, which is never
+    // the one the player meant. Degrees of penalty per metre.
+    float lock_distance_weight = 0.02f;
     // 0 aims purely down the nose, 1 aims perfectly at the intercept.
     //
     // High by default, and deliberately so: the residual error is what the
@@ -96,9 +100,10 @@ struct CombatTuning {
 // What the player is asking combat to do this frame. Held vs edge is decided by
 // the caller, so this struct means the same thing for a bot later.
 struct CombatInput {
-    bool breath = false;      // held
-    bool fire = false;        // edge: one fireball per press
-    bool boost = false;       // edge
+    bool breath = false;        // held
+    bool fire = false;          // edge: one fireball per press
+    bool boost = false;         // edge
+    bool cycle_target = false;  // edge: relock onto the next candidate
 };
 
 struct Projectile {
@@ -243,6 +248,7 @@ private:
     float boost_cooldown_timer_ = 0.0f;
     int kills_ = 0;
     int locked_ = -1;
+    bool want_cycle_ = false;
     core::Vec3 lock_intercept_ = core::Vec3::zero();
 
     core::Vec3 breath_origin_ = core::Vec3::zero();

@@ -565,12 +565,50 @@ void test_breath_follows_the_lock() {
                               combat.tuning.breath_range));
 }
 
+void test_lock_prefers_near_and_cycles() {
+    std::printf("lock prefers the near target and relock walks candidates\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 61u);
+    retire_all(combat);
+    // Two targets in the cone: a distant one dead ahead, a near one 10 degrees
+    // off. The near one is the one the player means.
+    auto park = [&](game::Sentinel& sentinel, Vec3 position) {
+        sentinel.alive = true;
+        sentinel.respawn_timer = 0.0f;
+        sentinel.health = combat.tuning.sentinel_health;
+        sentinel.max_health = combat.tuning.sentinel_health;
+        sentinel.position = position;
+        sentinel.centre = position;
+        sentinel.orbit_radius = 0.0f;
+        sentinel.orbit_speed = 0.0f;
+        sentinel.bob = 0.0f;
+        sentinel.fire_timer = 1e6f;
+    };
+    park(combat.sentinels()[0], Vec3{0.0f, 0.0f, -1400.0f});  // far, dead ahead
+    const float off = radians(10.0f);
+    park(combat.sentinels()[1],
+         Vec3{std::sin(off) * 250.0f, 0.0f, -std::cos(off) * 250.0f});  // near, off-axis
+
+    const FlightState player = player_at(Vec3::zero());
+    combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(combat.locked_index() == 1);  // near wins: 10 deg + 5 < 0 deg + 28
+
+    // Relock walks to the other candidate, and again wraps back.
+    CombatInput cycle;
+    cycle.cycle_target = true;
+    combat.update(1.0f / 60.0f, player, cycle);
+    CHECK(combat.locked_index() == 0);
+    combat.update(1.0f / 60.0f, player, cycle);
+    CHECK(combat.locked_index() == 1);
+}
+
 }  // namespace
 
 int main() {
     test_cone();
     test_intercept_point();
     test_lock_acquires_and_holds();
+    test_lock_prefers_near_and_cycles();
     test_aim_assist_lands_an_off_axis_shot();
     test_breath_follows_the_lock();
     test_closest_point_fraction();
