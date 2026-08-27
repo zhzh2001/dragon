@@ -246,6 +246,74 @@ void test_long_sim_stays_finite() {
     CHECK(grounded_frames == 0);
 }
 
+// The report this answers: "they struggle to hit me when I'm turning". A
+// steady turn is the most predictable manoeuvre there is, and the arc-aware
+// lead must aim measurably closer to where the turning target will actually be
+// than a straight-line lead does.
+void test_arc_lead_beats_linear_on_a_turn() {
+    std::printf("arc-aware lead out-shoots linear lead on a steady turn\n");
+
+    auto aim_error = [](float curvature) {
+        BotPilot pilot;
+        pilot.tuning.lead_curvature = curvature;
+        pilot.tuning.aim_spread_deg = 0.0f;
+        // Nose discipline is tested elsewhere; here the question is purely
+        // whether the SOLUTION is right, so the cone and range are opened up
+        // and the cooldown shortened to collect a spread of shots.
+        pilot.tuning.fire_cone_deg = 90.0f;
+        pilot.tuning.fire_range = 1000.0f;
+        pilot.tuning.fire_cooldown = 0.5f;
+        pilot.reset(37u);
+
+        FlightState self;
+        self.position = Vec3::zero();
+        self.velocity = Vec3{0.0f, 0.0f, -30.0f};
+
+        // Target circling at 40 m/s on a 250 m radius, ahead of the bot.
+        const float radius = 250.0f, speed = 40.0f;
+        const float omega = speed / radius;
+        const Vec3 centre{0.0f, 0.0f, -450.0f};
+        auto on_circle = [&](float t) {
+            return centre + Vec3{radius * std::sin(omega * t), 0.0f,
+                                 radius * std::cos(omega * t)};
+        };
+        auto circle_velocity = [&](float t) {
+            return Vec3{speed * std::cos(omega * t), 0.0f, -speed * std::sin(omega * t)};
+        };
+
+        float worst = 0.0f;
+        int shots = 0;
+        for (int i = 0; i < 20 * 60; ++i) {
+            const float dt = 1.0f / 60.0f;
+            const float t = float(i) * dt;
+            const BotDecision d = pilot.update(
+                dt, self, target_at(on_circle(t), circle_velocity(t)), true, -1e9f);
+            if (!d.fire) continue;
+            // The first second is settling: acceleration needs two samples to
+            // exist at all, and both modes fire an identical uninformed opener.
+            if (t < 1.0f) continue;
+            ++shots;
+            // Fly the round against the moving target and take the closest
+            // approach -- the only miss metric that cannot argue with itself.
+            float closest = 1e9f;
+            for (float ft = 0.0f; ft < 6.0f; ft += 1.0f / 120.0f) {
+                closest = minf(closest, distance(self.position + d.fire_velocity * ft,
+                                                 on_circle(t + ft)));
+            }
+            worst = maxf(worst, closest);
+        }
+        CHECK(shots >= 3);
+        return worst;
+    };
+
+    const float linear = aim_error(0.0f);
+    const float arc = aim_error(1.0f);
+    std::printf("  worst miss: linear %.0f m, arc-aware %.0f m\n", linear, arc);
+    CHECK(arc < linear * 0.6f);
+    // And close enough that the generous fireball hitbox has a real chance.
+    CHECK(arc < 25.0f);
+}
+
 }  // namespace
 
 int main() {
@@ -254,6 +322,7 @@ int main() {
     test_fire_discipline();
     test_damage_triggers_evasion_and_rhythm_cycles();
     test_reaction_window_is_honest();
+    test_arc_lead_beats_linear_on_a_turn();
     test_long_sim_stays_finite();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

@@ -123,16 +123,22 @@ void Combat::update_lock(const FlightState& player) {
     // the way. Without this the assist is still wrong at range for a reason the
     // player cannot see: at 700 m the flight time is 2.7 s and the drop is 15 m,
     // which is larger than the target, so every long shot passes underneath.
+    // The fireball inherits the player's velocity, so the intercept is solved
+    // for the drift-compensated round -- without this every crossing shot lands
+    // a drift-length behind, and the assist looks like it is not helping.
     auto solve_aim = [&](const Sentinel& target) {
-        Vec3 aim = intercept_point(origin, target.position, target.velocity,
-                                   tuning.fireball_speed);
-        for (int i = 0; i < 2; ++i) {
-            const float flight_time =
-                core::length(aim - origin) / core::maxf(tuning.fireball_speed, 1.0f);
-            aim.y = target.position.y + target.velocity.y * flight_time +
-                    0.5f * tuning.fireball_gravity * flight_time * flight_time;
+        float flight_time =
+            core::distance(origin, target.position) / core::maxf(tuning.fireball_speed, 1.0f);
+        Vec3 aim = target.position;
+        for (int i = 0; i < 3; ++i) {
+            aim = target.position + target.velocity * flight_time;
+            aim.y += 0.5f * tuning.fireball_gravity * flight_time * flight_time;
+            flight_time = core::length(aim - origin - player.velocity * flight_time) /
+                          core::maxf(tuning.fireball_speed, 1.0f);
         }
-        return aim;
+        // The point handed to the assist is offset so that aiming the nose at it
+        // makes the INHERITED round arrive: the drift is baked into the target.
+        return aim - player.velocity * flight_time;
     };
     const Vec3 nose = player.forward();
     const float hold = std::cos(core::radians(core::clampf(tuning.lock_hold_cone_deg, 1.0f, 179.0f)));
@@ -265,6 +271,7 @@ void Combat::spawn_wave(int count) {
 int Combat::spawn_external(float health, float radius) {
     Sentinel bot;
     bot.external = true;
+    bot.radius = radius;
     bot.health = health;
     bot.max_health = health;
     bot.alive = true;
@@ -384,7 +391,9 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
             for (Sentinel& sentinel : sentinels_) {
                 if (!sentinel.alive) continue;
                 float distance = 0.0f;
-                if (!sweep_hit(sentinel.position, tuning.sentinel_radius, distance)) continue;
+                const float body = sentinel.radius > 0.0f ? sentinel.radius
+                                                          : tuning.sentinel_radius;
+                if (!sweep_hit(sentinel.position, body, distance)) continue;
                 damage_sentinel(sentinel, projectile.damage, events);
                 consumed = true;
                 break;

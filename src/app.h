@@ -176,6 +176,10 @@ private:
     };
     std::vector<std::unique_ptr<BotShip>> bots_;
     int bot_count_ = 2;
+    // Template applied to every spawned or preset-adjusted pilot.
+    game::BotTuning bot_tuning_;
+    int bot_skill_ = 1;  // 0 rookie, 1 veteran, 2 ace
+    void apply_bot_skill(int level);
     void spawn_bots(int count);
     void place_bot(BotShip& bot, uint32_t seed);
     void update_bots(float dt);

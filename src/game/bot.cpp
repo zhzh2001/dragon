@@ -15,6 +15,8 @@ void BotPilot::reset(uint32_t seed) {
     fire_timer_ = 0.0f;
     jink_phase_ = random_unit() * core::PI;
     snapshot_age_ = 1e9f;
+    seen_before_ = false;
+    seen_acceleration_ = Vec3::zero();
     // Personality: each pilot runs its rhythm a little fast or slow, so a
     // flight of them breaks formation naturally.
     tempo_ = 1.0f + 0.25f * random_unit();
@@ -34,6 +36,15 @@ const char* BotPilot::state_name() const {
         case BotState::Evade: return "evade";
     }
     return "?";
+}
+
+// Quadratic extrapolation of the sampled player: position, velocity and the
+// acceleration measured between samples. It leads arcs and brakes; what it
+// cannot do -- by design -- is see a manoeuvre CHANGE inside the reaction
+// window.
+Vec3 BotPilot::predict(float ahead) const {
+    return seen_position_ + seen_velocity_ * ahead +
+           seen_acceleration_ * (0.5f * ahead * ahead);
 }
 
 void BotPilot::notify_hit() {
@@ -58,11 +69,24 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // aims at an extrapolation, so a break inside the reaction window works.
     snapshot_age_ += dt;
     if (snapshot_age_ >= tuning.reaction_interval) {
+        // Acceleration measured between the last two samples: a steady turn or
+        // a brake shows up here and gets led. Capped, because a sample straddling
+        // a respawn would otherwise predict teleportation -- and the FIRST
+        // sample has no history, so it measures nothing rather than measuring
+        // against zero.
+        if (seen_before_) {
+            Vec3 acceleration = (player.velocity - seen_velocity_) /
+                                core::maxf(snapshot_age_, 1e-3f);
+            const float magnitude = core::length(acceleration);
+            if (magnitude > 45.0f) acceleration *= 45.0f / magnitude;
+            seen_acceleration_ = acceleration * core::saturate(tuning.lead_curvature);
+        }
+        seen_before_ = true;
         snapshot_age_ = 0.0f;
         seen_position_ = player.position;
         seen_velocity_ = player.velocity;
     }
-    const Vec3 believed = seen_position_ + seen_velocity_ * snapshot_age_;
+    const Vec3 believed = predict(snapshot_age_);
 
     const float range = core::distance(self.position, believed);
 
@@ -112,12 +136,21 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // ---- steering ----
     Vec3 aim_point = believed;
     switch (state_) {
-        case BotState::Attack:
+        case BotState::Attack: {
             // Fly at the firing solution, not at the target: the nose ends up
-            // where the shot needs it.
-            aim_point = intercept_point(self.position, believed, seen_velocity_,
-                                        tuning.projectile_speed);
+            // where the shot needs it. Solved on the predicted arc, in the
+            // round's own frame -- a fired round inherits the bot's velocity, so
+            // the solution must subtract the bot's drift over the flight time or
+            // every crossing shot lands one drift-length behind the target.
+            float flight_time = range / core::maxf(tuning.projectile_speed, 1.0f);
+            for (int i = 0; i < 3; ++i) {
+                flight_time = core::length(predict(snapshot_age_ + flight_time) -
+                                           self.position - self.velocity * flight_time) /
+                              core::maxf(tuning.projectile_speed, 1.0f);
+            }
+            aim_point = predict(snapshot_age_ + flight_time);
             break;
+        }
         case BotState::Extend:
             aim_point = extend_point_;
             break;
@@ -144,9 +177,17 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // ---- gunnery ----
     if (state_ == BotState::Attack && player_alive && fire_timer_ <= 0.0f &&
         range <= tuning.fire_range) {
-        const Vec3 solution =
-            intercept_point(self.position, believed, seen_velocity_, tuning.projectile_speed);
-        const Vec3 to_solution = core::normalize_or(solution - self.position, self.forward());
+        // Same arc-aware, drift-compensated solution the steering flies toward.
+        float flight_time = range / core::maxf(tuning.projectile_speed, 1.0f);
+        for (int i = 0; i < 3; ++i) {
+            flight_time = core::length(predict(snapshot_age_ + flight_time) - self.position -
+                                       self.velocity * flight_time) /
+                          core::maxf(tuning.projectile_speed, 1.0f);
+        }
+        const Vec3 to_solution =
+            core::normalize_or(predict(snapshot_age_ + flight_time) - self.position -
+                                   self.velocity * flight_time,
+                               self.forward());
         const float aligned = core::dot(to_solution, self.forward());
         if (aligned >= std::cos(core::radians(tuning.fire_cone_deg))) {
             fire_timer_ = tuning.fire_cooldown;

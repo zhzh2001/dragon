@@ -244,6 +244,17 @@ reaction window genuinely defeats its aim; spread is error in the firing
 solution, not damage dice; and the nose must actually point at the solution,
 because bots aim by flying.
 
+Prediction is **quadratic**: position, velocity, and the acceleration measured
+between the last two samples (nothing on the first -- measuring against zero
+history invents a lunge). A STEADY turn or brake is the most predictable
+manoeuvre there is, and a pilot who cannot lead one is not a pilot; what still
+defeats the bot is CHANGING the manoeuvre inside its reaction window. Firing
+solutions -- the bots' and the player's aim assist alike -- are solved for the
+**inherited-velocity drift**: a round leaves at shooter velocity plus muzzle
+velocity, and ignoring the drift lands every crossing shot one drift-length
+behind the target. That bug hid in both solvers, found by flying recorded shots
+to closest approach in a test.
+
 The state machine is the fight's rhythm: **attack** (fly at the intercept,
 fire in the cone), **extend** (out past the merge, turn, come back with
 energy -- passes, not orbiting), **evade** (a jink on taking a hit). Three

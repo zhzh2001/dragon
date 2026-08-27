@@ -23,6 +23,13 @@ struct BotTuning {
     // is THE fairness dial: a direction change inside the reaction window
     // genuinely defeats its aim, the way it defeats a person's.
     float reaction_interval = 0.30f;
+    // How much of the player's measured acceleration goes into the prediction.
+    // At 0 the bot leads straight lines only and a steady turn defeats it
+    // forever -- but a STEADY turn is the most predictable manoeuvre there is,
+    // and a pilot who cannot lead one is not a pilot. 1 leads the full arc;
+    // what still works on the bot is CHANGING the manoeuvre inside its
+    // reaction window, which is the honest counter.
+    float lead_curvature = 1.0f;
 
     // ---- gunnery ----
     float fire_range = 560.0f;
@@ -83,6 +90,8 @@ public:
     void notify_hit();
 
     BotState state() const { return state_; }
+    // For probes: what the pilot currently believes about the target's motion.
+    core::Vec3 seen_acceleration() const { return seen_acceleration_; }
     const char* state_name() const;
 
 private:
@@ -93,10 +102,14 @@ private:
     float fire_timer_ = 0.0f;
     float jink_phase_ = 0.0f;
 
-    // Stale-by-design perception.
+    // Stale-by-design perception, including the measured acceleration between
+    // the last two samples.
     float snapshot_age_ = 1e9f;
+    bool seen_before_ = false;
     core::Vec3 seen_position_ = core::Vec3::zero();
     core::Vec3 seen_velocity_ = core::Vec3::zero();
+    core::Vec3 seen_acceleration_ = core::Vec3::zero();
+    core::Vec3 predict(float ahead) const;
 
     core::Vec3 extend_point_ = core::Vec3::zero();
     // Per-pilot personality scale on the rhythm timers.

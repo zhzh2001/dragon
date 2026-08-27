@@ -1507,6 +1507,37 @@ void App::place_bot(BotShip& bot, uint32_t seed) {
     bot.was_alive = true;
 }
 
+// Difficulty is honest imperfection, so skill is exactly three dials: how
+// stale the bot's picture of you is, how scattered its solution, how often it
+// shoots. An ace is not stronger -- it is current, precise and busy.
+void App::apply_bot_skill(int level) {
+    bot_skill_ = level;
+    game::BotTuning t;
+    switch (level) {
+        case 0:  // rookie
+            t.reaction_interval = 0.55f;
+            t.aim_spread_deg = 5.0f;
+            t.fire_cooldown = 2.3f;
+            t.lead_curvature = 0.3f;
+            t.damage = 9.0f;
+            break;
+        default:  // veteran
+            t.reaction_interval = 0.30f;
+            t.aim_spread_deg = 2.5f;
+            t.fire_cooldown = 1.6f;
+            break;
+        case 2:  // ace
+            t.reaction_interval = 0.15f;
+            t.aim_spread_deg = 1.2f;
+            t.fire_cooldown = 1.1f;
+            t.damage = 14.0f;
+            t.fire_range = 650.0f;
+            break;
+    }
+    bot_tuning_ = t;
+    for (auto& bot : bots_) bot->pilot.tuning = bot_tuning_;
+}
+
 void App::spawn_bots(int count) {
     combat_.clear_hostiles();
     bots_.clear();
@@ -1517,6 +1548,7 @@ void App::spawn_bots(int count) {
         bot->rig.set_model_scale(asset_.scale);
         if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
         bot->rig.tuning = dragon_rig_.tuning;
+        bot->pilot.tuning = bot_tuning_;
         place_bot(*bot, uint32_t(20260826 + i * 977));
         bot->last_health = 80.0f;
         bots_.push_back(std::move(bot));
@@ -1625,6 +1657,9 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
 
     for (const game::Sentinel& sentinel : combat_.sentinels()) {
         if (!sentinel.alive) continue;
+        // External hostiles are drawn as full dragons elsewhere; the drone ball
+        // on top of a dragon read as a growth.
+        if (sentinel.external) continue;
         // Flashes white when hit. At 500 m a health bar is unreadable but a
         // flash is not, and knowing a shot landed is what lets you commit.
         const float flash = sentinel.hit_flash;
@@ -1960,6 +1995,11 @@ void App::build_combat_ui() {
     }
     ImGui::Separator();
 
+    if (ImGui::RadioButton("rookie", bot_skill_ == 0)) apply_bot_skill(0);
+    ImGui::SameLine();
+    if (ImGui::RadioButton("veteran", bot_skill_ == 1)) apply_bot_skill(1);
+    ImGui::SameLine();
+    if (ImGui::RadioButton("ace", bot_skill_ == 2)) apply_bot_skill(2);
     ImGui::SetNextItemWidth(120.0f);
     ImGui::SliderInt("##botcount", &bot_count_, 1, 4);
     ImGui::SameLine();

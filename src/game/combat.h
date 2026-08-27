@@ -130,6 +130,9 @@ struct Sentinel {
     // by a real FlightModel outside, and they fire through fire_hostile()
     // instead of the orbit timer.
     bool external = false;
+    // Hit-sphere radius. Drones use the tuned default; an external dragon's
+    // body is its own size.
+    float radius = 0.0f;
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
     float health = 0.0f;
