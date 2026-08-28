@@ -32,6 +32,8 @@ void check(bool condition, const char* what, int line) {
 }
 #define CHECK(cond) check((cond), #cond, __LINE__)
 
+bool near(float a, float b, float eps = 1e-4f) { return std::fabs(a - b) <= eps; }
+
 FlightState target_at(Vec3 position, Vec3 velocity = Vec3::zero()) {
     FlightState state;
     state.position = position;
@@ -314,6 +316,50 @@ void test_arc_lead_beats_linear_on_a_turn() {
     CHECK(arc < 25.0f);
 }
 
+void test_breath_discipline_and_recovery() {
+    std::printf("breath only close and aligned; low clearance forces the pull-up\n");
+    BotPilot pilot;
+    pilot.reset(41u);
+    FlightState self;
+    self.position = Vec3::zero();
+    self.velocity = Vec3{0.0f, 0.0f, -40.0f};
+
+    // Close, dead ahead: flame held -- until the burst budget runs dry.
+    int flame_frames = 0;
+    for (int i = 0; i < 60 * 6; ++i) {
+        const BotDecision d = pilot.update(1.0f / 60.0f, self,
+                                           target_at(Vec3{0.0f, 0.0f, -100.0f}), true, -1e9f);
+        flame_frames += d.breathe ? 1 : 0;
+    }
+    const float burst = pilot.tuning.breath_burst;
+    CHECK(flame_frames > int(burst * 60.0f) * 3 / 4);
+    CHECK(flame_frames < 60 * 6);  // the budget must actually gate it
+
+    // In flame range but 90 degrees off the nose: no flame.
+    BotPilot off;
+    off.reset(43u);
+    int off_frames = 0;
+    for (int i = 0; i < 120; ++i) {
+        off_frames += off.update(1.0f / 60.0f, self, target_at(Vec3{100.0f, 0.0f, 0.0f}), true,
+                                 -1e9f)
+                          .breathe
+                          ? 1
+                          : 0;
+    }
+    CHECK(off_frames == 0);
+
+    // Scraping the deck: whatever the fight wants, the decision is a full-flap
+    // pull-up, and neither weapon fires.
+    BotPilot low;
+    low.reset(47u);
+    self.position = Vec3{0.0f, 30.0f, 0.0f};
+    const BotDecision d =
+        low.update(1.0f / 60.0f, self, target_at(Vec3{0.0f, 10.0f, -90.0f}), true, 0.0f);
+    CHECK(near(d.flight.flap, 1.0f, 1e-3f));
+    CHECK(!d.fire);
+    CHECK(!d.breathe);
+}
+
 }  // namespace
 
 int main() {
@@ -323,6 +369,7 @@ int main() {
     test_damage_triggers_evasion_and_rhythm_cycles();
     test_reaction_window_is_honest();
     test_arc_lead_beats_linear_on_a_turn();
+    test_breath_discipline_and_recovery();
     test_long_sim_stays_finite();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

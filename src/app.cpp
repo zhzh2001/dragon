@@ -678,6 +678,19 @@ void App::update(float dt) {
     }
 
     if (combat_enabled_ && !studio_active_) {
+        // Fire leaves the MOUTH the rig animates, not a fixed body offset. The
+        // rig runs later this frame, so this is last frame's head -- one frame
+        // of lag on a body-attached point is invisible.
+        {
+            const game::FlightState& s = flight_.state();
+            const core::Mat4 to_world =
+                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+            const core::Vec3 head_model = dragon_rig_.head_position();
+            if (core::length_sq(head_model) > 1e-6f) {
+                combat_.set_muzzle(core::transform_point(to_world, head_model));
+            }
+        }
+
         // Relock is edge-triggered; Input tracks key edges but only held state
         // for gamepad buttons, so the edge is derived here.
         const bool cycle_down = input_.has_gamepad() &&
@@ -1577,29 +1590,62 @@ void App::update_bots(float dt) {
 
         const game::FlightState& self = bot->flight.state();
         // Terrain as seen along the flight path, not just below: avoidance that
-        // only looks down flies into rising slopes at speed.
-        const core::Vec3 ahead = self.position + self.velocity * 2.0f;
-        const float ground =
-            core::maxf(terrain_.height_at(self.position.x, self.position.z),
-                       terrain_.height_at(ahead.x, ahead.z));
+        // only looks down flies into rising slopes at speed. Three samples out
+        // to three seconds, because one sample at two seconds saw only the base
+        // of a valley wall.
+        float ground = terrain_.height_at(self.position.x, self.position.z);
+        for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
+            const core::Vec3 ahead = self.position + self.velocity * look;
+            ground = core::maxf(ground, terrain_.height_at(ahead.x, ahead.z));
+        }
         const game::BotDecision decision =
             bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground);
+        const float sink_before = bot->flight.state().climb_rate;
         bot->flight.update(decision.flight, &terrain_, dt);
 
-        // A dragon that flies into the mountain dies of it, exactly like the
-        // player would. Combat records the kill and starts the respawn clock.
-        if (bot->flight.state().grounded) {
-            combat_.kill_external(bot->slot);
-            bot->was_alive = false;
-            continue;
+        // Terrain contact scales with violence. A plummet is death; a scrape
+        // costs health and the recovery reflex takes the bot back off the deck;
+        // a gentle touch is a touch. Instantly deleting a dragon that grazed a
+        // slope read as a bug, because it was one.
+        if (bot->flight.state().grounded && !bot->grounded_last_frame) {
+            if (sink_before < -25.0f) {
+                LOG_INFO("bot crashed: state=%s sink=%.0f m/s speed=%.0f m/s",
+                         bot->pilot.state_name(), -sink_before,
+                         bot->flight.state().airspeed);
+                combat_.kill_external(bot->slot);
+                bot->was_alive = false;
+                continue;
+            }
+            if (sink_before < -8.0f) {
+                LOG_INFO("bot scraped terrain: state=%s sink=%.0f m/s",
+                         bot->pilot.state_name(), -sink_before);
+                combat_.damage_external(bot->slot, 22.0f);
+                bot->pilot.notify_hit();
+                // The scrape may have been fatal for a wounded bot.
+                if (!combat_.sentinels()[size_t(bot->slot)].alive) {
+                    bot->was_alive = false;
+                    continue;
+                }
+            }
         }
+        bot->grounded_last_frame = bot->flight.state().grounded;
 
         combat_.drive_external(bot->slot, bot->flight.state().position,
                                bot->flight.state().velocity);
+        const core::Vec3 muzzle = bot->flight.state().position +
+                                  bot->flight.state().forward() * 7.5f;
         if (decision.fire) {
-            const core::Vec3 muzzle = bot->flight.state().position +
-                                      bot->flight.state().forward() * 7.5f;
             combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
+        }
+        if (decision.breathe) {
+            combat_.hostile_breath(muzzle, bot->flight.state().forward());
+        }
+
+        // The head tracks the player when close and hunting -- the tell that a
+        // flame is coming, and where the flame visually comes from.
+        if (bot->pilot.state() == game::BotState::Attack &&
+            core::distance(self.position, flight_.state().position) < 350.0f) {
+            bot->rig.set_aim_target(flight_.state().position);
         }
 
         bot->rig.update(bot->flight.state(), dt);
@@ -1741,6 +1787,22 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         }
     }
 
+    // Hostile flames: same construction as the player's, cool-tinted the way
+    // hostile bolts are. The cone drawn is the cone that damages.
+    for (const game::BreathCone& flame : combat_.hostile_breaths()) {
+        const float range = combat_.tuning.hostile_breath_range;
+        const float spread = std::tan(core::radians(combat_.tuning.hostile_breath_half_angle_deg));
+        for (int i = 1; i <= 16; ++i) {
+            const float t = float(i) / 16.0f;
+            const float flicker = 0.86f + 0.14f * std::sin(time_seconds_ * 24.0f + float(i) * 1.9f);
+            const core::Vec3 colour = core::lerp(core::Vec3{0.85f, 0.95f, 1.0f},
+                                                 core::Vec3{0.25f, 0.45f, 1.0f}, t * t);
+            draw_ball(flame.origin + flame.direction * (range * t),
+                      core::maxf(range * t * spread * 0.55f, 0.5f) * flicker, colour,
+                      2.2f * (1.0f - t) * (1.0f - t) + 0.4f, true);
+        }
+    }
+
     if (hit_marker_ > 0.0f) {
         draw_ball(hit_marker_position_, 4.0f * (1.0f + (0.35f - hit_marker_) * 6.0f),
                   core::Vec3{1.0f, 0.92f, 0.80f}, hit_marker_ * 4.0f, true);
@@ -1819,6 +1881,29 @@ void App::draw_combat_hud() {
     };
     pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
     pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
+
+    // ---- aim marker ----
+    // Where a shot leaves and where it goes: a small cross at the mouth's aim
+    // direction. The head is hard to read from behind, and fire that leaves
+    // somewhere you cannot see feels random.
+    {
+        const game::FlightState& player = flight_.state();
+        const core::Vec3 aim_at =
+            combat_.muzzle(player) + combat_.fireball_direction(player) * 260.0f;
+        ImVec2 screen;
+        if (project_to_screen(view_proj, aim_at, width, height, screen)) {
+            const ImU32 colour = IM_COL32(255, 235, 200, combat_.has_lock() ? 235 : 140);
+            const float arm = 7.0f;
+            draw->AddLine(ImVec2(screen.x - arm, screen.y), ImVec2(screen.x - 2.5f, screen.y),
+                          colour, 1.6f);
+            draw->AddLine(ImVec2(screen.x + 2.5f, screen.y), ImVec2(screen.x + arm, screen.y),
+                          colour, 1.6f);
+            draw->AddLine(ImVec2(screen.x, screen.y - arm), ImVec2(screen.x, screen.y - 2.5f),
+                          colour, 1.6f);
+            draw->AddLine(ImVec2(screen.x, screen.y + 2.5f), ImVec2(screen.x, screen.y + arm),
+                          colour, 1.6f);
+        }
+    }
 
     // ---- target markers ----
     // Off-screen threats get an arrow at the screen edge. A 3D dogfight is

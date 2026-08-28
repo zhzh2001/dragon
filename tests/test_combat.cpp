@@ -602,6 +602,41 @@ void test_lock_prefers_near_and_cycles() {
     CHECK(combat.locked_index() == 1);
 }
 
+void test_hostile_breath_and_mouth_muzzle() {
+    std::printf("hostile flames burn the player in the cone; fire leaves the mouth\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 71u);
+    retire_all(combat);
+    const FlightState player = player_at(Vec3::zero());
+
+    // A flame from ahead, pointing at the player: damage arrives, attributed to
+    // the flame's origin.
+    const float start = combat.health();
+    combat.hostile_breath(Vec3{0.0f, 0.0f, -80.0f}, Vec3{0.0f, 0.0f, 1.0f});
+    game::CombatEvents events = combat.update(0.5f, player, CombatInput{});
+    CHECK(combat.health() < start);
+    CHECK(events.took_damage);
+    CHECK(near(events.damage_from.z, -80.0f, 1.0f));
+    // The flame is drawable this frame.
+    CHECK(combat.hostile_breaths().size() == 1);
+
+    // Pointing away: no damage. And the buffer drains each update.
+    const float after = combat.health();
+    combat.hostile_breath(Vec3{0.0f, 0.0f, -80.0f}, Vec3{0.0f, 0.0f, -1.0f});
+    combat.update(0.5f, player, CombatInput{});
+    CHECK(near(combat.health(), after, 1e-3f));
+    combat.update(0.5f, player, CombatInput{});
+    CHECK(combat.hostile_breaths().empty());
+
+    // The muzzle override moves where the player's own fire starts.
+    combat.set_muzzle(Vec3{3.0f, 2.0f, -9.0f});
+    CombatInput hold;
+    hold.breath = true;
+    combat.update(1.0f / 60.0f, player, hold);
+    CHECK(near(combat.breath_origin().x, 3.0f, 1e-3f));
+    CHECK(near(combat.breath_origin().z, -9.0f, 1e-3f));
+}
+
 }  // namespace
 
 int main() {
@@ -609,6 +644,7 @@ int main() {
     test_intercept_point();
     test_lock_acquires_and_holds();
     test_lock_prefers_near_and_cycles();
+    test_hostile_breath_and_mouth_muzzle();
     test_aim_assist_lands_an_off_axis_shot();
     test_breath_follows_the_lock();
     test_closest_point_fraction();

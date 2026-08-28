@@ -172,6 +172,7 @@ private:
         anim::DragonRig rig;
         int slot = -1;
         bool was_alive = true;
+        bool grounded_last_frame = false;
         float last_health = 0.0f;
     };
     std::vector<std::unique_ptr<BotShip>> bots_;

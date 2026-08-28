@@ -55,6 +55,14 @@ struct BotTuning {
     float evade_duration = 2.2f;
     float jink_rate = 2.6f;  // rad/s of the weave
 
+    // ---- breath ----
+    // Bots breathe when close and aligned, on a budget: a burst, then a
+    // recovery, like the player's meter without the micromanagement.
+    float breath_range = 140.0f;
+    float breath_cone_deg = 14.0f;
+    float breath_burst = 2.2f;    // seconds of flame per burst
+    float breath_recovery = 4.0f; // seconds to recharge after a burst
+
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
     float terrain_floor = 90.0f;
@@ -68,6 +76,8 @@ struct BotDecision {
     bool fire = false;
     // World-space velocity for the projectile if fire is set.
     core::Vec3 fire_velocity = core::Vec3::zero();
+    // Holding the flame this frame.
+    bool breathe = false;
 };
 
 // The pilot. Owns only its own perception and rhythm state; the aircraft is the
@@ -112,6 +122,8 @@ private:
     core::Vec3 predict(float ahead) const;
 
     core::Vec3 extend_point_ = core::Vec3::zero();
+    float breath_budget_ = 1.0f;  // 0..1 of a burst
+    bool breathing_ = false;
     // Per-pilot personality scale on the rhythm timers.
     float tempo_ = 1.0f;
     uint32_t rng_ = 1u;

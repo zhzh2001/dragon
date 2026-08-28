@@ -244,6 +244,31 @@ reaction window genuinely defeats its aim; spread is error in the firing
 solution, not damage dice; and the nose must actually point at the solution,
 because bots aim by flying.
 
+**Terrain contact scales with violence.** A plummet past 25 m/s of sink is
+death; a scrape costs health and triggers the jink; a gentle touch is a touch
+-- instantly deleting a dragon that grazed a slope read as a bug, because it
+was one. The recovery reflex fires on the **physics of the pull-out**
+(sink^2/2a plus margin), not a fixed height or time: 50 m of clearance is
+plenty in level flight and nothing in a 70 m/s dive. Recovery flares (brake
+adds drag AND lift, tightening the pull) and cancels tuck. Result: zero crash
+deaths across repeated 4-bot 4-minute soaks, down from ~6.
+
+**Bots breathe fire** on a latched burst budget, in ANY state when close and
+aligned -- gating breath on the attack state left a 20 m window between
+min_attack_range and breath_range that nobody ever saw a flame in. The flame
+check uses the live player position (a flame visibly connects or does not;
+pretending not to see reads as blindness, not fairness -- fairness lives in
+the aim solution), and their heads track the player inside 350 m, which is the
+tell that a flame is coming. Hostile flames damage through
+`Combat::hostile_breath`, buffered and resolved in update() so attribution
+goes through the one path that owns it.
+
+**Fire leaves the mouth.** The app feeds the rig's animated head position to
+`Combat::set_muzzle` each frame, so the player's flame and fireballs start
+where the head actually is, and a small HUD cross marks where the mouth's shot
+will go -- the head is unreadable from behind, and fire from an invisible
+origin toward an unmarked point felt random.
+
 Prediction is **quadratic**: position, velocity, and the acceleration measured
 between the last two samples (nothing on the first -- measuring against zero
 history invents a lunge). A STEADY turn or brake is the most predictable

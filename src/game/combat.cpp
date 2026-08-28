@@ -72,7 +72,9 @@ float Combat::random_unit() {
     return float(rng_ & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
 }
 
-Vec3 Combat::muzzle(const FlightState& player) const { return muzzle_of(player); }
+Vec3 Combat::muzzle(const FlightState& player) const {
+    return has_muzzle_override_ ? muzzle_override_ : muzzle_of(player);
+}
 
 Vec3 Combat::lock_position() const {
     if (locked_ < 0 || size_t(locked_) >= sentinels_.size()) return Vec3::zero();
@@ -300,9 +302,19 @@ void Combat::kill_external(int index) {
     damage_sentinel(bot, bot.health + 1.0f, ignored);
 }
 
+void Combat::damage_external(int index, float amount) {
+    if (index < 0 || size_t(index) >= sentinels_.size()) return;
+    CombatEvents ignored;
+    damage_sentinel(sentinels_[size_t(index)], amount, ignored);
+}
+
 void Combat::clear_hostiles() {
     sentinels_.clear();
     locked_ = -1;
+}
+
+void Combat::hostile_breath(Vec3 origin, Vec3 direction) {
+    hostile_breaths_pending_.push_back({origin, core::normalize_or(direction, Vec3::forward())});
 }
 
 int Combat::sentinels_alive() const {
@@ -594,6 +606,30 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     }
 
     apply_breath(dt, player, events);
+
+    // Hostile flames, buffered by the bots since the last update. Cone-tested
+    // against the player exactly like the player's breath tests targets.
+    for (const BreathCone& flame : hostile_breaths_pending_) {
+        if (health_ <= 0.0f) break;
+        if (!point_in_cone(player.position, flame.origin, flame.direction,
+                           core::radians(tuning.hostile_breath_half_angle_deg),
+                           tuning.hostile_breath_range)) {
+            continue;
+        }
+        const float damage = tuning.hostile_breath_dps * dt;
+        health_ -= damage;
+        events.damage_taken += damage;
+        events.damage_from = flame.origin;
+        events.took_damage = true;
+        time_since_damage_ = 0.0f;
+        if (health_ <= 0.0f) {
+            health_ = 0.0f;
+            events.player_died = true;
+        }
+    }
+    hostile_breaths_drawn_ = std::move(hostile_breaths_pending_);
+    hostile_breaths_pending_.clear();
+
     update_sentinels(dt, player, events);
     update_projectiles(dt, player, events);
 

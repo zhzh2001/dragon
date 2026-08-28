@@ -14,6 +14,8 @@ void BotPilot::reset(uint32_t seed) {
     state_time_ = 0.0f;
     fire_timer_ = 0.0f;
     jink_phase_ = random_unit() * core::PI;
+    breath_budget_ = 1.0f;
+    breathing_ = false;
     snapshot_age_ = 1e9f;
     seen_before_ = false;
     seen_acceleration_ = Vec3::zero();
@@ -172,10 +174,59 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     if (ground_height > -1e8f) {
         aim_point.y = core::maxf(aim_point.y, ground_height + tuning.terrain_floor);
     }
+
+    // Ground recovery reflex: triggered by the physics of the pull-out, not by
+    // a fixed height or time. Arresting `sink` of vertical speed at roughly
+    // 12 m/s^2 of usable pull consumes sink^2/24 metres -- 66 m from a 40 m/s
+    // dive -- so the reflex must fire while that much altitude still exists,
+    // plus a margin for the PD loop to actually get the nose up.
+    const float clearance = ground_height > -1e8f ? self.position.y - ground_height : 1e9f;
+    const float sink = core::maxf(-self.climb_rate, 0.0f);
+    const float pull_out_altitude = sink * sink / 24.0f + 45.0f;
+    const bool recovering =
+        clearance < tuning.terrain_floor * 0.55f || clearance < pull_out_altitude;
+    if (recovering) {
+        const Vec3 level_forward = core::normalize_or(
+            Vec3{self.forward().x, 0.0f, self.forward().z}, Vec3::forward());
+        aim_point = self.position + level_forward * 120.0f + Vec3{0.0f, 220.0f, 0.0f};
+    }
     decision.flight = steer_toward(self, aim_point, tuning.steering, ground_height);
+    if (recovering) {
+        decision.flight.flap = 1.0f;
+        // Braking in a dive adds drag AND lift: it tightens the pull-out the
+        // way flaring for a landing does.
+        decision.flight.brake = core::saturate(sink / 30.0f);
+        decision.flight.tuck = 0.0f;
+    }
+
+    // ---- breath ----
+    // Close and aligned: hold the flame, on a budget -- in ANY state, because a
+    // bot extending past the player rakes them on the way through, and gating
+    // this on the attack state left a 20 m window nobody ever saw a flame in.
+    // The check uses the LIVE player position, not the stale sample: a flame is
+    // continuous and visibly connects or does not, so pretending not to see
+    // would read as blindness rather than fairness. Fairness lives in the aim.
+    const float live_range = core::distance(self.position, player.position);
+    const Vec3 to_player = core::normalize_or(player.position - self.position, self.forward());
+    const bool aligned =
+        core::dot(to_player, self.forward()) >= std::cos(core::radians(tuning.breath_cone_deg));
+    const bool wants_flame =
+        player_alive && !recovering && live_range <= tuning.breath_range && aligned;
+    // Latched like the player's meter: an empty budget must refill a third of
+    // the way before the flame restarts, or it stutters at zero.
+    if (wants_flame && (breathing_ ? breath_budget_ > 0.0f : breath_budget_ > 0.35f)) {
+        breathing_ = true;
+        decision.breathe = true;
+        breath_budget_ =
+            core::maxf(breath_budget_ - dt / core::maxf(tuning.breath_burst, 0.1f), 0.0f);
+    } else {
+        breathing_ = false;
+        breath_budget_ = core::minf(
+            breath_budget_ + dt / core::maxf(tuning.breath_recovery, 0.1f), 1.0f);
+    }
 
     // ---- gunnery ----
-    if (state_ == BotState::Attack && player_alive && fire_timer_ <= 0.0f &&
+    if (state_ == BotState::Attack && player_alive && fire_timer_ <= 0.0f && !recovering &&
         range <= tuning.fire_range) {
         // Same arc-aware, drift-compensated solution the steering flies toward.
         float flight_time = range / core::maxf(tuning.projectile_speed, 1.0f);

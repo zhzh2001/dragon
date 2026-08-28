@@ -84,6 +84,11 @@ struct CombatTuning {
     // degrees is invisible; a flame doing it looks like a garden hose.
     float breath_assist_max_deg = 16.0f;
 
+    // ---- hostile breath (bots) ----
+    float hostile_breath_dps = 38.0f;
+    float hostile_breath_range = 150.0f;
+    float hostile_breath_half_angle_deg = 12.0f;
+
     // ---- sentinels ----
     float sentinel_health = 60.0f;
     float sentinel_radius = 7.0f;
@@ -149,6 +154,13 @@ struct Sentinel {
     float phase = 0.0f;
     float bob = 18.0f;
     float fire_timer = 0.0f;
+};
+
+// A flame active this frame, for rendering. The cone drawn is the cone that
+// damages -- same origin, same axis.
+struct BreathCone {
+    core::Vec3 origin = core::Vec3::zero();
+    core::Vec3 direction = core::Vec3::forward();
 };
 
 // What happened this frame, for the HUD and, later, audio.
@@ -218,6 +230,11 @@ public:
     core::Vec3 fireball_direction(const FlightState& player) const;
     core::Vec3 breath_direction_for(const FlightState& player) const;
 
+    // Where fire leaves the player this frame -- the mouth when the app has set
+    // it, a body offset otherwise. Public because the HUD draws the aim marker
+    // from the same point the rounds actually use.
+    core::Vec3 muzzle(const FlightState& player) const;
+
     // Tip and axis of the breath cone this frame. Only meaningful while
     // breathing(); the renderer uses it directly so the flame drawn and the
     // volume that damages can never disagree.
@@ -237,7 +254,23 @@ public:
     void fire_hostile(core::Vec3 position, core::Vec3 velocity, float damage);
     // The bot flew into a mountain; combat records the kill the usual way.
     void kill_external(int index);
+    // Lesser terrain scrapes cost health through the same accounting.
+    void damage_external(int index, float amount);
     void clear_hostiles();
+    // An external pilot breathing fire this frame. Buffered and resolved
+    // against the player inside update(), so damage attribution and events go
+    // through the one path that owns them.
+    void hostile_breath(core::Vec3 origin, core::Vec3 direction);
+    // Last frame's hostile flames, for drawing.
+    const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
+
+    // The fire actually leaves the dragon's MOUTH, which the rig animates; the
+    // app tells combat where that is each frame. Without an override the
+    // muzzle falls back to a fixed body offset.
+    void set_muzzle(core::Vec3 world_position) {
+        muzzle_override_ = world_position;
+        has_muzzle_override_ = true;
+    }
 
 private:
     void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
@@ -248,7 +281,6 @@ private:
     void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events);
     float random_unit();
     void update_lock(const FlightState& player);
-    core::Vec3 muzzle(const FlightState& player) const;
     core::Vec3 assisted_direction(const FlightState& player, core::Vec3 target,
                                   float max_turn_deg) const;
 
@@ -270,6 +302,11 @@ private:
     int locked_ = -1;
     bool want_cycle_ = false;
     core::Vec3 lock_intercept_ = core::Vec3::zero();
+
+    std::vector<BreathCone> hostile_breaths_pending_;
+    std::vector<BreathCone> hostile_breaths_drawn_;
+    core::Vec3 muzzle_override_ = core::Vec3::zero();
+    bool has_muzzle_override_ = false;
 
     core::Vec3 breath_origin_ = core::Vec3::zero();
     core::Vec3 breath_direction_ = core::Vec3::forward();
