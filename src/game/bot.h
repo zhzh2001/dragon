@@ -45,7 +45,9 @@ struct BotTuning {
     // ---- the fight's rhythm ----
     // Attack runs end: too close (an overshoot about to happen) or too long
     // (a tail chase that is not converging).
-    float min_attack_range = 120.0f;
+    // Low enough that an attack presses THROUGH the breath envelope instead of
+    // breaking off at its outer edge -- 120 left a flame window nobody hit.
+    float min_attack_range = 80.0f;
     float attack_duration = 9.0f;
     // The extend leg: fly out, turn around, come back with energy. This is what
     // makes a fight read as passes rather than as two dragons orbiting a point.
@@ -58,8 +60,8 @@ struct BotTuning {
     // ---- breath ----
     // Bots breathe when close and aligned, on a budget: a burst, then a
     // recovery, like the player's meter without the micromanagement.
-    float breath_range = 140.0f;
-    float breath_cone_deg = 14.0f;
+    float breath_range = 180.0f;
+    float breath_cone_deg = 20.0f;
     float breath_burst = 2.2f;    // seconds of flame per burst
     float breath_recovery = 4.0f; // seconds to recharge after a burst
 

@@ -263,6 +263,17 @@ tell that a flame is coming. Hostile flames damage through
 `Combat::hostile_breath`, buffered and resolved in update() so attribution
 goes through the one path that owns it.
 
+**Combat reset clears the bots.** Combat::reset rebuilds the sentinel slots;
+bots that survived it were left pointing at freshly spawned drones, puppeting
+spheres around the sky while their dragons rendered on top. The panel toggle
+now clears the bots, and update_bots refuses to drive a slot that is not
+flagged external -- the belt to the button's braces.
+
+A **manual aim** checkbox zeroes the assist (and restores the exact slider
+value after), the aim cross is big enough to see, and a bot holding its flame
+turns its HUD bracket red with a FLAME tag -- the head tracking is the diegetic
+tell, but a tell nobody notices is not a tell.
+
 **Fire leaves the mouth.** The app feeds the rig's animated head position to
 `Combat::set_muzzle` each frame, so the player's flame and fireballs start
 where the head actually is, and a small HUD cross marks where the mouth's shot

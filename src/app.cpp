@@ -1572,6 +1572,13 @@ void App::update_bots(float dt) {
     for (auto& bot : bots_) {
         if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
         game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
+        // A slot that is not external belongs to a drone: the linkage is stale
+        // (combat was reset under this bot) and driving it would puppet a
+        // sphere around the sky.
+        if (!slot.external) {
+            bot->slot = -1;
+            continue;
+        }
 
         // Death and respawn ride Combat's timer; the app owns where the body
         // comes back and in what state.
@@ -1637,6 +1644,11 @@ void App::update_bots(float dt) {
         if (decision.fire) {
             combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
         }
+        if (decision.breathe && !bot->breathing) {
+            LOG_INFO("bot flame burst at %.0f m",
+                     core::distance(self.position, flight_.state().position));
+        }
+        bot->breathing = decision.breathe;
         if (decision.breathe) {
             combat_.hostile_breath(muzzle, bot->flight.state().forward());
         }
@@ -1892,16 +1904,23 @@ void App::draw_combat_hud() {
             combat_.muzzle(player) + combat_.fireball_direction(player) * 260.0f;
         ImVec2 screen;
         if (project_to_screen(view_proj, aim_at, width, height, screen)) {
-            const ImU32 colour = IM_COL32(255, 235, 200, combat_.has_lock() ? 235 : 140);
-            const float arm = 7.0f;
-            draw->AddLine(ImVec2(screen.x - arm, screen.y), ImVec2(screen.x - 2.5f, screen.y),
-                          colour, 1.6f);
-            draw->AddLine(ImVec2(screen.x + 2.5f, screen.y), ImVec2(screen.x + arm, screen.y),
-                          colour, 1.6f);
-            draw->AddLine(ImVec2(screen.x, screen.y - arm), ImVec2(screen.x, screen.y - 2.5f),
-                          colour, 1.6f);
-            draw->AddLine(ImVec2(screen.x, screen.y + 2.5f), ImVec2(screen.x, screen.y + arm),
-                          colour, 1.6f);
+            const ImU32 colour = IM_COL32(255, 235, 200, combat_.has_lock() ? 245 : 170);
+            const float arm = 14.0f;
+            const float gap = 4.5f;
+            draw->AddLine(ImVec2(screen.x - arm, screen.y), ImVec2(screen.x - gap, screen.y),
+                          colour, 2.4f);
+            draw->AddLine(ImVec2(screen.x + gap, screen.y), ImVec2(screen.x + arm, screen.y),
+                          colour, 2.4f);
+            draw->AddLine(ImVec2(screen.x, screen.y - arm), ImVec2(screen.x, screen.y - gap),
+                          colour, 2.4f);
+            draw->AddLine(ImVec2(screen.x, screen.y + gap), ImVec2(screen.x, screen.y + arm),
+                          colour, 2.4f);
+            draw->AddCircleFilled(ImVec2(screen.x, screen.y), 2.0f, colour, 10);
+            // A ring when locked: the marker doubles as the "shots will bend"
+            // cue, so it visibly changes state with the lock.
+            if (combat_.has_lock() && !manual_aim_) {
+                draw->AddCircle(ImVec2(screen.x, screen.y), arm * 0.75f, colour, 20, 1.5f);
+            }
         }
     }
 
@@ -1919,10 +1938,18 @@ void App::draw_combat_hud() {
             project_to_screen(view_proj, sentinel.position, width, height, screen) &&
             screen.x > 4.0f && screen.x < width - 4.0f && screen.y > 4.0f && screen.y < height - 4.0f;
 
-        const bool locked = combat_.locked_index() == int(&sentinel - combat_.sentinels().data());
+        const int index = int(&sentinel - combat_.sentinels().data());
+        const bool locked = combat_.locked_index() == index;
+        // A bot holding its flame is the most urgent thing on screen.
+        bool flaming = false;
+        for (const auto& bot : bots_) {
+            if (bot->slot == index && bot->breathing) flaming = true;
+        }
         // The locked target is unmistakable. Everything else is a faint mark:
         // if every target looks equally important, none of them read.
-        const ImU32 colour = locked ? IM_COL32(255, 205, 70, 245) : IM_COL32(255, 110, 90, 150);
+        const ImU32 colour = flaming ? IM_COL32(255, 60, 20, 255)
+                             : locked ? IM_COL32(255, 205, 70, 245)
+                                      : IM_COL32(255, 110, 90, 150);
         if (on_screen) {
             // Brackets rather than a box: they read as a target at any size and
             // do not obscure what they surround.
@@ -1941,9 +1968,11 @@ void App::draw_combat_hud() {
                               1.8f);
             }
             char label[32];
-            std::snprintf(label, sizeof(label), "%.0f m", range);
+            std::snprintf(label, sizeof(label), flaming ? "%.0f m  FLAME" : "%.0f m", range);
             draw->AddText(ImVec2(screen.x + size + 5.0f, screen.y - 7.0f),
-                          locked ? IM_COL32(255, 225, 160, 230) : IM_COL32(255, 200, 190, 150),
+                          flaming ? IM_COL32(255, 90, 40, 255)
+                          : locked ? IM_COL32(255, 225, 160, 230)
+                                   : IM_COL32(255, 200, 190, 150),
                           label);
             if (locked) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), size * 1.35f, colour, 24, 1.4f);
@@ -2030,6 +2059,10 @@ void App::build_combat_ui() {
     ImGui::Begin("Combat");
 
     if (ImGui::Checkbox("combat enabled", &combat_enabled_) && combat_enabled_) {
+        // Reset rebuilds the sentinel slots, so any existing bots would be left
+        // pointing at freshly spawned drones -- driving them around while their
+        // own dragons rendered on top. Both halves of that bug shipped once.
+        bots_.clear();
         combat_.reset(&terrain_, flight_.state().position, 20260824u);
     }
     if (!combat_enabled_) {
@@ -2057,6 +2090,16 @@ void App::build_combat_ui() {
     // hit is. Both were previously inside a collapsed header, which is the same
     // as not existing.
     ImGui::Separator();
+    if (ImGui::Checkbox("manual aim (no assist)", &manual_aim_)) {
+        // The slider value survives the toggle, so switching back restores the
+        // exact feel rather than a default.
+        if (manual_aim_) {
+            saved_aim_assist_ = t.aim_assist;
+            t.aim_assist = 0.0f;
+        } else {
+            t.aim_assist = saved_aim_assist_;
+        }
+    }
     ImGui::SliderFloat("aim assist", &t.aim_assist, 0.0f, 1.0f);
     ImGui::SliderFloat("enemy aim spread", &t.sentinel_spread, 0.0f, 80.0f, "%.0f m");
     ImGui::TextDisabled("higher assist = easier to hit; higher spread = easier to survive");

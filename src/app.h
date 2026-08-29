@@ -173,6 +173,7 @@ private:
         int slot = -1;
         bool was_alive = true;
         bool grounded_last_frame = false;
+        bool breathing = false;
         float last_health = 0.0f;
     };
     std::vector<std::unique_ptr<BotShip>> bots_;
@@ -180,6 +181,8 @@ private:
     // Template applied to every spawned or preset-adjusted pilot.
     game::BotTuning bot_tuning_;
     int bot_skill_ = 1;  // 0 rookie, 1 veteran, 2 ace
+    bool manual_aim_ = false;
+    float saved_aim_assist_ = 0.9f;
     void apply_bot_skill(int level);
     void spawn_bots(int count);
     void place_bot(BotShip& bot, uint32_t seed);

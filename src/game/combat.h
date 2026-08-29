@@ -86,7 +86,7 @@ struct CombatTuning {
 
     // ---- hostile breath (bots) ----
     float hostile_breath_dps = 38.0f;
-    float hostile_breath_range = 150.0f;
+    float hostile_breath_range = 190.0f;
     float hostile_breath_half_angle_deg = 12.0f;
 
     // ---- sentinels ----
