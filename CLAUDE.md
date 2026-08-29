@@ -157,8 +157,10 @@ tests/       plain executables, no framework
 - **M15** the match loop: countdown / fight / results / rematch, first-to-N
   deathmatch with an optional clock, weapons-cold phases, per-tier bot
   survivability (health and regeneration), match HUD.
-- **Next:** loadouts (distinct ability sets), or M7 polish (thermals,
-  particles, audio).
+- **M7 (part)** additive billboard particles (fire, ember trails, impact
+  bursts) and fully synthesized audio -- wind that brightens with speed, flame
+  roar, wingbeat whooshes, shots, hits and explosions, no sound assets at all.
+- **Next:** loadouts (distinct ability sets), water, thermals, clouds.
 
 ## Combat
 
@@ -236,6 +238,33 @@ readability exaggeration tapered off near the camera. Both lessons were paid
 for: a nested "glow" shell just occludes its own core in a forward opaque
 pipeline, and a shot passing the chase camera at 3x exaggeration is a
 screen-filling balloon that reads as a volley of different-sized projectiles.
+
+## Particles and audio (M7, first half)
+
+`gfx::ParticleSystem`: CPU-simulated, GPU-billboarded quads drawn **additively
+with depth test but no depth write** -- particles are light, they sum and never
+occlude, which is also why one unsorted draw call is correct. The pool is
+fixed (4096, swap-remove); when full, a sampled oldest particle is replaced,
+because the newest particles are the bright just-happened ones whose absence
+would be noticed. Staging rides alongside the debug-line upload: **a copy pass
+cannot open inside a render pass**. Emitters live in the app: flame (buoyant
+puffs launched down the cone, spawn rate integrated so frame rate cannot thin
+the fire), projectile ember trails, and impact bursts with upward splash on
+terrain. The damage cones and hitboxes are untouched -- particles are what the
+fight looks like, never what it is.
+
+`audio::Audio` synthesizes every sound at init -- **no audio assets**, in the
+same spirit as the procedural terrain. Continuous streams (wind through a
+lowpass whose cutoff opens with airspeed, so a dive gets brighter rather than
+merely louder; flame noise with a slow crackle) are set by level each frame
+and smoothed at audio rate; one-shots (brown-noise explosion with a sub
+thump, filter-swept shot whoosh, damage ping, wingbeat) fire from a lock-free
+voice pool. Explosion loudness follows distance to the CAMERA -- the ear sits
+where the player does. A tanh soft-clip keeps a busy fight loud but never
+harsh. Master volume in the Engine panel; headless runs skip the device.
+
+Every ImGui window except Combat starts **collapsed** -- one click away, not
+hidden, but the screen belongs to the game.
 
 ## The match loop (M15)
 

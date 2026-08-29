@@ -21,6 +21,8 @@
 #include "game/rally.h"
 #include "game/terrain.h"
 #include "gfx/debug_draw.h"
+#include "gfx/particles.h"
+#include "audio/audio.h"
 #include "gfx/device.h"
 #include "gfx/mesh.h"
 #include "gfx/pipeline.h"
@@ -199,17 +201,17 @@ private:
     void place_bot(BotShip& bot, uint32_t seed);
     void update_bots(float dt);
     gfx::Mesh sphere_mesh_;
-    // Transient impact explosions: expanding, cooling spheres. A ring buffer,
-    // because a dogfight makes them constantly.
-    struct ImpactEffect {
-        core::Vec3 position = core::Vec3::zero();
-        float age = 1e9f;
-        bool hostile = false;
-        bool on_terrain = false;
-    };
-    static constexpr int MAX_EFFECTS = 32;
-    ImpactEffect effects_[MAX_EFFECTS];
-    int effect_cursor_ = 0;
+    gfx::ParticleSystem particles_;
+    audio::Audio audio_;
+    // Edge detection for the sounds tied to state transitions.
+    float previous_fire_cooldown_ = 0.0f;
+    float previous_flap_phase_ = 0.0f;
+    // Deterministic jitter for the emitters.
+    uint32_t particle_rng_ = 1u;
+    float particle_unit();
+    void emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile,
+                    float dt);
+    void emit_impact(core::Vec3 position, bool hostile, bool on_terrain);
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;

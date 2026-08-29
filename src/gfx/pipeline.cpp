@@ -165,7 +165,15 @@ bool PipelineCache::build(Entry& entry) {
     }
 
     SDL_GPUColorTargetBlendState blend = {};
-    if (d.alpha_blend) {
+    if (d.additive_blend) {
+        blend.enable_blend = true;
+        blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    } else if (d.alpha_blend) {
         blend.enable_blend = true;
         blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
         blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;

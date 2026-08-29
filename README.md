@@ -32,7 +32,10 @@ conventions, and `ROADMAP.md` for where it is going.
   flight gets violent. An in-game **animation studio** plays scripted,
   dynamically consistent manoeuvres on a pinned dragon for inspection.
 - **Hot-reloaded Metal shaders**, reversed-Z depth, cascade-free directional
-  shadows, PBR texturing with normal and ORM maps.
+  shadows, PBR texturing with normal and ORM maps, additive particle fire.
+- **Synthesized audio** -- wind that brightens with speed, flame roar, wingbeat
+  whooshes, shots and explosions, all generated at startup from noise and
+  sines: the game ships no sound files.
 
 ## Building
 

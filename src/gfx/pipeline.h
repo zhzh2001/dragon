@@ -41,6 +41,9 @@ struct PipelineDesc {
     bool depth_test = true;
     bool depth_write = true;
     bool alpha_blend = false;
+    // Additive (src ONE, dst ONE): fire, glows, anything that is light rather
+    // than surface. Wins over alpha_blend if both are set.
+    bool additive_blend = false;
 
     // Defaults to GREATER for the reversed-Z main pass. The shadow pass uses a
     // conventional [0,1] depth range and so overrides this with LESS.

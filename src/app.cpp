@@ -196,6 +196,10 @@ bool App::init(const Options& options) {
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
     sphere_mesh_.upload(device_.gpu(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
                         "unit_sphere");
+    if (!particles_.init(&device_, &pipelines_)) return false;
+    // Headless runs have no ears; a machine without an output device plays on
+    // silently rather than failing.
+    if (!options.headless) audio_.init();
     rebuild_courses();
     best_times_.load(ASSET_ROOT "/best_times.txt");
     current_course_ = options.course_index;
@@ -570,6 +574,8 @@ void App::shutdown() {
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
     world_.shutdown(device_);
     shadow_.shutdown(device_);
+    audio_.shutdown();
+    particles_.shutdown();
     debug_.shutdown();
     pipelines_.shutdown();
     ui_.shutdown();
@@ -710,9 +716,35 @@ void App::update(float dt) {
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
         match_.update(dt, events);
         for (const game::Impact& impact : combat_.impacts()) {
-            effects_[effect_cursor_] = {impact.position, 0.0f, impact.team == game::Team::Hostile,
-                                        impact.on_terrain};
-            effect_cursor_ = (effect_cursor_ + 1) % MAX_EFFECTS;
+            emit_impact(impact.position, impact.team == game::Team::Hostile, impact.on_terrain);
+            // Loudness by proximity to the ear, not to the dragon: the chase
+            // camera is where the player sits.
+            const float d = core::distance(active_camera().position, impact.position);
+            audio_.play(audio::Clip::Explosion, 1.2f / (1.0f + d * d / (170.0f * 170.0f)));
+        }
+        if (combat_.breathing()) {
+            emit_flame(combat_.breath_origin(), combat_.breath_direction(),
+                       combat_.tuning.breath_range, false, dt);
+        }
+        for (const game::BreathCone& flame : combat_.hostile_breaths()) {
+            emit_flame(flame.origin, flame.direction, combat_.tuning.hostile_breath_range, true,
+                       dt);
+        }
+        // A thin ember trail off every live round, so its path lingers a beat.
+        for (const game::Projectile& projectile : combat_.projectiles()) {
+            if (!projectile.alive) continue;
+            gfx::Particle p;
+            p.position = projectile.position;
+            p.velocity = projectile.velocity * 0.05f;
+            p.drag = 2.5f;
+            p.life = 0.30f;
+            p.size_start = 1.4f;
+            p.size_end = 0.4f;
+            const bool mine = projectile.team == game::Team::Player;
+            p.color_start = mine ? core::Vec3{1.8f, 1.0f, 0.35f} : core::Vec3{0.9f, 1.2f, 1.9f};
+            p.color_end = mine ? core::Vec3{0.8f, 0.2f, 0.05f} : core::Vec3{0.15f, 0.3f, 0.8f};
+            p.brightness = 0.9f;
+            particles_.spawn(p);
         }
         // Enter starts the rematch from the results screen; R already means
         // respawn and stays out of it.
@@ -735,6 +767,7 @@ void App::update(float dt) {
             hit_marker_position_ = events.last_hit;
         }
         if (events.damage_taken > 0.0f) {
+            audio_.play(audio::Clip::Hit, 0.9f);
             damage_flash_ = 1.0f;
             // Held well past the flash: the point is to let the player turn and
             // find the shooter, which takes longer than the hit registers.
@@ -746,7 +779,35 @@ void App::update(float dt) {
     hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
     damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
-    for (ImpactEffect& effect : effects_) effect.age += dt;
+    particles_.update(dt);
+
+    // ---- ears ----
+    if (audio_.ready()) {
+        const game::FlightState& s = dragon_state();
+        audio_.set_wind(core::saturate(s.airspeed / 90.0f));
+
+        // The flame you hear is any flame near you: yours at full strength, a
+        // bot's by how close its cone is.
+        float flame = combat_.breathing() ? 1.0f : 0.0f;
+        for (const game::BreathCone& cone : combat_.hostile_breaths()) {
+            const float d = core::distance(cone.origin, s.position);
+            flame = core::maxf(flame, 1.0f - core::saturate(d / 220.0f));
+        }
+        audio_.set_flame(flame * (combat_enabled_ ? 1.0f : 0.0f));
+
+        // The wingbeat: one whoosh at the start of each powered downstroke,
+        // volume following how hard the wings are actually working.
+        if (s.flap_amplitude > 0.3f && s.flap_phase < previous_flap_phase_) {
+            audio_.play(audio::Clip::Flap, 0.5f * s.flap_amplitude);
+        }
+        previous_flap_phase_ = s.flap_phase;
+
+        // Firing: the cooldown jumping up is the shot leaving.
+        if (combat_.fire_cooldown() > previous_fire_cooldown_ + 0.5f) {
+            audio_.play(audio::Clip::Shot, 0.8f);
+        }
+        previous_fire_cooldown_ = combat_.fire_cooldown();
+    }
 
     if (!studio_active_) rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
@@ -961,6 +1022,10 @@ void App::build_ui(float dt) {
     const float ms = average_frame_ms();
     ImGui::Text("%.2f ms  (%.0f fps)   %ux%u", ms, ms > 0.0f ? 1000.0f / ms : 0.0f,
                 device_.width(), device_.height());
+    if (audio_.ready()) {
+        float volume = audio_.master();
+        if (ImGui::SliderFloat("volume", &volume, 0.0f, 1.0f)) audio_.set_master(volume);
+    }
 
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         game::ChaseCameraTuning& c = chase_.tuning;
@@ -1296,6 +1361,9 @@ void App::build_rally_ui() {
     ImGui::SetNextWindowPos(ImVec2(392.0f, float(device_.height()) - 236.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
+    // Collapsed by default: Combat is the panel a fight actually needs;
+    // the rest stay one click away.
+    ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Rally");
 
     for (size_t i = 0; i < courses_.size(); ++i) {
@@ -1393,6 +1461,9 @@ void App::build_studio_ui() {
     ImGui::SetNextWindowPos(ImVec2(float(device_.width()) * 0.5f - 190.0f, 12.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_FirstUseEver);
+    // Collapsed by default: Combat is the panel a fight actually needs;
+    // the rest stay one click away.
+    ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Studio");
 
     if (ImGui::Checkbox("animation studio", &studio_active_) && studio_active_) {
@@ -1432,6 +1503,9 @@ void App::build_dragon_ui() {
     // is indistinguishable from not having built it at all.
     ImGui::SetNextWindowPos(ImVec2(408.0f, 12.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(384, 0), ImGuiCond_FirstUseEver);
+    // Collapsed by default: Combat is the panel a fight actually needs;
+    // the rest stay one click away.
+    ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Dragon");
 
     ImGui::TextDisabled("%s, %d joints, %zu submesh(es)", dragon_source_.c_str(),
@@ -1725,6 +1799,82 @@ void App::update_bots(float dt) {
     }
 }
 
+float App::particle_unit() {
+    particle_rng_ ^= particle_rng_ << 13;
+    particle_rng_ ^= particle_rng_ >> 17;
+    particle_rng_ ^= particle_rng_ << 5;
+    return float(particle_rng_ & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
+}
+
+// Fire as particles: hot fast puffs launched down the cone, spreading and
+// slowing, buoyant at the end of their life the way combustion products are.
+// The damage cone is untouched -- this is what the cone LOOKS like.
+void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile,
+                     float dt) {
+    const core::Vec3 side =
+        core::normalize_or(core::cross(direction, core::Vec3::up()), core::Vec3::right());
+    const core::Vec3 lift =
+        core::normalize_or(core::cross(side, direction), core::Vec3::up());
+
+    // Spawn rate in particles per second, integrated so frame rate does not
+    // change the flame's density.
+    static float carry = 0.0f;
+    carry += dt * 160.0f;
+    const core::Vec3 hot = hostile ? core::Vec3{1.3f, 1.7f, 2.2f} : core::Vec3{2.2f, 1.5f, 0.7f};
+    const core::Vec3 cool = hostile ? core::Vec3{0.2f, 0.4f, 1.0f} : core::Vec3{1.0f, 0.25f, 0.04f};
+    while (carry >= 1.0f) {
+        carry -= 1.0f;
+        const float speed = range / 1.4f * (0.85f + 0.3f * particle_unit());
+        gfx::Particle p;
+        p.position = origin + direction * (2.0f + particle_unit());
+        p.velocity = direction * speed + (side * particle_unit() + lift * particle_unit()) *
+                                              (speed * 0.12f);
+        p.acceleration = core::Vec3{0.0f, 9.0f, 0.0f};  // buoyancy
+        p.drag = 1.4f;
+        p.life = 1.2f + 0.4f * particle_unit();
+        p.size_start = 1.1f;
+        p.size_end = 5.5f;
+        p.color_start = hot;
+        p.color_end = cool;
+        p.brightness = 1.0f;
+        particles_.spawn(p);
+    }
+}
+
+// A hit: a radial burst of embers plus a short-lived hot flash.
+void App::emit_impact(core::Vec3 position, bool hostile, bool on_terrain) {
+    const core::Vec3 hot = hostile ? core::Vec3{1.2f, 1.6f, 2.4f} : core::Vec3{2.4f, 1.4f, 0.5f};
+    const core::Vec3 cool = hostile ? core::Vec3{0.15f, 0.3f, 0.9f} : core::Vec3{0.9f, 0.2f, 0.04f};
+    const int embers = on_terrain ? 26 : 18;
+    for (int i = 0; i < embers; ++i) {
+        gfx::Particle p;
+        p.position = position;
+        core::Vec3 direction{particle_unit(), particle_unit(), particle_unit()};
+        if (on_terrain && direction.y < 0.0f) direction.y = -direction.y;  // splash upward
+        p.velocity = core::normalize_or(direction, core::Vec3::up()) *
+                     (18.0f + 14.0f * std::fabs(particle_unit()));
+        p.acceleration = core::Vec3{0.0f, -22.0f, 0.0f};  // embers fall
+        p.drag = 1.8f;
+        p.life = 0.5f + 0.3f * std::fabs(particle_unit());
+        p.size_start = 0.9f;
+        p.size_end = 0.25f;
+        p.color_start = hot;
+        p.color_end = cool;
+        p.brightness = 1.2f;
+        particles_.spawn(p);
+    }
+    // The flash: one big soft particle that dies fast.
+    gfx::Particle flash;
+    flash.position = position;
+    flash.life = 0.22f;
+    flash.size_start = 3.5f;
+    flash.size_end = on_terrain ? 11.0f : 8.0f;
+    flash.color_start = hot;
+    flash.color_end = cool;
+    flash.brightness = 1.6f;
+    particles_.spawn(flash);
+}
+
 // Combat is deliberately on separate bindings from flight, and on buttons that
 // do not already mean something: the flight controls were fought over once
 // already and are not worth disturbing.
@@ -1773,40 +1923,6 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         model.tint = core::Vec4{colour.x, colour.y, colour.z, emissive};
         model.material.w = unlit ? 1.0f : 0.0f;
         world_.draw_mesh(device_, pass, sphere_mesh_, model);
-    };
-
-    // A flame: puffs marching down the cone, each with its own flicker phase, a
-    // sideways wobble that grows toward the tip, and a brightness pulse that
-    // travels OUTWARD -- fire moves away from the mouth, and a pulse moving the
-    // right way is most of what separates a flame from a glowing cone.
-    auto draw_flame = [&](core::Vec3 origin, core::Vec3 direction, float range,
-                          float half_angle_deg, core::Vec3 hot, core::Vec3 cool) {
-        const float spread = std::tan(core::radians(half_angle_deg));
-        const core::Vec3 side =
-            core::normalize_or(core::cross(direction, core::Vec3::up()), core::Vec3::right());
-        const core::Vec3 lift = core::normalize_or(core::cross(side, direction),
-                                                   core::Vec3::up());
-        const int puffs = 22;
-        for (int i = 1; i <= puffs; ++i) {
-            const float t = float(i) / float(puffs);
-            const float distance = range * t;
-            const float phase = float(i) * 1.7f;
-            const float flicker = 0.82f + 0.18f * std::sin(time_seconds_ * 26.0f + phase);
-            // The travelling pulse: crests move from mouth to tip.
-            const float pulse =
-                0.85f + 0.3f * std::sin(time_seconds_ * 18.0f - float(i) * 0.9f);
-            // Turbulent wander, wider toward the tip where the stream breaks up.
-            const core::Vec3 wobble =
-                (side * std::sin(time_seconds_ * 9.0f + phase * 2.3f) +
-                 lift * std::sin(time_seconds_ * 7.3f + phase * 1.4f)) *
-                (distance * spread * 0.35f * t);
-            const core::Vec3 position = origin + direction * distance + wobble;
-            const float radius =
-                core::maxf(distance * spread * 0.55f, 0.5f) * flicker * pulse;
-            const core::Vec3 colour = core::lerp(hot, cool, t * t);
-            const float emissive = (2.4f * (1.0f - t) * (1.0f - t) + 0.45f) * pulse;
-            draw_ball(position, radius, colour, emissive, true);
-        }
     };
 
     for (const game::Sentinel& sentinel : combat_.sentinels()) {
@@ -1882,45 +1998,10 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
 
     // The flame: a line of spheres widening down the cone. It is drawn from the
     // same origin and axis the damage test uses, so what looks engulfed is.
-    if (combat_.breathing()) {
-        draw_flame(combat_.breath_origin(), combat_.breath_direction(),
-                   combat_.tuning.breath_range, combat_.tuning.breath_half_angle_deg,
-                   core::Vec3{1.0f, 0.88f, 0.60f}, core::Vec3{0.98f, 0.22f, 0.04f});
-    }
 
-    // Hostile flames: same construction as the player's, cool-tinted the way
-    // hostile bolts are. The cone drawn is the cone that damages.
-    for (const game::BreathCone& flame : combat_.hostile_breaths()) {
-        draw_flame(flame.origin, flame.direction, combat_.tuning.hostile_breath_range,
-                   combat_.tuning.hostile_breath_half_angle_deg,
-                   core::Vec3{0.85f, 0.95f, 1.0f}, core::Vec3{0.25f, 0.45f, 1.0f});
-    }
 
-    // Impact explosions: a flash swelling into a cooling shell, then gone. The
-    // frame a shot connects is the frame the whole exchange is judged by.
-    for (const ImpactEffect& effect : effects_) {
-        const float life = 0.45f;
-        if (effect.age >= life) continue;
-        // A hit ON the player is told by the damage vignette and the flash; a
-        // ball glued to your own dragon in the chase view is just occlusion.
-        if (core::distance(effect.position, flight_.state().position) < 12.0f) continue;
-        const float t = effect.age / life;
-        // Tapered near the camera like the bolts: a burst beside the chase
-        // camera at full size is a wall, not an explosion.
-        const float near_taper = core::lerpf(
-            0.3f, 1.0f,
-            core::smoothstep(8.0f, 70.0f,
-                             core::distance(active_camera().position, effect.position)));
-        const float radius = core::lerpf(2.0f, effect.on_terrain ? 9.0f : 7.0f,
-                                         1.0f - (1.0f - t) * (1.0f - t)) *
-                             near_taper;
-        const core::Vec3 hot = effect.hostile ? core::Vec3{0.7f, 0.85f, 1.0f}
-                                              : core::Vec3{1.0f, 0.8f, 0.45f};
-        const core::Vec3 cool = effect.hostile ? core::Vec3{0.2f, 0.3f, 0.6f}
-                                               : core::Vec3{0.5f, 0.15f, 0.05f};
-        draw_ball(effect.position, radius, core::lerp(hot, cool, t),
-                  4.0f * (1.0f - t) * (1.0f - t) + 0.1f, true);
-    }
+    // Flames and explosions are particles now (emitted in update); nothing to
+    // draw here but the solid bolts above.
 
     if (hit_marker_ > 0.0f) {
         draw_ball(hit_marker_position_, 4.0f * (1.0f + (0.35f - hit_marker_) * 6.0f),
@@ -2382,6 +2463,9 @@ void App::build_flight_ui() {
     ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 12.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
+    // Collapsed by default: Combat is the panel a fight actually needs;
+    // the rest stay one click away.
+    ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Flight");
 
     // --- the readout you actually fly by ---
@@ -2556,6 +2640,9 @@ void App::render() {
     // Debug geometry has to be uploaded before any render pass opens, because
     // the upload itself is a copy pass.
     debug_.upload(device_);
+    // Copy passes cannot open inside a render pass, so particle staging rides
+    // alongside the debug-line upload.
+    particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
     ui_.prepare_draw_data(device_);
 
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
@@ -2642,6 +2729,10 @@ void App::render() {
     }
 
     draw_combat(pass);
+
+    // Particles last among world draws: additive light over everything opaque,
+    // depth-tested against it, never writing. (Staged before the pass began.)
+    particles_.draw(device_, pass);
 
     // Ghost of the best run, flying its own recording alongside.
     game::GhostSample ghost;

@@ -14,6 +14,7 @@ find_package(SDL3 REQUIRED CONFIG)
 include(cmake/imgui.cmake)
 include(cmake/cgltf.cmake)
 include(cmake/stb.cmake)
+include(cmake/miniaudio.cmake)
 
 add_executable(dragon
   src/main.cpp
@@ -26,6 +27,8 @@ add_executable(dragon
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
+  src/gfx/particles.cpp
+  src/audio/audio.cpp
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
@@ -51,7 +54,7 @@ add_executable(dragon
 )
 
 target_include_directories(dragon PRIVATE src)
-target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb)
+target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio)
 
 # Shaders are read from the source tree at runtime so hot reload edits the same
 # files we author. A shipping build would copy them next to the binary instead.
