@@ -154,7 +154,10 @@ tests/       plain executables, no framework
 - **M14** bot dragons: a BotPilot state machine (attack / extend / evade)
   steering the same flight model the player flies, honest gunnery, terrain
   doctrine, spawn/respawn through Combat's external hostile slots.
-- **Next:** M15 match loop (scores, rounds, loadouts), or M7 polish (thermals,
+- **M15** the match loop: countdown / fight / results / rematch, first-to-N
+  deathmatch with an optional clock, weapons-cold phases, per-tier bot
+  survivability (health and regeneration), match HUD.
+- **Next:** loadouts (distinct ability sets), or M7 polish (thermals,
   particles, audio).
 
 ## Combat
@@ -233,6 +236,23 @@ readability exaggeration tapered off near the camera. Both lessons were paid
 for: a nested "glow" shell just occludes its own core in a forward opaque
 pipeline, and a shot passing the chase camera at 3x exaggeration is a
 screen-filling balloon that reads as a volley of different-sized projectiles.
+
+## The match loop (M15)
+
+`game::Match` is pure scorekeeping and phase logic -- it consumes CombatEvents
+and emits nothing but state, so the whole loop is testable without the app.
+Deathmatch: the player scores kills, hostiles score by killing the player,
+first to the target wins; on time expiry the leader wins and a tie is honestly
+a draw. **Weapons are cold** in the countdown and on the results screen --
+enforced in three places (player input, bot decisions, and the scorer itself
+refusing kills outside the fight), because a kill during a countdown is a bug
+wherever it comes from. The rally HUD stands down while a match runs. Enter
+rematches; `--match` (with `--bots N`) starts one from the CLI.
+
+Bots regenerate like the player does (`hostile_regen`, after a lull), scaled
+by skill tier along with their health: a rookie never heals and loses wars of
+attrition; an ace refuses to stay wounded. Disengage-and-recover cuts both
+ways, which is the balance the player asked for.
 
 ## Bots (M14)
 

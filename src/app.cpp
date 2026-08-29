@@ -53,6 +53,9 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--bots" && i + 1 < argc) {
             options.combat = true;
             options.bots = SDL_atoi(argv[++i]);
+        } else if (arg == "--match") {
+            options.combat = true;
+            options.match = true;
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -217,6 +220,10 @@ bool App::init(const Options& options) {
         combat_enabled_ = true;
         combat_.reset(&terrain_, flight_.state().position, 20260824u);
         if (options.bots > 0) spawn_bots(options.bots);
+        if (options.match) {
+            bot_count_ = options.bots > 0 ? options.bots : bot_count_;
+            start_match();
+        }
     }
 
     if (options.has_camera) {
@@ -701,6 +708,13 @@ void App::update(float dt) {
 
         update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
+        match_.update(dt, events);
+        // Enter starts the rematch from the results screen; R already means
+        // respawn and stays out of it.
+        if (match_.phase() == game::MatchPhase::Results &&
+            input_.pressed(SDL_SCANCODE_RETURN)) {
+            start_match();
+        }
 
         // The head turns toward whatever is locked, so the dragon visibly looks
         // at what it is about to burn. Read after the update so the head and the
@@ -1121,6 +1135,10 @@ void App::draw_hud() {
 
     if (combat_enabled_) draw_combat_hud();
 
+    // During a match the rally HUD stands down: you are fighting, not racing,
+    // and the checkpoint marker collides with the scoreline.
+    if (match_.phase() != game::MatchPhase::Idle) return;
+
     const game::Course& course = rally_.course();
     if (course.rings.empty()) return;
 
@@ -1527,28 +1545,43 @@ void App::apply_bot_skill(int level) {
     bot_skill_ = level;
     game::BotTuning t;
     switch (level) {
-        case 0:  // rookie
+        case 0:  // rookie: fragile, never heals, loses wars of attrition.
             t.reaction_interval = 0.55f;
             t.aim_spread_deg = 5.0f;
             t.fire_cooldown = 2.3f;
             t.lead_curvature = 0.3f;
             t.damage = 9.0f;
+            bot_health_ = 60.0f;
+            combat_.tuning.hostile_regen = 0.0f;
             break;
         default:  // veteran
             t.reaction_interval = 0.30f;
             t.aim_spread_deg = 2.5f;
             t.fire_cooldown = 1.6f;
+            bot_health_ = 80.0f;
+            combat_.tuning.hostile_regen = 4.0f;
             break;
-        case 2:  // ace
+        case 2:  // ace: tough, and refuses to stay wounded.
             t.reaction_interval = 0.15f;
             t.aim_spread_deg = 1.2f;
             t.fire_cooldown = 1.1f;
             t.damage = 14.0f;
             t.fire_range = 650.0f;
+            bot_health_ = 100.0f;
+            combat_.tuning.hostile_regen = 8.0f;
             break;
     }
     bot_tuning_ = t;
     for (auto& bot : bots_) bot->pilot.tuning = bot_tuning_;
+}
+
+// A match starts clean: fresh player, fresh bots, weapons cold until the
+// countdown ends.
+void App::start_match() {
+    respawn_dragon();
+    combat_.revive();
+    spawn_bots(bot_count_);
+    match_.start();
 }
 
 void App::spawn_bots(int count) {
@@ -1556,14 +1589,14 @@ void App::spawn_bots(int count) {
     bots_.clear();
     for (int i = 0; i < count; ++i) {
         auto bot = std::make_unique<BotShip>();
-        bot->slot = combat_.spawn_external(80.0f, 6.5f);
+        bot->slot = combat_.spawn_external(bot_health_, 6.5f);
         bot->rig.init(dragon_skeleton_, dragon_joints_);
         bot->rig.set_model_scale(asset_.scale);
         if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
         bot->rig.tuning = dragon_rig_.tuning;
         bot->pilot.tuning = bot_tuning_;
         place_bot(*bot, uint32_t(20260826 + i * 977));
-        bot->last_health = 80.0f;
+        bot->last_health = bot_health_;
         bots_.push_back(std::move(bot));
     }
 }
@@ -1605,7 +1638,7 @@ void App::update_bots(float dt) {
             const core::Vec3 ahead = self.position + self.velocity * look;
             ground = core::maxf(ground, terrain_.height_at(ahead.x, ahead.z));
         }
-        const game::BotDecision decision =
+        game::BotDecision decision =
             bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground);
         const float sink_before = bot->flight.state().climb_rate;
         bot->flight.update(decision.flight, &terrain_, dt);
@@ -1648,6 +1681,12 @@ void App::update_bots(float dt) {
             LOG_INFO("bot flame burst at %.0f m",
                      core::distance(self.position, flight_.state().position));
         }
+        // Bots honour the same weapons-cold phases the player does.
+        const bool weapons_live = match_.weapons_live();
+        if (!weapons_live) {
+            decision.fire = false;
+            decision.breathe = false;
+        }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
             combat_.hostile_breath(muzzle, bot->flight.state().forward());
@@ -1671,6 +1710,8 @@ void App::update_bots(float dt) {
 game::CombatInput App::read_combat_input() const {
     game::CombatInput in;
     if (!combat_enabled_) return in;
+    // Weapons are cold during the countdown and on the results screen.
+    if (!match_.weapons_live()) return in;
 
     if (options_.attack) {
         in.breath = true;
@@ -1894,6 +1935,46 @@ void App::draw_combat_hud() {
     pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
     pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
 
+    // ---- the match, writ large ----
+    {
+        char line[96];
+        const ImU32 GOLD = IM_COL32(255, 205, 90, 245);
+        if (match_.phase() == game::MatchPhase::Countdown) {
+            std::snprintf(line, sizeof(line), "%d", int(std::ceil(match_.countdown_remaining())));
+            const ImVec2 size = ImGui::CalcTextSize(line);
+            draw->AddText(nullptr, 64.0f,
+                          ImVec2(width * 0.5f - size.x * 2.0f, height * 0.30f), GOLD, line);
+        } else if (match_.phase() == game::MatchPhase::Fighting) {
+            if (match_.settings.time_limit > 0.0f) {
+                std::snprintf(line, sizeof(line), "YOU %d : %d BOTS   first to %d   %d:%02d",
+                              match_.player_kills(), match_.player_deaths(),
+                              match_.settings.target_kills, int(match_.time_remaining()) / 60,
+                              int(match_.time_remaining()) % 60);
+            } else {
+                std::snprintf(line, sizeof(line), "YOU %d : %d BOTS   first to %d",
+                              match_.player_kills(), match_.player_deaths(),
+                              match_.settings.target_kills);
+            }
+            const ImVec2 size = ImGui::CalcTextSize(line);
+            draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, 14.0f), GOLD, line);
+        } else if (match_.phase() == game::MatchPhase::Results) {
+            const char* verdict =
+                match_.draw() ? "DRAW" : (match_.player_won() ? "VICTORY" : "DEFEAT");
+            const ImU32 colour = match_.draw() ? IM_COL32(220, 220, 220, 245)
+                                : match_.player_won() ? IM_COL32(140, 235, 140, 245)
+                                                      : IM_COL32(255, 90, 70, 245);
+            ImVec2 size = ImGui::CalcTextSize(verdict);
+            draw->AddText(nullptr, 56.0f, ImVec2(width * 0.5f - size.x * 3.4f, height * 0.30f),
+                          colour, verdict);
+            std::snprintf(line, sizeof(line), "%d : %d in %.0f s  --  ENTER to rematch",
+                          match_.player_kills(), match_.player_deaths(),
+                          match_.fight_duration());
+            size = ImGui::CalcTextSize(line);
+            draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, height * 0.30f + 64.0f),
+                          IM_COL32(230, 235, 245, 220), line);
+        }
+    }
+
     // ---- aim marker ----
     // Where a shot leaves and where it goes: a small cross at the mouth's aim
     // direction. The head is hard to read from behind, and fire that leaves
@@ -2070,6 +2151,37 @@ void App::build_combat_ui() {
         ImGui::End();
         return;
     }
+
+    // ---- the match ----
+    switch (match_.phase()) {
+        case game::MatchPhase::Idle:
+            if (ImGui::Button("start match")) start_match();
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90.0f);
+            ImGui::SliderInt("first to", &match_.settings.target_kills, 1, 15);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90.0f);
+            ImGui::SliderFloat("clock", &match_.settings.time_limit, 0.0f, 600.0f, "%.0f s");
+            break;
+        case game::MatchPhase::Countdown:
+            ImGui::Text("match starting in %.0f...", std::ceil(match_.countdown_remaining()));
+            break;
+        case game::MatchPhase::Fighting:
+            ImGui::Text("MATCH  you %d : %d bots  (first to %d)", match_.player_kills(),
+                        match_.player_deaths(), match_.settings.target_kills);
+            if (ImGui::SmallButton("abandon")) match_.abandon();
+            break;
+        case game::MatchPhase::Results:
+            ImGui::Text("%s  %d : %d in %.0f s",
+                        match_.draw() ? "DRAW" : (match_.player_won() ? "VICTORY" : "DEFEAT"),
+                        match_.player_kills(), match_.player_deaths(),
+                        match_.fight_duration());
+            if (ImGui::Button("rematch (enter)")) start_match();
+            ImGui::SameLine();
+            if (ImGui::Button("free play")) match_.abandon();
+            break;
+    }
+    ImGui::Separator();
 
     ImGui::Text("health %5.0f / %.0f   breath %3.0f%%", combat_.health(), t.max_health,
                 combat_.breath() * 100.0f);

@@ -84,6 +84,13 @@ struct CombatTuning {
     // degrees is invisible; a flame doing it looks like a garden hose.
     float breath_assist_max_deg = 16.0f;
 
+    // ---- hostile survivability (bots) ----
+    // Bots heal like the player does: disengage-and-recover cuts both ways,
+    // and it is a difficulty dial -- a rookie that never heals loses a war of
+    // attrition that an ace refuses to grant.
+    float hostile_regen = 4.0f;        // per second, after the delay
+    float hostile_regen_delay = 6.0f;  // seconds without damage
+
     // ---- hostile breath (bots) ----
     float hostile_breath_dps = 38.0f;
     float hostile_breath_range = 190.0f;
@@ -154,6 +161,8 @@ struct Sentinel {
     float phase = 0.0f;
     float bob = 18.0f;
     float fire_timer = 0.0f;
+    // For delayed regeneration, mirroring the player's.
+    float time_since_damage = 1e9f;
 };
 
 // A flame active this frame, for rendering. The cone drawn is the cone that

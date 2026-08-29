@@ -12,6 +12,7 @@
 #include "game/chase_camera.h"
 #include "game/bot.h"
 #include "game/combat.h"
+#include "game/match.h"
 #include "game/studio.h"
 #include "game/debug_camera.h"
 #include "game/autopilot.h"
@@ -83,6 +84,8 @@ struct Options {
     bool attack = false;
     // --bots N replaces the sentinels with N bot dragons at startup.
     int bots = 0;
+    // --match starts a deathmatch against the spawned bots immediately.
+    bool match = false;
 };
 
 Options parse_options(int argc, char** argv);
@@ -183,6 +186,13 @@ private:
     int bot_skill_ = 1;  // 0 rookie, 1 veteran, 2 ace
     bool manual_aim_ = false;
     float saved_aim_assist_ = 0.9f;
+    // Per-tier bot survivability, applied at spawn (health) and live (regen).
+    float bot_health_ = 80.0f;
+
+    // M15: the match loop. Countdown, fight to a kill target, results,
+    // rematch. Idle means free play, which everything else already was.
+    game::Match match_;
+    void start_match();
     void apply_bot_skill(int level);
     void spawn_bots(int count);
     void place_bot(BotShip& bot, uint32_t seed);

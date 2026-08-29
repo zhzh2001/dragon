@@ -362,6 +362,7 @@ void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& eve
     if (!sentinel.alive || amount <= 0.0f) return;
     sentinel.health -= amount;
     sentinel.hit_flash = 1.0f;
+    sentinel.time_since_damage = 0.0f;
     ++events.hits_dealt;
     events.last_hit = sentinel.position;
     events.had_hit = true;
@@ -465,6 +466,15 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
     (void)events;
     for (Sentinel& sentinel : sentinels_) {
         sentinel.hit_flash = core::maxf(sentinel.hit_flash - dt * 4.0f, 0.0f);
+        sentinel.time_since_damage += dt;
+
+        // External hostiles regenerate after a lull, exactly like the player:
+        // pressing the attack matters, and half-dead bots do not accumulate.
+        if (sentinel.external && sentinel.alive &&
+            sentinel.time_since_damage >= tuning.hostile_regen_delay) {
+            sentinel.health =
+                core::minf(sentinel.health + tuning.hostile_regen * dt, sentinel.max_health);
+        }
 
         if (!sentinel.alive) {
             sentinel.respawn_timer -= dt;

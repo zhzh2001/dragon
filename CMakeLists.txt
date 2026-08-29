@@ -46,6 +46,7 @@ add_executable(dragon
   src/game/combat.cpp
   src/game/bot.cpp
   src/game/studio.cpp
+  src/game/match.cpp
   src/editor/imgui_layer.cpp
 )
 
@@ -130,6 +131,7 @@ add_test(NAME rally COMMAND test_rally)
 add_executable(test_anim
   tests/test_anim.cpp
   src/game/studio.cpp
+  src/game/match.cpp
   src/anim/animation.cpp
   src/anim/gltf_loader.cpp
   src/gfx/texture.cpp
@@ -181,3 +183,19 @@ target_include_directories(test_bot PRIVATE src)
 target_link_libraries(test_bot PRIVATE SDL3::SDL3)
 target_compile_options(test_bot PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME bot COMMAND test_bot)
+
+add_executable(test_match
+  tests/test_match.cpp
+  src/game/match.cpp
+  src/game/combat.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_match PRIVATE src)
+target_link_libraries(test_match PRIVATE SDL3::SDL3)
+target_compile_options(test_match PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME match COMMAND test_match)
