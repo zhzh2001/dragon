@@ -165,6 +165,13 @@ struct Sentinel {
     float time_since_damage = 1e9f;
 };
 
+// A projectile ending its life somewhere visible, for impact effects.
+struct Impact {
+    core::Vec3 position = core::Vec3::zero();
+    Team team = Team::Player;
+    bool on_terrain = false;
+};
+
 // A flame active this frame, for rendering. The cone drawn is the cone that
 // damages -- same origin, same axis.
 struct BreathCone {
@@ -272,6 +279,9 @@ public:
     void hostile_breath(core::Vec3 origin, core::Vec3 direction);
     // Last frame's hostile flames, for drawing.
     const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
+    // Projectiles that ended this frame -- hits and terrain strikes -- for the
+    // renderer to detonate.
+    const std::vector<Impact>& impacts() const { return impacts_; }
 
     // The fire actually leaves the dragon's MOUTH, which the rig animates; the
     // app tells combat where that is each frame. Without an override the
@@ -312,6 +322,7 @@ private:
     bool want_cycle_ = false;
     core::Vec3 lock_intercept_ = core::Vec3::zero();
 
+    std::vector<Impact> impacts_;
     std::vector<BreathCone> hostile_breaths_pending_;
     std::vector<BreathCone> hostile_breaths_drawn_;
     core::Vec3 muzzle_override_ = core::Vec3::zero();

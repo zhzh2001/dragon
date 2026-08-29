@@ -42,6 +42,19 @@ static float value_noise(float2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Three octaves: single-octave value noise reads as soft blobs, fbm reads as
+// ground. Still cheap enough to call several times per fragment.
+static float fbm(float2 p) {
+    float total = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 3; ++i) {
+        total += amplitude * value_noise(p);
+        p = p * 2.17 + float2(31.7, 17.3);
+        amplitude *= 0.5;
+    }
+    return total;
+}
+
 // Terrain material from height and slope. Kept in the shader so it can be
 // retuned by saving the file while flying.
 static float3 terrain_albedo(float3 world_position, float3 normal,
@@ -63,13 +76,21 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
     // normal.y is 1 on flat ground and 0 on a vertical cliff.
     float flatness = saturate(normal.y);
 
-    // Two noise octaves: broad patches of dry/lush ground, plus fine grain that
-    // keeps large flat areas from reading as a solid colour.
-    float patches = value_noise(world_position.xz * 0.0055);
+    // Broad patches of dry/lush ground, plus fine grain that keeps large flat
+    // areas from reading as a solid colour.
+    float patches = fbm(world_position.xz * 0.0055);
     float grain = value_noise(world_position.xz * 0.09);
 
     float3 grass = mix(GRASS, GRASS_DRY, smoothstep(0.35, 0.75, patches));
     float3 rock = mix(ROCK_DARK, ROCK, smoothstep(0.25, 0.8, patches));
+
+    // Strata: near-horizontal bands on steep faces, the single strongest cue
+    // that a cliff is rock and not grey clay. Height-keyed noise, squeezed by
+    // steepness so flat ground shows none of it.
+    float strata = value_noise(float2(world_position.y * 0.11,
+                                      dot(world_position.xz, float2(0.013, 0.017))));
+    float steepness = 1.0 - flatness;
+    rock *= 1.0 + (strata - 0.5) * 0.55 * smoothstep(0.25, 0.7, steepness);
 
     // A narrow sand band right at the waterline, then grass above it.
     float3 albedo = mix(SAND, grass, smoothstep(water_level, water_level + 10.0, height));
@@ -98,6 +119,20 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 normal = normalize(in.normal);
     float3 to_sun = normalize(scene.sun.xyz);
 
+    float camera_distance = length(in.world_position - scene.camera_position.xyz);
+
+    // Micro-relief: a noise-gradient normal perturbation that fades out by
+    // 400 m. Up close the ground gets shape the mesh does not carry; far away
+    // it vanishes before it can shimmer.
+    float detail_fade = 1.0 - smoothstep(80.0, 400.0, camera_distance);
+    if (detail_fade > 0.0) {
+        float2 p = in.world_position.xz * 0.35;
+        float h = 0.5;
+        float gx = value_noise(p + float2(h, 0.0)) - value_noise(p - float2(h, 0.0));
+        float gz = value_noise(p + float2(0.0, h)) - value_noise(p - float2(0.0, h));
+        normal = normalize(normal + float3(-gx, 0.0, -gz) * (0.55 * detail_fade));
+    }
+
     float3 albedo = terrain_albedo(in.world_position, normal, scene) * in.tint;
 
     // Direct sun, wrapped slightly so slopes turning away keep some shape
@@ -114,9 +149,19 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
 
     float3 lit = albedo * (direct + ambient);
 
+    // Snow glints: a modest specular lobe only where the surface is bright and
+    // cold, which reads as crust without turning the mountains to plastic.
+    float snowiness = smoothstep(0.55, 0.85, albedo.b) * step(0.6, albedo.r);
+    if (snowiness > 0.0) {
+        float3 to_camera = normalize(scene.camera_position.xyz - in.world_position);
+        float3 half_vector = normalize(to_sun + to_camera);
+        float glint = pow(saturate(dot(normal, half_vector)), 48.0);
+        lit += scene.sun_color.rgb * scene.sun.w * glint * 0.35 * snowiness * visibility;
+    }
+
     // Exponential-squared height fog, thinning with altitude so mountain peaks
     // stay legible while valley distance still reads.
-    float distance = length(in.world_position - scene.camera_position.xyz);
+    float distance = camera_distance;
     float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
     float fog = 1.0 - exp(-pow(distance * density, 2.0));
 

@@ -177,6 +177,7 @@ private:
         bool was_alive = true;
         bool grounded_last_frame = false;
         bool breathing = false;
+        float grounded_time = 0.0f;
         float last_health = 0.0f;
     };
     std::vector<std::unique_ptr<BotShip>> bots_;
@@ -198,6 +199,17 @@ private:
     void place_bot(BotShip& bot, uint32_t seed);
     void update_bots(float dt);
     gfx::Mesh sphere_mesh_;
+    // Transient impact explosions: expanding, cooling spheres. A ring buffer,
+    // because a dogfight makes them constantly.
+    struct ImpactEffect {
+        core::Vec3 position = core::Vec3::zero();
+        float age = 1e9f;
+        bool hostile = false;
+        bool on_terrain = false;
+    };
+    static constexpr int MAX_EFFECTS = 32;
+    ImpactEffect effects_[MAX_EFFECTS];
+    int effect_cursor_ = 0;
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;

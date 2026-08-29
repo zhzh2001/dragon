@@ -452,12 +452,14 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
 
         if (consumed) {
             projectile.alive = false;
+            impacts_.push_back({projectile.position, projectile.team, false});
             continue;
         }
 
         if (terrain_ && projectile.position.y <=
                             terrain_->height_at(projectile.position.x, projectile.position.z)) {
             projectile.alive = false;
+            impacts_.push_back({projectile.position, projectile.team, true});
         }
     }
 }
@@ -556,6 +558,7 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
 CombatEvents Combat::update(float dt, const FlightState& player, const CombatInput& input) {
     CombatEvents events;
     if (dt <= 0.0f) return events;
+    impacts_.clear();
 
     const bool player_alive = health_ > 0.0f;
 

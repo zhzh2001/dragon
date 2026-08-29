@@ -709,6 +709,11 @@ void App::update(float dt) {
         update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
         match_.update(dt, events);
+        for (const game::Impact& impact : combat_.impacts()) {
+            effects_[effect_cursor_] = {impact.position, 0.0f, impact.team == game::Team::Hostile,
+                                        impact.on_terrain};
+            effect_cursor_ = (effect_cursor_ + 1) % MAX_EFFECTS;
+        }
         // Enter starts the rematch from the results screen; R already means
         // respawn and stays out of it.
         if (match_.phase() == game::MatchPhase::Results &&
@@ -741,6 +746,7 @@ void App::update(float dt) {
     hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
     damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
+    for (ImpactEffect& effect : effects_) effect.age += dt;
 
     if (!studio_active_) rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
@@ -1670,22 +1676,37 @@ void App::update_bots(float dt) {
         }
         bot->grounded_last_frame = bot->flight.state().grounded;
 
+        // A bot that stays on the ground is stuck -- wedged on a slope the
+        // flight model cannot take off from. Give the recovery reflex a fair
+        // window, then write it off as a crash so the respawn puts it back in
+        // the fight.
+        if (bot->flight.state().grounded) {
+            bot->grounded_time += dt;
+            if (bot->grounded_time > 3.0f) {
+                LOG_INFO("bot stuck on terrain for 3 s; respawning");
+                combat_.kill_external(bot->slot);
+                bot->was_alive = false;
+                bot->grounded_time = 0.0f;
+                continue;
+            }
+        } else {
+            bot->grounded_time = 0.0f;
+        }
+
         combat_.drive_external(bot->slot, bot->flight.state().position,
                                bot->flight.state().velocity);
+        // Bots honour the same weapons-cold phases the player does. This strip
+        // must come BEFORE anything consumes the decision: it once sat between
+        // the fireball and the flame, gating one and not the other.
+        if (!match_.weapons_live()) {
+            decision.fire = false;
+            decision.breathe = false;
+        }
+
         const core::Vec3 muzzle = bot->flight.state().position +
                                   bot->flight.state().forward() * 7.5f;
         if (decision.fire) {
             combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
-        }
-        if (decision.breathe && !bot->breathing) {
-            LOG_INFO("bot flame burst at %.0f m",
-                     core::distance(self.position, flight_.state().position));
-        }
-        // Bots honour the same weapons-cold phases the player does.
-        const bool weapons_live = match_.weapons_live();
-        if (!weapons_live) {
-            decision.fire = false;
-            decision.breathe = false;
         }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
@@ -1754,6 +1775,40 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         world_.draw_mesh(device_, pass, sphere_mesh_, model);
     };
 
+    // A flame: puffs marching down the cone, each with its own flicker phase, a
+    // sideways wobble that grows toward the tip, and a brightness pulse that
+    // travels OUTWARD -- fire moves away from the mouth, and a pulse moving the
+    // right way is most of what separates a flame from a glowing cone.
+    auto draw_flame = [&](core::Vec3 origin, core::Vec3 direction, float range,
+                          float half_angle_deg, core::Vec3 hot, core::Vec3 cool) {
+        const float spread = std::tan(core::radians(half_angle_deg));
+        const core::Vec3 side =
+            core::normalize_or(core::cross(direction, core::Vec3::up()), core::Vec3::right());
+        const core::Vec3 lift = core::normalize_or(core::cross(side, direction),
+                                                   core::Vec3::up());
+        const int puffs = 22;
+        for (int i = 1; i <= puffs; ++i) {
+            const float t = float(i) / float(puffs);
+            const float distance = range * t;
+            const float phase = float(i) * 1.7f;
+            const float flicker = 0.82f + 0.18f * std::sin(time_seconds_ * 26.0f + phase);
+            // The travelling pulse: crests move from mouth to tip.
+            const float pulse =
+                0.85f + 0.3f * std::sin(time_seconds_ * 18.0f - float(i) * 0.9f);
+            // Turbulent wander, wider toward the tip where the stream breaks up.
+            const core::Vec3 wobble =
+                (side * std::sin(time_seconds_ * 9.0f + phase * 2.3f) +
+                 lift * std::sin(time_seconds_ * 7.3f + phase * 1.4f)) *
+                (distance * spread * 0.35f * t);
+            const core::Vec3 position = origin + direction * distance + wobble;
+            const float radius =
+                core::maxf(distance * spread * 0.55f, 0.5f) * flicker * pulse;
+            const core::Vec3 colour = core::lerp(hot, cool, t * t);
+            const float emissive = (2.4f * (1.0f - t) * (1.0f - t) + 0.45f) * pulse;
+            draw_ball(position, radius, colour, emissive, true);
+        }
+    };
+
     for (const game::Sentinel& sentinel : combat_.sentinels()) {
         if (!sentinel.alive) continue;
         // External hostiles are drawn as full dragons elsewhere; the drone ball
@@ -1808,52 +1863,63 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         model.tint = core::Vec4{hot.x, hot.y, hot.z, 2.2f};
         model.material.w = 1.0f;
         world_.draw_mesh(device_, pass, sphere_mesh_, model);
-        (void)colour;
+        // A short cooling streak behind the round -- continuous with the bolt,
+        // so it reads as motion rather than as extra projectiles.
+        const core::Vec3 back = core::normalize_or(projectile.velocity, core::Vec3::forward());
+        for (int i = 1; i <= 2; ++i) {
+            const float fade = 1.0f - float(i) * 0.35f;
+            gfx::ModelUniforms trail;
+            const float trail_radius = radius * fade * 0.8f;
+            trail.model = core::Mat4::trs(projectile.position - back * (radius * 3.4f * float(i)),
+                                          heading,
+                                          core::Vec3{trail_radius, trail_radius,
+                                                     trail_radius * 2.4f});
+            trail.tint = core::Vec4{colour.x, colour.y, colour.z, 0.9f * fade};
+            trail.material.w = 1.0f;
+            world_.draw_mesh(device_, pass, sphere_mesh_, trail);
+        }
     }
 
     // The flame: a line of spheres widening down the cone. It is drawn from the
     // same origin and axis the damage test uses, so what looks engulfed is.
     if (combat_.breathing()) {
-        const float range = combat_.tuning.breath_range;
-        const float spread = std::tan(core::radians(combat_.tuning.breath_half_angle_deg));
-        const int puffs = 22;
-        for (int i = 1; i <= puffs; ++i) {
-            const float t = float(i) / float(puffs);
-            const float distance = range * t;
-            // Flicker, so the stream is alive rather than a string of beads.
-            // Per-puff phase, otherwise the whole flame pulses as one object.
-            const float flicker =
-                0.86f + 0.14f * std::sin(time_seconds_ * 26.0f + float(i) * 1.7f);
-            const core::Vec3 position =
-                combat_.breath_origin() + combat_.breath_direction() * distance;
-            // Well inside the damage cone rather than filling it: a flame that
-            // exactly fills its hitbox looks like a cone, not like fire.
-            const float radius = core::maxf(distance * spread * 0.55f, 0.5f) * flicker;
-            // White-hot at the mouth, cooling through orange to deep red.
-            const core::Vec3 colour =
-                core::lerp(core::Vec3{1.0f, 0.88f, 0.60f}, core::Vec3{0.98f, 0.22f, 0.04f}, t * t);
-            // Falls away sharply so the white-hot core stays small, but never to
-            // nothing: the shared tonemap turns a dim saturated colour muddy, and
-            // the tail of a flame should still glow rather than look like soot.
-            const float emissive = 2.4f * (1.0f - t) * (1.0f - t) + 0.45f;
-            draw_ball(position, radius, colour, emissive, true);
-        }
+        draw_flame(combat_.breath_origin(), combat_.breath_direction(),
+                   combat_.tuning.breath_range, combat_.tuning.breath_half_angle_deg,
+                   core::Vec3{1.0f, 0.88f, 0.60f}, core::Vec3{0.98f, 0.22f, 0.04f});
     }
 
     // Hostile flames: same construction as the player's, cool-tinted the way
     // hostile bolts are. The cone drawn is the cone that damages.
     for (const game::BreathCone& flame : combat_.hostile_breaths()) {
-        const float range = combat_.tuning.hostile_breath_range;
-        const float spread = std::tan(core::radians(combat_.tuning.hostile_breath_half_angle_deg));
-        for (int i = 1; i <= 16; ++i) {
-            const float t = float(i) / 16.0f;
-            const float flicker = 0.86f + 0.14f * std::sin(time_seconds_ * 24.0f + float(i) * 1.9f);
-            const core::Vec3 colour = core::lerp(core::Vec3{0.85f, 0.95f, 1.0f},
-                                                 core::Vec3{0.25f, 0.45f, 1.0f}, t * t);
-            draw_ball(flame.origin + flame.direction * (range * t),
-                      core::maxf(range * t * spread * 0.55f, 0.5f) * flicker, colour,
-                      2.2f * (1.0f - t) * (1.0f - t) + 0.4f, true);
-        }
+        draw_flame(flame.origin, flame.direction, combat_.tuning.hostile_breath_range,
+                   combat_.tuning.hostile_breath_half_angle_deg,
+                   core::Vec3{0.85f, 0.95f, 1.0f}, core::Vec3{0.25f, 0.45f, 1.0f});
+    }
+
+    // Impact explosions: a flash swelling into a cooling shell, then gone. The
+    // frame a shot connects is the frame the whole exchange is judged by.
+    for (const ImpactEffect& effect : effects_) {
+        const float life = 0.45f;
+        if (effect.age >= life) continue;
+        // A hit ON the player is told by the damage vignette and the flash; a
+        // ball glued to your own dragon in the chase view is just occlusion.
+        if (core::distance(effect.position, flight_.state().position) < 12.0f) continue;
+        const float t = effect.age / life;
+        // Tapered near the camera like the bolts: a burst beside the chase
+        // camera at full size is a wall, not an explosion.
+        const float near_taper = core::lerpf(
+            0.3f, 1.0f,
+            core::smoothstep(8.0f, 70.0f,
+                             core::distance(active_camera().position, effect.position)));
+        const float radius = core::lerpf(2.0f, effect.on_terrain ? 9.0f : 7.0f,
+                                         1.0f - (1.0f - t) * (1.0f - t)) *
+                             near_taper;
+        const core::Vec3 hot = effect.hostile ? core::Vec3{0.7f, 0.85f, 1.0f}
+                                              : core::Vec3{1.0f, 0.8f, 0.45f};
+        const core::Vec3 cool = effect.hostile ? core::Vec3{0.2f, 0.3f, 0.6f}
+                                               : core::Vec3{0.5f, 0.15f, 0.05f};
+        draw_ball(effect.position, radius, core::lerp(hot, cool, t),
+                  4.0f * (1.0f - t) * (1.0f - t) + 0.1f, true);
     }
 
     if (hit_marker_ > 0.0f) {

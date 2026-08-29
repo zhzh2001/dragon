@@ -239,6 +239,12 @@ screen-filling balloon that reads as a volley of different-sized projectiles.
 
 ## The match loop (M15)
 
+**Weapons-cold gating must precede everything that consumes the decision**: it
+once sat between the bot's fireball and its flame, gating one and not the
+other, and bots shot through the countdown. And a bot grounded for three
+seconds is written off as a crash -- wedged on a slope the flight model cannot
+take off from, the recovery reflex has had its fair window.
+
 `game::Match` is pure scorekeeping and phase logic -- it consumes CombatEvents
 and emits nothing but state, so the whole loop is testable without the app.
 Deathmatch: the player scores kills, hostiles score by killing the player,
