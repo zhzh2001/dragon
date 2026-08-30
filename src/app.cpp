@@ -433,6 +433,9 @@ void App::apply_camera_preset(int index) {
         case 2: chase_.tuning = game::camera_preset_cinematic(); break;
         default: chase_.tuning = game::camera_preset_chase(); break;
     }
+    // The boost FOV surge rides on top of whatever the preset chose, so the
+    // preset's own base is recorded here and re-applied each frame.
+    base_fov_ = chase_.tuning.fov_base_deg;
 }
 
 game::FlightInput App::read_flight_input() const {
@@ -765,6 +768,28 @@ void App::update(float dt) {
         if (events.had_hit) {
             hit_marker_ = 0.35f;
             hit_marker_position_ = events.last_hit;
+            // A burning target sheds embers continuously: breath damage has no
+            // projectile impact to detonate, and a white glow alone was not
+            // reading as "your flame is landing".
+            if (combat_.breathing()) {
+                for (int i = 0; i < 2; ++i) {
+                    gfx::Particle p;
+                    p.position = events.last_hit +
+                                 core::Vec3{particle_unit(), particle_unit(), particle_unit()} *
+                                     4.0f;
+                    p.velocity = core::Vec3{6.0f * particle_unit(),
+                                            8.0f + 5.0f * particle_unit(),
+                                            6.0f * particle_unit()};
+                    p.drag = 1.0f;
+                    p.life = 0.5f;
+                    p.size_start = 1.3f;
+                    p.size_end = 0.3f;
+                    p.color_start = core::Vec3{2.2f, 1.3f, 0.4f};
+                    p.color_end = core::Vec3{0.9f, 0.2f, 0.05f};
+                    p.brightness = 1.1f;
+                    particles_.spawn(p);
+                }
+            }
         }
         // Being INSIDE a flame is its own visual: embers swarming the body.
         // Damage numbers arrive silently, but fire crawling over your own
@@ -825,26 +850,46 @@ void App::update(float dt) {
     const bool boosting = combat_.boost_active();
     if (boosting && !was_boosting_) audio_.play(audio::Clip::Boost, 0.9f);
     if (boosting) {
+        // Air, not fire: pale slipstream threads peeling off the wingtips, and
+        // faint streaks rushing PAST the body -- the world moving, not the
+        // dragon burning. Flame-coloured boost read as being on fire.
         const game::FlightState& s = flight_.state();
         static float boost_carry = 0.0f;
-        boost_carry += dt * 90.0f;
+        boost_carry += dt * 140.0f;
+        const core::Vec3 pale{0.55f, 0.65f, 0.8f};
         while (boost_carry >= 1.0f) {
             boost_carry -= 1.0f;
             gfx::Particle p;
-            p.position = s.position - s.forward() * 6.0f +
-                         s.right() * (2.5f * particle_unit()) +
-                         s.up() * (1.5f * particle_unit());
-            p.velocity = s.velocity * 0.3f - s.forward() * 30.0f;
-            p.drag = 2.2f;
-            p.life = 0.5f;
-            p.size_start = 1.6f;
-            p.size_end = 0.3f;
-            p.color_start = core::Vec3{1.6f, 1.1f, 0.5f};
-            p.color_end = core::Vec3{0.5f, 0.3f, 0.9f};
-            p.brightness = 1.0f;
+            if ((particle_rng_ & 1u) == 0u) {
+                // Wingtip vortex thread.
+                const float side_sign = (particle_rng_ & 2u) ? 1.0f : -1.0f;
+                p.position = s.position + s.right() * (9.0f * side_sign) + s.up() * 1.0f;
+                p.velocity = s.velocity * 0.15f;
+                p.size_start = 0.7f;
+                p.size_end = 2.2f;
+            } else {
+                // Slipstream streak: born ahead and beside, swept backward fast
+                // so it rushes past the camera.
+                p.position = s.position + s.forward() * (30.0f + 20.0f * particle_unit()) +
+                             s.right() * (10.0f * particle_unit()) +
+                             s.up() * (7.0f * particle_unit());
+                p.velocity = s.velocity * 0.1f - s.forward() * 60.0f;
+                p.size_start = 0.5f;
+                p.size_end = 1.6f;
+            }
+            p.drag = 1.0f;
+            p.life = 0.55f;
+            p.color_start = pale;
+            p.color_end = pale * 0.3f;
+            p.brightness = 0.5f;
             particles_.spawn(p);
         }
     }
+    // The warp is mostly the lens: the field of view surges wide for the burn
+    // and eases back, smoothed by the camera's own fov lag.
+    const float fov_surge = boosting ? 14.0f : 0.0f;
+    boost_fov_ = core::damp(boost_fov_, fov_surge, 0.18f, dt);
+    chase_.tuning.fov_base_deg = base_fov_ + boost_fov_;
     was_boosting_ = boosting;
 
     particles_.update(dt);
@@ -1764,6 +1809,13 @@ void App::update_bots(float dt) {
         // Death and respawn ride Combat's timer; the app owns where the body
         // comes back and in what state.
         if (!slot.alive) {
+            if (bot->was_alive) {
+                // The moment of death, wherever it came from -- shot, flame,
+                // scrape or mountain.
+                const float d = core::distance(active_camera().position, slot.position);
+                audio_.play(audio::Clip::KnockOut, 1.1f / (1.0f + d * d / (260.0f * 260.0f)),
+                            0.82f + 0.08f * particle_unit());
+            }
             bot->was_alive = false;
             continue;
         }
@@ -1772,8 +1824,19 @@ void App::update_bots(float dt) {
             bot->last_health = slot.health;
         }
 
-        // Damage since last frame is the pilot's cue to jink.
-        if (slot.health < bot->last_health - 0.01f) bot->pilot.notify_hit();
+        // Damage since last frame is the pilot's cue to jink -- and to cry out.
+        // Bots run slightly deeper and varied, so a flight of them never
+        // chorusing in unison and the player's own cry stays distinct.
+        if (slot.health < bot->last_health - 0.01f) {
+            bot->pilot.notify_hit();
+            if (bot->hit_cry_cooldown <= 0.0f) {
+                const float d = core::distance(active_camera().position, slot.position);
+                audio_.play(audio::Clip::Screech, 0.9f / (1.0f + d * d / (240.0f * 240.0f)),
+                            0.8f + 0.1f * particle_unit());
+                bot->hit_cry_cooldown = 0.5f;
+            }
+        }
+        bot->hit_cry_cooldown = core::maxf(bot->hit_cry_cooldown - dt, 0.0f);
         bot->last_health = slot.health;
 
         const game::FlightState& self = bot->flight.state();
@@ -2798,7 +2861,11 @@ void App::render() {
         gfx::ModelUniforms bot_model;
         bot_model.model =
             core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
-        bot_model.tint = core::Vec4{1.0f, 0.72f, 0.66f, 0.10f + slot.hit_flash * 1.2f};
+        // The hit flash reddens rather than brightens: high emissive whitens
+        // through the tonemap, and a white flash was unreadable as damage.
+        bot_model.tint =
+            core::Vec4{1.0f, core::lerpf(0.72f, 0.25f, slot.hit_flash),
+                       core::lerpf(0.66f, 0.15f, slot.hit_flash), 0.10f + slot.hit_flash * 0.45f};
         world_.draw_skinned(device_, pass, dragon_mesh_, bot_model,
                             bot->rig.skinning_matrices(), dragon_textures_, model_sampler_);
     }

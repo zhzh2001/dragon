@@ -253,6 +253,17 @@ the fire), projectile ember trails, and impact bursts with upward splash on
 terrain. The damage cones and hitboxes are untouched -- particles are what the
 fight looks like, never what it is.
 
+**Boost is air, not fire**: pale slipstream threads off the wingtips, faint
+streaks rushing past the body, and a field-of-view surge that eases back
+through the camera's own fov lag -- the world moving, not the dragon burning
+(flame-coloured boost read as being on fire). The surge rides on top of
+whatever camera preset is active. **Bots cry too** -- the same screech and
+dying cry as the player, pitched deeper with per-bot variation so a flight
+never chorusing, faded by distance to the camera. A bot's hit flash **reddens
+rather than brightens** (high emissive whitens through the tonemap, and a
+white flash was unreadable as damage), and a target held in the breath sheds
+embers continuously, because breath has no projectile impact to detonate.
+
 **Flame reach is solved, not tuned**: launch speed is computed against drag so
 a puff's travel distance equals the damage range (v = d*k/(1-e^-kT)), because
 the flame's visible length is how the player judges reach. Being inside a

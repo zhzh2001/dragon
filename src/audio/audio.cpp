@@ -94,10 +94,11 @@ void Audio::synthesize_clips() {
     };
     screech(clips_[int(Clip::Screech)], 0.38f, 1350.0f, 750.0f, 1.0f);
 
-    // Knock-out: a longer, lower dying cry over a heavy body thump.
+    // Knock-out: a long, falling dying cry over a heavy body thump, with room
+    // to trail off -- a death should take a moment.
     {
         std::vector<float>& clip = clips_[int(Clip::KnockOut)];
-        screech(clip, 1.1f, 1000.0f, 240.0f, 1.1f);
+        screech(clip, 1.8f, 1050.0f, 190.0f, 1.1f);
         for (uint32_t i = 0; i < clip.size(); ++i) {
             const float t = float(i) / SAMPLE_RATE;
             clip[i] += 0.7f * std::sin(TWO_PI * 42.0f * t) * std::exp(-3.0f * t);
@@ -172,7 +173,7 @@ void Audio::shutdown() {
     ready_ = false;
 }
 
-void Audio::play(Clip clip, float gain) {
+void Audio::play(Clip clip, float gain, float rate) {
     if (!ready_ || gain < 0.01f) return;
     const std::vector<float>& samples = clips_[int(clip)];
     if (samples.empty()) return;
@@ -181,7 +182,8 @@ void Audio::play(Clip clip, float gain) {
     for (Voice& voice : voices_) {
         if (voice.active.load(std::memory_order_acquire)) continue;
         voice.samples = &samples;
-        voice.cursor = 0;
+        voice.cursor = 0.0f;
+        voice.rate = core::clampf(rate, 0.5f, 2.0f);
         voice.gain = core::minf(gain, 1.5f);
         voice.active.store(true, std::memory_order_release);
         return;
@@ -214,8 +216,9 @@ void Audio::mix(float* out, uint32_t frames) {
         float voices = 0.0f;
         for (Voice& voice : voices_) {
             if (!voice.active.load(std::memory_order_acquire)) continue;
-            voices += (*voice.samples)[voice.cursor] * voice.gain;
-            if (++voice.cursor >= voice.samples->size()) {
+            voices += (*voice.samples)[uint32_t(voice.cursor)] * voice.gain;
+            voice.cursor += voice.rate;
+            if (uint32_t(voice.cursor) >= voice.samples->size()) {
                 voice.active.store(false, std::memory_order_release);
             }
         }

@@ -180,6 +180,7 @@ private:
         bool grounded_last_frame = false;
         bool breathing = false;
         float grounded_time = 0.0f;
+        float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
     };
     std::vector<std::unique_ptr<BotShip>> bots_;
@@ -208,6 +209,8 @@ private:
     float previous_flap_phase_ = 0.0f;
     float hit_sound_cooldown_ = 0.0f;
     bool was_boosting_ = false;
+    float boost_fov_ = 0.0f;
+    float base_fov_ = 62.0f;
     // Deterministic jitter for the emitters.
     uint32_t particle_rng_ = 1u;
     float particle_unit();

@@ -33,7 +33,10 @@ public:
     void set_master(float volume) { master_.store(volume, std::memory_order_relaxed); }
     float master() const { return master_.load(std::memory_order_relaxed); }
 
-    void play(Clip clip, float gain);
+    // `rate` is playback speed: 1 is as synthesized, lower is deeper and
+    // slower. Cheap per-voice pitch, which is what makes one screech clip serve
+    // every dragon in the sky without them chorusing.
+    void play(Clip clip, float gain, float rate = 1.0f);
 
     // The mixer callback. Public only because the C callback trampoline needs
     // it; nothing else should call it.
@@ -45,7 +48,8 @@ private:
     struct Voice {
         std::atomic<bool> active{false};
         const std::vector<float>* samples = nullptr;
-        uint32_t cursor = 0;
+        float cursor = 0.0f;
+        float rate = 1.0f;
         float gain = 1.0f;
     };
 
