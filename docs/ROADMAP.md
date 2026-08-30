@@ -209,3 +209,23 @@ Per-milestone, run it and look at it — this is a game, so tests are the floor 
 
 The real gate is Phase 2: if Dragon Rally isn't fun, the flight model isn't finished, and no amount of
 combat will rescue it.
+
+
+---
+
+## Status check-in (2026-08-29)
+
+Everything through Phase 3 shipped, in a different order than planned and
+richer in places: the flight sandbox, Dragon Rally with ghosts, the real
+rigged dragon with physically based procedural animation (chains, pendulum
+legs, articulation limits, an animation studio for inspecting it), combat
+with sticky lock-on and honest aim assist, bot dragons flying the same flight
+model with an attack/extend/evade doctrine, the M15 match loop
+(countdown/fight/results/rematch), additive particle fire, and fully
+synthesized audio. Nine test suites guard it.
+
+Phase 4 remains open. Two tracks are on the table, written up in `RETRO.md`:
+the ranked gameplay list (loadouts, water, thermals, team matches, a boss-duel
+probe of the campaign question), and a D3D9-era retro port -- a new game for
+old GPUs -- whose first phase is an RHI extraction that is worth doing
+regardless.

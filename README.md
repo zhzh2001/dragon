@@ -7,10 +7,12 @@ because the lift vector tilts -- through a 5 km procedural valley, racing
 checkpoint courses against your own ghost and dogfighting bot dragons that fly
 the exact same flight model you do.
 
-Everything above the vendored foundations (SDL3, Dear ImGui, cgltf, stb_image)
-is written from scratch as a learning project: renderer, animation system,
-flight model, camera, AI, gameplay. See `CLAUDE.md` for the engineering log and
-conventions, and `ROADMAP.md` for where it is going.
+Everything above the vendored foundations (SDL3, Dear ImGui, cgltf, stb_image,
+miniaudio) is written from scratch as a learning project: renderer, animation
+system, flight model, camera, AI, gameplay, audio synthesis. See `CLAUDE.md`
+for the engineering log and conventions, `docs/ROADMAP.md` for the original
+plan, and `docs/RETRO.md` for the next frontier: porting the game to
+D3D9-class GPUs -- a new game for old hardware.
 
 ## Highlights
 
@@ -87,6 +89,7 @@ Headless verification, no human at the keyboard:
 ./build/dragon --headless --frames 300 --screenshot /tmp/shot.bmp
 ./build/dragon --headless --autopilot --course 1 --frames 4000   # fly a course
 ./build/dragon --headless --bots 3 --frames 7200                 # bot soak
+./build/dragon --headless --bots 2 --match --frames 7200         # match soak
 ./build/dragon --studio 5                                        # animation studio: dive
 ```
 
@@ -94,12 +97,16 @@ Headless verification, no human at the keyboard:
 
 ```
 src/core/    math, input, noise, logging
-src/gfx/     GPU device, pipeline cache + shader hot reload, renderer, shadows
+src/gfx/     GPU device, pipeline cache + shader hot reload, renderer,
+             shadows, additive particles
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
-src/game/    flight model, chase camera, terrain, rally, combat, bots, studio
+src/game/    flight model, chase camera, terrain, rally, combat, bots,
+             match loop, animation studio
+src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration
 shaders/     MSL, hot-reloaded from source
-tests/       eight suites, ~1000 checks
+tests/       nine suites, ~1100 checks
+docs/        ROADMAP.md (the plan), RETRO.md (the D3D9 port study)
 ```
 
 ## Licence

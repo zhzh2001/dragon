@@ -160,7 +160,10 @@ tests/       plain executables, no framework
 - **M7 (part)** additive billboard particles (fire, ember trails, impact
   bursts) and fully synthesized audio -- wind that brightens with speed, flame
   roar, wingbeat whooshes, shots, hits and explosions, no sound assets at all.
-- **Next:** loadouts (distinct ability sets), water, thermals, clouds.
+- **Next:** see `docs/RETRO.md` -- the ranked gameplay/visual list (loadouts,
+  water, thermals, team matches) and the D3D9-era port study. The port's first
+  phase (extracting an RHI from `src/gfx`) is a pure refactor that pays for
+  itself even if the port never ships.
 
 ## Combat
 
