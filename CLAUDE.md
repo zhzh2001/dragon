@@ -253,13 +253,25 @@ the fire), projectile ember trails, and impact bursts with upward splash on
 terrain. The damage cones and hitboxes are untouched -- particles are what the
 fight looks like, never what it is.
 
+**Flame reach is solved, not tuned**: launch speed is computed against drag so
+a puff's travel distance equals the damage range (v = d*k/(1-e^-kT)), because
+the flame's visible length is how the player judges reach. Being inside a
+hostile flame swarms embers over the player's own dragon -- the vignette says
+"damage", the fire crawling on you says "burning". The damage screech is
+rate-limited to one per 0.45 s: a flame deals damage every frame, and forty
+overlapping cries per second was the playtest's "strange loud flame".
+
 `audio::Audio` synthesizes every sound at init -- **no audio assets**, in the
 same spirit as the procedural terrain. Continuous streams (wind through a
 lowpass whose cutoff opens with airspeed, so a dive gets brighter rather than
 merely louder; flame noise with a slow crackle) are set by level each frame
 and smoothed at audio rate; one-shots (brown-noise explosion with a sub
-thump, filter-swept shot whoosh, damage ping, wingbeat) fire from a lock-free
-voice pool. Explosion loudness follows distance to the CAMERA -- the ear sits
+thump, filter-swept shot whoosh, a wounded-animal screech for damage and a
+longer dying one for the knock-out, a rising boost rush, wingbeat) fire from a
+lock-free voice pool. Output is stereo with independent noise per channel --
+identical channels collapse to mono in the head -- plus a gust LFO on the wind
+and sparse crackle pops on the flame, which is what separates fire from
+filtered static. Explosion loudness follows distance to the CAMERA -- the ear sits
 where the player does. A tanh soft-clip keeps a busy fight loud but never
 harsh. Master volume in the Engine panel; headless runs skip the device.
 

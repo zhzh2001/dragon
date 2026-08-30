@@ -69,16 +69,54 @@ void Audio::synthesize_clips() {
         }
     }
 
-    // Hit: a short low ping with a click of noise on the front. Felt more than
-    // heard, which is what taking damage should be.
-    {
-        std::vector<float>& clip = clips_[int(Clip::Hit)];
-        clip.resize(seconds(0.25f));
+    // Screech: a wounded-animal cry -- a pitch falling through harmonics with
+    // vibrato and breath noise. FM-ish synthesis, because a pure sine reads as
+    // a UI beep and taking a hit should sound like it happened to a creature.
+    auto screech = [&](std::vector<float>& clip, float duration, float f_start, float f_end,
+                       float loudness) {
+        clip.resize(seconds(duration));
+        float phase = 0.0f;
         for (uint32_t i = 0; i < clip.size(); ++i) {
             const float t = float(i) / SAMPLE_RATE;
-            const float ping = std::sin(TWO_PI * 95.0f * t) * std::exp(-14.0f * t);
-            const float click = synth_noise() * std::exp(-90.0f * t) * 0.5f;
-            clip[i] = 0.8f * (ping + click);
+            const float u = t / duration;
+            const float vibrato = 1.0f + 0.045f * std::sin(TWO_PI * 26.0f * t);
+            const float f = (f_start + (f_end - f_start) * u * u) * vibrato;
+            phase += TWO_PI * f / SAMPLE_RATE;
+            // A reedy waveform: fundamental plus strong odd harmonics.
+            float tone = std::sin(phase) + 0.55f * std::sin(2.0f * phase + 0.7f) +
+                         0.3f * std::sin(3.0f * phase);
+            // Breath: noise amplitude-modulated by the tone, which fuses them
+            // into one voice instead of a whistle plus static.
+            tone += synth_noise() * 0.25f * (0.5f + 0.5f * std::fabs(tone));
+            const float envelope = std::sin(3.14159f * core::minf(u * 1.2f, 1.0f));
+            clip[i] = loudness * 0.30f * tone * envelope;
+        }
+    };
+    screech(clips_[int(Clip::Screech)], 0.38f, 1350.0f, 750.0f, 1.0f);
+
+    // Knock-out: a longer, lower dying cry over a heavy body thump.
+    {
+        std::vector<float>& clip = clips_[int(Clip::KnockOut)];
+        screech(clip, 1.1f, 1000.0f, 240.0f, 1.1f);
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            clip[i] += 0.7f * std::sin(TWO_PI * 42.0f * t) * std::exp(-3.0f * t);
+        }
+    }
+
+    // Boost: a rush of air sweeping upward -- the filter opens instead of
+    // closing, which is what makes it read as acceleration.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Boost)];
+        clip.resize(seconds(0.7f));
+        float lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            const float u = t / 0.7f;
+            const float cutoff = 0.04f + 0.30f * u;
+            lp += (synth_noise() - lp) * cutoff;
+            const float envelope = std::sin(3.14159f * core::minf(u * 1.1f, 1.0f));
+            clip[i] = 0.85f * lp * envelope * (1.0f + 0.5f * u);
         }
     }
 
@@ -102,7 +140,7 @@ bool Audio::init() {
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format = ma_format_f32;
-    config.playback.channels = 1;
+    config.playback.channels = 2;
     config.sampleRate = SAMPLE_RATE;
     config.dataCallback = data_callback;
     config.pUserData = this;
@@ -156,40 +194,61 @@ void Audio::mix(float* out, uint32_t frames) {
     const float flame_target = flame_target_.load(std::memory_order_relaxed);
 
     for (uint32_t i = 0; i < frames; ++i) {
-        // Smooth the control levels at audio rate: per-frame game updates would
-        // otherwise zipper.
         wind_level_ += (wind_target - wind_level_) * 0.0004f;
         flame_level_ += (flame_target - flame_level_) * 0.002f;
 
-        noise_state_ ^= noise_state_ << 13;
-        noise_state_ ^= noise_state_ >> 17;
-        noise_state_ ^= noise_state_ << 5;
-        const float noise = float(noise_state_ & 0xffffffu) / float(0x7fffff) - 1.0f;
-
-        // Wind: noise through a one-pole lowpass whose cutoff opens with speed.
-        // Faster flight is not just louder, it is brighter -- that is what makes
-        // a dive audibly build.
-        const float wind_cutoff = 0.02f + 0.12f * wind_level_;
-        wind_lp_ += (noise - wind_lp_) * wind_cutoff;
-        float sample = wind_lp_ * wind_level_ * wind_level_ * 1.6f;
-
-        // Flame: darker noise with a slow crackle wobble under it.
+        // A slow gust LFO on top of the commanded level: steady wind sounds
+        // like a fan, gusting wind sounds like weather.
+        gust_phase_ += TWO_PI * 0.23f / SAMPLE_RATE;
+        const float gust = 1.0f + 0.22f * std::sin(gust_phase_) *
+                                      std::sin(gust_phase_ * 2.7f + 1.3f);
         flame_phase_ += TWO_PI * 31.0f / SAMPLE_RATE;
-        flame_lp_ += (noise - flame_lp_) * 0.05f;
-        sample += flame_lp_ * flame_level_ *
-                  (0.7f + 0.3f * std::sin(flame_phase_)) * 0.9f;
 
-        // One-shots.
+        // Flame crackle: sparse random pops held for a few samples, gated by
+        // the flame level. This is what separates fire from filtered static.
+        if (crackle_hold_ > 0.0f) {
+            crackle_hold_ -= 1.0f;
+        }
+
+        // One-shots are mono, mixed to both ears.
+        float voices = 0.0f;
         for (Voice& voice : voices_) {
             if (!voice.active.load(std::memory_order_acquire)) continue;
-            sample += (*voice.samples)[voice.cursor] * voice.gain;
+            voices += (*voice.samples)[voice.cursor] * voice.gain;
             if (++voice.cursor >= voice.samples->size()) {
                 voice.active.store(false, std::memory_order_release);
             }
         }
 
-        // Soft clip: a saturating tanh keeps a busy fight loud but never harsh.
-        out[i] = std::tanh(sample * master);
+        for (int channel = 0; channel < 2; ++channel) {
+            uint32_t& rng = noise_state_[channel];
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            const float noise = float(rng & 0xffffffu) / float(0x7fffff) - 1.0f;
+
+            // Wind, two layers per ear: a bright hiss whose cutoff opens with
+            // speed (a dive gets brighter, not merely louder) over a low
+            // buffet rumble. Independent noise per channel is what makes it
+            // wide; identical channels collapse to mono in the head.
+            const float wind = wind_level_ * gust;
+            const float hiss_cutoff = 0.02f + 0.13f * wind;
+            wind_lp_[channel] += (noise - wind_lp_[channel]) * hiss_cutoff;
+            wind_rumble_[channel] += (noise - wind_rumble_[channel]) * 0.006f;
+            float sample = wind_lp_[channel] * wind * wind * 1.5f +
+                           wind_rumble_[channel] * wind * 2.2f;
+
+            // Flame: dark roaring noise with a slow wobble and crackle pops.
+            flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.05f;
+            float flame = flame_lp_[channel] * (0.7f + 0.3f * std::sin(flame_phase_));
+            if (channel == 0 && flame_level_ > 0.05f && (rng & 0x3ffu) == 0u) {
+                crackle_hold_ = 90.0f;  // ~2 ms pop
+            }
+            if (crackle_hold_ > 0.0f) flame += noise * 0.6f;
+            sample += flame * flame_level_ * 0.9f;
+
+            out[i * 2 + channel] = std::tanh((sample + voices) * master);
+        }
     }
 }
 

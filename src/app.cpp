@@ -766,19 +766,87 @@ void App::update(float dt) {
             hit_marker_ = 0.35f;
             hit_marker_position_ = events.last_hit;
         }
+        // Being INSIDE a flame is its own visual: embers swarming the body.
+        // Damage numbers arrive silently, but fire crawling over your own
+        // dragon in the chase view is unmistakable.
+        for (const game::BreathCone& cone : combat_.hostile_breaths()) {
+            if (!game::point_in_cone(flight_.state().position, cone.origin, cone.direction,
+                                     core::radians(combat_.tuning.hostile_breath_half_angle_deg),
+                                     combat_.tuning.hostile_breath_range)) {
+                continue;
+            }
+            const game::FlightState& s = flight_.state();
+            for (int i = 0; i < 3; ++i) {
+                gfx::Particle p;
+                p.position = s.position + core::Vec3{particle_unit(), particle_unit(),
+                                                     particle_unit()} *
+                                              5.0f;
+                p.velocity = s.velocity * 0.6f +
+                             core::Vec3{particle_unit(), 6.0f + 4.0f * particle_unit(),
+                                        particle_unit() * 4.0f};
+                p.drag = 1.2f;
+                p.life = 0.45f;
+                p.size_start = 1.2f;
+                p.size_end = 0.3f;
+                p.color_start = core::Vec3{2.0f, 1.2f, 0.4f};
+                p.color_end = core::Vec3{0.9f, 0.2f, 0.05f};
+                p.brightness = 1.1f;
+                particles_.spawn(p);
+            }
+        }
+
         if (events.damage_taken > 0.0f) {
-            audio_.play(audio::Clip::Hit, 0.9f);
+            // Rate-limited: a flame deals damage every frame, and forty
+            // overlapping cries per second was the "strange loud flame" of the
+            // playtest. One screech, then a beat before the next.
+            if (hit_sound_cooldown_ <= 0.0f) {
+                audio_.play(audio::Clip::Screech, 0.85f);
+                hit_sound_cooldown_ = 0.45f;
+            }
             damage_flash_ = 1.0f;
             // Held well past the flash: the point is to let the player turn and
             // find the shooter, which takes longer than the hit registers.
             damage_direction_ = events.damage_from;
             damage_marker_ = 3.0f;
         }
-        if (events.player_died) respawn_dragon();
+        if (events.player_died) {
+            audio_.play(audio::Clip::KnockOut, 1.0f);
+            respawn_dragon();
+        }
     }
     hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
     damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
+    hit_sound_cooldown_ = core::maxf(hit_sound_cooldown_ - dt, 0.0f);
+
+    // Boost: a rising rush on activation, and a wake of hot streaks while the
+    // thrust lasts -- with the sound and particles both keyed to the same flag
+    // the flight model reads, they can never disagree with the physics.
+    const bool boosting = combat_.boost_active();
+    if (boosting && !was_boosting_) audio_.play(audio::Clip::Boost, 0.9f);
+    if (boosting) {
+        const game::FlightState& s = flight_.state();
+        static float boost_carry = 0.0f;
+        boost_carry += dt * 90.0f;
+        while (boost_carry >= 1.0f) {
+            boost_carry -= 1.0f;
+            gfx::Particle p;
+            p.position = s.position - s.forward() * 6.0f +
+                         s.right() * (2.5f * particle_unit()) +
+                         s.up() * (1.5f * particle_unit());
+            p.velocity = s.velocity * 0.3f - s.forward() * 30.0f;
+            p.drag = 2.2f;
+            p.life = 0.5f;
+            p.size_start = 1.6f;
+            p.size_end = 0.3f;
+            p.color_start = core::Vec3{1.6f, 1.1f, 0.5f};
+            p.color_end = core::Vec3{0.5f, 0.3f, 0.9f};
+            p.brightness = 1.0f;
+            particles_.spawn(p);
+        }
+    }
+    was_boosting_ = boosting;
+
     particles_.update(dt);
 
     // ---- ears ----
@@ -1819,24 +1887,31 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
     // Spawn rate in particles per second, integrated so frame rate does not
     // change the flame's density.
     static float carry = 0.0f;
-    carry += dt * 160.0f;
+    carry += dt * 260.0f;
     const core::Vec3 hot = hostile ? core::Vec3{1.3f, 1.7f, 2.2f} : core::Vec3{2.2f, 1.5f, 0.7f};
     const core::Vec3 cool = hostile ? core::Vec3{0.2f, 0.4f, 1.0f} : core::Vec3{1.0f, 0.25f, 0.04f};
+    // Launch speed solved against drag so a puff's travel equals the damage
+    // range: with velocity decaying as e^(-kt), distance = v(1-e^(-kT))/k.
+    // The flame's visible length IS its reach, which is how the player judges
+    // whether a target is in it.
+    const float drag = 1.4f;
+    const float life = 1.3f;
+    const float speed_for_range = range * drag / (1.0f - std::exp(-drag * life));
     while (carry >= 1.0f) {
         carry -= 1.0f;
-        const float speed = range / 1.4f * (0.85f + 0.3f * particle_unit());
+        const float speed = speed_for_range * (1.0f + 0.08f * particle_unit());
         gfx::Particle p;
         p.position = origin + direction * (2.0f + particle_unit());
         p.velocity = direction * speed + (side * particle_unit() + lift * particle_unit()) *
-                                              (speed * 0.12f);
-        p.acceleration = core::Vec3{0.0f, 9.0f, 0.0f};  // buoyancy
-        p.drag = 1.4f;
-        p.life = 1.2f + 0.4f * particle_unit();
-        p.size_start = 1.1f;
+                                              (speed * 0.10f);
+        p.acceleration = core::Vec3{0.0f, 7.0f, 0.0f};  // buoyancy
+        p.drag = drag;
+        p.life = life * (1.0f + 0.08f * particle_unit());
+        p.size_start = 2.0f;
         p.size_end = 5.5f;
         p.color_start = hot;
         p.color_end = cool;
-        p.brightness = 1.0f;
+        p.brightness = 0.85f;
         particles_.spawn(p);
     }
 }

@@ -13,7 +13,9 @@ namespace audio {
 enum class Clip : int {
     Explosion = 0,
     Shot,
-    Hit,
+    Screech,   // taking a hit: a wounded-animal cry, not a UI ping
+    KnockOut,  // going down: a long dying cry over a heavy thump
+    Boost,     // a rising rush of air
     Flap,
     Count,
 };
@@ -55,13 +57,18 @@ private:
     std::atomic<float> flame_target_{0.0f};
     std::atomic<float> master_{0.6f};
 
-    // Mixer-thread state (only touched inside mix()).
+    // Mixer-thread state (only touched inside mix()). Wind and flame carry a
+    // filter per channel with independent noise, which is what makes the sound
+    // wide: identical channels collapse to mono in the head.
     float wind_level_ = 0.0f;
     float flame_level_ = 0.0f;
-    float wind_lp_ = 0.0f;
-    float flame_lp_ = 0.0f;
+    float wind_lp_[2] = {0.0f, 0.0f};
+    float wind_rumble_[2] = {0.0f, 0.0f};
+    float flame_lp_[2] = {0.0f, 0.0f};
+    float gust_phase_ = 0.0f;
     float flame_phase_ = 0.0f;
-    uint32_t noise_state_ = 0x1234567u;
+    float crackle_hold_ = 0.0f;
+    uint32_t noise_state_[2] = {0x1234567u, 0x89abcdefu};
 
     void* device_ = nullptr;  // ma_device*, kept opaque to spare every includer
     bool ready_ = false;

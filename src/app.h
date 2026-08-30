@@ -206,6 +206,8 @@ private:
     // Edge detection for the sounds tied to state transitions.
     float previous_fire_cooldown_ = 0.0f;
     float previous_flap_phase_ = 0.0f;
+    float hit_sound_cooldown_ = 0.0f;
+    bool was_boosting_ = false;
     // Deterministic jitter for the emitters.
     uint32_t particle_rng_ = 1u;
     float particle_unit();
