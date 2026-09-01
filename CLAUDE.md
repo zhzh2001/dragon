@@ -21,6 +21,8 @@ Useful flags:
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
+| `--inspect [angle] [dist]` | Orbit camera locked to the dragon; add `--inspect-head` to orbit the animated head instead (jaw, aim). |
+| `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb`. |
 
 `--combat` arms the dragon and spawns a wave; `--attack` also holds breath and
 fires, which is how the flame and the projectiles get onto a screenshot.
@@ -292,6 +294,10 @@ harsh. Master volume in the Engine panel; headless runs skip the device.
 Every ImGui window except Combat starts **collapsed** -- one click away, not
 hidden, but the screen belongs to the game.
 
+Bots cycle through four body tints (warm red, rust, ash, violet) so a flight
+is not four copies of one dragon, and their fire leaves the animated head like
+the player's.
+
 ## The match loop (M15)
 
 **Weapons-cold gating must precede everything that consumes the decision**: it
@@ -534,6 +540,61 @@ that same curve, so a scenario cannot lie about its own rotation and every
 physically based response reacts exactly as it would in flight. Nothing
 downstream of the rig reads position kinematics, so pinning the position is
 safe. Combat, rally and the HUD idle while the studio is up.
+
+### One frame: the rig works in model space, and the model may face +Z
+
+**Every world quantity the rig reads arrives in the engine's body frame
+(forward -Z) and every bone lives in model space, and this asset faces +Z in
+its own space** (the app yaws it 180 to fly). For a long time the rig applied
+engine-frame gravity, airflow, pseudo-forces and the aim target straight to
+model-space bones. On the generated rig the frames coincide, so every test
+passed; on the real dragon it silently inverted the fore-aft axis: pitch
+steering worked backwards (nose-up input LOWERED the head), the brake surge
+pushed the neck the wrong way (the "neck buckles under the chest" saga was
+this), the tail was upstream of its own airflow so the v^2 drag never acted on
+it, and the head aim reared the head 50 degrees UP and turned it the wrong way
+when locked on. `DragonRig` now measures which way the model faces from the
+bind pose (head forward of tail, the same rule the app uses) and carries one
+rotation, `body_to_model_`, across everything; `model_frame()` re-expresses
+the FlightState so `conj(orientation)` lands in model space. Sign-bearing
+constants (sweep aft, washout, roll lean, leg trail, foot hang) are written in
+engine terms and multiplied by the measured facing. **When a generated test
+rig and an imported asset disagree, suspect the frame before the physics** --
+and probe the imported asset numerically (load the glb in a test binary), not
+just the generated one.
+
+Two more asset-facing traps found the same day. **The per-vertebra bend limit
+must be relative to the rest shape**: this neck's vertebrae sit at 27-29
+degrees to each other at rest, so an absolute 20-degree limit straightened
+the neck permanently and clamped away most of any steer -- the "stiff neck no
+slider could fix". And **measure the jaw's tip as the most forward descendant,
+not the deepest**: the deepest bone under the jaw is the tongue, which points
+back into the mouth, and the measured open direction came out inverted.
+
+### Attack and speed posture
+
+The rig takes a `RigAction` (breath 0..1, fire edge, boost) each frame from
+combat, the bots, or the studio. **Fire from a closed, still mouth reads as a
+particle effect stapled to a model**; the jaw, the neck and the claws are what
+say the creature is doing it. The jaw (`Bone_024` here -- found as the parent
+of the lower lip when nothing is named "jaw") opens with the breath and gapes
+and shuts on a spit; the neck **thrusts forward and down** into the flame,
+stiffens (`breath_neck_tone`) and trembles faintly on the head only, after the
+aim so the aim cannot correct it away; the **spit rears the neck back and
+whips it forward** through the same spring as everything else, helped by a
+velocity impulse and a 7x stiffness for the gesture, because a steer alone
+asks an overdamped neck to move through its spring and a spit is a snap. The
+**neck carries a share of the aim** (`neck_aim_share`), curling toward the
+lock through the spring while the head snaps the residual -- an animal looking
+40 degrees off its body turns its whole neck. Talons open while breathing.
+
+Speed shapes the wing on its own: past cruise the wings **sweep back and
+part-fold** whether or not the tuck is held (`speed_sweep_deg`, blending into
+the full tuck angles), the outer membrane **flutters** with the square of a
+speed factor so cruise is calm and a dive is alive, a flare **buffets**, and
+under g the tips **wash out** and the wings come a little forward. The studio's
+Attack scenario now spits and breathes on an 8 s schedule and Dive releases the
+tuck halfway through its cycle, so both can be watched on loop.
 
 ### Flight response: the active posture layer
 

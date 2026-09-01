@@ -1,5 +1,6 @@
 #pragma once
 
+#include "anim/dragon_rig.h"
 #include "game/flight.h"
 
 namespace game {
@@ -38,5 +39,11 @@ FlightState studio_state(StudioScenario scenario, float t, core::Vec3 centre, fl
 
 // Where the attack scenario's target orbits, for the head aim.
 core::Vec3 studio_attack_target(float t, core::Vec3 centre);
+
+// What the dragon does with its weapons over the interval (previous, t]: the
+// attack scenario holds its breath and spits on a schedule, so the jaw, the
+// recoil and the talons can be watched on loop. The fire flag is an edge and
+// needs the previous time to be detected.
+anim::RigAction studio_action(StudioScenario scenario, float previous, float t);
 
 }  // namespace game

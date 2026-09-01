@@ -30,9 +30,10 @@ D3D9-class GPUs -- a new game for old hardware.
 - **Physically based animation** -- an imported rigged dragon driven by
   procedural animation: inertial neck and tail chains with muscle tone and
   articulation limits, pendulum legs that trail in flight, wings that bow under
-  g-load and flex through the upstroke, and a ground-idle clip that fades as
-  flight gets violent. An in-game **animation studio** plays scripted,
-  dynamically consistent manoeuvres on a pinned dragon for inspection.
+  g-load, sweep back and flutter with speed, a jaw that gapes on the flame and
+  a neck that rears on the spit, and a ground-idle clip that fades as flight
+  gets violent. An in-game **animation studio** plays scripted, dynamically
+  consistent manoeuvres on a pinned dragon for inspection.
 - **Hot-reloaded Metal shaders**, reversed-Z depth, cascade-free directional
   shadows, PBR texturing with normal and ORM maps, additive particle fire.
 - **Synthesized audio** -- wind that brightens with speed, flame roar, wingbeat
@@ -91,6 +92,7 @@ Headless verification, no human at the keyboard:
 ./build/dragon --headless --bots 3 --frames 7200                 # bot soak
 ./build/dragon --headless --bots 2 --match --frames 7200         # match soak
 ./build/dragon --studio 5                                        # animation studio: dive
+./build/dragon --studio 8 --inspect 90 4.5 --inspect-head        # attack, camera on the head
 ```
 
 ## Layout

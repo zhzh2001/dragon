@@ -4,6 +4,7 @@
 // transposed multiply produces a mesh that is *nearly* right, or one that
 // explodes only when a particular joint rotates. These pin the properties that
 // make the whole thing trustworthy.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -578,6 +579,7 @@ void test_head_aims_at_a_target() {
     anim::DragonRig limited;
     limited.init(skeleton, joints);
     limited.tuning.head_aim_max_deg = 25.0f;
+    limited.tuning.neck_aim_share = 0.0f;  // the neck's share is tested separately
     for (int i = 0; i < 30; ++i) limited.update(state, 1.0f / 60.0f);
     const Vec3 limited_rest = head_direction(limited);
     for (int i = 0; i < 120; ++i) {
@@ -767,6 +769,215 @@ void test_idle_clip_fades_with_intensity() {
     CHECK(head_deflection(grounded) > 30.0f);
 }
 
+// The neck carries part of the aim: an animal looking well off its body turns
+// the whole neck and finishes with the head. The tell is the neck's base-to-head
+// line, which a head-only aim would never move.
+void test_neck_shares_the_aim() {
+    std::printf("the neck carries a share of the aim\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState state;
+    state.velocity = Vec3{0.0f, 0.0f, -40.0f};
+
+    auto neck_line = [&](anim::DragonRig& r) {
+        const Vec3 base = r.world_matrices()[size_t(joints.neck.front())].col[3].xyz();
+        const Vec3 head = r.world_matrices()[size_t(joints.head)].col[3].xyz();
+        return normalize(head - base);
+    };
+
+    anim::DragonRig head_only;
+    head_only.init(skeleton, joints);
+    head_only.tuning.neck_aim_share = 0.0f;
+    anim::DragonRig shared;
+    shared.init(skeleton, joints);
+    shared.tuning.neck_aim_share = 0.6f;
+
+    // Target 50 degrees to the left of the nose (toward -X, forward is -Z).
+    const Vec3 target = state.position + Vec3{-153.0f, 0.0f, -129.0f};
+    for (int i = 0; i < 180; ++i) {
+        head_only.set_aim_target(target);
+        head_only.update(state, 1.0f / 60.0f);
+        shared.set_aim_target(target);
+        shared.update(state, 1.0f / 60.0f);
+    }
+    // The shared neck's line swings toward the target; the head-only neck's
+    // line barely moves (the chain sim has no reason to).
+    CHECK(neck_line(shared).x < -0.15f);
+    CHECK(neck_line(shared).x < neck_line(head_only).x - 0.1f);
+
+    // Let go and it comes back.
+    for (int i = 0; i < 240; ++i) shared.update(state, 1.0f / 60.0f);
+    CHECK(std::fabs(neck_line(shared).x) < 0.08f);
+}
+
+// The mouth is what says the creature is doing it: the jaw opens on the
+// breath, gapes and shuts on a spit, and the spit rears the neck back.
+void test_attack_posture() {
+    std::printf("jaw opens on breath and spit, spit recoils the neck\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    CHECK(joints.jaw != anim::NO_PARENT);
+
+    game::FlightState state;
+    state.velocity = Vec3{0.0f, 0.0f, -35.0f};
+
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    // Jaw tip in model space: the deepest joint under the jaw.
+    int tip = joints.jaw;
+    for (int i = 0; i < skeleton.count(); ++i) {
+        if (skeleton.joint(i).parent == joints.jaw) tip = i;
+    }
+    // The jaw's opening, as the tip's drop below the head -- relative, so the
+    // neck's own motion (the breath thrusts it) does not leak into the
+    // measurement.
+    auto tip_drop = [&](anim::DragonRig& r) {
+        return r.world_matrices()[size_t(joints.head)].col[3].y -
+               r.world_matrices()[size_t(tip)].col[3].y;
+    };
+    // And the jaw joint's own rotation away from bind, in degrees.
+    auto jaw_angle = [&](anim::DragonRig& r) {
+        const Quat posed = r.pose().local[size_t(joints.jaw)].rotation;
+        const Quat bind = skeleton.joint(joints.jaw).local_bind.rotation;
+        return degrees(2.0f * std::acos(clampf(std::fabs(dot(posed, bind)), -1.0f, 1.0f)));
+    };
+    auto head_y = [&](anim::DragonRig& r) {
+        return r.world_matrices()[size_t(joints.head)].col[3].y;
+    };
+
+    for (int i = 0; i < 60; ++i) rig.update(state, 1.0f / 60.0f);
+    const float closed_drop = tip_drop(rig);
+    const float head_rest = head_y(rig);
+    CHECK(rig.jaw_open() < 0.01f);
+    CHECK(jaw_angle(rig) < 0.5f);
+
+    // Breath: the jaw opens (tip drops) by the tuned angle and stays open.
+    anim::RigAction breathe;
+    breathe.breath = 1.0f;
+    rig.set_action(breathe);
+    for (int i = 0; i < 60; ++i) rig.update(state, 1.0f / 60.0f);
+    CHECK(rig.jaw_open() > 0.9f);
+    CHECK(tip_drop(rig) > closed_drop + 0.1f);
+    CHECK(std::fabs(jaw_angle(rig) - rig.tuning.jaw_open_deg) < 3.0f);
+
+    // Release: it shuts again.
+    rig.set_action(anim::RigAction{});
+    for (int i = 0; i < 90; ++i) rig.update(state, 1.0f / 60.0f);
+    CHECK(rig.jaw_open() < 0.05f);
+    CHECK(jaw_angle(rig) < 1.5f);
+
+    // Spit: one edge. The jaw gapes then shuts within the gesture, and the
+    // neck rears back (head rises) before settling.
+    anim::RigAction spit;
+    spit.fire = true;
+    rig.set_action(spit);
+    float peak_open = 0.0f;
+    float peak_head = head_rest;
+    for (int i = 0; i < 12; ++i) {
+        rig.update(state, 1.0f / 60.0f);
+        peak_open = std::max(peak_open, rig.jaw_open());
+        peak_head = std::max(peak_head, head_y(rig));
+    }
+    CHECK(peak_open > 0.8f);
+    // The edge is consumed: a second update with the same stored action must
+    // not fire again.
+    CHECK(!rig.action().fire);
+    for (int i = 0; i < 20; ++i) {
+        rig.update(state, 1.0f / 60.0f);
+        peak_head = std::max(peak_head, head_y(rig));
+    }
+    CHECK(peak_head > head_rest + 0.03f);
+    (void)closed_drop;
+    CHECK(rig.jaw_open() < 0.05f);
+    for (int i = 0; i < 120; ++i) rig.update(state, 1.0f / 60.0f);
+    CHECK(std::fabs(head_y(rig) - head_rest) < 0.05f);
+}
+
+// Speed shapes the wing on its own: past cruise the tips sweep aft even with
+// no tuck held -- the same way the tuck sweeps them -- and the membrane
+// flutters. Cruise stays dead calm.
+void test_speed_posture() {
+    std::printf("wings sweep with speed and the tips flutter in a dive\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    // A point out on the membrane beyond the last finger joint, so the joint's
+    // own rotation (flutter, twist) moves it -- a joint's origin is only moved
+    // by its ancestors.
+    const int wingtip = joints.wing_fingers[0].back().back();
+    const Vec3 membrane = skeleton.world_bind(wingtip).translation_part() + Vec3{2.0f, 0.0f, 0.0f};
+    auto tip_of = [&](anim::DragonRig& r) {
+        return transform_point(r.skinning_matrices()[size_t(wingtip)], membrane);
+    };
+    auto fly = [&](anim::DragonRig& r, float speed, float tuck, int frames) {
+        game::FlightState s;
+        s.velocity = Vec3{0.0f, 0.0f, -speed};
+        s.airspeed = speed;
+        s.wing_angle = radians(9.0f);
+        s.wing_tuck = tuck;
+        for (int i = 0; i < frames; ++i) r.update(s, 1.0f / 60.0f);
+    };
+
+    anim::DragonRig cruise;
+    cruise.init(skeleton, joints);
+    fly(cruise, 30.0f, 0.0f, 60);
+    const Vec3 cruise_tip = tip_of(cruise);
+    fly(cruise, 30.0f, 0.0f, 1);
+    // Calm at cruise: consecutive frames agree.
+    CHECK(near(tip_of(cruise), cruise_tip, 1e-3f));
+
+    anim::DragonRig tucked;
+    tucked.init(skeleton, joints);
+    fly(tucked, 30.0f, 1.0f, 120);
+    const Vec3 tucked_tip = tip_of(tucked);
+    // The tuck sweeps AFT: the generated rig faces -Z, so aft is +Z.
+    CHECK(tucked_tip.z > cruise_tip.z + 1.0f);
+
+    anim::DragonRig dive;
+    dive.init(skeleton, joints);
+    dive.tuning.flutter_deg = 0.0f;  // steady, for the sweep measurement
+    fly(dive, 95.0f, 0.0f, 120);
+    const Vec3 dive_tip = tip_of(dive);
+    // Speed alone sweeps the same way as the tuck, part of the way.
+    const float tuck_sweep = tucked_tip.z - cruise_tip.z;
+    const float speed_sweep = dive_tip.z - cruise_tip.z;
+    CHECK(speed_sweep > 0.15f * tuck_sweep);
+    CHECK(speed_sweep < 0.9f * tuck_sweep);
+
+    // And alive: with the flutter on, the membrane moves between frames at
+    // speed.
+    anim::DragonRig alive;
+    alive.init(skeleton, joints);
+    fly(alive, 95.0f, 0.0f, 120);
+    float travel = 0.0f;
+    Vec3 previous = tip_of(alive);
+    for (int i = 0; i < 30; ++i) {
+        fly(alive, 95.0f, 0.0f, 1);
+        travel += length(tip_of(alive) - previous);
+        previous = tip_of(alive);
+    }
+    CHECK(travel > 0.05f);
+
+    // With the speed posture dialled to zero, speed changes nothing.
+    anim::DragonRig still;
+    still.init(skeleton, joints);
+    still.tuning.speed_sweep_deg = 0.0f;
+    still.tuning.speed_fold_deg = 0.0f;
+    still.tuning.flutter_deg = 0.0f;
+    fly(still, 95.0f, 0.0f, 120);
+    CHECK(near(tip_of(still), cruise_tip, 0.05f));
+}
+
 // The studio's one promise: its states are dynamically consistent, so the rig
 // reacts exactly as it would in flight. A scenario whose angular velocity did
 // not match its own orientation curve would exercise the chains with forces
@@ -906,6 +1117,9 @@ int main() {
     test_body_responds_to_control_input();
     test_wings_carry_the_load();
     test_idle_clip_fades_with_intensity();
+    test_neck_shares_the_aim();
+    test_attack_posture();
+    test_speed_posture();
     test_studio_states_are_consistent();
     test_legs_swing_with_the_frame();
 

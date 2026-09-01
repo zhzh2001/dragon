@@ -610,6 +610,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
             player.velocity + fireball_direction(player) * tuning.fireball_speed;
         fire_projectile(muzzle(player), velocity, tuning.fireball_damage,
                         tuning.fireball_radius, tuning.fireball_blast_radius, Team::Player);
+        events.fired = true;
     }
 
     // ---- boost ----

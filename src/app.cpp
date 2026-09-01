@@ -33,6 +33,8 @@ Options parse_options(int argc, char** argv) {
             else LOG_WARN("--cam-mode expects chase|action|cinematic|fp");
         } else if (arg == "--course" && i + 1 < argc) {
             options.course_index = SDL_atoi(argv[++i]);
+        } else if (arg == "--model" && i + 1 < argc) {
+            options.model = argv[++i];
         } else if (arg == "--bind-pose") {
             options.bind_pose = true;
         } else if (arg == "--inspect") {
@@ -43,6 +45,8 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.inspect_distance = float(SDL_atof(argv[++i]));
             }
+        } else if (arg == "--inspect-head") {
+            options.inspect_head = true;
         } else if (arg == "--studio" && i + 1 < argc) {
             options.studio_scenario = SDL_atoi(argv[++i]);
         } else if (arg == "--combat") {
@@ -112,8 +116,10 @@ bool App::init(const Options& options) {
         // driven the same way either way -- it only needs to know which joints
         // form the neck, tail and wings, and map_dragon_joints works that out
         // from an arbitrary skeleton.
+        const std::string model_path =
+            options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model;
         const anim::GltfLoadResult loaded =
-            anim::load_skinned_gltf(ASSET_ROOT "/dragon.glb", dragon_skeleton_, mesh_data);
+            anim::load_skinned_gltf(model_path.c_str(), dragon_skeleton_, mesh_data);
         if (loaded.ok) {
             dragon_joints_ = anim::map_dragon_joints(dragon_skeleton_);
             using_imported_dragon_ = dragon_joints_.valid();
@@ -128,7 +134,7 @@ bool App::init(const Options& options) {
             anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
             dragon_source_ = "generated";
         } else {
-            dragon_source_ = "assets/dragon.glb";
+            dragon_source_ = options_.model.empty() ? "assets/dragon.glb" : options_.model;
             // Scale so the wingspan matches what the flight model assumes, and
             // recentre, because an asset's origin is wherever its author left it
             // -- this one sits over a hundred units from its own geometry. Both
@@ -664,7 +670,9 @@ void App::update(float dt) {
     // at it -- otherwise you cannot inspect a manoeuvre from outside.
     flight_.update(read_flight_input(), &terrain_, dt);
 
+    rig_action_ = anim::RigAction{};
     if (studio_active_) {
+        studio_time_previous_ = studio_time_;
         studio_time_ += dt * studio_time_scale_;
         const auto scenario = game::StudioScenario(studio_scenario_);
         const float ground = terrain_.height_at(studio_centre_.x, studio_centre_.z);
@@ -672,6 +680,7 @@ void App::update(float dt) {
         if (scenario == game::StudioScenario::Attack) {
             dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
         }
+        rig_action_ = game::studio_action(scenario, studio_time_previous_, studio_time_);
     }
 
     chase_.update(dragon_state(), &terrain_, read_free_look(dt), dt);
@@ -689,7 +698,18 @@ void App::update(float dt) {
                                                core::Vec3{std::sin(angle) * options_.inspect_distance,
                                                           options_.inspect_distance * 0.25f,
                                                           std::cos(angle) * options_.inspect_distance});
-        camera_.set_position(s.position + offset, s.position);
+        core::Vec3 focus = s.position;
+        if (options_.inspect_head) {
+            // Last frame's head, in world space -- the same transform the
+            // muzzle uses.
+            const core::Vec3 head_model = dragon_rig_.head_position();
+            if (core::length_sq(head_model) > 1e-6f) {
+                focus = core::transform_point(
+                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix(),
+                    head_model);
+            }
+        }
+        camera_.set_position(focus + offset, focus);
         free_camera_ = true;
     }
 
@@ -764,6 +784,10 @@ void App::update(float dt) {
         } else {
             dragon_rig_.clear_aim_target();
         }
+        // And the mouth: open on the flame, a spit on the fireball.
+        rig_action_.breath = combat_.breathing() ? 1.0f : 0.0f;
+        rig_action_.fire = events.fired;
+        rig_action_.boost = combat_.boost_active() ? 1.0f : 0.0f;
 
         if (events.had_hit) {
             hit_marker_ = 0.35f;
@@ -940,6 +964,7 @@ void App::update(float dt) {
     // headless capture and doubles as a soak test.
     if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
 
+    dragon_rig_.set_action(rig_action_);
     if (!options_.bind_pose) dragon_rig_.update(dragon_state(), dt);
 
     // The ghost's rig is driven from its recording, reconstructed as a flight
@@ -1698,6 +1723,33 @@ void App::build_dragon_ui() {
         }
     }
 
+    if (ImGui::CollapsingHeader("Attack posture")) {
+        ImGui::SliderFloat("jaw open", &rig.jaw_open_deg, 0.0f, 50.0f, "%.0f deg");
+        ImGui::SliderFloat("spit recoil", &rig.spit_recoil_deg, 0.0f, 25.0f, "%.0f deg");
+        ImGui::SliderFloat("spit duration", &rig.spit_duration, 0.15f, 1.0f, "%.2f s");
+        ImGui::SliderFloat("breath thrust", &rig.breath_neck_thrust_deg, 0.0f, 20.0f, "%.0f deg");
+        ImGui::SliderFloat("breath neck tone", &rig.breath_neck_tone, 0.0f, 4.0f);
+        ImGui::SliderFloat("breath tremor", &rig.breath_tremor_deg, 0.0f, 3.0f, "%.1f deg");
+        ImGui::SliderFloat("talon spread", &rig.attack_toe_spread_deg, 0.0f, 30.0f, "%.0f deg");
+        ImGui::SliderFloat("neck aim share", &rig.neck_aim_share, 0.0f, 1.0f);
+        ImGui::SliderFloat("neck aim max", &rig.neck_aim_max_deg, 0.0f, 60.0f, "%.0f deg");
+        ImGui::TextDisabled("jaw: %s   open %.2f", dragon_joints_.jaw == anim::NO_PARENT ? "none" : "found",
+                            dragon_rig_.jaw_open());
+    }
+
+    if (ImGui::CollapsingHeader("Speed and load posture")) {
+        ImGui::SliderFloat("speed sweep", &rig.speed_sweep_deg, 0.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("speed fold", &rig.speed_fold_deg, 0.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("sweep from", &rig.sweep_speed_start, 20.0f, 80.0f, "%.0f m/s");
+        ImGui::SliderFloat("sweep full at", &rig.sweep_speed_full, 50.0f, 140.0f, "%.0f m/s");
+        ImGui::SliderFloat("tip flutter", &rig.flutter_deg, 0.0f, 6.0f, "%.1f deg");
+        ImGui::SliderFloat("flutter from", &rig.flutter_speed_start, 30.0f, 100.0f, "%.0f m/s");
+        ImGui::SliderFloat("brake buffet", &rig.brake_buffet_deg, 0.0f, 8.0f, "%.1f deg");
+        ImGui::SliderFloat("load twist", &rig.load_twist_deg, 0.0f, 12.0f, "%.0f deg/g");
+        ImGui::SliderFloat("load forward sweep", &rig.load_forward_sweep_deg, 0.0f, 15.0f,
+                           "%.0f deg/g");
+    }
+
     ImGui::Checkbox("show skeleton", &show_skeleton_);
 
     // A replay must animate exactly like the live dragon, or the ghost stops
@@ -1788,6 +1840,16 @@ void App::spawn_bots(int count) {
         if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
         bot->rig.tuning = dragon_rig_.tuning;
         bot->pilot.tuning = bot_tuning_;
+        // Four body colours, cycling. All warm enough to read as hostile at a
+        // glance, different enough to tell "the rust one" from "the ash one"
+        // across a fight -- the cheapest variety there is.
+        static const core::Vec3 palette[] = {
+            {1.00f, 0.72f, 0.66f},  // warmed red, the original
+            {0.95f, 0.55f, 0.30f},  // rust
+            {0.62f, 0.66f, 0.72f},  // ash
+            {0.85f, 0.60f, 0.95f},  // violet
+        };
+        bot->tint = palette[size_t(i) % 4];
         place_bot(*bot, uint32_t(20260826 + i * 977));
         bot->last_health = bot_health_;
         bots_.push_back(std::move(bot));
@@ -1908,8 +1970,19 @@ void App::update_bots(float dt) {
             decision.breathe = false;
         }
 
-        const core::Vec3 muzzle = bot->flight.state().position +
-                                  bot->flight.state().forward() * 7.5f;
+        // Fire leaves the bot's mouth too: last frame's animated head, like
+        // the player's, with the fixed offset as the fallback for a headless
+        // rig.
+        core::Vec3 muzzle = bot->flight.state().position + bot->flight.state().forward() * 7.5f;
+        {
+            const core::Vec3 head_model = bot->rig.head_position();
+            if (core::length_sq(head_model) > 1e-6f) {
+                const core::Mat4 to_world =
+                    core::Mat4::trs(self.position, self.orientation, core::Vec3::one()) *
+                    asset_.matrix();
+                muzzle = core::transform_point(to_world, head_model);
+            }
+        }
         if (decision.fire) {
             combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
         }
@@ -1917,6 +1990,10 @@ void App::update_bots(float dt) {
         if (decision.breathe) {
             combat_.hostile_breath(muzzle, bot->flight.state().forward());
         }
+        anim::RigAction action;
+        action.breath = decision.breathe ? 1.0f : 0.0f;
+        action.fire = decision.fire;
+        bot->rig.set_action(action);
 
         // The head tracks the player when close and hunting -- the tell that a
         // flame is coming, and where the flame visually comes from.
@@ -2863,9 +2940,9 @@ void App::render() {
             core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
         // The hit flash reddens rather than brightens: high emissive whitens
         // through the tonemap, and a white flash was unreadable as damage.
-        bot_model.tint =
-            core::Vec4{1.0f, core::lerpf(0.72f, 0.25f, slot.hit_flash),
-                       core::lerpf(0.66f, 0.15f, slot.hit_flash), 0.10f + slot.hit_flash * 0.45f};
+        const core::Vec3 hot{1.0f, 0.25f, 0.15f};
+        const core::Vec3 body = bot->tint * (1.0f - slot.hit_flash) + hot * slot.hit_flash;
+        bot_model.tint = core::Vec4{body.x, body.y, body.z, 0.10f + slot.hit_flash * 0.45f};
         world_.draw_skinned(device_, pass, dragon_mesh_, bot_model,
                             bot->rig.skinning_matrices(), dragon_textures_, model_sampler_);
     }

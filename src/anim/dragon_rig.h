@@ -51,6 +51,8 @@ struct DragonJoints {
     // Foot roots (this asset parents every foot straight to the body -- an IK
     // rig's world-space targets), each with its toe chains hanging beneath.
     std::vector<int> foot_roots;
+    // The lower jaw, if the rig has one. Opens for the breath and the spit.
+    int jaw = NO_PARENT;
 
     bool valid() const {
         return root != NO_PARENT && !wing_root[0].empty() && !wing_root[1].empty();
@@ -222,6 +224,55 @@ struct RigTuning {
     // as the animation fighting the aim.
     float head_aim_blend = 0.85f;
     float head_aim_max_deg = 60.0f;
+    // The NECK carries part of the aim, not just the head: an animal that
+    // looks 40 degrees off its body turns its whole neck and finishes with the
+    // head. Fraction of the aim angle steered into the neck chain (the spring
+    // eases it in), capped so the neck never corkscrews.
+    float neck_aim_share = 0.55f;
+    float neck_aim_max_deg = 35.0f;
+
+    // ---- attack posture ----
+    //
+    // What the body does when it uses its weapons. Fire that leaves a closed,
+    // still mouth reads as a particle effect stapled to a model; the jaw, the
+    // neck and the claws are what say the CREATURE is doing it.
+    float jaw_open_deg = 26.0f;
+    // Fireball: the neck rears back and whips forward, a spit. Peak deflection
+    // and the duration of the whole gesture.
+    float spit_recoil_deg = 30.0f;
+    float spit_duration = 0.5f;
+    // And a muscular impulse: velocity kicked into the neck at the moment of
+    // firing (m/s at the head, up and back), because a steer alone asks an
+    // overdamped neck to move through its spring, and a spit is a snap.
+    float spit_impulse = 4.0f;
+    // Breath: the neck thrusts forward and down into the stream, stiffens
+    // (a tensed neck holds the flame steady) and trembles faintly with the
+    // effort. The tremor is on the head only, after the aim.
+    float breath_neck_thrust_deg = 14.0f;
+    float breath_neck_tone = 1.5f;
+    float breath_tremor_deg = 0.7f;
+    // Talons open while attacking -- the claws come out.
+    float attack_toe_spread_deg = 12.0f;
+
+    // ---- speed and load posture ----
+    //
+    // A stoop is not only a control input: past cruise the wings sweep back and
+    // part-fold on their own, a falcon's shape, whether or not the tuck is
+    // held. Blends to the full tuck angles as the tuck is applied.
+    float speed_sweep_deg = 30.0f;
+    float speed_fold_deg = 14.0f;
+    float sweep_speed_start = 45.0f;
+    float sweep_speed_full = 95.0f;
+    // Membrane flutter: the outer wing buffets at speed, and shudders in a
+    // flare. Amplitude at the tip; it grows with the square of the speed
+    // factor so cruise is dead calm and a dive is alive.
+    float flutter_deg = 2.0f;
+    float flutter_speed_start = 55.0f;
+    float brake_buffet_deg = 3.0f;
+    // Under g the tips wash out (leading edge down, shedding load) and the
+    // wings come forward a little, the flare shape of a bird pulling hard.
+    float load_twist_deg = 4.0f;
+    float load_forward_sweep_deg = 4.0f;
 
     // ---- legs ----
     float leg_tuck_deg = 62.0f;  // folded in flight, extended on the ground
@@ -253,6 +304,14 @@ struct RigTuning {
     float foot_follow = 1.0f;
 };
 
+// What the dragon is doing with its weapons this frame, for the attack
+// posture. Flight already arrives through FlightState; this is the rest.
+struct RigAction {
+    float breath = 0.0f;  // 0..1, flame held
+    bool fire = false;    // edge: a fireball left this frame
+    float boost = 0.0f;   // 0..1
+};
+
 // Turns flight state into a pose. Holds the spring-chain state, so it must be
 // updated once per frame per dragon and cannot be shared.
 class DragonRig {
@@ -273,6 +332,12 @@ public:
         aim_active_ = true;
     }
     void clear_aim_target() { aim_active_ = false; }
+    // Weapon use, read by the next update(). Persists until set again, so a
+    // caller that stops attacking must say so.
+    void set_action(const RigAction& action) { action_ = action; }
+    const RigAction& action() const { return action_; }
+    // How open the jaw is, 0..1, after the last update. For probes and tests.
+    float jaw_open() const { return jaw_open_; }
 
     // Where the mouth actually is, in world space -- the head joint's origin
     // after animation. For drawing anything that should issue from it.
@@ -322,6 +387,9 @@ private:
                       float angle_b);
 
     void drive_wings(const game::FlightState& state);
+    // The jaw, the breath tremor and the talons -- after the aim, because the
+    // aim would otherwise correct the tremor away.
+    void drive_attack(float airborne);
     // 0 calm glide .. 1 flat out: how hard the flight state is working the body.
     float flight_intensity(const game::FlightState& state) const;
     // Per-chain feel on top of the shared parameters.
@@ -406,6 +474,31 @@ private:
     // pose. A rig's bones each point along their own axis, so this cannot be
     // assumed.
     core::Vec3 head_axis_local_ = core::Vec3::forward();
+    // Which way the MODEL faces in its own space: +1 for +Z (this asset), -1
+    // for -Z (the engine's convention and the generated rig). Measured from
+    // the bind pose. Every world quantity the rig reads -- gravity, airflow,
+    // the frame's pseudo-forces, the aim target -- arrives in the engine's
+    // body frame, and every bone lives in model space; body_to_model_ is the
+    // one rotation between them. Skipping it was invisible on the generated
+    // rig (the frames coincide) and quietly inverted pitch steering, the
+    // fore-aft pseudo-forces and the head aim on the imported dragon.
+    float model_forward_z_ = -1.0f;
+    core::Quat body_to_model_ = core::Quat::identity();
+    // The flight state re-expressed so that conj(orientation) lands in model
+    // space rather than the engine's body frame.
+    game::FlightState model_frame(const game::FlightState& state) const;
+    // Attack state. spit_time_ counts up from the last fireball; a large
+    // value means none is in progress.
+    RigAction action_;
+    float breath_smoothed_ = 0.0f;
+    float spit_time_ = 1e9f;
+    float jaw_open_ = 0.0f;
+    // Which way a positive body-X rotation of the jaw moves it: +1 opens, -1
+    // closes. Measured at init, because the jaw bone points wherever the
+    // rigger left it.
+    float jaw_open_sign_ = 1.0f;
+    // Running time for the flutter oscillators.
+    float time_ = 0.0f;
     float clip_time_ = 0.0f;
     // Previous frame's motion, for deriving the accelerations the chains feel.
     core::Vec3 previous_velocity_ = core::Vec3::zero();

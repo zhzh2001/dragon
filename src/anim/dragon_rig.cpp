@@ -181,6 +181,10 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
         j.neck.push_back(parent);
     }
     j.head = skeleton.add_joint("head", parent, offset(Vec3{0, 0, -neck_step * 0.9f}));
+    // A lower jaw with a tip, so the attack posture has a mouth to open and
+    // something to measure the opening direction against.
+    j.jaw = skeleton.add_joint("jaw", j.head, offset(Vec3{0, -0.35f, -0.5f}));
+    skeleton.add_joint("jaw_tip", j.jaw, offset(Vec3{0, -0.1f, -1.2f}));
 
     // Tail, backwards from the root.
     parent = j.root;
@@ -367,29 +371,63 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     compute_world_matrices(skeleton, pose_, world_);
     compute_skinning_matrices(skeleton, world_, skinning_);
 
-    // Which way the head points, measured rather than assumed. Prefer the
-    // direction to a child bone -- a snout or jaw -- and fall back to the
-    // direction the neck grew, which is where the head faces on any sane rig.
-    head_axis_local_ = Vec3::forward();
-    if (joints.head != NO_PARENT) {
-        const Vec3 head_position = world_[size_t(joints.head)].col[3].xyz();
-        Vec3 direction = Vec3::zero();
-        for (int i = 0; i < count; ++i) {
-            if (skeleton.joint(i).parent != joints.head) continue;
-            direction = world_[size_t(i)].col[3].xyz() - head_position;
-            break;
+    // Which way the model faces, from the bind pose: the head lies forward of
+    // the tail on any creature. The same rule the app uses to yaw the asset
+    // into the engine's -Z convention, so the two agree by construction.
+    model_forward_z_ = -1.0f;
+    {
+        const int aft = !joints.tail.empty() ? joints.tail.back()
+                        : (!joints.neck.empty() ? joints.neck.front() : NO_PARENT);
+        if (joints.head != NO_PARENT && aft != NO_PARENT) {
+            const float head_z = skeleton.world_bind(joints.head).translation_part().z;
+            const float aft_z = skeleton.world_bind(aft).translation_part().z;
+            model_forward_z_ = head_z > aft_z ? 1.0f : -1.0f;
         }
-        if (core::length_sq(direction) < 1e-8f) {
-            const int parent = skeleton.joint(joints.head).parent;
-            if (parent != NO_PARENT) {
-                direction = head_position - world_[size_t(parent)].col[3].xyz();
+    }
+    body_to_model_ = model_forward_z_ > 0.0f
+                         ? Quat::from_axis_angle(Vec3::unit_y(), core::PI)
+                         : Quat::identity();
+
+    // Which way the head points: the model's forward axis, carried into the
+    // head's local frame. A rest pose faces forward; measuring the direction to
+    // a child bone instead picked this asset's skull bone, which points 33
+    // degrees UP from the snout, and the aim then pitched the head down by
+    // exactly that much.
+    head_axis_local_ = Vec3{0.0f, 0.0f, model_forward_z_};
+    if (joints.head != NO_PARENT) {
+        const Quat head_world = core::quat_from_matrix(world_[size_t(joints.head)]);
+        head_axis_local_ = core::normalize(
+            core::rotate(core::conjugate(head_world), Vec3{0.0f, 0.0f, model_forward_z_}));
+    }
+
+    // Which way the jaw opens, measured rather than assumed: rotate it a little
+    // about body X and see whether its tip drops. A jaw opens downward on any
+    // creature; which local rotation does that is the rigger's business. The
+    // tip is the descendant furthest FORWARD of the pivot -- the deepest one
+    // on this asset is the tongue, which points back into the mouth and gave
+    // the opposite answer.
+    jaw_open_sign_ = 1.0f;
+    if (joints.jaw != NO_PARENT) {
+        int tip = joints.jaw;
+        float tip_reach = -1e9f;
+        const Vec3 pivot = world_[size_t(joints.jaw)].col[3].xyz();
+        for (int i = 0; i < count; ++i) {
+            int p = skeleton.joint(i).parent;
+            while (p != NO_PARENT && p != joints.jaw) p = skeleton.joint(p).parent;
+            if (p != joints.jaw) continue;
+            const float reach = (world_[size_t(i)].col[3].xyz() - pivot).z * model_forward_z_;
+            if (reach > tip_reach) {
+                tip = i;
+                tip_reach = reach;
             }
         }
-        if (core::length_sq(direction) > 1e-8f) {
-            const Quat head_world = core::quat_from_matrix(world_[size_t(joints.head)]);
-            head_axis_local_ = core::normalize(
-                core::rotate(core::conjugate(head_world), core::normalize(direction)));
-        }
+        const Vec3 before = world_[size_t(tip)].col[3].xyz();
+        rotate_joint(joints.jaw, Vec3::unit_x(), core::radians(10.0f));
+        std::vector<core::Mat4> probe;
+        compute_world_matrices(skeleton, pose_, probe);
+        const Vec3 after = probe[size_t(tip)].col[3].xyz();
+        if (after.y > before.y) jaw_open_sign_ = -1.0f;
+        pose_.reset_to_bind(skeleton);
     }
 }
 
@@ -419,14 +457,43 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // drawn and the thrust that was generated cannot disagree. On top of it,
     // load flex: the wings bow upward under g, which is what makes a hard pull
     // look like it costs something. load_smoothed_ is maintained in update().
-    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
-                       core::radians(tuning.tuck_droop_deg) * state.wing_tuck;
     const float tuck = state.wing_tuck;
     const float flare = state.wing_brake;
+    // Sweep and fold go AFT and twist is washout (leading edge down): both are
+    // rotations whose sense depends on which way the model faces.
+    const float aft = model_forward_z_;
+    // Past cruise the wings sweep back and part-fold on their own -- a stoop
+    // is a shape speed makes, not only a button. The speed posture fills in
+    // whatever the tuck has not already taken.
+    const float speed_factor =
+        core::smoothstep(tuning.sweep_speed_start, tuning.sweep_speed_full, state.airspeed);
+    const float speed_share = speed_factor * (1.0f - tuck);
+    const float sweep_deg = tuning.tuck_sweep_deg * tuck + tuning.speed_sweep_deg * speed_share -
+                            tuning.load_forward_sweep_deg * core::maxf(load_smoothed_, 0.0f);
+    const float fold_deg = tuning.tuck_fold_deg * tuck + tuning.speed_fold_deg * speed_share;
+    const float droop_deg =
+        tuning.tuck_droop_deg * (tuck + speed_share * tuning.speed_sweep_deg /
+                                            core::maxf(tuning.tuck_sweep_deg, 1.0f));
+    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
+                       core::radians(droop_deg);
+    // Membrane flutter: the outer wing buffets at speed and shudders in a
+    // flare. Two incommensurate frequencies so it never reads as a metronome,
+    // squared speed factor so cruise is calm and a dive is alive.
+    const float flutter_speed = core::smoothstep(tuning.flutter_speed_start,
+                                                 tuning.flutter_speed_start + 45.0f,
+                                                 state.airspeed);
+    const float flutter_amplitude =
+        core::radians(tuning.flutter_deg) * flutter_speed * flutter_speed +
+        core::radians(tuning.brake_buffet_deg) * flare;
+    // Under g the tips wash out: leading edge down, shedding load outboard.
+    const float twist =
+        core::radians(tuning.load_twist_deg) * core::maxf(load_smoothed_, 0.0f) * aft;
     // Roll lean is deliberately NOT mirrored between sides: the same rotation
     // about the body's forward axis on both wings tips one up and one down,
-    // which is exactly the shape that produces a roll.
-    const float roll_lean = core::radians(tuning.wing_roll_lean_deg) * state.control.z;
+    // which is exactly the shape that produces a roll. Positive control.z is
+    // roll right, so the right wing (engine +X) goes down.
+    const float roll_lean =
+        core::radians(tuning.wing_roll_lean_deg) * state.control.z * model_forward_z_;
     // Upstroke flex: as the wing rises past ~20 degrees the wrist folds in --
     // real bird kinematics, and it keeps two raised wings from crossing over
     // the spine at the top of the beat.
@@ -470,9 +537,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const float flap_normalize = flap_total > 1e-4f ? 1.0f / flap_total : 1.0f;
 
         int depth = 0;
+        int finger_index = -1;  // -1 while walking the shared root
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
-            const float decay = std::pow(tuning.outboard_decay, float(depth)) * normalize;
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
             const float flap_angle = (base * sign + roll_lean) *
                                      flap_share_at(size_t(depth)) * flap_normalize * lag;
@@ -482,17 +549,34 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float progress = chain_length > 1
                                        ? float(index_in_chain) / float(chain_length - 1)
                                        : 1.0f;
-            const float sweep = core::radians(tuning.tuck_sweep_deg) * tuck * sign *
+            const float sweep = core::radians(sweep_deg) * sign * aft *
                                 (0.4f + 0.6f * progress) * normalize;
-            const float fold = (core::radians(tuning.tuck_fold_deg) * tuck +
-                                upstroke_fold * progress) * progress * sign * normalize;
+            const float fold = (core::radians(fold_deg) +
+                                upstroke_fold * progress) * progress * sign * aft * normalize;
             const float flare_angle =
                 core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
+
+            // Flutter and twist live on the fingers only -- the arm is bone.
+            // Flutter grows toward the tip (progress squared: the membrane
+            // moves, the wrist barely), each finger on its own phase.
+            float flutter = 0.0f;
+            float finger_twist = 0.0f;
+            if (finger_index >= 0) {
+                const float phase = float(finger_index) * 1.9f + float(side) * 0.7f;
+                flutter = flutter_amplitude * progress * progress *
+                          (std::sin(core::TWO_PI * 13.0f * time_ + phase) +
+                           0.6f * std::sin(core::TWO_PI * 21.7f * time_ + 1.7f * phase)) *
+                          sign * normalize;
+                finger_twist = twist * progress * normalize;
+            }
 
             // Flap is a rotation about the body's forward axis; sweep is about
             // the body's up axis.
             rotate_joint(joint, Vec3::unit_y(), sweep + fold, Vec3::unit_z(),
-                         flap_angle - flare_angle);
+                         flap_angle - flare_angle + flutter);
+            if (std::fabs(finger_twist) > 1e-5f) {
+                rotate_joint(joint, Vec3::unit_x(), finger_twist, true);
+            }
             ++depth;
         };
 
@@ -504,6 +588,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const int root_depth = depth;
         for (const std::vector<int>& finger : joints_.wing_fingers[side]) {
             depth = root_depth;
+            ++finger_index;
             for (size_t i = 0; i < finger.size(); ++i) {
                 apply(finger[i], int(i), int(finger.size()));
             }
@@ -680,7 +765,6 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
 
     // Constraints: keep the segments their original length, and stop the chain
     // folding back through itself.
-    const float max_bend = std::cos(core::radians(tuning.chain_max_bend_deg));
     for (int iteration = 0; iteration < tuning.chain_iterations; ++iteration) {
         // The articulation range is a TOTAL budget spent walking out the chain,
         // not a per-segment allowance -- per-segment, seven neck links at 30
@@ -738,17 +822,28 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
             }
 
             if (i >= 2) {
-                // Limit the angle against the previous segment.
+                // Limit the angle against the previous segment -- on top of
+                // whatever bend the (steered) rest shape already has there.
+                // An absolute limit fought this asset's own resting neck,
+                // whose vertebrae sit at 27-29 degrees to each other: it
+                // straightened the neck at rest and clamped away most of any
+                // steer, which read as a stiff neck no slider could fix.
                 const Vec3 previous = core::normalize_or(
                     sim.position[i - 1] - sim.position[i - 2], direction);
-                if (core::dot(previous, direction) < max_bend) {
+                const Vec3 target_previous = core::normalize_or(
+                    target[i - 1] - target[i - 2], previous);
+                const Vec3 target_direction = core::normalize_or(
+                    target[i] - target[i - 1], direction);
+                const float rest_bend = std::acos(core::clampf(
+                    core::dot(target_previous, target_direction), -1.0f, 1.0f));
+                const float allowed = rest_bend + core::radians(tuning.chain_max_bend_deg);
+                if (core::dot(previous, direction) < std::cos(allowed)) {
                     // Rotate the direction back toward the previous segment
                     // until it is inside the cone.
                     const Vec3 axis = core::cross(previous, direction);
                     if (core::length_sq(axis) > 1e-8f) {
                         direction = core::rotate(
-                            core::Quat::from_axis_angle(core::normalize(axis),
-                                                        core::radians(tuning.chain_max_bend_deg)),
+                            core::Quat::from_axis_angle(core::normalize(axis), allowed),
                             previous);
                     } else {
                         direction = previous;
@@ -835,13 +930,17 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // body, not rotated past it.
         const float trail = core::radians(tuning.leg_trail_deg) * airborne *
                             (1.0f - 0.7f * state.wing_tuck);
+        // Trail and fold were settled by eye on the +Z-facing asset; the aft
+        // factor keeps them aft on a model facing the other way. The pendulum
+        // swing is already in model space and needs no help.
+        const float aft = model_forward_z_;
         auto drive_limb = [&](const std::vector<int>& chain, float trail_angle) {
             float sign = 1.0f;
             bool first = true;
             for (const int joint : chain) {
-                rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign, true);
+                rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign * aft, true);
                 if (first) {
-                    rotate_joint(joint, Vec3::unit_x(), trail_angle + swing.x, true);
+                    rotate_joint(joint, Vec3::unit_x(), trail_angle * aft + swing.x, true);
                     rotate_joint(joint, Vec3::unit_z(), swing.y, true);
                     first = false;
                 }
@@ -906,8 +1005,23 @@ void DragonRig::attach_feet(float airborne) {
     }
 }
 
-void DragonRig::update(const game::FlightState& state, float dt) {
+game::FlightState DragonRig::model_frame(const game::FlightState& engine) const {
+    // conj(orientation) takes world into the body frame; composing the asset's
+    // facing onto it takes world straight into model space, where the bones
+    // are. Body-frame vectors the flight model already resolved come across
+    // with the same rotation.
+    game::FlightState model = engine;
+    model.orientation =
+        core::normalize(engine.orientation * core::conjugate(body_to_model_));
+    model.angular_velocity = core::rotate(body_to_model_, engine.angular_velocity);
+    return model;
+}
+
+void DragonRig::update(const game::FlightState& engine_state, float dt) {
     if (!skeleton_ || dt <= 0.0f) return;
+
+    // Everything below works in model space, where the bones are.
+    const game::FlightState state = model_frame(engine_state);
 
     // Accelerations are what the chains actually respond to, and the flight model
     // reports velocities, so they are differenced here.
@@ -921,6 +1035,28 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     previous_velocity_ = state.velocity;
     previous_angular_velocity_ = state.angular_velocity;
     have_previous_ = true;
+    time_ += dt;
+
+    // Attack state. The breath eases in fast and out slower (a mouth snaps
+    // open and relaxes shut); the spit is a clock from the last fireball.
+    breath_smoothed_ = core::damp(breath_smoothed_, core::saturate(action_.breath),
+                                  action_.breath > breath_smoothed_ ? 0.06f : 0.2f, dt);
+    if (action_.fire) {
+        spit_time_ = 0.0f;
+        // The snap: kick the neck's points up and back, more toward the head.
+        // Engine body frame (up +Y, aft +Z), carried into model space like
+        // every other frame vector.
+        const Vec3 kick = core::rotate(body_to_model_, Vec3{0.0f, 0.6f, 0.8f}) *
+                          tuning.spit_impulse;
+        const size_t points = neck_sim_.velocity.size();
+        for (size_t i = 1; i < points; ++i) {
+            const float progress = float(i) / float(points - 1);
+            neck_sim_.velocity[i] += kick * progress;
+        }
+    } else {
+        spit_time_ += dt;
+    }
+    action_.fire = false;  // an edge, consumed
 
     // Wing load flex reads the g excess, smoothed because g_load is assembled
     // from this frame's forces and single-frame spikes would make the wings
@@ -963,7 +1099,7 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     // commanded turn (a rudder pushing the tail across the airflow); pitch
     // input works it as an elevator, dropping the tail as the nose rises. The
     // control positions are already smoothed by the flight model.
-    const core::Vec2 tail_steer{
+    core::Vec2 tail_steer{
         state.control.x * tuning.tail_elevator_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
 
@@ -973,8 +1109,41 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     const float streamline =
         core::maxf(core::saturate(state.airspeed / core::maxf(tuning.streamline_speed, 1.0f)),
                    state.wing_tuck * 0.9f);
-    const core::Vec2 neck_steer{
+    core::Vec2 neck_steer{
         state.control.x * tuning.neck_lead_deg - streamline * tuning.neck_streamline_deg, 0.0f};
+
+    // The neck carries its share of the aim. The head finishes the job in
+    // aim_head(), measured against wherever the chain actually put it, so the
+    // two never fight: the neck curls toward the mark through the spring, the
+    // head snaps the rest of the way.
+    if (aim_active_ && !joints_.neck.empty()) {
+        // Measured from the body origin rather than the neck root: the mark
+        // is hundreds of metres out and the neck root a couple of metres in,
+        // and the head corrects the residual anyway.
+        // In the ENGINE body frame (forward -Z), like the control inputs the
+        // steer is added to; the pitch sign below converts once for both.
+        const Vec3 to_target = core::rotate(core::conjugate(engine_state.orientation),
+                                            aim_target_ - engine_state.position);
+        if (core::length_sq(to_target) > 1e-4f) {
+            // Yaw about Y and pitch about X of the body's forward axis, the
+            // same convention the tail's rudder and elevator use.
+            const float yaw = core::degrees(std::atan2(-to_target.x, -to_target.z));
+            const float pitch = core::degrees(std::atan2(
+                to_target.y, std::sqrt(to_target.x * to_target.x + to_target.z * to_target.z)));
+            const float limit = tuning.neck_aim_max_deg;
+            neck_steer.x += core::clampf(pitch * tuning.neck_aim_share, -limit, limit);
+            neck_steer.y += core::clampf(yaw * tuning.neck_aim_share, -limit, limit);
+        }
+    }
+
+    // Breath: the neck thrusts into the stream. Spit: it rears back and whips
+    // forward -- one sine cycle, decaying, through the same spring as
+    // everything else, so the recoil overshoots and settles like a neck.
+    neck_steer.x -= breath_smoothed_ * tuning.breath_neck_thrust_deg;
+    if (spit_time_ < tuning.spit_duration) {
+        const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
+        neck_steer.x += tuning.spit_recoil_deg * std::sin(core::TWO_PI * u) * (1.0f - u);
+    }
 
     // Named fields, not positional braces: a positional initializer here once
     // silently dropped the neck's brace, aero gate and articulation range when
@@ -984,12 +1153,25 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     tail_feel.range_deg = tuning.tail_range_deg;
 
     ChainFeel neck_feel;
-    neck_feel.stiffness = tuning.neck_stiffness_scale;
+    // A breathing neck is tensed: it holds the flame steady. A spitting neck
+    // is a strike: several times stiffer for the gesture, which is what makes
+    // an overdamped, heavy neck fast enough to rear and whip inside half a
+    // second instead of absorbing the impulse.
+    const float spitting = spit_time_ < tuning.spit_duration ? 1.0f : 0.0f;
+    neck_feel.stiffness = tuning.neck_stiffness_scale *
+                          (1.0f + tuning.breath_neck_tone * breath_smoothed_ + 6.0f * spitting);
     neck_feel.gravity = tuning.neck_gravity_scale;
     neck_feel.inertia = tuning.neck_inertia_scale;
     neck_feel.damping = tuning.neck_damping_scale;
     neck_feel.aero = 0.1f;
     neck_feel.range_deg = tuning.neck_range_deg;
+
+    // Steer pitch is specified in engine terms (+ raises the head, drops the
+    // tail) and applied about the model's X axis, which points the other way
+    // on a model facing +Z.
+    const float pitch_sign = -model_forward_z_;
+    tail_steer.x *= pitch_sign;
+    neck_steer.x *= pitch_sign;
 
     drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration,
                 tail_steer, tail_feel, dt);
@@ -1003,8 +1185,12 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     const float airborne = 1.0f - leg_extend_;
     attach_feet(airborne);
     if (airborne > 0.001f) {
-        const float root_angle = core::radians(tuning.foot_hang_deg) * airborne;
-        const float curl_angle = core::radians(tuning.toe_curl_deg) * airborne;
+        // Hang and curl were settled by eye on the +Z-facing asset.
+        const float root_angle = core::radians(tuning.foot_hang_deg) * airborne * model_forward_z_;
+        // Talons open on the attack: the relaxed curl gives way to a spread.
+        const float curl_angle = core::radians(tuning.toe_curl_deg -
+                                               tuning.attack_toe_spread_deg * breath_smoothed_) *
+                                 airborne * model_forward_z_;
         for (const auto& [joint, depth] : foot_joints_) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
         }
@@ -1016,10 +1202,46 @@ void DragonRig::update(const game::FlightState& state, float dt) {
     // passes over the hierarchy is nothing next to the skinning it feeds.
     if (aim_active_ && joints_.head != NO_PARENT) {
         aim_head(state);
-        compute_world_matrices(*skeleton_, pose_, world_);
     }
+    // Jaw and tremor after the aim: the aim measures the head and would
+    // correct the tremor straight back out.
+    drive_attack(airborne);
+    compute_world_matrices(*skeleton_, pose_, world_);
     compute_skinning_matrices(*skeleton_, world_, skinning_);
     aim_active_ = false;
+}
+
+void DragonRig::drive_attack(float airborne) {
+    // Jaw: open with the breath, and a quick gape for the spit that shuts as
+    // the round leaves -- open through the rear-back, closed by the whip.
+    float spit_open = 0.0f;
+    if (spit_time_ < tuning.spit_duration) {
+        const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
+        spit_open = u < 0.7f ? std::sin(core::PI * u / 0.7f) : 0.0f;
+    }
+    jaw_open_ = core::maxf(breath_smoothed_, spit_open);
+    if (joints_.jaw != NO_PARENT && jaw_open_ > 1e-3f) {
+        // A faint chatter on top of the breath -- the mouth is not a hatch.
+        const float chatter = 1.0f + 0.06f * breath_smoothed_ *
+                                         std::sin(core::TWO_PI * 9.0f * time_);
+        rotate_joint(joints_.jaw, Vec3::unit_x(),
+                     jaw_open_sign_ * core::radians(tuning.jaw_open_deg) * jaw_open_ * chatter,
+                     true);
+    }
+
+    // Breath tremor on the head: effort, not a wobble. Tiny, two frequencies,
+    // on both head axes with different phases.
+    if (joints_.head != NO_PARENT && breath_smoothed_ > 1e-3f) {
+        const float amplitude = core::radians(tuning.breath_tremor_deg) * breath_smoothed_;
+        const float yaw = amplitude * (std::sin(core::TWO_PI * 11.0f * time_) +
+                                       0.5f * std::sin(core::TWO_PI * 17.3f * time_ + 1.1f));
+        const float pitch = amplitude * 0.7f *
+                            (std::sin(core::TWO_PI * 12.7f * time_ + 2.3f) +
+                             0.5f * std::sin(core::TWO_PI * 19.1f * time_));
+        rotate_joint(joints_.head, Vec3::unit_y(), yaw, true);
+        rotate_joint(joints_.head, Vec3::unit_x(), pitch, true);
+    }
+    (void)airborne;
 }
 
 core::Vec3 DragonRig::head_position() const {
@@ -1039,7 +1261,10 @@ void DragonRig::aim_head(const game::FlightState& state) {
         core::rotate(core::conjugate(state.orientation), aim_target_ - state.position);
 
     const Quat head_world = core::quat_from_matrix(world_[head]);
-    const Vec3 head_position = world_[head].col[3].xyz();
+    // Metres, like the target: the head sits a few model units from the
+    // origin, and at eight units to the metre that is a visible aim error on
+    // a close target.
+    const Vec3 head_position = world_[head].col[3].xyz() * model_scale_;
     const Vec3 current = core::normalize_or(core::rotate(head_world, head_axis_local_),
                                             Vec3::forward());
     const Vec3 desired = core::normalize_or(target_body - head_position, current);
@@ -1272,6 +1497,36 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
     }
 
+    // Jaw: by name if the rigger named it, otherwise the parent of the lower
+    // lip -- on this asset the jaw is an anonymous "Bone_024" whose children
+    // are the lower lip and the tongue. Either way it must sit under the head.
+    {
+        auto under_head = [&](int joint) {
+            for (int p = joint; p != NO_PARENT; p = skeleton.joint(p).parent) {
+                if (p == j.head) return true;
+            }
+            return false;
+        };
+        std::vector<int> jaw = collect(skeleton, {"jaw", "kiefer", "mandib"}, {"_end", "ik_", "cont"});
+        for (const int candidate : jaw) {
+            if (under_head(candidate)) {
+                j.jaw = candidate;
+                break;
+            }
+        }
+        if (j.jaw == NO_PARENT) {
+            const std::vector<int> lip = collect(skeleton, {"lower_lip", "lowerlip", "unterlippe"},
+                                                 {"_end"});
+            for (const int candidate : lip) {
+                const int parent = skeleton.joint(candidate).parent;
+                if (parent != NO_PARENT && parent != j.head && under_head(parent)) {
+                    j.jaw = parent;
+                    break;
+                }
+            }
+        }
+    }
+
     // Foot roots: this asset parents each foot straight to the body (IK
     // targets), so they are found by name and never as leg descendants. Nested
     // matches are toes and belong to their root's subtree, not this list.
@@ -1289,11 +1544,11 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
     }
 
     LOG_INFO("mapped rig: neck %zu, tail %zu, wing root %zu/%zu, fingers %zu/%zu, legs %zu/%zu, "
-             "front legs %zu/%zu, feet %zu",
+             "front legs %zu/%zu, feet %zu, jaw %s",
              j.neck.size(), j.tail.size(), j.wing_root[0].size(), j.wing_root[1].size(),
              j.wing_fingers[0].size(), j.wing_fingers[1].size(), j.leg[0].size(),
              j.leg[1].size(), j.front_leg[0].size(), j.front_leg[1].size(),
-             j.foot_roots.size());
+             j.foot_roots.size(), j.jaw == NO_PARENT ? "none" : skeleton.joint(j.jaw).name.c_str());
     return j;
 }
 

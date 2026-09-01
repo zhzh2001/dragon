@@ -37,6 +37,9 @@ struct Options {
     int frames = 0;  // 0 = run until quit
     bool headless = false;
     std::string screenshot;  // empty = none
+    // --model PATH loads a different rigged glTF in place of assets/dragon.glb,
+    // for trying alternative dragons without touching the tree.
+    std::string model;
 
     // --cam x,y,z,tx,ty,tz places the camera for a verification capture. Without
     // it the app frames the valley itself.
@@ -69,6 +72,9 @@ struct Options {
     bool inspect = false;
     float inspect_angle_deg = 35.0f;
     float inspect_distance = 30.0f;
+    // --inspect-head orbits the animated head instead of the body centre, for
+    // looking at the jaw and the aim.
+    bool inspect_head = false;
 
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.
@@ -156,6 +162,8 @@ private:
     bool studio_active_ = false;
     int studio_scenario_ = 0;
     float studio_time_ = 0.0f;
+    // The frame before, so the studio's scripted fireballs can be edges.
+    float studio_time_previous_ = 0.0f;
     float studio_time_scale_ = 1.0f;
     core::Vec3 studio_centre_ = core::Vec3::zero();
     game::FlightState studio_state_;
@@ -179,6 +187,8 @@ private:
         bool was_alive = true;
         bool grounded_last_frame = false;
         bool breathing = false;
+        // Body colour, so a flight of bots is not four copies of one dragon.
+        core::Vec3 tint{1.0f, 0.72f, 0.66f};
         float grounded_time = 0.0f;
         float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
@@ -223,6 +233,9 @@ private:
     // Edge detection for gamepad buttons, which core::Input only reports as
     // held state.
     bool cycle_button_was_down_ = false;
+    // What the player's rig should be doing with its mouth this frame; filled
+    // by combat or the studio, applied where the rig updates.
+    anim::RigAction rig_action_;
     bool cycle_requested_ = false;
     core::Vec3 damage_direction_ = core::Vec3::zero();
     float damage_marker_ = 0.0f;

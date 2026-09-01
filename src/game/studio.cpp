@@ -126,13 +126,13 @@ const char* studio_scenario_notes(StudioScenario scenario) {
         case StudioScenario::STurns:
             return "reversals: tail whips across, legs swing through, then settle";
         case StudioScenario::Dive:
-            return "arrow shape: wings swept, neck straight, tail streaming, idle gone";
+            return "arrow shape: tucked, then untucked at speed -- wings still sweep, tips flutter";
         case StudioScenario::PullOut:
             return "the pull: wings bow up under g, tail sweeps low, head leads";
         case StudioScenario::Brake:
             return "flare: legs swing forward under the deceleration";
         case StudioScenario::Attack:
-            return "body weaves, head stays pinned on the mark -- they must decouple";
+            return "neck and head hold the mark; jaw gapes on the breath, rears back on the spit";
         case StudioScenario::Grounded:
             return "wings stowed, legs planted, idle clip at full strength";
         default: return "";
@@ -144,6 +144,23 @@ Vec3 studio_attack_target(float t, Vec3 centre) {
     // to sweep visibly to hold it while the body weaves the other way.
     return centre + Vec3{85.0f * std::sin(0.8f * t), 25.0f * std::sin(1.3f * t),
                          -120.0f};
+}
+
+anim::RigAction studio_action(StudioScenario scenario, float previous, float t) {
+    anim::RigAction action;
+    if (scenario != StudioScenario::Attack) return action;
+    // An 8 s cycle: spit at 0.5 s, breathe from 2 to 4.5 s, spit again at 6 s.
+    const float period = 8.0f;
+    const float cycle = std::fmod(t, period);
+    action.breath = (cycle > 2.0f && cycle < 4.5f) ? 1.0f : 0.0f;
+    for (const float shot : {0.5f, 6.0f}) {
+        // Crossed if the shot time lies in (previous, t], allowing for the wrap.
+        const float last = std::fmod(previous, period);
+        const bool crossed = last < cycle ? (shot > last && shot <= cycle)
+                                          : (shot > last || shot <= cycle);
+        if (crossed && t > previous) action.fire = true;
+    }
+    return action;
 }
 
 FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float ground_y) {
@@ -201,11 +218,17 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             state.g_load = 1.0f + 0.8f * std::fabs(std::sin(phase));
             break;
         }
-        case StudioScenario::Dive:
-            state.wing_tuck = 1.0f;
+        case StudioScenario::Dive: {
+            // Tucked for the first half of each cycle, released for the second:
+            // the release shows what speed alone does to the wings.
+            const float cycle = std::fmod(t, 10.0f);
+            state.wing_tuck = 1.0f - core::smoothstep(4.5f, 5.5f, cycle) +
+                              core::smoothstep(9.3f, 10.0f, cycle);
+            state.wing_tuck = core::saturate(state.wing_tuck);
             state.control = Vec3{-0.2f, 0.0f, 0.0f};
             state.g_load = 0.4f;
             break;
+        }
         case StudioScenario::PullOut: {
             const float cycle = std::fmod(t, 7.0f);
             const float pulling = core::smoothstep(2.4f, 3.2f, cycle) *

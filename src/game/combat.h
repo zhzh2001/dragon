@@ -193,6 +193,8 @@ struct CombatEvents {
     // aerial fight.
     core::Vec3 damage_from = core::Vec3::zero();
     bool took_damage = false;
+    // A fireball left the player's mouth this frame -- the rig's spit.
+    bool fired = false;
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
