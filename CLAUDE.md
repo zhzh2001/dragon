@@ -21,7 +21,8 @@ Useful flags:
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
-| `--inspect [angle] [dist]` | Orbit camera locked to the dragon; add `--inspect-head` to orbit the animated head instead (jaw, aim). |
+| `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon (elev 88 looks straight down -- the only view that shows a lateral tail wave); add `--inspect-head` to orbit the animated head instead (jaw, aim). |
+| `--skeleton` | Draw the posed joints as lines, to tell a rig problem from a skinning one. |
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
@@ -297,7 +298,8 @@ hidden, but the screen belongs to the game.
 
 Bots cycle through four hides -- rust, bone, moss, violet -- so a flight is not
 four copies of one dragon, and their fire leaves the animated head like the
-player's. **A multiplicative tint cannot recolour a dark texture**: the first
+player's ("bot recolour" slider in the Combat panel, right under the bot
+skill buttons). **A multiplicative tint cannot recolour a dark texture**: the first
 four bot tints were four indistinguishable greys. `ModelUniforms::recolour`
 pushes the albedo toward a hue at its own luminance instead, so scales and
 shading survive and "the green one" is a thing a player can say. The player
@@ -469,6 +471,25 @@ which is the test: `mapped rig:` in the log must read the same for it.
 
 The frame fix above is what made a second asset possible at all: this one also
 faces +Z, and the rig detects that itself.
+
+Three more lessons from flying it. **The ground idle is chosen by name**
+(idle/stand/rest/breath/hover), and an asset with only a landing gets that
+clip's LAST frame held -- a standing pose beats a landing replayed on loop
+(`DragonRig::set_base_clip(clip, hold_at)`). **On the ground the authored
+stance wins the whole body** (`ground_contact_`, contact not proximity): a
+wyvern folds its wings into forelegs and a tail sim cannot know that; the
+artist did. A quadruped keeps its wings with the rig even there -- it stands
+on its legs, and this asset's authored fold drapes the membranes. And **a
+straight-rested, seven-segment tail read as a robot arm** for two reasons the
+first asset's short curved tail had hidden: one stiffness per point turns a
+uniform load into a rigid rod pivoting at the root (`tail_tip_stiffness`
+tapers the spring toward the tip so the chain curves), and a per-vertebra
+bend cap generous enough for four segments let seven take the whole bend in
+two -- a hinge at the base and a straight boom beyond -- so the cap is
+normalised to a four-segment chain. The tell was invisible from the side and
+from behind; only the top view (`--inspect 0 24 88`) showed it, after two
+rounds of probing a chain that was, numerically, bending exactly as designed.
+**Look from the axis the motion is in.**
 
 ### Getting a usable asset: download glTF, never route it through Blender
 

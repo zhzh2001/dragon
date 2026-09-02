@@ -650,9 +650,17 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     // square root of the same factor, keeping the response near critically
     // damped instead of increasingly ringy as it stiffens.
     const float tone = 1.0f + tuning.chain_tone * intensity_smoothed_;
-    const float stiffness = tuning.chain_stiffness * feel.stiffness * tone;
-    const float damping =
+    const float base_stiffness = tuning.chain_stiffness * feel.stiffness * tone;
+    const float base_damping =
         tuning.chain_damping * feel.damping * std::sqrt(feel.stiffness * tone);
+    // Taper toward the tip: the same load bends the end more than the base,
+    // so the chain curves instead of pivoting. Damping follows the square
+    // root of stiffness to stay near critical along the whole length.
+    const float segments_total = float(std::max<size_t>(sim.position.size(), 2) - 1);
+    auto taper_at = [&](size_t i) {
+        return core::lerpf(1.0f, core::clampf(feel.tip_stiffness, 0.05f, 1.0f),
+                           float(i) / segments_total);
+    };
 
     // Active steering: curl the chain's target shape. The full deflection is
     // spread down the chain, each segment rotated a little more than the one
@@ -711,8 +719,9 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
 
         // Spring back toward the (possibly steered) target shape, so the chain
         // has a shape to return to rather than dangling.
-        acceleration += (target[i] - r) * stiffness;
-        acceleration -= v * damping;
+        const float taper = taper_at(i);
+        acceleration += (target[i] - r) * (base_stiffness * taper);
+        acceleration -= v * (base_damping * std::sqrt(taper));
 
         // Drag against the relative airflow: a linear term that damps slow
         // motion plus the physical v^2 term. Slender-body drag acts across the
@@ -843,7 +852,14 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                     target[i] - target[i - 1], direction);
                 const float rest_bend = std::acos(core::clampf(
                     core::dot(target_previous, target_direction), -1.0f, 1.0f));
-                const float allowed = rest_bend + core::radians(tuning.chain_max_bend_deg);
+                // The per-vertebra limit is normalised to a four-segment
+                // chain: a seven-segment tail with the same per-joint limit
+                // could take its whole bend in two joints and did -- a hinge
+                // at the base with a straight boom beyond it, which read as
+                // robotic. The same total bend, spread along the length.
+                const float per_joint = core::radians(tuning.chain_max_bend_deg) *
+                                        core::minf(1.0f, 4.0f / float(count - 1));
+                const float allowed = rest_bend + per_joint;
                 if (core::dot(previous, direction) < std::cos(allowed)) {
                     // Rotate the direction back toward the previous segment
                     // until it is inside the cone.
@@ -1085,15 +1101,18 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         (1.0f - core::saturate(tuning.clip_flight_fade) * intensity_smoothed_);
     const float clip_weight =
         tuning.base_clip_weight * core::lerpf(airborne_weight, 1.0f, leg_extend_);
-    if (base_clip_ && base_clip_->valid() && clip_weight > 0.001f) {
+    ground_contact_ = core::damp(ground_contact_, state.grounded ? 1.0f : 0.0f, 0.3f, dt);
+    const bool has_clip = base_clip_ && base_clip_->valid();
+    if (has_clip) {
         clip_time_ += dt * tuning.base_clip_rate;
+        const float sample_time = clip_hold_time_ >= 0.0f ? clip_hold_time_ : clip_time_;
+        // The full authored pose is kept for the ground handover below.
+        clip_pose_.reset_to_bind(*skeleton_);
+        base_clip_->sample(sample_time, clip_pose_);
         if (clip_weight >= 0.999f) {
-            base_clip_->sample(clip_time_, pose_);
-        } else {
-            Pose clip_pose;
-            clip_pose.reset_to_bind(*skeleton_);
-            base_clip_->sample(clip_time_, clip_pose);
-            blend_poses(pose_, clip_pose, clip_weight, pose_);
+            pose_ = clip_pose_;
+        } else if (clip_weight > 0.001f) {
+            blend_poses(pose_, clip_pose_, clip_weight, pose_);
         }
     }
 
@@ -1158,6 +1177,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     ChainFeel tail_feel;
     tail_feel.damping = tuning.tail_damping_scale;
     tail_feel.range_deg = tuning.tail_range_deg;
+    tail_feel.tip_stiffness = tuning.tail_tip_stiffness;
 
     ChainFeel neck_feel;
     // A breathing neck is tensed: it holds the flame steady. A spitting neck
@@ -1200,6 +1220,33 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
                                  airborne * model_forward_z_;
         for (const auto& [joint, depth] : foot_joints_) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
+        }
+    }
+
+    // On the ground the authored stance wins the WHOLE body -- wings, tail,
+    // legs, neck -- not just the joints the rig never owned. A wyvern folds its
+    // wings into forelegs on the ground and a stick-straight tail sim cannot
+    // know that; the artist did. Contact only: the approach is the rig's.
+    if (has_clip && ground_contact_ > 0.001f && tuning.base_clip_weight > 0.001f) {
+        // A quadruped keeps its wings with the rig even here: it stands on its
+        // legs, and this asset's authored fold drapes the membranes to the
+        // ground. A wyvern has no other forelegs -- its wings ARE the stance.
+        const bool quadruped = !joints_.front_leg[0].empty() || !joints_.front_leg[1].empty();
+        std::vector<Transform> rig_wings;
+        std::vector<int> wing_joints;
+        if (quadruped) {
+            for (int side = 0; side < 2; ++side) {
+                for (const int j : joints_.wing_root[side]) wing_joints.push_back(j);
+                for (const auto& finger : joints_.wing_fingers[side]) {
+                    for (const int j : finger) wing_joints.push_back(j);
+                }
+            }
+            for (const int j : wing_joints) rig_wings.push_back(pose_.local[size_t(j)]);
+        }
+        blend_poses(pose_, clip_pose_, ground_contact_ * core::saturate(tuning.base_clip_weight),
+                    pose_);
+        for (size_t k = 0; k < wing_joints.size(); ++k) {
+            pose_.local[size_t(wing_joints[k])] = rig_wings[k];
         }
     }
 

@@ -167,6 +167,13 @@ struct RigTuning {
     float neck_inertia_scale = 0.18f;
     float neck_damping_scale = 2.2f;
     float tail_damping_scale = 1.25f;
+    // The tail's spring thins toward the tip: muscle is thick at the base and
+    // a whisker at the end. With one stiffness per point, a uniform load moved
+    // every point by the same a/k and the constraints turned that into a rigid
+    // rod pivoting at the root -- exactly the "robotic" tail a straight-rested
+    // asset showed. Tip stiffness as a fraction of the base's; the deflection
+    // then grows toward the tip, which is what a tail does.
+    float tail_tip_stiffness = 0.25f;
     // Hard articulation limits, total deviation from the rest shape. The neck
     // is tight -- big head turns are the aim system's job, not the sim's; the
     // tail keeps room to whip.
@@ -344,8 +351,13 @@ public:
     core::Vec3 head_position() const;
 
     // Authored motion layered under the procedural pose. Not owned; must outlive
-    // the rig. Null disables it.
-    void set_base_clip(const AnimationClip* clip) { base_clip_ = clip; }
+    // the rig. Null disables it. `hold_at` >= 0 freezes the clip at that time
+    // -- for an asset with no idle, the last frame of its landing is a
+    // standing pose, and a held pose beats a landing replayed on loop.
+    void set_base_clip(const AnimationClip* clip, float hold_at = -1.0f) {
+        base_clip_ = clip;
+        clip_hold_time_ = hold_at;
+    }
     bool has_base_clip() const { return base_clip_ && base_clip_->valid(); }
     void update(const game::FlightState& state, float dt);
 
@@ -414,6 +426,10 @@ private:
         // (steered) rest direction, whatever the forces say. Muscle has a
         // range, and every long-run failure mode ends outside it.
         float range_deg = 178.0f;
+        // Stiffness at the far end as a fraction of the base's. 1 is uniform
+        // (a neck carrying a head it must hold still); below 1 the chain
+        // bends progressively rather than pivoting as a rod.
+        float tip_stiffness = 1.0f;
     };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
@@ -468,6 +484,13 @@ private:
     void attach_feet(float airborne);
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
+    float clip_hold_time_ = -1.0f;
+    // The authored pose as sampled this frame, before the rig overrode it, and
+    // how much of it wins: on the ground the artist's stance is the whole
+    // body, not just the toes. Smoothed ground CONTACT, not proximity -- the
+    // approach still belongs to the rig.
+    Pose clip_pose_;
+    float ground_contact_ = 0.0f;
     core::Vec3 aim_target_ = core::Vec3::zero();
     bool aim_active_ = false;
     // The head's own forward axis, in its local frame, measured from the bind

@@ -978,6 +978,75 @@ void test_speed_posture() {
     CHECK(near(tip_of(still), cruise_tip, 0.05f));
 }
 
+// On the ground the authored stance wins the joints the rig owns in flight --
+// wings included on a rig with no forelegs (a wyvern stands on its wings; the
+// generated greybox has hind legs only, so it counts as one). And a held clip
+// is a pose, not a loop.
+void test_ground_stance_is_authored() {
+    std::printf("the authored stance takes the body on the ground\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    CHECK(joints.front_leg[0].empty());  // no forelegs: the wings are the stance
+
+    // A clip that curls the tail's second joint and lifts a wing root: both are
+    // joints the rig rebuilds in flight.
+    const int tail_joint = joints.tail[1];
+    const int wing_joint = joints.wing_root[0].front();
+    anim::AnimationClip clip;
+    clip.name = "stance";
+    clip.duration = 1.0f;
+    for (const int joint : {tail_joint, wing_joint}) {
+        anim::RotationTrack track;
+        track.joint = joint;
+        track.times = {0.0f, 0.5f, 1.0f};
+        track.rotations = {Quat::from_axis_angle(Vec3::unit_x(), radians(40.0f)),
+                           Quat::from_axis_angle(Vec3::unit_x(), radians(10.0f)),
+                           Quat::from_axis_angle(Vec3::unit_x(), radians(40.0f))};
+        clip.tracks.push_back(track);
+    }
+    auto angle_from_bind = [&](anim::DragonRig& r, int joint) {
+        const Quat posed = r.pose().local[size_t(joint)].rotation;
+        const Quat bind = skeleton.joint(joint).local_bind.rotation;
+        return degrees(2.0f * std::acos(clampf(std::fabs(dot(posed, bind)), -1.0f, 1.0f)));
+    };
+
+    // Held at t = 0.5: the tail joint sits at 10 degrees, and stays there.
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    rig.set_base_clip(&clip, 0.5f);
+
+    game::FlightState grounded;
+    grounded.grounded = true;
+    grounded.ground_clearance = 0.0f;
+    grounded.wing_tuck = 1.0f;
+    for (int i = 0; i < 240; ++i) rig.update(grounded, 1.0f / 60.0f);
+    CHECK(std::fabs(angle_from_bind(rig, tail_joint) - 10.0f) < 1.0f);
+    const float held = angle_from_bind(rig, tail_joint);
+    for (int i = 0; i < 30; ++i) rig.update(grounded, 1.0f / 60.0f);
+    CHECK(std::fabs(angle_from_bind(rig, tail_joint) - held) < 0.1f);
+    // With no forelegs the wing is the stance too: the clip's 10 degrees, not
+    // the rig's tuck.
+    CHECK(std::fabs(angle_from_bind(rig, wing_joint) - 10.0f) < 1.0f);
+
+    // Airborne, the tail is the chain's again: it matches a rig that never had
+    // the clip, flown the same way.
+    anim::DragonRig bare;
+    bare.init(skeleton, joints);
+    game::FlightState glide;
+    glide.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    glide.airspeed = 30.0f;
+    glide.ground_clearance = 300.0f;
+    for (int i = 0; i < 300; ++i) {
+        rig.update(glide, 1.0f / 60.0f);
+        bare.update(glide, 1.0f / 60.0f);
+    }
+    CHECK(std::fabs(angle_from_bind(rig, tail_joint) - angle_from_bind(bare, tail_joint)) < 1.0f);
+    CHECK(std::fabs(angle_from_bind(rig, wing_joint) - angle_from_bind(bare, wing_joint)) < 1.0f);
+}
+
 // The studio's one promise: its states are dynamically consistent, so the rig
 // reacts exactly as it would in flight. A scenario whose angular velocity did
 // not match its own orientation curve would exercise the chains with forces
@@ -1120,6 +1189,7 @@ int main() {
     test_neck_shares_the_aim();
     test_attack_posture();
     test_speed_posture();
+    test_ground_stance_is_authored();
     test_studio_states_are_consistent();
     test_legs_swing_with_the_frame();
 

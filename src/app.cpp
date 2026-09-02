@@ -52,8 +52,13 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.inspect_distance = float(SDL_atof(argv[++i]));
             }
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                options.inspect_elevation_deg = float(SDL_atof(argv[++i]));
+            }
         } else if (arg == "--inspect-head") {
             options.inspect_head = true;
+        } else if (arg == "--skeleton") {
+            options.skeleton = true;
         } else if (arg == "--studio" && i + 1 < argc) {
             options.studio_scenario = SDL_atoi(argv[++i]);
         } else if (arg == "--combat") {
@@ -195,8 +200,9 @@ bool App::init(const Options& options) {
 
         if (!loaded.animations.empty()) {
             dragon_animations_ = loaded.animations;
-            dragon_rig_.set_base_clip(&dragon_animations_.front());
-            ghost_rig_.set_base_clip(&dragon_animations_.front());
+            choose_idle_clip();
+            apply_idle_clip(dragon_rig_);
+            apply_idle_clip(ghost_rig_);
         }
     }
 
@@ -227,6 +233,7 @@ bool App::init(const Options& options) {
     chase_.first_person = options.first_person;
     respawn_dragon();
 
+    if (options.skeleton) show_skeleton_ = true;
     if (options.has_hue) {
         player_hue_ = core::Vec3{options.hue.x, options.hue.y, options.hue.z};
         player_recolour_ = options.hue.w;
@@ -708,10 +715,12 @@ void App::update(float dt) {
         // flight model would be looking at empty sky.
         const game::FlightState& s = dragon_state();
         const float angle = core::radians(options_.inspect_angle_deg);
+        const float elevation = core::radians(core::clampf(options_.inspect_elevation_deg, -89.0f, 89.0f));
+        const float d = options_.inspect_distance;
         const core::Vec3 offset = core::rotate(s.orientation,
-                                               core::Vec3{std::sin(angle) * options_.inspect_distance,
-                                                          options_.inspect_distance * 0.25f,
-                                                          std::cos(angle) * options_.inspect_distance});
+                                               core::Vec3{std::sin(angle) * std::cos(elevation) * d,
+                                                          std::sin(elevation) * d,
+                                                          std::cos(angle) * std::cos(elevation) * d});
         core::Vec3 focus = s.position;
         if (options_.inspect_head) {
             // Last frame's head, in world space -- the same transform the
@@ -1745,6 +1754,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("neck brace", &rig.neck_inertia_scale, 0.0f, 1.0f);
         ImGui::SliderFloat("neck damping x", &rig.neck_damping_scale, 0.5f, 5.0f);
         ImGui::SliderFloat("tail damping x", &rig.tail_damping_scale, 0.5f, 5.0f);
+        ImGui::SliderFloat("tail tip stiffness", &rig.tail_tip_stiffness, 0.05f, 1.0f);
         ImGui::SliderFloat("neck range", &rig.neck_range_deg, 5.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("tail range", &rig.tail_range_deg, 20.0f, 170.0f, "%.0f deg");
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);
@@ -1768,7 +1778,8 @@ void App::build_dragon_ui() {
     if (ImGui::CollapsingHeader("Legs & authored motion")) {
         ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
         if (dragon_rig_.has_base_clip()) {
-            ImGui::TextDisabled("clip '%s'", dragon_animations_.front().name.c_str());
+            ImGui::TextDisabled("clip '%s'%s", dragon_animations_[size_t(idle_clip_)].name.c_str(),
+                                idle_clip_hold_ >= 0.0f ? " (held at its last frame)" : "");
             // Weight 0 is the honest A/B: it restores exactly the un-layered rig.
             ImGui::SliderFloat("clip weight", &rig.base_clip_weight, 0.0f, 1.0f);
             ImGui::SliderFloat("clip rate", &rig.base_clip_rate, 0.0f, 3.0f);
@@ -1888,6 +1899,47 @@ void App::start_match() {
 // The outermost wing joint per side: the one furthest from the centreline in
 // the bind pose, over the shared arm and every finger. Not the last joint of
 // the last finger -- on this asset that is a helper bound at the origin.
+// The ground idle is whichever clip says so by name. An asset with only a
+// landing has a standing pose at the end of it, so that frame is held; an asset
+// with a single unnamed clip (the first dragon's 'Scene') gets that clip.
+void App::choose_idle_clip() {
+    idle_clip_ = -1;
+    idle_clip_hold_ = -1.0f;
+    auto lowered = [](std::string text) {
+        for (char& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
+        return text;
+    };
+    for (size_t i = 0; i < dragon_animations_.size(); ++i) {
+        const std::string name = lowered(dragon_animations_[i].name);
+        for (const char* key : {"idle", "stand", "rest", "breath", "hover"}) {
+            if (name.find(key) != std::string::npos) idle_clip_ = int(i);
+        }
+        if (idle_clip_ >= 0) break;
+    }
+    if (idle_clip_ < 0) {
+        for (size_t i = 0; i < dragon_animations_.size(); ++i) {
+            if (lowered(dragon_animations_[i].name).find("land") != std::string::npos) {
+                idle_clip_ = int(i);
+                idle_clip_hold_ = core::maxf(dragon_animations_[i].duration - 1.0f / 30.0f, 0.0f);
+                break;
+            }
+        }
+    }
+    if (idle_clip_ < 0 && dragon_animations_.size() == 1) idle_clip_ = 0;
+    if (idle_clip_ >= 0) {
+        LOG_INFO("ground idle: clip '%s'%s", dragon_animations_[size_t(idle_clip_)].name.c_str(),
+                 idle_clip_hold_ >= 0.0f ? " held at its last frame" : "");
+    } else if (!dragon_animations_.empty()) {
+        LOG_INFO("ground idle: none of %zu clips looks like an idle; bind pose it is",
+                 dragon_animations_.size());
+    }
+}
+
+void App::apply_idle_clip(anim::DragonRig& rig) const {
+    if (idle_clip_ < 0 || size_t(idle_clip_) >= dragon_animations_.size()) return;
+    rig.set_base_clip(&dragon_animations_[size_t(idle_clip_)], idle_clip_hold_);
+}
+
 void App::find_wingtips() {
     for (int side = 0; side < 2; ++side) {
         wingtip_joint_[side] = -1;
@@ -1914,7 +1966,7 @@ void App::spawn_bots(int count) {
         bot->slot = combat_.spawn_external(bot_health_, 6.5f);
         bot->rig.init(dragon_skeleton_, dragon_joints_);
         bot->rig.set_model_scale(asset_.scale);
-        if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
+        apply_idle_clip(bot->rig);
         bot->rig.tuning = dragon_rig_.tuning;
         bot->pilot.tuning = bot_tuning_;
         // Four hides, cycling: rust, bone, moss, violet. Recoloured at the

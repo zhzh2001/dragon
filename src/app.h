@@ -75,9 +75,15 @@ struct Options {
     bool inspect = false;
     float inspect_angle_deg = 35.0f;
     float inspect_distance = 30.0f;
+    // Camera elevation above the dragon's horizontal plane; 90 looks straight
+    // down, which is the only view that shows a lateral tail wave.
+    float inspect_elevation_deg = 14.5f;
     // --inspect-head orbits the animated head instead of the body centre, for
     // looking at the jaw and the aim.
     bool inspect_head = false;
+    // --skeleton draws the posed joints as lines, for telling a rig problem
+    // from a skinning one in a headless capture.
+    bool skeleton = false;
 
     // --autopilot flies the selected course unattended. Used to verify the whole
     // rally loop headlessly, and it doubles as the seed of the bot AI.
@@ -263,6 +269,11 @@ private:
     // cannot serve two dragons.
     anim::DragonRig ghost_rig_;
     std::vector<anim::AnimationClip> dragon_animations_;
+    // Which clip serves as the ground idle, and whether it is held at one time.
+    int idle_clip_ = -1;
+    float idle_clip_hold_ = -1.0f;
+    void choose_idle_clip();
+    void apply_idle_clip(anim::DragonRig& rig) const;
     std::vector<SDL_GPUTexture*> dragon_textures_;
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
