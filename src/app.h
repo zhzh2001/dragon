@@ -40,6 +40,9 @@ struct Options {
     // --model PATH loads a different rigged glTF in place of assets/dragon.glb,
     // for trying alternative dragons without touching the tree.
     std::string model;
+    // --hue r,g,b,strength recolours the player's dragon (see ModelUniforms::recolour).
+    bool has_hue = false;
+    core::Vec4 hue;
 
     // --cam x,y,z,tx,ty,tz places the camera for a verification capture. Without
     // it the app frames the valley itself.
@@ -187,8 +190,9 @@ private:
         bool was_alive = true;
         bool grounded_last_frame = false;
         bool breathing = false;
-        // Body colour, so a flight of bots is not four copies of one dragon.
-        core::Vec3 tint{1.0f, 0.72f, 0.66f};
+        // Body colour, so a flight of bots is not four copies of one dragon:
+        // a hue the hide is recoloured toward, at its own luminance.
+        core::Vec3 hue{1.9f, 0.55f, 0.35f};
         float grounded_time = 0.0f;
         float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
@@ -209,6 +213,9 @@ private:
     void start_match();
     void apply_bot_skill(int level);
     void spawn_bots(int count);
+    void find_wingtips();
+    // How far bot hides are recoloured toward their hue; 0 leaves the texture.
+    float bot_recolour_ = 0.8f;
     void place_bot(BotShip& bot, uint32_t seed);
     void update_bots(float dt);
     gfx::Mesh sphere_mesh_;
@@ -219,6 +226,9 @@ private:
     float previous_flap_phase_ = 0.0f;
     float hit_sound_cooldown_ = 0.0f;
     bool was_boosting_ = false;
+    // The outermost wing joint per side (0 = +X), for effects that leave the
+    // wingtips. -1 when the rig has no wings.
+    int wingtip_joint_[2] = {-1, -1};
     float boost_fov_ = 0.0f;
     float base_fov_ = 62.0f;
     // Deterministic jitter for the emitters.
@@ -257,6 +267,10 @@ private:
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
     gfx::MaterialToggles material_toggles_;
+    // The player's hide colour: a hue the texture is pushed toward at its own
+    // luminance, and how far. Strength 0 is the texture as authored.
+    core::Vec3 player_hue_{1.0f, 1.0f, 1.0f};
+    float player_recolour_ = 0.0f;
 
     // An imported asset arrives in whatever scale and orientation its author
     // used. Rather than guess at load time, the correction is a live transform

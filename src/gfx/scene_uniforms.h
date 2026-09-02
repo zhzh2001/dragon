@@ -45,6 +45,11 @@ struct ModelUniforms {
     // map still has to bind *something* to satisfy the pipeline's sampler slot,
     // and the shader has to know to ignore it.
     core::Vec4 material = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // Recolour: rgb is the hue the surface is pushed toward (keeping its own
+    // luminance, so scales and shading survive), a is how far. A multiplicative
+    // tint cannot recolour a dark texture -- four bot tints were four
+    // indistinguishable greys -- so this replaces the hue instead.
+    core::Vec4 recolour = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
 };
 
 // Sun and sky, as tunable values rather than shader constants. Sun angle is

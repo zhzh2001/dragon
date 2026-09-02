@@ -339,6 +339,13 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     for (const int foot : joints.foot_roots) {
         const Vec3 foot_position = skeleton.world_bind(foot).translation_part();
         if (core::length_sq(foot_position) < 1e-4f || anchors.empty()) continue;
+        // A foot that already hangs off its leg needs no re-anchoring -- the
+        // hierarchy carries it. Only the body-parented IK-target kind does.
+        bool on_a_leg = false;
+        for (int p = skeleton.joint(foot).parent; p != NO_PARENT; p = skeleton.joint(p).parent) {
+            for (const int anchor : anchors) on_a_leg = on_a_leg || anchor == p;
+        }
+        if (on_a_leg) continue;
         int best = anchors.front();
         float best_distance = 1e9f;
         for (const int anchor : anchors) {
@@ -1397,17 +1404,69 @@ int ancestor_depth(const Skeleton& skeleton, int joint) {
     return depth;
 }
 
-// Follows a chain down while each joint has exactly one child.
-std::vector<int> descend_single(const Skeleton& skeleton, int start) {
+int subtree_size(const Skeleton& skeleton, int root) {
+    int count = 0;
+    std::vector<int> stack{root};
+    while (!stack.empty()) {
+        const int current = stack.back();
+        stack.pop_back();
+        ++count;
+        for (const int child : children_of(skeleton, current)) stack.push_back(child);
+    }
+    return count;
+}
+
+// Children that carry a chain rather than a bare leaf (an *_end* export
+// artifact, a lone corrective).
+std::vector<int> significant_children(const Skeleton& skeleton, int joint) {
+    std::vector<int> found;
+    for (const int child : children_of(skeleton, joint)) {
+        if (subtree_size(skeleton, child) >= 2) found.push_back(child);
+    }
+    return found;
+}
+
+// Where a chain genuinely branches: the children that are peers of the
+// largest. Fingers off a hand are peers; an elbow corrective hanging off the
+// upper arm is not -- the arm carries the whole wing beyond it, so the main
+// line continues and the corrective is left alone.
+std::vector<int> branches_of(const Skeleton& skeleton, int joint) {
+    std::vector<int> children = significant_children(skeleton, joint);
+    int largest = 0;
+    for (const int child : children) largest = std::max(largest, subtree_size(skeleton, child));
+    std::vector<int> peers;
+    for (const int child : children) {
+        if (subtree_size(skeleton, child) * 3 >= largest) peers.push_back(child);
+    }
+    return peers;
+}
+
+// Follows a chain down its main line. Helpers hanging off the chain do not end
+// it; a genuine branch -- the fingers off a hand, the toes off a foot -- does.
+// `stop_at` ends the chain before a joint the caller wants to own separately.
+std::vector<int> descend_main(const Skeleton& skeleton, int start,
+                              const std::vector<int>& stop_at = {}) {
     std::vector<int> chain;
     int current = start;
     while (current != NO_PARENT) {
+        bool stop = false;
+        for (const int s : stop_at) stop = stop || s == current;
+        if (stop && !chain.empty()) break;
         chain.push_back(current);
-        const std::vector<int> children = children_of(skeleton, current);
-        if (children.size() != 1) break;
-        current = children[0];
+        const std::vector<int> next = branches_of(skeleton, current);
+        if (next.size() != 1) break;
+        current = next[0];
     }
     return chain;
+}
+
+// Names that mark rig plumbing rather than the animal: IK targets, pole
+// vectors, controllers, corrective chains. Riggers spell them many ways; these
+// cover the assets seen so far.
+const std::vector<const char*>& helper_names() {
+    static const std::vector<const char*> names{"_end", "ik", "pole", "cont", "target", "chain",
+                                                "roll", "fly", "muscle", "kneecap"};
+    return names;
 }
 
 }  // namespace
@@ -1437,7 +1496,7 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
     // name: riggers label sides from the creature's point of view or the
     // viewer's, inconsistently, and this model calls its +X wing "_L".
     const std::vector<int> wing_candidates =
-        collect(skeleton, {"w_c", "wing", "shoulder"}, {"_end"});
+        collect(skeleton, {"w_c", "wing", "shoulder"}, helper_names());
     for (int side = 0; side < 2; ++side) {
         int best = NO_PARENT;
         int best_depth = 0;
@@ -1453,12 +1512,12 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
         if (best == NO_PARENT) continue;
 
-        // Shared arm first: descend while there is exactly one child. Where it
+        // Shared arm first: descend the main line. Where it genuinely
         // branches, each branch is a finger.
-        j.wing_root[side] = descend_single(skeleton, best);
+        j.wing_root[side] = descend_main(skeleton, best);
         const int branch_point = j.wing_root[side].back();
-        for (const int finger_base : children_of(skeleton, branch_point)) {
-            j.wing_fingers[side].push_back(descend_single(skeleton, finger_base));
+        for (const int finger_base : branches_of(skeleton, branch_point)) {
+            j.wing_fingers[side].push_back(descend_main(skeleton, finger_base));
         }
         // A wing with no branches (a simple three-bone arm) keeps its last bone
         // as a single "finger", so downstream code always has one.
@@ -1468,14 +1527,33 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
     }
 
-    // Legs, again sided by bind position.
+    // Feet are found first: a leg chain ends where the foot begins, so the foot
+    // can be re-anchored or left alone as its rig demands. Nothing inside a
+    // wing is a foot, whatever it is called (this rig's wing hands are "Hand").
+    const std::vector<int> foot_candidates_all =
+        collect(skeleton, {"hand", "food", "foot", "fuss", "paw"}, helper_names());
+    std::vector<int> foot_candidates;
+    for (const int candidate : foot_candidates_all) {
+        bool in_wing = false;
+        for (int side = 0; side < 2; ++side) {
+            const int wing_base = j.wing_root[side].empty() ? NO_PARENT : j.wing_root[side].front();
+            for (int p = candidate; p != NO_PARENT && wing_base != NO_PARENT; p = skeleton.joint(p).parent) {
+                if (p == wing_base) in_wing = true;
+            }
+        }
+        if (!in_wing) foot_candidates.push_back(candidate);
+    }
+
+    // Legs, again sided by bind position. Several bones may match (a thigh
+    // base, a corrective chain, the thigh itself): the one that grows the
+    // longest chain is the leg.
     const std::vector<int> leg_candidates =
-        collect(skeleton, {"oberschenkel", "thigh", "upperleg", "hip", "femur"}, {"_end"});
+        collect(skeleton, {"oberschenkel", "thigh", "upperleg", "hip", "femur"}, helper_names());
     for (int side = 0; side < 2; ++side) {
         for (const int candidate : leg_candidates) {
             if ((subtree_mean_x(skeleton, candidate) > 0.0f) != (side == 0)) continue;
-            j.leg[side] = descend_single(skeleton, candidate);
-            break;
+            std::vector<int> chain = descend_main(skeleton, candidate, foot_candidates);
+            if (chain.size() > j.leg[side].size()) j.leg[side] = chain;
         }
     }
 
@@ -1486,7 +1564,7 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
     for (int side = 0; side < 2; ++side) {
         for (const int candidate : arm_candidates) {
             if ((subtree_mean_x(skeleton, candidate) > 0.0f) != (side == 0)) continue;
-            j.front_leg[side] = descend_single(skeleton, candidate);
+            j.front_leg[side] = descend_main(skeleton, candidate, foot_candidates);
             // descend_single happily walks into export-artifact leaves.
             while (!j.front_leg[side].empty() &&
                    skeleton.joint(j.front_leg[side].back()).name.find("_end_") !=
@@ -1527,11 +1605,9 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
         }
     }
 
-    // Foot roots: this asset parents each foot straight to the body (IK
-    // targets), so they are found by name and never as leg descendants. Nested
-    // matches are toes and belong to their root's subtree, not this list.
-    const std::vector<int> foot_candidates =
-        collect(skeleton, {"hand", "food", "foot", "fuss", "paw"}, {"_end", "ik_", "target"});
+    // Foot roots. One asset parents each foot straight to the body (IK
+    // targets); another hangs them off the shin. Either way they are found by
+    // name; nested matches are toes and belong to their root's subtree.
     for (const int candidate : foot_candidates) {
         bool nested = false;
         for (int p = skeleton.joint(candidate).parent; p != NO_PARENT;

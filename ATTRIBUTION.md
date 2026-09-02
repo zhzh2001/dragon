@@ -24,3 +24,23 @@ directory. Rename it to `assets/dragon.glb`.
 
 Use the glTF download, **not** the original FBX. Blender's FBX importer mangles
 this rig -- see CLAUDE.md. The glTF loads directly with no Blender step at all.
+
+## assets/alt/prowler.glb (optional second dragon)
+
+**"Prowler Dragon Variant Rig"** by **SuperKapoo913**, via Sketchfab.
+
+- Licence: **CC Attribution (CC BY)**
+- Source: https://sketchfab.com/3d-models/7ee71aaf323d426bbbdf28d73d55bbd9
+
+A 126-bone wyvern (wings are the forelimbs) with base colour, normal and
+metallic-roughness maps and two clips (Landing, Walk). Loaded with
+`--model assets/alt/prowler.glb`; the joint mapper finds its neck, tail, wings,
+legs, feet and jaw by name and structure, so the same procedural rig drives it.
+
+### Getting it
+
+Sketchfab serves this one as glTF. Download -> glTF, then either use the .glb
+directly or, as was done here, import the glTF into Blender and export the
+armature plus its two skinned meshes as a single .glb with tangents. (The glTF
+importer is fine -- it is only Blender's FBX importer that mangles rigs.)
+Credit SuperKapoo913 in anything published that includes this model.

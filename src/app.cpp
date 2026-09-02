@@ -35,6 +35,13 @@ Options parse_options(int argc, char** argv) {
             options.course_index = SDL_atoi(argv[++i]);
         } else if (arg == "--model" && i + 1 < argc) {
             options.model = argv[++i];
+        } else if (arg == "--hue" && i + 1 < argc) {
+            core::Vec4& h = options.hue;
+            if (SDL_sscanf(argv[++i], "%f,%f,%f,%f", &h.x, &h.y, &h.z, &h.w) == 4) {
+                options.has_hue = true;
+            } else {
+                LOG_WARN("--hue expects r,g,b,strength");
+            }
         } else if (arg == "--bind-pose") {
             options.bind_pose = true;
         } else if (arg == "--inspect") {
@@ -123,6 +130,7 @@ bool App::init(const Options& options) {
         if (loaded.ok) {
             dragon_joints_ = anim::map_dragon_joints(dragon_skeleton_);
             using_imported_dragon_ = dragon_joints_.valid();
+            find_wingtips();
             if (!using_imported_dragon_) {
                 LOG_WARN("imported skeleton has no recognisable wings; falling back");
             }
@@ -132,6 +140,7 @@ bool App::init(const Options& options) {
 
         if (!using_imported_dragon_) {
             anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
+            find_wingtips();
             dragon_source_ = "generated";
         } else {
             dragon_source_ = options_.model.empty() ? "assets/dragon.glb" : options_.model;
@@ -218,6 +227,10 @@ bool App::init(const Options& options) {
     chase_.first_person = options.first_person;
     respawn_dragon();
 
+    if (options.has_hue) {
+        player_hue_ = core::Vec3{options.hue.x, options.hue.y, options.hue.z};
+        player_recolour_ = options.hue.w;
+    }
     if (options.studio_scenario >= 0) {
         studio_active_ = true;
         studio_scenario_ = options.studio_scenario % int(game::StudioScenario::Count);
@@ -544,6 +557,7 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     // The asset correction is applied inside the dragon's own frame, so it
     // aligns the model to the engine without disturbing the flight transform.
     model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+    model.recolour = core::Vec4{player_hue_.x, player_hue_.y, player_hue_.z, player_recolour_};
     return model;
 }
 
@@ -874,38 +888,76 @@ void App::update(float dt) {
     const bool boosting = combat_.boost_active();
     if (boosting && !was_boosting_) audio_.play(audio::Clip::Boost, 0.9f);
     if (boosting) {
-        // Air, not fire: pale slipstream threads peeling off the wingtips, and
+        // Air, not fire: pale slipstream threads peeling off BOTH wingtips, and
         // faint streaks rushing PAST the body -- the world moving, not the
-        // dragon burning. Flame-coloured boost read as being on fire.
+        // dragon burning. Flame-coloured boost read as being on fire. The
+        // threads leave the animated tips (the wing flaps through the burn),
+        // one thread per side per step so the two wings always match: an
+        // earlier version drew the side from a random bit it never advanced,
+        // and whole frames of threads landed on one wing.
         const game::FlightState& s = flight_.state();
-        static float boost_carry = 0.0f;
-        boost_carry += dt * 140.0f;
+        const core::Mat4 to_world =
+            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
         const core::Vec3 pale{0.55f, 0.65f, 0.8f};
+        static float boost_carry = 0.0f;
+        boost_carry += dt * 90.0f;
         while (boost_carry >= 1.0f) {
             boost_carry -= 1.0f;
-            gfx::Particle p;
-            if ((particle_rng_ & 1u) == 0u) {
-                // Wingtip vortex thread.
-                const float side_sign = (particle_rng_ & 2u) ? 1.0f : -1.0f;
-                p.position = s.position + s.right() * (9.0f * side_sign) + s.up() * 1.0f;
-                p.velocity = s.velocity * 0.15f;
-                p.size_start = 0.7f;
-                p.size_end = 2.2f;
-            } else {
-                // Slipstream streak: born ahead and beside, swept backward fast
-                // so it rushes past the camera.
-                p.position = s.position + s.forward() * (30.0f + 20.0f * particle_unit()) +
-                             s.right() * (10.0f * particle_unit()) +
-                             s.up() * (7.0f * particle_unit());
-                p.velocity = s.velocity * 0.1f - s.forward() * 60.0f;
-                p.size_start = 0.5f;
-                p.size_end = 1.6f;
+            for (int side = 0; side < 2; ++side) {
+                gfx::Particle p;
+                if (wingtip_joint_[side] >= 0) {
+                    p.position = core::transform_point(
+                        to_world,
+                        dragon_rig_.world_matrices()[size_t(wingtip_joint_[side])].col[3].xyz());
+                } else {
+                    p.position = s.position + s.right() * (side == 0 ? 9.0f : -9.0f) + s.up();
+                }
+                // Left behind, curling slightly: the vortex, not a jet.
+                p.velocity = s.velocity * 0.12f + s.up() * (1.5f * particle_unit()) +
+                             s.right() * (1.0f * particle_unit());
+                p.size_start = 0.6f;
+                p.size_end = 2.6f;
+                p.drag = 1.0f;
+                p.life = 0.7f;
+                p.color_start = pale;
+                p.color_end = pale * 0.25f;
+                p.brightness = 0.55f;
+                particles_.spawn(p);
             }
-            p.drag = 1.0f;
-            p.life = 0.55f;
-            p.color_start = pale;
-            p.color_end = pale * 0.3f;
-            p.brightness = 0.5f;
+            // Slipstream streak: born ahead and beside, swept backward fast so
+            // it rushes past the camera.
+            gfx::Particle streak;
+            streak.position = s.position + s.forward() * (30.0f + 20.0f * particle_unit()) +
+                              s.right() * (12.0f * particle_unit()) +
+                              s.up() * (8.0f * particle_unit());
+            streak.velocity = s.velocity * 0.1f - s.forward() * 60.0f;
+            streak.size_start = 0.5f;
+            streak.size_end = 1.6f;
+            streak.drag = 1.0f;
+            streak.life = 0.5f;
+            streak.color_start = pale;
+            streak.color_end = pale * 0.3f;
+            streak.brightness = 0.5f;
+            particles_.spawn(streak);
+        }
+    }
+    if (boosting && !was_boosting_) {
+        // The kick: a ring of air blown outward around the body at ignition, so
+        // the start of a boost is an event and not just a brighter wake.
+        const game::FlightState& s = flight_.state();
+        for (int i = 0; i < 48; ++i) {
+            const float angle = core::TWO_PI * float(i) / 48.0f;
+            const core::Vec3 radial = s.right() * std::cos(angle) + s.up() * std::sin(angle);
+            gfx::Particle p;
+            p.position = s.position + radial * 3.0f - s.forward() * 2.0f;
+            p.velocity = radial * 22.0f + s.velocity * 0.6f;
+            p.drag = 2.5f;
+            p.life = 0.45f;
+            p.size_start = 1.2f;
+            p.size_end = 3.0f;
+            p.color_start = core::Vec3{0.8f, 0.9f, 1.0f};
+            p.color_end = core::Vec3{0.2f, 0.25f, 0.35f};
+            p.brightness = 0.7f;
             particles_.spawn(p);
         }
     }
@@ -1661,6 +1713,10 @@ void App::build_dragon_ui() {
             if (ImGui::SmallButton("all on")) material_toggles_ = gfx::MaterialToggles{};
         }
         ImGui::TextDisabled("%zu texture(s) loaded", dragon_textures_.size());
+        // Hide colour: the same recolour the bots use, for the player.
+        ImGui::ColorEdit3("hide hue", &player_hue_.x, ImGuiColorEditFlags_Float |
+                                                          ImGuiColorEditFlags_HDR);
+        ImGui::SliderFloat("hide recolour", &player_recolour_, 0.0f, 1.0f);
     }
 
     if (ImGui::CollapsingHeader("Wings")) {
@@ -1829,6 +1885,27 @@ void App::start_match() {
     match_.start();
 }
 
+// The outermost wing joint per side: the one furthest from the centreline in
+// the bind pose, over the shared arm and every finger. Not the last joint of
+// the last finger -- on this asset that is a helper bound at the origin.
+void App::find_wingtips() {
+    for (int side = 0; side < 2; ++side) {
+        wingtip_joint_[side] = -1;
+        float best = 0.0f;
+        auto consider = [&](int joint) {
+            const float reach = std::fabs(dragon_skeleton_.world_bind(joint).translation_part().x);
+            if (reach > best) {
+                best = reach;
+                wingtip_joint_[side] = joint;
+            }
+        };
+        for (const int joint : dragon_joints_.wing_root[side]) consider(joint);
+        for (const auto& finger : dragon_joints_.wing_fingers[side]) {
+            for (const int joint : finger) consider(joint);
+        }
+    }
+}
+
 void App::spawn_bots(int count) {
     combat_.clear_hostiles();
     bots_.clear();
@@ -1840,16 +1917,19 @@ void App::spawn_bots(int count) {
         if (!dragon_animations_.empty()) bot->rig.set_base_clip(&dragon_animations_.front());
         bot->rig.tuning = dragon_rig_.tuning;
         bot->pilot.tuning = bot_tuning_;
-        // Four body colours, cycling. All warm enough to read as hostile at a
-        // glance, different enough to tell "the rust one" from "the ash one"
-        // across a fight -- the cheapest variety there is.
+        // Four hides, cycling: rust, bone, moss, violet. Recoloured at the
+        // texture's own luminance (a multiplicative tint on this dark hide
+        // produced four indistinguishable greys), so "the green one" is a
+        // thing a player can say across a fight -- the cheapest variety there
+        // is. Values above 1 are deliberate: the hide is dark and the hue has
+        // to carry it back into the visible range.
         static const core::Vec3 palette[] = {
-            {1.00f, 0.72f, 0.66f},  // warmed red, the original
-            {0.95f, 0.55f, 0.30f},  // rust
-            {0.62f, 0.66f, 0.72f},  // ash
-            {0.85f, 0.60f, 0.95f},  // violet
+            {2.0f, 0.55f, 0.35f},  // rust
+            {1.9f, 1.6f, 0.95f},   // bone
+            {0.75f, 1.7f, 0.6f},   // moss
+            {1.4f, 0.7f, 2.0f},    // violet
         };
-        bot->tint = palette[size_t(i) % 4];
+        bot->hue = palette[size_t(i) % 4];
         place_bot(*bot, uint32_t(20260826 + i * 977));
         bot->last_health = bot_health_;
         bots_.push_back(std::move(bot));
@@ -2101,7 +2181,8 @@ game::CombatInput App::read_combat_input() const {
 
     if (options_.attack) {
         in.breath = true;
-        in.fire = true;  // the cooldown decides the actual rate
+        in.fire = true;   // the cooldown decides the actual rate
+        in.boost = true;  // likewise: a burn at t=0 and every cooldown after
         return in;
     }
 
@@ -2606,6 +2687,8 @@ void App::build_combat_ui() {
     ImGui::SliderInt("##botcount", &bot_count_, 1, 4);
     ImGui::SameLine();
     if (ImGui::Button("spawn bots")) spawn_bots(bot_count_);
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::SliderFloat("bot recolour", &bot_recolour_, 0.0f, 1.0f);
     ImGui::SameLine();
     if (ImGui::Button("sentinels")) {
         bots_.clear();
@@ -2940,9 +3023,12 @@ void App::render() {
             core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
         // The hit flash reddens rather than brightens: high emissive whitens
         // through the tonemap, and a white flash was unreadable as damage.
-        const core::Vec3 hot{1.0f, 0.25f, 0.15f};
-        const core::Vec3 body = bot->tint * (1.0f - slot.hit_flash) + hot * slot.hit_flash;
-        bot_model.tint = core::Vec4{body.x, body.y, body.z, 0.10f + slot.hit_flash * 0.45f};
+        // The hit flash reddens rather than brightens: high emissive whitens
+        // through the tonemap, and a white flash was unreadable as damage.
+        bot_model.tint = core::Vec4{1.0f, core::lerpf(1.0f, 0.3f, slot.hit_flash),
+                                    core::lerpf(1.0f, 0.2f, slot.hit_flash),
+                                    0.10f + slot.hit_flash * 0.45f};
+        bot_model.recolour = core::Vec4{bot->hue.x, bot->hue.y, bot->hue.z, bot_recolour_};
         world_.draw_skinned(device_, pass, dragon_mesh_, bot_model,
                             bot->rig.skinning_matrices(), dragon_textures_, model_sampler_);
     }

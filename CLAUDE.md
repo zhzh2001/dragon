@@ -22,7 +22,8 @@ Useful flags:
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
 | `--inspect [angle] [dist]` | Orbit camera locked to the dragon; add `--inspect-head` to orbit the animated head instead (jaw, aim). |
-| `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb`. |
+| `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
+| `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
 `--combat` arms the dragon and spawns a wave; `--attack` also holds breath and
 fires, which is how the flame and the projectiles get onto a screenshot.
@@ -294,9 +295,20 @@ harsh. Master volume in the Engine panel; headless runs skip the device.
 Every ImGui window except Combat starts **collapsed** -- one click away, not
 hidden, but the screen belongs to the game.
 
-Bots cycle through four body tints (warm red, rust, ash, violet) so a flight
-is not four copies of one dragon, and their fire leaves the animated head like
-the player's.
+Bots cycle through four hides -- rust, bone, moss, violet -- so a flight is not
+four copies of one dragon, and their fire leaves the animated head like the
+player's. **A multiplicative tint cannot recolour a dark texture**: the first
+four bot tints were four indistinguishable greys. `ModelUniforms::recolour`
+pushes the albedo toward a hue at its own luminance instead, so scales and
+shading survive and "the green one" is a thing a player can say. The player
+gets the same control (Dragon panel, `--hue`).
+
+**Boost threads leave both animated wingtips**, one per side per step. The
+first version drew the side from a random bit it never advanced, so whole
+frames of threads landed on one wing. The outermost wing joint per side is the
+one furthest from the centreline in bind -- not the last joint of the last
+finger, which on this asset is a helper bound at the origin. Ignition blows a
+ring of air outward so the start of a boost is an event.
 
 ## The match loop (M15)
 
@@ -438,6 +450,25 @@ The rig applies rotations about **body-space axes, composed with each joint's bi
 rotation**. Replacing the bind rotation destroys the rest pose, and a real rig's
 bones each point along their own axis, so "rotate about local Z" means something
 different for every bone.
+
+### A second dragon: what the joint mapper had to learn
+
+`assets/alt/prowler.glb` (a CC-BY wyvern, see ATTRIBUTION.md) is the second
+rig the procedural animation drives, and it taught `map_dragon_joints` to
+**skip rig plumbing by name** (ik, pole, cont, target, chain, roll, fly,
+muscle, kneecap): a wing candidate nearest the root was its IK target, a thigh
+candidate its corrective chain. Chains now **descend the main line** --
+a branch counts only where the children are peers of the largest subtree, so
+an elbow corrective hanging off the upper arm does not end the arm while six
+fingers off a hand do -- and the **longest chain wins** among several leg
+candidates. Nothing inside a wing is a foot whatever it is called (this rig's
+wing hands are "Hand"), a leg chain **stops before the foot**, and a foot that
+already hangs off its leg is **not re-anchored** -- only the body-parented
+IK-target kind is. The first asset's mapping is unchanged by all of this,
+which is the test: `mapped rig:` in the log must read the same for it.
+
+The frame fix above is what made a second asset possible at all: this one also
+faces +Z, and the rig detects that itself.
 
 ### Getting a usable asset: download glTF, never route it through Blender
 

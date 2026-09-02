@@ -15,4 +15,6 @@ struct ModelUniforms {
     float4 tint;
     // x: 1 when a base-colour texture is bound, 0 to use the vertex colour.
     float4 material;
+    // rgb: hue to push the albedo toward at its own luminance; a: how far.
+    float4 recolour;
 };

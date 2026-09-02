@@ -128,6 +128,13 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     if (model.material.x > 0.5) {
         albedo *= base_colour.sample(base_sampler, in.uv).rgb;
     }
+    // Recolour at constant luminance: the texture's scales and shading stay,
+    // the hue goes where the draw asks. This is how one dragon model becomes
+    // four distinguishable bots.
+    if (model.recolour.a > 0.001) {
+        float luminance = dot(albedo, float3(0.30, 0.59, 0.11));
+        albedo = mix(albedo, luminance * model.recolour.rgb, model.recolour.a);
+    }
 
     // Scaly hide is not a mirror, so the specular lobe is deliberately modest:
     // a single GGX highlight, no image-based lighting, no environment probe.
