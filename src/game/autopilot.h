@@ -31,6 +31,17 @@ struct AutopilotTuning {
     // up rather than cutting across the plane at a shallow angle. Scales with
     // range and is capped.
     float axis_lead_fraction = 0.55f;
+    // The go-around. Close to a ring but off its axis, the lead point sits
+    // almost on top of the dragon and a bank-limited turn cannot reach it: the
+    // autopilot orbits the ring forever at a hundred metres. Below this range
+    // and alignment (cosine between the direction to the ring and its axis) it
+    // instead flies back out to an entry point this far up the axis, and comes
+    // in straight. Found by a 4x frame-jitter soak on Canyon Weave.
+    float go_around_range = 260.0f;
+    // Negative: only once the dragon is past the ring's plane. Triggering on a
+    // merely oblique approach sent it away from rings it would have made.
+    float go_around_alignment = -0.1f;
+    float go_around_distance = 330.0f;
     float axis_lead_max = 240.0f;
     // Terrain avoidance. Below `min_clearance` the aim point is lifted by the
     // shortfall times `avoid_lift`, rather than the controls being overridden.

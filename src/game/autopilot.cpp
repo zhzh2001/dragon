@@ -11,9 +11,17 @@ FlightInput steer_through(const FlightState& state, Vec3 target, Vec3 approach_d
     // crossing its plane at a shallow angle and clipping the rim.
     if (core::length_sq(approach_direction) > 1e-6f) {
         const Vec3 axis = core::normalize(approach_direction);
-        const float range = core::distance(state.position, target);
-        const float lead = core::minf(range * tuning.axis_lead_fraction, tuning.axis_lead_max);
-        target -= axis * lead;
+        const Vec3 to_ring = target - state.position;
+        const float range = core::length(to_ring);
+        const float alignment =
+            range > 1e-3f ? core::dot(to_ring / range, axis) : 1.0f;
+        if (range < tuning.go_around_range && alignment < tuning.go_around_alignment) {
+            // Beside or behind the ring and close: go around rather than orbit.
+            target -= axis * tuning.go_around_distance;
+        } else {
+            const float lead = core::minf(range * tuning.axis_lead_fraction, tuning.axis_lead_max);
+            target -= axis * lead;
+        }
     }
     return steer_toward(state, target, tuning, ground_height);
 }

@@ -25,6 +25,33 @@ float Terrain::valley_mask(float x, float z) const {
 }
 
 float Terrain::height_at(float x, float z) const {
+    if (grid_ready_) {
+        // The cell under the point, and where in it. Same layout build_mesh
+        // wrote: row iz, column ix, two triangles split from top-right to
+        // bottom-left.
+        const float extent = settings_.half_extent;
+        const float cell = core::maxf(settings_.cell_size, 0.5f);
+        const float fx = (x + extent) / cell;
+        const float fz = (z + extent) / cell;
+        const int cells = verts_per_side_ - 1;
+        if (fx >= 0.0f && fz >= 0.0f && fx < float(cells) && fz < float(cells)) {
+            const int ix = int(fx);
+            const int iz = int(fz);
+            const float u = fx - float(ix);
+            const float v = fz - float(iz);
+            auto h = [&](int cx, int cz) {
+                return mesh_.vertices[size_t(cz) * size_t(verts_per_side_) + size_t(cx)].position.y;
+            };
+            const float tl = h(ix, iz), tr = h(ix + 1, iz);
+            const float bl = h(ix, iz + 1), br = h(ix + 1, iz + 1);
+            if (u + v <= 1.0f) return tl + u * (tr - tl) + v * (bl - tl);
+            return br + (1.0f - u) * (bl - br) + (1.0f - v) * (tr - br);
+        }
+    }
+    return analytic_height_at(x, z);
+}
+
+float Terrain::analytic_height_at(float x, float z) const {
     const float mask = valley_mask(x, z);
 
     const float mountains = noise_.ridged(x / settings_.mountain_scale, z / settings_.mountain_scale,
@@ -60,6 +87,8 @@ void Terrain::build_mesh() {
     mesh_.vertices.reserve(size_t(verts_per_side) * size_t(verts_per_side));
     mesh_.indices.reserve(size_t(cells) * size_t(cells) * 6);
 
+    grid_ready_ = false;
+    verts_per_side_ = verts_per_side;
     max_height_ = -1e9f;
     min_height_ = 1e9f;
 
@@ -67,7 +96,7 @@ void Terrain::build_mesh() {
         const float z = -extent + float(iz) * cell;
         for (int ix = 0; ix < verts_per_side; ++ix) {
             const float x = -extent + float(ix) * cell;
-            const float y = height_at(x, z);
+            const float y = analytic_height_at(x, z);
             max_height_ = core::maxf(max_height_, y);
             min_height_ = core::minf(min_height_, y);
 
@@ -101,6 +130,7 @@ void Terrain::build_mesh() {
     }
 
     mesh_.recompute_normals();
+    grid_ready_ = true;
 
     LOG_INFO("terrain: %d x %d cells over %.0f m, height %.0f..%.0f m", cells, cells,
              extent * 2.0f, min_height_, max_height_);

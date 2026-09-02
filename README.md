@@ -35,7 +35,9 @@ D3D9-class GPUs -- a new game for old hardware.
   gets violent. An in-game **animation studio** plays scripted, dynamically
   consistent manoeuvres on a pinned dragon for inspection.
 - **Hot-reloaded Metal shaders**, reversed-Z depth, cascade-free directional
-  shadows, PBR texturing with normal and ORM maps, additive particle fire.
+  shadows, PBR texturing with normal and ORM maps, additive particle fire,
+  instanced forests with swaying, shadow-casting conifers and camera-local
+  grass.
 - **Synthesized audio** -- wind that brightens with speed, flame roar, wingbeat
   whooshes, shots and explosions, all generated at startup from noise and
   sines: the game ships no sound files.
@@ -103,12 +105,12 @@ src/core/    math, input, noise, logging
 src/gfx/     GPU device, pipeline cache + shader hot reload, renderer,
              shadows, additive particles
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
-src/game/    flight model, chase camera, terrain, rally, combat, bots,
-             match loop, animation studio
+src/game/    flight model, chase camera, terrain, vegetation, rally, combat,
+             bots, match loop, animation studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration
 shaders/     MSL, hot-reloaded from source
-tests/       nine suites, ~1100 checks
+tests/       ten suites
 docs/        ROADMAP.md (the plan), RETRO.md (the D3D9 port study)
 ```
 

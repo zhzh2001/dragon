@@ -20,6 +20,8 @@
 #include "game/flight.h"
 #include "game/rally.h"
 #include "game/terrain.h"
+#include "game/vegetation.h"
+#include "gfx/foliage.h"
 #include "gfx/debug_draw.h"
 #include "gfx/particles.h"
 #include "audio/audio.h"
@@ -278,6 +280,12 @@ private:
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
     gfx::MaterialToggles material_toggles_;
+    // Trees and grass: placed by the terrain rules, drawn instanced.
+    game::Vegetation vegetation_;
+    game::VegetationSettings vegetation_settings_;
+    gfx::Foliage foliage_;
+    std::vector<game::PlantInstance> grass_scratch_;
+    void replant();
     // The player's hide colour: a hue the texture is pushed toward at its own
     // luminance, and how far. Strength 0 is the texture as authored.
     core::Vec3 player_hue_{1.0f, 1.0f, 1.0f};

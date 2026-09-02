@@ -23,6 +23,8 @@ Useful flags:
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
 | `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon (elev 88 looks straight down -- the only view that shows a lateral tail wave); add `--inspect-head` to orbit the animated head instead (jaw, aim). |
 | `--skeleton` | Draw the posed joints as lines, to tell a rig problem from a skinning one. |
+
+The Terrain panel's **Vegetation** node has the tree and grass controls.
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
@@ -101,11 +103,15 @@ flight controls.
 - **Shadows**: one directional map following the camera, using a conventional
   [0,1] depth range with a LESS compare -- deliberately unlike the reversed-Z
   main pass, since an independent pass is easier to debug with standard depth.
-- **Terrain height is analytic**: `Terrain::height_at` evaluates the same noise
-  the mesh was built from, so gameplay queries never touch triangles. Physics
-  (Jolt) is deferred until something actually needs swept or convex collision --
-  dragon-vs-dragon, projectiles, ragdolls. A heightfield collider would be pure
-  overhead for ground clearance.
+- **Terrain is generated analytically and queried from the mesh**: the noise
+  builds the grid, and once the grid exists `Terrain::height_at` interpolates
+  the exact rendered triangle under the point (`analytic_height_at` is the
+  generator). The two differed by up to 3.5 m on ridge crests, which is an
+  invisible bump the dragon could touch and the player could not see. The
+  triangle lookup is also cheaper than ten octaves of noise, which is what
+  lets grass be re-placed around the camera every frame. Physics (Jolt) is
+  deferred until something actually needs swept or convex collision --
+  dragon-vs-dragon, projectiles, ragdolls.
 - **Tuning**: every gameplay constant belongs behind an ImGui slider. Feel is
   found by dragging sliders while playing, not by planning.
 
@@ -245,6 +251,36 @@ readability exaggeration tapered off near the camera. Both lessons were paid
 for: a nested "glow" shell just occludes its own core in a forward opaque
 pipeline, and a shot passing the chase camera at 3x exaggeration is a
 screen-filling balloon that reads as a volley of different-sized projectiles.
+
+## Vegetation
+
+`game::Vegetation` places, `gfx::Foliage` draws. Trees are a generated conifer
+(trunk plus three cone skirts, 105 indices) instanced from a static buffer with
+one `FoliageInstance` per tree -- position, scale, yaw, shade, sway phase --
+planted once per terrain on a jittered grid, thinned by a forest-cover noise
+into stands and clearings, kept off water, steep ground and everything above
+a treeline (`treeline_above_floor`: a forested peak is a hill). They cast
+shadows through their own depth pipeline and sway in the vertex shader with
+the square of their height fraction so roots stay put. **Grass is re-placed
+every frame** around the active camera from a stateless hash of the ground
+cell, so a tuft is always in the same place when you come back to it, and
+streamed like the particles; tufts are six leaning blade triangles, no
+texture, no alpha, shrinking into the ground over the last third of the
+radius rather than blinking out. Both pipelines read the mesh vertex layout
+plus a second, instance-rate buffer -- and `instance_step_rate` must be 0:
+SDL reserves it, and a 1 fails pipeline creation with an empty message.
+Plants are visual only; nothing collides with a tree.
+
+The surface query also exposed a frame-time weakness: under the rally test's
+4x frame jitter the bank-limited autopilot orbited Canyon Weave's rings that
+it flies cleanly at 60 Hz. The real fix was in the flight model: **frames
+longer than `max_step` (20 ms) are split into equal substeps** inside
+`FlightModel::update`, since the app lets a hitch reach 100 ms and the
+explicit integration of a banked, roll-damped turn drifts at that step.
+Every dragon benefits, bots included. The autopilot also gained a go-around
+(fly back out to an entry point once past a ring's plane), which is a
+smaller matter -- an eager version of it, triggering on oblique approaches,
+made things worse before the substeps were found.
 
 ## Particles and audio (M7, first half)
 
@@ -622,6 +658,25 @@ the neck permanently and clamped away most of any steer -- the "stiff neck no
 slider could fix". And **measure the jaw's tip as the most forward descendant,
 not the deepest**: the deepest bone under the jaw is the tongue, which points
 back into the mouth, and the measured open direction came out inverted.
+
+### Why the tail was abrupt (and how to find such things)
+
+Three causes, found in this order, each hiding the next. The **hard joint
+clamps** stopped a tail tip arriving at 25 m/s in one frame; a soft limit
+(`chain_limit_stiffness`/`_damping`) now brakes progressively from half the
+allowed bend, and the range clamp removes only the velocity into it. That
+was not the main cause. **Pseudo-forces on a spring sized for 1 g**: a 4 g
+S-turn reversal flung the tail to its constraints and it snapped back;
+muscle tenses against load, so chain stiffness now saturates with the local
+inertial acceleration (`chain_load_tone_accel`) -- deflection bounded, whip
+gone; this took the old dragon's worst tip acceleration from 276 to 51 m/s^2.
+And the Prowler's remaining one-frame kick was a **26 cm stub bone** at the
+head of its tail chain, free to swing 180 degrees in a frame and drag the
+chain after it; the mapper now trims stub bases (`trim_stub_base`). Method:
+trace the tip's per-frame acceleration through a scripted manoeuvre
+(`probe`-style, off the studio's S-turn state), bisect by zeroing one force
+term at a time, and do not trust a view that cannot show the axis the motion
+is in.
 
 ### Attack and speed posture
 

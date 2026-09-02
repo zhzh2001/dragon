@@ -28,6 +28,8 @@ add_executable(dragon
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
   src/gfx/particles.cpp
+  src/gfx/foliage.cpp
+  src/game/vegetation.cpp
   src/audio/audio.cpp
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
@@ -202,3 +204,16 @@ target_include_directories(test_match PRIVATE src)
 target_link_libraries(test_match PRIVATE SDL3::SDL3)
 target_compile_options(test_match PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME match COMMAND test_match)
+
+add_executable(test_vegetation
+  tests/test_vegetation.cpp
+  src/game/terrain.cpp
+  src/game/vegetation.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_vegetation PRIVATE src)
+target_link_libraries(test_vegetation PRIVATE SDL3::SDL3)
+target_compile_options(test_vegetation PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME vegetation COMMAND test_vegetation)

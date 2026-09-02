@@ -54,7 +54,13 @@ class Terrain {
 public:
     void generate(const TerrainSettings& settings);
 
+    // Height of the RENDERED surface: once the mesh exists, this interpolates
+    // the exact triangle under (x, z), so nothing the player can touch differs
+    // from what they can see. Before generation, and outside the mesh, it is
+    // the analytic function the mesh was built from.
     float height_at(float x, float z) const;
+    // The generating function itself, for building the mesh and for tests.
+    float analytic_height_at(float x, float z) const;
     core::Vec3 normal_at(float x, float z) const;
 
     // Signed height above the ground. Negative means underground.
@@ -67,6 +73,7 @@ public:
     float valley_center_x(float z) const;
 
     const gfx::MeshData& mesh_data() const { return mesh_; }
+    bool has_mesh() const { return grid_ready_; }
     const TerrainSettings& settings() const { return settings_; }
 
     // Highest point found while building the mesh -- for framing the camera and
@@ -82,6 +89,8 @@ private:
     TerrainSettings settings_;
     core::Noise noise_;
     gfx::MeshData mesh_;
+    bool grid_ready_ = false;
+    int verts_per_side_ = 0;
     float max_height_ = 0.0f;
     float min_height_ = 0.0f;
 };

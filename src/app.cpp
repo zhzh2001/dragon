@@ -118,6 +118,7 @@ bool App::init(const Options& options) {
     if (!world_.init(&device_, &pipelines_)) return false;
     if (!shadow_.init(&device_, &pipelines_)) return false;
     world_.set_shadow_map(&shadow_);
+    if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
 
     regenerate_terrain();
 
@@ -568,10 +569,18 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     return model;
 }
 
+void App::replant() {
+    vegetation_.plant(terrain_, vegetation_settings_);
+    foliage_.set_trees(device_, vegetation_.trees());
+    foliage_.wind = vegetation_settings_.wind;
+    foliage_.tree_height = vegetation_settings_.tree_height;
+}
+
 void App::regenerate_terrain() {
     terrain_.generate(terrain_settings_);
     terrain_mesh_.release(device_.gpu());
     terrain_mesh_.upload(device_.gpu(), terrain_.mesh_data(), "terrain");
+    replant();
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
     material_.rock_slope = 0.62f;
@@ -602,6 +611,7 @@ void App::shutdown() {
     }
     dragon_textures_.clear();
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
+    foliage_.shutdown(device_);
     world_.shutdown(device_);
     shadow_.shutdown(device_);
     audio_.shutdown();
@@ -1317,6 +1327,30 @@ void App::build_ui(float dt) {
                                     2000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("valley meander", &terrain_settings_.valley_meander, 0.0f,
                                     1600.0f, "%.0f m");
+        if (ImGui::TreeNode("Vegetation")) {
+            bool replant_now = false;
+            replant_now |= ImGui::Checkbox("trees", &vegetation_settings_.trees);
+            ImGui::SameLine();
+            ImGui::Checkbox("grass", &vegetation_settings_.grass);
+            replant_now |= ImGui::SliderFloat("tree spacing", &vegetation_settings_.tree_spacing,
+                                              6.0f, 40.0f, "%.0f m");
+            replant_now |= ImGui::SliderFloat("forest cover", &vegetation_settings_.forest_cover,
+                                              0.0f, 1.0f);
+            replant_now |= ImGui::SliderFloat("treeline above floor",
+                                              &vegetation_settings_.treeline_above_floor, 50.0f,
+                                              800.0f, "%.0f m");
+            replant_now |= ImGui::SliderFloat("tree max slope", &vegetation_settings_.tree_max_slope,
+                                              0.3f, 1.0f);
+            ImGui::SliderFloat("grass radius", &vegetation_settings_.grass_radius, 30.0f, 250.0f,
+                               "%.0f m");
+            ImGui::SliderFloat("grass spacing", &vegetation_settings_.grass_spacing, 1.0f, 8.0f,
+                               "%.1f m");
+            ImGui::SliderFloat("wind", &vegetation_settings_.wind, 0.0f, 3.0f);
+            ImGui::TextDisabled("%u trees, %u grass tufts near the camera", foliage_.tree_count(),
+                                foliage_.grass_count());
+            if (replant_now && !ImGui::IsAnyItemActive()) replant();
+            ImGui::TreePop();
+        }
         dirty |= ImGui::SliderFloat("half extent", &terrain_settings_.half_extent, 500.0f, 4000.0f,
                                     "%.0f m");
         dirty |= ImGui::SliderFloat("cell size", &terrain_settings_.cell_size, 3.0f, 20.0f,
@@ -1749,6 +1783,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("drag", &rig.chain_drag, 0.0f, 0.5f);
         ImGui::SliderFloat("max bend", &rig.chain_max_bend_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("muscle tone", &rig.chain_tone, 0.0f, 6.0f);
+        ImGui::SliderFloat("load tone accel", &rig.chain_load_tone_accel, 1.0f, 40.0f, "%.0f m/s^2");
         ImGui::SliderFloat("neck stiffness x", &rig.neck_stiffness_scale, 0.5f, 8.0f);
         ImGui::SliderFloat("neck gravity x", &rig.neck_gravity_scale, 0.0f, 1.5f);
         ImGui::SliderFloat("neck brace", &rig.neck_inertia_scale, 0.0f, 1.0f);
@@ -2993,6 +3028,13 @@ void App::render() {
     // Copy passes cannot open inside a render pass, so particle staging rides
     // alongside the debug-line upload.
     particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
+    // Grass is re-placed around the camera every frame, deterministically from
+    // the ground cell, and streamed like the particles.
+    vegetation_.grass_around(terrain_, vegetation_settings_, camera.position, grass_scratch_);
+    foliage_.wind = vegetation_settings_.wind;
+    foliage_.grass_fade_end = vegetation_settings_.grass_radius;
+    foliage_.grass_fade_start = vegetation_settings_.grass_radius * 0.7f;
+    foliage_.upload_grass(device_, grass_scratch_);
     ui_.prepare_draw_data(device_);
 
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
@@ -3000,6 +3042,8 @@ void App::render() {
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled) {
         SDL_GPURenderPass* shadow_pass = shadow_.begin_pass(device_);
+        foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
+                                  world_.scene().view_params.z);
         world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                gfx::ModelUniforms());
         world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
@@ -3034,6 +3078,8 @@ void App::render() {
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
+    foliage_.draw_trees(device_, pass, world_.scene());
+    foliage_.draw_grass(device_, pass, world_.scene());
     world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,
                         dragon_rig_.skinning_matrices(), dragon_textures_, model_sampler_);
 

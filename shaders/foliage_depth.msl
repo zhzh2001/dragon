@@ -1,0 +1,39 @@
+#include "scene_common.msl"
+
+// Depth-only instanced plants for the shadow map. The same placement and sway
+// as foliage.msl, so a swaying crown casts a swaying shadow.
+
+struct FoliageParams {
+    float4 wind_time_fade;
+    float4 extra;
+};
+
+struct ShadowUniforms {
+    float4x4 light_view_proj;
+};
+
+struct VertexIn {
+    float3 position       [[attribute(0)]];
+    float3 normal         [[attribute(1)]];
+    float3 color          [[attribute(2)]];
+    float4 position_scale [[attribute(3)]];
+    float4 params         [[attribute(4)]];
+};
+
+vertex float4 vs_main(VertexIn in [[stage_in]],
+                      constant ShadowUniforms& shadow [[buffer(0)]],
+                      constant FoliageParams& params [[buffer(1)]]) {
+    float yaw = in.params.x;
+    float c = cos(yaw), s = sin(yaw);
+    float3 local = in.position * in.position_scale.w;
+    float3 rotated = float3(c * local.x + s * local.z, local.y, -s * local.x + c * local.z);
+    float height_fraction = saturate(local.y / max(in.position_scale.w * params.extra.x, 0.01));
+    float t = params.wind_time_fade.y;
+    float sway = params.wind_time_fade.x * height_fraction * height_fraction *
+                 (sin(t * 1.3 + in.params.z) + 0.5 * sin(t * 2.9 + in.params.z * 1.7));
+    rotated.x += sway;
+    rotated.z += sway * 0.6;
+    return shadow.light_view_proj * float4(in.position_scale.xyz + rotated, 1.0);
+}
+
+fragment void fs_main() {}

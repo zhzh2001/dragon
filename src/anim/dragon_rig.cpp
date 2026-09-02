@@ -682,6 +682,13 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     }
 
     const Vec3 omega = state.angular_velocity;
+    // The per-vertebra bend limit is normalised to a four-segment chain: a
+    // seven-segment tail with the same per-joint limit could take its whole
+    // bend in two joints and did -- a hinge at the base with a straight boom
+    // beyond it, which read as robotic. The same total bend, spread along the
+    // length.
+    const float per_joint_bend = core::radians(tuning.chain_max_bend_deg) *
+                                 core::minf(1.0f, 4.0f / float(std::max<size_t>(sim.position.size(), 2) - 1));
 
     // Gravity, expressed in the dragon's frame.
     const Vec3 gravity_local =
@@ -717,11 +724,52 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
 
         Vec3 acceleration = gravity_local + inertial;
 
+        // Load tone: the muscle holding this point tenses with what it carries.
+        const float load_tone =
+            1.0f + core::length(inertial) / core::maxf(tuning.chain_load_tone_accel, 0.1f);
+
         // Spring back toward the (possibly steered) target shape, so the chain
         // has a shape to return to rather than dangling.
         const float taper = taper_at(i);
-        acceleration += (target[i] - r) * (base_stiffness * taper);
-        acceleration -= v * (base_damping * std::sqrt(taper));
+        acceleration += (target[i] - r) * (base_stiffness * taper * load_tone);
+        acceleration -= v * (base_damping * std::sqrt(taper * load_tone));
+
+        // Soft joint limit. The hard bend clamp below is a wall, and a tail tip
+        // arriving at a wall at 25 m/s stops in one frame -- the "abrupt"
+        // tail. Muscle and ligament resist progressively instead: from half
+        // the allowed bend the joint feels a restoring pull toward the
+        // straightened position and its velocity into the limit is damped,
+        // so the clamp is only ever reached slowly, if at all.
+        if (i >= 2) {
+            const Vec3 previous_dir =
+                core::normalize_or(sim.position[i - 1] - sim.position[i - 2], along_chain);
+            const Vec3 target_previous = core::normalize_or(
+                target[i - 1] - target[i - 2], previous_dir);
+            const Vec3 target_direction = core::normalize_or(target[i] - target[i - 1], along_chain);
+            const float rest_bend = std::acos(core::clampf(
+                core::dot(target_previous, target_direction), -1.0f, 1.0f));
+            const float bend = std::acos(core::clampf(core::dot(previous_dir, along_chain), -1.0f, 1.0f));
+            const float excess = bend - rest_bend;
+            const float soft_start = 0.5f * per_joint_bend;
+            if (excess > soft_start && per_joint_bend > 1e-4f) {
+                const float over = core::saturate((excess - soft_start) / (per_joint_bend - soft_start));
+                // Where this point would sit with the excess reduced to the
+                // soft start: rotate the segment back toward the previous one.
+                const Vec3 axis = core::cross(along_chain, previous_dir);
+                Vec3 eased_dir = along_chain;
+                if (core::length_sq(axis) > 1e-8f) {
+                    eased_dir = core::rotate(core::Quat::from_axis_angle(core::normalize(axis),
+                                                                          excess - soft_start),
+                                             along_chain);
+                }
+                const Vec3 eased = sim.position[i - 1] + eased_dir * sim.segment[i];
+                const Vec3 correction = eased - r;
+                acceleration += correction * (tuning.chain_limit_stiffness * over);
+                const Vec3 n = core::normalize_or(correction, Vec3::zero());
+                const float into = core::dot(v, n);
+                if (into < 0.0f) acceleration -= n * into * (tuning.chain_limit_damping * over);
+            }
+        }
 
         // Drag against the relative airflow: a linear term that damps slow
         // motion plus the physical v^2 term. Slender-body drag acts across the
@@ -815,8 +863,14 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                         direction = target_direction;
                     }
                     // Kill the velocity that drove past the limit, or the
-                    // spring fights a phantom momentum forever.
-                    sim.velocity[i] = sim.velocity[i] * 0.5f;
+                    // spring fights a phantom momentum forever -- but only the
+                    // component into the clamp; halving everything stopped the
+                    // whole tail dead in one frame.
+                    const Vec3 clamp_normal = core::normalize_or(
+                        (sim.position[i - 1] + direction * sim.segment[i]) - sim.position[i],
+                        Vec3::zero());
+                    const float into = core::dot(sim.velocity[i], clamp_normal);
+                    if (into < 0.0f) sim.velocity[i] -= clamp_normal * into;
                     range_budget = 0.0f;
                 } else {
                     range_budget -= deviation;
@@ -852,14 +906,9 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                     target[i] - target[i - 1], direction);
                 const float rest_bend = std::acos(core::clampf(
                     core::dot(target_previous, target_direction), -1.0f, 1.0f));
-                // The per-vertebra limit is normalised to a four-segment
-                // chain: a seven-segment tail with the same per-joint limit
-                // could take its whole bend in two joints and did -- a hinge
-                // at the base with a straight boom beyond it, which read as
-                // robotic. The same total bend, spread along the length.
-                const float per_joint = core::radians(tuning.chain_max_bend_deg) *
-                                        core::minf(1.0f, 4.0f / float(count - 1));
-                const float allowed = rest_bend + per_joint;
+                // Hard safety net behind the soft limit above: a tail that
+                // still gets here does so slowly.
+                const float allowed = rest_bend + per_joint_bend;
                 if (core::dot(previous, direction) < std::cos(allowed)) {
                     // Rotate the direction back toward the previous segment
                     // until it is inside the cone.
@@ -1488,6 +1537,29 @@ std::vector<int> branches_of(const Skeleton& skeleton, int joint) {
     return peers;
 }
 
+// Drops leading chain joints that sit almost on top of the next one -- a
+// "TailBase" or control bone parked on the root, not a vertebra. A 26 cm stub
+// at the head of an 8 m tail can swing through 180 degrees inside one frame
+// for almost no cost, and the length constraints then whip the whole chain
+// after it: the one-frame kick the Prowler's tail showed at every reversal.
+void trim_stub_base(const Skeleton& skeleton, std::vector<int>& chain) {
+    while (chain.size() >= 3) {
+        float total = 0.0f;
+        for (size_t i = 1; i < chain.size(); ++i) {
+            total += core::distance(skeleton.world_bind(chain[i]).translation_part(),
+                                    skeleton.world_bind(chain[i - 1]).translation_part());
+        }
+        const float mean = total / float(chain.size() - 1);
+        const float first = core::distance(skeleton.world_bind(chain[1]).translation_part(),
+                                           skeleton.world_bind(chain[0]).translation_part());
+        if (first < 0.25f * mean) {
+            chain.erase(chain.begin());
+        } else {
+            break;
+        }
+    }
+}
+
 // Follows a chain down its main line. Helpers hanging off the chain do not end
 // it; a genuine branch -- the fingers off a hand, the toes off a foot -- does.
 // `stop_at` ends the chain before a joint the caller wants to own separately.
@@ -1538,6 +1610,8 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
     const std::vector<int> head = collect(skeleton, {"head"}, {"ik", "_end", "target"});
     j.head = head.empty() ? NO_PARENT : head.front();
     j.tail = order_chain(skeleton, collect(skeleton, {"tail"}, {"cont", "_end"}));
+    trim_stub_base(skeleton, j.tail);
+    trim_stub_base(skeleton, j.neck);
 
     // Wings. Side comes from the bind position's X sign rather than from the
     // name: riggers label sides from the creature's point of view or the

@@ -147,12 +147,25 @@ struct RigTuning {
     // one vertebra -- and an accordioned tail was exactly what a looser limit
     // produced under hard manoeuvres.
     float chain_max_bend_deg = 20.0f;
+    // The soft joint limit in front of that wall: a restoring pull (1/s^2 per
+    // metre of over-bend) and damping of motion into the limit (1/s), both
+    // fading in from half the allowed bend. A tail tip meeting a hard clamp
+    // at 25 m/s stopped in one frame; this is what makes it ease instead.
+    float chain_limit_stiffness = 60.0f;
+    float chain_limit_damping = 12.0f;
     int chain_iterations = 4;
     // Muscle tone: chains stiffen with flight intensity, the way an animal
     // tenses under load. At tone 2 a full-intensity manoeuvre triples the
     // stiffness, which is what keeps the tail a rudder instead of a streamer in
     // a dive or a hard pull.
     float chain_tone = 2.0f;
+    // Muscle also tenses against the load it is actually carrying: stiffness
+    // (and damping, by its square root) scale with 1 + |inertial
+    // acceleration| / this, per point. Without it a spring sized to look
+    // legible at 1 g is flung to its constraints by a 4 g reversal and snaps
+    // back -- the "abrupt" tail. With it the deflection saturates at roughly
+    // this acceleration over the base stiffness: a held tail, not a flail.
+    float chain_load_tone_accel = 8.0f;
     // The neck is muscle wrapped around a spine and carries the head the animal
     // aims with; it is far stiffer and far better supported than the tail.
     // Scales applied on top of the shared chain parameters.

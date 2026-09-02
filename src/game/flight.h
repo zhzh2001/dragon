@@ -207,6 +207,11 @@ public:
     // Fixed-step is preferable but a clamped variable step is stable here.
     // `terrain` may be null, in which case there is no ground.
     void update(const FlightInput& input, const Terrain* terrain, float dt);
+    // Longest single integration step. A frame longer than this is split into
+    // equal substeps: the app lets a hitch reach 100 ms, and at that step the
+    // explicit integration of a banked, roll-damped turn drifts enough that a
+    // bank-limited autopilot orbited rings it flies cleanly at 60 Hz.
+    float max_step = 1.0f / 50.0f;
 
     const FlightState& state() const { return state_; }
     FlightState& state() { return state_; }
@@ -220,6 +225,8 @@ public:
     core::Vec3 debug_gravity = core::Vec3::zero();
 
 private:
+    void step(const FlightInput& input, const Terrain* terrain, float dt);
+
     void integrate_forces(const FlightInput& input, float dt);
     void integrate_rotation(const FlightInput& input, float dt);
     void resolve_ground(const Terrain* terrain, float dt);

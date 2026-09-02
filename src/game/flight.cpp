@@ -53,6 +53,13 @@ void FlightModel::reset(Vec3 position, Quat orientation, float airspeed) {
 
 void FlightModel::update(const FlightInput& input, const Terrain* terrain, float dt) {
     if (dt <= 0.0f) return;
+    const float step_limit = core::maxf(max_step, 1e-3f);
+    const int steps = dt > step_limit ? int(std::ceil(dt / step_limit)) : 1;
+    const float step_dt = dt / float(steps);
+    for (int i = 0; i < steps; ++i) step(input, terrain, step_dt);
+}
+
+void FlightModel::step(const FlightInput& input, const Terrain* terrain, float dt) {
 
     // Smooth the raw input. Control lag is what separates a dragon from a
     // cursor: the body has inertia and the wings take time to bite.
