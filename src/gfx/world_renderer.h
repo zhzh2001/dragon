@@ -41,6 +41,8 @@ public:
     void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
 
     void draw_terrain(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
+    // The water surface quad (see water.msl).
+    void draw_water(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
 
     // Lit opaque geometry with per-vertex albedo and procedural deformation.
     void draw_mesh(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
@@ -69,6 +71,7 @@ private:
     PipelineHandle sky_ = INVALID_PIPELINE;
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
+    PipelineHandle water_ = INVALID_PIPELINE;
     PipelineHandle mesh_ = INVALID_PIPELINE;
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;

@@ -38,6 +38,18 @@ PipelineDesc make_terrain_desc(bool wireframe) {
     return desc;
 }
 
+PipelineDesc make_water_desc() {
+    PipelineDesc desc;
+    desc.name = "water";
+    desc.shader_path = "water.msl";
+    desc.vs_uniform_buffers = 1;
+    desc.fs_uniform_buffers = 1;
+    desc.vertex_buffers = Mesh::buffer_descriptions();
+    desc.vertex_attributes = Mesh::attributes();
+    desc.cull = SDL_GPU_CULLMODE_NONE;
+    return desc;
+}
+
 PipelineDesc make_mesh_desc() {
     PipelineDesc desc;
     desc.name = "mesh";
@@ -113,6 +125,7 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     sky_ = pipelines_->create(make_sky_desc());
     terrain_ = pipelines_->create(make_terrain_desc(false));
     terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
+    water_ = pipelines_->create(make_water_desc());
     mesh_ = pipelines_->create(make_mesh_desc());
     skinned_ = pipelines_->create(make_skinned_desc());
     return sky_ != INVALID_PIPELINE && terrain_ != INVALID_PIPELINE && mesh_ != INVALID_PIPELINE &&
@@ -151,6 +164,16 @@ void WorldRenderer::draw_terrain(Device& device, SDL_GPURenderPass* pass, const 
         SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
     }
 
+    mesh.bind(pass);
+    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
+}
+
+void WorldRenderer::draw_water(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh) {
+    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(water_);
+    if (!pipeline || !pass || !mesh.valid()) return;
+    SDL_BindGPUGraphicsPipeline(pass, pipeline);
+    SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene_, sizeof(SceneUniforms));
+    SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(pass);
     SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
 }

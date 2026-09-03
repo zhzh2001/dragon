@@ -288,10 +288,7 @@ private:
     void replant();
     // The coarse ground beyond the playable extent.
     gfx::Mesh terrain_skirt_mesh_;
-    // Handling "heft": one knob that scales mass and the control rates
-    // together, so a heavier dragon is slower to roll and pitch. Applied as a
-    // ratio to the previous value, so the individual sliders stay live.
-    float heft_ = 1.0f;
+    gfx::Mesh water_mesh_;
     std::string model_tuning_path_;
     // The player's hide colour: a hue the texture is pushed toward at its own
     // luminance, and how far. Strength 0 is the texture as authored.

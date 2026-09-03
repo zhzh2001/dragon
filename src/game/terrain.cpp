@@ -18,6 +18,13 @@ float Terrain::valley_center_x(float z) const {
                                        std::sin(t * core::TWO_PI * 0.37f + 1.3f) * 0.3f);
 }
 
+float Terrain::river_center_x(float z) const {
+    // Off the corridor's centre by a slower wander, so the water crosses the
+    // valley floor rather than tracing its axis.
+    const float t = z / core::maxf(settings_.valley_period, 1.0f);
+    return valley_center_x(z) + settings_.river_wander * std::sin(t * core::TWO_PI * 1.7f + 0.6f);
+}
+
 float Terrain::valley_mask(float x, float z) const {
     const float distance = std::fabs(x - valley_center_x(z));
     return core::smoothstep(settings_.valley_width, settings_.valley_width + settings_.valley_falloff,
@@ -78,7 +85,19 @@ float Terrain::analytic_height_at(float x, float z) const {
 
     // Mountains only exist outside the corridor. Hills are damped but not
     // removed on the floor, so the valley still has relief to fly around.
-    return settings_.valley_floor + mountains * mask + hills * (0.25f + 0.75f * mask);
+    const float ground = settings_.valley_floor + mountains * mask + hills * (0.25f + 0.75f * mask);
+
+    // The river: blend the ground down to a flat bed below the water line
+    // inside the channel, with banks a couple of widths across. Only where the
+    // corridor is (the mask is 0), so the river never climbs a mountain.
+    if (settings_.river_half_width > 0.0f && mask < 0.999f) {
+        const float distance = std::fabs(x - river_center_x(z));
+        const float half = settings_.river_half_width;
+        const float channel = 1.0f - core::smoothstep(half, half * 2.6f, distance);
+        const float bed = settings_.water_level - settings_.river_depth;
+        return core::lerpf(ground, core::minf(ground, bed), channel * (1.0f - mask));
+    }
+    return ground;
 }
 
 Vec3 Terrain::normal_at(float x, float z) const {

@@ -45,6 +45,14 @@ struct TerrainSettings {
     float valley_period = 3300.0f;   // metres per meander cycle
 
     float water_level = 34.0f;
+    // The river: a channel carved along the corridor, wandering off the
+    // corridor's own centre line so the two do not read as one curve. Half
+    // width at the water line, bed depth below the water, and how far it
+    // wanders. The floor sits above the water everywhere else, so this is the
+    // only water in the valley.
+    float river_half_width = 26.0f;
+    float river_depth = 7.0f;
+    float river_wander = 110.0f;
 
     // Beyond the playable extent the same function continues as a coarse
     // "skirt" mesh out to this multiple of the half extent, so there is
@@ -71,10 +79,17 @@ public:
     float analytic_height_at(float x, float z) const;
     core::Vec3 normal_at(float x, float z) const;
 
-    // Signed height above the ground. Negative means underground.
-    float clearance_at(core::Vec3 position) const {
-        return position.y - height_at(position.x, position.z);
+    // The surface you can stand on or splash into: the ground, or the water
+    // where the ground is below the water line.
+    float surface_at(float x, float z) const {
+        return core::maxf(height_at(x, z), settings_.water_level);
     }
+    // Signed height above the surface. Negative means under it.
+    float clearance_at(core::Vec3 position) const {
+        return position.y - surface_at(position.x, position.z);
+    }
+    // Centre line of the river at a given Z.
+    float river_center_x(float z) const;
 
     // Centre of the valley corridor at a given Z. Useful for placing courses,
     // spawns, and the initial camera.

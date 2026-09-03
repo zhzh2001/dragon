@@ -280,6 +280,17 @@ instance-rate buffer -- and `instance_step_rate` must be 0: SDL reserves it,
 and a 1 fails pipeline creation with an empty message. Plants are visual only;
 nothing collides with a tree.
 
+**There is a river now, and it is the only water.** The valley floor sits
+above the water line everywhere, so for a long time "water level" coloured a
+sand band and nothing else. `analytic_height_at` carves a channel along
+`river_center_x` (the corridor's centre plus its own slower wander, so the two
+curves differ) down to a flat bed below the water line; `surface_at` is the
+ground or the water, whichever is higher, and everything that lands, hovers
+or measures clearance uses it. The water is one quad at the water line over
+the whole world (`water.msl`: fresnel between a deep colour and the reflected
+sky, a small ripple, a sun glint), hidden by the terrain wherever the ground
+is above the line -- which is everywhere but the river. Reeds crowd its banks.
+
 **The world does not end at the playable extent.** The analytic height used
 to carry on past the last visible triangle: an invisible mountain range you
 could fly into and land on, out toward the sky. The terrain now builds a
@@ -350,12 +361,24 @@ Every ImGui window except Combat starts **collapsed** -- one click away, not
 hidden, but the screen belongs to the game.
 
 **Handling per model.** The two dragons fly identical numbers, and the eye
-insists the small quick-looking wyvern is lighter. The Flight panel has a
-**heft** knob -- one ratio that scales mass up and roll/pitch/yaw rates and
-control lag down by its square root, on top of the individual sliders -- and
-"save for this model" writes the tuning to `<model>.flight.cfg` beside the
-glTF, loaded automatically on top of `assets/flight_tuning.cfg` when that
-model is used.
+insists the small quick-looking wyvern is lighter. `FlightTuning::heft` is
+one knob that multiplies the mass and slows roll/pitch/yaw and control lag by
+its square root, applied at use so it composes with the presets instead of
+being baked into the sliders (the first version rescaled the sliders in place
+and fought the preset buttons). "save for this model" writes the tuning to
+`<model>.flight.cfg` beside the glTF, loaded automatically on top of
+`assets/flight_tuning.cfg` when that model is used.
+
+**Landing and taking off are states.** Auto-flap once flapped at full power
+under 75 m no matter what, so the dragon could never land -- it hovered near
+the ground fighting its pilot. Now: brake held low, or being down, is a
+landing intent that stands the assist aside; a nose pointed down or a held
+tuck is a dive and gets no assist flaps either (wings beating in a dive read
+as wrong because they are); near-ground assist is proportional and only
+against a sink. On the ground a slow body settles level on the surface
+(yaw kept), and the first flap from the ground is a leap (`takeoff_jump`,
+`takeoff_push`), because the min-airspeed assist is off on the ground and a
+taxiing dragon otherwise never reached flying speed.
 
 Bots cycle through four hides -- rust, bone, moss, violet -- so a flight is not
 four copies of one dragon, and their fire leaves the animated head like the

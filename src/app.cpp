@@ -541,16 +541,31 @@ game::FlightInput App::read_flight_input() const {
     // missing and leaves the dive-and-climb trade intact.
     if (assists_.auto_flap) {
         const game::FlightState& s = flight_.state();
-        const float deficit = (assists_.auto_flap_speed - s.airspeed) / 14.0f;
-        float assist = core::saturate(deficit);
-        // Sink protection: a fight at healthy airspeed still glides steadily
-        // downhill, and a pilot busy aiming does not notice until the ground
-        // does. Flap against an unintended descent -- unintended meaning no
-        // tuck and no brake held.
-        if (in.tuck < 0.1f && in.brake < 0.1f) {
-            assist = core::maxf(assist, core::saturate((-s.climb_rate - 4.0f) / 8.0f));
+        // Landing intent: brake held low, or already down. The assist stands
+        // aside -- it once flapped at full power under 75 m no matter what,
+        // which is why the dragon could never actually land, only hover near
+        // the ground fighting its own pilot.
+        const bool landing = s.grounded || (in.brake > 0.3f && s.ground_clearance < 40.0f);
+        // Diving is a decision: no assist flaps against a nose pointed down.
+        const bool diving = s.forward().y < -0.25f || in.tuck > 0.1f;
+        float assist = 0.0f;
+        if (!landing) {
+            const float deficit = (assists_.auto_flap_speed - s.airspeed) / 14.0f;
+            assist = diving ? 0.0f : core::saturate(deficit);
+            // Sink protection: a fight at healthy airspeed still glides steadily
+            // downhill, and a pilot busy aiming does not notice until the ground
+            // does. Flap against an unintended descent -- unintended meaning no
+            // tuck, no brake and no dive.
+            if (!diving && in.brake < 0.1f) {
+                assist = core::maxf(assist, core::saturate((-s.climb_rate - 4.0f) / 8.0f));
+            }
+            // Close to the ground and sinking: proportional, not a hard 1.
+            if (s.ground_clearance < assists_.auto_flap_clearance && s.climb_rate < 1.0f &&
+                !diving) {
+                assist = core::maxf(assist, core::saturate((assists_.auto_flap_clearance -
+                                                            s.ground_clearance) / 30.0f));
+            }
         }
-        if (s.ground_clearance < assists_.auto_flap_clearance) assist = 1.0f;
         in.flap = core::maxf(in.flap, assist);
     }
 
@@ -593,6 +608,24 @@ void App::regenerate_terrain() {
     terrain_skirt_mesh_.release(device_.gpu());
     if (!terrain_.skirt_mesh_data().indices.empty()) {
         terrain_skirt_mesh_.upload(device_.gpu(), terrain_.skirt_mesh_data(), "terrain_skirt");
+    }
+    // The water surface: one quad at the water line over the whole world. The
+    // terrain hides it everywhere the ground is above the line, which is
+    // everywhere but the river.
+    {
+        gfx::MeshData quad;
+        const float half = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
+        const float y = terrain_settings_.water_level;
+        for (int i = 0; i < 4; ++i) {
+            gfx::MeshVertex v;
+            v.position = core::Vec3{(i & 1) ? half : -half, y, (i & 2) ? half : -half};
+            v.normal = core::Vec3::up();
+            v.color = core::Vec3::one();
+            quad.vertices.push_back(v);
+        }
+        quad.indices = {0, 2, 1, 1, 2, 3};
+        water_mesh_.release(device_.gpu());
+        water_mesh_.upload(device_.gpu(), quad, "water");
     }
     replant();
     // Snow should sit sensibly relative to whatever the peaks came out at.
@@ -2938,11 +2971,14 @@ void App::build_flight_ui() {
     }
 
     if (ImGui::CollapsingHeader("Presets")) {
+        // Presets set the body and wing; heft is the player's and survives them.
+        const float kept_heft = t.heft;
         if (ImGui::Button("glider")) t = game::tuning_preset_glider();
         ImGui::SameLine();
         if (ImGui::Button("agile")) t = game::tuning_preset_agile();
         ImGui::SameLine();
         if (ImGui::Button("heavy")) t = game::tuning_preset_heavy();
+        t.heft = kept_heft;
         ImGui::SameLine();
         if (ImGui::Button("default")) t = game::FlightTuning();
         if (ImGui::Button("save to assets/flight_tuning.cfg")) {
@@ -2956,20 +2992,11 @@ void App::build_flight_ui() {
         if (ImGui::Button("save for this model")) game::save_tuning(t, model_tuning_path_.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", model_tuning_path_.c_str());
-        // Heft: one knob for "this one is heavier". Mass up, control rates and
-        // lag toward slower, all by the same ratio, on top of whatever the
-        // individual sliders say.
-        float heft = heft_;
-        if (ImGui::SliderFloat("heft", &heft, 0.5f, 2.5f, "%.2fx") && heft > 0.01f) {
-            const float ratio = heft / heft_;
-            t.mass *= ratio;
-            t.roll_rate /= std::sqrt(ratio);
-            t.pitch_rate /= std::sqrt(ratio);
-            t.yaw_rate /= std::sqrt(ratio);
-            t.control_lag *= std::sqrt(ratio);
-            heft_ = heft;
-        }
-        ImGui::TextDisabled("heft scales mass, and slows roll/pitch/yaw and control lag by its root");
+        // Heft: one knob for "this one is heavier", composed on top of the
+        // presets and sliders rather than baked into them.
+        ImGui::SliderFloat("heft", &t.heft, 0.5f, 2.5f, "%.2fx");
+        ImGui::TextDisabled("heft multiplies mass, and slows roll/pitch/yaw and control lag by its root");
+        ImGui::SliderFloat("take-off jump", &t.takeoff_jump, 0.0f, 15.0f, "%.1f m/s");
     }
 
     if (ImGui::CollapsingHeader("Body & wing")) {
@@ -3115,6 +3142,7 @@ void App::render() {
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
     if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_);
+    if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
     foliage_.draw_trees(device_, pass, world_.scene());
     foliage_.draw_grass(device_, pass, world_.scene());
     world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,

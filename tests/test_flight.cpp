@@ -482,7 +482,70 @@ void test_tuning_round_trip() {
 
 }  // namespace
 
+// Landing and taking off are states, not accidents. A dragon set down on the
+// ground stays down and settles level; the first flap from the ground is a leap
+// that leaves it; heft makes the same commands act on a heavier body.
+void test_landing_and_takeoff() {
+    std::printf("landing settles, the first flap from the ground is a leap\n");
+    game::TerrainSettings settings;
+    settings.half_extent = 600.0f;
+    game::Terrain terrain;
+    terrain.generate(settings);
+
+    // Set down on the floor, slow, nose slightly up and banked: it should
+    // come to rest level within a couple of seconds and stay grounded.
+    game::FlightModel model;
+    const float x = terrain.valley_center_x(0.0f) + 150.0f, z = 0.0f;
+    const float ground = terrain.surface_at(x, z);
+    model.reset(Vec3{x, ground + model.tuning.ground_offset, z},
+                normalize(Quat::from_axis_angle(Vec3::unit_z(), radians(25.0f)) *
+                          Quat::from_axis_angle(Vec3::unit_x(), radians(10.0f))),
+                3.0f);
+    game::FlightInput idle;
+    int grounded_frames = 0;
+    for (int i = 0; i < 180; ++i) {
+        model.update(idle, &terrain, 1.0f / 60.0f);
+        if (model.state().grounded) ++grounded_frames;
+    }
+    CHECK(model.state().grounded);
+    CHECK(grounded_frames > 150);
+    CHECK(length(model.state().velocity) < 0.5f);
+    // Level: the body up is within a few degrees of the surface normal.
+    const Vec3 normal = terrain.normal_at(x, z);
+    CHECK(dot(model.state().up(), normal) > 0.99f);
+    CHECK(state_is_sane(model));
+
+    // A flap from the ground: airborne within a second, and climbing.
+    game::FlightInput flap;
+    flap.flap = 1.0f;
+    for (int i = 0; i < 6; ++i) model.update(flap, &terrain, 1.0f / 60.0f);
+    CHECK(!model.state().grounded);
+    CHECK(model.state().velocity.y > 2.0f);
+    for (int i = 0; i < 54; ++i) model.update(flap, &terrain, 1.0f / 60.0f);
+    CHECK(model.state().ground_clearance > 2.0f);
+    CHECK(state_is_sane(model));
+
+    // Heft: the same roll command turns a heavier dragon more slowly.
+    game::FlightModel light, heavy;
+    heavy.tuning.heft = 2.0f;
+    light.reset(Vec3{0.0f, 500.0f, 0.0f}, Quat::identity(), 40.0f);
+    heavy.reset(Vec3{0.0f, 500.0f, 0.0f}, Quat::identity(), 40.0f);
+    game::FlightInput roll;
+    roll.roll = 1.0f;
+    for (int i = 0; i < 30; ++i) {
+        light.update(roll, nullptr, 1.0f / 60.0f);
+        heavy.update(roll, nullptr, 1.0f / 60.0f);
+    }
+    const float light_bank = std::fabs(std::atan2(dot(light.state().right(), Vec3::up()),
+                                                  dot(light.state().up(), Vec3::up())));
+    const float heavy_bank = std::fabs(std::atan2(dot(heavy.state().right(), Vec3::up()),
+                                                  dot(heavy.state().up(), Vec3::up())));
+    CHECK(heavy_bank < light_bank * 0.85f);
+    CHECK(heavy_bank > 0.0f);
+}
+
 int main() {
+    test_landing_and_takeoff();
     test_glide_loses_energy_slowly();
     test_dive_trades_altitude_for_speed();
     test_flapping_adds_energy();

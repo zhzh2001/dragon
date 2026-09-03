@@ -63,12 +63,22 @@ void FlightModel::step(const FlightInput& input, const Terrain* terrain, float d
 
     // Smooth the raw input. Control lag is what separates a dragon from a
     // cursor: the body has inertia and the wings take time to bite.
-    state_.control.x = core::damp(state_.control.x, core::clampf(input.pitch, -1.0f, 1.0f),
-                                 tuning.control_lag, dt);
-    state_.control.y = core::damp(state_.control.y, core::clampf(input.yaw, -1.0f, 1.0f),
-                                 tuning.control_lag, dt);
-    state_.control.z = core::damp(state_.control.z, core::clampf(input.roll, -1.0f, 1.0f),
-                                 tuning.control_lag, dt);
+    const float heft_root = std::sqrt(core::maxf(tuning.heft, 0.05f));
+    const float lag = tuning.control_lag * heft_root;
+    state_.control.x = core::damp(state_.control.x, core::clampf(input.pitch, -1.0f, 1.0f), lag, dt);
+    state_.control.y = core::damp(state_.control.y, core::clampf(input.yaw, -1.0f, 1.0f), lag, dt);
+    state_.control.z = core::damp(state_.control.z, core::clampf(input.roll, -1.0f, 1.0f), lag, dt);
+
+    // Take-off: the first flap from the ground is a leap. Without it a
+    // grounded dragon flapping just slid forward until lift arrived, and the
+    // min-airspeed assist is off on the ground, so it often never did.
+    const bool flap_pressed = input.flap > 0.5f;
+    if (state_.grounded && flap_pressed && !flap_was_down_) {
+        state_.velocity += Vec3{0.0f, tuning.takeoff_jump, 0.0f} + state_.forward() * tuning.takeoff_push;
+        state_.position.y += 0.05f;
+        state_.grounded = false;
+    }
+    flap_was_down_ = flap_pressed;
     state_.wing_tuck = core::damp(state_.wing_tuck, core::saturate(input.tuck), 0.12f, dt);
     state_.wing_brake = core::damp(state_.wing_brake, core::saturate(input.brake), 0.10f, dt);
 
@@ -206,7 +216,7 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
 
     state_.thrust = thrust_magnitude;
     Vec3 thrust_force = forward * thrust_magnitude;
-    Vec3 gravity_force = Vec3{0.0f, -tuning.gravity * tuning.mass, 0.0f};
+    Vec3 gravity_force = Vec3{0.0f, -tuning.gravity * tuning.effective_mass(), 0.0f};
 
     debug_lift = lift_force;
     debug_drag = drag_force;
@@ -214,12 +224,12 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
     debug_gravity = gravity_force;
 
     const Vec3 total = lift_force + drag_force + thrust_force + gravity_force;
-    state_.velocity += (total / tuning.mass) * dt;
+    state_.velocity += (total / tuning.effective_mass()) * dt;
 
     // G-load is what the pilot feels along body up: aerodynamic force only,
     // since gravity is not felt in free fall.
     state_.g_load = core::dot(lift_force + drag_force + thrust_force, up) /
-                    (tuning.mass * tuning.gravity);
+                    (tuning.effective_mass() * tuning.gravity);
 }
 
 void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
@@ -235,9 +245,10 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
 
     // Commanded body rates. Positive pitch about +X raises the nose; yaw right
     // and roll right are both negative about their axes, given forward is -Z.
-    Vec3 commanded{state_.control.x * tuning.pitch_rate,
-                   -state_.control.y * tuning.yaw_rate,
-                   -state_.control.z * tuning.roll_rate};
+    const float rate_scale = 1.0f / std::sqrt(core::maxf(tuning.heft, 0.05f));
+    Vec3 commanded{state_.control.x * tuning.pitch_rate * rate_scale,
+                   -state_.control.y * tuning.yaw_rate * rate_scale,
+                   -state_.control.z * tuning.roll_rate * rate_scale};
     commanded *= authority;
 
     // --- assists, expressed as extra commanded rate ---
@@ -346,7 +357,8 @@ void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
         return;
     }
 
-    const float ground_height = terrain->height_at(state_.position.x, state_.position.z);
+    // The surface, not the ground: over the river that is the water.
+    const float ground_height = terrain->surface_at(state_.position.x, state_.position.z);
     const float resting_height = ground_height + tuning.ground_offset;
 
     if (state_.position.y > resting_height) {
@@ -354,8 +366,25 @@ void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
         return;
     }
 
-    const Vec3 normal = terrain->normal_at(state_.position.x, state_.position.z);
+    const bool on_water =
+        terrain->height_at(state_.position.x, state_.position.z) < terrain->settings().water_level;
+    const Vec3 normal = on_water ? Vec3::up()
+                                 : terrain->normal_at(state_.position.x, state_.position.z);
     state_.position.y = resting_height;
+
+    // Standing: once slow, the body settles level on the surface -- yaw kept,
+    // pitch and roll eased out -- instead of holding whatever attitude it
+    // arrived in. A landed dragon is not a parked aircraft frozen mid-bank.
+    const float slow = core::saturate(1.0f - core::length(state_.velocity) / 8.0f);
+    if (slow > 0.0f) {
+        const Vec3 forward = state_.forward();
+        const Vec3 level_forward = core::normalize_or(
+            forward - normal * core::dot(forward, normal), Vec3::forward());
+        const core::Quat level = core::look_rotation(level_forward, normal);
+        state_.orientation = core::normalize(
+            core::slerp(state_.orientation, level, core::saturate(slow * 4.0f * dt)));
+        state_.angular_velocity = state_.angular_velocity * (1.0f - core::saturate(slow * 6.0f * dt));
+    }
 
     // Remove the velocity going into the surface, keep what slides along it.
     const float into_surface = core::dot(state_.velocity, normal);
@@ -455,6 +484,7 @@ const Field FIELDS[] = {
     FIELD(auto_level),           FIELD(auto_level_max_rate), FIELD(turn_coordination),
     FIELD(stall_recovery),       FIELD(pitch_level),         FIELD(pitch_level_max_rate),
     FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),
+    FIELD(heft),                 FIELD(takeoff_jump),        FIELD(takeoff_push),
     FIELD(ground_friction),      FIELD(ground_stop_speed),   FIELD(safe_landing_speed),
 };
 #undef FIELD

@@ -1,0 +1,54 @@
+#include "scene_common.msl"
+
+// A still water surface: one quad at the water line, fresnel between a deep
+// colour and the reflected sky, a little animated ripple in the normal, and a
+// sun glint. It exists for the river: the valley floor sits above the water
+// line everywhere else, so the terrain simply hides it there.
+
+struct VertexIn {
+    float3 position [[attribute(0)]];
+    float3 normal   [[attribute(1)]];
+    float3 color    [[attribute(2)]];
+};
+
+struct VertexOut {
+    float4 clip_position [[position]];
+    float3 world_position;
+};
+
+vertex VertexOut vs_main(VertexIn in [[stage_in]],
+                         constant SceneUniforms& scene [[buffer(0)]]) {
+    VertexOut out;
+    out.world_position = in.position;
+    out.clip_position = scene.view_proj * float4(in.position, 1.0);
+    return out;
+}
+
+fragment float4 fs_main(VertexOut in [[stage_in]],
+                        constant SceneUniforms& scene [[buffer(0)]]) {
+    float t = scene.view_params.z;
+    float2 p = in.world_position.xz;
+    // Two crossed ripple trains; small, so the reflection stays readable.
+    float3 normal = normalize(float3(sin(p.x * 0.09 + t * 1.1) * 0.04 + sin(p.y * 0.13 - t * 0.8) * 0.03,
+                                     1.0,
+                                     cos(p.y * 0.07 + t * 0.7) * 0.04 + cos(p.x * 0.05 + t * 0.5) * 0.03));
+    float3 to_camera = scene.camera_position.xyz - in.world_position;
+    float distance = length(to_camera);
+    float3 ray = -to_camera / max(distance, 1e-3);
+    float3 reflected = reflect(ray, normal);
+    reflected.y = abs(reflected.y);  // never reflect what is under the water
+    float3 reflection = sky_color(reflected, scene);
+
+    const float3 DEEP = float3(0.04, 0.10, 0.11);
+    float cosine = saturate(dot(-ray, normal));
+    float fresnel = 0.04 + 0.96 * pow(1.0 - cosine, 5.0);
+    float3 color = mix(DEEP, reflection, fresnel);
+    // Sun glint on the ripples.
+    float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 180.0);
+    color += scene.sun_color.rgb * scene.sun.w * glint * 0.6;
+
+    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
+    float fog = 1.0 - exp(-pow(distance * density, 2.0));
+    float3 fogged = mix(color, sky_color(ray, scene), saturate(fog));
+    return float4(tonemap(fogged), 1.0);
+}

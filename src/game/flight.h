@@ -17,6 +17,11 @@ class Terrain;
 struct FlightTuning {
     // ---- body ----
     float mass = 800.0f;         // kg
+    // Heft: one knob for "this one is heavier". Multiplies the mass and slows
+    // the control rates and control lag by its square root, on top of the
+    // individual values, so a preset and a heft compose instead of fighting.
+    float heft = 1.0f;
+    float effective_mass() const { return mass * heft; }
     float wing_area = 40.0f;     // m^2, fully extended
     float air_density = 1.225f;  // kg/m^3 at sea level
     float gravity = 9.81f;       // m/s^2
@@ -129,6 +134,10 @@ struct FlightTuning {
 
     // ---- ground ----
     float ground_offset = 2.2f;   // body centre height when resting
+    // Take-off: flapping from the ground is a leap, not a taxi. Upward and
+    // forward speed added on the first beat.
+    float takeoff_jump = 7.0f;
+    float takeoff_push = 5.0f;
     float ground_friction = 1.8f;
     // Static friction. Sliding friction alone is multiplicative, so it can never
     // fully cancel the component of gravity along a slope -- a landed dragon
@@ -226,6 +235,7 @@ public:
 
 private:
     void step(const FlightInput& input, const Terrain* terrain, float dt);
+    bool flap_was_down_ = false;
 
     void integrate_forces(const FlightInput& input, float dt);
     void integrate_rotation(const FlightInput& input, float dt);
