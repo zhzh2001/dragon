@@ -24,28 +24,42 @@ float Terrain::valley_mask(float x, float z) const {
                       distance);
 }
 
+bool Terrain::grid_height(const gfx::MeshData& mesh, int n, float half, float cell, float x,
+                          float z, float& out) {
+    // The cell under the point, and where in it. Same layout build_mesh writes:
+    // row iz, column ix, two triangles split from top-right to bottom-left.
+    const float fx = (x + half) / cell;
+    const float fz = (z + half) / cell;
+    const int cells = n - 1;
+    // The far edge belongs to the last cell, so the boundary vertices are
+    // reproduced exactly instead of falling through to the coarser grid.
+    if (!(fx >= 0.0f && fz >= 0.0f && fx <= float(cells) && fz <= float(cells))) return false;
+    const int ix = fx >= float(cells) ? cells - 1 : int(fx);
+    const int iz = fz >= float(cells) ? cells - 1 : int(fz);
+    const float u = fx - float(ix);
+    const float v = fz - float(iz);
+    auto h = [&](int cx, int cz) {
+        return mesh.vertices[size_t(cz) * size_t(n) + size_t(cx)].position.y;
+    };
+    const float tl = h(ix, iz), tr = h(ix + 1, iz);
+    const float bl = h(ix, iz + 1), br = h(ix + 1, iz + 1);
+    out = (u + v <= 1.0f) ? tl + u * (tr - tl) + v * (bl - tl)
+                          : br + (1.0f - u) * (bl - br) + (1.0f - v) * (tr - br);
+    return true;
+}
+
 float Terrain::height_at(float x, float z) const {
     if (grid_ready_) {
-        // The cell under the point, and where in it. Same layout build_mesh
-        // wrote: row iz, column ix, two triangles split from top-right to
-        // bottom-left.
-        const float extent = settings_.half_extent;
-        const float cell = core::maxf(settings_.cell_size, 0.5f);
-        const float fx = (x + extent) / cell;
-        const float fz = (z + extent) / cell;
-        const int cells = verts_per_side_ - 1;
-        if (fx >= 0.0f && fz >= 0.0f && fx < float(cells) && fz < float(cells)) {
-            const int ix = int(fx);
-            const int iz = int(fz);
-            const float u = fx - float(ix);
-            const float v = fz - float(iz);
-            auto h = [&](int cx, int cz) {
-                return mesh_.vertices[size_t(cz) * size_t(verts_per_side_) + size_t(cx)].position.y;
-            };
-            const float tl = h(ix, iz), tr = h(ix + 1, iz);
-            const float bl = h(ix, iz + 1), br = h(ix + 1, iz + 1);
-            if (u + v <= 1.0f) return tl + u * (tr - tl) + v * (bl - tl);
-            return br + (1.0f - u) * (bl - br) + (1.0f - v) * (tr - br);
+        float h = 0.0f;
+        if (grid_height(mesh_, verts_per_side_, settings_.half_extent,
+                        core::maxf(settings_.cell_size, 0.5f), x, z, h)) {
+            return h;
+        }
+        if (skirt_verts_per_side_ > 0 &&
+            grid_height(skirt_, skirt_verts_per_side_,
+                        settings_.half_extent * settings_.skirt_extent_factor,
+                        core::maxf(settings_.skirt_cell_size, 1.0f), x, z, h)) {
+            return h;
         }
     }
     return analytic_height_at(x, z);
@@ -130,10 +144,59 @@ void Terrain::build_mesh() {
     }
 
     mesh_.recompute_normals();
-    grid_ready_ = true;
-
     LOG_INFO("terrain: %d x %d cells over %.0f m, height %.0f..%.0f m", cells, cells,
              extent * 2.0f, min_height_, max_height_);
+    build_skirt();
+    grid_ready_ = true;
+}
+
+// The coarse ring of ground beyond the playable extent. A full coarse grid is
+// sampled (so height queries index it simply) but triangles are only emitted
+// for cells outside the fine mesh, plus one cell of overlap under its edge.
+void Terrain::build_skirt() {
+    skirt_.vertices.clear();
+    skirt_.indices.clear();
+    skirt_verts_per_side_ = 0;
+    if (settings_.skirt_extent_factor <= 1.05f) return;
+
+    const float half = settings_.half_extent * settings_.skirt_extent_factor;
+    const float cell = core::maxf(settings_.skirt_cell_size, 1.0f);
+    const int cells = int((half * 2.0f) / cell);
+    const int n = cells + 1;
+    skirt_verts_per_side_ = n;
+    skirt_.vertices.reserve(size_t(n) * size_t(n));
+    for (int iz = 0; iz < n; ++iz) {
+        const float z = -half + float(iz) * cell;
+        for (int ix = 0; ix < n; ++ix) {
+            const float x = -half + float(ix) * cell;
+            gfx::MeshVertex vertex;
+            vertex.position = Vec3{x, analytic_height_at(x, z), z};
+            vertex.normal = Vec3::up();
+            vertex.color = Vec3::one();
+            skirt_.vertices.push_back(vertex);
+        }
+    }
+    const float inner = settings_.half_extent - cell;
+    for (int iz = 0; iz < cells; ++iz) {
+        for (int ix = 0; ix < cells; ++ix) {
+            const float x0 = -half + float(ix) * cell, x1 = x0 + cell;
+            const float z0 = -half + float(iz) * cell, z1 = z0 + cell;
+            // Skip cells wholly inside the fine mesh.
+            if (x0 > -inner && x1 < inner && z0 > -inner && z1 < inner) continue;
+            const uint32_t top_left = uint32_t(iz * n + ix);
+            const uint32_t top_right = top_left + 1;
+            const uint32_t bottom_left = top_left + uint32_t(n);
+            const uint32_t bottom_right = bottom_left + 1;
+            skirt_.indices.push_back(top_left);
+            skirt_.indices.push_back(bottom_left);
+            skirt_.indices.push_back(top_right);
+            skirt_.indices.push_back(top_right);
+            skirt_.indices.push_back(bottom_left);
+            skirt_.indices.push_back(bottom_right);
+        }
+    }
+    skirt_.recompute_normals();
+    LOG_INFO("terrain skirt: %d x %d coarse cells to %.0f m", cells, cells, half);
 }
 
 }  // namespace game

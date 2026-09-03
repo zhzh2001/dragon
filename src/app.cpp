@@ -210,6 +210,15 @@ bool App::init(const Options& options) {
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
     game::load_tuning(flight_.tuning, ASSET_ROOT "/flight_tuning.cfg");
+    // A model may carry its own handling on top: <model>.flight.cfg next to
+    // the glTF. The heavy-looking dragon and the quick-looking wyvern fly the
+    // same numbers otherwise, and the eye disagrees.
+    model_tuning_path_ =
+        (options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model) +
+        ".flight.cfg";
+    if (game::load_tuning(flight_.tuning, model_tuning_path_.c_str())) {
+        LOG_INFO("loaded model handling from %s", model_tuning_path_.c_str());
+    }
 
     // A unit-radius torus scaled per ring: one mesh, any checkpoint size.
     ring_mesh_.upload(device_.gpu(),
@@ -571,15 +580,20 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
 
 void App::replant() {
     vegetation_.plant(terrain_, vegetation_settings_);
-    foliage_.set_trees(device_, vegetation_.trees());
+    for (int k = 0; k < gfx::TREE_KINDS; ++k) {
+        foliage_.set_trees(device_, gfx::TreeKind(k), vegetation_.trees(gfx::TreeKind(k)));
+    }
     foliage_.wind = vegetation_settings_.wind;
-    foliage_.tree_height = vegetation_settings_.tree_height;
 }
 
 void App::regenerate_terrain() {
     terrain_.generate(terrain_settings_);
     terrain_mesh_.release(device_.gpu());
     terrain_mesh_.upload(device_.gpu(), terrain_.mesh_data(), "terrain");
+    terrain_skirt_mesh_.release(device_.gpu());
+    if (!terrain_.skirt_mesh_data().indices.empty()) {
+        terrain_skirt_mesh_.upload(device_.gpu(), terrain_.skirt_mesh_data(), "terrain_skirt");
+    }
     replant();
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
@@ -1341,6 +1355,8 @@ void App::build_ui(float dt) {
                                               800.0f, "%.0f m");
             replant_now |= ImGui::SliderFloat("tree max slope", &vegetation_settings_.tree_max_slope,
                                               0.3f, 1.0f);
+            replant_now |= ImGui::SliderFloat("slope sink", &vegetation_settings_.slope_sink, 0.0f,
+                                              12.0f, "%.1f m");
             ImGui::SliderFloat("grass radius", &vegetation_settings_.grass_radius, 30.0f, 250.0f,
                                "%.0f m");
             ImGui::SliderFloat("grass spacing", &vegetation_settings_.grass_spacing, 1.0f, 8.0f,
@@ -2936,6 +2952,24 @@ void App::build_flight_ui() {
         if (ImGui::Button("load")) {
             game::load_tuning(t, ASSET_ROOT "/flight_tuning.cfg");
         }
+        // Per-model handling: what this dragon feels like to fly.
+        if (ImGui::Button("save for this model")) game::save_tuning(t, model_tuning_path_.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", model_tuning_path_.c_str());
+        // Heft: one knob for "this one is heavier". Mass up, control rates and
+        // lag toward slower, all by the same ratio, on top of whatever the
+        // individual sliders say.
+        float heft = heft_;
+        if (ImGui::SliderFloat("heft", &heft, 0.5f, 2.5f, "%.2fx") && heft > 0.01f) {
+            const float ratio = heft / heft_;
+            t.mass *= ratio;
+            t.roll_rate /= std::sqrt(ratio);
+            t.pitch_rate /= std::sqrt(ratio);
+            t.yaw_rate /= std::sqrt(ratio);
+            t.control_lag *= std::sqrt(ratio);
+            heft_ = heft;
+        }
+        ImGui::TextDisabled("heft scales mass, and slows roll/pitch/yaw and control lag by its root");
     }
 
     if (ImGui::CollapsingHeader("Body & wing")) {
@@ -3034,7 +3068,9 @@ void App::render() {
     foliage_.wind = vegetation_settings_.wind;
     foliage_.grass_fade_end = vegetation_settings_.grass_radius;
     foliage_.grass_fade_start = vegetation_settings_.grass_radius * 0.7f;
-    foliage_.upload_grass(device_, grass_scratch_);
+    for (int k = 0; k < gfx::GRASS_KINDS; ++k) {
+        foliage_.upload_grass(device_, gfx::GrassKind(k), grass_scratch_[k]);
+    }
     ui_.prepare_draw_data(device_);
 
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
@@ -3078,6 +3114,7 @@ void App::render() {
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
+    if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_);
     foliage_.draw_trees(device_, pass, world_.scene());
     foliage_.draw_grass(device_, pass, world_.scene());
     world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,

@@ -254,22 +254,39 @@ screen-filling balloon that reads as a volley of different-sized projectiles.
 
 ## Vegetation
 
-`game::Vegetation` places, `gfx::Foliage` draws. Trees are a generated conifer
-(trunk plus three cone skirts, 105 indices) instanced from a static buffer with
-one `FoliageInstance` per tree -- position, scale, yaw, shade, sway phase --
-planted once per terrain on a jittered grid, thinned by a forest-cover noise
-into stands and clearings, kept off water, steep ground and everything above
-a treeline (`treeline_above_floor`: a forested peak is a hill). They cast
-shadows through their own depth pipeline and sway in the vertex shader with
-the square of their height fraction so roots stay put. **Grass is re-placed
-every frame** around the active camera from a stateless hash of the ground
-cell, so a tuft is always in the same place when you come back to it, and
-streamed like the particles; tufts are six leaning blade triangles, no
-texture, no alpha, shrinking into the ground over the last third of the
-radius rather than blinking out. Both pipelines read the mesh vertex layout
-plus a second, instance-rate buffer -- and `instance_step_rate` must be 0:
-SDL reserves it, and a 1 fails pipeline creation with an empty message.
-Plants are visual only; nothing collides with a tree.
+`game::Vegetation` places, `gfx::Foliage` draws. Four tree kinds (spruce,
+mountain pine, broadleaf, dead snag) and three grass kinds (tuft, waterside
+reed, bush), each a generated mesh of rings, cones, lumpy blobs and blade
+triangles, each instanced from its own buffer with one `FoliageInstance` per
+plant -- position, scale, yaw, shade, sway phase. Trees are planted once per
+terrain on a jittered grid, thinned by TWO scales of cover noise (stands at
+400 m, clumps at 55 m -- one scale is an even sprinkle) and kept off water,
+steep ground and everything above a treeline (`treeline_above_floor`: a
+forested peak is a hill). **The kind mix shifts with altitude but is a mix
+everywhere** -- half broadleaf on the floor, spruce through the middle, pines
+at the top, dead snags in the last stretch and on rough ground -- because a
+band of one kind reads as a plantation, which is exactly what the first
+all-broadleaf floor looked like. Sizes spread 0.7-1.7x for the same reason.
+**Plants sink into slopes** (`slope_sink`, metres per unit of 1 - normal.y)
+so a skirt's downhill side meets the ground instead of hanging in the air.
+Trees cast shadows through their own depth pipeline and sway in the vertex
+shader with the square of their height fraction so roots stay put. **Grass is
+re-placed every frame** around the active camera from a stateless hash of the
+ground cell, so a tuft is always in the same place when you come back to it,
+patchy by a fine noise, and streamed like the particles; no texture, no alpha,
+shrinking into the ground over the last third of the radius rather than
+blinking out. Both pipelines read the mesh vertex layout plus a second,
+instance-rate buffer -- and `instance_step_rate` must be 0: SDL reserves it,
+and a 1 fails pipeline creation with an empty message. Plants are visual only;
+nothing collides with a tree.
+
+**The world does not end at the playable extent.** The analytic height used
+to carry on past the last visible triangle: an invisible mountain range you
+could fly into and land on, out toward the sky. The terrain now builds a
+coarse **skirt** (36 m cells to three times the half extent) from the same
+function, drawn with the terrain shader and queried by the same triangle
+lookup, so there is ground under the sky all the way to the fog. It gets no
+plants.
 
 The surface query also exposed a frame-time weakness: under the rally test's
 4x frame jitter the bank-limited autopilot orbited Canyon Weave's rings that
@@ -331,6 +348,14 @@ harsh. Master volume in the Engine panel; headless runs skip the device.
 
 Every ImGui window except Combat starts **collapsed** -- one click away, not
 hidden, but the screen belongs to the game.
+
+**Handling per model.** The two dragons fly identical numbers, and the eye
+insists the small quick-looking wyvern is lighter. The Flight panel has a
+**heft** knob -- one ratio that scales mass up and roll/pitch/yaw rates and
+control lag down by its square root, on top of the individual sliders -- and
+"save for this model" writes the tuning to `<model>.flight.cfg` beside the
+glTF, loaded automatically on top of `assets/flight_tuning.cfg` when that
+model is used.
 
 Bots cycle through four hides -- rust, bone, moss, violet -- so a flight is not
 four copies of one dragon, and their fire leaves the animated head like the

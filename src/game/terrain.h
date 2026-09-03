@@ -45,6 +45,14 @@ struct TerrainSettings {
     float valley_period = 3300.0f;   // metres per meander cycle
 
     float water_level = 34.0f;
+
+    // Beyond the playable extent the same function continues as a coarse
+    // "skirt" mesh out to this multiple of the half extent, so there is
+    // ground under the sky all the way to the fog. Without it the analytic
+    // height carried on past the last visible triangle: an invisible mountain
+    // range you could land on.
+    float skirt_extent_factor = 3.0f;
+    float skirt_cell_size = 36.0f;
 };
 
 // Procedural valley. Height is defined by an analytic function of (x, z), so
@@ -73,6 +81,7 @@ public:
     float valley_center_x(float z) const;
 
     const gfx::MeshData& mesh_data() const { return mesh_; }
+    const gfx::MeshData& skirt_mesh_data() const { return skirt_; }
     bool has_mesh() const { return grid_ready_; }
     const TerrainSettings& settings() const { return settings_; }
 
@@ -89,8 +98,15 @@ private:
     TerrainSettings settings_;
     core::Noise noise_;
     gfx::MeshData mesh_;
+    gfx::MeshData skirt_;
     bool grid_ready_ = false;
     int verts_per_side_ = 0;
+    int skirt_verts_per_side_ = 0;
+    void build_skirt();
+    // Triangle-exact height on a square grid of `n` vertices per side spanning
+    // [-half, half] at `cell` metres. Returns false outside it.
+    static bool grid_height(const gfx::MeshData& mesh, int n, float half, float cell, float x,
+                            float z, float& out);
     float max_height_ = 0.0f;
     float min_height_ = 0.0f;
 };

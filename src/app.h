@@ -284,8 +284,15 @@ private:
     game::Vegetation vegetation_;
     game::VegetationSettings vegetation_settings_;
     gfx::Foliage foliage_;
-    std::vector<game::PlantInstance> grass_scratch_;
+    std::vector<game::PlantInstance> grass_scratch_[gfx::GRASS_KINDS];
     void replant();
+    // The coarse ground beyond the playable extent.
+    gfx::Mesh terrain_skirt_mesh_;
+    // Handling "heft": one knob that scales mass and the control rates
+    // together, so a heavier dragon is slower to roll and pitch. Applied as a
+    // ratio to the previous value, so the individual sliders stay live.
+    float heft_ = 1.0f;
+    std::string model_tuning_path_;
     // The player's hide colour: a hue the texture is pushed toward at its own
     // luminance, and how far. Strength 0 is the texture as authored.
     core::Vec3 player_hue_{1.0f, 1.0f, 1.0f};

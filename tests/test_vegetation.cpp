@@ -6,6 +6,7 @@
 #include "core/math.h"
 #include "game/terrain.h"
 #include "game/vegetation.h"
+#include "gfx/foliage.h"
 
 namespace {
 
@@ -82,19 +83,31 @@ void test_trees_stand_where_trees_can() {
     game::VegetationSettings settings;
     game::Vegetation vegetation;
     vegetation.plant(terrain, settings);
-    const auto& trees = vegetation.trees();
+    std::vector<game::PlantInstance> trees;
+    for (int k = 0; k < gfx::TREE_KINDS; ++k) {
+        const auto& list = vegetation.trees(gfx::TreeKind(k));
+        trees.insert(trees.end(), list.begin(), list.end());
+    }
     CHECK(trees.size() > 200);
+    CHECK(trees.size() == vegetation.tree_count());
+    // More than one kind grows.
+    int kinds = 0;
+    for (int k = 0; k < gfx::TREE_KINDS; ++k) kinds += vegetation.trees(gfx::TreeKind(k)).empty() ? 0 : 1;
+    CHECK(kinds >= 2);
 
     const float treeline = terrain.settings().valley_floor + settings.treeline_above_floor;
     bool all_rooted = true, all_below_line = true, all_dry = true, all_gentle = true;
     for (const auto& tree : trees) {
         const float x = tree.position_scale.x, z = tree.position_scale.z;
         const float ground = terrain.height_at(x, z);
-        if (std::fabs(tree.position_scale.y + 0.3f - ground) > 0.05f) all_rooted = false;
+        // Rooted: at or a little below the surface (sunk into slopes), never above.
+        if (tree.position_scale.y > ground - 0.2f || tree.position_scale.y < ground - 8.0f) {
+            all_rooted = false;
+        }
         if (ground > treeline) all_below_line = false;
         if (ground < terrain.settings().water_level + 2.0f) all_dry = false;
         if (terrain.normal_at(x, z).y < settings.tree_max_slope) all_gentle = false;
-        if (tree.position_scale.w < 1.0f || tree.position_scale.w > 1.6f) all_rooted = false;
+        if (tree.position_scale.w < 0.5f || tree.position_scale.w > 1.8f) all_rooted = false;
     }
     CHECK(all_rooted);
     CHECK(all_below_line);
@@ -104,14 +117,14 @@ void test_trees_stand_where_trees_can() {
     // Deterministic: the same seed plants the same forest.
     game::Vegetation again;
     again.plant(terrain, settings);
-    CHECK(again.trees().size() == trees.size());
-    CHECK(core::distance(again.trees().front().position_scale.xyz(),
-                         trees.front().position_scale.xyz()) < 1e-4f);
+    CHECK(again.tree_count() == trees.size());
+    CHECK(core::distance(again.trees(gfx::TreeKind::Spruce).front().position_scale.xyz(),
+                         vegetation.trees(gfx::TreeKind::Spruce).front().position_scale.xyz()) < 1e-4f);
 
-    // Cover 0 plants nothing; trees off plants nothing.
+    // Cover 0 plants nothing.
     settings.forest_cover = 0.0f;
     again.plant(terrain, settings);
-    CHECK(again.trees().empty());
+    CHECK(again.tree_count() == 0);
 }
 
 void test_grass_follows_the_camera() {
@@ -121,38 +134,46 @@ void test_grass_follows_the_camera() {
     game::VegetationSettings settings;
     game::Vegetation vegetation;
     const core::Vec3 here{terrain.valley_center_x(0.0f), 0.0f, 0.0f};
-    std::vector<game::PlantInstance> a, b, c;
+    std::vector<game::PlantInstance> a[gfx::GRASS_KINDS], b[gfx::GRASS_KINDS], c[gfx::GRASS_KINDS];
     vegetation.grass_around(terrain, settings, here, a);
-    CHECK(a.size() > 500);
-    CHECK(a.size() <= settings.max_grass);
+    size_t total = 0;
+    for (const auto& list : a) total += list.size();
+    CHECK(total > 500);
+    CHECK(total <= settings.max_grass);
+    CHECK(!a[int(gfx::GrassKind::Tuft)].empty());
     bool inside = true, grounded = true;
-    for (const auto& tuft : a) {
-        const float dx = tuft.position_scale.x - here.x, dz = tuft.position_scale.z - here.z;
-        if (dx * dx + dz * dz > settings.grass_radius * settings.grass_radius) inside = false;
-        if (std::fabs(tuft.position_scale.y -
-                      terrain.height_at(tuft.position_scale.x, tuft.position_scale.z)) > 0.05f) {
-            grounded = false;
+    for (const auto& list : a) {
+        for (const auto& tuft : list) {
+            const float dx = tuft.position_scale.x - here.x, dz = tuft.position_scale.z - here.z;
+            if (dx * dx + dz * dz > settings.grass_radius * settings.grass_radius) inside = false;
+            const float ground = terrain.height_at(tuft.position_scale.x, tuft.position_scale.z);
+            if (tuft.position_scale.y > ground || tuft.position_scale.y < ground - 4.0f) {
+                grounded = false;
+            }
         }
     }
     CHECK(inside);
     CHECK(grounded);
 
-    // Walk away and back: the tufts in the overlap are identical.
+    // Walk away and back: the tufts are identical.
     vegetation.grass_around(terrain, settings, here + core::Vec3{40.0f, 0.0f, 0.0f}, b);
     vegetation.grass_around(terrain, settings, here, c);
-    CHECK(c.size() == a.size());
     bool identical = true;
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (core::distance(a[i].position_scale.xyz(), c[i].position_scale.xyz()) > 1e-5f) {
-            identical = false;
+    for (int k = 0; k < gfx::GRASS_KINDS; ++k) {
+        if (c[k].size() != a[k].size()) identical = false;
+        for (size_t i = 0; identical && i < a[k].size(); ++i) {
+            if (core::distance(a[k][i].position_scale.xyz(), c[k][i].position_scale.xyz()) > 1e-5f) {
+                identical = false;
+            }
         }
     }
     CHECK(identical);
     // And the overlap between the two positions shares tufts.
     int shared = 0;
-    for (const auto& tuft : b) {
-        for (size_t i = 0; i < a.size(); i += 1) {
-            if (core::distance(a[i].position_scale.xyz(), tuft.position_scale.xyz()) < 1e-4f) {
+    const auto& a_tufts = a[int(gfx::GrassKind::Tuft)];
+    for (const auto& tuft : b[int(gfx::GrassKind::Tuft)]) {
+        for (size_t i = 0; i < a_tufts.size(); ++i) {
+            if (core::distance(a_tufts[i].position_scale.xyz(), tuft.position_scale.xyz()) < 1e-4f) {
                 ++shared;
                 break;
             }
