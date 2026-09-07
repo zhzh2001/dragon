@@ -2,7 +2,9 @@
 
 Custom C++20 engine for a single-player dragon game, rendering with SDL3's GPU
 API (Metal backend on macOS). Long-term hobby project: `docs/STATUS.md` is
-what exists, `docs/RETRO.md` is where it goes next.
+what exists, `docs/RETRO.md` is where it goes next. Ignore RETRO.md for now,
+we will deal with it after the modern build is polished, so no need to limit
+usage of modern features in the current code.
 
 ## Where things are written down
 
@@ -20,6 +22,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/ROADMAP.md` | The original plan and its phases |
 | `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
+| `.claude/skills/concept-art/SKILL.md` | Generating concept art, HUD mockups and creature reference sheets from a ChatGPT/Gemini subscription -- which backend suits which job, and which quota each one burns |
 
 ## Build & run
 
