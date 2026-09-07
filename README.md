@@ -125,6 +125,7 @@ conventions, and the cross-cutting lessons. The detail lives in `docs/`:
 | `docs/WORLD.md` | Terrain, the river, the skirt, vegetation |
 | `docs/EFFECTS.md` | Particles and synthesized audio |
 | `docs/STATUS.md` | Milestone history and open questions |
+| `docs/DIRECTION.md` | Where it goes next: genre, art direction, UI, assets, and the plan |
 | `docs/ROADMAP.md` | The original plan |
 | `docs/RETRO.md` | The D3D9-era port study and what to build next |
 

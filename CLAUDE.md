@@ -19,6 +19,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement |
 | `docs/EFFECTS.md` | Particles and the fully synthesized audio |
 | `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
+| `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
 | `docs/ROADMAP.md` | The original plan and its phases |
 | `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |

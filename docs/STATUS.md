@@ -41,10 +41,13 @@ What is built, in the order it was built. The plan these came from is
   carved river with a reflective surface, a coarse skirt past the playable
   extent, four tree and three grass kinds placed by slope, altitude and water,
   landing and take-off states, and `heft` as per-model handling.
-- **Next:** see `docs/RETRO.md` -- the ranked gameplay/visual list (loadouts,
-  thermals, team matches, clouds) and the D3D9-era port study. The port's first
-  phase (extracting an RHI from `src/gfx`) is a pure refactor that pays for
-  itself even if the port never ships.
+- **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
+  roguelite with growth as tuning), the art direction and its generated
+  targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
+  plan. `docs/RETRO.md` keeps the feature-by-feature ranking and the D3D9-era
+  port study; the port's first phase (extracting an RHI from `src/gfx`) is a
+  pure refactor that pays for itself even if the port never ships, and it
+  follows the polish work in DIRECTION.md.
 
 ## Open questions
 
