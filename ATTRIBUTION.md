@@ -23,7 +23,8 @@ an NC asset in a repo is best avoided. From the Sketchfab page choose
 directory. Rename it to `assets/dragon.glb`.
 
 Use the glTF download, **not** the original FBX. Blender's FBX importer mangles
-this rig -- see CLAUDE.md. The glTF loads directly with no Blender step at all.
+this rig -- see `docs/ANIMATION.md`. The glTF loads directly with no Blender
+step at all.
 
 ## assets/alt/prowler.glb (optional second dragon)
 

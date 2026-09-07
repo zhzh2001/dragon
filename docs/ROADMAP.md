@@ -1,5 +1,11 @@
 # Dragon Game — Custom Engine Roadmap
 
+> **Historical document.** This is the original plan, kept because its
+> reasoning still explains why the engine is shaped the way it is. What was
+> actually built is in `STATUS.md`; where the project goes next is `RETRO.md`;
+> the running decision log this plan asked for grew into `CLAUDE.md` plus the
+> topic docs beside this file.
+
 ## Context
 
 You want a single-player 3D dragon game, built with coding agents on a custom engine for freedom and

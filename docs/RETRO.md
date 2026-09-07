@@ -143,9 +143,12 @@ Ranked by feel-per-session, independent of the retro track:
 1. **Loadouts** (finishes M15): heavy / skirmisher / sniper as tuning presets
    over the same flight model — cheap, adds matchup variety, and bots can use
    them too.
-2. **Water**: the valley has a waterline and no water. One reflective plane
-   with fresnel + the existing sky = transformed low flying. (Retro note:
-   planar reflections are *the* 2005 water tech — this feature ports.)
+2. ~~**Water**~~ — **done**: a river is carved along the corridor with a
+   fresnel/sky-reflection surface, and the flight model lands on it. Still
+   open is water *gameplay* (skimming, dousing a burning dragon) and a second
+   body of water — a lake needs the valley floor to dip below the water line
+   somewhere. (Retro note: planar reflections are *the* 2005 water tech, so
+   an upgrade from the current analytic reflection still ports.)
 3. **Thermals**: updraft columns marked by circling debris particles; rewards
    reading terrain in both rally and combat. Pure flight-model + emitter work.
 4. **Team matches**: wingman bots that fly *your* side — BotPilot already
