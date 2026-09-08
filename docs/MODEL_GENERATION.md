@@ -236,6 +236,63 @@ The multi-view upload takes eight labelled slots — 正 (front, required), 背,
 the reference sheet's top view fill five of them, which is the best-conditioned
 input we can give any generator.
 
+### The stages are gated in order, and that order is ours
+
+The stage routes are `/studio/creation/{concept,geo,comp,poly,uv,texture,rs,ae}`
+(`rs` is 绑骨蒙皮 — `/rig` redirects to concept). They chain automatically:
+open a later stage and it already reports the previous stage's output as its
+input, so there is no re-uploading between stages.
+
+**绑骨蒙皮 refuses a raw generated mesh.** With the 1.5M-face geometry as
+input the rig stage loads, reports `模型面数 1500000 / 顶点数 749994`, and
+leaves 立即生成 carrying `t-is-disabled`. 低模生成 with the same input is
+enabled. So Hunyuan enforces retopo-before-rig — which is exactly the order
+`docs/MODEL_GENERATION.md` step 4 then 5 already prescribed, arrived at
+independently. Do not fight it; run the low-poly stage first.
+
+低模生成 is also a free Quad Remesher: model `低模拓扑 V1.5`, face budget
+低/中/高, and **拓扑选择 三角面 / 四边面 — quads**. That is step 4's $79
+Quad Remesher line item, at one free run.
+
+### The retopo result, and its one bad artefact
+
+`中` + `四边面` on the 1.5M mesh returned **19,977 faces / 10,486 verts** in
+about seven minutes — just under step 4's 25-40K target, and the body holds
+up: wings, membranes, legs, feet, tail and dorsal ridge all survive
+(`artifacts/dragon-options/embercrest-lowpoly-retopo.png`).
+
+Three things to know before relying on it:
+
+- **Asking for quads does not get you quads through a GLB.** The downloaded
+  mesh is named `..._repair_quad.obj` yet arrives as 19,977 triangles and
+  zero quads, because **glTF 2.0 cannot represent quads at all** — the
+  exporter triangulates. The work record carries an `fbxUrl` beside its
+  `glbUrl`; take the FBX (or OBJ) if the quad topology is the point.
+- **The horns become two enormous thin spires.** They rise to roughly the
+  body's own height above the head and are continuous mesh, not stray
+  vertices — the farthest vertex sits at 0.936 from the median centre where
+  p99 is 0.766, so no outlier filter will catch them. They double the
+  model's height (Z extent 0.998 vs the source's 0.518), which means
+  **the retopo output's bounding box cannot be trusted for the engine's
+  scale-by-extent step** until the horns are fixed. Try `高` instead of `中`,
+  or trim them in Blender.
+- **1,190 non-manifold edges and 1,110 boundary edges.** The boundary edges
+  are the membranes being open sheets and are expected; together they are
+  precisely the input that the doc's auto-rigging section notes makes
+  Blender's Automatic Weights fail. Plan on the ML skinner, not Blender's.
+
+### Where the rigging question still stands
+
+**Unresolved, and blocked on one human click.** With the 19,973-face
+low-poly as input, 绑骨蒙皮 loads it and 立即生成 loses `t-is-disabled` — so
+the gate really was polycount. But clicking it, by `@ref` and by synthetic
+pointer sequence alike, fires only an analytics beacon: no generation
+request, no new work in the list, and the counter stays put. Most likely the
+本地模型 source selector needs a model picked explicitly before the handler
+will submit. So the survey's biggest open question — whether any rigger puts
+a finger chain on a winged quadruped — is still open, now one dropdown away
+rather than one account away.
+
 ### Driving it with chrome-use, since the 30/day are web-only
 
 Three things cost real time and will cost it again:
@@ -376,16 +433,18 @@ The frontier moved in 2026 and it moved in our favour.
 
 ## Open questions
 
-- Which accounts to open. Nothing in the cloud pass runs without one: a free
-  Hugging Face token is the cheapest and widest (every open model's Space),
-  Tripo is the only one that also rigs a non-humanoid, Hunyuan Studio gives
-  the most free volume at 20/day. HF PRO at $9 is the one paid tier that
-  changes the shape of the work rather than just the bill.
+- **Why 绑骨蒙皮's 立即生成 does nothing when enabled** (see above). One
+  human click on the 本地模型 selector probably answers it, and with it the
+  question below.
+- Whether the horn spires are a `中` artefact that `高` avoids, or inherent
+  to 低模拓扑 V1.5 on thin tapered shapes.
 - Nobody has run the native ComfyUI TRELLIS.2 on Turing or under 12 GB yet.
 - SkinTokens' real VRAM floor (14 GB claimed, 4 GB in a wrapper) and whether
   `--use_skeleton` copes with a 68-bone skeleton; its training rigs are
   mostly under 64 bones.
-- Whether any commercial rigger puts a finger chain on a winged quadruped.
+- Whether any rigger puts a finger chain on a winged quadruped. Hunyuan's
+  绑骨蒙皮 is the first free way to find out and it accepts the mesh; only
+  its submit is stuck.
 - Rigel3D and AniGen (2026 papers) generate already-rigged, semantically
   named creatures from one image. Neither has code. Worth rechecking in a
   few months; if one ships, steps 4 to 6 collapse.
