@@ -254,6 +254,37 @@ Three things cost real time and will cost it again:
   Verify instead by watching that slot's placeholder label disappear from the
   panel text.
 
+### What Hunyuan produced, and how it compares
+
+Five slots filled (the four turnaround panels plus the sheet's top view),
+`3D生成 V3.1`, 1.5M budget: **exactly 1,500,000 faces, one object, and no
+UVs, no materials and no textures.** 几何生成 really is geometry only — UV
+unwrap, texture paint and rigging are separate stages, each costing another
+run. 27 MB of GLB, which is also why the in-browser viewer sat on
+`加载中...`: don't ask for 1.5M if you want to preview it in the page.
+
+Rendered the same five ways as the TRELLIS mesh
+(`artifacts/dragon-options/embercrest-mesh-candidates.png`, TRELLIS on top,
+Hunyuan below), **Hunyuan wins clearly on the two things that matter to the
+rig**:
+
+- **The jaw is open, with teeth, as a separate volume.** The multi-view input
+  included the turnaround's front panel, whose mouth is open, and the sculpt
+  kept it. This is the `jaw`/`mandib` volume TRELLIS fused away.
+- **Symmetry is near-perfect and the wings are the widest extent**
+  (X 1.163 vs depth 1.062), because the front panel showed both wings spread
+  and level. So the engine's scale-by-X-extent lands much closer to right.
+- Wing fingers are individually modelled as distinct bones under the
+  membrane; the dorsal ridge runs unbroken from horns to tail tip; feet have
+  real toes and claws rather than TRELLIS's blobs.
+- Membranes are again **thin single-sided sheets**, so the Solidify or
+  two-sided-material fix is needed whichever generator wins.
+
+The lesson is about input, not vendor: **the pose and expression you give it
+is the pose and expression you get back**, and a five-view spread-wing
+open-jaw input beat a one-view swept-wing closed-mouth input by more than the
+model choice did. Feed generators the turnaround, not the reference sheet.
+
 ## Auto-rigging
 
 The frontier moved in 2026 and it moved in our favour.
