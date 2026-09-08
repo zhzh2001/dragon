@@ -57,9 +57,8 @@ Compared with the concept and with the imported models:
 None of this is a pipeline failure. It is what procedural tube geometry with
 generated tiling textures produces, and the ceiling is a clean greybox-plus,
 not a hero asset. A better original dragon needs a sculpted or generated mesh
-(the Hyper3D or Hunyuan generation that `DIRECTION.md` earmarks for props is
-the obvious thing to try), with this script's rig and export step kept as the
-back half.
+(`MODEL_GENERATION.md` surveys the tools), with this script's rig and export
+step kept as the back half.
 
 ## Rebuilding it
 

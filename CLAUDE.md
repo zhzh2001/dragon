@@ -21,6 +21,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
 | `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
 | `docs/EMBERCREST.md` | The script-built original dragon: what the Blender generator produced, why it is not the hero model, and how to rebuild it |
+| `docs/MODEL_GENERATION.md` | Survey of text/image-to-3D and auto-rigging tools, cloud and open, what the two GPU boxes can run, and the generate-retopo-rig pipeline that fits this engine |
 | `docs/ROADMAP.md` | The original plan and its phases |
 | `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
