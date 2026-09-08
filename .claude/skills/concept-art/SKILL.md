@@ -35,11 +35,12 @@ not by which is "better" — they lose to each other in different ways.
 |---|---|---|
 | Key art, mood, lighting/atmosphere target | `--backend web` | GPT Image 2 |
 | HUD layout, flat diagram, orthographic reference sheet | `--backend agy` | Nano Banana 2 |
-| nothing — avoid | `--backend codex` | GPT Image 2 |
+| GPT Image 2 when `web` is rate-limited | `--backend codex --model gpt-5.6-luna` | GPT Image 2 |
 
 ```sh
 chatgpt-imagegen "prompt" --backend web -o docs/concept/name.png
 chatgpt-imagegen "prompt" --backend agy -o docs/concept/name.png
+chatgpt-imagegen "prompt" --backend codex --model gpt-5.6-luna -o docs/concept/name.png
 ```
 
 **GPT Image 2 ignores style specifications it considers a downgrade.** Asked for
@@ -55,17 +56,30 @@ it will add castles and waterfalls to a valley that has none. NB2 is cooler and
 more restrained, and happens to sit closer to what this engine actually renders.
 NB2 also watermarks text-to-image output and treats `--size` as a hint only.
 
-**Never use `--backend codex` for images.** It bills metered Codex usage, and
-OpenAI's own docs state image generation burns those limits **3-5x faster** than
-a normal turn. `--backend web` reaches the *cheap* ChatGPT conversation bucket
-(~40-50 prompts per rolling 3h on Plus) and is the correct GPT path.
+**`--backend web` is still the default GPT path**, because it reaches the cheap
+ChatGPT conversation bucket (~40-50 prompts per rolling 3h on Plus) and costs no
+Codex usage at all. `--backend codex` bills metered Codex usage and OpenAI's own
+docs say image generation burns those limits **3-5x faster** than a normal turn,
+so it is the *second* GPT path, for when `web` is rate-limited or its Chrome
+relay is down — not the first.
+
+When you do reach for it, **pass `--model gpt-5.6-luna`**. The tool's `--model`
+default is `gpt-5.5`, and the flag selects which Codex model orchestrates the
+`image_generation` tool call — the image itself is GPT Image 2 either way, so
+the cheapest listed model is enough and Luna is the cheapest. Only `gpt-5.6-*`,
+`gpt-6-astra` and `gpt-5.5` exist as slugs; check
+`~/.codex/models_cache.json` if a name is rejected. The backend also rejects
+models when the `version` header looks stale, which the tool works around by
+never sending a version below its own floor.
 
 ## Quotas
 
 Don't try to precompute them. The 429 is the meter — it names the model and its
 reset time. Roughly: `web` ~40-50 prompts/3h; `agy` compute-based on a Google AI
 subscription (no published image count, and Nano Banana **Pro** is not reachable
-from the CLI — there is no model flag, and only NB2 is offered).
+from the CLI — there is no model flag, and only NB2 is offered); `codex` draws
+on the shared 5-hour and weekly Codex windows, which `codex` itself reports in
+its status line, so spend it in single images rather than in sweeps.
 
 ## The browser dependency, and its blast radius
 

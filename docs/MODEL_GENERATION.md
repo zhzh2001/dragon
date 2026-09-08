@@ -114,9 +114,60 @@ safe default with weaker bone naming. Meshy's own page says a six-legged
 dragon "needs manual rigging"; Tripo's says a dog rig "is not proof that a
 tool supports wings". Expect the wings to be skinned to the spine.
 
-The Blender MCP already has Rodin and Hunyuan integrations (Blender was not
-running when checked); the bundled Rodin trial key has a daily cap and can
-be swapped for a hyper3d or fal.ai key.
+The Blender MCP already has Rodin and Hunyuan integrations. Its bundled Rodin
+trial key is the literal string `"vibecoding"`, shared by every install, and
+**it is drained**: with the key armed and the addon reporting
+`Mode: MAIN_SITE. Key type: free_trial`, a multi-view generate returns
+`{"error": "API_INSUFFICIENT_FUNDS"}`. Treat that integration as needing a
+private hyper3d or fal.ai key. The Hunyuan side of the addon wants either a
+local server (`LOCAL_API`) or Tencent `SecretId`/`SecretKey`
+(`OFFICIAL_API`) — there is no bundled key at all.
+
+To bring the addon up without a human clicking *Connect to Claude* (the
+server auto-starts on load, so only the Rodin fields need setting):
+
+```python
+# blender --python this.py   -- scene props, so set them after load
+import bpy, addon_utils
+addon_utils.enable("addon", default_set=True, persistent=True)
+def boot():
+    sc = bpy.context.scene
+    sc.blendermcp_use_hyper3d = True
+    sc.blendermcp_hyper3d_api_key = "vibecoding"   # or a private key
+    sc.blendermcp_hyper3d_mode = 'MAIN_SITE'
+    if not sc.blendermcp_server_running:
+        bpy.ops.blendermcp.start_server()          # EADDRINUSE = already up
+bpy.app.timers.register(boot, first_interval=1.5)
+```
+
+## Hugging Face Spaces: the cheapest cloud, and its one wall
+
+`microsoft/TRELLIS.2` is live, public, ungated, and exposes its **entire**
+pipeline over the Gradio API with no key of its own — `/start_session`,
+`/preprocess_image` (rembg, so a flat-grey plate is fine),
+`/image_to_3d` (`resolution` 512/1024/1536, the sampler's guidance and step
+counts all exposed), then `/extract_glb` (`decimation_target`,
+`texture_size`). `tools/trellis2_space.py` drives it end to end; the only
+credential anywhere in the path is a Hugging Face token, and that token buys
+nothing but quota.
+
+Quota is the wall. Both GPU stages are `@spaces.GPU(duration=120)`, and
+ZeroGPU refuses a call whose *requested* duration exceeds the quota
+remaining rather than the time it would really burn — anonymously it fails
+with `120s requested vs. 178s left`. So one asset costs 240 s of
+reservations against:
+
+| Account | ZeroGPU/day | Dragons/day |
+|---|---|---|
+| anonymous | 120 s | **0** — cannot finish one |
+| free | ~210-300 s | 1, sometimes 2 |
+| PRO, $9/mo | 2,400 s | as many as we want |
+
+One free account therefore unlocks not just TRELLIS.2 but Hunyuan3D-2,
+Hi3DGen, TripoSG and PartCrafter, all of which have Spaces — at one asset a
+day. **There is no way around the quota by picking a different Space**: every
+3D-generation Space that was running when this was checked is on ZeroGPU or
+`cpu-basic`, and the quota is per account, not per Space.
 
 ## Auto-rigging
 
@@ -156,16 +207,39 @@ The frontier moved in 2026 and it moved in our favour.
 
 ## The pipeline
 
-1. **Reference sheet.** Orthographic front, side and top of the chosen
-   design with wings fully spread, legs apart and slightly bent, tail
-   straight, jaw slightly open so the lower jaw is a separate volume. The
-   concept-art skill does this; Embercrest panel A in
-   `artifacts/dragon-options/concepts.png` is the starting design.
-2. **Cloud pass first, for calibration.** Five candidates each from Rodin
-   (via the Blender MCP or fal.ai) and Tripo multi-view, plus Hunyuan Studio
-   for free. Run Tripo's rig on its best one with `quadruped` and `avian` to
-   see what a commercial rigger does to the wings. Under $10 all in, and it
-   sets the bar the local models have to reach.
+1. **Reference sheet — done.** All three designs from
+   `artifacts/dragon-options/concepts.png` have one:
+   `embercrest-`, `stormsail-` and `ironroot-reference-sheet.png`, each with
+   front, side and top plus head, wing-root and foot insets. Embercrest is
+   the design being taken forward, because its name is already on the
+   68-bone rig in step 5.
+
+   A reference sheet is for a human, though, and a *generator* wants one
+   pose per view. The sheets do not have that — their front and top views
+   share a wings-spread pose but the side view is a walking pose with a
+   curved tail, and a multi-view generator reads that as two animals. So
+   `embercrest-turnaround.png` is the generator input: front, left, back and
+   right in one pose, one scale, one eye level, flat grey, no watermark,
+   which GPT Image 2 will produce if the prompt forbids perspective,
+   foreshortening, cast shadows and labels *explicitly* and the existing
+   sheet rides along as a subject reference. Split it into the four images an
+   API wants with:
+
+   ```sh
+   T=artifacts/dragon-options/embercrest-turnaround.png   # 2158x729, 4 panels
+   i=0; for n in front left back right; do
+     magick "$T" -crop 539x729+$((i*539))+0 +repage -trim +repage \
+       -bordercolor '#c9c9c9' -border 40 "views/tv-$n.png"; i=$((i+1))
+   done
+   ```
+2. **Cloud pass first, for calibration.** Everything here needs an account —
+   see the Spaces and cloud sections above; the one free no-signup path,
+   the Blender MCP's shared Rodin key, is drained. With a Hugging Face
+   token, `tools/trellis2_space.py` is the cheapest first candidate. Then
+   five each from Rodin and Tripo multi-view, plus Hunyuan Studio's 20/day.
+   Run Tripo's rig on its best one with `quadruped` and `avian` to see what
+   a commercial rigger does to the wings. Under $10 all in, and it sets the
+   bar the local models have to reach.
 3. **Local pass on x99.** ComfyUI 0.34, native TRELLIS.2 INT8, weights on
    `/mnt/Data`, 1024 cascade at 8-12 steps with `low_vram`. Compare with the
    cloud meshes in Blender, not by reasoning about them.
@@ -186,6 +260,11 @@ The frontier moved in 2026 and it moved in our favour.
 
 ## Open questions
 
+- Which accounts to open. Nothing in the cloud pass runs without one: a free
+  Hugging Face token is the cheapest and widest (every open model's Space),
+  Tripo is the only one that also rigs a non-humanoid, Hunyuan Studio gives
+  the most free volume at 20/day. HF PRO at $9 is the one paid tier that
+  changes the shape of the work rather than just the bill.
 - Nobody has run the native ComfyUI TRELLIS.2 on Turing or under 12 GB yet.
 - SkinTokens' real VRAM floor (14 GB claimed, 4 GB in a wrapper) and whether
   `--use_skeleton` copes with a 68-bone skeleton; its training rigs are
