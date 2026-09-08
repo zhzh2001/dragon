@@ -17,8 +17,11 @@ the two GPU boxes can run, and where the real gap is. Short version:
   fit a skeleton *we* name (Embercrest's 68-bone rig already has the right
   names), and let an ML skinner compute only the weights.
 
-Everything below was gathered by web research on the date above. Claims that
-could not be confirmed are marked as such. Prices are USD.
+The survey below started as web research on the date above; the sections on
+Hugging Face Spaces and Hunyuan 3D Studio, and the two meshes in
+`artifacts/dragon-options/`, are **measured** — generated, downloaded and
+rendered the same day. Where a claim is still only a vendor's, it says so.
+Prices are USD.
 
 ## What the engine needs from an asset
 
