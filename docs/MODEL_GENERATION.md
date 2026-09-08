@@ -323,6 +323,10 @@ unwrap, texture paint and rigging are separate stages, each costing another
 run. 27 MB of GLB, which is also why the in-browser viewer sat on
 `加载中...`: don't ask for 1.5M if you want to preview it in the page.
 
+All three candidate GLBs are kept at `assets/embercrest-cand-*.glb`
+(`trellis2`, `hunyuan-1p5m`, `hunyuan-lowpoly`), gitignored by the existing
+`assets/*.glb` rule since the hosted terms were never fetched.
+
 Rendered the same five ways as the TRELLIS mesh
 (`artifacts/dragon-options/embercrest-mesh-candidates.png`, TRELLIS on top,
 Hunyuan below), **Hunyuan wins clearly on the two things that matter to the
