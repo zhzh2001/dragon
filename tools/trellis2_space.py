@@ -42,7 +42,9 @@ def as_path(v):
 
 def generate(image, out, res="1024", decimation=200000, texture=2048,
              seed=1, token=None, cache=None):
-    client = Client(SPACE, hf_token=token,
+    # `token`, not `hf_token` -- gradio_client renamed it, and the old name
+    # raises TypeError before any GPU time is reserved.
+    client = Client(SPACE, token=token,
                     download_files=str(cache) if cache else True)
 
     # The Space keeps the sampled latents in per-session state, so preprocess,

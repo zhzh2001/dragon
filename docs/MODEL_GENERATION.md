@@ -99,9 +99,9 @@ TRELLIS.2 native at 512, Hi3DGen, Hunyuan3D-2mini shape.
 
 | Service | Generation | Rigging | Cost for five dragons | Licence on cheap tier |
 |---|---|---|---|---|
-| **Tripo** (v3.1, API) | text, image, multi-view; GLB/FBX, PBR default, quad and low-poly add-ons | **Rig v2.5: biped, quadruped, hexapod, octopod, avian, serpentine, aquatic**; `tripo` or `mixamo` bone naming; free rig-check; ~25-30 credits | ~55 cr per mesh + 25-30 rig = ~$4 total at $0.01/cr; 2,000 free API credits claimed (unverified) | Free tier CC BY 4.0, non-commercial, public |
+| **Tripo** (v3.1, API) | text, image, multi-view; GLB/FBX, PBR default, quad and low-poly add-ons | **Rig v2.5: biped, quadruped, hexapod, octopod, avian, serpentine, aquatic**; `tripo` or `mixamo` bone naming; free rig-check; ~25-30 credits | ~55 cr per mesh + 25-30 rig = ~$4 total at $0.01/cr. **The free credits are not API credits**: a fresh account's key returns `balance: 0` from `/v2/openapi/user/balance`, because Studio and API are separate pools. Paying is the only way to reach Rig v2.5 | Free tier CC BY 4.0, non-commercial, public |
 | **Rodin / Hyper3D** (Gen-2.5) | text, 1-5 images; GLB/FBX; **quad 4K-50K**, T/A-pose enforcement, PBR | **none** ("coming soon" since 2025) | fal.ai hosts it at $0.40/gen = $2; hyper3d free tier charges per download | Output use unrestricted per terms |
-| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | hosted auto-rig, "characters or animals", T-pose input, humanoid presets; skeleton undocumented | **$0**: 20 free generations/day, 1,000 promo API credits | hosted terms not fetched |
+| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | **绑骨蒙皮 stage, shown on creatures as well as characters** — the only free rigger that claims it; skeleton naming still undocumented | **$0**: **30** free generations/day on the web (measured), whole pipeline incl. rigging; API needs Tencent Cloud | hosted terms not fetched |
 | **Meshy** (6 text, 7 image) | image; FBX/GLB/OBJ; free remesh | Humanoid, "Quadruped Dog", **Smart Rig (Beta)** for fantasy creatures, web only; API rig is humanoid only | needs one month of Pro ($20) to download current-model output | Free = CC BY 4.0 but downloads locked |
 | **3D AI Studio** | aggregator: Rodin, Hunyuan, Tripo, Hi3D | own "Prism" rigger: biped, quadruped, avian, serpentine, Mixamo names | ~$0 inside 1,000 free credits/month | ownership claim unverified |
 | Hi3D (ex-Hitem3D) | 1536³ geometry, 2M faces | none | | good hero sculpts, dense triangles |
@@ -160,14 +160,99 @@ reservations against:
 | Account | ZeroGPU/day | Dragons/day |
 |---|---|---|
 | anonymous | 120 s | **0** — cannot finish one |
-| free | ~210-300 s | 1, sometimes 2 |
-| PRO, $9/mo | 2,400 s | as many as we want |
+| free | ~240 s | **exactly 1**, measured |
+| PRO, $9/mo | 1,500 s (25 min, per the 429 itself) | ~6 |
 
 One free account therefore unlocks not just TRELLIS.2 but Hunyuan3D-2,
 Hi3DGen, TripoSG and PartCrafter, all of which have Spaces — at one asset a
 day. **There is no way around the quota by picking a different Space**: every
 3D-generation Space that was running when this was checked is on ZeroGPU or
 `cpu-basic`, and the quota is per account, not per Space.
+
+Two traps found by running it. **`resolution` above 512 fails**: 1024 raises a
+bare `AssertionError` from the app, so the hosted demo really is 512³ whatever
+the radio offers, and the failure looks like a bug rather than a limit.
+And because the two stages reserve separately, **the second one can be
+refused after the first has already succeeded** — a free account's second
+attempt sampled fine and then died on `extract_glb` with `0s left`, leaving
+the latents stranded in server-side session state with no way to pay for the
+extraction. Sample and extract are one budget: don't start a second asset.
+
+### What TRELLIS.2 actually produced
+
+From the sheet's side view, at 512, decimated to 200K: 199,932 triangles,
+`POSITION`/`NORMAL`/`TEXCOORD_0`, base colour plus metallic-roughness, no
+skin (so `--model` rejects it until step 6). Rendered five ways in Workbench,
+it is a real dragon and not greybox — six limbs, four legs, two separate bat
+wings with distinct wing fingers, dorsal ridge, spiked tail, horned head.
+
+- **The membrane claim is now measured, not inferred.** The wings came back
+  as thin open sheets with scalloped trailing edges. No SDF thickening, no
+  closed-over webbing. This is the reason to prefer TRELLIS.2 for *this*
+  creature.
+- **But the membranes are single-sided** (`doubleSided: false`), so in-engine
+  they vanish under backface culling from below. They need a Solidify or a
+  two-sided material before the asset is usable.
+- **The input pose is the output pose.** The side view's wings are raised and
+  swept back, so the mesh's X extent (0.517) is *half* its Z extent (0.998).
+  Scaling by X to a 19 m wingspan would therefore produce a dragon roughly
+  twice the intended size. Generate from a wings-level view, or re-pose
+  before export.
+- **The jaw is the weak spot.** The reference sheet's mouth is nearly closed,
+  and the sculpt duly fused the lower jaw into the head — no separate volume
+  for a `jaw`/`mandib` joint to drive. Step 1's "jaw slightly open" is not a
+  nicety; it is what makes the jaw riggable.
+
+## Hunyuan 3D Studio: the whole pipeline, hosted, 30 a day
+
+The survey listed this as "20 free generations/day" and undersold it badly.
+`3d.hunyuan.tencent.com` (the Chinese site — the global one has registration
+paused) has a **3D Studio at `/studio/creation/...` whose left nav is very
+nearly steps 3 to 7 of our own pipeline**, each stage separately runnable on
+an asset:
+
+| Stage | What it is | Our step |
+|---|---|---|
+| 概念设计 | text-to-image, image-to-multiview, with a **标准化A-pose** toggle whose tooltip is "turn this on if you need to drive the character with motion" | 1 |
+| 几何生成 | image or multi-view to mesh, model `3D生成 V3.1`, face budget **1.5M / 1M / 500k / 50k** | 3 |
+| 组件拆分 | split into components — the PartCrafter idea, hosted | — |
+| 低模生成 | "art-grade low-poly", takes an image *or* a high-poly input | 4 (retopo) |
+| UV展开 | semantic UV unwrap | 4 |
+| 纹理绘制 | PBR texture paint | 4 (bake) |
+| **绑骨蒙皮** | **rig and skin** — the gallery shows it applied to 角色 *and* 生物 (creature) | 5-6 |
+| 动画生成 | animation from instruction or video | not needed |
+
+The Studio counter reads **今日剩余生成次数：30** and a geometry submission
+took it to 29, so 30 free runs a day, one per stage submission. The homepage
+badge separately reads 20; what that one counts was not determined, so treat
+30 as the Studio budget and 20 as unexplained rather than assuming they are
+the same pool. This is by far the most free capacity of anything surveyed, and it
+is the only free service that even claims to rig a creature. The API is the
+part that needs Tencent Cloud and a one-time 100 credits; the 30/day are
+web-only, hence the browser.
+
+The multi-view upload takes eight labelled slots — 正 (front, required), 背,
+左, 右, 顶, 底, 左45°, 右45° — min 2, max 8. Our four turnaround panels plus
+the reference sheet's top view fill five of them, which is the best-conditioned
+input we can give any generator.
+
+### Driving it with chrome-use, since the 30/day are web-only
+
+Three things cost real time and will cost it again:
+
+- **`@refs` churn on every re-render.** This is a TDesign/Vue app that reuses
+  nodes, so a ref captured in one snapshot is usually stale by the next click.
+  Drive it with `eval`, or tag nodes (`el.setAttribute('data-cu', ...)`) and
+  address them by CSS selector.
+- **TDesign radios ignore `input.click()`.** Selecting 上传多视图 needs a full
+  pointer sequence dispatched at the `.t-radio__label` span:
+  `for (const t of ['pointerdown','mousedown','pointerup','mouseup','click'])
+  label.dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true}))`.
+- **The eight file inputs do not exist until the "添加多视图" row is clicked**,
+  and once `chrome-use upload` fires, the React dropzone consumes the file and
+  clears `input.files` — so `files.length` reads 0 on a *successful* upload.
+  Verify instead by watching that slot's placeholder label disappear from the
+  panel text.
 
 ## Auto-rigging
 
