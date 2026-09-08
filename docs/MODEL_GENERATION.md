@@ -51,11 +51,11 @@ candidate can be judged before it is imported:
 
 | | t5810 | x99 |
 |---|---|---|
-| GPU | RTX 2080 Ti, 11 GB, sm_75 (Turing: no bf16, no flash-attn 2) | RTX 5060 Ti, 16 GB, sm_120 (Blackwell: needs torch 2.7+ / cu128) |
+| GPU | RTX 2080 Ti, 11 GB, sm_75 (Turing: no bf16, no flash-attn 2) | RTX 5060 Ti, 16 GB, sm_120 (Blackwell: **cu130** — ComfyUI 0.34 disables its CUDA kernels below that) |
 | OS, Python | Ubuntu 22.04, Python 3.10, CUDA 13.2 toolkit installed | CachyOS, Python 3.14 (too new; use `uv python install 3.12`), uv, docker, conda |
 | RAM, CPU | 31 GB, 4 cores | 31 GB, 8 cores |
 | Disk | 284 GB free | **20 GB free on root.** `/mnt/Data` (NTFS) has 69 GB free for weights |
-| No torch on either. | sudo needs a password | sudo is passwordless |
+| torch: none on t5810; **x99 has 2.14.0+cu130** in `~/venvs/comfy` | sudo needs a password | sudo is passwordless |
 
 x99 is the generation box (Blackwell is a first-class target for current
 PyTorch; 16 GB clears the useful thresholds). Its disk is the binding
@@ -360,6 +360,85 @@ is the pose and expression you get back**, and a five-view spread-wing
 open-jaw input beat a one-view swept-wing closed-mouth input by more than the
 model choice did. Feed generators the turnaround, not the reference sheet.
 
+## Local generation on x99: measured, and it is the cheap path after all
+
+TRELLIS.2 now runs locally. From the turnaround's front view it produces a
+correct dragon in **34 seconds at 7.7 GB peak VRAM**, which is roughly half
+what this doc estimated and leaves an RTX 5060 Ti two-thirds idle. There is
+no per-day quota, no account, and no upload. For iterating on the mesh this
+beats every cloud option tried.
+
+| Run | Target res | Time | Peak VRAM | Faces |
+|---|---|---|---|---|
+| local TRELLIS.2 INT8 | 1024 | 32 s | 6.3 GB | 3.3 M |
+| local TRELLIS.2 INT8 | 1536 | 34 s | **7.7 GB** | 7.1 M |
+
+1536 is visibly smoother than 1024 -- cleaner membranes, less faceting on the
+dorsal ridge and tail -- and costs two seconds and 1.4 GB, so there is no
+reason to run 1024. Neither is close to the 16 GB ceiling; the earlier
+"~10 GB at 1024, ~14 GB at 12 steps" figures were for the original repo, not
+the ComfyUI native INT8 path. Result in
+`artifacts/dragon-options/embercrest-local-trellis2.png`, mesh at
+`assets/embercrest-cand-trellis2-local-1536.glb`.
+
+The wings come out as the widest extent (X 0.999 against 0.943 of depth, a
+ratio of 1.06), which is what the engine's scale-by-X-extent needs — the same
+spread-wing front view that fixed this in the cloud fixes it locally.
+
+### Setup, and the four things that actually cost time
+
+Weights live on `/mnt/Data/models` (69 GB free) and the venv on root, which
+had 20 GB. Point ComfyUI at them with an `extra_model_paths.yaml` naming
+`base_path: /mnt/Data/models`. Only ~8 GB of weights is needed:
+`trellis_2_int8_convrot` (4.89 GiB), `dino_v3_vit_l` (1.13), and the two VAEs
+— all from `Comfy-Org/TRELLIS.2`. Skip the 9.63 GiB bf16 UNet.
+
+- **ComfyUI 0.34 wants cu130, not cu128.** This doc used to say Blackwell
+  needs "torch 2.7+ / cu128". On cu128 the server logs *"You need pytorch
+  with cu130 or higher to use optimized CUDA operations"* and reports
+  `comfy_kitchen backend cuda: disabled` — which is where the INT8 convrot
+  dequant kernels live, i.e. exactly what an INT8 model needs. Its torchaudio
+  wheel also links `libcudart.so.13` and fails to load, taking the whole
+  server down at import. Installing torch/vision/audio from
+  `download.pytorch.org/whl/cu130` (torch 2.14.0+cu130) fixes both and flips
+  the CUDA backend to enabled.
+- **`/mnt/Data` being NTFS is not the problem it looks like.** Mounted with
+  the `ntfs3` driver it supports symlinks *and* hardlinks, so the HF cache
+  needs no copy fallback. But uv's cache must sit on the *same* filesystem as
+  the venv or every install silently degrades to full copies; keep the cache
+  on root beside the venv, or pass `UV_LINK_MODE=copy` knowingly.
+- **`pkill -f "main.py --listen"` kills the shell that runs it.** The pattern
+  matches the invoking shell's own command line, so the server never starts
+  and the log is not even truncated — it looks like a silent failure. Use a
+  pattern that cannot match itself (`main[.]py --listen`), or just run the
+  server under tmux, which is what `~/start_comfy.sh` does.
+- **`LoadImage`'s MASK output is `1 - alpha`** (`nodes.py:1788`), so it marks
+  the *background*. Wiring it straight into `ImageCropToMask` inverts subject
+  and background, and TRELLIS.2 dutifully sculpts the plate: the first run
+  returned a flat rectangular slab, 0.059 deep against 1.0 tall, with the
+  dragon in shallow bas-relief on its face. Put an `InvertMask` in between.
+  Nothing errors — the mesh is just wrong, which is the whole argument for
+  rendering every result.
+
+### Running it headless
+
+The templates ship in the editor's format, so `tools/comfy_workflow.py`
+converts one to the API format `/prompt` wants, and `tools/trellis2_local.py`
+builds and submits the geometry graph directly. Three traps in the conversion,
+all recorded in that file: widget values are positional against
+`/object_info` order, a `control_after_generate` input eats a second slot,
+and — the one that silently severs the graph — **`PreviewImage` in 0.34 is a
+pass-through with a real output**, so dropping "preview" nodes by name loses
+the image feeding `Trellis2Conditioning`.
+
+Two more worth knowing: slice to a node whose schema says
+`output_node: true`, because `MeshToFile3D` is not one and will not make the
+graph run (`SaveGLB` is the mesh output that needs no browser viewport
+state); and the shipped template hides a second 5.2 GB Pixal3D UNet plus MoGe
+behind `ComfySwitchNode`s, which a plain dependency slice keeps alive.
+Resolving the constant switch first drops that branch — the converter's
+`--set-bool 316=true` picks TRELLIS.2 and takes the graph from 55 nodes to 21.
+
 ## Auto-rigging
 
 The frontier moved in 2026 and it moved in our favour.
@@ -456,7 +535,9 @@ The frontier moved in 2026 and it moved in our favour.
   credits (Studio credits do not reach the API).
 - Whether the horn spires are a `中` artefact that `高` avoids, or inherent
   to 低模拓扑 V1.5 on thin tapered shapes.
-- Nobody has run the native ComfyUI TRELLIS.2 on Turing or under 12 GB yet.
+- Turing (t5810, 11 GB) is still unrun. x99 answered the 16 GB half: the
+  native INT8 path peaks at 7.7 GB at 1536, so 11 GB looks reachable if a
+  cu130 build exists for sm_75.
 - SkinTokens' real VRAM floor (14 GB claimed, 4 GB in a wrapper) and whether
   `--use_skeleton` copes with a 68-bone skeleton; its training rigs are
   mostly under 64 bones.
