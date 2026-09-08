@@ -754,7 +754,8 @@ void App::update(float dt) {
         studio_time_ += dt * studio_time_scale_;
         const auto scenario = game::StudioScenario(studio_scenario_);
         const float ground = terrain_.height_at(studio_centre_.x, studio_centre_.z);
-        studio_state_ = game::studio_state(scenario, studio_time_, studio_centre_, ground);
+        studio_state_ = game::studio_state(scenario, studio_time_, studio_centre_, ground,
+                                          flight_.tuning.ground_offset);
         if (scenario == game::StudioScenario::Attack) {
             dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
         }

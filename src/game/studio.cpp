@@ -163,7 +163,8 @@ anim::RigAction studio_action(StudioScenario scenario, float previous, float t) 
     return action;
 }
 
-FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float ground_y) {
+FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float ground_y,
+                         float ground_offset) {
     FlightState state;
 
     const Quat orientation = orientation_at(scenario, t);
@@ -256,7 +257,7 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             break;
         }
         case StudioScenario::Grounded:
-            state.position.y = ground_y + 2.5f;  // hips above the feet
+            state.position.y = ground_y + ground_offset;  // body centre above the surface
             state.velocity = Vec3::zero();
             state.airspeed = 0.0f;
             state.grounded = true;

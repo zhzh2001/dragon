@@ -303,7 +303,7 @@ scanned dragon never matches however well chosen.
 | Ground textures | **PolyHaven** tiling sets | CC0, PBR, the detail pass in section 3 |
 | Watchtower, ballista, huts, hoard pile | **Modelled in Blender via MCP** from primitives, with PolyHaven stone, wood and metal materials | Simple shapes; the shared textures are what make them belong. Hyper3D/Hunyuan generation is worth one experiment for the hoard pile and a ballista, where the mesh is static and the texture will be replaced |
 | Prey (goat, sheep, deer) | **Sketchfab CC BY**, rigged, or unrigged at first | A herd needs a walk cycle and a scatter, and the glTF skinned loader and joint mapper already exist. Start unrigged with a bob-and-scatter; a rig is a later upgrade |
-| Dragons | **Keep both.** No new hero models | The recolour system already makes a flight of distinct dragons. The hero's CC BY-NC licence is the one long-term liability: replace it with a CC BY or original rig only if the project is ever published |
+| Dragons | **Keep both.** No new hero models | The recolour system already makes a flight of distinct dragons. The hero's CC BY-NC licence is the one long-term liability: replace it with a CC BY or original rig only if the project is ever published. A script-built original was tried on 2026-09-08 and fell short of both imported models; `EMBERCREST.md` records why, and its rig-and-export step is reusable |
 | Clouds, leaf and bark textures | **Generated** (concept-art skill, NB2) or PolyHaven | Small painted textures are what the tool is good at, and they can be regenerated to the palette |
 
 ### Pipeline notes

@@ -34,8 +34,11 @@ const char* studio_scenario_notes(StudioScenario scenario);
 
 // The scripted state at time `t`. The dragon stays at `centre` (position is
 // pinned; nothing downstream of the rig reads position kinematics), with
-// `ground_y` used by the grounded scenario.
-FlightState studio_state(StudioScenario scenario, float t, core::Vec3 centre, float ground_y);
+// `ground_y` used by the grounded scenario. `ground_offset` is the body-centre
+// height above that surface; the default preserves the original studio pose for
+// callers that do not have per-model ground tuning.
+FlightState studio_state(StudioScenario scenario, float t, core::Vec3 centre, float ground_y,
+                         float ground_offset = 2.5f);
 
 // Where the attack scenario's target orbits, for the head aim.
 core::Vec3 studio_attack_target(float t, core::Vec3 centre);

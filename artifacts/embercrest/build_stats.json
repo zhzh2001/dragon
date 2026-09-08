@@ -1,0 +1,19 @@
+{
+  "vertices": 40602,
+  "polygons": 30379,
+  "triangles": 64916,
+  "bones": 68,
+  "materials": 11,
+  "max_vertex_influences": 4,
+  "source": "Original procedural geometry and generated PBR textures; no reference asset geometry reused",
+  "forward": "glTF -Z",
+  "up": "glTF +Y",
+  "revision": 2,
+  "texture_sizes": {
+    "skin": 2048,
+    "membrane": 2048,
+    "horn_and_armour": 1024,
+    "details": 256
+  },
+  "neck_rise": 2.5699994564056396
+}

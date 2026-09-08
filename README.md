@@ -63,6 +63,10 @@ source and licence (CC BY-NC: this project is strictly non-commercial). Without
 it the game falls back to a generated greybox dragon. Any rigged glTF can be
 tried with `--model PATH`; a second, CC-BY wyvern is documented there too.
 
+An original, script-built dragon (Embercrest) was also tried. It is not as good
+as either imported model and is kept only for reference; the generator, what
+it produced and why it fell short are in [`docs/EMBERCREST.md`](docs/EMBERCREST.md).
+
 ## Playing
 
 | Input | Action |

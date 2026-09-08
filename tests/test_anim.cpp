@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 
 #include "anim/animation.h"
 #include "anim/dragon_rig.h"
+#include "anim/gltf_loader.h"
 #include "game/studio.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
@@ -1089,6 +1091,25 @@ void test_studio_states_are_consistent() {
     }
 }
 
+void test_studio_ground_offset() {
+    std::printf("studio grounded pose uses the supplied ground offset\n");
+    const Vec3 centre{12.0f, 200.0f, -7.0f};
+    const float ground_y = 37.5f;
+
+    // Keep the API's historical default for callers that do not have a model
+    // tuning file, while allowing an asset-specific body height in the app.
+    const game::FlightState legacy =
+        game::studio_state(game::StudioScenario::Grounded, 0.0f, centre, ground_y);
+    const game::FlightState embercrest =
+        game::studio_state(game::StudioScenario::Grounded, 0.0f, centre, ground_y, 3.15f);
+    CHECK(near(legacy.position.y, ground_y + 2.5f));
+    CHECK(near(embercrest.position.y, ground_y + 3.15f));
+    CHECK(near(embercrest.position.x, centre.x));
+    CHECK(near(embercrest.position.z, centre.z));
+    CHECK(near(embercrest.ground_clearance, 0.0f));
+    CHECK(embercrest.grounded);
+}
+
 void test_legs_swing_with_the_frame() {
     std::printf("legs are pendulums: outward in a turn, forward under braking\n");
     anim::DragonShape shape;
@@ -1168,6 +1189,181 @@ void test_legs_swing_with_the_frame() {
     CHECK(length(foot_with_trail(38.0f) - foot_with_trail(0.0f)) > 0.3f);
 }
 
+bool finite_palette(const anim::DragonRig& rig) {
+    for (const Mat4& matrix : rig.skinning_matrices()) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (!std::isfinite(matrix.col[c][r])) return false;
+            }
+        }
+    }
+    return true;
+}
+
+float palette_delta(const anim::DragonRig& a, const anim::DragonRig& b) {
+    const size_t count = std::min(a.skinning_matrices().size(), b.skinning_matrices().size());
+    float delta = 0.0f;
+    for (size_t j = 0; j < count; ++j) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                delta = std::max(delta, std::fabs(a.skinning_matrices()[j].col[c][r] -
+                                                  b.skinning_matrices()[j].col[c][r]));
+            }
+        }
+    }
+    return delta;
+}
+
+float joint_palette_delta(const anim::DragonRig& a, const anim::DragonRig& b, int joint) {
+    if (joint < 0 || size_t(joint) >= a.skinning_matrices().size() ||
+        size_t(joint) >= b.skinning_matrices().size()) {
+        return 0.0f;
+    }
+    const Mat4& lhs = a.skinning_matrices()[size_t(joint)];
+    const Mat4& rhs = b.skinning_matrices()[size_t(joint)];
+    float delta = 0.0f;
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) {
+            delta = std::max(delta, std::fabs(lhs.col[c][r] - rhs.col[c][r]));
+        }
+    }
+    return delta;
+}
+
+void test_optional_embercrest_asset() {
+    std::printf("optional Embercrest asset validates when present\n");
+
+    namespace fs = std::filesystem;
+    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path candidates[] = {
+        fs::path("assets/embercrest.glb"),
+        fs::path("../assets/embercrest.glb"),
+        source_root / "assets/embercrest.glb",
+    };
+    fs::path asset_path;
+    for (const fs::path& candidate : candidates) {
+        if (fs::is_regular_file(candidate)) {
+            asset_path = candidate;
+            break;
+        }
+    }
+    if (asset_path.empty()) {
+        std::printf("  assets/embercrest.glb absent; optional validation skipped\n");
+        return;
+    }
+
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    const anim::GltfLoadResult loaded =
+        anim::load_skinned_gltf(asset_path.string().c_str(), skeleton, mesh);
+    CHECK(loaded.ok);
+    if (!loaded.ok) return;
+    std::printf("  loaded %d joints, %zu verts, %zu tris, bind error %.6f\n",
+                loaded.joint_count, loaded.vertex_count, loaded.triangle_count,
+                loaded.bind_pose_error);
+    CHECK(loaded.bind_pose_error <= 0.01f);
+    CHECK(loaded.joint_count == skeleton.count());
+    CHECK(!mesh.vertices.empty());
+    CHECK(!mesh.indices.empty());
+
+    const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+    CHECK(joints.root != anim::NO_PARENT);
+    CHECK(joints.chest != anim::NO_PARENT);
+    CHECK(joints.head != anim::NO_PARENT);
+    CHECK(joints.jaw != anim::NO_PARENT);
+    CHECK(!joints.neck.empty());
+    CHECK(!joints.tail.empty());
+    CHECK(!joints.wing_root[0].empty());
+    CHECK(!joints.wing_root[1].empty());
+    CHECK(!joints.wing_fingers[0].empty());
+    CHECK(!joints.wing_fingers[1].empty());
+    // Embercrest is a four-legged dragon: the two hind-leg and two foreleg
+    // chains are all expected, but their exact lengths depend on the authored
+    // rig and are intentionally not fixed here.
+    CHECK(!joints.leg[0].empty());
+    CHECK(!joints.leg[1].empty());
+    CHECK(!joints.front_leg[0].empty());
+    CHECK(!joints.front_leg[1].empty());
+
+    const Vec3 extent = loaded.bounds_max - loaded.bounds_min;
+    const float model_scale = extent.x > 0.1f ? 19.0f / extent.x : 1.0f;
+
+    game::FlightState glide;
+    glide.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    glide.airspeed = 30.0f;
+    glide.ground_clearance = 300.0f;
+    glide.g_load = 1.0f;
+    glide.wing_angle = radians(8.0f);
+
+    game::FlightState flap = glide;
+    flap.wing_angle = radians(44.0f);
+    flap.flap_amplitude = 1.0f;
+    flap.flap_phase = 0.25f;
+
+    game::FlightState tuck = glide;
+    tuck.velocity = Vec3{0.0f, 0.0f, -95.0f};
+    tuck.airspeed = 95.0f;
+    tuck.wing_tuck = 1.0f;
+
+    game::FlightState yawing = glide;
+    yawing.control = Vec3{0.0f, 1.0f, 0.0f};
+
+    game::FlightState ground;
+    ground.grounded = true;
+    ground.ground_clearance = 0.0f;
+    ground.wing_tuck = 1.0f;
+
+    auto posed = [&](const game::FlightState& state, const anim::RigAction& action =
+                                             anim::RigAction{}) {
+        auto rig = std::make_unique<anim::DragonRig>();
+        rig->init(skeleton, joints);
+        rig->set_model_scale(model_scale);
+        rig->set_action(action);
+        for (int frame = 0; frame < 120; ++frame) rig->update(state, 1.0f / 60.0f);
+        return rig;
+    };
+
+    const auto glide_rig = posed(glide);
+    const auto flap_rig = posed(flap);
+    const auto tuck_rig = posed(tuck);
+    const auto yawing_rig = posed(yawing);
+    const auto ground_rig = posed(ground);
+    anim::RigAction attack;
+    attack.breath = 1.0f;
+    attack.fire = true;
+    const auto attack_rig = posed(glide, attack);
+
+    CHECK(finite_palette(*glide_rig));
+    CHECK(finite_palette(*flap_rig));
+    CHECK(finite_palette(*tuck_rig));
+    CHECK(finite_palette(*yawing_rig));
+    CHECK(finite_palette(*attack_rig));
+    CHECK(finite_palette(*ground_rig));
+
+    // Compare posed palettes rather than assuming the authored bone axes. This
+    // catches a mapper that found names but failed to drive the imported chains.
+    const int wing_tip = joints.wing_fingers[0].front().back();
+    const int tail_tip = joints.tail.back();
+    CHECK(!glide_rig->skinning_matrices().empty());
+    const float wing_flap_delta = joint_palette_delta(*glide_rig, *flap_rig, wing_tip);
+    const float wing_tuck_delta = joint_palette_delta(*glide_rig, *tuck_rig, wing_tip);
+    const float tail_yaw_delta = joint_palette_delta(*glide_rig, *yawing_rig, tail_tip);
+    const float attack_delta = palette_delta(*glide_rig, *attack_rig);
+    const float ground_delta = palette_delta(*glide_rig, *ground_rig);
+    std::printf("  response deltas wing flap %.5f, wing tuck %.5f, tail yaw %.5f, "
+                "attack %.5f, ground %.5f, jaw %.3f\n",
+                wing_flap_delta, wing_tuck_delta, tail_yaw_delta, attack_delta,
+                ground_delta, attack_rig->jaw_open());
+    CHECK(wing_flap_delta > 1e-3f);
+    CHECK(wing_tuck_delta > 1e-3f);
+    CHECK(tail_yaw_delta > 1e-3f);
+    CHECK(attack_delta > 1e-3f);
+    CHECK(ground_delta > 1e-3f);
+    CHECK(wing_tip >= 0 && wing_tip < skeleton.count());
+    CHECK(tail_tip >= 0 && tail_tip < skeleton.count());
+    CHECK(attack_rig->jaw_open() > 0.5f);
+}
+
 }  // namespace
 
 int main() {
@@ -1191,7 +1387,9 @@ int main() {
     test_speed_posture();
     test_ground_stance_is_authored();
     test_studio_states_are_consistent();
+    test_studio_ground_offset();
     test_legs_swing_with_the_frame();
+    test_optional_embercrest_asset();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
