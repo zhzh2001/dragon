@@ -104,7 +104,7 @@ TRELLIS.2 native at 512, Hi3DGen, Hunyuan3D-2mini shape.
 |---|---|---|---|---|
 | **Tripo** (v3.1, API) | text, image, multi-view; GLB/FBX, PBR default, quad and low-poly add-ons | **Rig v2.5: biped, quadruped, hexapod, octopod, avian, serpentine, aquatic**; `tripo` or `mixamo` bone naming; free rig-check; ~25-30 credits | ~55 cr per mesh + 25-30 rig = ~$4 total at $0.01/cr. **The free credits are not API credits**: a fresh account's key returns `balance: 0` from `/v2/openapi/user/balance`, because Studio and API are separate pools. Paying is the only way to reach Rig v2.5 | Free tier CC BY 4.0, non-commercial, public |
 | **Rodin / Hyper3D** (Gen-2.5) | text, 1-5 images; GLB/FBX; **quad 4K-50K**, T/A-pose enforcement, PBR | **none** ("coming soon" since 2025) | fal.ai hosts it at $0.40/gen = $2; hyper3d free tier charges per download | Output use unrestricted per terms |
-| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | **绑骨蒙皮 stage, shown on creatures as well as characters** — the only free rigger that claims it; skeleton naming still undocumented | **$0**: **30** free generations/day on the web (measured), whole pipeline incl. rigging; API needs Tencent Cloud | hosted terms not fetched |
+| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | 绑骨蒙皮 stage, but **tested and humanoid-only**: a winged quadruped is refused with `仅支持人形标准化` | **$0**: **30** free generations/day on the web (measured), whole pipeline incl. rigging; API needs Tencent Cloud | hosted terms not fetched |
 | **Meshy** (6 text, 7 image) | image; FBX/GLB/OBJ; free remesh | Humanoid, "Quadruped Dog", **Smart Rig (Beta)** for fantasy creatures, web only; API rig is humanoid only | needs one month of Pro ($20) to download current-model output | Free = CC BY 4.0 but downloads locked |
 | **3D AI Studio** | aggregator: Rodin, Hunyuan, Tripo, Hi3D | own "Prism" rigger: biped, quadruped, avian, serpentine, Mixamo names | ~$0 inside 1,000 free credits/month | ownership claim unverified |
 | Hi3D (ex-Hitem3D) | 1536³ geometry, 2M faces | none | | good hero sculpts, dense triangles |
@@ -222,7 +222,7 @@ an asset:
 | 低模生成 | "art-grade low-poly", takes an image *or* a high-poly input | 4 (retopo) |
 | UV展开 | semantic UV unwrap | 4 |
 | 纹理绘制 | PBR texture paint | 4 (bake) |
-| **绑骨蒙皮** | **rig and skin** — the gallery shows it applied to 角色 *and* 生物 (creature) | 5-6 |
+| 绑骨蒙皮 | rig and skin — but **humanoid only** (`仅支持人形标准化`), despite a 生物/creature gallery card. Useless for a dragon | — |
 | 动画生成 | animation from instruction or video | not needed |
 
 The Studio counter reads **今日剩余生成次数：30** and a geometry submission
@@ -284,17 +284,28 @@ Three things to know before relying on it:
   precisely the input that the doc's auto-rigging section notes makes
   Blender's Automatic Weights fail. Plan on the ML skinner, not Blender's.
 
-### Where the rigging question still stands
+### 绑骨蒙皮 is humanoid-only: **仅支持人形标准化**
 
-**Unresolved, and blocked on one human click.** With the 19,973-face
-low-poly as input, 绑骨蒙皮 loads it and 立即生成 loses `t-is-disabled` — so
-the gate really was polycount. But clicking it, by `@ref` and by synthetic
-pointer sequence alike, fires only an analytics beacon: no generation
-request, no new work in the list, and the counter stays put. Most likely the
-本地模型 source selector needs a model picked explicitly before the handler
-will submit. So the survey's biggest open question — whether any rigger puts
-a finger chain on a winged quadruped — is still open, now one dropdown away
-rather than one account away.
+Answered, and the answer is no. With the 19,973-face low-poly as input the
+rig stage loads it and 立即生成 loses `t-is-disabled` — so the earlier
+refusal really was polycount — but submitting returns
+**`仅支持人形标准化`**, "only humanoid standardisation is supported".
+
+That is worth more than it looks. Hunyuan's own marketing and the gallery
+card 绑骨蒙皮生物 ("rig and skin — creature") both imply animals, and the
+cloud table's "characters or animals" came from that. It is wrong: the
+stage takes humanoids only, and a six-limbed dragon is refused outright
+rather than rigged badly. So the *free* rigging path is closed, and the
+survey's "every auto-rigger is humanoid-first" holds up under test rather
+than only in documentation.
+
+What remains for rigging is unchanged from the survey: Tripo's Rig v2.5
+(paid, the only one claiming quadruped *and* avian), or our own plan —
+fit the named 68-bone Embercrest skeleton and let SkinTokens compute only
+the weights. Note also the trap this stage would have set even if it had
+worked: it emits its own skeleton with its own names, and this engine maps
+joints by name substring, so a Hunyuan rig would have needed renaming
+anyway.
 
 ### Driving it with chrome-use, since the 30/day are web-only
 
@@ -440,18 +451,18 @@ The frontier moved in 2026 and it moved in our favour.
 
 ## Open questions
 
-- **Why 绑骨蒙皮's 立即生成 does nothing when enabled** (see above). One
-  human click on the 本地模型 selector probably answers it, and with it the
-  question below.
+- Whether Tripo's Rig v2.5 really puts a finger chain on a winged quadruped.
+  It is now the only commercial candidate left, and it needs paid API
+  credits (Studio credits do not reach the API).
 - Whether the horn spires are a `中` artefact that `高` avoids, or inherent
   to 低模拓扑 V1.5 on thin tapered shapes.
 - Nobody has run the native ComfyUI TRELLIS.2 on Turing or under 12 GB yet.
 - SkinTokens' real VRAM floor (14 GB claimed, 4 GB in a wrapper) and whether
   `--use_skeleton` copes with a 68-bone skeleton; its training rigs are
   mostly under 64 bones.
-- Whether any rigger puts a finger chain on a winged quadruped. Hunyuan's
-  绑骨蒙皮 is the first free way to find out and it accepts the mesh; only
-  its submit is stuck.
+- Whether any rigger puts a finger chain on a winged quadruped. Hunyuan is
+  now excluded by test (`仅支持人形标准化`), leaving Tripo Rig v2.5 and
+  SkinTokens.
 - Rigel3D and AniGen (2026 papers) generate already-rigged, semantically
   named creatures from one image. Neither has code. Worth rechecking in a
   few months; if one ships, steps 4 to 6 collapse.
