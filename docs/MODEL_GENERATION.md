@@ -530,7 +530,55 @@ views is the better start, and the wings can be re-thinned.
 (`artifacts/dragon-options/embercrest-local-hunyuan3d-mv.png`,
 `assets/embercrest-cand-hunyuan3dmv-local.glb`.)
 
-### Tripo: it will not give you the file
+### Improving the outputs: octree resolution is the one lever that mattered
+
+The stipple on Hunyuan's membranes was diagnosed above as quantisation relief
+rather than holes. Raising `VAEDecodeHunyuan3D`'s `octree_resolution` from its
+default 256 to its maximum 512 **removes it completely**
+(`artifacts/dragon-options/embercrest-hunyuan-octree-fix.png`, before left,
+after right) and improves the mesh on the measure that matters for rigging:
+
+| Hunyuan3D-2mv, 4 views | Time | Peak VRAM | Faces | Boundary | Non-manifold |
+|---|---|---|---|---|---|
+| octree 256 (default) | 65 s | 5.4 GB | 228,332 | 89 | 56,891 |
+| **octree 512** | 397 s | 7.2 GB | 712,216 | 90 | **19,007** |
+| octree 512 + latent 4096 | ~400 s | 7.0 GB | 748,714 | 109 | 21,966 |
+
+Non-manifold edges fall 3x. The cost is 6x the wall clock, all of it in the
+decode rather than the diffusion. Worth it: this is the mesh that goes into
+retopo, and non-manifold geometry is what makes auto-weighting fail.
+
+The third row is the useful negative result. Raising
+`EmptyLatentHunyuan3Dv2`'s token budget from 3072 to 4096 — the obvious "more
+detail" knob — bought 36 K more faces and made the mesh *worse*
+(21,966 non-manifold against 19,007) for the same time. **The decode
+resolution was the lever; the diffusion budget was not.** Leave the latent at
+3072.
+
+`assets/embercrest-cand-hunyuan3dmv-oct512.glb` is the best local mesh so
+far, and `artifacts/dragon-options/embercrest-hunyuan-best.png` is what it
+looks like from four sides.
+
+### Tripo v2.5 is the exportable tier, and it is only 15 a month
+
+v3.1 will not export on the free plan. **v2.5 will** — the free plan allows
+15 exports a month, and the download is a plain GLB. It also costs 40 credits
+against v3.1's 55.
+
+What comes back is a genuinely different trade from the local models:
+143,848 faces with **a UV layer and a material already on it**, where every
+local run here is geometry only. But it keeps thin open sheets like TRELLIS.2
+does (24,304 boundary edges) rather than solidifying them, and its wings come
+back curled rather than spread, so its X extent is 0.556 against a depth of
+1.0 — the opposite of what the engine's scale-by-X-extent wants, and a
+regression from the spread-wing input it was given.
+
+So the field, for our purpose, is: **Hunyuan3D-2mv at octree 512 for
+geometry** (best topology, free, local, unlimited), **Tripo v2.5 when a UV'd
+and textured starting point is worth 1 of 15 monthly exports**, and TRELLIS.2
+when the thin open membranes matter more than the 7 M face count.
+
+### Tripo v3.1: it will not give you the file
 
 Tripo generated the best-looking single result of the cloud services -- 1.96 M
 faces, textured, v3.1 "Best Quality", from one image for 55 of the 200 free
