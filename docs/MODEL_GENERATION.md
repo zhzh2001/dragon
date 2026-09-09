@@ -339,6 +339,46 @@ results elsewhere in this doc used the smaller turnaround crops — which are
 reproducible from `embercrest-turnaround.png` with the `magick` loop in step 1
 above, if a run needs to be repeated exactly.
 
+### Image-to-image drift compounds, and it is invisible in a bounding box
+
+Regenerating the five view plates at full resolution made them worse, in a way
+worth writing down because the obvious check does not catch it.
+
+Each plate was generated image-to-image from `embercrest-turnaround.png` —
+which is itself one generation removed from the reference sheet. Normalising
+every front view to the same wingspan and measuring body breadth across the
+four feet, where the wings cannot reach:
+
+| Front view | body breadth / wingspan |
+|---|---|
+| `embercrest-reference-sheet.png` (the design) | **0.283** |
+| `embercrest-turnaround.png` (1 pass from it) | 0.316 (+12%) |
+| first hi-res views (2 passes) | **0.341 (+21%)** |
+| regenerated from the reference panels | 0.254 |
+
+Monotonic. **Every image-to-image pass fattened the dragon**, and the drift
+compounds because each generation becomes the next one's authority.
+
+The trap is that the *bounding box does not move*. At equal wingspan the three
+front views are 509, 506 and 508 px tall — within 0.6%. Wingspan-to-height,
+the ratio you would naturally check, reads 1.77 for both the reference and the
+drifted plate. The silhouette envelope is identical; what changed is the mass
+inside it, thicker torso, broader chest, heavier legs. Only a measurement
+that ignores the wings (breadth across the feet) sees it, and a human eye sees
+it immediately — this was caught by being told the proportions looked wrong,
+not by any check of mine.
+
+Two rules out of it. **Always reference the earliest authority**, the original
+reference sheet, never the most recent derivative. And when a generated asset
+is regenerated, **measure a proportion that excludes the dominant feature** —
+here the wings dominate the bbox and hid a 21% change in body mass.
+
+A related miss in the same batch: the first top-down plate came back with a
+wingspan-to-length ratio of 0.74 against the design's 1.31, wings far too
+narrow for the body. Stating the target ratio in the prompt fixed it (1.51
+after two attempts). Top-down is the view where wingspan is most obviously
+wrong and the easiest to not look at.
+
 ### The stages are gated in order, and that order is ours
 
 The stage routes are `/studio/creation/{concept,geo,comp,poly,uv,texture,rs,ae}`

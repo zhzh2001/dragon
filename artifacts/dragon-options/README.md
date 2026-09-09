@@ -34,9 +34,14 @@ does and does not help is measured** — see "Does input resolution matter" in
 a fixed 518 or 224 square, so the extra pixels do nothing there. They are for
 the cloud's texture stage, which emits 4096² maps, and for looking at.
 
-Consistency across five separate generations is held by passing the committed
-turnaround *and* the finished front view as subject references, which is why
-the colours, crest, ridge and tail match across all five.
+**Each view is generated from the matching panel of
+`embercrest-reference-sheet.png`, not from the turnaround.** That distinction
+is load-bearing — see "Image-to-image drift compounds" in
+`docs/MODEL_GENERATION.md`. Measured against the reference at equal wingspan,
+body breadth was 0.283 in the reference sheet, 0.316 in the turnaround and
+0.341 in a first attempt generated *from* the turnaround: each pass made the
+dragon broader. Regenerating from the reference panels brought it back to
+0.254. If these are ever regenerated, reference the sheet, and measure.
 
 ## Design inputs
 
