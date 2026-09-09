@@ -484,6 +484,52 @@ path — Blackwell has native INT8/FP8 acceleration that Turing lacks, and
 sm_75 has no bf16 units, so those tensors get widened and the intermediates
 grow. Use t5810 when x99 is off; do not expect it to be the fast box.
 
+### A second local model: Hunyuan3D-2mv, and the membrane question settled
+
+ComfyUI 0.34 also has native Hunyuan3D v2 nodes, including
+`Hunyuan3Dv2ConditioningMultiView` which takes **front, left, back and right**
+— our four turnaround panels, the input that produced the best cloud result.
+One 4.93 GB checkpoint (`tencent/Hunyuan3D-2mv`, loaded through
+`ImageOnlyCheckpointLoader`, which yields model, CLIP-vision and VAE together)
+and the shipped `3d_hunyuan3d_multiview_to_model` template converts cleanly
+with `tools/comfy_workflow.py` — a second, independent test of that converter.
+
+On the same 2080 Ti, against TRELLIS.2's one-view run:
+
+| Local model | Time | Peak VRAM | Faces | Boundary loops | Non-manifold |
+|---|---|---|---|---|---|
+| TRELLIS.2 INT8 @1536 | 164 s | 8.9 GB | 7,174,220 | 20,619 | 166,008 |
+| Hunyuan3D-2mv, 4 views | **65 s** | **5.4 GB** | **228,332** | **89** | 56,891 |
+
+Hunyuan is 2.5x faster, uses 3.5 GB less, and returns a mesh 31x smaller that
+is *already* near step 4's 25-40K target rather than 7 M triangles of
+marching-cubes soup needing retopo first.
+
+**And it settles the membrane question the survey could only infer.** Same
+creature, same views, two architectures:
+
+- TRELLIS.2: **20,619 boundary loops** — the wings really are thin open
+  sheets, exactly the O-Voxel behaviour this doc predicted and the reason it
+  was ranked first for a bat-winged creature.
+- Hunyuan3D-2mv: **89 boundary loops**, i.e. watertight. The membranes come
+  back as thin *solid* volumes, which is the SDF/occupancy thickening the
+  survey warned about.
+
+Watch the trap in reading that, though. The membranes look perforated in a
+render — a regular stippled lattice across them — and the obvious conclusion
+is holes. The boundary count says otherwise: 89 loops cannot be a perforated
+sheet. It is quantisation relief on a solid surface from `octree_resolution`
+256, so the fix is a higher octree resolution, not hole-filling. The render
+found the artefact and only the measurement identified it; neither alone was
+enough.
+
+Which to prefer depends on the step. For a hero sculpt to retopo by hand,
+TRELLIS.2's open membranes are truer to the design. For something already
+close to a game budget with clean watertight topology, Hunyuan3D-2mv at four
+views is the better start, and the wings can be re-thinned.
+(`artifacts/dragon-options/embercrest-local-hunyuan3d-mv.png`,
+`assets/embercrest-cand-hunyuan3dmv-local.glb`.)
+
 ### Tripo: it will not give you the file
 
 Tripo generated the best-looking single result of the cloud services -- 1.96 M
