@@ -452,9 +452,22 @@ Every row below is the same input -- the turnaround's front view, cut to RGBA
 | Hunyuan Studio 几何生成 | cloud | ~7 min with queue | — | 1.5 M | no | 30/day |
 | Tripo v3.1 Best Quality | cloud | ~6 min | — | 1.96 M | yes | 55 cr, **export paywalled** |
 
-The two local runs are the same mesh: 7,094,360 vs 7,174,220 triangles from
-one seed, extents agreeing to three decimals. The 1.1 % difference is
-non-deterministic reduction order across two GPUs, not a different result.
+The two local runs are **not** the same mesh, and every aggregate said they
+were. Face counts differ by 1.1 % (7,094,360 vs 7,174,220), extents agree to
+three decimals, surface area is identical to four, and mean dihedral angle
+differs by one degree. Rendered side by side from one camera, though, the
+Turing output is plainly coarser -- broad flat facets across the wing
+membranes and along the tail where the Blackwell run is smooth, at 6.5 %
+pixel RMSE (`artifacts/dragon-options/embercrest-gpu-quality-gap.png`).
+
+The statistics missed it because the marching-cubes output carries a mass of
+near-degenerate faces -- 90th-percentile dihedral is 179 degrees -- and those
+swamp the smooth regions where the two actually differ. The likely cause is
+precision: sm_75 has no bf16 units, so those tensors take a different path and
+the isosurface comes out blockier. **Treat t5810 as a fallback that is both
+4.8x slower and visibly lower quality, not as an equivalent box.** And note
+which check caught this: not the face count, not the bounding box, not the
+dihedral histogram, but rendering both and looking.
 
 ### Turing works, and is 4.8x slower
 
