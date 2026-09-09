@@ -43,6 +43,31 @@ body breadth was 0.283 in the reference sheet, 0.316 in the turnaround and
 dragon broader. Regenerating from the reference panels brought it back to
 0.254. If these are ever regenerated, reference the sheet, and measure.
 
+## Which plate set to regenerate from
+
+There are two sets, and the higher-resolution one is **not** automatically the
+right choice. Measured on the meshes they produce:
+
+| Set | Proportions | Sculpt quality |
+|---|---|---|
+| `views/` — full-frame, 1536x1024, from the reference sheet | **better** (wingspan/depth 1.238 vs 1.123; design is 1.31) | **worse** — mushy muzzle, jaw and brow lose definition |
+| `views-turnaround-crops/` — 619x809, cropped from `embercrest-turnaround.png` | 21% too broad in the body | **better** — sharply modelled head, defined jaw and brow |
+
+The asset that survived to `assets/embercrest-textured.glb` came from the
+turnaround crops, and its head is the reason. **Regenerate from
+`views-turnaround-crops/` unless you specifically need the proportions**, and
+fix proportions on the mesh afterwards, where a scale is exact — see
+"Better plates did not mean a better mesh" in `docs/MODEL_GENERATION.md`.
+
+One further suggestion for a multi-view regeneration: **use only front, back
+and top** (slots 正/背/顶, three is above the minimum of two). The left and
+right plates in both sets show the wings *swept back*, while front, back and
+top show them *spread level* — a genuine contradiction for a multi-view
+generator. It is not a fixable plate: a level-spread wing seen from directly
+side-on projects nearly edge-on, so any turnaround of a wide-winged creature
+either hides the wings in its side views or draws them in a different pose.
+Dropping the side views removes the conflict rather than papering over it.
+
 ## Design inputs
 
 | File | What it is |
