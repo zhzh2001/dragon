@@ -559,6 +559,36 @@ resolution was the lever; the diffusion budget was not.** Leave the latent at
 far, and `artifacts/dragon-options/embercrest-hunyuan-best.png` is what it
 looks like from four sides.
 
+### Pixal3D multi-view: a failure, and probably my fault
+
+`Pixal3DMultiViewConditioning` looked like the obvious way to give the
+TRELLIS family the four views that made Hunyuan good — it takes front, left,
+back and right directly, and unlike `Pixal3DConditioning` it needs no MoGe,
+only a `fov` float. Downloaded `pixal3d_multiview_int8_convrot` (5.2 GiB) and
+the Pixal3D-flavoured `dino_v3_L_naf_fp32`, ran the same four RGBA views at
+1536 with `fov=20`.
+
+It came back **worse than everything else**: 13,613,326 faces, heavily
+faceted with visibly torn membranes, and **1,485,327 non-manifold edges** —
+two orders of magnitude worse than Hunyuan's 19,007. 410 s, 9.4 GB peak.
+
+Two causes are plausible and this run cannot separate them:
+
+1. **The `fov` was a guess.** The shipped template does not hardcode it; it
+   derives it per-image with `MoGeGeometryToFOV`, which is the step I skipped
+   as an unnecessary dependency. Pixal3D back-projects pixels using camera
+   geometry, so a wrong field of view misaligns the four views against each
+   other and the reconstruction tears — which is exactly what the render
+   shows.
+2. **Turing faceting.** TRELLIS.2 on this same card was already visibly
+   coarser than on Blackwell, and Pixal3D is the same architecture; this may
+   be that effect amplified.
+
+Either way the lesson is the first one: **the template computed that fov for
+a reason, and dropping a dependency because it looks optional is how you get
+a confidently wrong mesh.** Re-run on x99 with MoGe wired in before judging
+Pixal3D on this.
+
 ### Tripo v2.5 is the exportable tier, and it is only 15 a month
 
 v3.1 will not export on the free plan. **v2.5 will** — the free plan allows
@@ -573,10 +603,24 @@ back curled rather than spread, so its X extent is 0.556 against a depth of
 1.0 — the opposite of what the engine's scale-by-X-extent wants, and a
 regression from the spread-wing input it was given.
 
-So the field, for our purpose, is: **Hunyuan3D-2mv at octree 512 for
-geometry** (best topology, free, local, unlimited), **Tripo v2.5 when a UV'd
-and textured starting point is worth 1 of 15 monthly exports**, and TRELLIS.2
-when the thin open membranes matter more than the 7 M face count.
+### The field, ranked
+
+`artifacts/dragon-options/embercrest-model-field.png`, one camera, left to
+right: Hunyuan octree 512, TRELLIS.2, Tripo v2.5, Pixal3D multi-view.
+
+| | Faces | Non-manifold | Textured | Time | Verdict |
+|---|---|---|---|---|---|
+| **Hunyuan3D-2mv, octree 512** | 712 K | **19,007** | no | 397 s | **best geometry**, free and local |
+| Hunyuan3D-2mv, octree 256 | 228 K | 56,891 | no | 65 s | fast preview |
+| TRELLIS.2 @1536 | 7.17 M | 166,008 | no | 164 s | only one with thin *open* membranes |
+| Tripo v2.5 | 144 K | 24,304 | **yes, UV+material** | ~5 min | 15 exports/month; curls the wings |
+| Pixal3D multi-view | 13.6 M | 1,485,327 | no | 410 s | broken, see above |
+
+Your read is right: **Hunyuan is the best exportable quality**, and octree
+512 widens that lead rather than narrowing it. Tripo v2.5 is the only one
+handing back UVs and a material, which is worth one of its fifteen monthly
+exports if a textured starting point saves more work than its curled wings
+cost.
 
 ### Tripo v3.1: it will not give you the file
 
