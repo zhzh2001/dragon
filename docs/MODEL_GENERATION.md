@@ -261,9 +261,12 @@ Do not pre-cut for the cloud; it is wasted work.
 1. **几何生成 — geometry.** Switch 上传单图 to **上传多视图**, then click the
    `添加多视图（Min2，Max8）` row, which is what creates the eight file
    inputs; they do not exist before that click. They sit in DOM order 正
-   (front, required), 背, 左, 右, 顶, 底, 左45°, 右45° — so upload
-   front/back/left/right/top into indices 0-4. Leave 模型面数 at its default
-   1.5M and the model at `3D生成 V3.1`. Submit with 立即生成.
+   (front, required), 背, 左, 右, 顶, 底, 左45°, 右45°. The five files to put
+   in the first five slots are committed, named in that order, at
+   **`artifacts/dragon-options/views/`** — `1-front-正图.png` through
+   `5-top-顶图.png`; leave 底图 and the two 45° slots empty. Then leave
+   模型面数 at its default 1.5M and the model at `3D生成 V3.1`, and submit
+   with 立即生成.
 
 2. **低模生成 — retopo.** It picks up stage 1 automatically. Choose 拓扑选择
    **四边面** and a face budget; `中` gave 19,977. Two traps: the horns come
@@ -273,9 +276,9 @@ Do not pre-cut for the cloud; it is wasted work.
 
 3. **UV展开 — unwrap.** The button here is **智能展开UV**, not 立即生成.
 
-4. **纹理绘制 — texture.** Pick **图生纹理** to drive it from the same
-   reference the geometry came from (文生纹理 is text-only, and multi-view
-   input is also accepted). The upload goes into the **second** file input on
+4. **纹理绘制 — texture.** Pick **图生纹理** and give it
+   `views/1-front-正图.png`, the same reference the geometry came from
+   (文生纹理 is text-only, and multi-view input is also accepted). The upload goes into the **second** file input on
    the page — index 0 belongs to the 本地模型 row above it, and uploading
    there leaves 立即生成 disabled with no error.
 
