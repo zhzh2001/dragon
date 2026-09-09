@@ -239,6 +239,77 @@ The multi-view upload takes eight labelled slots — 正 (front, required), 背,
 the reference sheet's top view fill five of them, which is the best-conditioned
 input we can give any generator.
 
+### The runbook, stage by stage
+
+Four submissions of the 30 daily credits take a set of reference views to a
+UV'd, textured, quad-topology dragon. Everything below was run this way; the
+per-stage caveats are expanded in the subsections that follow.
+
+**Inputs.** Plain PNGs with the flat grey plate still on them are fine — the
+geometry workflow runs `hunyuan-3d-images-subject-segmentation` before
+anything else and cuts the subject out itself. This is the opposite of the
+local path, where `LoadImage` + `InvertMask` + an RGBA cutout are mandatory.
+Do not pre-cut for the cloud; it is wasted work.
+
+| # | Stage | Route | Cost | Wall clock | Out |
+|---|---|---|---|---|---|
+| 1 | 几何生成 | `/studio/creation/geo` | 1 | ~7 min | 1.5 M faces, watertight, no UV |
+| 2 | 低模生成 | `/studio/creation/poly` | 1 | ~7 min | ~20 K faces, quads |
+| 3 | UV展开 | `/studio/creation/uv` | 1 | ~2.5 min | adds `UVMap` |
+| 4 | 纹理绘制 | `/studio/creation/texture` | 1 | ~6 min | GLB + FBX + 4 x 4096² PBR maps |
+
+1. **几何生成 — geometry.** Switch 上传单图 to **上传多视图**, then click the
+   `添加多视图（Min2，Max8）` row, which is what creates the eight file
+   inputs; they do not exist before that click. They sit in DOM order 正
+   (front, required), 背, 左, 右, 顶, 底, 左45°, 右45° — so upload
+   front/back/left/right/top into indices 0-4. Leave 模型面数 at its default
+   1.5M and the model at `3D生成 V3.1`. Submit with 立即生成.
+
+2. **低模生成 — retopo.** It picks up stage 1 automatically. Choose 拓扑选择
+   **四边面** and a face budget; `中` gave 19,977. Two traps: the horns come
+   back as spires at `中` (try `高`), and **a GLB cannot carry quads** — the
+   file arrives triangulated, so take the `fbxUrl` if the quad topology is
+   the point.
+
+3. **UV展开 — unwrap.** The button here is **智能展开UV**, not 立即生成.
+
+4. **纹理绘制 — texture.** Pick **图生纹理** to drive it from the same
+   reference the geometry came from (文生纹理 is text-only, and multi-view
+   input is also accepted). The upload goes into the **second** file input on
+   the page — index 0 belongs to the 本地模型 row above it, and uploading
+   there leaves 立即生成 disabled with no error.
+
+**Skip 绑骨蒙皮.** It returns `仅支持人形标准化` on a six-limbed dragon.
+
+**Retrieving results — use the API, not the viewer.** The in-page 3D viewer
+sits on `加载中...` for minutes on a 1.5 M mesh and there is no reliable
+download button to find. Every stage's output is in one call:
+
+```js
+// in the page, so the session cookie comes along
+const r = await fetch('/api/game3d/general_info/get_works_list',
+    {method:'POST', credentials:'include',
+     headers:{'Content-Type':'application/json'}, body:'{}'});
+const t = await r.text();
+// NOTE: the response is TWO concatenated JSON objects, an error line then the
+// real one. Split on newlines and take the object that has data.list.
+const j = t.trim().split('\n').map(l => { try { return JSON.parse(l) }
+                                          catch(e) { return null } })
+           .filter(Boolean).find(l => l.data && l.data.list);
+const w = j.data.list[0];            // newest first; w.status 1 = running, 2 = done
+```
+
+`w.modelInfo.<stage>Rsp` then holds the URLs — `geometryGenerationRsp.glbUrl`,
+`texturePaintingRsp.glbUrl` / `.fbxUrl` / `.pbrImageUrl` /
+`.pbrRoughnessImageUrl` / `.pbrMetallicImageUrl` / `.pbrNormalImageUrl`. Those
+are plain COS HTTPS links that `curl` fetches without auth.
+
+**Poll that API, not the page text.** Two ways this went wrong: a "50%"
+progress reading was actually the *"Save Up to 50%"* upgrade banner, and
+opening another site in the adopted tab silently redirected the poll to the
+wrong page so a running job read as finished. Poll `w.status` and match on the
+`workFlow` string for the stage you submitted.
+
 ### The stages are gated in order, and that order is ours
 
 The stage routes are `/studio/creation/{concept,geo,comp,poly,uv,texture,rs,ae}`
