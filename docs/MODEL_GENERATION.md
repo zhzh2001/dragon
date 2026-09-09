@@ -313,6 +313,32 @@ opening another site in the adopted tab silently redirected the poll to the
 wrong page so a running job read as finished. Poll `w.status` and match on the
 `workFlow` string for the stage you submitted.
 
+### Does input resolution matter? For geometry, no — measured
+
+The obvious way to improve any of this is to feed it bigger images. For the
+conditioning stage that is wasted effort, and ComfyUI's own configs say so.
+`comfy/clip_vision.py` preprocesses to a fixed `image_size` square taken from
+the encoder config, and the two encoders in play are:
+
+| Encoder | Used by | `image_size` |
+|---|---|---|
+| `dino2_large` | Hunyuan3D-2mv | **518** |
+| `dino3_large` | TRELLIS.2, Pixal3D | **224** |
+
+So every view is resized to 518x518 or 224x224 before the model ever sees it.
+The `ImageCropToMask` 1024x1024 in the TRELLIS graph is not the resolution the
+conditioning uses; DINOv3 still takes 224 from it. Feeding a 4096-pixel plate
+to local geometry conditioning changes nothing.
+
+Where the pixels *do* plausibly earn their place is the cloud's 纹理绘制
+stage, which emits 4096² maps and has to get surface detail from somewhere,
+and in being able to see the design yourself. `artifacts/dragon-options/views/`
+is therefore generated one full-frame view per image (~1450 px of dragon)
+rather than cropped from a four-panel sheet (~540 px), while the measured
+results elsewhere in this doc used the smaller turnaround crops — which are
+reproducible from `embercrest-turnaround.png` with the `magick` loop in step 1
+above, if a run needs to be repeated exactly.
+
 ### The stages are gated in order, and that order is ours
 
 The stage routes are `/studio/creation/{concept,geo,comp,poly,uv,texture,rs,ae}`

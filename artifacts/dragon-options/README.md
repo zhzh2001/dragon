@@ -13,13 +13,13 @@ The findings behind these live in `docs/MODEL_GENERATION.md`.
 Hunyuan Studio's 上传多视图 slots appear (see the runbook in
 `docs/MODEL_GENERATION.md`):
 
-| File | Slot |
-|---|---|
-| `views/1-front-正图.png` | 正图 — front, the only required one |
-| `views/2-back-背图.png` | 背图 — back |
-| `views/3-left-左图.png` | 左图 — left |
-| `views/4-right-右图.png` | 右图 — right |
-| `views/5-top-顶图.png` | 顶图 — top |
+| File | Slot | Size |
+|---|---|---|
+| `views/1-front-正图.png` | 正图 — front, the only required one | 1536x1024 |
+| `views/2-back-背图.png` | 背图 — back | 1536x1024 |
+| `views/3-left-左图.png` | 左图 — left | 1536x1024 |
+| `views/4-right-右图.png` | 右图 — right | 1536x1024 |
+| `views/5-top-顶图.png` | 顶图 — top | 1024x1536 |
 
 Leave 底图 and the two 45° slots empty. **Upload these as they are** — the
 grey background stays on. Hunyuan runs subject segmentation itself, and the
@@ -27,8 +27,16 @@ RGBA cutouts the *local* pipeline needs are wasted work here.
 
 For 纹理绘制 (texture), 图生纹理 takes `views/1-front-正图.png` alone.
 
-Views 1-4 are the four panels of `embercrest-turnaround.png`; view 5 is the
-top-down panel of `embercrest-reference-sheet.png`.
+Each is generated as its own full-frame image rather than cropped out of a
+turnaround sheet, so the dragon spans ~1450 px instead of ~540. **Where that
+does and does not help is measured** — see "Does input resolution matter" in
+`docs/MODEL_GENERATION.md`: local geometry conditioning resizes every view to
+a fixed 518 or 224 square, so the extra pixels do nothing there. They are for
+the cloud's texture stage, which emits 4096² maps, and for looking at.
+
+Consistency across five separate generations is held by passing the committed
+turnaround *and* the finished front view as subject references, which is why
+the colours, crest, ridge and tail match across all five.
 
 ## Design inputs
 
