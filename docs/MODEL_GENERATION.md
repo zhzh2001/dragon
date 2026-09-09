@@ -603,6 +603,69 @@ back curled rather than spread, so its X extent is 0.556 against a depth of
 1.0 — the opposite of what the engine's scale-by-X-extent wants, and a
 regression from the spread-wing input it was given.
 
+### Cloud Hunyuan beats every local run, and the reason is the model generation
+
+Tested directly, and the read that cloud looks sharper is correct — by more
+than "sharper features". Same creature, head close-ups in
+`artifacts/dragon-options/embercrest-cloud-vs-local-head.png` (cloud, local
+2.0-mv, local 2.1):
+
+| Hunyuan | Faces | Boundary | Non-manifold | Time |
+|---|---|---|---|---|
+| **cloud 几何生成 (v3.1)** | 1,500,000 | **0** | **0** | ~7 min with queue |
+| local 2.0-mv, octree 512, x99 | 708,172 | 86 | 19,421 | 226 s |
+| local 2.0-mv, octree 512, t5810 | 712,216 | 90 | 19,007 | 397 s |
+| local 2.1, single view, x99 | 356,022 | 1,051 | 21,590 | 212 s |
+
+**The cloud mesh is watertight and fully manifold — zero boundary edges and
+zero non-manifold edges at 1.5 M faces.** No local run gets within three
+orders of magnitude of that, and visually it has crisper horns, cleaner crest
+spikes and finer scale relief.
+
+I could not beat it locally, and the reason is structural rather than a
+setting I missed. The cloud runs `hunyuan-3d-views2geometry-v3.1`. The newest
+*open* Hunyuan is 2.1, and this doc already recorded that 2.5, 3.x and PolyGen
+are API-only. Downloading 2.1 (6.9 GB) and running it confirmed the gap
+rather than closing it: it scored *worse* than 2.0-mv on every measure,
+because 2.1 ships no multi-view variant, so it gives up the four-view
+conditioning that is worth more here than the newer weights.
+
+One other thing this settles: for Hunyuan, **Blackwell and Turing produce
+near-identical meshes** (19,421 vs 19,007 non-manifold) and differ only in
+speed, 226 s against 397 s. The visible quality gap measured earlier between
+those two cards was specific to TRELLIS.2, not a general property of the box.
+
+So the honest recommendation is the one already being acted on: **use the
+cloud for the hero geometry.** Local generation is for iteration — no quota,
+four minutes, no browser — and the cloud for the asset that ships.
+
+### Yes, cloud Hunyuan does UV and texture, and it beats Tripo at it
+
+Asked and answered by running it. The Studio's 语义UV and 纹理绘制 stages
+chain onto the retopo automatically, one credit each:
+
+- **语义UV** (`hy-3d-semantic-uv-v3.0`) — ~2.5 min, adds a `UVMap`.
+- **纹理绘制** (`hunyuan-3d-image2texture-v3.1`) — takes 文生纹理 (text) or
+  **图生纹理** (image), so it can be driven from the same reference image the
+  geometry came from. It also accepts multi-view input for texturing.
+
+What comes back is a complete game-ready asset: a **19,965-face quad mesh
+with UVs, as both GLB and FBX, plus four separate 4096x4096 maps — base
+colour, roughness, metallic and normal.** The normal map matters: this
+engine only samples one where the primitive carries tangents, and this is the
+first thing in the whole survey that produced one.
+
+Against Tripo v2.5, which was the reason to consider doing UV and texture by
+hand: Tripo gives one material on a 144 K triangle mesh, 15 exports a month.
+Hunyuan gives a 20 K quad mesh with a 4K PBR set, and geometry, retopo, UV
+and texture together cost **4 of 30 daily credits**. There is no reason to do
+this manually.
+
+(`artifacts/dragon-options/embercrest-hunyuan-textured.png`, mesh at
+`assets/embercrest-cand-hunyuan-cloud-textured.glb`, maps in
+`assets/embercrest-textures/` — both gitignored, as generated assets under
+hosted terms.)
+
 ### The field, ranked
 
 `artifacts/dragon-options/embercrest-model-field.png`, one camera, left to
