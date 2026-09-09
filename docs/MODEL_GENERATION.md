@@ -439,6 +439,101 @@ behind `ComfySwitchNode`s, which a plain dependency slice keeps alive.
 Resolving the constant switch first drops that branch — the converter's
 `--set-bool 316=true` picks TRELLIS.2 and takes the graph from 55 nodes to 21.
 
+## The comparison, measured on one input
+
+Every row below is the same input -- the turnaround's front view, cut to RGBA
+-- so the differences are the tool, not the prompt.
+
+| Path | Where | Time | Peak VRAM | Faces | Textured | Cost |
+|---|---|---|---|---|---|---|
+| ComfyUI TRELLIS.2 INT8 @1536 | RTX 5060 Ti 16 GB | **34 s** | 7.7 GB | 7.09 M | no | free |
+| ComfyUI TRELLIS.2 INT8 @1536 | RTX 2080 Ti 11 GB | 164 s | 8.9 GB | 7.17 M | no | free |
+| TRELLIS.2 HF Space @512 | ZeroGPU | ~1 min | — | 0.2 M | yes, PBR | 1/day |
+| Hunyuan Studio 几何生成 | cloud | ~7 min with queue | — | 1.5 M | no | 30/day |
+| Tripo v3.1 Best Quality | cloud | ~6 min | — | 1.96 M | yes | 55 cr, **export paywalled** |
+
+The two local runs are the same mesh: 7,094,360 vs 7,174,220 triangles from
+one seed, extents agreeing to three decimals. The 1.1 % difference is
+non-deterministic reduction order across two GPUs, not a different result.
+
+### Turing works, and is 4.8x slower
+
+The open question -- can the native ComfyUI path run on the 2080 Ti and under
+12 GB -- is answered **yes**. `torch 2.14.0+cu130` still ships `sm_75` in its
+arch list, and ComfyUI 0.34 reports `comfy_kitchen backend cuda: disabled:
+False` on Turing exactly as it does on Blackwell.
+
+It is just slow. 164 s against 34 s for an identical graph, and it wants
+*more* VRAM doing it (8.9 GB vs 7.7 GB). That is not raw throughput: the same
+fp16 matmul benchmark runs **faster** on the 2080 Ti (0.13 s vs 0.18 s for
+20x4096³), which its wider memory bus would predict. The gap is the quantised
+path — Blackwell has native INT8/FP8 acceleration that Turing lacks, and
+sm_75 has no bf16 units, so those tensors get widened and the intermediates
+grow. Use t5810 when x99 is off; do not expect it to be the fast box.
+
+### Tripo: it will not give you the file
+
+Tripo generated the best-looking single result of the cloud services -- 1.96 M
+faces, textured, v3.1 "Best Quality", from one image for 55 of the 200 free
+monthly credits. **Then it refuses to export it.** The Export dialog offers
+GLB and 4K textures, and pressing Export produces no download and the banner
+"Upgrade to unlock 3D model exports". So the free tier spends real credits on
+a mesh you can only look at, which is the same trap this doc already recorded
+for Meshy. Combined with the API pool being separate and at zero, Tripo is
+unusable at $0.
+
+Its rigger did produce the most interesting result of the day, though. The
+Studio calls `POST /v2/studio/operation/pre_rig_check` before spending
+anything, and for our dragon it answers:
+
+```json
+{"code":0,"message":"OK","data":{"riggable":true,"rig_type":"others"}}
+```
+
+**`rig_type: "others"`.** Tripo advertises biped, quadruped, hexapod, octopod,
+avian, serpentine and aquatic; a winged quadruped matches none of them and
+falls through to the catch-all. It says `riggable: true`, but the Studio then
+declines to submit the 20-credit Auto Rig job at all. So Tripo neither refuses
+the dragon outright the way Hunyuan does (`仅支持人形标准化`) nor claims one of
+its named skeletons for it -- which is as close to a direct answer as the
+survey's "expect the wings to be skinned to the spine" is going to get without
+paying.
+
+## Frameworks: is ComfyUI the right harness?
+
+**Yes, and it is genuinely agent-drivable.** Everything in this doc was run
+headlessly over its HTTP API: `GET /object_info` returns every node's full
+input schema as JSON, `POST /prompt` takes the graph, `GET /history/<id>`
+polls to a terminal state, and outputs land on disk where a script can pick
+them up. No browser is involved. That is a better automation surface than any
+of the hosted services, three of which needed a real Chrome driven through
+their React UI.
+
+The caveats are real but bounded, and all four are recorded above: templates
+ship only in the editor's format, widget values are positional, `output_node`
+decides what actually executes, and the worst failures are silent rather than
+loud -- the inverted mask produced a confident, well-formed, completely wrong
+mesh.
+
+**trellis.cpp is not the speed play.** It is a C++/GGML implementation of the
+same TRELLIS.2-4B (MIT, actively developed) with CUDA, Vulkan, ROCm and Metal
+backends and a resident HTTP server, needing no torch and no CUDA extensions.
+But its own README reports res-1024 at **3:16 to 7:23 on an RTX 5060 Ti** --
+the same card that does 1536 in 34 s under ComfyUI's native INT8 path, so it
+is roughly 6-13x slower on hardware we already have working.
+
+Where it would earn its place is portability, not throughput:
+
+- **The Mac.** Metal is supported and the README cites an M5 doing res-512 at
+  5.6 GB peak RSS. That would make dragon iteration independent of whether a
+  lab box is powered on -- which is exactly the problem that moved this work
+  from x99 to t5810 mid-session.
+- **A box where the torch stack fights back.** It sidesteps cu130, sm_75 and
+  the whole wheel-matching problem that cost this session two rebuilds.
+
+It is worth building for the Mac path if untethering from the lab matters.
+It is not worth it to make x99 faster.
+
 ## Auto-rigging
 
 The frontier moved in 2026 and it moved in our favour.
