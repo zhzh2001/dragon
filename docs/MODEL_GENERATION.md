@@ -239,6 +239,56 @@ The multi-view upload takes eight labelled slots — 正 (front, required), 背,
 the reference sheet's top view fill five of them, which is the best-conditioned
 input we can give any generator.
 
+### Verdict on 低模生成: do not use it. Decimate locally instead.
+
+Tested by running the full chain on the corrected view plates. The retopo
+stage returned **13,851 triangles**, and at that budget it erases exactly the
+features the rig needs: the **wing finger bones are gone** (smooth membrane
+blobs where the source has crisp separated fingers), the dorsal ridge spikes
+are smoothed to a bump, and the jaw and teeth become an undefined mass. The
+horn spires recorded earlier were the same stage misbehaving. It is not a
+budget to tune — it is a stage to skip.
+
+What works instead is decimating the 1.5 M geometry **locally**, which is
+under our control and preserves the detail: `tools/rig_embercrest_candidate.py`
+takes 1.5 M to 80 K with 61 named bones, 4 influences, no unweighted vertices
+and valid tangents, and the engine loads the result and renders it textured.
+
+So the pipeline is: **几何生成 (or the one-shot) at 1.5 M in the cloud →
+decimate locally → rig locally → cloud 语义UV + 纹理绘制 if PBR is wanted.**
+The Studio accepts an uploaded mesh (`Upload 3D Model`, OBJ/FBX/STL/GLB,
+≤150 MB), so a locally-decimated mesh can still go back for UV and texture.
+
+**The 20 badge is a separate pool.** The homepage counter this doc left
+unexplained is the one-shot 图/文生3D allowance: 20 a day, independent of the
+Studio's 30 stage submissions. The one-shot produces geometry *and* texture
+together at full 1.5 M resolution with no retopo stage in the way, which is
+why it yields a better asset than the staged chain.
+
+### Better plates did not mean a better mesh
+
+Worth recording against my own earlier recommendation. The regenerated,
+proportion-corrected view plates produced a 1.5 M mesh with measurably better
+proportions — wingspan/depth 1.238 against the older plates' 1.123, closer to
+the design's 1.31. Rendered side by side, it is still the **worse** mesh: the
+muzzle is mushy, the jaw and brow lose definition, the chest plates flatten.
+The old plates, drifted and 21% too broad, gave a sharply modelled head.
+
+Two lessons. Proportion fidelity and sculpt quality are independent axes, and
+the measurement that caught the drift says nothing about the second one. And
+prompting hard for "slender" bought slimness at the cost of facial structure —
+the generator spent its detail budget elsewhere. Do not re-source a good mesh
+to fix proportions; fix proportions on the good mesh.
+
+### One worry that turned out not to apply
+
+This doc flags single-sided membranes needing a Solidify or two-sided material
+before the asset is usable. **Not for this engine.** Every generated asset
+here declares `doubleSided: true`, and the renderer sets
+`SDL_GPU_CULLMODE_NONE` on all its pipelines (`src/gfx/world_renderer.cpp`,
+`foliage.cpp`, `particles.cpp`, `debug_draw.cpp`), so nothing is
+backface-culled. The concern is real for other engines; here it costs nothing.
+
 ### The runbook, stage by stage
 
 Four submissions of the 30 daily credits take a set of reference views to a
