@@ -20,6 +20,7 @@ assets/black_dragon_with_idle_animation/
 # generator, the docs and a few renders are tracked. assets/*.glb above already
 # covers assets/embercrest.glb.
 assets/embercrest/
+assets/stormsail/
 tools/__pycache__/
 artifacts/**/*.bmp
 artifacts/**/*.log

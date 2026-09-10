@@ -10,9 +10,9 @@
   "unweighted_vertices": 0,
   "binding": "Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind",
   "material": "Preserved source UVs and PBR textures",
-  "glb_bytes": 54795812,
+  "glb_bytes": 54795908,
   "ground_offset": 3.9933978544450914,
-  "repaired_zero_tangents": 5,
+  "repaired_zero_tangents": 4,
   "source_images": [
     {
       "name": "texture_pbr_20250901",
