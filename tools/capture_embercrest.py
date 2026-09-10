@@ -15,6 +15,11 @@ CASES = [
     ('bind-top', ['--bind-pose', '--inspect', '0', '20', '88'], 1),
     ('glide', ['--studio', '0', '--inspect', '35', '18', '25'], 90),
     ('flap', ['--studio', '1', '--inspect', '150', '16', '18'], 90),
+    ('flap-upstroke', ['--studio', '1', '--inspect', '150', '16', '18'], 54),
+    ('brake', ['--studio', '7', '--inspect', '90', '16', '12'], 180),
+    ('pull-out', ['--studio', '6', '--inspect', '35', '16', '40'], 210),
+    ('attack-rest', ['--studio', '8', '--inspect', '90', '4.3', '5', '--inspect-head'], 90),
+    ('attack-mouth', ['--studio', '8', '--inspect', '90', '4.3', '5', '--inspect-head'], 180),
     ('tuck', ['--studio', '5', '--inspect', '35', '16', '40'], 120),
     ('attack-head', ['--studio', '8', '--inspect', '145', '4.3', '15', '--inspect-head'], 180),
     ('ground', ['--studio', '9', '--inspect', '140', '17', '12'], 240),
@@ -23,6 +28,7 @@ CASES = [
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--executable', type=Path, default=ROOT/'build/dragon')
     parser.add_argument('--model', type=Path, default=ROOT/'assets/embercrest.glb')
     parser.add_argument('--output', type=Path, default=OUT)
     parser.add_argument('--cases', nargs='+', choices=[case[0] for case in CASES])
@@ -33,7 +39,7 @@ def main():
         if args.cases and name not in args.cases:
             continue
         bmp = output / (name + '.bmp')
-        cmd = [str(ROOT/'build/dragon'), '--headless', '--model', str(args.model.resolve()),
+        cmd = [str(args.executable.resolve()), '--headless', '--model', str(args.model.resolve()),
                '--hide-ui', '--frames', str(frames), '--screenshot', str(bmp)] + flags
         with (output/(name+'.log')).open('w') as log:
             subprocess.run(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)

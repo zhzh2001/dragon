@@ -76,6 +76,10 @@ bone('chest', (0,.08,.19), (0,.21,.23), 'root')
 chain(['neck_01','neck_02','neck_03'], [(0,.21,.23),(0,.255,.30),(0,.255,.36),(0,.285,.40)], 'chest')
 bone('head',(0,.285,.40),(0,.395,.385),'neck_03')
 bone('jaw',(0,.285,.367),(0,.385,.337),'head')
+if TEXTURED:
+    # Runtime determines opening direction by probing a descendant tip. A leaf
+    # jaw only probes its unmoving pivot and can choose the closing direction.
+    bone('jaw_tip',(0,.385,.337),(0,.400,.332),'jaw')
 chain([f'tail_{i:02d}' for i in range(1,9)],[(0,y,z) for y,z in [(-.035,.17),(-.11,.135),(-.19,.105),(-.27,.080),(-.35,.067),(-.43,.065),(-.51,.072),(-.59,.080),(-.66,.062)]], 'root')
 for side,suffix in [(-1,'l'),(1,'r')]:
     def p(x,y,z):return (side*x,y,z)

@@ -4,14 +4,15 @@
   "source_triangles": 1500000,
   "triangles": 80000,
   "vertices": 40000,
-  "bones": 61,
+  "bones": 62,
   "max_influences": 4,
   "max_weight_sum_error": 5.122274160385132e-08,
   "unweighted_vertices": 0,
   "binding": "Bone heat body; continuous top-four wing field with wrist and root blending; rigid skull/jaw; level wing bind",
   "material": "Preserved source UVs and PBR textures",
-  "glb_bytes": 54795556,
+  "glb_bytes": 54795812,
   "ground_offset": 3.9933978544450914,
+  "repaired_zero_tangents": 5,
   "source_images": [
     {
       "name": "texture_pbr_20250901",
@@ -47,6 +48,5 @@
     0.00017440319061279297,
     -0.02060568332672119,
     -3.229852651998044e-08
-  ],
-  "repaired_zero_tangents": 5
+  ]
 }

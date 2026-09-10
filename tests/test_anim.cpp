@@ -41,6 +41,8 @@ bool near(Vec3 a, Vec3 b, float eps = 1e-4f) {
     return near(a.x, b.x, eps) && near(a.y, b.y, eps) && near(a.z, b.z, eps);
 }
 
+float joint_palette_delta(const anim::DragonRig& a, const anim::DragonRig& b, int joint);
+
 Transform at(Vec3 position) {
     Transform t;
     t.position = position;
@@ -238,6 +240,128 @@ void test_dragon_rig_builds() {
     std::printf("  wing tips at x %+.2f and %+.2f\n", right_tip.x, left_tip.x);
     CHECK(near(right_tip.x, -left_tip.x, 1e-3f));
     CHECK(right_tip.x > 0.0f);
+}
+
+void test_rig_tuning_profile_round_trip() {
+    std::printf("rig tuning profiles round-trip through flat config\n");
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "dragon-rig-tuning-test.cfg";
+
+    anim::RigTuning written;
+    written.wing_elbow_fold_scale = 0.45f;
+    written.wing_wrist_fold_scale = 1.25f;
+    written.wing_finger_fold_scale = 1.75f;
+    written.wing_flap_fold_deg = 17.0f;
+    written.wing_flap_limit_deg = 41.0f;
+    written.leg_brake_extend = 0.7f;
+    written.leg_brake_forward_deg = 28.0f;
+    written.chain_iterations = 9;
+    CHECK(anim::save_rig_tuning(written, path.string().c_str()));
+
+    anim::RigTuning loaded;
+    CHECK(anim::load_rig_tuning(loaded, path.string().c_str()));
+    CHECK(near(loaded.wing_elbow_fold_scale, written.wing_elbow_fold_scale));
+    CHECK(near(loaded.wing_wrist_fold_scale, written.wing_wrist_fold_scale));
+    CHECK(near(loaded.wing_finger_fold_scale, written.wing_finger_fold_scale));
+    CHECK(near(loaded.wing_flap_fold_deg, written.wing_flap_fold_deg));
+    CHECK(near(loaded.wing_flap_limit_deg, written.wing_flap_limit_deg));
+    CHECK(near(loaded.leg_brake_extend, written.leg_brake_extend));
+    CHECK(near(loaded.leg_brake_forward_deg, written.leg_brake_forward_deg));
+    CHECK(loaded.chain_iterations == written.chain_iterations);
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+}
+
+void test_wing_fold_profile_is_anatomical() {
+    std::printf("wing fold controls separate elbow, wrist and fingers\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState tucked;
+    tucked.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    tucked.airspeed = 30.0f;
+    tucked.ground_clearance = 300.0f;
+    tucked.wing_tuck = 1.0f;
+
+    auto settled = [&](const anim::RigTuning& tuning) {
+        auto rig = std::make_unique<anim::DragonRig>();
+        rig->init(skeleton, joints);
+        rig->tuning = tuning;
+        for (int i = 0; i < 120; ++i) rig->update(tucked, 1.0f / 60.0f);
+        return rig;
+    };
+
+    anim::DragonRig baseline;
+    baseline.init(skeleton, joints);
+    for (int i = 0; i < 120; ++i) baseline.update(tucked, 1.0f / 60.0f);
+
+    anim::RigTuning elbow_open = baseline.tuning;
+    elbow_open.wing_elbow_fold_scale = 0.0f;
+    const auto elbow_open_rig = settled(elbow_open);
+    const int elbow = joints.wing_root[0].back();
+    const int finger = joints.wing_fingers[0].front().back();
+    CHECK(joint_palette_delta(baseline, *elbow_open_rig, elbow) > 1e-3f);
+
+    anim::RigTuning fingers_closed = baseline.tuning;
+    fingers_closed.wing_finger_fold_scale = 1.8f;
+    const auto fingers_closed_rig = settled(fingers_closed);
+    // Closing the finger must not rotate its parent elbow. This is the
+    // distinction the old cumulative profile could not express.
+    CHECK(joint_palette_delta(baseline, *fingers_closed_rig, elbow) < 1e-4f);
+    CHECK(joint_palette_delta(baseline, *fingers_closed_rig, finger) > 1e-3f);
+
+    // A model may cap a visual stroke without changing the flight state's
+    // engine angle or its force model.
+    game::FlightState high_flap = tucked;
+    high_flap.wing_tuck = 0.0f;
+    high_flap.wing_angle = radians(80.0f);
+    anim::DragonRig uncapped;
+    uncapped.init(skeleton, joints);
+    for (int i = 0; i < 60; ++i) uncapped.update(high_flap, 1.0f / 60.0f);
+    anim::DragonRig capped;
+    capped.init(skeleton, joints);
+    capped.tuning.wing_flap_limit_deg = 40.0f;
+    for (int i = 0; i < 60; ++i) capped.update(high_flap, 1.0f / 60.0f);
+    CHECK(joint_palette_delta(uncapped, capped, joints.wing_root[0].front()) > 1e-3f);
+}
+
+void test_brake_leg_profile_floats_forward() {
+    std::printf("brake leg profile unfolds and floats limbs forward\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState braking;
+    braking.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    braking.airspeed = 30.0f;
+    braking.ground_clearance = 300.0f;
+    braking.wing_brake = 1.0f;
+
+    auto leg_tip = [&](const anim::RigTuning& tuning) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.tuning = tuning;
+        for (int i = 0; i < 180; ++i) rig.update(braking, 1.0f / 60.0f);
+        return rig.world_matrices()[size_t(joints.leg[0].back())].col[3].xyz();
+    };
+
+    const Vec3 default_tip = leg_tip(anim::RigTuning{});
+    anim::RigTuning profiled;
+    profiled.leg_tuck_deg = 42.0f;
+    profiled.leg_trail_deg = 14.0f;
+    profiled.front_leg_trail_deg = 10.0f;
+    profiled.leg_brake_extend = 0.65f;
+    profiled.leg_brake_forward_deg = 30.0f;
+    const Vec3 profiled_tip = leg_tip(profiled);
+    // Engine forward is -Z for the generated rig. The profile's positive
+    // forward float must move the tip toward that direction and clear the
+    // deeply aft default.
+    CHECK(profiled_tip.z < default_tip.z - 0.1f);
 }
 
 void test_rig_responds_to_flight() {
@@ -1296,6 +1420,21 @@ void test_optional_embercrest_asset() {
     CHECK(!joints.front_leg[0].empty());
     CHECK(!joints.front_leg[1].empty());
 
+    // A delivered model may carry a model-scoped rig profile beside the asset.
+    // Apply it here as the runtime does, so the optional pose checks exercise
+    // the shipped tuning rather than the generic defaults.
+    const std::string asset_name = asset_path.filename().string();
+    const bool is_textured_embercrest =
+        asset_name.find("embercrest-textured") != std::string::npos;
+    const fs::path rig_profile_path = fs::path(asset_path.string() + ".rig.cfg");
+    anim::RigTuning model_tuning;
+    const bool has_model_tuning =
+        fs::is_regular_file(rig_profile_path) &&
+        anim::load_rig_tuning(model_tuning, rig_profile_path.string().c_str());
+    if (is_textured_embercrest) {
+        CHECK(has_model_tuning);
+    }
+
     const Vec3 extent = loaded.bounds_max - loaded.bounds_min;
     const float model_scale = extent.x > 0.1f ? 19.0f / extent.x : 1.0f;
 
@@ -1328,6 +1467,7 @@ void test_optional_embercrest_asset() {
                                              anim::RigAction{}) {
         auto rig = std::make_unique<anim::DragonRig>();
         rig->init(skeleton, joints);
+        if (has_model_tuning) rig->tuning = model_tuning;
         rig->set_model_scale(model_scale);
         rig->set_action(action);
         for (int frame = 0; frame < 120; ++frame) rig->update(state, 1.0f / 60.0f);
@@ -1373,6 +1513,36 @@ void test_optional_embercrest_asset() {
     CHECK(wing_tip >= 0 && wing_tip < skeleton.count());
     CHECK(tail_tip >= 0 && tail_tip < skeleton.count());
     CHECK(attack_rig->jaw_open() > 0.5f);
+
+    // The textured asset's jaw is a deforming parent with a separate endpoint.
+    // Probe the furthest direct child so this remains independent of the
+    // endpoint's exact exported name. A palette-wide attack delta can pass
+    // while the mouth still closes upward, which is the glitch this catches.
+    int jaw_tip = joints.jaw;
+    float jaw_reach = 0.0f;
+    const Vec3 jaw_bind = skeleton.world_bind(joints.jaw).translation_part();
+    for (int i = 0; i < skeleton.count(); ++i) {
+        if (skeleton.joint(i).parent != joints.jaw) continue;
+        const float reach = distance(skeleton.world_bind(i).translation_part(), jaw_bind);
+        if (reach > jaw_reach) {
+            jaw_reach = reach;
+            jaw_tip = i;
+        }
+    }
+    const float glide_jaw_drop =
+        glide_rig->world_matrices()[size_t(joints.head)].col[3].y -
+        glide_rig->world_matrices()[size_t(jaw_tip)].col[3].y;
+    const float attack_jaw_drop =
+        attack_rig->world_matrices()[size_t(joints.head)].col[3].y -
+        attack_rig->world_matrices()[size_t(jaw_tip)].col[3].y;
+    // The rebuilt textured deliverable explicitly owns a mandible endpoint.
+    // The neutral Embercrest asset predates that joint and remains a valid
+    // legacy model, so only require the endpoint/direction regression for the
+    // named textured asset.
+    if (is_textured_embercrest) {
+        CHECK(jaw_tip != joints.jaw);
+        CHECK(attack_jaw_drop > glide_jaw_drop + 0.01f);
+    }
 }
 
 }  // namespace
@@ -1384,6 +1554,9 @@ int main() {
     test_weight_normalization();
     test_blended_skinning_preserves_shape();
     test_dragon_rig_builds();
+    test_rig_tuning_profile_round_trip();
+    test_wing_fold_profile_is_anatomical();
+    test_brake_leg_profile_floats_forward();
     test_rig_responds_to_flight();
     test_animation_track_sampling();
     test_animation_clip_loops();

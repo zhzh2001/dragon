@@ -1,5 +1,10 @@
 #include "anim/dragon_rig.h"
 
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+
 #include "core/log.h"
 
 using core::Quat;
@@ -272,6 +277,159 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
              out_mesh.vertices.size(), out_mesh.indices.size() / 3);
 }
 
+namespace {
+
+// Keep the rig config flat and hand-editable, like the flight config. The
+// pointer-to-member table is shared by save and load so a field cannot be
+// persisted in one direction and silently ignored in the other.
+struct RigField {
+    const char* name;
+    float RigTuning::*float_member;
+    int RigTuning::*int_member;
+};
+
+#define RIG_FLOAT_FIELD(name) {#name, &RigTuning::name, nullptr}
+#define RIG_INT_FIELD(name) {#name, nullptr, &RigTuning::name}
+const RigField RIG_FIELDS[] = {
+    RIG_FLOAT_FIELD(flap_shoulder_deg),
+    RIG_FLOAT_FIELD(wing_phase_lag),
+    RIG_FLOAT_FIELD(outboard_decay),
+    RIG_FLOAT_FIELD(tuck_sweep_deg),
+    RIG_FLOAT_FIELD(tuck_fold_deg),
+    RIG_FLOAT_FIELD(tuck_droop_deg),
+    RIG_FLOAT_FIELD(brake_flare_deg),
+    RIG_FLOAT_FIELD(wing_elbow_fold_scale),
+    RIG_FLOAT_FIELD(wing_wrist_fold_scale),
+    RIG_FLOAT_FIELD(wing_finger_fold_scale),
+    RIG_FLOAT_FIELD(wing_flap_fold_deg),
+    RIG_FLOAT_FIELD(wing_flap_limit_deg),
+    RIG_FLOAT_FIELD(upstroke_fold_deg),
+    RIG_FLOAT_FIELD(chain_stiffness),
+    RIG_FLOAT_FIELD(chain_damping),
+    RIG_FLOAT_FIELD(chain_inertia),
+    RIG_FLOAT_FIELD(chain_gravity),
+    RIG_FLOAT_FIELD(chain_drag),
+    RIG_FLOAT_FIELD(chain_drag_v2),
+    RIG_FLOAT_FIELD(chain_axial_response),
+    RIG_FLOAT_FIELD(chain_max_acceleration),
+    RIG_FLOAT_FIELD(chain_max_speed),
+    RIG_FLOAT_FIELD(chain_max_bend_deg),
+    RIG_FLOAT_FIELD(chain_limit_stiffness),
+    RIG_FLOAT_FIELD(chain_limit_damping),
+    RIG_INT_FIELD(chain_iterations),
+    RIG_FLOAT_FIELD(chain_tone),
+    RIG_FLOAT_FIELD(chain_load_tone_accel),
+    RIG_FLOAT_FIELD(neck_stiffness_scale),
+    RIG_FLOAT_FIELD(neck_gravity_scale),
+    RIG_FLOAT_FIELD(neck_inertia_scale),
+    RIG_FLOAT_FIELD(neck_damping_scale),
+    RIG_FLOAT_FIELD(tail_damping_scale),
+    RIG_FLOAT_FIELD(tail_tip_stiffness),
+    RIG_FLOAT_FIELD(neck_range_deg),
+    RIG_FLOAT_FIELD(tail_range_deg),
+    RIG_FLOAT_FIELD(tail_rudder_deg),
+    RIG_FLOAT_FIELD(tail_elevator_deg),
+    RIG_FLOAT_FIELD(neck_lead_deg),
+    RIG_FLOAT_FIELD(neck_streamline_deg),
+    RIG_FLOAT_FIELD(streamline_speed),
+    RIG_FLOAT_FIELD(wing_load_flex_deg),
+    RIG_FLOAT_FIELD(wing_roll_lean_deg),
+    RIG_FLOAT_FIELD(base_clip_weight),
+    RIG_FLOAT_FIELD(base_clip_rate),
+    RIG_FLOAT_FIELD(clip_air_weight),
+    RIG_FLOAT_FIELD(clip_flight_fade),
+    RIG_FLOAT_FIELD(head_aim_blend),
+    RIG_FLOAT_FIELD(head_aim_max_deg),
+    RIG_FLOAT_FIELD(neck_aim_share),
+    RIG_FLOAT_FIELD(neck_aim_max_deg),
+    RIG_FLOAT_FIELD(jaw_open_deg),
+    RIG_FLOAT_FIELD(spit_recoil_deg),
+    RIG_FLOAT_FIELD(spit_duration),
+    RIG_FLOAT_FIELD(spit_impulse),
+    RIG_FLOAT_FIELD(breath_neck_thrust_deg),
+    RIG_FLOAT_FIELD(breath_neck_tone),
+    RIG_FLOAT_FIELD(breath_tremor_deg),
+    RIG_FLOAT_FIELD(attack_toe_spread_deg),
+    RIG_FLOAT_FIELD(speed_sweep_deg),
+    RIG_FLOAT_FIELD(speed_fold_deg),
+    RIG_FLOAT_FIELD(sweep_speed_start),
+    RIG_FLOAT_FIELD(sweep_speed_full),
+    RIG_FLOAT_FIELD(flutter_deg),
+    RIG_FLOAT_FIELD(flutter_speed_start),
+    RIG_FLOAT_FIELD(brake_buffet_deg),
+    RIG_FLOAT_FIELD(load_twist_deg),
+    RIG_FLOAT_FIELD(load_forward_sweep_deg),
+    RIG_FLOAT_FIELD(leg_tuck_deg),
+    RIG_FLOAT_FIELD(leg_sway_response),
+    RIG_FLOAT_FIELD(leg_sway_max_deg),
+    RIG_FLOAT_FIELD(leg_sway_stiffness),
+    RIG_FLOAT_FIELD(leg_sway_damping),
+    RIG_FLOAT_FIELD(leg_trail_deg),
+    RIG_FLOAT_FIELD(front_leg_trail_deg),
+    RIG_FLOAT_FIELD(leg_brake_extend),
+    RIG_FLOAT_FIELD(leg_brake_forward_deg),
+    RIG_FLOAT_FIELD(foot_hang_deg),
+    RIG_FLOAT_FIELD(toe_curl_deg),
+    RIG_FLOAT_FIELD(foot_follow),
+};
+#undef RIG_FLOAT_FIELD
+#undef RIG_INT_FIELD
+
+}  // namespace
+
+bool save_rig_tuning(const RigTuning& tuning, const char* path) {
+    std::ofstream output(path);
+    if (!output) {
+        LOG_ERROR("could not write rig tuning '%s'", path);
+        return false;
+    }
+
+    output << "# dragon rig tuning\n";
+    output << std::setprecision(6);
+    for (const RigField& field : RIG_FIELDS) {
+        output << field.name << ' ';
+        if (field.float_member != nullptr) {
+            output << tuning.*field.float_member;
+        } else {
+            output << tuning.*field.int_member;
+        }
+        output << '\n';
+    }
+    if (!output) {
+        LOG_ERROR("could not finish rig tuning '%s'", path);
+        return false;
+    }
+    LOG_INFO("saved rig tuning -> %s", path);
+    return true;
+}
+
+bool load_rig_tuning(RigTuning& tuning, const char* path) {
+    std::ifstream input(path);
+    if (!input) return false;
+
+    int applied = 0;
+    std::string line;
+    while (std::getline(input, line)) {
+        std::istringstream parser(line);
+        std::string key;
+        float value = 0.0f;
+        if (!(parser >> key >> value) || !std::isfinite(value)) continue;
+
+        for (const RigField& field : RIG_FIELDS) {
+            if (key != field.name) continue;
+            if (field.float_member != nullptr) {
+                tuning.*field.float_member = value;
+            } else {
+                tuning.*field.int_member = static_cast<int>(value);
+            }
+            ++applied;
+            break;
+        }
+    }
+    LOG_INFO("loaded %d rig tuning values from %s", applied, path);
+    return applied > 0;
+}
+
 // ---------------------------------------------------------------- rig
 
 void DragonRig::set_model_scale(float metres_per_unit) {
@@ -481,7 +639,12 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float droop_deg =
         tuning.tuck_droop_deg * (tuck + speed_share * tuning.speed_sweep_deg /
                                             core::maxf(tuning.tuck_sweep_deg, 1.0f));
-    const float base = state.wing_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
+    float flap_angle = state.wing_angle;
+    if (tuning.wing_flap_limit_deg > 0.0f) {
+        const float limit = core::radians(tuning.wing_flap_limit_deg);
+        flap_angle = core::clampf(flap_angle, -limit, limit);
+    }
+    const float base = flap_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
                        core::radians(droop_deg);
     // Membrane flutter: the outer wing buffets at speed and shudders in a
     // flare. Two incommensurate frequencies so it never reads as a metronome,
@@ -506,6 +669,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // the spine at the top of the beat.
     const float upstroke = core::smoothstep(core::radians(20.0f), core::radians(50.0f), base);
     const float upstroke_fold = core::radians(tuning.upstroke_fold_deg) * upstroke;
+    const float flap_fold = core::radians(tuning.wing_flap_fold_deg) * upstroke;
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
@@ -556,10 +720,27 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float progress = chain_length > 1
                                        ? float(index_in_chain) / float(chain_length - 1)
                                        : 1.0f;
+            // A generated wing has shoulder -> elbow -> hand, while an
+            // imported wing commonly has shoulder -> elbow -> wrist followed
+            // by several finger chains. Scale the same progressive fold by the
+            // anatomical station so a long finger chain can close without
+            // forcing the elbow through the torso. The all-ones defaults are
+            // intentionally identical to the old profile.
+            float fold_progress = progress;
+            if (finger_index >= 0) {
+                fold_progress *= core::maxf(tuning.wing_finger_fold_scale, 0.0f);
+            } else if (index_in_chain > 0) {
+                const bool is_wrist = root_len >= 3 &&
+                                      size_t(index_in_chain + 1) == root_len;
+                const float scale = is_wrist ? tuning.wing_wrist_fold_scale
+                                             : tuning.wing_elbow_fold_scale;
+                fold_progress *= core::maxf(scale, 0.0f);
+            }
             const float sweep = core::radians(sweep_deg) * sign * aft *
                                 (0.4f + 0.6f * progress) * normalize;
             const float fold = (core::radians(fold_deg) +
-                                upstroke_fold * progress) * progress * sign * aft * normalize;
+                                upstroke_fold * progress + flap_fold) * fold_progress * sign *
+                               aft * normalize;
             const float flare_angle =
                 core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
 
@@ -962,7 +1143,15 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
     const float max_swing = core::radians(tuning.leg_sway_max_deg);
 
     const float airborne = 1.0f - leg_extend_;
-    const float tuck_angle = core::radians(tuning.leg_tuck_deg) * airborne;
+    // Braking is a transition toward landing posture: let the knees unfold a
+    // little and give the whole limb a forward float. Both are model-scoped so
+    // an imported quadruped can stay clear of its torso without changing the
+    // generated dragon's established pose.
+    const float brake = core::saturate(state.wing_brake);
+    const float brake_extend = core::saturate(tuning.leg_brake_extend) * brake;
+    const float flight_fold = airborne * (1.0f - brake_extend);
+    const float tuck_angle = core::radians(tuning.leg_tuck_deg) * flight_fold;
+    const float brake_forward = core::radians(tuning.leg_brake_forward_deg) * brake * airborne;
     for (int side = 0; side < 2; ++side) {
         if (joints_.leg[side].empty()) continue;
 
@@ -1000,7 +1189,7 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // thigh ~100 degrees in a dive, pointing the shin up and parking the
         // anchored feet above the wings. A stoop stows the legs under the
         // body, not rotated past it.
-        const float trail = core::radians(tuning.leg_trail_deg) * airborne *
+        const float trail = core::radians(tuning.leg_trail_deg) * flight_fold *
                             (1.0f - 0.7f * state.wing_tuck);
         // Trail and fold were settled by eye on the +Z-facing asset; the aft
         // factor keeps them aft on a model facing the other way. The pendulum
@@ -1012,7 +1201,12 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
             for (const int joint : chain) {
                 rotate_joint(joint, Vec3::unit_x(), tuck_angle * sign * aft, true);
                 if (first) {
-                    rotate_joint(joint, Vec3::unit_x(), trail_angle * aft + swing.x, true);
+                    // `leg_brake_forward_deg` is positive in engine-forward
+                    // terms. It opposes the aft trail after conversion to the
+                    // model's measured facing, so +Z-facing imported assets
+                    // and the generated -Z asset agree.
+                    rotate_joint(joint, Vec3::unit_x(),
+                                 trail_angle * aft - brake_forward * aft + swing.x, true);
                     rotate_joint(joint, Vec3::unit_z(), swing.y, true);
                     first = false;
                 }
@@ -1021,7 +1215,7 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         };
         drive_limb(joints_.leg[side], trail);
         drive_limb(joints_.front_leg[side],
-                   core::radians(tuning.front_leg_trail_deg) * airborne);
+                   core::radians(tuning.front_leg_trail_deg) * flight_fold);
     }
 }
 

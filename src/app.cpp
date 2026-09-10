@@ -207,6 +207,20 @@ bool App::init(const Options& options) {
         }
     }
 
+    // A model may carry a rig profile beside its glTF. Rig tuning is separate
+    // from flight handling: the former changes only the visible pose, while
+    // the latter changes forces and control response. Missing profiles leave
+    // the shared defaults untouched, so existing models behave as before.
+    const std::string rig_model_path =
+        using_imported_dragon_
+            ? (options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model)
+            : std::string(ASSET_ROOT "/dragon.glb");
+    model_rig_tuning_path_ = rig_model_path + ".rig.cfg";
+    if (anim::load_rig_tuning(dragon_rig_.tuning, model_rig_tuning_path_.c_str())) {
+        LOG_INFO("loaded model rig from %s", model_rig_tuning_path_.c_str());
+    }
+    ghost_rig_.tuning = dragon_rig_.tuning;
+
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
     game::load_tuning(flight_.tuning, ASSET_ROOT "/flight_tuning.cfg");
@@ -1821,6 +1835,13 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("upstroke fold", &rig.upstroke_fold_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("brake flare", &rig.brake_flare_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
+        ImGui::SliderFloat("wrist fold scale", &rig.wing_wrist_fold_scale, 0.0f, 2.0f);
+        ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
+        ImGui::SliderFloat("raised flap fold", &rig.wing_flap_fold_deg, 0.0f, 45.0f,
+                           "%.0f deg");
+        ImGui::SliderFloat("flap angle limit", &rig.wing_flap_limit_deg, 0.0f, 90.0f,
+                           "%.0f deg");
     }
 
     if (ImGui::CollapsingHeader("Neck & tail dynamics", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1856,6 +1877,9 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
         ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("brake leg extend", &rig.leg_brake_extend, 0.0f, 1.0f);
+        ImGui::SliderFloat("brake leg forward", &rig.leg_brake_forward_deg, 0.0f, 60.0f,
+                           "%.0f deg");
         ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("toe curl", &rig.toe_curl_deg, -45.0f, 45.0f, "%.0f deg");
     }
@@ -1900,6 +1924,17 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("load twist", &rig.load_twist_deg, 0.0f, 12.0f, "%.0f deg/g");
         ImGui::SliderFloat("load forward sweep", &rig.load_forward_sweep_deg, 0.0f, 15.0f,
                            "%.0f deg/g");
+    }
+
+    if (ImGui::CollapsingHeader("Rig profile")) {
+        if (ImGui::Button("save for this model")) {
+            anim::save_rig_tuning(rig, model_rig_tuning_path_.c_str());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("reload profile")) {
+            anim::load_rig_tuning(rig, model_rig_tuning_path_.c_str());
+        }
+        ImGui::TextDisabled("%s", model_rig_tuning_path_.c_str());
     }
 
     ImGui::Checkbox("show skeleton", &show_skeleton_);

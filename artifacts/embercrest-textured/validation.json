@@ -1,12 +1,12 @@
 {
   "model": "assets/embercrest-textured.glb",
-  "sha256": "b3f79c546ba2d812597551824185886dba3ea58880d34f9212f22b4d46b0a0ff",
+  "sha256": "b194e0e4edfca9b7f1df570c215748defcb8c1efba5dbea85c2de28f9adf75a5",
   "source_sha256": "af080a8b2be1e2ca61d0091a6176c8fcc2d8c0fc19048c2ac990f928eb43508a",
   "triangles": 80000,
   "exported_vertices": 73550,
-  "bones": 61,
+  "bones": 62,
   "embedded_images": 3,
-  "animation_checks": 508,
+  "animation_checks": 526,
   "animation_failures": 0,
   "bind_error": 0.0,
   "capture_cases": [
@@ -15,13 +15,18 @@
     "bind-top",
     "glide",
     "flap",
+    "flap-upstroke",
+    "brake",
+    "pull-out",
+    "attack-rest",
+    "attack-mouth",
     "tuck",
     "attack-head",
     "ground",
     "turn-soak"
   ],
   "turn_soak_frames": 7200,
-  "visual_review": "Blender poses and native Metal bind, flap, full tuck, attack, ground and turn soak inspected",
+  "visual_review": "Revision2 native brake, raised flap, moderate dive fold, pull-out, attack mouth, ground and turn soak inspected; full animation quality remains subject to human playtesting",
   "source_blend": "assets/embercrest/textured/embercrest-textured.blend",
   "texture_preservation": "All three 4096x4096 PNGs byte-identical to source; material settings unchanged",
   "repaired_zero_tangents": 5,
@@ -31,6 +36,15 @@
     "metallic_roughness": "2aa0254b8d437e9f1c4ec614ea667438299bc307c1fbe680905c2597f3c9bda4"
   },
   "all_exported_tangents_valid": true,
-  "max_tangent_length_error": 7.78e-05,
-  "max_tangent_normal_dot": 0.000145
+  "max_tangent_length_error": 7.780839340765233e-05,
+  "max_tangent_normal_dot": 0.00014529657534012586,
+  "max_weight_sum_error": 1.4901161193847656e-07,
+  "revision": 2,
+  "rig_profile": "assets/embercrest-textured.glb.rig.cfg",
+  "rig_profile_sha256": "f72c47ff62d5d505be043c880bfd59b019e204d5d1065da7a097c11ed3b982a5",
+  "checkpoint_commit": "a571198",
+  "neutral_animation_checks": 523,
+  "default_animation_checks": 522,
+  "ctest_suites": 10,
+  "ctest_failures": 0
 }

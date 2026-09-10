@@ -290,6 +290,7 @@ private:
     gfx::Mesh terrain_skirt_mesh_;
     gfx::Mesh water_mesh_;
     std::string model_tuning_path_;
+    std::string model_rig_tuning_path_;
     // The player's hide colour: a hue the texture is pushed toward at its own
     // luminance, and how far. Strength 0 is the texture as authored.
     core::Vec3 player_hue_{1.0f, 1.0f, 1.0f};

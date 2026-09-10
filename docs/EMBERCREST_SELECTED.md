@@ -84,8 +84,8 @@ acceptance.
 `assets/embercrest/textured/embercrest-textured.blend`.
 
 The output has **80,000 triangles, 40,000 mesh vertices (73,550 exported
-vertices after UV/normal splits), and 61 bones**. The 1.5 million triangle input
-is reduced 94.7%. The GLB is 54,795,556 bytes, including the original 4K base
+vertices after UV/normal splits), and 62 bones** in revision 2. The 1.5 million triangle input
+is reduced 94.7%. The GLB is 54,795,812 bytes, including the original 4K base
 colour, normal, and packed metallic/roughness maps. UVs and material connections
 are retained; no planar replacement UVs or neutral-clay material is applied.
 A binary audit confirms that all three embedded PNGs are byte-identical to the
@@ -100,10 +100,11 @@ untextured model.
 
 The same wing bind correction, three finger rays, smooth weight transitions,
 FK diagnostic action and pose markers are included. The measured ground
-clearance is 3.993398 m. The exact exported model passes **508 checks with zero
-failures**, has zero reported bind error, and loads with three textures in the
-game. Blender pose renders and nine native Metal captures, including a
-7,200-frame turn soak, are retained under `artifacts/embercrest-textured/`.
+clearance is 3.993398 m. Revision 1 passed **508 checks with zero
+failures**, with zero reported bind error and three loaded textures. See
+[the revision history](EMBERCREST_TEXTURED.md) for current animation fixes and
+validation. Blender pose renders and native Metal captures are retained under
+`artifacts/embercrest-textured/`.
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \

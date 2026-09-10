@@ -97,6 +97,22 @@ struct RigTuning {
     // stoop.
     float tuck_droop_deg = 22.0f;
     float brake_flare_deg = 30.0f;
+    // Folding is distributed by anatomy rather than by one uniform rotation.
+    // The values scale the shared fold at the elbow, wrist and fingers. A
+    // value of 1 preserves the original progressive profile; an imported wing
+    // can, for example, keep the elbow open while closing the wrist and hand.
+    float wing_elbow_fold_scale = 1.0f;
+    float wing_wrist_fold_scale = 1.0f;
+    float wing_finger_fold_scale = 1.0f;
+    // Extra hand folding while the wing is raised. The existing upstroke fold
+    // remains the broad default; this opt-in term is useful for a stiff,
+    // long-fingered imported wing. Zero preserves the old motion exactly.
+    float wing_flap_fold_deg = 0.0f;
+    // Visual ceiling for the flap angle. Zero disables the ceiling, preserving
+    // the historical behaviour and leaving the flight engine's force model
+    // untouched. This is an animation guard for rigs whose membranes cross at
+    // the engine's full stroke.
+    float wing_flap_limit_deg = 0.0f;
     // On the upstroke the wrist flexes and the wing part-folds -- real bird
     // kinematics, and what keeps the two raised wings from crossing over the
     // spine at the top of the beat.
@@ -311,6 +327,12 @@ struct RigTuning {
     // beneath it like landing gear.
     float leg_trail_deg = 38.0f;
     float front_leg_trail_deg = 30.0f;
+    // During an air-brake a flying animal begins to unfold its landing limbs
+    // and lets them float into the airflow. The defaults are zero so existing
+    // models retain the original tucked pose; a model config can opt in to a
+    // partial extension and an engine-forward hip offset.
+    float leg_brake_extend = 0.0f;
+    float leg_brake_forward_deg = 0.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
     // bird's relaxed foot, not a planted one. This asset parents its feet to the
     // body, so nothing else would ever move them once the ground idle fades.
@@ -323,6 +345,12 @@ struct RigTuning {
     // ground the authored planted stance wins.
     float foot_follow = 1.0f;
 };
+
+// Flat `key value` text, one field per line. A model may opt into a rig profile
+// by placing `<model>.rig.cfg` beside its glTF; absent or unknown keys leave the
+// built-in defaults untouched.
+bool save_rig_tuning(const RigTuning& tuning, const char* path);
+bool load_rig_tuning(RigTuning& tuning, const char* path);
 
 // What the dragon is doing with its weapons this frame, for the attack
 // posture. Flight already arrives through FlightState; this is the rest.
