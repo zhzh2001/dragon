@@ -1,0 +1,52 @@
+{
+  "source": "embercrest-cand-stormsail-oneshot.glb",
+  "source_sha256": "fba8102111444f9ac149d4d6e5fa16c1def7bba604283908011fee069f670a3d",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 55,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 46857216,
+  "ground_offset": 5.315536025541327,
+  "repaired_zero_tangents": 3,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    -1.7314556899350464e-08
+  ]
+}

@@ -193,8 +193,12 @@ bpy.context.view_layer.objects.active=body
 bpy.ops.object.vertex_group_limit_total(limit=4)
 bpy.ops.object.vertex_group_normalize_all(lock_active=False)
 # The cavity is real; rigid jaw/skull assignments keep teeth from stretching.
+# The mask below is authored in Embercrest canonical coordinates, so a skeleton
+# for another head opts out with "jaw_mask": null and keeps the heat weights.
+JAW_MASK=SKEL.get('jaw_mask','embercrest')
+if JAW_MASK is None:print('JAW_MASK_SKIPPED','skeleton sets jaw_mask null',flush=True)
 head_group=body.vertex_groups['head'];jaw_group=body.vertex_groups['jaw']
-for v in body.data.vertices:
+for v in (body.data.vertices if JAW_MASK=='embercrest' else []):
     co=canonical(v.co)
     x,y,z=co
     if TEXTURED and y>.30 and z>.305:
@@ -266,6 +270,8 @@ for pb in rig.pose.bones:pb.rotation_mode='QUATERNION'
 def reset():
     for pb in rig.pose.bones:pb.rotation_quaternion=Quaternion()
 def rotate(name,axis,deg):
+    # The inspection action names quadruped bones; a biped skeleton simply lacks them.
+    if name not in rig.pose.bones:return
     pb=rig.pose.bones[name]
     pb.rotation_quaternion=Quaternion(pb.bone.matrix_local.to_quaternion().inverted()@Vector(axis),math.radians(deg))
 scene=bpy.context.scene;scene.frame_start=1;scene.frame_end=101;scene.render.fps=30
