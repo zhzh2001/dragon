@@ -852,6 +852,67 @@ back curled rather than spread, so its X extent is 0.556 against a depth of
 1.0 — the opposite of what the engine's scale-by-X-extent wants, and a
 regression from the spread-wing input it was given.
 
+### SkinTokens tested on t5810: it runs, and it is not usable yet
+
+Tested end to end via `ComfyUI-SkinTokens` on the 2080 Ti, with our validated
+80 K/62-bone asset as input and `use_skeleton` on. **It runs, and the result
+is not usable.**
+
+Getting it to run took four fixes, all worth writing down:
+
+- **FlashAttention.** The node imports `flash_attn_interface` first and falls
+  back to `flash_attn`; both are FlashAttention and FA2 needs sm_80+, so
+  neither works on Turing, and there is no SDPA path upstream. Dropping a
+  small `flash_attn_interface.py` shim on the venv path — SDPA behind the FA3
+  signature, transposing (B,S,H,D) to (B,H,S,D) and returning `(out, None)` —
+  satisfies that first import without patching any upstream file. Verified
+  bit-exact against a manual SDPA reference.
+- **A second, separate FA dependency.** `tokenrig.py` passes
+  `attn_implementation="flash_attention_2"` straight to HuggingFace, which the
+  shim cannot intercept. Patched to `"sdpa"`.
+- **Two Python environments.** In "Headless (Blender)" mode the bpy server runs
+  under *Blender's bundled* Python, not the ComfyUI venv, so its dependencies
+  must be installed there separately: `bottle`, `scipy`, `trimesh`, `tornado`
+  at import time and `dill` at request time. A missing request-time module
+  surfaces as `UnpicklingError: invalid load key` in the client, because the
+  server's text error page is fed to `pickle.loads`.
+- Blender itself: t5810 has no sudo, so 4.5.3 goes in `$HOME/blender` and on
+  `PATH`.
+
+**VRAM is a non-issue: 4.9 GB peak, 35 s per run.** The upstream README's
+14 GB is wrong for this path by a factor of three, so the 11 GB card is fine.
+
+What comes back is the problem. With `use_transfer=False`:
+
+| | input (gpt rig) | output |
+|---|---|---|
+| joints | 62, named `root`/`chest`/`wing_finger_1a_l`… | **59, named `bone_0`…`bone_58`** |
+| attributes | POSITION, NORMAL, TEXCOORD_0, TANGENT, JOINTS_0, WEIGHTS_0 | POSITION, NORMAL, JOINTS_0, WEIGHTS_0 |
+| verts | 73,550 | 239,950 (fully split) |
+| images | 3 | **0** |
+
+`use_skeleton` did **not** preserve our joint names, and this doc's own
+constraint section says a numbered skeleton maps to nothing —
+`src/anim/dragon_rig.cpp` finds joints by name substring. The bone count also
+differs (59 vs 62), so a positional `bone_N` to our-name remap is not safe
+either. UVs, tangents and all three textures are gone.
+
+And `use_transfer=True`, the flag whose tooltip promises to preserve textures,
+materials and mesh quality, **crashes at export**:
+`KeyError: bpy_prop_collection[key]: key "Embercrest_Textured_Rig" not found`
+— it looks the input armature up by name in a scene where it was never
+created. That is the path that would have preserved what we need.
+
+**Conclusion: not a replacement for the Blender rigger today.** The blocker is
+not compute, it is that the one flag that preserves the asset is broken and
+the one that works discards the naming the engine depends on. Worth
+re-checking when the node moves; the environment work above is done and
+recorded, so a retest is cheap.
+
+The cheaper answer to rigging cost is that `tools/rig_embercrest_candidate.py`
+is now parameterised and its skeleton is data, so re-rigging a new creature of
+the same anatomy costs one Blender run and no LLM time at all.
+
 ### Cloud Hunyuan beats every local run, and the reason is the model generation
 
 Tested directly, and the read that cloud looks sharper is correct — by more
