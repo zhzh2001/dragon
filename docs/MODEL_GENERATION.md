@@ -239,6 +239,22 @@ The multi-view upload takes eight labelled slots — 正 (front, required), 背,
 the reference sheet's top view fill five of them, which is the best-conditioned
 input we can give any generator.
 
+### 语义UV caps at 30,000 faces, so the staged chain cannot skip retopo
+
+`模型面数不可大于3万` — the UV stage refuses any mesh over 30 K faces. That
+closes the obvious idea of running 几何生成 → 语义UV → 纹理绘制 and simply
+omitting 低模生成: there is no way to get a 1.5 M mesh through UV in the
+Studio. Retopo to ≤30 K is mandatory *in the staged chain*.
+
+Two ways out, and only one is good:
+
+- **The one-shot.** It produces 1.5 M geometry *with* `TEXCOORD_0` and three
+  PBR maps in a single generation, never touching the UV or retopo stages.
+  This is why the one-shot asset is the best one we have. 20/day pool.
+- **Decimate locally to ≤30 K and upload** (`Upload 3D Model`, ≤150 MB), then
+  run 语义UV and 纹理绘制 on that. Untested, but it is the only route that
+  keeps multi-view geometry *and* gets cloud PBR.
+
 ### Verdict on 低模生成: do not use it. Decimate locally instead.
 
 Tested by running the full chain on the corrected view plates. The retopo
@@ -279,6 +295,49 @@ the measurement that caught the drift says nothing about the second one. And
 prompting hard for "slender" bought slimness at the cost of facial structure —
 the generator spent its detail budget elsewhere. Do not re-source a good mesh
 to fix proportions; fix proportions on the good mesh.
+
+### Two plate experiments that both failed
+
+Recorded because both were my suggestions and both were wrong, which is worth
+more than the successes:
+
+- **Higher-resolution plates** (`views/`, full-frame 1536x1024) → the
+  `textured-hq` one-shot, worse than the asset made from the low-resolution
+  turnaround crops. Consistent with the earlier finding that the corrected
+  plates give better proportions and a worse head.
+- **Three consistent views instead of five** (front/back/top only, dropping
+  the side plates whose wing pose contradicts them) → `textured-3v`, worse
+  anatomy. The reasoning — that a multi-view generator is confused by
+  contradictory wing poses — sounded right and did not survive contact. Five
+  imperfect views beat three consistent ones here; the extra angles evidently
+  constrain the body more than the contradiction costs.
+
+The asset to beat remains the original one-shot from the turnaround crops.
+
+### Triangle count is not the bottleneck: measured
+
+Before optimising the dragon mesh for low-end GPUs, measure. Three rigged
+models through `--headless --frames N`, timing the *slope* between 300 and
+2400 frames so process startup and texture upload are excluded:
+
+| Model | tris | images | startup | **ms/frame** |
+|---|---|---|---|---|
+| `dragon.glb` | 37,998 | 9 | 0.93 s | **5.01** |
+| `embercrest-textured.glb` | 80,000 | 3 | 0.88 s | **2.68** |
+| `embercrest-selected.glb` | 80,000 | 1 | 0.21 s | 3.47 |
+
+**The 80 K model is faster than the 38 K one.** At this scale — tens of
+thousands of triangles, one or a few characters — the dragon mesh does not
+predict frame time, and a low-poly dragon will not measurably help. Whatever
+`dragon.glb` costs extra is not its triangles; it has nine images against
+three, so material and draw-call structure is the likelier culprit.
+
+Note also that the 4096² PBR set costs **0.88 s of startup against 0.21 s**
+and nothing measurable per frame. Its real cost on a low-end card is VRAM,
+not shading — three 4096² maps with mips is roughly 270 MB.
+
+Measure the slope, not the total: on a 600-frame run the totals ranked the
+PBR asset *slowest*, which was entirely its texture upload.
 
 ### One worry that turned out not to apply
 
