@@ -1,7 +1,27 @@
-"""Simplify and fit a deform rig to the selected Hunyuan candidate.
-Run: Blender --background --factory-startup --python tools/rig_embercrest_candidate.py
-Add -- --textured after the script path to retain the textured candidate's PBR maps.
-The candidate and original procedural Embercrest remain untouched.
+"""Simplify a generated mesh and fit a named deform rig to it.
+
+    blender --background --factory-startup --python tools/rig_embercrest_candidate.py \
+        -- --textured                                   # the validated Embercrest build
+    blender --background --factory-startup --python tools/rig_embercrest_candidate.py \
+        -- --input assets/my-cand.glb --stem wyvern \
+           --skeleton tools/skeletons/winged-quadruped.json --target 40000
+
+`--textured` and no arguments reproduce the two original builds exactly; the
+other flags exist so a second creature does not need a second copy of this
+script.
+
+**The skeleton is data, in `tools/skeletons/*.json`.** Bone head/tail are in
+normalised model space with +Y forward, alongside the `reference_bounds` they
+were authored against; this script remaps them onto the actual mesh bounds,
+which is what lets one skeleton fit differently-proportioned meshes of the
+same anatomy. A genuinely different creature is a new JSON, not a new script.
+
+Bone *names* are the interface, not just labels. `src/anim/dragon_rig.cpp`
+finds joints by name substring, and so does this script: bone collections,
+the continuous wing-membrane weight field and the pose-axis setup all key off
+the `wing*`, `tail*`, `toe*`, `_l`/`_r` conventions. Follow them in a new
+skeleton and the anatomy-specific passes apply themselves; a creature with no
+`wing*` bones simply skips the membrane pass.
 """
 import bpy
 import json
@@ -15,23 +35,37 @@ from repair_gltf_tangents import repair_tangents
 from mathutils import Vector, Quaternion
 
 ROOT = Path(__file__).resolve().parents[1]
-parser=argparse.ArgumentParser(description=__doc__)
+parser=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--textured',action='store_true',help='Rig the textured Hunyuan candidate and retain its UVs and PBR maps')
+parser.add_argument('--input',help='source .glb to rig (default: the Embercrest candidate implied by --textured)')
+parser.add_argument('--stem',help='output name: writes assets/<stem>.glb and artifacts/<stem>/ (default embercrest-textured/-selected)')
+parser.add_argument('--target',type=int,default=80000,help='triangle budget after decimation (default 80000)')
+parser.add_argument('--skeleton',default='tools/skeletons/winged-quadruped.json',
+                    help='skeleton JSON; bone names drive the anatomy-specific passes')
+parser.add_argument('--keep-uvs',action='store_true',help='treat the source as textured regardless of --textured')
 args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
-TEXTURED=args.textured
-STEM='embercrest-textured' if TEXTURED else 'embercrest-selected'
-SOURCE = ROOT / ('assets/embercrest-cand-hunyuan-textured.glb' if TEXTURED else 'assets/embercrest-cand-hunyuan-1p5m.glb')
-OUT = ROOT / ('assets/embercrest/textured' if TEXTURED else 'assets/embercrest/selected')
+TEXTURED=args.textured or args.keep_uvs
+STEM=args.stem or ('embercrest-textured' if args.textured else 'embercrest-selected')
+SOURCE = ROOT / (args.input if args.input else
+                 ('assets/embercrest-cand-hunyuan-textured.glb' if args.textured
+                  else 'assets/embercrest-cand-hunyuan-1p5m.glb'))
+OUT = ROOT / ('assets/embercrest/textured' if TEXTURED and not args.stem else
+              'assets/embercrest/selected' if not args.stem else 'assets/'+STEM)
 CAP = ROOT / ('artifacts/'+STEM)
 GLB = ROOT / ('assets/'+STEM+'.glb')
-TARGET = 80000
+TARGET = args.target
+if not SOURCE.exists(): raise SystemExit(f'source mesh not found: {SOURCE}')
+
+# The skeleton, and the bounds its coordinates were authored against.
+SKEL=json.loads((ROOT/args.skeleton).read_text())
+print('SKELETON',args.skeleton,SKEL.get('name'),len(SKEL['bones']),'bones',flush=True)
 OUT.mkdir(parents=True, exist_ok=True)
 CAP.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 bpy.ops.import_scene.gltf(filepath=str(SOURCE),merge_vertices=True)
 body = next(o for o in bpy.context.selected_objects if o.type == 'MESH')
-body.name = 'Embercrest_Textured' if TEXTURED else 'Embercrest_Selected'
+body.name = STEM.replace('-','_')
 bpy.context.view_layer.objects.active = body
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 original_faces = len(body.data.polygons)
@@ -41,8 +75,8 @@ body.rotation_euler.z = math.pi
 bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 # The texture export has slightly different bounds. Fit bones/weight landmarks
 # to those bounds rather than rescaling the mesh or changing its authored UVs.
-reference_lo=Vector((-.582478404,-.661605179,0.))
-reference_hi=Vector((.580175459,.400670350,.518391728))
+reference_lo=Vector(tuple(SKEL['reference_bounds']['lo']))
+reference_hi=Vector(tuple(SKEL['reference_bounds']['hi']))
 actual_lo=Vector(tuple(min(v.co[i] for v in body.data.vertices) for i in range(3)))
 actual_hi=Vector(tuple(max(v.co[i] for v in body.data.vertices) for i in range(3)))
 fit_scale=Vector(tuple((actual_hi[i]-actual_lo[i])/(reference_hi[i]-reference_lo[i]) if TEXTURED else 1. for i in range(3)))
@@ -71,34 +105,16 @@ def bone(name, a, b, parent=None):
 def chain(names, points, parent):
     for i, name in enumerate(names):
         bone(name, points[i], points[i+1], parent if i == 0 else names[i-1])
-bone('root', (0,-.035,.17), (0,.08,.19))
-bone('chest', (0,.08,.19), (0,.21,.23), 'root')
-chain(['neck_01','neck_02','neck_03'], [(0,.21,.23),(0,.255,.30),(0,.255,.36),(0,.285,.40)], 'chest')
-bone('head',(0,.285,.40),(0,.395,.385),'neck_03')
-bone('jaw',(0,.285,.367),(0,.385,.337),'head')
-if TEXTURED:
-    # Runtime determines opening direction by probing a descendant tip. A leaf
-    # jaw only probes its unmoving pivot and can choose the closing direction.
-    bone('jaw_tip',(0,.385,.337),(0,.400,.332),'jaw')
-chain([f'tail_{i:02d}' for i in range(1,9)],[(0,y,z) for y,z in [(-.035,.17),(-.11,.135),(-.19,.105),(-.27,.080),(-.35,.067),(-.43,.065),(-.51,.072),(-.59,.080),(-.66,.062)]], 'root')
-for side,suffix in [(-1,'l'),(1,'r')]:
-    def p(x,y,z):return (side*x,y,z)
-    chain([f'upper_arm_{suffix}',f'forearm_{suffix}',f'wrist_{suffix}',f'hand_{suffix}'],
-          [p(.052,.205,.17),p(.068,.18,.09),p(.074,.215,.038),p(.077,.225,.014),p(.077,.277,.013)],'chest')
-    chain([f'thigh_{suffix}',f'shin_{suffix}',f'ankle_{suffix}',f'foot_{suffix}'],
-          [p(.058,-.014,.168),p(.085,.040,.084),p(.082,-.054,.055),p(.083,-.039,.014),p(.083,.016,.012)],'root')
-    for prefix,base,parent in [('fore',(.077,.245,.014),f'hand_{suffix}'),('hind',(.083,-.012,.014),f'foot_{suffix}')]:
-        for j in range(3):
-            x=base[0]+(j-1)*.022
-            bone(f'toe_{prefix}_{j+1}_{suffix}',p(x,base[1],base[2]),p(x+(j-1)*.009,base[1]+.035,.008),parent)
-    shoulder=p(.055,.145,.215);elbow=p(.145,.008,.297);wrist=p(.295,.118,.492);hub=p(.318,.111,.487)
-    chain([f'wing_root_{suffix}',f'wing_arm_{suffix}',f'wing_wrist_{suffix}'],[shoulder,elbow,wrist,hub],'chest')
-    ends=[p(.580,-.135,.401),p(.520,-.335,.270),p(.313,-.294,.128)]
-    for j,end in enumerate(ends):
-        mid=Vector(hub).lerp(Vector(end),.52)
-        chain([f'wing_finger_{j+1}a_{suffix}',f'wing_finger_{j+1}b_{suffix}'],[hub,mid,end],f'wing_wrist_{suffix}')
-armdata=bpy.data.armatures.new('Embercrest Selected skeleton')
-rig=bpy.data.objects.new('Embercrest_Textured_Rig' if TEXTURED else 'Embercrest_Selected_Rig',armdata)
+for name, a, b, parent in SKEL['bones']:
+    # jaw_tip exists only where the runtime probes a descendant to find the
+    # jaw's opening direction; a leaf jaw probes its own unmoving pivot.
+    if name == 'jaw_tip' and SKEL.get('jaw_tip_requires_textured') and not TEXTURED:
+        continue
+    bone(name, a, b, parent)
+print('BONES', len(bones), flush=True)
+
+armdata=bpy.data.armatures.new(STEM+' skeleton')
+rig=bpy.data.objects.new(STEM.replace('-','_')+'_Rig',armdata)
 bpy.context.collection.objects.link(rig)
 bpy.ops.object.select_all(action='DESELECT');rig.select_set(True);bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='EDIT')
@@ -139,11 +155,19 @@ def continuous_top_four(weights):
         return {ordered[0][0]:1.}
     return {n:w/total for n,w in kept.items() if w>0}
 
-for v in body.data.vertices:
+# Anatomy-specific, and therefore optional. A skeleton with no wing* bones
+# skips this entirely rather than feeding an empty candidate set into
+# continuous_top_four, which would index ordered[0] on an empty list.
+WING=SKEL.get('wing_field')
+if not any(wing_bones.values()) or WING is None:
+    print('WING_FIELD_SKIPPED',
+          'no wing* bones' if not any(wing_bones.values()) else 'no wing_field in skeleton',
+          flush=True)
+for v in (body.data.vertices if (any(wing_bones.values()) and WING) else []):
     co=canonical(v.co)
     x,y,z=co
-    blend=(smoothstep(.075,.145,abs(x))*smoothstep(.105,.155,z)
-           *(1-smoothstep(.18,.22,y)))
+    blend=(smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
+           *(1-smoothstep(*WING['fade_y'],y)))
     if blend==0:
         continue
     suffix='l' if x<0 else 'r'
@@ -154,8 +178,8 @@ for v in body.data.vertices:
         d=(co-(a+t*delta)).length
         candidates[name]=1/(d*d+.025**2)**1.5
     field=continuous_top_four(candidates)
-    hub=Vector(((-1 if x<0 else 1)*.318,.111,.487))
-    wrist_share=1-smoothstep(.015,.06,(co-hub).length)
+    hub=Vector(((-1 if x<0 else 1)*WING['hub'][0],WING['hub'][1],WING['hub'][2]))
+    wrist_share=1-smoothstep(*WING['wrist_share'],(co-hub).length)
     field={n:w*(1-wrist_share) for n,w in field.items()}
     wrist_name='wing_wrist_'+suffix
     field[wrist_name]=field.get(wrist_name,0)+wrist_share
