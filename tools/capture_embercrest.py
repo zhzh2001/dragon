@@ -5,6 +5,7 @@ Requires native macOS display access even though windows are hidden.
 """
 from pathlib import Path
 import subprocess
+import argparse
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'artifacts/embercrest'
@@ -21,14 +22,22 @@ CASES = [
 ]
 
 def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--model', type=Path, default=ROOT/'assets/embercrest.glb')
+    parser.add_argument('--output', type=Path, default=OUT)
+    parser.add_argument('--cases', nargs='+', choices=[case[0] for case in CASES])
+    args = parser.parse_args()
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
     for name, flags, frames in CASES:
-        bmp = OUT / (name + '.bmp')
-        cmd = [str(ROOT/'build/dragon'), '--headless', '--model', str(ROOT/'assets/embercrest.glb'),
+        if args.cases and name not in args.cases:
+            continue
+        bmp = output / (name + '.bmp')
+        cmd = [str(ROOT/'build/dragon'), '--headless', '--model', str(args.model.resolve()),
                '--hide-ui', '--frames', str(frames), '--screenshot', str(bmp)] + flags
-        with (OUT/(name+'.log')).open('w') as log:
+        with (output/(name+'.log')).open('w') as log:
             subprocess.run(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
-        subprocess.run(['sips', '-s', 'format', 'png', str(bmp), '--out', str(OUT/(name+'.png'))],
+        subprocess.run(['sips', '-s', 'format', 'png', str(bmp), '--out', str(output/(name+'.png'))],
                        stdout=subprocess.DEVNULL, check=True)
         print(f'{name}: {frames} frames, captured', flush=True)
 

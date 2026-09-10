@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
@@ -1234,22 +1235,32 @@ void test_optional_embercrest_asset() {
     std::printf("optional Embercrest asset validates when present\n");
 
     namespace fs = std::filesystem;
-    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
-    const fs::path candidates[] = {
-        fs::path("assets/embercrest.glb"),
-        fs::path("../assets/embercrest.glb"),
-        source_root / "assets/embercrest.glb",
-    };
     fs::path asset_path;
-    for (const fs::path& candidate : candidates) {
-        if (fs::is_regular_file(candidate)) {
-            asset_path = candidate;
-            break;
+    const char* override_path = std::getenv("EMBERCREST_TEST_MODEL");
+    if (override_path && *override_path) {
+        asset_path = fs::path(override_path);
+        std::printf("  using EMBERCREST_TEST_MODEL=%s\n", asset_path.string().c_str());
+        // An explicit model is a request to validate that exact file. Do not
+        // turn a typo or an unavailable build artifact into an optional skip.
+        CHECK(fs::is_regular_file(asset_path));
+        if (!fs::is_regular_file(asset_path)) return;
+    } else {
+        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        const fs::path candidates[] = {
+            fs::path("assets/embercrest.glb"),
+            fs::path("../assets/embercrest.glb"),
+            source_root / "assets/embercrest.glb",
+        };
+        for (const fs::path& candidate : candidates) {
+            if (fs::is_regular_file(candidate)) {
+                asset_path = candidate;
+                break;
+            }
         }
-    }
-    if (asset_path.empty()) {
-        std::printf("  assets/embercrest.glb absent; optional validation skipped\n");
-        return;
+        if (asset_path.empty()) {
+            std::printf("  assets/embercrest.glb absent; optional validation skipped\n");
+            return;
+        }
     }
 
     Skeleton skeleton;

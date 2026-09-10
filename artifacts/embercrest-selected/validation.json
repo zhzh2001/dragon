@@ -1,0 +1,29 @@
+{
+  "model": "assets/embercrest-selected.glb",
+  "sha256": "4850aa6812f77cf687c8e9b5401c7627dee1dbf5b41b8bae686e9a0d8efcc0aa",
+  "triangles": 80000,
+  "exported_vertices": 51743,
+  "bones": 61,
+  "animation_checks": 508,
+  "animation_failures": 0,
+  "bind_error": 0.0,
+  "capture_cases": [
+    "bind-front",
+    "bind-side",
+    "bind-top",
+    "glide",
+    "flap",
+    "tuck",
+    "attack-head",
+    "ground",
+    "turn-soak"
+  ],
+  "turn_soak_frames": 7200,
+  "visual_review": "Blender rest/flap/fold/jaw/tail and native Metal bind, glide, flap, full tuck, attack, ground, turn soak inspected",
+  "corrections": [
+    "Level wing bind: shoulder down 35 degrees, wrist counter-rotation",
+    "Three free finger rays, body attachment retained",
+    "Smooth top-four influence transitions and wrist/root blending"
+  ],
+  "source_blend": "assets/embercrest/selected/embercrest-selected.blend"
+}

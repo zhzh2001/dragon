@@ -1,0 +1,36 @@
+{
+  "model": "assets/embercrest-textured.glb",
+  "sha256": "b3f79c546ba2d812597551824185886dba3ea58880d34f9212f22b4d46b0a0ff",
+  "source_sha256": "af080a8b2be1e2ca61d0091a6176c8fcc2d8c0fc19048c2ac990f928eb43508a",
+  "triangles": 80000,
+  "exported_vertices": 73550,
+  "bones": 61,
+  "embedded_images": 3,
+  "animation_checks": 508,
+  "animation_failures": 0,
+  "bind_error": 0.0,
+  "capture_cases": [
+    "bind-front",
+    "bind-side",
+    "bind-top",
+    "glide",
+    "flap",
+    "tuck",
+    "attack-head",
+    "ground",
+    "turn-soak"
+  ],
+  "turn_soak_frames": 7200,
+  "visual_review": "Blender poses and native Metal bind, flap, full tuck, attack, ground and turn soak inspected",
+  "source_blend": "assets/embercrest/textured/embercrest-textured.blend",
+  "texture_preservation": "All three 4096x4096 PNGs byte-identical to source; material settings unchanged",
+  "repaired_zero_tangents": 5,
+  "texture_png_sha256": {
+    "normal": "e42440dc83e409f9d986da1f3d2988651c146f50cb902926beb490cbd49b9f78",
+    "base_color": "9f46013f6a3c41de2a141a411f8fde5332877ab9bd7b3994492cbdc7006559f9",
+    "metallic_roughness": "2aa0254b8d437e9f1c4ec614ea667438299bc307c1fbe680905c2597f3c9bda4"
+  },
+  "all_exported_tangents_valid": true,
+  "max_tangent_length_error": 7.78e-05,
+  "max_tangent_normal_dot": 0.000145
+}

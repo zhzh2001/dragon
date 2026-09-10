@@ -1,0 +1,15 @@
+{
+  "source": "embercrest-cand-hunyuan-1p5m.glb",
+  "source_sha256": "5dea616b44e8785d404f694df207884c949e25c73da912536f3bc7a95a961e6b",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 39994,
+  "bones": 61,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field with wrist and root blending; rigid skull/jaw; level wing bind",
+  "material": "Neutral clay; source contains no UV or texture",
+  "glb_bytes": 4019068,
+  "ground_offset": 3.954605144184886
+}

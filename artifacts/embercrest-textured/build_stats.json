@@ -1,0 +1,52 @@
+{
+  "source": "embercrest-cand-hunyuan-textured.glb",
+  "source_sha256": "af080a8b2be1e2ca61d0091a6176c8fcc2d8c0fc19048c2ac990f928eb43508a",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 40000,
+  "bones": 61,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.122274160385132e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field with wrist and root blending; rigid skull/jaw; level wing bind",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 54795556,
+  "ground_offset": 3.9933978544450914,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0064568519592285,
+    0.9808756113052368,
+    0.9642150402069092
+  ],
+  "bone_fit_bias": [
+    0.00017440319061279297,
+    -0.02060568332672119,
+    -3.229852651998044e-08
+  ],
+  "repaired_zero_tangents": 5
+}

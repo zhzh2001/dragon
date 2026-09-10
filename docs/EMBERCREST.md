@@ -1,5 +1,8 @@
 # Embercrest: the original-model experiment
 
+The generated candidate selected and rigged afterward is documented in
+[EMBERCREST_SELECTED.md](EMBERCREST_SELECTED.md), with its own GLB and Blender source.
+
 An attempt (2026-09-08, made with GPT) to replace the two imported dragons with
 an original rigged model built entirely by script. It works end to end, and it
 is **not as good as either imported asset**, so the imported dragons remain the
