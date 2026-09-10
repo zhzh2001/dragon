@@ -372,8 +372,8 @@ Do not pre-cut for the cloud; it is wasted work.
    inputs; they do not exist before that click. They sit in DOM order 正
    (front, required), 背, 左, 右, 顶, 底, 左45°, 右45°. The five files to put
    in the first five slots are committed, named in that order, at
-   **`artifacts/dragon-options/views/`** — `1-front-正图.png` through
-   `5-top-顶图.png`; leave 底图 and the two 45° slots empty. Then leave
+   **`artifacts/dragon-options/views/`** — `1-front.png` through
+   `5-top.png`; leave 底图 and the two 45° slots empty. Then leave
    模型面数 at its default 1.5M and the model at `3D生成 V3.1`, and submit
    with 立即生成.
 
@@ -386,7 +386,7 @@ Do not pre-cut for the cloud; it is wasted work.
 3. **UV展开 — unwrap.** The button here is **智能展开UV**, not 立即生成.
 
 4. **纹理绘制 — texture.** Pick **图生纹理** and give it
-   `views/1-front-正图.png`, the same reference the geometry came from
+   `views/1-front.png`, the same reference the geometry came from
    (文生纹理 is text-only, and multi-view input is also accepted). The upload goes into the **second** file input on
    the page — index 0 belongs to the 本地模型 row above it, and uploading
    there leaves 立即生成 disabled with no error.
