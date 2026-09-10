@@ -1842,6 +1842,9 @@ void App::build_dragon_ui() {
                            "%.0f deg");
         ImGui::SliderFloat("flap angle limit", &rig.wing_flap_limit_deg, 0.0f, 90.0f,
                            "%.0f deg");
+        ImGui::SliderFloat("outer beat delay", &rig.wing_phase_delay, 0.0f, 0.10f, "%.3f cycles");
+        ImGui::SliderFloat("recovery fold", &rig.wing_recovery_fold_deg, 0.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("reopen phase", &rig.wing_recovery_extend_phase, 0.5f, 0.95f);
     }
 
     if (ImGui::CollapsingHeader("Neck & tail dynamics", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1900,6 +1903,7 @@ void App::build_dragon_ui() {
     }
 
     if (ImGui::CollapsingHeader("Attack posture")) {
+        ImGui::SliderFloat("jaw rest offset", &rig.jaw_rest_deg, -40.0f, 20.0f, "%.0f deg");
         ImGui::SliderFloat("jaw open", &rig.jaw_open_deg, 0.0f, 50.0f, "%.0f deg");
         ImGui::SliderFloat("spit recoil", &rig.spit_recoil_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("spit duration", &rig.spit_duration, 0.15f, 1.0f, "%.2f s");

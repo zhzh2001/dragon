@@ -28,6 +28,26 @@ Transform offset(Vec3 position) {
     return t;
 }
 
+// The flight model owns the beat clock, but a model-specific rig may sample
+// that clock a little behind at the wrist and fingers. Keep the same unequal
+// downstroke/recovery easing here so the visual delay preserves the physical
+// beat shape instead of turning it into a sine wave.
+float wrapped_phase(float phase) {
+    phase -= std::floor(phase);
+    return phase < 0.0f ? phase + 1.0f : phase;
+}
+
+float wingbeat_curve(float phase, float downstroke_fraction) {
+    const float down = core::clampf(downstroke_fraction, 0.05f, 0.95f);
+    phase = wrapped_phase(phase);
+    if (phase < down) {
+        const float t = phase / down;
+        return std::cos(t * core::PI);  // +1 down to -1
+    }
+    const float t = (phase - down) / (1.0f - down);
+    return -std::cos(t * core::PI);  // -1 back up to +1
+}
+
 // A tube of `segments` rings skinned along a chain of joints.
 //
 // Each ring is bound to the two nearest joints in the chain, weighted by how far
@@ -293,6 +313,8 @@ struct RigField {
 const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(flap_shoulder_deg),
     RIG_FLOAT_FIELD(wing_phase_lag),
+    RIG_FLOAT_FIELD(wing_phase_delay),
+    RIG_FLOAT_FIELD(wing_downstroke_fraction),
     RIG_FLOAT_FIELD(outboard_decay),
     RIG_FLOAT_FIELD(tuck_sweep_deg),
     RIG_FLOAT_FIELD(tuck_fold_deg),
@@ -303,6 +325,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(wing_finger_fold_scale),
     RIG_FLOAT_FIELD(wing_flap_fold_deg),
     RIG_FLOAT_FIELD(wing_flap_limit_deg),
+    RIG_FLOAT_FIELD(wing_recovery_fold_deg),
+    RIG_FLOAT_FIELD(wing_recovery_extend_phase),
     RIG_FLOAT_FIELD(upstroke_fold_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
@@ -343,6 +367,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(neck_aim_share),
     RIG_FLOAT_FIELD(neck_aim_max_deg),
     RIG_FLOAT_FIELD(jaw_open_deg),
+    RIG_FLOAT_FIELD(jaw_rest_deg),
     RIG_FLOAT_FIELD(spit_recoil_deg),
     RIG_FLOAT_FIELD(spit_duration),
     RIG_FLOAT_FIELD(spit_impulse),
@@ -644,8 +669,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const float limit = core::radians(tuning.wing_flap_limit_deg);
         flap_angle = core::clampf(flap_angle, -limit, limit);
     }
-    const float base = flap_angle + core::radians(tuning.wing_load_flex_deg) * load_smoothed_ -
-                       core::radians(droop_deg);
+    const float non_flap_base =
+        core::radians(tuning.wing_load_flex_deg) * load_smoothed_ - core::radians(droop_deg);
+    const float base = flap_angle + non_flap_base;
     // Membrane flutter: the outer wing buffets at speed and shudders in a
     // flare. Two incommensurate frequencies so it never reads as a metronome,
     // squared speed factor so cruise is calm and a dive is alive.
@@ -670,6 +696,19 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float upstroke = core::smoothstep(core::radians(20.0f), core::radians(50.0f), base);
     const float upstroke_fold = core::radians(tuning.upstroke_fold_deg) * upstroke;
     const float flap_fold = core::radians(tuning.wing_flap_fold_deg) * upstroke;
+    // A positive delay means the outer joint is still on the previous part of
+    // the beat while the shoulder has already changed direction. Reconstruct
+    // only the cyclic component here; tuck, load flex and steering stay tied to
+    // the current frame so the visible model remains in the same flight state.
+    const bool phase_articulation = tuning.wing_phase_delay > 1e-5f &&
+                                    state.flap_amplitude > 1e-4f;
+    const float beat_strength = core::saturate(state.flap_amplitude) *
+                                (1.0f - core::saturate(state.wing_tuck));
+    const float current_phase = wrapped_phase(state.flap_phase);
+    const float downstroke_fraction =
+        core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
+    const float current_beat =
+        phase_articulation ? wingbeat_curve(current_phase, downstroke_fraction) : 0.0f;
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
@@ -712,7 +751,26 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
-            const float flap_angle = (base * sign + roll_lean) *
+            const float delay = core::clampf(tuning.wing_phase_delay, 0.0f, 0.25f) *
+                                float(depth);
+            const float local_phase = wrapped_phase(current_phase - delay);
+            const float delayed_beat =
+                phase_articulation ? wingbeat_curve(local_phase, downstroke_fraction) : 0.0f;
+            const float delayed_flap =
+                phase_articulation
+                    ? core::radians(tuning.flap_shoulder_deg) *
+                          core::saturate(state.flap_amplitude) * (delayed_beat - current_beat)
+                    : 0.0f;
+            float local_base = base + delayed_flap;
+            if (tuning.wing_flap_limit_deg > 0.0f) {
+                // The ceiling applies to the complete delayed cyclic sample,
+                // while load flex and droop remain additive posture terms.
+                const float limit = core::radians(tuning.wing_flap_limit_deg);
+                const float cyclic_base =
+                    core::clampf(local_base - non_flap_base, -limit, limit);
+                local_base = cyclic_base + non_flap_base;
+            }
+            const float flap_angle = (local_base * sign + roll_lean) *
                                      flap_share_at(size_t(depth)) * flap_normalize * lag;
 
             // Folding sweeps back about local Y and closes progressively toward
@@ -738,9 +796,36 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             }
             const float sweep = core::radians(sweep_deg) * sign * aft *
                                 (0.4f + 0.6f * progress) * normalize;
-            const float fold = (core::radians(fold_deg) +
-                                upstroke_fold * progress + flap_fold) * fold_progress * sign *
-                               aft * normalize;
+            // Recovery compacts the outer wing first and then lets it reopen
+            // before the phase wraps. Multiplying by the extension envelope
+            // makes the timed term zero at both ends of the cycle, avoiding a
+            // snap when phase goes from 1 back to 0. The depth weighting keeps
+            // the shoulder broad while the wrist and fingers do the compacting.
+            const float max_depth =
+                float(std::max<size_t>(root_len + longest_finger, 1u) - 1u);
+            const float recovery_depth =
+                max_depth > 0.0f ? core::saturate(float(depth) / max_depth) : 0.0f;
+            const float recovery_start = downstroke_fraction * 0.85f;
+            const float recovery_end =
+                downstroke_fraction + (1.0f - downstroke_fraction) * 0.38f;
+            const float recovery_compact =
+                phase_articulation && tuning.wing_recovery_extend_phase > 1e-5f
+                    ? core::smoothstep(recovery_start, recovery_end, local_phase)
+                    : 0.0f;
+            const float extend_start =
+                core::clampf(tuning.wing_recovery_extend_phase, downstroke_fraction, 0.99f);
+            const float extend_end =
+                extend_start + (1.0f - extend_start) * 0.60f;
+            const float recovery_extend =
+                phase_articulation && tuning.wing_recovery_extend_phase > 1e-5f
+                    ? core::smoothstep(extend_start, extend_end, local_phase)
+                    : 0.0f;
+            const float recovery_fold =
+                core::radians(tuning.wing_recovery_fold_deg) * beat_strength *
+                recovery_compact * (1.0f - recovery_extend) * recovery_depth;
+            const float fold = (core::radians(fold_deg) + upstroke_fold * progress +
+                                flap_fold + recovery_fold) *
+                               fold_progress * sign * aft * normalize;
             const float flare_angle =
                 core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
 
@@ -1517,12 +1602,14 @@ void DragonRig::drive_attack(float airborne) {
         spit_open = u < 0.7f ? std::sin(core::PI * u / 0.7f) : 0.0f;
     }
     jaw_open_ = core::maxf(breath_smoothed_, spit_open);
-    if (joints_.jaw != NO_PARENT && jaw_open_ > 1e-3f) {
+    if (joints_.jaw != NO_PARENT) {
         // A faint chatter on top of the breath -- the mouth is not a hatch.
         const float chatter = 1.0f + 0.06f * breath_smoothed_ *
                                          std::sin(core::TWO_PI * 9.0f * time_);
+        const float opening = core::saturate(jaw_open_ * chatter);
         rotate_joint(joints_.jaw, Vec3::unit_x(),
-                     jaw_open_sign_ * core::radians(tuning.jaw_open_deg) * jaw_open_ * chatter,
+                     jaw_open_sign_ * core::radians(tuning.jaw_rest_deg +
+                                                    tuning.jaw_open_deg * opening),
                      true);
     }
 

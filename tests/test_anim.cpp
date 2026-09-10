@@ -248,11 +248,15 @@ void test_rig_tuning_profile_round_trip() {
         std::filesystem::temp_directory_path() / "dragon-rig-tuning-test.cfg";
 
     anim::RigTuning written;
+    written.wing_phase_delay = 0.035f;
+    written.wing_downstroke_fraction = 0.42f;
     written.wing_elbow_fold_scale = 0.45f;
     written.wing_wrist_fold_scale = 1.25f;
     written.wing_finger_fold_scale = 1.75f;
     written.wing_flap_fold_deg = 17.0f;
     written.wing_flap_limit_deg = 41.0f;
+    written.wing_recovery_fold_deg = 18.0f;
+    written.wing_recovery_extend_phase = 0.68f;
     written.leg_brake_extend = 0.7f;
     written.leg_brake_forward_deg = 28.0f;
     written.chain_iterations = 9;
@@ -260,11 +264,15 @@ void test_rig_tuning_profile_round_trip() {
 
     anim::RigTuning loaded;
     CHECK(anim::load_rig_tuning(loaded, path.string().c_str()));
+    CHECK(near(loaded.wing_phase_delay, written.wing_phase_delay));
+    CHECK(near(loaded.wing_downstroke_fraction, written.wing_downstroke_fraction));
     CHECK(near(loaded.wing_elbow_fold_scale, written.wing_elbow_fold_scale));
     CHECK(near(loaded.wing_wrist_fold_scale, written.wing_wrist_fold_scale));
     CHECK(near(loaded.wing_finger_fold_scale, written.wing_finger_fold_scale));
     CHECK(near(loaded.wing_flap_fold_deg, written.wing_flap_fold_deg));
     CHECK(near(loaded.wing_flap_limit_deg, written.wing_flap_limit_deg));
+    CHECK(near(loaded.wing_recovery_fold_deg, written.wing_recovery_fold_deg));
+    CHECK(near(loaded.wing_recovery_extend_phase, written.wing_recovery_extend_phase));
     CHECK(near(loaded.leg_brake_extend, written.leg_brake_extend));
     CHECK(near(loaded.leg_brake_forward_deg, written.leg_brake_forward_deg));
     CHECK(loaded.chain_iterations == written.chain_iterations);
@@ -326,6 +334,137 @@ void test_wing_fold_profile_is_anatomical() {
     capped.tuning.wing_flap_limit_deg = 40.0f;
     for (int i = 0; i < 60; ++i) capped.update(high_flap, 1.0f / 60.0f);
     CHECK(joint_palette_delta(uncapped, capped, joints.wing_root[0].front()) > 1e-3f);
+}
+
+void test_wingbeat_phase_articulation() {
+    std::printf("wingbeat phase delay leads the elbow and lets the fingers recover\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    const int shoulder = joints.wing_root[0].front();
+    const int elbow = joints.wing_root[0].back();
+    const int wrist = joints.wing_fingers[0].front().front();
+    const int tip = joints.wing_fingers[0].back().back();
+
+    auto beat_curve = [](float phase, float downstroke_fraction) {
+        phase -= std::floor(phase);
+        if (phase < 0.0f) phase += 1.0f;
+        if (phase < downstroke_fraction) {
+            return std::cos(core::PI * phase / downstroke_fraction);
+        }
+        return -std::cos(core::PI * (phase - downstroke_fraction) /
+                         (1.0f - downstroke_fraction));
+    };
+    auto state_at = [&](float phase, float amplitude = 1.0f, float tuck = 0.0f) {
+        game::FlightState state;
+        state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        state.airspeed = 30.0f;
+        state.ground_clearance = 300.0f;
+        state.flap_phase = phase;
+        state.flap_amplitude = amplitude;
+        state.wing_tuck = tuck;
+        // Match the studio beat (4 degree centre, 36 degree half range) so a
+        // delayed sample can be compared against the current sample directly.
+        const float beating = 4.0f + 36.0f * beat_curve(phase, 0.40f);
+        state.wing_angle = radians(9.0f + amplitude * (beating - 9.0f));
+        return state;
+    };
+    auto posed = [&](float phase, const anim::RigTuning& tuning, float amplitude = 1.0f,
+                     float tuck = 0.0f) {
+        auto rig = std::make_unique<anim::DragonRig>();
+        rig->init(skeleton, joints);
+        rig->tuning = tuning;
+        rig->update(state_at(phase, amplitude, tuck), 1.0f / 60.0f);
+        return rig;
+    };
+    auto local_lift = [](const anim::DragonRig& rig, int joint) {
+        return core::rotate(rig.pose().local[size_t(joint)].rotation, Vec3::unit_x()).y;
+    };
+
+    anim::RigTuning delayed;
+    delayed.wing_phase_lag = 0.0f;
+    delayed.outboard_decay = 1.0f;
+    delayed.flap_shoulder_deg = 36.0f;
+    delayed.wing_phase_delay = 0.06f;
+    delayed.upstroke_fold_deg = 0.0f;
+    delayed.wing_flap_fold_deg = 0.0f;
+
+    // The local z rotations reach their low point later at each outboard
+    // station. This measures temporal order directly rather than looking only
+    // at a final amplitude or a static posed screenshot.
+    float minimum_phase[3] = {0.0f, 0.0f, 0.0f};
+    float minimum_lift[3] = {1e9f, 1e9f, 1e9f};
+    const int measured_joints[3] = {shoulder, elbow, wrist};
+    for (int sample = 0; sample < 200; ++sample) {
+        const float phase = float(sample) / 200.0f;
+        const auto rig = posed(phase, delayed);
+        for (int station = 0; station < 3; ++station) {
+            const float lift = local_lift(*rig, measured_joints[station]);
+            if (lift < minimum_lift[station]) {
+                minimum_lift[station] = lift;
+                minimum_phase[station] = phase;
+            }
+        }
+    }
+    std::printf("  low points shoulder %.3f, elbow %.3f, wrist %.3f\n", minimum_phase[0],
+                minimum_phase[1], minimum_phase[2]);
+    CHECK(minimum_phase[1] > minimum_phase[0] + 0.025f);
+    CHECK(minimum_phase[2] > minimum_phase[1] + 0.025f);
+
+    // A zero phase delay and zero recovery profile are byte-for-byte the old
+    // pose path, even when the flight state contains an active beat.
+    const auto legacy = posed(0.31f, anim::RigTuning{});
+    anim::RigTuning explicit_legacy;
+    explicit_legacy.wing_phase_delay = 0.0f;
+    explicit_legacy.wing_recovery_fold_deg = 24.0f;
+    explicit_legacy.wing_recovery_extend_phase = 0.70f;
+    const auto disabled = posed(0.31f, explicit_legacy);
+    CHECK(joint_palette_delta(*legacy, *disabled, shoulder) < 1e-5f);
+    CHECK(joint_palette_delta(*legacy, *disabled, tip) < 1e-5f);
+
+    // The timed recovery fold belongs to the outer wing, peaks after the fast
+    // downstroke, and fades before phase wraps so the membrane can reopen.
+    anim::RigTuning recovery = delayed;
+    recovery.wing_recovery_fold_deg = 30.0f;
+    recovery.wing_recovery_extend_phase = 0.68f;
+    const auto no_recovery = posed(0.58f, delayed);
+    anim::RigTuning disabled_recovery = recovery;
+    disabled_recovery.wing_recovery_extend_phase = 0;
+    const auto no_extension = posed(0.58f, disabled_recovery);
+    CHECK(joint_palette_delta(*no_recovery, *no_extension, tip) < 1e-5f);
+    const auto compact = posed(0.58f, recovery);
+    const auto no_recovery_late = posed(0.999f, delayed);
+    const auto extended = posed(0.999f, recovery);
+    const float compact_delta = joint_palette_delta(*no_recovery, *compact, tip);
+    const float elbow_compact_delta = joint_palette_delta(*no_recovery, *compact, elbow);
+    const float extended_delta = joint_palette_delta(*no_recovery_late, *extended, tip);
+    std::printf("  recovery fold deltas elbow %.4f, tip %.4f, late %.4f\n",
+                elbow_compact_delta, compact_delta, extended_delta);
+    CHECK(compact_delta > elbow_compact_delta + 1e-3f);
+    CHECK(extended_delta < compact_delta * 0.35f);
+
+    // Recovery strength is proportional to active flapping and disappears as
+    // the wing is tucked, so a tiny residual amplitude cannot cause a full fold.
+    const auto weak = posed(0.58f, recovery, 0.10f);
+    const auto weak_no_recovery = posed(0.58f, delayed, 0.10f);
+    const auto tucked = posed(0.58f, recovery, 1.0f, 1.0f);
+    const auto tucked_no_recovery = posed(0.58f, delayed, 1.0f, 1.0f);
+    CHECK(joint_palette_delta(*weak_no_recovery, *weak, tip) < compact_delta * 0.25f);
+    CHECK(joint_palette_delta(*tucked_no_recovery, *tucked, tip) < compact_delta * 0.25f);
+
+    // The cycle boundary is continuous, and the two wings keep their tips on
+    // their own side of the spine throughout recovery.
+    const auto before_wrap = posed(0.999f, recovery);
+    const auto after_wrap = posed(0.001f, recovery);
+    CHECK(joint_palette_delta(*before_wrap, *after_wrap, tip) < 0.05f);
+    const Vec3 right_tip = before_wrap->world_matrices()[size_t(tip)].col[3].xyz();
+    const int left_tip_index = joints.wing_fingers[1].back().back();
+    const Vec3 left_tip = before_wrap->world_matrices()[size_t(left_tip_index)].col[3].xyz();
+    CHECK(right_tip.x > 0.0f);
+    CHECK(left_tip.x < 0.0f);
 }
 
 void test_brake_leg_profile_floats_forward() {
@@ -943,6 +1082,41 @@ void test_neck_shares_the_aim() {
 
 // The mouth is what says the creature is doing it: the jaw opens on the
 // breath, gapes and shuts on a spit, and the spit rears the neck back.
+void test_open_sculpt_jaw_calibration() {
+    std::printf("open sculpt jaw closes at rest and never exceeds authored gape\n");
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(anim::DragonShape{}, skeleton, joints, mesh);
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    rig.tuning.jaw_rest_deg = -16.0f;
+    rig.tuning.jaw_open_deg = 16.0f;
+    game::FlightState state;
+    state.velocity = Vec3{0, 0, -35};
+    for (int i = 0; i < 90; ++i) rig.update(state, 1.0f / 60.0f);
+    const Quat closed = rig.pose().local[size_t(joints.jaw)].rotation;
+    const Quat bind = skeleton.joint(joints.jaw).local_bind.rotation;
+    auto angle = [](Quat a, Quat b) {
+        return degrees(2 * std::acos(clampf(std::fabs(dot(a, b)), 0, 1)));
+    };
+    CHECK(std::fabs(angle(closed, bind) - 16.0f) < 0.1f);
+    anim::RigAction action;
+    action.breath = 1;
+    rig.set_action(action);
+    float maximum_opening = 0;
+    for (int i = 0; i < 180; ++i) {
+        rig.update(state, 1.0f / 60.0f);
+        const Quat current = rig.pose().local[size_t(joints.jaw)].rotation;
+        maximum_opening = std::max(maximum_opening, angle(current, closed));
+    }
+    CHECK(maximum_opening <= 16.1f);
+    CHECK(angle(rig.pose().local[size_t(joints.jaw)].rotation, bind) < 1.1f);
+    rig.set_action(anim::RigAction{});
+    for (int i = 0; i < 180; ++i) rig.update(state, 1.0f / 60.0f);
+    CHECK(angle(rig.pose().local[size_t(joints.jaw)].rotation, closed) < 0.1f);
+}
+
 void test_attack_posture() {
     std::printf("jaw opens on breath and spit, spit recoils the neck\n");
     anim::DragonShape shape;
@@ -1556,6 +1730,7 @@ int main() {
     test_dragon_rig_builds();
     test_rig_tuning_profile_round_trip();
     test_wing_fold_profile_is_anatomical();
+    test_wingbeat_phase_articulation();
     test_brake_leg_profile_floats_forward();
     test_rig_responds_to_flight();
     test_animation_track_sampling();
@@ -1568,6 +1743,7 @@ int main() {
     test_idle_clip_fades_with_intensity();
     test_neck_shares_the_aim();
     test_attack_posture();
+    test_open_sculpt_jaw_calibration();
     test_speed_posture();
     test_ground_stance_is_authored();
     test_studio_states_are_consistent();

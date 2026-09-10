@@ -79,12 +79,23 @@ void build_dragon(const DragonShape& shape, Skeleton& out_skeleton, DragonJoints
 // How the rig responds to flight. All live-tunable.
 struct RigTuning {
     // ---- wings ----
+    // The amplitude used when reconstructing a delayed sample of the flight
+    // model's cyclic beat. It is also the historical live tuning for the
+    // shoulder stroke; zero phase delay leaves the direct state angle alone.
     float flap_shoulder_deg = 52.0f;
-    // Each segment lags the one inboard of it, which is what gives a wingbeat
-    // its whip instead of looking like a hinged plank.
-    // Higher lag makes the wing whip through the beat rather than rotate as a
-    // rigid plank -- the tip visibly trails the shoulder.
+    // Legacy outboard amplitude attenuation. This is a static contribution
+    // profile, not a temporal delay; use wing_phase_delay below when a model
+    // needs the wrist and fingers to sample an earlier point in the beat.
     float wing_phase_lag = 0.26f;
+    // Optional temporal phase delay, in beat cycles per outboard joint. The
+    // legacy `wing_phase_lag` above attenuates amplitude; this value actually
+    // samples the asymmetric beat earlier for outer joints, so the elbow leads
+    // the wrist and the fingers follow it. Zero preserves the legacy pose.
+    float wing_phase_delay = 0.0f;
+    // Match the flight model's fast powered downstroke and slower recovery.
+    // This is only read when wing_phase_delay is enabled, and lets a model
+    // profile track a custom FlightTuning value without changing shared code.
+    float wing_downstroke_fraction = 0.40f;
     // How much of the flap each successive outboard segment keeps. Below 1 the
     // shoulder does most of the work, which is what a wing actually does.
     float outboard_decay = 0.68f;
@@ -113,6 +124,12 @@ struct RigTuning {
     // untouched. This is an animation guard for rigs whose membranes cross at
     // the engine's full stroke.
     float wing_flap_limit_deg = 0.0f;
+    // Extra compacting fold during the middle of the recovery stroke. It fades
+    // back out before the next downstroke, so the fingers reopen smoothly.
+    float wing_recovery_fold_deg = 0.0f;
+    // Beat phase at which that recovery fold starts extending. Zero disables
+    // the timed recovery profile; positive values are in [downstroke, 1].
+    float wing_recovery_extend_phase = 0.0f;
     // On the upstroke the wrist flexes and the wing part-folds -- real bird
     // kinematics, and what keeps the two raised wings from crossing over the
     // spine at the top of the beat.
@@ -273,6 +290,10 @@ struct RigTuning {
     // still mouth reads as a particle effect stapled to a model; the jaw, the
     // neck and the claws are what say the CREATURE is doing it.
     float jaw_open_deg = 26.0f;
+    // Offset from the authored bind jaw, in the measured opening direction.
+    // Negative closes a sculpt authored with a gape. Attack opening is an
+    // excursion from this calibrated resting angle.
+    float jaw_rest_deg = 0.0f;
     // Fireball: the neck rears back and whips forward, a spit. Peak deflection
     // and the duration of the whole gesture.
     float spit_recoil_deg = 30.0f;

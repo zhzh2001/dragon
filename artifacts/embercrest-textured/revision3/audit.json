@@ -1,0 +1,16 @@
+{
+  "sha256": "00b05181628a1d19b5331c0c0b77ecf616592e8bab6e65b81221d235357fc64d",
+  "triangles": 80000,
+  "exported_vertices": 73550,
+  "bones": 62,
+  "texture_png_sha256": [
+    "e42440dc83e409f9d986da1f3d2988651c146f50cb902926beb490cbd49b9f78",
+    "9f46013f6a3c41de2a141a411f8fde5332877ab9bd7b3994492cbdc7006559f9",
+    "2aa0254b8d437e9f1c4ec614ea667438299bc307c1fbe680905c2597f3c9bda4"
+  ],
+  "max_tangent_length_error": 7.780839340765233e-05,
+  "max_tangent_normal_dot": 0.00014529657534012586,
+  "max_weight_sum_error": 1.4901161193847656e-07,
+  "all_exported_tangents_valid": true,
+  "materials_match_source": true
+}

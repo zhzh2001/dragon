@@ -173,7 +173,17 @@ head_group=body.vertex_groups['head'];jaw_group=body.vertex_groups['jaw']
 for v in body.data.vertices:
     co=canonical(v.co)
     x,y,z=co
-    if y>.30 and z>.305:
+    if TEXTURED and y>.30 and z>.305:
+        # Follow the visible mouth gap instead of cutting through the rising
+        # upper surface of the mandible. A flat low plane pins lower teeth and
+        # gum vertices to the skull, producing stretched strips on closure.
+        jaw_line=(.365 + (.383-.365)*smoothstep(.30,.338,y)
+                  - .35*max(y-.338,0))
+        share=smoothstep(.295,.335,y) if z<jaw_line else 0.0
+        for gi in [g.group for g in v.groups]:body.vertex_groups[gi].remove([v.index])
+        if share>0:jaw_group.add([v.index],share,'REPLACE')
+        if share<1:head_group.add([v.index],1-share,'REPLACE')
+    elif y>.30 and z>.305:
         for gi in [g.group for g in v.groups]:body.vertex_groups[gi].remove([v.index])
         # Lower mandible slopes down toward the muzzle. Upper teeth remain skull.
         jaw_line=.363 - .16*(y-.30)
@@ -286,7 +296,7 @@ rig.select_set(True);bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='POSE')
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/(STEM+'.blend')),compress=True)
 weights=[sum(g.weight for g in v.groups) for v in body.data.vertices]
-stats={'source':SOURCE.name,'source_sha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),'source_triangles':original_faces,'triangles':len(body.data.polygons),'vertices':len(body.data.vertices),'bones':len(bones),'max_influences':max(len(v.groups) for v in body.data.vertices),'max_weight_sum_error':max(abs(w-1) for w in weights),'unweighted_vertices':sum(w==0 for w in weights),'binding':'Bone heat body; continuous top-four wing field with wrist and root blending; rigid skull/jaw; level wing bind','material':'Preserved source UVs and PBR textures' if TEXTURED else 'Neutral clay; source contains no UV or texture','glb_bytes':GLB.stat().st_size}
+stats={'source':SOURCE.name,'source_sha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),'source_triangles':original_faces,'triangles':len(body.data.polygons),'vertices':len(body.data.vertices),'bones':len(bones),'max_influences':max(len(v.groups) for v in body.data.vertices),'max_weight_sum_error':max(abs(w-1) for w in weights),'unweighted_vertices':sum(w==0 for w in weights),'binding':'Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind' if TEXTURED else 'Bone heat body; continuous top-four wing field; rigid skull/jaw; level wing bind','material':'Preserved source UVs and PBR textures' if TEXTURED else 'Neutral clay; source contains no UV or texture','glb_bytes':GLB.stat().st_size}
 assert stats['max_influences']<=4 and stats['max_weight_sum_error']<1e-6
 lo=[min(v.co[i] for v in body.data.vertices) for i in range(3)]
 hi=[max(v.co[i] for v in body.data.vertices) for i in range(3)]
