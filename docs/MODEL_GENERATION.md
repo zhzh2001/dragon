@@ -1009,10 +1009,21 @@ The frontier moved in 2026 and it moved in our favour.
   (verified in its `bpy.py`). Needs 14 GB VRAM per README, torch 2.7 cu128,
   flash-attn: x99. Known bug: exported bone tails are wrong (issue #8, fix
   posted). A wrapper claims 4 GB; unverified.
-- **skin-tokens.cpp** (LocalAI, Aug 2026, Apache-2.0). C++23/GGML port,
-  CPU or Vulkan, C API. `skintokens-cli skin model.gguf mesh.glb
-  skeleton.glb out.glb` is exactly the weights-for-a-given-skeleton call.
-  Runs on t5810 or the Mac without CUDA. Two weeks old; memory unstated.
+- **ComfyUI-SkinTokens** (`Aero-Ex/ComfyUI-SkinTokens`, active 2026-08-29).
+  A ComfyUI wrapper around SkinTokens that exposes `--use_skeleton` as
+  "use existing skeleton (generate skin only)" — precisely what this engine
+  needs, since it supplies its own named skeleton and wants only weights.
+  **This is the leading candidate**, because it runs inside the harness
+  already driven headlessly by `tools/comfy_workflow.py` on x99, so it needs
+  no new tooling from us. Its README does not state VRAM, weight sources, or
+  whether joint names survive; SkinTokens' own `bpy.py` says they do. Untested.
+- **skin-tokens.cpp** (`localai-org/skin-tokens.cpp` — note the org; this doc
+  previously said `localai/`, which 404s. 183 stars, pushed 2026-09-01,
+  Apache-2.0). C++/GGML port, CPU or Vulkan, C API. `skintokens-cli skin
+  model.gguf mesh.glb skeleton.glb out.glb` is exactly the
+  weights-for-a-given-skeleton call. **No torch and no CUDA**, so it runs on
+  the Mac or t5810 — the fallback that makes rigging independent of whether a
+  lab box is powered on.
 - **UniRig** (2025, MIT, 8 GB): numbered bones, weak skinning, and its own
   README says to fix the skeleton in Blender before skinning. Superseded.
 - Puppeteer, MagicArticulate, Anymate: research artefacts, old torch pins,
@@ -1032,6 +1043,37 @@ The frontier moved in 2026 and it moved in our favour.
   painted high on wing fingers and jaw; Quadriflow free but needs the soup
   decimated under ~100K first. Target **25-40K triangles**, spent on the
   membranes and the head. Bake albedo and normal from the generated mesh.
+
+## What generation is worth using for in this engine
+
+Generated meshes are not a general asset source here. Measured against what
+the engine actually draws:
+
+**Vegetation: no.** The trees are procedural and tiny — `make_tree_mesh` in
+`src/gfx/foliage.cpp` builds them out of cones and tubes at **spruce 38 verts
+/ 35 tris, pine 30/28, broadleaf 130/206, dead 52/52, grass tuft 24 verts /
+8 tris** — drawn as thousands of GPU instances with vertex colours and no
+textures at all. A generated tree arrives as 1.5 M triangles plus a 4096²
+PBR set. Decimating it to ~100 triangles leaves nothing of the generation
+(you are back to a cone), and its texture would add a material path the
+foliage pipeline deliberately does not have. Grass is re-placed around the
+camera every frame, so the budget there is instance count, not mesh detail.
+
+**More dragons: yes.** Every dragon in a match is currently the same mesh and
+texture with a hue push (`bot_hue_strength` in `src/app.h`, and `--hue`), so
+distinct bot dragons are a real visual gain rather than a nicety. The pipeline
+is proven end to end and costs about four Studio credits plus a rig.
+
+The rule that falls out: generation pays for things that are **few on screen,
+large, and want a unique silhouette and texture** — hero creatures and set
+pieces. It does not pay for anything instanced in the thousands, which is
+exactly what the procedural systems in this engine already do well.
+
+**Licence, before mass-producing anything.** This doc still records the
+Hunyuan Studio hosted terms as "not fetched", and the generated assets and
+their texture sets are gitignored partly for that reason. Free-tier output
+going into a shipped game is where those terms matter; read them before
+building a library on top of this.
 
 ## The pipeline
 
