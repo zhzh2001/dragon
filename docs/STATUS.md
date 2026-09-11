@@ -60,6 +60,12 @@ What is built, in the order it was built. The plan these came from is
   brake all the way down, so the dragon could not be landed deliberately.
   `docs/ANIMATION.md` has the detail. `assets/stormsail.glb` has its first rig
   profile and both generated assets now have a standing wing stow.
+- **The generated models looked plastic, and it was their data maps.** Both
+  shipped a constant 1.0 occlusion channel, a near-constant roughness (one
+  gloss for horn, hide and membrane) and a nearly flat normal map.
+  `tools/repair_model_materials.py` bakes AO from the mesh, rebuilds roughness
+  from geometric zones and derives a detail normal; the repaired files take
+  the plain names and the untouched originals are kept as `<name>-raw.glb`.
 
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
