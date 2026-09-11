@@ -1183,6 +1183,26 @@ of `concepts.png` panel B), so the numbers are from two runs, not one.
    Budget: 80 K is fine. "Triangle count is not the bottleneck" measured an
    80 K mesh rendering *faster* than a 38 K one.
 
+   **Then repair the data maps.** Hunyuan's base colour is good; its ORM and
+   normal are not: occlusion is a constant 1.0, roughness is one value for
+   horn, hide and membrane alike (Stormsail std 0.019), and the normal map is
+   nearly flat (R/G std 0.03). Under the engine's single GGX lobe that reads
+   as plastic. `tools/repair_model_materials.py` bakes AO from the mesh,
+   rebuilds roughness from zones the mesh can locate (thin-and-cylindrical
+   is keratin, thin-and-flat is membrane, the rest is hide) and derives a
+   subtle detail normal from the base colour's luminance; it writes a new
+   `.glb` with only the two image payloads changed and verifies the rest is
+   byte-identical. The base colour has some occlusion painted into it
+   already (luminance vs baked AO, r ≈ +0.35 on both assets), so the AO is
+   not turned up further than the bake gives. Needs a venv with numpy,
+   Pillow, scipy and trimesh+embree; about a minute per model.
+
+   The repaired file takes the plain name and the untouched Hunyuan output is
+   kept beside it as `<name>-raw.glb`, with copies of its `.rig.cfg` and
+   `.flight.cfg` so it can still be loaded for comparison. These `.glb` files
+   are gitignored and the generation run is slow and cloud-bound, so nothing
+   in this pipeline ever overwrites one.
+
 4. **Accept it in the engine.**
 
    ```sh
