@@ -328,6 +328,10 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(wing_recovery_fold_deg),
     RIG_FLOAT_FIELD(wing_recovery_extend_phase),
     RIG_FLOAT_FIELD(upstroke_fold_deg),
+    RIG_FLOAT_FIELD(ground_stow_sweep_deg),
+    RIG_FLOAT_FIELD(ground_stow_fold_deg),
+    RIG_FLOAT_FIELD(ground_stow_wrist_deg),
+    RIG_FLOAT_FIELD(ground_stow_finger_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -513,11 +517,88 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
             position.push_back(skeleton.world_bind(joint).translation_part());
         }
         const Vec3 tip = position.back() + (position.back() - position[position.size() - 2]);
-        const float span = core::length(tip - position.front());
+        // The moment arm is the part of the joint-to-tip vector PERPENDICULAR to
+        // the flap axis, which is the body's fore-aft axis. Body up and the
+        // model's own up coincide here and the facing yaw leaves Z on Z, so the
+        // component to drop is simply z. Using the straight-line distance
+        // instead credits a swept or bent wing with leverage it does not have
+        // about that axis, and the normalizer then hands the outboard joints
+        // too much of the stroke: the two generated assets reached only about
+        // two thirds of the commanded angle while the straight generated rig
+        // reached all of it.
+        auto arm = [](Vec3 from, Vec3 to) {
+            const Vec3 d = to - from;
+            return core::length(Vec3{d.x, d.y, 0.0f});
+        };
+        const float span = arm(position.front(), tip);
         if (span < 1e-4f) continue;
         for (const Vec3& p : position) {
-            wing_flap_leverage_[side].push_back(core::length(tip - p) / span);
+            wing_flap_leverage_[side].push_back(arm(p, tip) / span);
         }
+    }
+
+    // The axis each wing folds about: the normal of the plane fitted through
+    // that wing's bind-pose joints. Body up is only the right hinge for a wing
+    // bound level, and a sculpt whose membranes drape aft-down is not -- see
+    // wing_fold_axis_. Undriven leaves below the mapped chains are included:
+    // they are the real finger tips and they carry most of the membrane, so
+    // leaving them out tilts the fit toward the arm.
+    for (int side = 0; side < 2; ++side) {
+        std::vector<bool> in_wing(size_t(count), false);
+        for (const int joint : joints.wing_root[side]) in_wing[size_t(joint)] = true;
+        for (const std::vector<int>& finger : joints.wing_fingers[side]) {
+            for (const int joint : finger) in_wing[size_t(joint)] = true;
+        }
+        // Descendants inherit membership; joints are topologically sorted, so
+        // one forward pass carries it all the way down.
+        for (int i = 0; i < count; ++i) {
+            const int parent = skeleton.joint(i).parent;
+            if (parent != NO_PARENT && in_wing[size_t(parent)]) in_wing[size_t(i)] = true;
+        }
+
+        std::vector<Vec3> sample;
+        for (int i = 0; i < count; ++i) {
+            if (!in_wing[size_t(i)]) continue;
+            const Vec3 p = skeleton.world_bind(i).translation_part();
+            // Helpers that bind at the model origin carry no position -- the
+            // default asset's shoulder chain is two of them -- and would drag
+            // the fit toward the body centre.
+            if (core::length_sq(p) < 1e-4f) continue;
+            sample.push_back(p);
+        }
+        if (sample.size() < 3) continue;
+
+        Vec3 centre = Vec3::zero();
+        for (const Vec3& p : sample) centre = centre + p;
+        centre = centre * (1.0f / float(sample.size()));
+        float cov[3][3] = {};
+        for (const Vec3& p : sample) {
+            const Vec3 d = p - centre;
+            const float v[3] = {d.x, d.y, d.z};
+            for (int r = 0; r < 3; ++r) {
+                for (int c = 0; c < 3; ++c) cov[r][c] += v[r] * v[c];
+            }
+        }
+        // The plane normal is the smallest eigenvector of the covariance.
+        // Iterating (trace*I - C) amplifies exactly that one, which is enough
+        // here and saves carrying a 3x3 eigensolver for one call site. Seeded
+        // with body up so a wing that really is level keeps the old axis.
+        const float trace = cov[0][0] + cov[1][1] + cov[2][2];
+        Vec3 normal = Vec3::unit_y();
+        for (int iteration = 0; iteration < 32; ++iteration) {
+            const Vec3 n = normal;
+            normal = Vec3{trace * n.x - (cov[0][0] * n.x + cov[0][1] * n.y + cov[0][2] * n.z),
+                          trace * n.y - (cov[1][0] * n.x + cov[1][1] * n.y + cov[1][2] * n.z),
+                          trace * n.z - (cov[2][0] * n.x + cov[2][1] * n.y + cov[2][2] * n.z)};
+            if (core::length_sq(normal) < 1e-12f) {
+                normal = Vec3::unit_y();
+                break;
+            }
+            normal = core::normalize(normal);
+        }
+        // Up, not down: the fold's sign convention is written for an axis that
+        // points the same way body up does.
+        wing_fold_axis_[side] = normal.y < 0.0f ? normal * -1.0f : normal;
     }
 
     // Feet and toes, with depth below their root, for the hanging curl. The
@@ -688,9 +769,14 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float speed_factor =
         core::smoothstep(tuning.sweep_speed_start, tuning.sweep_speed_full, state.airspeed);
     const float speed_share = speed_factor * (1.0f - tuck);
+    // Standing closes further than any tuck should: the stow is added here so
+    // the flight angles stay free to be as open as a stoop needs.
+    const float stow = ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f);
     const float sweep_deg = tuning.tuck_sweep_deg * tuck + tuning.speed_sweep_deg * speed_share -
-                            tuning.load_forward_sweep_deg * core::maxf(load_smoothed_, 0.0f);
-    const float fold_deg = tuning.tuck_fold_deg * tuck + tuning.speed_fold_deg * speed_share;
+                            tuning.load_forward_sweep_deg * core::maxf(load_smoothed_, 0.0f) +
+                            tuning.ground_stow_sweep_deg * stow;
+    const float fold_deg = tuning.tuck_fold_deg * tuck + tuning.speed_fold_deg * speed_share +
+                           tuning.ground_stow_fold_deg * stow;
     const float droop_deg =
         tuning.tuck_droop_deg * (tuck + speed_share * tuning.speed_sweep_deg /
                                             core::maxf(tuning.tuck_sweep_deg, 1.0f));
@@ -762,6 +848,61 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         }
         const float normalize = decay_total > 1e-4f ? 1.0f / decay_total : 1.0f;
 
+        // Sweep and fold need their OWN normalizers, and for a long time they
+        // borrowed the flap's. That normalizer is 1 / sum of decay^k, which is
+        // right only for shares that are themselves decay^k. The sweep's shares
+        // are (0.4 + 0.6 * progress) and the fold's are progress * anatomical
+        // scale -- neither decays -- so the tip received far more rotation than
+        // was asked for: a commanded 88 degrees of tuck sweep arrived as 111 on
+        // a three-plus-one wing and 131 on a four-plus-two. Past about 90 the
+        // tip is rotated behind straight-back and the folded wing points
+        // inboard at the opposite flank, which is why the two downloaded assets
+        // put 71% and 99% of one wing's membrane inside the other's when
+        // tucked. Each term is now divided by the sum of its own shares along
+        // the representative chain, so a commanded angle is the angle the tip
+        // actually closes through.
+        //
+        // `progress` runs 0..1 within each chain, so the walk is the shared
+        // root followed by the longest finger -- the same path the flap
+        // normalizes over.
+        auto progress_at = [](size_t index, size_t length) {
+            return length > 1 ? float(index) / float(length - 1) : 1.0f;
+        };
+        auto fold_share = [&](size_t index, size_t length, bool finger) {
+            float share = progress_at(index, length);
+            if (finger) {
+                share *= core::maxf(tuning.wing_finger_fold_scale, 0.0f);
+            } else if (index > 0) {
+                const bool wrist = root_len >= 3 && index + 1 == root_len;
+                share *= core::maxf(
+                    wrist ? tuning.wing_wrist_fold_scale : tuning.wing_elbow_fold_scale, 0.0f);
+            }
+            return share;
+        };
+        // The fold normalizes over the progressive share ALONE, with the
+        // anatomical scales left out. They stay absolute multipliers on top, so
+        // closing the fingers harder does not quietly open the elbow to
+        // compensate -- separating those three stations is the whole point of
+        // the profile, and a shared normalizer would couple them back together.
+        // A profile that leaves the scales at one therefore folds through
+        // exactly the commanded angle, and one that opens the elbow folds
+        // through less, which is what opening the elbow means.
+        float sweep_total = 0.0f, fold_total = 0.0f;
+        for (size_t i = 0; i < root_len; ++i) {
+            sweep_total += 0.4f + 0.6f * progress_at(i, root_len);
+            fold_total += progress_at(i, root_len);
+        }
+        for (size_t i = 0; i < longest_finger; ++i) {
+            sweep_total += 0.4f + 0.6f * progress_at(i, longest_finger);
+            fold_total += progress_at(i, longest_finger);
+        }
+        const float sweep_normalize = sweep_total > 1e-4f ? 1.0f / sweep_total : 1.0f;
+        const float fold_normalize = fold_total > 1e-4f ? 1.0f / fold_total : 1.0f;
+        // The flare has no progressive share at all -- every joint gets the
+        // same angle -- so its total is simply the joint count.
+        const float flare_normalize =
+            1.0f / core::maxf(float(root_len + longest_finger), 1.0f);
+
         // On the upstroke the flap redistributes outboard: the humerus barely
         // elevates and the wrist leads, which is how a real bird raises its
         // wings -- and it is what keeps the two inner membranes from crossing
@@ -772,6 +913,20 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         // long time it was applied AFTER this normalizer instead of inside it,
         // so the tip reached only as much of the commanded angle as the lag
         // happened to leave.
+        //
+        // Both decay and lag are keyed to how far OUT the joint is, not to how
+        // many joints precede it. Raising decay to the power of the joint index
+        // means a wing described with more bones concentrates its flap further
+        // inboard and the tip travels less -- the same shape, animated
+        // differently, purely because of how the rigger subdivided the arm.
+        // Adding the wyvern's outer finger ribs to the chain cost it a fifth of
+        // its stroke that way. The station is distance from the shoulder as a
+        // fraction of the span, scaled to a three-bone reference so the old
+        // exponents keep their meaning.
+        const std::vector<float>& leverage = wing_flap_leverage_[side];
+        auto flap_leverage_at = [&](size_t k) {
+            return k < leverage.size() ? leverage[k] : 0.0f;
+        };
         auto flap_weight_at = [&](size_t k) {
             const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(k), 0.8f);
             return std::pow(tuning.outboard_decay, float(k)) *
@@ -787,10 +942,6 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         // the visible stroke was 64% of the commanded angle on the generated
         // rig and less on a long imported wing, which is most of what read as a
         // shallow, stiff wingbeat. Leverage comes from the bind pose in init().
-        const std::vector<float>& leverage = wing_flap_leverage_[side];
-        auto flap_leverage_at = [&](size_t k) {
-            return k < leverage.size() ? leverage[k] : 0.0f;
-        };
         float flap_total = 0.0f;
         for (size_t k = 0; k < root_len + longest_finger; ++k) {
             flap_total += flap_weight_at(k) * flap_leverage_at(k);
@@ -820,32 +971,31 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                     core::clampf(local_base - non_flap_base, -limit, limit);
                 local_base = cyclic_base + non_flap_base;
             }
-            const float flap_angle = (local_base * sign + roll_lean) *
-                                     flap_weight_at(size_t(depth)) * flap_normalize;
+            // Standing stow: the wrist rises, the fingers hang. Spread evenly
+            // along each chain so the station named reaches the angle named,
+            // and added to the flap rather than blended with it -- both are
+            // elevation about the same fore-aft axis.
+            const float stow_total = finger_index >= 0 ? tuning.ground_stow_finger_deg
+                                                       : tuning.ground_stow_wrist_deg;
+            const float stow_angle = core::radians(stow_total) * stow /
+                                     core::maxf(float(chain_length), 1.0f);
 
-            // Folding sweeps back about local Y and closes progressively toward
-            // the tip, which is how a wing actually stows.
-            const float progress = chain_length > 1
-                                       ? float(index_in_chain) / float(chain_length - 1)
-                                       : 1.0f;
-            // A generated wing has shoulder -> elbow -> hand, while an
-            // imported wing commonly has shoulder -> elbow -> wrist followed
-            // by several finger chains. Scale the same progressive fold by the
-            // anatomical station so a long finger chain can close without
-            // forcing the elbow through the torso. The all-ones defaults are
-            // intentionally identical to the old profile.
-            float fold_progress = progress;
-            if (finger_index >= 0) {
-                fold_progress *= core::maxf(tuning.wing_finger_fold_scale, 0.0f);
-            } else if (index_in_chain > 0) {
-                const bool is_wrist = root_len >= 3 &&
-                                      size_t(index_in_chain + 1) == root_len;
-                const float scale = is_wrist ? tuning.wing_wrist_fold_scale
-                                             : tuning.wing_elbow_fold_scale;
-                fold_progress *= core::maxf(scale, 0.0f);
-            }
+            const float flap_angle = (local_base * sign + roll_lean) *
+                                         flap_weight_at(size_t(depth)) * flap_normalize +
+                                     stow_angle * sign;
+
+            // Folding closes progressively toward the tip, which is how a wing
+            // actually stows. A generated wing has shoulder -> elbow -> hand,
+            // while an imported wing commonly has shoulder -> elbow -> wrist
+            // followed by several finger chains, so the fold is scaled by the
+            // anatomical station: a long finger chain can close without forcing
+            // the elbow through the torso. The all-ones defaults leave the
+            // original progressive profile.
+            const float progress = progress_at(size_t(index_in_chain), size_t(chain_length));
+            const float fold_progress =
+                fold_share(size_t(index_in_chain), size_t(chain_length), finger_index >= 0);
             const float sweep = core::radians(sweep_deg) * sign * aft *
-                                (0.4f + 0.6f * progress) * normalize;
+                                (0.4f + 0.6f * progress) * sweep_normalize;
             // Recovery compacts the outer wing first and then lets it reopen
             // before the phase wraps. Multiplying by the extension envelope
             // makes the timed term zero at both ends of the cycle, avoiding a
@@ -875,9 +1025,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 recovery_compact * (1.0f - recovery_extend) * recovery_depth;
             const float fold = (core::radians(fold_deg) + upstroke_fold * progress +
                                 flap_fold + recovery_fold) *
-                               fold_progress * sign * aft * normalize;
+                               fold_progress * sign * aft * fold_normalize;
             const float flare_angle =
-                core::radians(tuning.brake_flare_deg) * flare * sign * normalize;
+                core::radians(tuning.brake_flare_deg) * flare * sign * flare_normalize;
 
             // Flutter and twist live on the fingers only -- the arm is bone.
             // Flutter grows toward the tip (progress squared: the membrane
@@ -893,9 +1043,10 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 finger_twist = twist * progress * normalize;
             }
 
-            // Flap is a rotation about the body's forward axis; sweep is about
-            // the body's up axis.
-            rotate_joint(joint, Vec3::unit_y(), sweep + fold, Vec3::unit_z(),
+            // Flap is a rotation about the body's forward axis; sweep and fold
+            // are the same in-plane rotation about the wing's own hinge, which
+            // is body up only for a wing bound level.
+            rotate_joint(joint, wing_fold_axis_[side], sweep + fold, Vec3::unit_z(),
                          flap_angle - flare_angle + flutter);
             if (std::fabs(finger_twist) > 1e-5f) {
                 rotate_joint(joint, Vec3::unit_x(), finger_twist, true);
@@ -1895,7 +2046,8 @@ void trim_stub_base(const Skeleton& skeleton, std::vector<int>& chain) {
 // it; a genuine branch -- the fingers off a hand, the toes off a foot -- does.
 // `stop_at` ends the chain before a joint the caller wants to own separately.
 std::vector<int> descend_main(const Skeleton& skeleton, int start,
-                              const std::vector<int>& stop_at = {}) {
+                              const std::vector<int>& stop_at = {},
+                              bool extend_into_leaf = false) {
     std::vector<int> chain;
     int current = start;
     while (current != NO_PARENT) {
@@ -1904,7 +2056,31 @@ std::vector<int> descend_main(const Skeleton& skeleton, int start,
         if (stop && !chain.empty()) break;
         chain.push_back(current);
         const std::vector<int> next = branches_of(skeleton, current);
-        if (next.size() != 1) break;
+        if (next.size() != 1) {
+            // A chain that ran out of SIGNIFICANT children may still have one
+            // more real bone below it: `significant_children` needs a subtree of
+            // two, so any bone whose child is a leaf ends one bone early. That
+            // rule was written for the first asset, whose leaves are genuine
+            // `_end` export artifacts carrying no vertices -- and it is wrong
+            // for every other asset here. The wyvern's four finger ribs
+            // (`wing_finger_Nb`) are leaves holding roughly half the membrane,
+            // and the Prowler's third phalanges are leaves too; all of them rode
+            // rigidly on their parent, which is why a finger could only swing at
+            // its base and the membrane had no knuckle to furl at.
+            //
+            // Only when the chain has ALREADY terminated and there is exactly
+            // one child: a lone leaf beside a real branch is a corrective (the
+            // Prowler's elbow helpers), and treating it as a branch would end
+            // the arm at the shoulder.
+            if (extend_into_leaf && next.empty()) {
+                const std::vector<int> leaves = children_of(skeleton, current);
+                if (leaves.size() == 1 &&
+                    skeleton.joint(leaves[0]).name.find("_end") == std::string::npos) {
+                    chain.push_back(leaves[0]);
+                }
+            }
+            break;
+        }
         current = next[0];
     }
     return chain;
@@ -1966,10 +2142,10 @@ DragonJoints map_dragon_joints(const Skeleton& skeleton) {
 
         // Shared arm first: descend the main line. Where it genuinely
         // branches, each branch is a finger.
-        j.wing_root[side] = descend_main(skeleton, best);
+        j.wing_root[side] = descend_main(skeleton, best, {}, true);
         const int branch_point = j.wing_root[side].back();
         for (const int finger_base : branches_of(skeleton, branch_point)) {
-            j.wing_fingers[side].push_back(descend_main(skeleton, finger_base));
+            j.wing_fingers[side].push_back(descend_main(skeleton, finger_base, {}, true));
         }
         // A wing with no branches (a simple three-bone arm) keeps its last bone
         // as a single "finger", so downstream code always has one.

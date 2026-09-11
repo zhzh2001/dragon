@@ -79,7 +79,14 @@ void FlightModel::step(const FlightInput& input, const Terrain* terrain, float d
         state_.grounded = false;
     }
     flap_was_down_ = flap_pressed;
-    state_.wing_tuck = core::damp(state_.wing_tuck, core::saturate(input.tuck), 0.12f, dt);
+    // A standing animal folds its wings without being asked. The studio's
+    // grounded scenario has always assumed this -- it sets a full tuck itself --
+    // but the game did not, so a landed dragon stood with its wings half open
+    // unless the player kept holding the dive key. Lift is moot on the ground,
+    // so this costs the force model nothing.
+    const float tuck_command =
+        state_.grounded ? 1.0f : core::saturate(input.tuck);
+    state_.wing_tuck = core::damp(state_.wing_tuck, tuck_command, 0.12f, dt);
     state_.wing_brake = core::damp(state_.wing_brake, core::saturate(input.brake), 0.10f, dt);
 
     integrate_rotation(input, dt);

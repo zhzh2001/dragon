@@ -1430,23 +1430,37 @@ float measured_stroke_fraction(const Skeleton& skeleton, const anim::DragonJoint
                                const anim::RigTuning& tuning) {
     // The outermost joint of the longest chain on one wing: the tip whose
     // travel the player reads as the size of the wingbeat.
-    int tip = joints.wing_root[0].back();
+    std::vector<int> tip_chain = joints.wing_root[0];
     size_t longest = 0;
     for (const std::vector<int>& finger : joints.wing_fingers[0]) {
         if (finger.size() > longest && !finger.empty()) {
             longest = finger.size();
-            tip = finger.back();
+            tip_chain = finger;
         }
     }
+    const int tip = tip_chain.back();
     const int shoulder = joints.wing_root[0].front();
-    const float span = length((skeleton.world_bind(tip).col[3] -
-                               skeleton.world_bind(shoulder).col[3]).xyz());
+
+    // The reference point is one bone-length beyond the outermost joint, not
+    // the joint itself: the membrane carries on past the last rib, that is what
+    // the player watches, and it is what drive_wings normalizes its leverage
+    // to. Carried as a point in the tip joint's own space so the posed position
+    // comes straight out of that joint's world matrix, scale and all.
+    const int stem = tip_chain.size() >= 2 ? tip_chain[tip_chain.size() - 2] : shoulder;
+    const Vec3 tip_bind = skeleton.world_bind(tip).translation_part();
+    const Vec3 stem_bind = skeleton.world_bind(stem).translation_part();
+    const Vec3 membrane_bind = tip_bind + (tip_bind - stem_bind);
+    const Vec3 membrane_local =
+        transform_point(inverse(skeleton.world_bind(tip)), membrane_bind);
+    const float span = length(membrane_bind -
+                              skeleton.world_bind(shoulder).translation_part());
     if (span < 0.01f) return 0.0f;
 
     auto elevation_deg = [&](float wing_angle_deg) {
         anim::DragonRig rig;
         rig.init(skeleton, joints);
         rig.tuning = tuning;
+        rig.tuning.upstroke_fold_deg = 0.0f;
         game::FlightState s;
         s.velocity = Vec3{0.0f, 0.0f, -30.0f};
         s.airspeed = 30.0f;
@@ -1454,17 +1468,23 @@ float measured_stroke_fraction(const Skeleton& skeleton, const anim::DragonJoint
         s.wing_angle = radians(wing_angle_deg);
         s.flap_amplitude = 1.0f;
         for (int i = 0; i < 180; ++i) rig.update(s, 1.0f / 60.0f);
-        const Vec3 d = rig.world_matrices()[size_t(tip)].col[3].xyz() -
+        const Vec3 d = transform_point(rig.world_matrices()[size_t(tip)], membrane_local) -
                        rig.world_matrices()[size_t(shoulder)].col[3].xyz();
         return degrees(std::asin(clampf(d.y / span, -1.0f, 1.0f)));
     };
 
     // The flight model's own stroke, top of the upbeat to bottom of the
-    // downbeat: FlightTuning::flap_up_angle_deg and flap_down_angle_deg.
+    // downbeat: FlightTuning::flap_up_angle_deg and flap_down_angle_deg. A
+    // model profile may cap the visual stroke below that (wing_flap_limit_deg)
+    // for a rig whose membranes cross at the full angle, so measure against the
+    // stroke this model is actually allowed to fly.
     const game::FlightTuning flight;
-    const float commanded = flight.flap_up_angle_deg - flight.flap_down_angle_deg;
-    return (elevation_deg(flight.flap_up_angle_deg) -
-            elevation_deg(flight.flap_down_angle_deg)) / commanded;
+    float up = flight.flap_up_angle_deg, down = flight.flap_down_angle_deg;
+    if (tuning.wing_flap_limit_deg > 0.0f) {
+        up = std::min(up, tuning.wing_flap_limit_deg);
+        down = std::max(down, -tuning.wing_flap_limit_deg);
+    }
+    return (elevation_deg(up) - elevation_deg(down)) / (up - down);
 }
 
 void test_wingtip_reaches_the_commanded_flap() {

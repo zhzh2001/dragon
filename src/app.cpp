@@ -1872,6 +1872,12 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("outer beat delay", &rig.wing_phase_delay, 0.0f, 0.10f, "%.3f cycles");
         ImGui::SliderFloat("recovery fold", &rig.wing_recovery_fold_deg, 0.0f, 40.0f, "%.0f deg");
         ImGui::SliderFloat("reopen phase", &rig.wing_recovery_extend_phase, 0.5f, 0.95f);
+        ImGui::SeparatorText("standing stow");
+        ImGui::SliderFloat("stow sweep", &rig.ground_stow_sweep_deg, 0.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("stow fold", &rig.ground_stow_fold_deg, 0.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("stow wrist up", &rig.ground_stow_wrist_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("stow finger down", &rig.ground_stow_finger_deg, -180.0f, 0.0f,
+                           "%.0f deg");
     }
 
     if (ImGui::CollapsingHeader("Neck & tail dynamics", ImGuiTreeNodeFlags_DefaultOpen)) {

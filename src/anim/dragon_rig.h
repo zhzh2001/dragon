@@ -134,6 +134,35 @@ struct RigTuning {
     // kinematics, and what keeps the two raised wings from crossing over the
     // spine at the top of the beat.
     float upstroke_fold_deg = 24.0f;
+    // Standing stance. A tuck alone is a folded wing held out from the body --
+    // the shape a diving animal makes, not a standing one. A wyvern at rest
+    // carries the wrist HIGH, above the shoulder, and lets the finger ribs hang
+    // down the flank, so the membrane stows in a narrow closed bundle instead
+    // of draping outward like a cape. Both angles are the total each station
+    // reaches, spread evenly along its chain, and both fade in with ground
+    // contact. Zero leaves the old tuck-only stance.
+    //
+    // This matters most for a model with no authored idle: on the ground the
+    // artist's stance normally wins the whole body, and the two generated
+    // assets ship no clip at all, so the procedural pose is the only pose.
+    // The extra sweep and fold a standing wing closes through, on top of
+    // whatever the tuck is already asking for. They are separate from
+    // tuck_sweep_deg and tuck_fold_deg because the two poses want opposite
+    // things: a stoop that closes as hard as a standing fold puts the two
+    // membranes through each other across the chest, and a standing fold as
+    // open as a comfortable stoop is a bat cape. Flight is the tuck, the ground
+    // adds the rest.
+    //
+    // Off by default. It is a strong, shape-specific pose and the right angles
+    // depend on where a rig puts its wrist: the two downloaded assets have a
+    // wing root of two bones whose joints bind at the model origin, and any
+    // stow at all folds them into a slab rather than a bundle. Their grounded
+    // wings are a separate, asset-level problem -- neither ships a folded
+    // stance to fall back on. Profiled per model, like every other angle here.
+    float ground_stow_sweep_deg = 0.0f;
+    float ground_stow_fold_deg = 0.0f;
+    float ground_stow_wrist_deg = 0.0f;
+    float ground_stow_finger_deg = 0.0f;
 
     // ---- neck and tail dynamics ----
     //
@@ -527,6 +556,15 @@ private:
     // the flap by leverage rather than by count is what makes the visible
     // stroke equal the angle the flight model commanded.
     std::vector<float> wing_flap_leverage_[2];
+    // The axis a wing folds and sweeps about: the normal of the plane fitted
+    // through that wing's bind-pose joints. Body up is only the right hinge for
+    // a wing that is bound level, which two of the four assets are and two are
+    // not -- the generated sculpts carry their membranes draped aft-down, 44
+    // degrees off horizontal on the wyvern. Folding such a wing about body up
+    // rotates its segments up to 61 degrees out of their own membrane plane and
+    // shears the inner membrane through the flank; about the plane normal they
+    // stay within 6. Measured in init(), model space, so no frame conversion.
+    core::Vec3 wing_fold_axis_[2] = {core::Vec3::unit_y(), core::Vec3::unit_y()};
     Pose pose_;
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
