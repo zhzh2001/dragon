@@ -1878,6 +1878,9 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("stow wrist up", &rig.ground_stow_wrist_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("stow finger down", &rig.ground_stow_finger_deg, -180.0f, 0.0f,
                            "%.0f deg");
+        ImGui::SliderFloat("stow zigzag", &rig.ground_stow_close_deg, 0.0f, 160.0f, "%.0f deg");
+        ImGui::SliderFloat("stow fan close", &rig.ground_stow_converge_deg, 0.0f, 120.0f,
+                           "%.0f deg");
     }
 
     if (ImGui::CollapsingHeader("Neck & tail dynamics", ImGuiTreeNodeFlags_DefaultOpen)) {

@@ -163,6 +163,28 @@ struct RigTuning {
     float ground_stow_fold_deg = 0.0f;
     float ground_stow_wrist_deg = 0.0f;
     float ground_stow_finger_deg = 0.0f;
+    // How far the arm ZIGZAGS shut, in degrees at each of the two hinges.
+    //
+    // This is the term that actually closes a wing, and the rest of the fold
+    // cannot do its job. Every other rotation here runs the same way down the
+    // chain: progressive, same sign, a fan. A fan SWEEPS a membrane, it never
+    // closes one -- which is why a wyvern with its wings "folded" still stood
+    // holding two full open sails up over its back. A real wing shuts by
+    // alternating: the forearm folds back against the humerus and the hand
+    // folds back against the forearm, and the membrane collapses into the
+    // pleats between them. The elbow takes this angle one way and the wrist
+    // the other.
+    float ground_stow_close_deg = 0.0f;
+    // How far the outermost finger rib swings toward the innermost, closing
+    // the fan. The other ribs take a proportional share, so the whole hand
+    // shuts like a paper fan rather than staying spread.
+    //
+    // Without this a "folded" wing keeps its ribs at the full bind spread and
+    // the membrane between them stays open, however far the arm zigzags. It
+    // shows up worst on a rig whose finger bases are COINCIDENT -- the wyvern's
+    // four ribs all start at the wrist and, receiving identical rotations, can
+    // never converge however hard the fold is driven.
+    float ground_stow_converge_deg = 0.0f;
 
     // ---- neck and tail dynamics ----
     //

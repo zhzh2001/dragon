@@ -332,6 +332,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_stow_fold_deg),
     RIG_FLOAT_FIELD(ground_stow_wrist_deg),
     RIG_FLOAT_FIELD(ground_stow_finger_deg),
+    RIG_FLOAT_FIELD(ground_stow_close_deg),
+    RIG_FLOAT_FIELD(ground_stow_converge_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -950,6 +952,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
 
         int depth = 0;
         int finger_index = -1;  // -1 while walking the shared root
+        const int finger_count = int(joints_.wing_fingers[side].size());
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
             const float delay = core::clampf(tuning.wing_phase_delay, 0.0f, 0.25f) *
@@ -1023,9 +1026,28 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float recovery_fold =
                 core::radians(tuning.wing_recovery_fold_deg) * beat_strength *
                 recovery_compact * (1.0f - recovery_extend) * recovery_depth;
+            // The zigzag closure is NOT normalized and NOT progressive: it is
+            // two opposed hinge angles at two named joints, which is what a
+            // wing shutting actually is. Everything else here is a fan.
+            float close = 0.0f;
+            if (stow > 1e-4f && index_in_chain > 0 && finger_index < 0) {
+                const bool is_wrist = root_len >= 3 &&
+                                      size_t(index_in_chain + 1) == root_len;
+                close = core::radians(tuning.ground_stow_close_deg) * stow *
+                        (is_wrist ? 1.0f : -1.0f);
+            }
+            // The fan shuts: each rib swings toward the innermost one, by a
+            // share of the full closure. Applied at the finger's BASE so the
+            // whole rib and its membrane come with it.
+            if (stow > 1e-4f && finger_index > 0 && index_in_chain == 0 &&
+                finger_count > 1) {
+                close -= core::radians(tuning.ground_stow_converge_deg) * stow *
+                         float(finger_index) / float(finger_count - 1);
+            }
             const float fold = (core::radians(fold_deg) + upstroke_fold * progress +
                                 flap_fold + recovery_fold) *
-                               fold_progress * sign * aft * fold_normalize;
+                                   fold_progress * sign * aft * fold_normalize +
+                               close * sign * aft;
             const float flare_angle =
                 core::radians(tuning.brake_flare_deg) * flare * sign * flare_normalize;
 
