@@ -1,0 +1,56 @@
+{
+  "source": "mossback-cand-oneshot.glb",
+  "source_sha256": "7aa7002c8d0838da2b9f044c9629f60ae38d451106d9846062d48fafbe3846c4",
+  "source_triangles": 1465612,
+  "triangles": 80000,
+  "vertices": 39918,
+  "bones": 37,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; heat-weight jaw (jaw_mask null)",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 53296212,
+  "reference_span": {
+    "axis": "y",
+    "metres": 4.5
+  },
+  "ground_offset": 1.7179787846569579,
+  "repaired_zero_tangents": 7,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    0.9999401569366455,
+    0.9999341368675232,
+    0.9999511241912842
+  ],
+  "bone_fit_bias": [
+    -1.6957521438598633e-05,
+    -1.1563301086425781e-05,
+    5.068835662314086e-08
+  ]
+}

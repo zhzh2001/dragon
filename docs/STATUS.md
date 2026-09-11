@@ -66,6 +66,40 @@ What is built, in the order it was built. The plan these came from is
   `tools/repair_model_materials.py` bakes AO from the mesh, rebuilds roughness
   from geometric zones and derives a detail normal; the repaired files take
   the plain names and the untouched originals are kept as `<name>-raw.glb`.
+- **Three encounter creatures, and the generation pipeline generalised past
+  dragons.** `ashcoil.glb` (a legless serpentine sky-wyrm, for the rival
+  dragon), `cragjaw.glb` (a wingless armoured ground drake, for the ground
+  defence) and `mossback.glb` (a wingless horned grazer, for the prey herd) --
+  one per encounter kind in `DIRECTION.md` that had no readable target, and
+  each a body plan the engine had never carried, so they separate by
+  silhouette rather than by the bots' hue push. Concept board, reference
+  sheets and turnarounds in `artifacts/dragon-options/`; three new skeletons
+  in `tools/skeletons/`; all three through the Hunyuan one-shot at 80 K tris
+  with repaired PBR. **Ashcoil loads and flies** -- `neck 3, tail 14, wing
+  root 3/3, fingers 4/4, legs 0/0, front legs 0/0, feet 0, jaw jaw`, with the
+  lateral body wave visible top-down, and no engine change was needed for a
+  legless body. The two wingless ones rig correctly and are then rejected by
+  the loader; see the first two Open questions.
+
+  What this cost in the tooling, all of it lifted into data with defaults that
+  preserve the existing builds: the wing bind-pose levelling is now
+  `wing_bind_level_deg` and skips when there are no wing bones (it was an
+  unconditional `rig.pose.bones['wing_root_l']`, a hard KeyError on anything
+  wingless); the ground-offset wingspan is now `reference_span`; the
+  `jaw_mask` lookup no longer assumes head and jaw groups exist; and the
+  `binding` stat reports the passes that actually ran instead of always
+  claiming the wing field and the Embercrest jaw mask. Re-running the
+  Embercrest build after those changes reproduced `max_weight_sum_error`
+  5.122274160385132e-08 and `ground_offset` 3.9933978544450914 exactly, which
+  is the regression test for this file.
+
+  Also: cutting a turnaround into upload plates is now
+  `tools/split_turnaround.py`. Equal quarters do not work -- a serpent's
+  profile is three times the width of its front view, and on Ashcoil one
+  view's tail tip reaches *past* the next view's wingtip, so there is no blank
+  column to cut on. It labels connected components, and repaints a
+  neighbour that intrudes into a crop; the hand-cut Stormsail plates turn out
+  to carry such fragments.
 
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
@@ -92,6 +126,32 @@ What is built, in the order it was built. The plan these came from is
   its body plan -- `src/anim/dragon_rig.cpp` derives `quadruped` from whether
   the front-leg chains are empty, so it maps with `front legs 0/0` and no
   engine change. Multi-model loading is the missing piece, not the asset.
+  There are now **four** rigged creatures waiting on it, not one:
+  `stormsail.glb`, `ashcoil.glb`, `cragjaw.glb` and `mossback.glb`. Ashcoil is
+  the strongest argument for doing the work -- it is a legless serpent, so a
+  rival flight containing it and the hero dragon would differ in silhouette
+  rather than in hue.
+- **A rig without wings is rejected outright.** `DragonJoints::valid()`
+  (`src/anim/dragon_rig.h:58`) returns true only when `wing_root` is non-empty
+  on *both* sides, so `app.cpp:146` logs "imported skeleton has no
+  recognisable wings; falling back" and substitutes the 218-vertex generated
+  dragon. Both wingless creatures hit this: `cragjaw.glb` and `mossback.glb`
+  map their chains correctly first -- `wing root 0/0, fingers 0/0, legs 3/3,
+  front legs 3/3, feet 4, jaw jaw` -- and are then discarded. The gate is
+  doing a real job (a genuinely unmapped skeleton should fall back), so the
+  fix is to widen the test rather than delete it: wings on both sides *or*
+  legs on both sides. Whatever else assumes wings exist has to be checked at
+  the same time, starting with `find_wingtips`.
+- **Model scale assumes the X extent is a wingspan.** `app.cpp:166` is
+  `scale = 19.0f / extent.x`, which held for every asset so far because they
+  were all winged and X *was* the wingspan. On a wingless body X is merely
+  body width, so Cragjaw would enter the world 50 m long and Mossback 40 m
+  long and 30 m tall -- 4x and 9x oversize. The skeletons already record the
+  intent (`"reference_span": {"axis": "y", "metres": 12}` and `4.5`), and the
+  rigger writes it into the `.flight.cfg` comment, but nothing reads it:
+  `asset_.scale` is computed at load, before the cfg files are read. Wiring it
+  up is a small change with an ordering wrinkle, and it is a prerequisite for
+  either wingless creature appearing at a believable size.
 - **Nothing collides with a tree.** Vegetation is visual only.
 - **The default asset's grounded wings are a wide flat drape.** Its wing root
   chain is two bones that bind at the model origin, so the shoulder sweep

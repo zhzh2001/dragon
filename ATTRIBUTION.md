@@ -11,13 +11,25 @@ The GLB and its `.blend` are not committed; rebuild them with Blender as
 described in `docs/EMBERCREST.md`. It is kept as a reference attempt and is
 not the hero model.
 
-## Cloud-generated candidates: assets/embercrest-textured.glb, assets/stormsail.glb
+## Cloud-generated creatures
 
-Generated with **Tencent Hunyuan 3D Studio** (`3d.hunyuan.tencent.com`) on its
-free tier, from original concept art made for this project, then decimated and
-rigged locally by `tools/rig_embercrest_candidate.py`. The full procedure is in
+`assets/embercrest-textured.glb`, `assets/stormsail.glb`, `assets/ashcoil.glb`,
+`assets/cragjaw.glb`, `assets/mossback.glb`.
+
+Generated with **Tencent Hunyuan 3D** (`3d.hunyuan.tencent.com`) on its free
+tier, from original concept art made for this project, then decimated and
+rigged locally by `tools/rig_embercrest_candidate.py` and finished by
+`tools/repair_model_materials.py`. The full procedure is in
 `docs/MODEL_GENERATION.md`; the one-shot generation step is in
 `tools/hunyuan_oneshot.md`.
+
+| Asset | Design | Generated |
+|---|---|---|
+| `embercrest-textured.glb` | Embercrest, winged quadruped | Studio, staged chain |
+| `stormsail.glb` | Stormsail, wyvern | one-shot |
+| `ashcoil.glb` | Ashcoil, serpentine sky-wyrm | one-shot |
+| `cragjaw.glb` | Cragjaw, armoured ground drake | one-shot |
+| `mossback.glb` | Mossback, horned grazer | one-shot |
 
 - **Licence: UNRESOLVED.** The hosted Studio's terms of service were never
   fetched or read. This is tracked as the first open question in

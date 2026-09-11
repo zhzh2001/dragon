@@ -9,27 +9,46 @@ The findings behind these live in `docs/MODEL_GENERATION.md`.
 
 ## Upload these
 
-`views/` holds the five images to feed a generator, named in the order
-Hunyuan Studio's 上传多视图 slots appear (see the runbook in
-`docs/MODEL_GENERATION.md`):
+Each creature has a `*-views/` directory holding the plates to feed a
+generator, named for the slot each one goes in (see the runbook in
+`docs/MODEL_GENERATION.md` and `tools/hunyuan_oneshot.md`):
 
 | File | Slot |
 |---|---|
-| `views/1-front.png` | 正图 — front, the only required one |
-| `views/2-back.png` | 背图 — back |
-| `views/3-left.png` | 左图 — left |
-| `views/4-right.png` | 右图 — right |
-| `views/5-top.png` | 顶图 — top |
+| `1-front.png` | 正图 — front, the only required one |
+| `2-back.png` | 背图 — back |
+| `3-left.png` | 左图 — left |
+| `4-right.png` | 右图 — right |
+| `5-top.png` | 顶图 — top, **Studio only** |
 
-Leave 底图 and the two 45° slots empty. **Upload these as they are** — the
-grey background stays on. Hunyuan runs subject segmentation itself, and the
-RGBA cutouts the *local* pipeline needs are wasted work here.
+| Directory | Creature | Plates |
+|---|---|---|
+| `views/` | Embercrest | five — a Studio run, so it has a top view |
+| `stormsail-views/` | Stormsail | four |
+| `ashcoil-views/` | Ashcoil | four |
+| `cragjaw-views/` | Cragjaw | four |
+| `mossback-views/` | Mossback | four |
 
-For 纹理绘制 (texture), 图生纹理 takes `views/1-front.png` alone.
+**The one-shot takes four, the Studio took five.** `views/` keeps its top
+plate because it fed 上传多视图 in Hunyuan Studio; every set since is a
+four-view turnaround, because the one-shot wants 顶/底/45° left empty. Leave
+底图 and the two 45° slots empty in both cases.
 
-These are the four panels of `embercrest-turnaround.png` plus the top-down
-panel of `embercrest-reference-sheet.png`, and **this is the set to use** —
-it is what produced `assets/embercrest-textured.glb`, the best asset so far.
+**Upload these as they are** — the grey background stays on. Hunyuan runs
+subject segmentation itself, and the RGBA cutouts the *local* pipeline needs
+are wasted work here.
+
+**The slot order is not the panel order, and neither is the DOM order.** The
+one-shot lays its file inputs out 顶 左45° 正 右45° 左 右 背 底, so uploading
+by position puts the front view in the top slot; read each input's own label.
+A turnaround is *drawn* front, left, back, right, so panels 2 and 3 swap when
+they are named. `tools/split_turnaround.py` does the cutting and the naming.
+
+For 纹理绘制 (texture), 图生纹理 takes the set's `1-front.png` alone.
+
+`views/` is the four panels of `embercrest-turnaround.png` plus the top-down
+panel of `embercrest-reference-sheet.png`, and **for Embercrest this is the
+set to use** — it is what produced `assets/embercrest-textured.glb`.
 
 A higher-resolution set was generated (one full-frame image per view, 1536
 wide, ~1450 px of dragon instead of ~540) and then deleted, because it made
@@ -50,9 +69,27 @@ same doc), so ~540 px of dragon is already above what it consumes.
 |---|---|
 | `concepts.png` | The three original designs, A Embercrest / B Stormsail / C Ironroot. Embercrest is the one taken forward |
 | `prompt.txt` | The prompt that produced `concepts.png` |
-| `embercrest-reference-sheet.png` | Embercrest for a human: front, side, top plus head, wing-root and foot insets |
-| `stormsail-reference-sheet.png`, `ironroot-reference-sheet.png` | The same for the two designs not taken forward |
-| `embercrest-turnaround.png` | Embercrest for a *generator*: front, left, back, right in one pose, one scale, one eye level. The reference sheets are not usable this way — their side view is a different pose from their front, and a multi-view generator reads that as two animals |
+| `concepts-hoard-run.png` | The three hoard-run designs, A Ashcoil / B Cragjaw / C Mossback. All three were taken forward |
+| `prompt-hoard-run.txt` | The prompt that produced it |
+| `*-reference-sheet.png` | The creature for a human: front, side and top plus detail insets. Six exist — Embercrest, Stormsail, Ironroot, Ashcoil, Cragjaw, Mossback. Ironroot is the only one never built |
+| `*-turnaround.png` | The creature for a *generator*: front, left, back, right in one pose, one scale, one eye level. The reference sheets are not usable this way — their side view is a different pose from their front, and a multi-view generator reads that as two animals |
+
+The chain is **concepts board → reference sheet → turnaround → plates**, and
+each step references the step before it, never a derivative of it: image-to-image
+drift compounds and is invisible in a bounding box (see `docs/MODEL_GENERATION.md`).
+
+### The hoard-run three
+
+Designed against the encounter table in `docs/DIRECTION.md` — one creature per
+encounter kind that had no readable target yet, and each a body plan the engine
+had never carried, so they separate by silhouette at flight range instead of by
+hue push.
+
+| Design | Encounter kind | Body plan |
+|---|---|---|
+| **Ashcoil**, a serpentine sky-wyrm | rival dragon, elite | legless: one snake trunk, two wings behind the skull, four finger ribs |
+| **Cragjaw**, an armoured ground drake | ground defence | wingless quadruped, heavy plates, long tail |
+| **Mossback**, a shaggy horned grazer | prey herd | wingless quadruped, hooves, stub tail |
 
 ## Comparisons
 
@@ -72,6 +109,11 @@ same doc), so ~540 px of dragon is already above what it consumes.
 ## The meshes are not here
 
 Generated GLBs and their texture sets live in `assets/` and are gitignored
-(`assets/embercrest-cand-*.glb`, `assets/embercrest-textures/`) — large,
-regenerable from the service, and under hosted terms nobody fetched. See
-`ATTRIBUTION.md` and the pipeline section of `docs/MODEL_GENERATION.md`.
+(`assets/*.glb` covers every candidate and every rigged build; also
+`assets/embercrest-textures/`) — large, regenerable from the service, and
+under hosted terms nobody fetched. See `ATTRIBUTION.md` and the pipeline
+section of `docs/MODEL_GENERATION.md`.
+
+What a finished creature leaves behind in the repo is the plates above, the
+skeleton in `tools/skeletons/`, and the acceptance record in
+`artifacts/<name>/` — everything needed to rebuild the mesh, not the mesh.

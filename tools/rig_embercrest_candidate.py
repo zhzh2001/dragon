@@ -159,6 +159,7 @@ def continuous_top_four(weights):
 # skips this entirely rather than feeding an empty candidate set into
 # continuous_top_four, which would index ordered[0] on an empty list.
 WING=SKEL.get('wing_field')
+WING_FIELD_RAN=bool(any(wing_bones.values()) and WING)
 if not any(wing_bones.values()) or WING is None:
     print('WING_FIELD_SKIPPED',
           'no wing* bones' if not any(wing_bones.values()) else 'no wing_field in skeleton',
@@ -197,7 +198,17 @@ bpy.ops.object.vertex_group_normalize_all(lock_active=False)
 # for another head opts out with "jaw_mask": null and keeps the heat weights.
 JAW_MASK=SKEL.get('jaw_mask','embercrest')
 if JAW_MASK is None:print('JAW_MASK_SKIPPED','skeleton sets jaw_mask null',flush=True)
-head_group=body.vertex_groups['head'];jaw_group=body.vertex_groups['jaw']
+# A sealed-mouth sculpt gives heat nothing to split on, so the mandible ends
+# up half head, half jaw and the gape is a muzzle bend. The generic form is a
+# plane in canonical coordinates, authored per skeleton:
+#   "jaw_mask": {"type": "plane", "x_max": .035, "y_min": .25,
+#                "line": [[y0, z0], [y1, z1]], "hinge_blend": [ya, yb]}
+# Below the (y,z) line within the box is jaw, blended in over hinge_blend.
+JAW_PLANE=JAW_MASK if isinstance(JAW_MASK,dict) and JAW_MASK.get('type')=='plane' else None
+if JAW_PLANE:print('JAW_MASK_PLANE',json.dumps(JAW_PLANE),flush=True)
+head_group=body.vertex_groups.get('head');jaw_group=body.vertex_groups.get('jaw')
+if (JAW_MASK=='embercrest' or JAW_PLANE) and (head_group is None or jaw_group is None):
+    raise RuntimeError('jaw_mask "embercrest" needs head and jaw bones; set "jaw_mask": null for a skeleton without them')
 for v in (body.data.vertices if JAW_MASK=='embercrest' else []):
     co=canonical(v.co)
     x,y,z=co
@@ -216,6 +227,17 @@ for v in (body.data.vertices if JAW_MASK=='embercrest' else []):
         # Lower mandible slopes down toward the muzzle. Upper teeth remain skull.
         jaw_line=.363 - .16*(y-.30)
         (jaw_group if z<jaw_line else head_group).add([v.index],1,'REPLACE')
+for v in (body.data.vertices if JAW_PLANE else []):
+    x,y,z=canonical(v.co)
+    if abs(x)>JAW_PLANE['x_max'] or y<JAW_PLANE['y_min']:continue
+    (y0,z0),(y1,z1)=JAW_PLANE['line']
+    split=z0+(z1-z0)*(y-y0)/(y1-y0)
+    if z>=split:continue
+    share=smoothstep(*JAW_PLANE['hinge_blend'],y)
+    if share<=0:continue
+    for gi in [g.group for g in v.groups]:body.vertex_groups[gi].remove([v.index])
+    jaw_group.add([v.index],share,'REPLACE')
+    if share<1:head_group.add([v.index],1-share,'REPLACE')
 # Normalize explicitly after edits; vertex-group collection elements are live.
 for v in body.data.vertices:
     entries=[(g.group,g.weight) for g in v.groups if g.weight>0]
@@ -225,12 +247,19 @@ for v in body.data.vertices:
 # Remove the sculpt's raised shoulder angle from the runtime bind pose.
 # Counter-rotate the wrist so the outer membrane remains spread and level.
 # Bake mesh and skeleton together; no scale or pose correction is needed in game.
+# The angle is per skeleton ("wing_bind_level_deg", default 35, the Embercrest
+# value); a skeleton without wing_root/wing_wrist bones skips the pass.
 for pb in rig.pose.bones:pb.rotation_mode='QUATERNION'
+WING_LEVEL_DEG=SKEL.get('wing_bind_level_deg',35)
+WING_LEVELLED=False
 for sign,suffix in [(-1,'l'),(1,'r')]:
-    for prefix,degrees in [('wing_root_',35),('wing_wrist_',-35)]:
+    for prefix,degrees in [('wing_root_',WING_LEVEL_DEG),('wing_wrist_',-WING_LEVEL_DEG)]:
+        if prefix+suffix not in rig.pose.bones:continue
         pb=rig.pose.bones[prefix+suffix]
         axis=pb.bone.matrix_local.to_quaternion().inverted()@Vector((0,1,0))
         pb.rotation_quaternion=Quaternion(axis,math.radians(sign*degrees))
+        WING_LEVELLED=True
+if not WING_LEVELLED:print('WING_LEVEL_SKIPPED','no wing_root/wing_wrist bones',flush=True)
 bpy.context.view_layer.update()
 bpy.ops.object.select_all(action='DESELECT');body.select_set(True)
 bpy.context.view_layer.objects.active=body
@@ -295,8 +324,9 @@ bpy.ops.export_scene.gltf(filepath=str(GLB),export_format='GLB',use_selection=Tr
 tangent_repairs=repair_tangents(GLB)
 # Presentation camera/light are only in the editable Blender source.
 camdata=bpy.data.cameras.new('Preview Camera');cam=bpy.data.objects.new('Preview Camera',camdata);scene.collection.objects.link(cam);scene.camera=cam
-camdata.type='ORTHO';camdata.ortho_scale=1.45
-cam.location=(1.3,1.9,1.0);target=Vector((0,-.08,.24));cam.rotation_euler=(target-cam.location).to_track_quat('-Z','Y').to_euler()
+PREVIEW=SKEL.get('preview',{})
+camdata.type='ORTHO';camdata.ortho_scale=PREVIEW.get('ortho_scale',1.45)
+cam.location=tuple(PREVIEW.get('camera',(1.3,1.9,1.0)));target=Vector(tuple(PREVIEW.get('target',(0,-.08,.24))));cam.rotation_euler=(target-cam.location).to_track_quat('-Z','Y').to_euler()
 scene.render.engine='CYCLES';scene.cycles.samples=16;scene.cycles.use_denoising=True
 scene.world.color=(.18,.18,.18)
 for name,loc,power in [('Key',(1,2,3),100),('Fill',(-2,1,1),70),('Rim',(0,-2,2),130)]:
@@ -326,14 +356,27 @@ rig.select_set(True);bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='POSE')
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/(STEM+'.blend')),compress=True)
 weights=[sum(g.weight for g in v.groups) for v in body.data.vertices]
-stats={'source':SOURCE.name,'source_sha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),'source_triangles':original_faces,'triangles':len(body.data.polygons),'vertices':len(body.data.vertices),'bones':len(bones),'max_influences':max(len(v.groups) for v in body.data.vertices),'max_weight_sum_error':max(abs(w-1) for w in weights),'unweighted_vertices':sum(w==0 for w in weights),'binding':'Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind' if TEXTURED else 'Bone heat body; continuous top-four wing field; rigid skull/jaw; level wing bind','material':'Preserved source UVs and PBR textures' if TEXTURED else 'Neutral clay; source contains no UV or texture','glb_bytes':GLB.stat().st_size}
+stats={'source':SOURCE.name,'source_sha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),'source_triangles':original_faces,'triangles':len(body.data.polygons),'vertices':len(body.data.vertices),'bones':len(bones),'max_influences':max(len(v.groups) for v in body.data.vertices),'max_weight_sum_error':max(abs(w-1) for w in weights),'unweighted_vertices':sum(w==0 for w in weights),'binding':'; '.join(['Bone heat body']
+    +(['continuous top-four wing field'] if WING_FIELD_RAN else [])
+    +([('gap-following jaw mask with hinge blend' if TEXTURED else 'rigid skull/jaw')] if JAW_MASK=='embercrest' else ['plane jaw mask with hinge blend'] if JAW_PLANE else ['heat-weight jaw (jaw_mask null)'])
+    +([('level wing bind' if WING_LEVEL_DEG==35 else f'level wing bind {WING_LEVEL_DEG} deg')] if WING_LEVELLED else [])),'material':'Preserved source UVs and PBR textures' if TEXTURED else 'Neutral clay; source contains no UV or texture','glb_bytes':GLB.stat().st_size}
 assert stats['max_influences']<=4 and stats['max_weight_sum_error']<1e-6
 lo=[min(v.co[i] for v in body.data.vertices) for i in range(3)]
 hi=[max(v.co[i] for v in body.data.vertices) for i in range(3)]
-ground=(hi[2]-lo[2])*.5*19/(hi[0]-lo[0])+.02
+# The engine scales a winged asset by its X extent to a 19 m wingspan. A
+# wingless body has no wingspan, so the skeleton says which extent the
+# engine size refers to: "reference_span": {"axis": "y", "metres": 12}.
+# Default is the Embercrest assumption, X = 19 m.
+SPAN=SKEL.get('reference_span',{'axis':'x','metres':19})
+span_axis='xyz'.index(SPAN['axis'])
+ground=(hi[2]-lo[2])*.5*SPAN['metres']/(hi[span_axis]-lo[span_axis])+.02
 GLB.with_suffix('.glb.flight.cfg').write_text(
-    '# Selected Hunyuan: resting sole clearance at the engine 19 m wingspan.\n'
-    f'ground_offset {ground:.6f}\n')
+    ('# Selected Hunyuan: resting sole clearance at the engine 19 m wingspan.\n' if 'reference_span' not in SKEL else
+     f"# {STEM}: resting sole clearance with the {SPAN['axis'].upper()} extent at {SPAN['metres']} m\n"
+     f"# (skeleton reference_span). The engine's 19 m X-extent scale does not fit a\n"
+     f"# wingless body; its model scale must match this span for the offset to hold.\n")
+    +f'ground_offset {ground:.6f}\n')
+stats['reference_span']=SPAN
 stats['ground_offset']=ground
 stats['repaired_zero_tangents']=tangent_repairs
 stats['source_images']=source_images

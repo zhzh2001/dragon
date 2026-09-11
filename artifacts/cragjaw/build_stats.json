@@ -1,0 +1,56 @@
+{
+  "source": "cragjaw-cand-oneshot.glb",
+  "source_sha256": "5914992b5903bc2ddfba2c79a441aca8280b8793f1c8abb4dee2e155861f254f",
+  "source_triangles": 1499904,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 48,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; heat-weight jaw (jaw_mask null)",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 49634900,
+  "reference_span": {
+    "axis": "y",
+    "metres": 12
+  },
+  "ground_offset": 2.845822493067211,
+  "repaired_zero_tangents": 3,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    0.9999550580978394,
+    1.0000354051589966,
+    1.0000274181365967
+  ],
+  "bone_fit_bias": [
+    2.7000904083251953e-05,
+    -7.092952728271484e-06,
+    2.2252782727605336e-08
+  ]
+}

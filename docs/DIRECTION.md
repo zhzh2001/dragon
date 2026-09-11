@@ -133,6 +133,15 @@ Each is one system; the run generator places them.
 | **Pass gate** | Rally ring, match results phase | Placement at the far end, the escape condition | small |
 | **Weather** | Wind in the flight model, fog uniforms | A wind field that varies along the valley, fog banks in side valleys, rain later | medium |
 
+**The readable target each of the first three kinds needed now exists as an
+asset** (2026-09-11): `assets/ashcoil.glb` for the rival dragon,
+`assets/cragjaw.glb` for the ground defence, `assets/mossback.glb` for the
+prey herd. Section 5 has the details. What remains for each is the *system*,
+not the art -- and two engine assumptions block the wingless pair from being
+drawn at all, both recorded under Open questions in `STATUS.md`: a rig without
+wings is rejected outright, and model scale is derived from the X extent as
+though it were a wingspan.
+
 Deliberately later: team matches (a wingman could be a run reward but is not
 needed for the loop), water gameplay beyond dousing, ragdoll deaths.
 
@@ -302,8 +311,9 @@ scanned dragon never matches however well chosen.
 | Rocks, boulders, scree | **PolyHaven scans** via Blender MCP, decimated, glTF | CC0, and a scanned rock next to a scanned dragon is the one case where importing gives consistency for free |
 | Ground textures | **PolyHaven** tiling sets | CC0, PBR, the detail pass in section 3 |
 | Watchtower, ballista, huts, hoard pile | **Modelled in Blender via MCP** from primitives, with PolyHaven stone, wood and metal materials | Simple shapes; the shared textures are what make them belong. Hyper3D/Hunyuan generation is worth one experiment for the hoard pile and a ballista, where the mesh is static and the texture will be replaced |
-| Prey (goat, sheep, deer) | **Sketchfab CC BY**, rigged, or unrigged at first | A herd needs a walk cycle and a scatter, and the glTF skinned loader and joint mapper already exist. Start unrigged with a bob-and-scatter; a rig is a later upgrade |
-| Dragons | **Keep both.** No new hero models | The recolour system already makes a flight of distinct dragons. The hero's CC BY-NC licence is the one long-term liability: replace it with a CC BY or original rig only if the project is ever published. A script-built original was tried on 2026-09-08 and fell short of both imported models; `EMBERCREST.md` records why, and its rig-and-export step is reusable. `MODEL_GENERATION.md` surveys the generative 3D and auto-rigging tools that could replace the hand-built mesh |
+| Prey (goat, sheep, deer) | **Generated and rigged in-house** -- superseded the Sketchfab plan | `assets/mossback.glb` is a horned grazer taken through the one-shot pipeline: 80 K tris, a 37-bone rig on `tools/skeletons/grazing-quadruped.json`, repaired PBR. No licence question, and it shares the generator's material language. A herd still needs a walk cycle and a scatter; start with a bob-and-scatter |
+| Dragons (the player) | **Keep both.** No new hero models | The hero's CC BY-NC licence is the one long-term liability: replace it with a CC BY or original rig only if the project is ever published. A script-built original was tried on 2026-09-08 and fell short of both imported models; `EMBERCREST.md` records why |
+| Encounter creatures | **Generated and rigged in-house**, one per encounter kind | This is a revision: the original entry said the recolour system was enough. It is not -- a hue push does not change a silhouette, and a rival read at flight range is a silhouette. `MODEL_GENERATION.md` concludes generation pays exactly for things "few on screen, large, and want a unique silhouette", which is what an encounter creature is. Three exist: `ashcoil.glb` (rival dragon, a legless sky-wyrm), `cragjaw.glb` (ground defence), `mossback.glb` (prey). Each is a body plan the engine had not carried, so they separate by shape rather than by hue |
 | Clouds, leaf and bark textures | **Generated** (concept-art skill, NB2) or PolyHaven | Small painted textures are what the tool is good at, and they can be regenerated to the palette |
 
 ### Pipeline notes

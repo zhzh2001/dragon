@@ -1142,10 +1142,13 @@ This replaces the original plan, which is preserved only in git history. Nearly
 every step of it was superseded by measurement; the sections above say why, and
 each step below links to the one that justifies it.
 
-**A second creature has been through this end to end** (Stormsail, the wyvern
-of `concepts.png` panel B), so the numbers are from two runs, not one.
+**Five creatures have been through this end to end**, so the numbers are not
+from one run: Embercrest, Stormsail, and the three hoard-run designs of
+`concepts-hoard-run.png` (Ashcoil, Cragjaw, Mossback). The last three were
+generated in one sitting, and the one-shot's 20/day pool took three of them
+without complaint.
 
-1. **Reference sheet, then a turnaround.** All three designs have a sheet
+1. **Reference sheet, then a turnaround.** Every design has a sheet
    (`artifacts/dragon-options/*-reference-sheet.png`). A sheet is drawn for a
    human and a generator wants one pose per view, so generate a four-panel
    turnaround from the sheet and crop it. **Reference the sheet, never a
@@ -1153,6 +1156,20 @@ of `concepts.png` panel B), so the numbers are from two runs, not one.
    worth chasing: "Does input resolution matter" measures the encoders at a
    fixed 518 or 224 square. `artifacts/dragon-options/README.md` says which
    plates to use and why.
+
+   The concept-art skill generates all three stages; use `--backend web`
+   (GPT Image 2) throughout so the identity carries, and pass the previous
+   stage with `-i <file> --ref-role subject`.
+
+   **Cut the turnaround with `tools/split_turnaround.py`, not by hand or by
+   width/4.** The panels are not equal quarters — a long-bodied animal's
+   profile is three times the width of its front view — and on Ashcoil they do
+   not even separate on empty columns, because one view's tail tip reaches
+   past the next view's wingtip. The tool labels connected components instead,
+   crops each animal to its own bounding box, repaints any neighbour that
+   intrudes into that box with the background, and asserts it found exactly
+   four. Without the repaint a plate carries a floating tail tip, which is
+   another subject for Hunyuan's segmentation to find.
 
 2. **One cloud generation. Nothing else.** Use the Hunyuan **one-shot**, not
    the staged chain: it emits 1.5 M triangles *with* UVs and a PBR set in a
@@ -1195,7 +1212,19 @@ of `concepts.png` panel B), so the numbers are from two runs, not one.
    byte-identical. The base colour has some occlusion painted into it
    already (luminance vs baked AO, r ≈ +0.35 on both assets), so the AO is
    not turned up further than the bake gives. Needs a venv with numpy,
-   Pillow, scipy and trimesh+embree; about a minute per model.
+   Pillow, scipy and trimesh+embree; about a minute per model. No such venv
+   survives on the mac, so make one (`uv venv`, then
+   `uv pip install numpy pillow scipy trimesh embreex`).
+
+   **Check `zone coverage` in the log against what the animal is made of.**
+   The zones are geometric, not semantic, so they mislabel a body the
+   heuristics were not written for: on Mossback the "thin and cylindrical =
+   keratin" rule claimed **15.4%** of the mesh, which is not horn but the
+   shaggy fur spikes, and it was handing all of it the semi-gloss 0.32 meant
+   for horn and claw — glossy plastic quills on a grazing animal. Passing
+   `--rough-keratin 0.55` makes the fur matte and costs a little gloss on the
+   real horns and hooves, which is the right trade here. Cragjaw, by contrast,
+   came out at 0.1% keratin and needed no override.
 
    The repaired file takes the plain name and the untouched Hunyuan output is
    kept beside it as `<name>-raw.glb`, with copies of its `.rig.cfg` and
@@ -1220,12 +1249,22 @@ of `concepts.png` panel B), so the numbers are from two runs, not one.
 
 ## Adding a creature that is not a dragon
 
-The seam is `tools/skeletons/*.json`, not the script. Two exist:
+The seam is `tools/skeletons/*.json`, not the script. Five exist:
 
 | File | Anatomy | Bones |
 |---|---|---|
 | `winged-quadruped.json` | Embercrest: four legs plus two wings | 62 |
 | `winged-biped.json` | Stormsail: two hind legs, wing forelimbs, rudder tail | 55 |
+| `winged-serpent.json` | Ashcoil: **no legs at all**, two wings behind the skull, the trunk is a 14-segment tail chain, four finger ribs | 44 |
+| `armoured-quadruped.json` | Cragjaw: **no wings**, four splayed legs, eight-segment tail | 48 |
+| `grazing-quadruped.json` | Mossback: **no wings**, four column legs, two toes per foot (cloven), five-segment stub tail | 37 |
+
+Cragjaw and Mossback are both wingless quadrupeds and still get separate
+files. The fit is a per-axis affine remap of the whole skeleton, so it absorbs
+proportion but not a change in *structure*: a tail authored to reach the
+drake's tail tip lands well past the grazer's rump, out in empty space. Share
+a skeleton only when the chains have the same lengths as well as the same
+names.
 
 Each holds bone head/tail in a normalised space plus the `reference_bounds`
 they were authored against; the rigger remaps them onto the actual mesh, which
@@ -1245,20 +1284,61 @@ derives `quadruped` from whether the front-leg chains are empty, and
 and no engine change at all. Do not assume a new creature needs engine work
 until an acceptance run says so.
 
-Two things in the rigger are still Embercrest-shaped, and both are opt-out in
-the JSON because the wyvern hit them:
+**The engine handles more body plans than it accepts.** Ashcoil proves the
+mapper needs no change for a legless animal: it reports `neck 3, tail 14, wing
+root 3/3, fingers 4/4, legs 0/0, front legs 0/0, feet 0, jaw jaw` and flies,
+with the lateral trunk wave visible from directly above. But the two *wingless*
+creatures map correctly and are then thrown away, because
+`DragonJoints::valid()` requires wing roots on both sides -- see the Open
+questions in `STATUS.md`. Check the acceptance log for `falling back` and not
+just for the `mapped rig:` line; a rejected asset still prints a perfect map
+immediately before the engine substitutes the generated dragon.
+
+Everything below was Embercrest-shaped, and each one is opt-out in the JSON
+because a later anatomy hit it. The first two were the wyvern's; the rest came
+from the wingless pair and the serpent:
 
 - `wing_field` — the membrane weight pass. Omit it, or use a skeleton with no
   `wing*` bones, and the pass skips.
 - `jaw_mask` — the gap-following jaw mask is authored in *Embercrest*
   canonical coordinates. On another head that region is the whole skull, which
   put the mandible entirely on `head`. Set `"jaw_mask": null` to keep heat
-  weights.
+  weights, or give it a measured plane (below).
+- `wing_bind_level_deg` — the correction that takes the sculpt's raised
+  shoulder out of the bind pose. It was an unconditional
+  `rig.pose.bones['wing_root_l']`, so it was a hard `KeyError` on any wingless
+  skeleton, which is what stopped Cragjaw first. Default 35, and the pass
+  skips when the `wing_root_`/`wing_wrist_` bones are absent.
+- `reference_span` — `{"axis": "y", "metres": 12}`. The `ground_offset` was
+  `(height/2) * 19 / x_extent`, i.e. it assumed the X extent is a 19 m
+  wingspan. True of every winged asset and nonsense on a wingless one, where X
+  is just body width. Default `{"axis": "x", "metres": 19}`.
+- `preview` — the Cycles camera for the `artifacts/<stem>/*.png` pose renders.
+  Embercrest's `ortho_scale` of 1.45 crops a serpent's trunk out of frame
+  entirely, which makes the acceptance record misleading rather than merely
+  ugly.
 
-If a third anatomy hits another hardcoded constant, the fix is to lift it into
-the JSON with a default that preserves existing builds, then re-run the
-Embercrest build and check `max_weight_sum_error` and `ground_offset` are
-unchanged to the digit. That is the regression test.
+**`jaw_mask` can also be a measured plane**, which is what a generated head
+usually needs: `{"type": "plane", "x_max": …, "y_min": …, "line": [[y,z],
+[y,z]], "hinge_blend": [lo,hi]}`. Hunyuan sculpts the mouth *sealed*, so heat
+diffusion has no gap to split on and the weights smear across the lip line —
+measured on Ashcoil, the mandible band came out 0.62 jaw / 0.37 head, and a
+jaw rotation bent the whole muzzle downward instead of opening it. With the
+plane taken off the lip crease in the side view, the mandible drops and the
+brow, eye and snout tip stay put. Two things to know: the gape reveals a
+stretched crease rather than a mouth cavity, because the sculpt has no mouth
+bag (Embercrest's hinge blend accepts the same artefact); and the line is
+measured on the *unlevelled* mesh in canonical space, which is correct, since
+the mask runs before the wing bind correction.
+
+If a further anatomy hits another hardcoded constant, the fix is the same:
+lift it into the JSON with a default that preserves existing builds, then
+re-run the Embercrest build and check `max_weight_sum_error` and
+`ground_offset` are unchanged to the digit. That is the regression test, and
+it passed across all five changes above — 5.122274160385132e-08 and
+3.9933978544450914, with the `binding` string byte-identical. Run it with a
+throwaway `--stem`: the real stem would overwrite the shipping
+`assets/embercrest-textured.glb` with an unrepaired rebuild.
 
 ## Open questions
 
@@ -1286,5 +1366,10 @@ genuinely still unknown:
 - Stormsail's shoulder/wing-root membrane junction and its flight leg fold are
   heat-weight quality rather than hand-tuned. Fine for a candidate; someone
   should look at them in `--studio 1` and `--studio 5` before it ships.
-- `build_stats.json` still reports `binding: "gap-following jaw mask ..."`
-  even when the mask is skipped. Cosmetic, but it misdescribes wyvern builds.
+- Ashcoil's own unverified corners: the inner trailing edge of the membrane
+  where it meets the flank near the ground (finger 3's tip sits at z 0.013)
+  was only judged at ~1280 px in engine, not in a close-up. Mossback has
+  belly fur strands that stretch into thin streaks where they span a hip or
+  shoulder and the leg at ±35°, and its shoulder mass sits outboard of the leg
+  column, so a large forward reach would shear the fur along the hump line;
+  neither was tested past 35 degrees. Cosmetic at prey distance.

@@ -1,0 +1,56 @@
+{
+  "source": "ashcoil-cand-oneshot.glb",
+  "source_sha256": "d0abdda6aafc7e7fccebccb8936c77739758ddcb164a702ef1035e937b90a4e6",
+  "source_triangles": 1499936,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 44,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; plane jaw mask with hinge blend; level wing bind",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 43515844,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 3.192615580958597,
+  "repaired_zero_tangents": 0,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.00006103515625,
+    1.0000076293945312,
+    0.9998875260353088
+  ],
+  "bone_fit_bias": [
+    1.0609626770019531e-05,
+    2.467632293701172e-05,
+    -9.027437464226296e-09
+  ]
+}

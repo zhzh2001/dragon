@@ -40,6 +40,19 @@ The one-shot takes multi-view too. Select **多张图片** with the same pointer
 dispatch, then click **添加多视图** — that click is what *creates* the eight
 file inputs; before it there are none.
 
+Two things about that second click have changed since the Stormsail run:
+
+- **The label now reads `添加多视图（Min2，Max8）`**, so an exact-string tree
+  walker finds nothing. Match with `startsWith` instead of `===`.
+- **Matching the text is not enough.** The handler is on the `+` at the right
+  end of the row, and the four-ancestor pointer dispatch that works everywhere
+  else on this site returns "clicked" while creating zero inputs. Click the
+  `+` by coordinate — `chrome-use click 274 239` at the default viewport.
+
+Either way the check is the same: the slots exist when
+`document.querySelectorAll('input[type=file]').length` becomes 8. Verify it
+rather than trusting the click, because both failure modes are silent.
+
 ## 3. Map slots by label, never by index
 
 **The one-shot's slot order differs from the Studio's.** The Studio lays them
@@ -80,7 +93,22 @@ accepted.
 Poll `/api/3d/creations/detail?creationsId=<id>`; the id appears in
 `performance.getEntriesByType('resource')` right after submission. The
 response carries `status`, `result[0].progress` and
-`result[0].progressGeometry`.
+`result[0].progressGeometry`. Clear `performance.clearResourceTimings()`
+before submitting, or you will read the *previous* job's id back.
+
+**Do not treat the presence of `urlResult` as completion.** It exists from the
+start carrying only `invisible_wall` and `air_wall`; the keys you want appear
+only at `status: "success"`. Poll for `status` or for `urlResult.textureGlb`
+by name — a truthiness check on `urlResult` returns immediately and wrong.
+
+Geometry finishes well before the job does: `progressGeometry` hit 100 at
+`progress` 47, and the run then sat at 99 for about a minute while the texture
+baked. Budget ~4-5 minutes per job.
+
+**Jobs can be queued back to back.** Generation is server-side, so reloading
+the page and submitting the next creature does not disturb the one in flight;
+three were run this way and polled together afterwards. The badge decrements
+once per submission, which is the only confirmation that a job was accepted.
 
 ## 5. Take the right URL
 
