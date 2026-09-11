@@ -76,6 +76,11 @@ Options parse_options(int argc, char** argv) {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
             options.hide_ui = true;
+        } else if (arg == "--telemetry") {
+            options.telemetry_interval = 60;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                options.telemetry_interval = SDL_atoi(argv[++i]);
+            }
         } else if (arg == "--input" && i + 1 < argc) {
             float* v = options.input_override;
             if (SDL_sscanf(argv[++i], "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4],
@@ -507,7 +512,14 @@ game::FlightInput App::read_flight_input() const {
                                    terrain_.height_at(position.x, position.z));
     }
 
-    if (options_.has_input_override) {
+    // --input holds a control position at the stick, and the stick is upstream
+    // of the assists -- so the scripted input falls through into them rather
+    // than returning here. It used to return immediately, which meant no
+    // headless run could ever exercise auto-flap or the tuck nose-over: the
+    // landing the player complained about was unreproducible precisely because
+    // the flag skipped the code that was interfering with it.
+    const bool scripted = options_.has_input_override;
+    if (scripted) {
         const float* v = options_.input_override;
         in.pitch = v[0];
         in.roll = v[1];
@@ -515,24 +527,25 @@ game::FlightInput App::read_flight_input() const {
         in.flap = v[3];
         in.tuck = v[4];
         in.brake = v[5];
-        return in;
-    }
+    } else {
+        if (free_camera_) return in;
 
-    if (free_camera_) return in;
+        // W pitches the nose up. invert_pitch gives the flight-sim
+        // pull-back-to-climb feel instead.
+        in.pitch = stick_.y * (controls_.invert_pitch ? -1.0f : 1.0f);
+        in.roll = stick_.x;
 
-    // W pitches the nose up. invert_pitch gives the flight-sim
-    // pull-back-to-climb feel instead.
-    in.pitch = stick_.y * (controls_.invert_pitch ? -1.0f : 1.0f);
-    in.roll = stick_.x;
-
-    const bool keyboard_free = !ui_.wants_keyboard();
-    if (keyboard_free) {
-        in.yaw = input_.axis(SDL_SCANCODE_Q, SDL_SCANCODE_E);
-        in.flap = input_.down(SDL_SCANCODE_SPACE) ? 1.0f : 0.0f;
-        in.tuck =
-            (input_.down(SDL_SCANCODE_LSHIFT) || input_.down(SDL_SCANCODE_RSHIFT)) ? 1.0f : 0.0f;
-        in.brake =
-            (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL)) ? 1.0f : 0.0f;
+        const bool keyboard_free = !ui_.wants_keyboard();
+        if (keyboard_free) {
+            in.yaw = input_.axis(SDL_SCANCODE_Q, SDL_SCANCODE_E);
+            in.flap = input_.down(SDL_SCANCODE_SPACE) ? 1.0f : 0.0f;
+            in.tuck = (input_.down(SDL_SCANCODE_LSHIFT) || input_.down(SDL_SCANCODE_RSHIFT))
+                          ? 1.0f
+                          : 0.0f;
+            in.brake = (input_.down(SDL_SCANCODE_LCTRL) || input_.down(SDL_SCANCODE_RCTRL))
+                           ? 1.0f
+                           : 0.0f;
+        }
     }
 
     // Combat boost is an ability with its own cooldown, so the flight model only
@@ -555,11 +568,24 @@ game::FlightInput App::read_flight_input() const {
     // missing and leaves the dive-and-climb trade intact.
     if (assists_.auto_flap) {
         const game::FlightState& s = flight_.state();
-        // Landing intent: brake held low, or already down. The assist stands
-        // aside -- it once flapped at full power under 75 m no matter what,
-        // which is why the dragon could never actually land, only hover near
-        // the ground fighting its own pilot.
-        const bool landing = s.grounded || (in.brake > 0.3f && s.ground_clearance < 40.0f);
+        // The brake is a command to SPEND energy and this assist exists to
+        // supply it, so held together they are a tug of war the assist always
+        // won. A braked approach sat at full flap from 99 m of clearance all
+        // the way down to 40 m -- the speed-deficit branch reads the
+        // deliberate deceleration as an energy shortfall and answers it -- and
+        // the pilot could not descend on purpose. Only under 40 m did the old
+        // gate release, by which point the dragon was slow, stalled and
+        // arrived rather than landed. The brake now scales the whole assist
+        // down in proportion: half brake, half assist, full brake none,
+        // wherever the dragon is. The earlier fix capped the gate at 40 m
+        // while the assist itself reaches `auto_flap_clearance` (75 m), which
+        // left a 35 m band where landing intent was simply not recognised.
+        const float brake_intent = core::saturate((in.brake - 0.15f) / 0.45f);
+        // Landing intent: braking anywhere the assist would otherwise reach,
+        // or already down.
+        const bool landing =
+            s.grounded ||
+            (brake_intent > 0.6f && s.ground_clearance < assists_.auto_flap_clearance);
         // Diving is a decision: no assist flaps against a nose pointed down.
         const bool diving = s.forward().y < -0.25f || in.tuck > 0.1f;
         float assist = 0.0f;
@@ -579,6 +605,7 @@ game::FlightInput App::read_flight_input() const {
                 assist = core::maxf(assist, core::saturate((assists_.auto_flap_clearance -
                                                             s.ground_clearance) / 30.0f));
             }
+            assist *= 1.0f - brake_intent;
         }
         in.flap = core::maxf(in.flap, assist);
     }
@@ -3259,6 +3286,20 @@ void App::render() {
     device_.end_pass(ui_pass);
 }
 
+// One line of flight state, for verifying a manoeuvre that a single screenshot
+// cannot settle. A landing is the motivating case: whether the dragon touched
+// down, and how long it spent hovering first, is a sequence, not a pose.
+void App::log_telemetry() const {
+    const game::FlightState& s = flight_.state();
+    LOG_INFO("t=%6.2f y=%7.1f clr=%6.1f spd=%5.1f climb=%6.1f g=%4.1f aoa=%5.1f "
+             "flap=%.2f tuck=%.2f brake=%.2f %s%s",
+             double(frame_index_) / 60.0, double(s.position.y), double(s.ground_clearance),
+             double(s.airspeed), double(s.climb_rate), double(s.g_load),
+             double(core::degrees(s.angle_of_attack)), double(s.flap_amplitude),
+             double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
+             s.stalling ? "STALL" : "");
+}
+
 void App::run() {
     uint64_t previous_ticks = SDL_GetTicksNS();
 
@@ -3279,6 +3320,11 @@ void App::run() {
 
         pump_events();
         update(dt);
+
+        if (options_.telemetry_interval > 0 &&
+            frame_index_ % options_.telemetry_interval == 0) {
+            log_telemetry();
+        }
 
         // Capture on the last frame, once the scene has settled.
         if (!options_.screenshot.empty() && options_.frames > 0 &&

@@ -157,6 +157,18 @@ flight controls.
 - Tests are plain executables with a `CHECK` macro, no framework. Add a suite
   when a system gets its own file; `ctest --test-dir build` runs all of them.
 - Commit messages describe what changed and *why it was wrong before*.
+- **Delegate complex 3D model rigging -- and asset repair when it is more than
+  a one-liner -- to a Fable 5.1 subagent** (`Agent` with `model: "fable"`).
+  That means: fitting or refitting a deform skeleton to a generated mesh,
+  diagnosing a bind pose or bone-axis problem inside a `.glb`, weight painting,
+  anything driving Blender through `tools/`, and repairing a model that imports
+  wrong. Give the subagent the asset paths, the relevant `tools/` script and
+  `tools/skeletons/*.json`, and tell it what the engine expects
+  (`docs/ANIMATION.md`, `docs/MODEL_GENERATION.md`). Judge the complexity
+  yourself: a one-line config tweak is not worth a subagent, a re-rig is.
+  Keep engine-side work (`src/anim`, `src/game`, the rig profiles) in the main
+  session so the C++ and the asset do not get edited from two places at once,
+  and scope each subagent to explicit paths -- the repo is shared.
 
 ## Cross-cutting lessons
 

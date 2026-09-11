@@ -105,6 +105,13 @@ struct Options {
     int bots = 0;
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
+
+    // --telemetry [N] logs one line of flight state every N frames (default
+    // 60, so once a second at the headless fixed step). A screenshot shows a
+    // pose; this shows the state machine behind it -- whether the dragon
+    // actually touched down, how long it took, and what the assists were
+    // doing while it did. Landing is the case that needed it.
+    int telemetry_interval = 0;  // 0 = off
 };
 
 Options parse_options(int argc, char** argv);
@@ -133,6 +140,7 @@ private:
     gfx::ModelUniforms dragon_model_uniforms() const;
     const gfx::Camera& active_camera() const;
     void draw_flight_debug();
+    void log_telemetry() const;
     void build_flight_ui();
     void build_rally_ui();
     void build_dragon_ui();
