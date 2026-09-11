@@ -101,6 +101,29 @@ What is built, in the order it was built. The plan these came from is
   neighbour that intrudes into a crop; the hand-cut Stormsail plates turn out
   to carry such fragments.
 
+- **Multi-model: a match can field several species.** This was the binding
+  constraint on visual variety, and it is gone. `--models A,B,C` loads a
+  roster; the player flies the first and bots are dealt the rest in turn. The
+  per-asset state that used to be a dozen loose members of `App` is now one
+  `LoadedModel` -- skeleton, joint map, mesh, textures, clips, alignment
+  transform, and the resolved `.rig.cfg` and `.flight.cfg` -- held by pointer
+  so a bot can refer to one by index. Each bot therefore gets its species'
+  skeleton, scale, pose profile and handling, not the player's.
+
+  Flame colour moved onto the model too, which needed `BreathCone` to carry
+  the tag of whoever breathed it -- combat never reads it, the renderer does.
+  That makes the breath the place a species reads as elemental. The colours
+  are pickers in the Dragon panel; nothing persists them yet, which is the
+  next thing to do when there is an elemental variant worth saving.
+
+  Two constants came out of `place_bot` while the verification needed them:
+  `bot_spawn_range_` and its jitter, now a Combat slider and `--bot-range`.
+  At 650 m a whole roster cannot be got into one frame, which is why this went
+  unverified by screenshot for so long.
+
+  Verified: a 7200-frame mixed-species match, clean; single-model runs log
+  `model roster: 1 entry(s)` and are otherwise byte-for-byte the old path.
+
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
@@ -118,19 +141,6 @@ What is built, in the order it was built. The plan these came from is
   the suspicion is the height fog itself saturating before the skirt is
   reached, rather than missing geometry. Needs the altitude and heading it
   was seen from.
-- **Bots all fly the player's model.** One mesh and one rig are loaded, so a
-  match cannot mix a dragon and a wyvern. The renderer and rig are per-bot
-  already; it is the asset loading that assumes one model. **This is now the
-  binding constraint on visual variety rather than a hypothetical:** a rigged
-  wyvern exists (`assets/stormsail.glb`) and the rig mapper already handles
-  its body plan -- `src/anim/dragon_rig.cpp` derives `quadruped` from whether
-  the front-leg chains are empty, so it maps with `front legs 0/0` and no
-  engine change. Multi-model loading is the missing piece, not the asset.
-  There are now **four** rigged creatures waiting on it, not one:
-  `stormsail.glb`, `ashcoil.glb`, `cragjaw.glb` and `mossback.glb`. Ashcoil is
-  the strongest argument for doing the work -- it is a legless serpent, so a
-  rival flight containing it and the hero dragon would differ in silhouette
-  rather than in hue.
 - **A rig without wings is rejected outright.** `DragonJoints::valid()`
   (`src/anim/dragon_rig.h:58`) returns true only when `wing_root` is non-empty
   on *both* sides, so `app.cpp:146` logs "imported skeleton has no

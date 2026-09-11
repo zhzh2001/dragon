@@ -313,8 +313,9 @@ void Combat::clear_hostiles() {
     locked_ = -1;
 }
 
-void Combat::hostile_breath(Vec3 origin, Vec3 direction) {
-    hostile_breaths_pending_.push_back({origin, core::normalize_or(direction, Vec3::forward())});
+void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source) {
+    hostile_breaths_pending_.push_back(
+        {origin, core::normalize_or(direction, Vec3::forward()), source});
 }
 
 int Combat::sentinels_alive() const {

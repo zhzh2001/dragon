@@ -177,6 +177,9 @@ struct Impact {
 struct BreathCone {
     core::Vec3 origin = core::Vec3::zero();
     core::Vec3 direction = core::Vec3::forward();
+    // Who breathed it, as an opaque tag the caller assigns -- the renderer
+    // uses it to colour the flame by species. Combat itself never reads it.
+    int source = -1;
 };
 
 // What happened this frame, for the HUD and, later, audio.
@@ -278,7 +281,7 @@ public:
     // An external pilot breathing fire this frame. Buffered and resolved
     // against the player inside update(), so damage attribution and events go
     // through the one path that owns them.
-    void hostile_breath(core::Vec3 origin, core::Vec3 direction);
+    void hostile_breath(core::Vec3 origin, core::Vec3 direction, int source = -1);
     // Last frame's hostile flames, for drawing.
     const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
     // Projectiles that ended this frame -- hits and terrain strikes -- for the

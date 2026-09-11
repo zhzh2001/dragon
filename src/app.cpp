@@ -35,6 +35,20 @@ Options parse_options(int argc, char** argv) {
             options.course_index = SDL_atoi(argv[++i]);
         } else if (arg == "--model" && i + 1 < argc) {
             options.model = argv[++i];
+        } else if (arg == "--bot-range" && i + 1 < argc) {
+            options.bot_range = float(SDL_atof(argv[++i]));
+        } else if (arg == "--models" && i + 1 < argc) {
+            // Comma-separated roster: the player flies the first, bots are
+            // dealt the rest. Splitting here keeps the app free of parsing.
+            const std::string list = argv[++i];
+            size_t start = 0;
+            while (start <= list.size()) {
+                const size_t comma = list.find(',', start);
+                const size_t end = comma == std::string::npos ? list.size() : comma;
+                if (end > start) options.models.push_back(list.substr(start, end - start));
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
         } else if (arg == "--hue" && i + 1 < argc) {
             core::Vec4& h = options.hue;
             if (SDL_sscanf(argv[++i], "%f,%f,%f,%f", &h.x, &h.y, &h.z, &h.w) == 4) {
@@ -127,104 +141,44 @@ bool App::init(const Options& options) {
 
     regenerate_terrain();
 
+    // The model roster. --models gives the whole list, --model sets just the
+    // player's, and neither leaves the single built-in dragon. Everything past
+    // the first entry exists so one match can field more than one species
+    // rather than four hue-pushed copies of the same mesh.
     {
-        anim::SkinnedMeshData mesh_data;
-
-        // Prefer an imported model, fall back to the generated one. The rig is
-        // driven the same way either way -- it only needs to know which joints
-        // form the neck, tail and wings, and map_dragon_joints works that out
-        // from an arbitrary skeleton.
-        const std::string model_path =
-            options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model;
-        const anim::GltfLoadResult loaded =
-            anim::load_skinned_gltf(model_path.c_str(), dragon_skeleton_, mesh_data);
-        if (loaded.ok) {
-            dragon_joints_ = anim::map_dragon_joints(dragon_skeleton_);
-            using_imported_dragon_ = dragon_joints_.valid();
-            find_wingtips();
-            if (!using_imported_dragon_) {
-                LOG_WARN("imported skeleton has no recognisable wings; falling back");
-            }
-        } else {
-            LOG_INFO("no imported dragon (%s); using the generated rig", loaded.error.c_str());
-        }
-
-        if (!using_imported_dragon_) {
-            anim::build_dragon(dragon_shape_, dragon_skeleton_, dragon_joints_, mesh_data);
-            find_wingtips();
-            dragon_source_ = "generated";
-        } else {
-            dragon_source_ = options_.model.empty() ? "assets/dragon.glb" : options_.model;
-            // Scale so the wingspan matches what the flight model assumes, and
-            // recentre, because an asset's origin is wherever its author left it
-            // -- this one sits over a hundred units from its own geometry. Both
-            // are starting points, refined by eye with the sliders.
-            // Match the wingspan the flight model assumes: 40 m^2 of wing over
-            // roughly a 19 m span. Scaling by the wingspan rather than the
-            // overall length keeps the aerodynamics and the visuals agreeing.
-            const core::Vec3 extent = loaded.bounds_max - loaded.bounds_min;
-            asset_.scale = extent.x > 0.1f ? 19.0f / extent.x : 1.0f;
-
-            // This asset faces +Z; the engine's forward is -Z. Determined from
-            // the rig rather than by eye: its head bone sits at positive Z and
-            // its tail tip at negative Z.
-            const int head = dragon_joints_.head;
-            const int tail = dragon_joints_.tail.empty() ? anim::NO_PARENT : dragon_joints_.tail.back();
-            if (head != anim::NO_PARENT && tail != anim::NO_PARENT) {
-                const float head_z = dragon_skeleton_.world_bind(head).translation_part().z;
-                const float tail_z = dragon_skeleton_.world_bind(tail).translation_part().z;
-                if (head_z > tail_z) {
-                    asset_.yaw_deg = 180.0f;
-                    LOG_INFO("asset faces +Z (head %.2f, tail %.2f); yawing 180", head_z, tail_z);
-                }
-            }
-
-            const core::Vec3 centre = (loaded.bounds_min + loaded.bounds_max) * 0.5f;
-            asset_.offset = core::rotate(
-                core::from_euler(0.0f, core::radians(asset_.yaw_deg), 0.0f), centre * -asset_.scale);
-            LOG_INFO("asset alignment: scale %.4f, offset (%.2f %.2f %.2f)", asset_.scale,
-                     asset_.offset.x, asset_.offset.y, asset_.offset.z);
-        }
-
-        // Upload whatever textures came with the model. The loader recorded the
-        // colour space of each, which is not something the pixels reveal.
         model_sampler_ = gfx::create_model_sampler(device_.gpu());
-        for (size_t i = 0; i < loaded.textures.size(); ++i) {
-            const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
-            const std::string name =
-                "dragon_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
-            dragon_textures_.push_back(gfx::create_texture_from_image(
-                device_.gpu(), loaded.textures[i], name.c_str(), srgb));
+        std::vector<std::string> roster = options_.models;
+        if (roster.empty()) {
+            roster.push_back(options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb")
+                                                    : options_.model);
         }
-
-        dragon_mesh_.upload(device_.gpu(), mesh_data, "dragon");
-        dragon_rig_.init(dragon_skeleton_, dragon_joints_);
-        ghost_rig_.init(dragon_skeleton_, dragon_joints_);
-        // The chain dynamics need to know how big the dragon is in metres.
-        dragon_rig_.set_model_scale(asset_.scale);
-        ghost_rig_.set_model_scale(asset_.scale);
-
-        if (!loaded.animations.empty()) {
-            dragon_animations_ = loaded.animations;
-            choose_idle_clip();
-            apply_idle_clip(dragon_rig_);
-            apply_idle_clip(ghost_rig_);
+        for (const std::string& path : roster) {
+            auto model = std::make_unique<LoadedModel>();
+            load_model(path, *model);
+            models_.push_back(std::move(model));
+        }
+        player_model_ = 0;
+        LOG_INFO("model roster: %zu entry(s)", models_.size());
+        for (size_t i = 0; i < models_.size(); ++i) {
+            LOG_INFO("  [%zu] %s (%d joints, scale %.3f)", i, models_[i]->path.c_str(),
+                     models_[i]->skeleton.count(), double(models_[i]->asset.scale));
         }
     }
 
-    // A model may carry a rig profile beside its glTF. Rig tuning is separate
-    // from flight handling: the former changes only the visible pose, while
-    // the latter changes forces and control response. Missing profiles leave
-    // the shared defaults untouched, so existing models behave as before.
-    const std::string rig_model_path =
-        using_imported_dragon_
-            ? (options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model)
-            : std::string(ASSET_ROOT "/dragon.glb");
-    model_rig_tuning_path_ = rig_model_path + ".rig.cfg";
-    if (anim::load_rig_tuning(dragon_rig_.tuning, model_rig_tuning_path_.c_str())) {
-        LOG_INFO("loaded model rig from %s", model_rig_tuning_path_.c_str());
-    }
+    dragon_rig_.init(player_model().skeleton, player_model().joints);
+    ghost_rig_.init(player_model().skeleton, player_model().joints);
+    // The chain dynamics need to know how big the dragon is in metres.
+    dragon_rig_.set_model_scale(player_model().asset.scale);
+    ghost_rig_.set_model_scale(player_model().asset.scale);
+    apply_idle_clip(player_model(), dragon_rig_);
+    apply_idle_clip(player_model(), ghost_rig_);
+    // Rig tuning is separate from flight handling: the former changes only the
+    // visible pose, the latter changes forces and control response. Both were
+    // resolved per model by load_model, so a bot flying another species gets
+    // that species' pose without the player's being disturbed.
+    dragon_rig_.tuning = player_model().rig_tuning;
     ghost_rig_.tuning = dragon_rig_.tuning;
+    model_rig_tuning_path_ = player_model().rig_tuning_path;
 
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
@@ -232,9 +186,7 @@ bool App::init(const Options& options) {
     // A model may carry its own handling on top: <model>.flight.cfg next to
     // the glTF. The heavy-looking dragon and the quick-looking wyvern fly the
     // same numbers otherwise, and the eye disagrees.
-    model_tuning_path_ =
-        (options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb") : options_.model) +
-        ".flight.cfg";
+    model_tuning_path_ = player_model().flight_tuning_path;
     if (game::load_tuning(flight_.tuning, model_tuning_path_.c_str())) {
         LOG_INFO("loaded model handling from %s", model_tuning_path_.c_str());
     }
@@ -275,6 +227,12 @@ bool App::init(const Options& options) {
 
     // After the spawn: the arena is built around where the dragon actually
     // starts, so a headless combat run opens with targets in front of it.
+    if (options.bot_range > 0.0f) {
+        bot_spawn_range_ = options.bot_range;
+        // Keep the jitter proportional, or a short range spawns everyone on
+        // top of each other.
+        bot_spawn_jitter_ = options.bot_range * 0.25f;
+    }
     if (options.combat) {
         combat_enabled_ = true;
         combat_.reset(&terrain_, flight_.state().position, 20260824u);
@@ -386,7 +344,7 @@ void App::respawn_dragon() {
 gfx::ModelUniforms App::ghost_model_uniforms(const game::GhostSample& sample) const {
     gfx::ModelUniforms model;
     model.model =
-        core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one()) * asset_.matrix();
+        core::Mat4::trs(sample.position, sample.orientation, core::Vec3::one()) * player_model().asset.matrix();
     // Cool and slightly emissive, so the ghost reads as a recording rather than
     // as a second dragon in the world.
     model.tint = core::Vec4{0.35f, 0.62f, 0.95f, 0.28f};
@@ -629,7 +587,7 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     gfx::ModelUniforms model;
     // The asset correction is applied inside the dragon's own frame, so it
     // aligns the model to the engine without disturbing the flight transform.
-    model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+    model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
     model.recolour = core::Vec4{player_hue_.x, player_hue_.y, player_hue_.z, player_recolour_};
     return model;
 }
@@ -692,12 +650,15 @@ void App::frame_camera_on_valley() {
 void App::shutdown() {
     if (device_.gpu()) SDL_WaitForGPUIdle(device_.gpu());
     terrain_mesh_.release(device_.gpu());
-    dragon_mesh_.release(device_.gpu());
-    ring_mesh_.release(device_.gpu());
-    for (SDL_GPUTexture* texture : dragon_textures_) {
-        if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
+    // Every roster entry owns GPU handles, not just the one being flown.
+    for (auto& model : models_) {
+        model->mesh.release(device_.gpu());
+        for (SDL_GPUTexture* texture : model->textures) {
+            if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
+        }
+        model->textures.clear();
     }
-    dragon_textures_.clear();
+    ring_mesh_.release(device_.gpu());
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
     foliage_.shutdown(device_);
     world_.shutdown(device_);
@@ -827,7 +788,7 @@ void App::update(float dt) {
             const core::Vec3 head_model = dragon_rig_.head_position();
             if (core::length_sq(head_model) > 1e-6f) {
                 focus = core::transform_point(
-                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix(),
+                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
                     head_model);
             }
         }
@@ -842,7 +803,7 @@ void App::update(float dt) {
         {
             const game::FlightState& s = flight_.state();
             const core::Mat4 to_world =
-                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
             const core::Vec3 head_model = dragon_rig_.head_position();
             if (core::length_sq(head_model) > 1e-6f) {
                 combat_.set_muzzle(core::transform_point(to_world, head_model));
@@ -869,11 +830,17 @@ void App::update(float dt) {
         }
         if (combat_.breathing()) {
             emit_flame(combat_.breath_origin(), combat_.breath_direction(),
-                       combat_.tuning.breath_range, false, dt);
+                       combat_.tuning.breath_range, false, dt, &player_model());
         }
         for (const game::BreathCone& flame : combat_.hostile_breaths()) {
+            // A bot tagged its cone with its model index; an untagged cone
+            // (a sentinel) keeps the shared hostile blue.
+            const LoadedModel* colour =
+                flame.source >= 0 && size_t(flame.source) < models_.size()
+                    ? models_[size_t(flame.source)].get()
+                    : nullptr;
             emit_flame(flame.origin, flame.direction, combat_.tuning.hostile_breath_range, true,
-                       dt);
+                       dt, colour);
         }
         // A thin ember trail off every live round, so its path lingers a beat.
         for (const game::Projectile& projectile : combat_.projectiles()) {
@@ -1005,7 +972,7 @@ void App::update(float dt) {
         // and whole frames of threads landed on one wing.
         const game::FlightState& s = flight_.state();
         const core::Mat4 to_world =
-            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
         const core::Vec3 pale{0.55f, 0.65f, 0.8f};
         static float boost_carry = 0.0f;
         boost_carry += dt * 90.0f;
@@ -1013,10 +980,10 @@ void App::update(float dt) {
             boost_carry -= 1.0f;
             for (int side = 0; side < 2; ++side) {
                 gfx::Particle p;
-                if (wingtip_joint_[side] >= 0) {
+                if (player_model().wingtip_joint[side] >= 0) {
                     p.position = core::transform_point(
                         to_world,
-                        dragon_rig_.world_matrices()[size_t(wingtip_joint_[side])].col[3].xyz());
+                        dragon_rig_.world_matrices()[size_t(player_model().wingtip_joint[side])].col[3].xyz());
                 } else {
                     p.position = s.position + s.right() * (side == 0 ? 9.0f : -9.0f) + s.up();
                 }
@@ -1185,7 +1152,7 @@ void App::draw_skeleton_debug() {
     if (!show_skeleton_) return;
     const game::FlightState& s = dragon_state();
     const core::Mat4 to_world =
-        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
     const std::vector<core::Mat4>& skinning = dragon_rig_.skinning_matrices();
     if (skinning.empty()) return;
 
@@ -1195,10 +1162,10 @@ void App::draw_skeleton_debug() {
     // the file's, and that assumption collapsed every bone onto one point.
     const std::vector<core::Mat4>& world = dragon_rig_.world_matrices();
     if (world.empty()) return;
-    for (int i = 0; i < dragon_skeleton_.count(); ++i) {
+    for (int i = 0; i < player_model().skeleton.count(); ++i) {
         const core::Vec3 posed =
             core::transform_point(to_world, world[size_t(i)].translation_part());
-        const int parent = dragon_skeleton_.joint(i).parent;
+        const int parent = player_model().skeleton.joint(i).parent;
         if (parent != anim::NO_PARENT) {
             const core::Vec3 parent_posed =
                 core::transform_point(to_world, world[size_t(parent)].translation_part());
@@ -1832,8 +1799,20 @@ void App::build_dragon_ui() {
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Dragon");
 
-    ImGui::TextDisabled("%s, %d joints, %zu submesh(es)", dragon_source_.c_str(),
-                        dragon_skeleton_.count(), dragon_mesh_.submeshes().size());
+    ImGui::TextDisabled("%s, %d joints, %zu submesh(es)", player_model().path.c_str(),
+                        player_model().skeleton.count(), player_model().mesh.submeshes().size());
+
+    // Which creature the player wears. At the top because swapping species is
+    // the first thing anyone does with a roster, and because it re-initialises
+    // both rigs -- the sliders below belong to whichever one is selected.
+    if (models_.size() > 1) {
+        for (size_t i = 0; i < models_.size(); ++i) {
+            if (i) ImGui::SameLine();
+            if (ImGui::RadioButton(models_[i]->path.c_str(), player_model_ == int(i))) {
+                set_player_model(int(i));
+            }
+        }
+    }
 
     if (ImGui::CollapsingHeader("Material maps", ImGuiTreeNodeFlags_DefaultOpen)) {
         // Toggling one at a time is the only honest way to see what it does.
@@ -1846,11 +1825,18 @@ void App::build_dragon_ui() {
             ImGui::SameLine();
             if (ImGui::SmallButton("all on")) material_toggles_ = gfx::MaterialToggles{};
         }
-        ImGui::TextDisabled("%zu texture(s) loaded", dragon_textures_.size());
+        ImGui::TextDisabled("%zu texture(s) loaded", player_model().textures.size());
         // Hide colour: the same recolour the bots use, for the player.
         ImGui::ColorEdit3("hide hue", &player_hue_.x, ImGuiColorEditFlags_Float |
                                                           ImGuiColorEditFlags_HDR);
         ImGui::SliderFloat("hide recolour", &player_recolour_, 0.0f, 1.0f);
+        // Flame colour belongs to the model, not to combat: it is what makes a
+        // species read as elemental. HDR because the particles are additive and
+        // the hot core sits above 1.
+        ImGui::ColorEdit3("breath hot", &player_model().breath_hot.x,
+                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::ColorEdit3("breath cool", &player_model().breath_cool.x,
+                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
     }
 
     if (ImGui::CollapsingHeader("Wings")) {
@@ -1926,8 +1912,8 @@ void App::build_dragon_ui() {
     if (ImGui::CollapsingHeader("Legs & authored motion")) {
         ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
         if (dragon_rig_.has_base_clip()) {
-            ImGui::TextDisabled("clip '%s'%s", dragon_animations_[size_t(idle_clip_)].name.c_str(),
-                                idle_clip_hold_ >= 0.0f ? " (held at its last frame)" : "");
+            ImGui::TextDisabled("clip '%s'%s", player_model().animations[size_t(player_model().idle_clip)].name.c_str(),
+                                player_model().idle_clip_hold >= 0.0f ? " (held at its last frame)" : "");
             // Weight 0 is the honest A/B: it restores exactly the un-layered rig.
             ImGui::SliderFloat("clip weight", &rig.base_clip_weight, 0.0f, 1.0f);
             ImGui::SliderFloat("clip rate", &rig.base_clip_rate, 0.0f, 3.0f);
@@ -1949,7 +1935,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("talon spread", &rig.attack_toe_spread_deg, 0.0f, 30.0f, "%.0f deg");
         ImGui::SliderFloat("neck aim share", &rig.neck_aim_share, 0.0f, 1.0f);
         ImGui::SliderFloat("neck aim max", &rig.neck_aim_max_deg, 0.0f, 60.0f, "%.0f deg");
-        ImGui::TextDisabled("jaw: %s   open %.2f", dragon_joints_.jaw == anim::NO_PARENT ? "none" : "found",
+        ImGui::TextDisabled("jaw: %s   open %.2f", player_model().joints.jaw == anim::NO_PARENT ? "none" : "found",
                             dragon_rig_.jaw_open());
     }
 
@@ -2001,7 +1987,7 @@ void App::place_bot(BotShip& bot, uint32_t seed) {
     const float bearing = unit() * core::PI;
     core::Vec3 spawn = player.position +
                        core::Vec3{std::sin(bearing), 0.0f, std::cos(bearing)} *
-                           (650.0f + 150.0f * unit());
+                           (bot_spawn_range_ + bot_spawn_jitter_ * unit());
     const float ground = terrain_.height_at(spawn.x, spawn.z);
     spawn.y = core::maxf(player.position.y + 60.0f * unit(), ground + 150.0f);
     bot.flight.reset(spawn, core::look_rotation(player.position - spawn, core::Vec3::up()),
@@ -2062,60 +2048,182 @@ void App::start_match() {
 // The ground idle is whichever clip says so by name. An asset with only a
 // landing has a standing pose at the end of it, so that frame is held; an asset
 // with a single unnamed clip (the first dragon's 'Scene') gets that clip.
-void App::choose_idle_clip() {
-    idle_clip_ = -1;
-    idle_clip_hold_ = -1.0f;
+void App::choose_idle_clip(LoadedModel& model) const {
+    model.idle_clip = -1;
+    model.idle_clip_hold = -1.0f;
     auto lowered = [](std::string text) {
         for (char& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
         return text;
     };
-    for (size_t i = 0; i < dragon_animations_.size(); ++i) {
-        const std::string name = lowered(dragon_animations_[i].name);
+    for (size_t i = 0; i < model.animations.size(); ++i) {
+        const std::string name = lowered(model.animations[i].name);
         for (const char* key : {"idle", "stand", "rest", "breath", "hover"}) {
-            if (name.find(key) != std::string::npos) idle_clip_ = int(i);
+            if (name.find(key) != std::string::npos) model.idle_clip = int(i);
         }
-        if (idle_clip_ >= 0) break;
+        if (model.idle_clip >= 0) break;
     }
-    if (idle_clip_ < 0) {
-        for (size_t i = 0; i < dragon_animations_.size(); ++i) {
-            if (lowered(dragon_animations_[i].name).find("land") != std::string::npos) {
-                idle_clip_ = int(i);
-                idle_clip_hold_ = core::maxf(dragon_animations_[i].duration - 1.0f / 30.0f, 0.0f);
+    if (model.idle_clip < 0) {
+        for (size_t i = 0; i < model.animations.size(); ++i) {
+            if (lowered(model.animations[i].name).find("land") != std::string::npos) {
+                model.idle_clip = int(i);
+                model.idle_clip_hold =
+                    core::maxf(model.animations[i].duration - 1.0f / 30.0f, 0.0f);
                 break;
             }
         }
     }
-    if (idle_clip_ < 0 && dragon_animations_.size() == 1) idle_clip_ = 0;
-    if (idle_clip_ >= 0) {
-        LOG_INFO("ground idle: clip '%s'%s", dragon_animations_[size_t(idle_clip_)].name.c_str(),
-                 idle_clip_hold_ >= 0.0f ? " held at its last frame" : "");
-    } else if (!dragon_animations_.empty()) {
+    if (model.idle_clip < 0 && model.animations.size() == 1) model.idle_clip = 0;
+    if (model.idle_clip >= 0) {
+        LOG_INFO("ground idle: clip '%s'%s",
+                 model.animations[size_t(model.idle_clip)].name.c_str(),
+                 model.idle_clip_hold >= 0.0f ? " held at its last frame" : "");
+    } else if (!model.animations.empty()) {
         LOG_INFO("ground idle: none of %zu clips looks like an idle; bind pose it is",
-                 dragon_animations_.size());
+                 model.animations.size());
     }
 }
 
-void App::apply_idle_clip(anim::DragonRig& rig) const {
-    if (idle_clip_ < 0 || size_t(idle_clip_) >= dragon_animations_.size()) return;
-    rig.set_base_clip(&dragon_animations_[size_t(idle_clip_)], idle_clip_hold_);
+void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const {
+    if (model.idle_clip < 0 || size_t(model.idle_clip) >= model.animations.size()) return;
+    rig.set_base_clip(&model.animations[size_t(model.idle_clip)], model.idle_clip_hold);
 }
 
-void App::find_wingtips() {
+void App::find_wingtips(LoadedModel& model) {
     for (int side = 0; side < 2; ++side) {
-        wingtip_joint_[side] = -1;
+        model.wingtip_joint[side] = -1;
         float best = 0.0f;
         auto consider = [&](int joint) {
-            const float reach = std::fabs(dragon_skeleton_.world_bind(joint).translation_part().x);
+            const float reach = std::fabs(model.skeleton.world_bind(joint).translation_part().x);
             if (reach > best) {
                 best = reach;
-                wingtip_joint_[side] = joint;
+                model.wingtip_joint[side] = joint;
             }
         };
-        for (const int joint : dragon_joints_.wing_root[side]) consider(joint);
-        for (const auto& finger : dragon_joints_.wing_fingers[side]) {
+        for (const int joint : model.joints.wing_root[side]) consider(joint);
+        for (const auto& finger : model.joints.wing_fingers[side]) {
             for (const int joint : finger) consider(joint);
         }
     }
+}
+
+// Loads one creature: mesh, textures, skeleton, the joint map the procedural
+// rig drives, the alignment that puts an arbitrary author's units into ours,
+// and the two tuning files that may sit beside the glTF. An empty path, or one
+// that fails to load, falls back to the generated rig rather than failing --
+// the app must always have a dragon.
+bool App::load_model(const std::string& path, LoadedModel& out) {
+    anim::SkinnedMeshData mesh_data;
+    const std::string model_path =
+        path.empty() ? std::string(ASSET_ROOT "/dragon.glb") : path;
+
+    // Prefer an imported model, fall back to the generated one. The rig is
+    // driven the same way either way -- it only needs to know which joints
+    // form the neck, tail and wings, and map_dragon_joints works that out
+    // from an arbitrary skeleton.
+    const anim::GltfLoadResult loaded =
+        anim::load_skinned_gltf(model_path.c_str(), out.skeleton, mesh_data);
+    if (loaded.ok) {
+        out.joints = anim::map_dragon_joints(out.skeleton);
+        out.imported = out.joints.valid();
+        if (!out.imported) {
+            LOG_WARN("%s: imported skeleton has no recognisable wings; falling back",
+                     model_path.c_str());
+        }
+    } else {
+        LOG_INFO("no imported dragon (%s); using the generated rig", loaded.error.c_str());
+    }
+
+    if (!out.imported) {
+        anim::build_dragon(out.shape, out.skeleton, out.joints, mesh_data);
+        out.path = "generated";
+    } else {
+        out.path = model_path;
+        // Scale so the wingspan matches what the flight model assumes, and
+        // recentre, because an asset's origin is wherever its author left it
+        // -- this one sits over a hundred units from its own geometry. Both
+        // are starting points, refined by eye with the sliders.
+        // Match the wingspan the flight model assumes: 40 m^2 of wing over
+        // roughly a 19 m span. Scaling by the wingspan rather than the
+        // overall length keeps the aerodynamics and the visuals agreeing.
+        const core::Vec3 extent = loaded.bounds_max - loaded.bounds_min;
+        out.asset.scale = extent.x > 0.1f ? 19.0f / extent.x : 1.0f;
+
+        // This asset faces +Z; the engine's forward is -Z. Determined from
+        // the rig rather than by eye: its head bone sits at positive Z and
+        // its tail tip at negative Z.
+        const int head = out.joints.head;
+        const int tail = out.joints.tail.empty() ? anim::NO_PARENT : out.joints.tail.back();
+        if (head != anim::NO_PARENT && tail != anim::NO_PARENT) {
+            const float head_z = out.skeleton.world_bind(head).translation_part().z;
+            const float tail_z = out.skeleton.world_bind(tail).translation_part().z;
+            if (head_z > tail_z) {
+                out.asset.yaw_deg = 180.0f;
+                LOG_INFO("%s: asset faces +Z (head %.2f, tail %.2f); yawing 180",
+                         out.path.c_str(), head_z, tail_z);
+            }
+        }
+
+        const core::Vec3 centre = (loaded.bounds_min + loaded.bounds_max) * 0.5f;
+        out.asset.offset =
+            core::rotate(core::from_euler(0.0f, core::radians(out.asset.yaw_deg), 0.0f),
+                         centre * -out.asset.scale);
+        LOG_INFO("%s: alignment scale %.4f, offset (%.2f %.2f %.2f)", out.path.c_str(),
+                 out.asset.scale, out.asset.offset.x, out.asset.offset.y, out.asset.offset.z);
+    }
+    find_wingtips(out);
+
+    // Upload whatever textures came with the model. The loader recorded the
+    // colour space of each, which is not something the pixels reveal. The
+    // debug name carries the roster slot so two species are told apart in a
+    // GPU capture.
+    const std::string tag = "model" + std::to_string(models_.size());
+    for (size_t i = 0; i < loaded.textures.size(); ++i) {
+        const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
+        const std::string name =
+            tag + "_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
+        out.textures.push_back(gfx::create_texture_from_image(device_.gpu(), loaded.textures[i],
+                                                              name.c_str(), srgb));
+    }
+    out.mesh.upload(device_.gpu(), mesh_data, tag.c_str());
+
+    if (!loaded.animations.empty()) {
+        out.animations = loaded.animations;
+        choose_idle_clip(out);
+    }
+
+    // A model may carry a rig profile and a handling profile beside its glTF.
+    // Missing profiles leave the built-in defaults untouched, so a model
+    // without either behaves exactly as one did before the roster existed.
+    // The generated fallback borrows the default dragon's profiles, which is
+    // where they lived when there was only ever one model.
+    const std::string cfg_stem = out.imported ? out.path : std::string(ASSET_ROOT "/dragon.glb");
+    out.rig_tuning_path = cfg_stem + ".rig.cfg";
+    out.flight_tuning_path = cfg_stem + ".flight.cfg";
+    if (anim::load_rig_tuning(out.rig_tuning, out.rig_tuning_path.c_str())) {
+        LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
+    }
+    game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
+    return true;
+}
+
+// Re-points the player at another roster entry. Both rigs hold spring state
+// indexed by joint, so they cannot simply be told about a different skeleton:
+// they are re-initialised, which also resets the chains to their rest pose.
+void App::set_player_model(int index) {
+    if (index < 0 || size_t(index) >= models_.size() || index == player_model_) return;
+    player_model_ = index;
+    LoadedModel& model = player_model();
+    dragon_rig_.init(model.skeleton, model.joints);
+    ghost_rig_.init(model.skeleton, model.joints);
+    dragon_rig_.set_model_scale(model.asset.scale);
+    ghost_rig_.set_model_scale(model.asset.scale);
+    dragon_rig_.tuning = model.rig_tuning;
+    ghost_rig_.tuning = model.rig_tuning;
+    apply_idle_clip(model, dragon_rig_);
+    apply_idle_clip(model, ghost_rig_);
+    model_rig_tuning_path_ = model.rig_tuning_path;
+    model_tuning_path_ = model.flight_tuning_path;
+    LOG_INFO("player model: [%d] %s", index, model.path.c_str());
 }
 
 void App::spawn_bots(int count) {
@@ -2124,10 +2232,19 @@ void App::spawn_bots(int count) {
     for (int i = 0; i < count; ++i) {
         auto bot = std::make_unique<BotShip>();
         bot->slot = combat_.spawn_external(bot_health_, 6.5f);
-        bot->rig.init(dragon_skeleton_, dragon_joints_);
-        bot->rig.set_model_scale(asset_.scale);
-        apply_idle_clip(bot->rig);
-        bot->rig.tuning = dragon_rig_.tuning;
+        // Deal the roster round-robin, skipping the player's own entry when
+        // there is anything else to fly. With a one-model roster this is the
+        // player's model for everyone, exactly as it was before.
+        bot->model = models_.size() > 1
+                         ? int((size_t(player_model_) + 1 + size_t(i)) % models_.size())
+                         : player_model_;
+        LoadedModel& worn = model_at(bot->model);
+        bot->rig.init(worn.skeleton, worn.joints);
+        bot->rig.set_model_scale(worn.asset.scale);
+        apply_idle_clip(worn, bot->rig);
+        // Pose and handling both follow the species, not the player.
+        bot->rig.tuning = worn.rig_tuning;
+        bot->flight.tuning = worn.flight_tuning;
         bot->pilot.tuning = bot_tuning_;
         // Four hides, cycling: rust, bone, moss, violet. Recoloured at the
         // texture's own luminance (a multiplicative tint on this dark hide
@@ -2142,6 +2259,7 @@ void App::spawn_bots(int count) {
             {1.4f, 0.7f, 2.0f},    // violet
         };
         bot->hue = palette[size_t(i) % 4];
+        LOG_INFO("bot %d: %s", i, worn.path.c_str());
         place_bot(*bot, uint32_t(20260826 + i * 977));
         bot->last_health = bot_health_;
         bots_.push_back(std::move(bot));
@@ -2271,7 +2389,7 @@ void App::update_bots(float dt) {
             if (core::length_sq(head_model) > 1e-6f) {
                 const core::Mat4 to_world =
                     core::Mat4::trs(self.position, self.orientation, core::Vec3::one()) *
-                    asset_.matrix();
+                    player_model().asset.matrix();
                 muzzle = core::transform_point(to_world, head_model);
             }
         }
@@ -2280,7 +2398,7 @@ void App::update_bots(float dt) {
         }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
-            combat_.hostile_breath(muzzle, bot->flight.state().forward());
+            combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model);
         }
         anim::RigAction action;
         action.breath = decision.breathe ? 1.0f : 0.0f;
@@ -2310,7 +2428,7 @@ float App::particle_unit() {
 // slowing, buoyant at the end of their life the way combustion products are.
 // The damage cone is untouched -- this is what the cone LOOKS like.
 void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile,
-                     float dt) {
+                     float dt, const LoadedModel* colour) {
     const core::Vec3 side =
         core::normalize_or(core::cross(direction, core::Vec3::up()), core::Vec3::right());
     const core::Vec3 lift =
@@ -2320,8 +2438,15 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
     // change the flame's density.
     static float carry = 0.0f;
     carry += dt * 260.0f;
-    const core::Vec3 hot = hostile ? core::Vec3{1.3f, 1.7f, 2.2f} : core::Vec3{2.2f, 1.5f, 0.7f};
-    const core::Vec3 cool = hostile ? core::Vec3{0.2f, 0.4f, 1.0f} : core::Vec3{1.0f, 0.25f, 0.04f};
+    // Colour comes from the breathing model, so two species in one fight do
+    // not share a flame. The hostile default stays cold blue: it is what makes
+    // incoming fire readable as incoming at a glance.
+    const core::Vec3 hot = colour ? colour->breath_hot
+                                  : (hostile ? core::Vec3{1.3f, 1.7f, 2.2f}
+                                             : core::Vec3{2.2f, 1.5f, 0.7f});
+    const core::Vec3 cool = colour ? colour->breath_cool
+                                   : (hostile ? core::Vec3{0.2f, 0.4f, 1.0f}
+                                              : core::Vec3{1.0f, 0.25f, 0.04f});
     // Launch speed solved against drag so a puff's travel equals the damage
     // range: with velocity decaying as e^(-kt), distance = v(1-e^(-kT))/k.
     // The flame's visible length IS its reach, which is how the player judges
@@ -2901,6 +3026,16 @@ void App::build_combat_ui() {
     if (ImGui::Button("spawn bots")) spawn_bots(bot_count_);
     ImGui::SetNextItemWidth(120.0f);
     ImGui::SliderFloat("bot recolour", &bot_recolour_, 0.0f, 1.0f);
+    ImGui::SetNextItemWidth(120.0f);
+    // Decides whether a fight opens as a long chase or as a merge, so it is a
+    // feel dial rather than a constant. Takes effect on the next spawn.
+    ImGui::SliderFloat("bot spawn range", &bot_spawn_range_, 80.0f, 1500.0f, "%.0f m");
+    if (models_.size() > 1) {
+        ImGui::TextDisabled("roster:");
+        for (size_t i = 0; i < bots_.size(); ++i) {
+            ImGui::TextDisabled("  bot %zu: %s", i, model_at(bots_[i]->model).path.c_str());
+        }
+    }
     ImGui::SameLine();
     if (ImGui::Button("sentinels")) {
         bots_.clear();
@@ -3117,15 +3252,15 @@ void App::build_flight_ui() {
 
     if (ImGui::CollapsingHeader("Debug draw", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("skeleton", &show_skeleton_);
-        ImGui::TextDisabled("model: %s (%d joints)", dragon_source_.c_str(),
-                            dragon_skeleton_.count());
+        ImGui::TextDisabled("model: %s (%d joints)", player_model().path.c_str(),
+                            player_model().skeleton.count());
         if (ImGui::TreeNode("Asset alignment")) {
-            ImGui::SliderFloat("scale", &asset_.scale, 0.01f, 4.0f, "%.4f");
-            ImGui::SliderFloat("yaw", &asset_.yaw_deg, -180.0f, 180.0f, "%.0f deg");
-            ImGui::SliderFloat("pitch", &asset_.pitch_deg, -180.0f, 180.0f, "%.0f deg");
-            ImGui::SliderFloat("roll", &asset_.roll_deg, -180.0f, 180.0f, "%.0f deg");
-            ImGui::SliderFloat("offset y", &asset_.offset.y, -10.0f, 10.0f, "%.2f m");
-            ImGui::SliderFloat("offset z", &asset_.offset.z, -10.0f, 10.0f, "%.2f m");
+            ImGui::SliderFloat("scale", &player_model().asset.scale, 0.01f, 4.0f, "%.4f");
+            ImGui::SliderFloat("yaw", &player_model().asset.yaw_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("pitch", &player_model().asset.pitch_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("roll", &player_model().asset.roll_deg, -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("offset y", &player_model().asset.offset.y, -10.0f, 10.0f, "%.2f m");
+            ImGui::SliderFloat("offset z", &player_model().asset.offset.z, -10.0f, 10.0f, "%.2f m");
             ImGui::TreePop();
         }
         ImGui::Checkbox("force vectors", &show_forces_);
@@ -3185,15 +3320,16 @@ void App::render() {
                                   world_.scene().view_params.z);
         world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                gfx::ModelUniforms());
-        world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_, shadow_.light_view_proj(),
+        world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
                                   dragon_model, dragon_rig_.skinning_matrices());
         for (const auto& bot : bots_) {
             if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
             const game::FlightState& s = bot->flight.state();
+            const LoadedModel& worn = model_at(bot->model);
             gfx::ModelUniforms bot_model;
             bot_model.model =
-                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
-            world_.draw_skinned_depth(device_, shadow_pass, dragon_mesh_,
+                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
+            world_.draw_skinned_depth(device_, shadow_pass, worn.mesh,
                                       shadow_.light_view_proj(), bot_model,
                                       bot->rig.skinning_matrices());
         }
@@ -3221,8 +3357,8 @@ void App::render() {
     if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
     foliage_.draw_trees(device_, pass, world_.scene());
     foliage_.draw_grass(device_, pass, world_.scene());
-    world_.draw_skinned(device_, pass, dragon_mesh_, dragon_model,
-                        dragon_rig_.skinning_matrices(), dragon_textures_, model_sampler_);
+    world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
+                        dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
     // rings that instancing would be premature. Hidden in the studio, whose
@@ -3257,9 +3393,10 @@ void App::render() {
         const game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
         if (!slot.alive) continue;
         const game::FlightState& s = bot->flight.state();
+        const LoadedModel& worn = model_at(bot->model);
         gfx::ModelUniforms bot_model;
         bot_model.model =
-            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * asset_.matrix();
+            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
         // The hit flash reddens rather than brightens: high emissive whitens
         // through the tonemap, and a white flash was unreadable as damage.
         // The hit flash reddens rather than brightens: high emissive whitens
@@ -3268,8 +3405,8 @@ void App::render() {
                                     core::lerpf(1.0f, 0.2f, slot.hit_flash),
                                     0.10f + slot.hit_flash * 0.45f};
         bot_model.recolour = core::Vec4{bot->hue.x, bot->hue.y, bot->hue.z, bot_recolour_};
-        world_.draw_skinned(device_, pass, dragon_mesh_, bot_model,
-                            bot->rig.skinning_matrices(), dragon_textures_, model_sampler_);
+        world_.draw_skinned(device_, pass, worn.mesh, bot_model, bot->rig.skinning_matrices(),
+                            worn.textures, model_sampler_);
     }
 
     draw_combat(pass);
@@ -3283,7 +3420,7 @@ void App::render() {
     if (show_ghost_ && rally_.ghost_pose(ghost)) {
         // The ghost is drawn untextured on purpose: its blue tint is what
         // distinguishes a replay from the living dragon.
-        world_.draw_skinned(device_, pass, dragon_mesh_, ghost_model_uniforms(ghost),
+        world_.draw_skinned(device_, pass, player_model().mesh, ghost_model_uniforms(ghost),
                             ghost_rig_.skinning_matrices());
     }
 

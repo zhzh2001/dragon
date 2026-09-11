@@ -69,6 +69,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
+| `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
+| `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
 Soaks that have caught real bugs:

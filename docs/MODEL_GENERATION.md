@@ -1120,9 +1120,12 @@ PBR set. Decimating it to ~100 triangles leaves nothing of the generation
 foliage pipeline deliberately does not have. Grass is re-placed around the
 camera every frame, so the budget there is instance count, not mesh detail.
 
-**More dragons: yes.** Every dragon in a match is currently the same mesh and
-texture with a hue push (`bot_hue_strength` in `src/app.h`, and `--hue`), so
-distinct bot dragons are a real visual gain rather than a nicety. The pipeline
+**More dragons: yes, and the engine now fields them.** Until 2026-09-11 every
+dragon in a match was the same mesh and texture with a hue push, which cannot
+change a silhouette. `--models A,B,C` loads a roster: the player flies the
+first and the bots are dealt the rest, each with its own skeleton, scale,
+`.rig.cfg` pose profile, `.flight.cfg` handling and flame colour. So a distinct
+bot dragon is now a visual gain that actually reaches the screen. The pipeline
 is proven end to end and costs about four Studio credits plus a rig.
 
 The rule that falls out: generation pays for things that are **few on screen,

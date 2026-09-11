@@ -42,6 +42,10 @@ struct Options {
     // --model PATH loads a different rigged glTF in place of assets/dragon.glb,
     // for trying alternative dragons without touching the tree.
     std::string model;
+    // --models A.glb,B.glb,... loads a whole roster. The player flies the
+    // first and the bots are dealt the rest in turn, so one match can field
+    // more than one species instead of four hue-pushed copies of one mesh.
+    std::vector<std::string> models;
     // --hue r,g,b,strength recolours the player's dragon (see ModelUniforms::recolour).
     bool has_hue = false;
     core::Vec4 hue;
@@ -103,6 +107,9 @@ struct Options {
     bool attack = false;
     // --bots N replaces the sentinels with N bot dragons at startup.
     int bots = 0;
+    // --bot-range N spawns the bots N metres out instead of 650, so a capture
+    // can hold the player and every rival in one frame.
+    float bot_range = 0.0f;  // 0 = leave the default
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
 
@@ -202,6 +209,10 @@ private:
         game::FlightModel flight;
         game::BotPilot pilot;
         anim::DragonRig rig;
+        // Which entry of models_ this bot wears. A flight of rivals reads as a
+        // flight of rivals only if they differ in silhouette; the hue below
+        // cannot do that on its own.
+        int model = 0;
         int slot = -1;
         bool was_alive = true;
         bool grounded_last_frame = false;
@@ -222,6 +233,12 @@ private:
     float saved_aim_assist_ = 0.9f;
     // Per-tier bot survivability, applied at spawn (health) and live (regen).
     float bot_health_ = 80.0f;
+    // How far out a bot spawns, and how much that varies. Pulled out of
+    // place_bot because it decides whether a fight starts as a chase or as a
+    // merge -- and because a short range is the only way to get the whole
+    // roster into one headless capture.
+    float bot_spawn_range_ = 650.0f;
+    float bot_spawn_jitter_ = 150.0f;
 
     // M15: the match loop. Countdown, fight to a kill target, results,
     // rematch. Idle means free play, which everything else already was.
@@ -229,7 +246,6 @@ private:
     void start_match();
     void apply_bot_skill(int level);
     void spawn_bots(int count);
-    void find_wingtips();
     // How far bot hides are recoloured toward their hue; 0 leaves the texture.
     float bot_recolour_ = 0.8f;
     void place_bot(BotShip& bot, uint32_t seed);
@@ -242,16 +258,11 @@ private:
     float previous_flap_phase_ = 0.0f;
     float hit_sound_cooldown_ = 0.0f;
     bool was_boosting_ = false;
-    // The outermost wing joint per side (0 = +X), for effects that leave the
-    // wingtips. -1 when the rig has no wings.
-    int wingtip_joint_[2] = {-1, -1};
     float boost_fov_ = 0.0f;
     float base_fov_ = 62.0f;
     // Deterministic jitter for the emitters.
     uint32_t particle_rng_ = 1u;
     float particle_unit();
-    void emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile,
-                    float dt);
     void emit_impact(core::Vec3 position, bool hostile, bool on_terrain);
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
@@ -268,23 +279,88 @@ private:
     // Master switch for every ImGui panel. The tuning UI covers most of the
     // screen, which is fine while tuning and useless while playing.
     bool show_panels_ = true;
-    // The dragon is a real skinned rig now: skeleton, skinned mesh, and
-    // procedural animation driven by flight state.
-    anim::DragonShape dragon_shape_;
-    anim::Skeleton dragon_skeleton_;
-    anim::DragonJoints dragon_joints_;
-    anim::SkinnedMesh dragon_mesh_;
+    // An imported asset arrives in whatever scale and orientation its author
+    // used. Rather than guess at load time, the correction is a live transform
+    // so it can be aligned by eye and then written down.
+    struct AssetTransform {
+        float scale = 1.0f;
+        float yaw_deg = 0.0f;
+        float pitch_deg = 0.0f;
+        float roll_deg = 0.0f;
+        core::Vec3 offset = core::Vec3::zero();
+
+        core::Mat4 matrix() const {
+            const core::Quat rotation =
+                core::from_euler(core::radians(pitch_deg), core::radians(yaw_deg),
+                                 core::radians(roll_deg));
+            return core::Mat4::trs(offset, rotation, core::Vec3(scale));
+        }
+    };
+
+    // One rigged creature, and everything that belongs to it rather than to
+    // whoever is flying it. Split out so a match can field more than one
+    // species: the mesh, its textures, the skeleton the joint mapper found and
+    // the per-model tuning files are all properties of the asset, while the
+    // spring state that animates them belongs to each DragonRig.
+    struct LoadedModel {
+        std::string path = "generated";  // what was loaded, for the UI and logs
+        anim::DragonShape shape;         // only meaningful for the generated fallback
+        anim::Skeleton skeleton;
+        anim::DragonJoints joints;
+        anim::SkinnedMesh mesh;
+        std::vector<SDL_GPUTexture*> textures;
+        std::vector<anim::AnimationClip> animations;
+        // Which clip serves as the ground idle, and whether it is held at one time.
+        int idle_clip = -1;
+        float idle_clip_hold = -1.0f;
+        AssetTransform asset;
+        // <model>.rig.cfg and <model>.flight.cfg, already resolved. A rig
+        // profile changes only the visible pose; the flight profile changes
+        // forces and control response, which is why a wyvern can be given the
+        // handling its shape implies.
+        anim::RigTuning rig_tuning;
+        game::FlightTuning flight_tuning;
+        std::string rig_tuning_path;
+        std::string flight_tuning_path;
+        bool imported = false;
+        // Flame colour, hot core to cool tip. Per model because the breath is
+        // the clearest place a species reads as elemental, and because the
+        // tonemap ends in a gamma encode -- a pale breath clips to white, so
+        // these want to stay mid-value and saturated (see EFFECTS.md).
+        core::Vec3 breath_hot{2.2f, 1.5f, 0.7f};
+        core::Vec3 breath_cool{1.0f, 0.25f, 0.04f};
+        // The outermost wing joint per side, for the wingtip vortex trails.
+        // -1 when the rig has no wings.
+        int wingtip_joint[2] = {-1, -1};
+    };
+    // Held by pointer because a LoadedModel owns GPU handles and is referred to
+    // by index from every bot; growth must not move one under a live reference.
+    std::vector<std::unique_ptr<LoadedModel>> models_;
+    int player_model_ = 0;
+    LoadedModel& player_model() { return *models_[size_t(player_model_)]; }
+    const LoadedModel& player_model() const { return *models_[size_t(player_model_)]; }
+    // A model index, clamped. Bots store an index rather than a pointer so the
+    // roster can be rebuilt without walking them.
+    LoadedModel& model_at(int index) {
+        if (index < 0 || size_t(index) >= models_.size()) return player_model();
+        return *models_[size_t(index)];
+    }
+    bool load_model(const std::string& path, LoadedModel& out);
+    void find_wingtips(LoadedModel& model);
+    // `colour` names the model whose flame this is; null keeps the shared
+    // player/hostile colours.
+    void emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile, float dt,
+                    const LoadedModel* colour = nullptr);
+    // Re-points the player at another entry in the roster. The rigs carry
+    // spring state tied to a specific skeleton, so both are re-initialised.
+    void set_player_model(int index);
+
     anim::DragonRig dragon_rig_;
     // The ghost needs its own rig: the spring chains carry state, so one rig
     // cannot serve two dragons.
     anim::DragonRig ghost_rig_;
-    std::vector<anim::AnimationClip> dragon_animations_;
-    // Which clip serves as the ground idle, and whether it is held at one time.
-    int idle_clip_ = -1;
-    float idle_clip_hold_ = -1.0f;
-    void choose_idle_clip();
-    void apply_idle_clip(anim::DragonRig& rig) const;
-    std::vector<SDL_GPUTexture*> dragon_textures_;
+    void choose_idle_clip(LoadedModel& model) const;
+    void apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const;
     SDL_GPUSampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
     gfx::MaterialToggles material_toggles_;
@@ -304,25 +380,6 @@ private:
     core::Vec3 player_hue_{1.0f, 1.0f, 1.0f};
     float player_recolour_ = 0.0f;
 
-    // An imported asset arrives in whatever scale and orientation its author
-    // used. Rather than guess at load time, the correction is a live transform
-    // so it can be aligned by eye and then written down.
-    struct AssetTransform {
-        float scale = 1.0f;
-        float yaw_deg = 0.0f;
-        float pitch_deg = 0.0f;
-        float roll_deg = 0.0f;
-        core::Vec3 offset = core::Vec3::zero();
-
-        core::Mat4 matrix() const {
-            const core::Quat rotation =
-                core::from_euler(core::radians(pitch_deg), core::radians(yaw_deg),
-                                 core::radians(roll_deg));
-            return core::Mat4::trs(offset, rotation, core::Vec3(scale));
-        }
-    } asset_;
-    bool using_imported_dragon_ = false;
-    std::string dragon_source_ = "generated";
 
     // ---- rally ----
     game::Rally rally_;
