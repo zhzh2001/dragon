@@ -1409,6 +1409,115 @@ void test_studio_ground_offset() {
     CHECK(embercrest.grounded);
 }
 
+// The wingtip must actually reach the angle the flight model commanded.
+//
+// drive_wings normalizes the per-joint contributions so that "the wingtip ends
+// up rotated by the flap angle itself, whatever the chain length" -- that is
+// what lets one procedural rig drive a two-bone generated wing and a
+// seven-joint imported one. The promise is worth a test because it is silently
+// breakable: any per-joint attenuation left out of the normalizer scales the
+// whole stroke down, and the loss grows with chain length, so the generated rig
+// barely notices while a real asset loses a third of its wingbeat. That reads
+// as a stiff, shallow flap rather than as a bug.
+// How far the wingtip actually travels, as a fraction of the angle commanded.
+//
+// Flap is a rotation about the body's forward axis, so it moves the tip along
+// body up and nothing else does -- sweep and fold rotate about body up itself
+// and leave that component alone. Height over the bind-pose span is therefore
+// the stroke angle cleanly, where measuring elevation above the horizon would
+// be contaminated by the fold shortening the span.
+float measured_stroke_fraction(const Skeleton& skeleton, const anim::DragonJoints& joints,
+                               const anim::RigTuning& tuning) {
+    // The outermost joint of the longest chain on one wing: the tip whose
+    // travel the player reads as the size of the wingbeat.
+    int tip = joints.wing_root[0].back();
+    size_t longest = 0;
+    for (const std::vector<int>& finger : joints.wing_fingers[0]) {
+        if (finger.size() > longest && !finger.empty()) {
+            longest = finger.size();
+            tip = finger.back();
+        }
+    }
+    const int shoulder = joints.wing_root[0].front();
+    const float span = length((skeleton.world_bind(tip).col[3] -
+                               skeleton.world_bind(shoulder).col[3]).xyz());
+    if (span < 0.01f) return 0.0f;
+
+    auto elevation_deg = [&](float wing_angle_deg) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.tuning = tuning;
+        game::FlightState s;
+        s.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        s.airspeed = 30.0f;
+        s.ground_clearance = 300.0f;
+        s.wing_angle = radians(wing_angle_deg);
+        s.flap_amplitude = 1.0f;
+        for (int i = 0; i < 180; ++i) rig.update(s, 1.0f / 60.0f);
+        const Vec3 d = rig.world_matrices()[size_t(tip)].col[3].xyz() -
+                       rig.world_matrices()[size_t(shoulder)].col[3].xyz();
+        return degrees(std::asin(clampf(d.y / span, -1.0f, 1.0f)));
+    };
+
+    // The flight model's own stroke, top of the upbeat to bottom of the
+    // downbeat: FlightTuning::flap_up_angle_deg and flap_down_angle_deg.
+    const game::FlightTuning flight;
+    const float commanded = flight.flap_up_angle_deg - flight.flap_down_angle_deg;
+    return (elevation_deg(flight.flap_up_angle_deg) -
+            elevation_deg(flight.flap_down_angle_deg)) / commanded;
+}
+
+void test_wingtip_reaches_the_commanded_flap() {
+    std::printf("the wingtip sweeps the angle the flight model commanded\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    const float fraction = measured_stroke_fraction(skeleton, joints, anim::RigTuning{});
+    std::printf("  generated rig: tip travels %.0f%% of the commanded stroke\n",
+                double(100.0f * fraction));
+    // Distributing the stroke down the chain curls the wing, so the tip follows
+    // a chord rather than the full arc and some loss is real animation. What is
+    // not acceptable is loss that grows with how many bones a rig happens to
+    // have -- that made a long imported wing flap half as far as a short
+    // generated one through no decision of anyone\'s. This floor is what the
+    // leverage normalizer in drive_wings buys; before it the generated rig sat
+    // at 64% and a seven-joint wing at barely half.
+    CHECK(fraction > 0.80f);
+
+    // Whatever an imported asset is shaped like, its visible stroke must land
+    // in the same band. Chain length is the variable this pins.
+    namespace fs = std::filesystem;
+    for (const char* name : {"assets/stormsail.glb", "assets/embercrest-textured.glb"}) {
+        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        fs::path path = source_root / name;
+        if (!fs::is_regular_file(path)) path = fs::path(name);
+        if (!fs::is_regular_file(path)) {
+            std::printf("  %s absent; skipped\n", name);
+            continue;
+        }
+        Skeleton asset_skeleton;
+        anim::SkinnedMeshData asset_mesh;
+        const anim::GltfLoadResult loaded =
+            anim::load_skinned_gltf(path.string().c_str(), asset_skeleton, asset_mesh);
+        if (!loaded.ok) {
+            std::printf("  %s failed to load; skipped\n", name);
+            continue;
+        }
+        const anim::DragonJoints asset_joints = anim::map_dragon_joints(asset_skeleton);
+        if (asset_joints.wing_root[0].empty()) continue;
+        anim::RigTuning asset_tuning;
+        anim::load_rig_tuning(asset_tuning, (path.string() + ".rig.cfg").c_str());
+        const float asset_fraction =
+            measured_stroke_fraction(asset_skeleton, asset_joints, asset_tuning);
+        std::printf("  %s: tip travels %.0f%% of the commanded stroke\n", name,
+                    double(100.0f * asset_fraction));
+        CHECK(asset_fraction > 0.80f);
+    }
+}
+
 void test_legs_swing_with_the_frame() {
     std::printf("legs are pendulums: outward in a turn, forward under braking\n");
     anim::DragonShape shape;
@@ -1748,6 +1857,7 @@ int main() {
     test_ground_stance_is_authored();
     test_studio_states_are_consistent();
     test_studio_ground_offset();
+    test_wingtip_reaches_the_commanded_flap();
     test_legs_swing_with_the_frame();
     test_optional_embercrest_asset();
 

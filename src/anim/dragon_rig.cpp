@@ -490,6 +490,36 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
                                 : core::conjugate(world_rotation[size_t(parent)]);
     }
 
+    // Leverage of each wing joint over the wingtip, measured once from the bind
+    // pose. The representative path is the shared root followed by the longest
+    // finger, which is the same walk drive_wings normalizes over. The reference
+    // point is one bone-length beyond the last joint, because the membrane
+    // carries on past it -- taking the last joint's own origin would say the
+    // outermost joint has no leverage at all, when what it actually moves is
+    // the membrane hanging off it.
+    for (int side = 0; side < 2; ++side) {
+        wing_flap_leverage_[side].clear();
+        std::vector<int> path = joints.wing_root[side];
+        const std::vector<int>* longest = nullptr;
+        for (const std::vector<int>& finger : joints.wing_fingers[side]) {
+            if (!longest || finger.size() > longest->size()) longest = &finger;
+        }
+        if (longest) path.insert(path.end(), longest->begin(), longest->end());
+        if (path.size() < 2) continue;
+
+        std::vector<Vec3> position;
+        position.reserve(path.size());
+        for (const int joint : path) {
+            position.push_back(skeleton.world_bind(joint).translation_part());
+        }
+        const Vec3 tip = position.back() + (position.back() - position[position.size() - 2]);
+        const float span = core::length(tip - position.front());
+        if (span < 1e-4f) continue;
+        for (const Vec3& p : position) {
+            wing_flap_leverage_[side].push_back(core::length(tip - p) / span);
+        }
+    }
+
     // Feet and toes, with depth below their root, for the hanging curl. The
     // *_end_* leaves are export artifacts with no skin weights; harmless to
     // rotate, cheaper to skip.
@@ -738,19 +768,39 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         // above the spine at the top of the beat. Total tip rotation is
         // unchanged; only the shape of the wing changes.
         const float shoulder_cut = 0.65f * upstroke;
-        auto flap_share_at = [&](size_t k) {
+        // `wing_phase_lag` attenuates each successive outboard joint, and for a
+        // long time it was applied AFTER this normalizer instead of inside it,
+        // so the tip reached only as much of the commanded angle as the lag
+        // happened to leave.
+        auto flap_weight_at = [&](size_t k) {
+            const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(k), 0.8f);
             return std::pow(tuning.outboard_decay, float(k)) *
-                   (k < 2 ? 1.0f - shoulder_cut : 1.0f);
+                   (k < 2 ? 1.0f - shoulder_cut : 1.0f) * lag;
+        };
+        // Normalize by how far each joint actually MOVES the wingtip, not by
+        // how much it rotates it. Summing the angles makes the tip bone's
+        // orientation come out right while its position travels a fraction of
+        // the arc: an outboard joint pivots close to the tip, so the same
+        // degree of rotation there displaces the membrane far less than it does
+        // at the shoulder -- and the upstroke's shoulder cut deliberately moves
+        // the weight out to exactly where that leverage is worst. Between them
+        // the visible stroke was 64% of the commanded angle on the generated
+        // rig and less on a long imported wing, which is most of what read as a
+        // shallow, stiff wingbeat. Leverage comes from the bind pose in init().
+        const std::vector<float>& leverage = wing_flap_leverage_[side];
+        auto flap_leverage_at = [&](size_t k) {
+            return k < leverage.size() ? leverage[k] : 0.0f;
         };
         float flap_total = 0.0f;
-        for (size_t k = 0; k < root_len + longest_finger; ++k) flap_total += flap_share_at(k);
+        for (size_t k = 0; k < root_len + longest_finger; ++k) {
+            flap_total += flap_weight_at(k) * flap_leverage_at(k);
+        }
         const float flap_normalize = flap_total > 1e-4f ? 1.0f / flap_total : 1.0f;
 
         int depth = 0;
         int finger_index = -1;  // -1 while walking the shared root
         auto apply = [&](int joint, int index_in_chain, int chain_length) {
             if (joint == NO_PARENT) return;
-            const float lag = 1.0f - core::minf(tuning.wing_phase_lag * float(depth), 0.8f);
             const float delay = core::clampf(tuning.wing_phase_delay, 0.0f, 0.25f) *
                                 float(depth);
             const float local_phase = wrapped_phase(current_phase - delay);
@@ -771,7 +821,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 local_base = cyclic_base + non_flap_base;
             }
             const float flap_angle = (local_base * sign + roll_lean) *
-                                     flap_share_at(size_t(depth)) * flap_normalize * lag;
+                                     flap_weight_at(size_t(depth)) * flap_normalize;
 
             // Folding sweeps back about local Y and closes progressively toward
             // the tip, which is how a wing actually stows.

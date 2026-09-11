@@ -518,6 +518,15 @@ private:
     // World bind rotation of each joint's parent, inverted. Converts a body-space
     // axis into the space a local rotation is expressed in.
     std::vector<core::Quat> parent_bind_inverse_;
+    // Per-side, per-depth leverage of a wing joint over the wingtip: the bind
+    // distance from that joint to the membrane tip, as a fraction of the whole
+    // span. Distributing a flap down the chain rotates the tip BONE by the sum
+    // of the angles, but moves the tip POSITION by much less -- an outboard
+    // joint pivots close to the tip and barely displaces it, and the outermost
+    // one does not move it at all. The player reads the position. Normalising
+    // the flap by leverage rather than by count is what makes the visible
+    // stroke equal the angle the flight model commanded.
+    std::vector<float> wing_flap_leverage_[2];
     Pose pose_;
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
