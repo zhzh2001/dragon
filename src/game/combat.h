@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/math.h"
+#include "game/breath.h"
 #include "game/flight.h"
 
 namespace game {
@@ -178,8 +179,12 @@ struct BreathCone {
     core::Vec3 origin = core::Vec3::zero();
     core::Vec3 direction = core::Vec3::forward();
     // Who breathed it, as an opaque tag the caller assigns -- the renderer
-    // uses it to colour the flame by species. Combat itself never reads it.
+    // uses it to pick the species' colours and particle character. Combat
+    // itself never reads it.
     int source = -1;
+    // The breather's species scales. Carried on the cone rather than looked up,
+    // because combat has no idea what a species is and should not acquire one.
+    BreathScales scales;
 };
 
 // What happened this frame, for the HUD and, later, audio.
@@ -281,7 +286,13 @@ public:
     // An external pilot breathing fire this frame. Buffered and resolved
     // against the player inside update(), so damage attribution and events go
     // through the one path that owns them.
-    void hostile_breath(core::Vec3 origin, core::Vec3 direction, int source = -1);
+    void hostile_breath(core::Vec3 origin, core::Vec3 direction, int source = -1,
+                        BreathScales scales = {});
+
+    // The player's species scales, set by the app whenever the model changes.
+    // Public like `tuning` is: it is data the owner sets, not state combat
+    // evolves.
+    BreathScales player_breath;
     // Last frame's hostile flames, for drawing.
     const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
     // Projectiles that ended this frame -- hits and terrain strikes -- for the

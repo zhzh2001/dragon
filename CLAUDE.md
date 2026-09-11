@@ -17,7 +17,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/ANIMATION.md` | The procedural rig, glTF import, the two assets, the animation studio, and the frame/scale traps that cost the most time |
 | `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop |
 | `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement |
-| `docs/EFFECTS.md` | Particles and the fully synthesized audio |
+| `docs/EFFECTS.md` | Particles, the per-species breath profiles, and the fully synthesized audio |
 | `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
 | `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
 | `docs/EMBERCREST.md` | The script-built original dragon: what the Blender generator produced, why it is not the hero model, and how to rebuild it |
@@ -35,7 +35,7 @@ they are records of what was already tried and why it is the way it is.
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # ten suites, plain executables, no framework
+ctest --test-dir build            # eleven suites, plain executables, no framework
 ```
 
 ### Verifying without a human at the keyboard
@@ -78,6 +78,15 @@ Soaks that have caught real bugs:
 ```sh
 ./build/dragon --headless --autopilot --course 1 --frames 4000   # fly a course
 ./build/dragon --headless --bots 3 --match --frames 7200         # 2-minute fight
+```
+
+The elemental roster, and the two flags that make a multi-species capture
+possible at all -- at the default 650 m spawn the rivals are specks:
+
+```sh
+./build/dragon --models assets/embercrest-textured.glb,assets/rimefang.glb,\
+assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.glb \
+  --bots 5 --bot-range 95 --combat
 ```
 
 Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
@@ -159,6 +168,10 @@ flight controls.
   not inside a collapsed header -- one that cannot be found does not exist.
 - Tests are plain executables with a `CHECK` macro, no framework. Add a suite
   when a system gets its own file; `ctest --test-dir build` runs all of them.
+- **A creature is a species, not just a mesh.** Each carries `<model>.rig.cfg`
+  (how it moves), `<model>.flight.cfg` (how it handles) and
+  `<model>.breath.cfg` (what it breathes) beside its glTF. All three are
+  partial files: absent or unknown keys leave the defaults alone.
 - Commit messages describe what changed and *why it was wrong before*.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
   a one-liner -- to a Fable 5.1 subagent** (`Agent` with `model: "fable"`).
@@ -223,14 +236,15 @@ src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
 src/game/    flight model, chase + debug cameras, terrain, vegetation,
-             course/rally, autopilot, combat, bots, match loop, studio
+             course/rally, autopilot, combat, breath profiles, bots, match
+             loop, studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     MSL, hot-reloaded from the source tree
-tests/       ten suites: math, camera, camera_rig, flight, rally, anim,
-             combat, bot, match, vegetation
+tests/       eleven suites: math, camera, camera_rig, flight, rally, anim,
+             combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```
 

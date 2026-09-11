@@ -313,9 +313,9 @@ void Combat::clear_hostiles() {
     locked_ = -1;
 }
 
-void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source) {
+void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScales scales) {
     hostile_breaths_pending_.push_back(
-        {origin, core::normalize_or(direction, Vec3::forward()), source});
+        {origin, core::normalize_or(direction, Vec3::forward()), source, scales});
 }
 
 int Combat::sentinels_alive() const {
@@ -538,7 +538,10 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
     breath_direction_ = breath_direction_for(player);
     if (!breathing_) return;
 
-    const float half_angle = core::radians(tuning.breath_half_angle_deg);
+    // Species scales multiply the master dials, so raising breath_range in the
+    // panel still moves every species together.
+    const float half_angle = core::radians(tuning.breath_half_angle_deg * player_breath.angle);
+    const float reach = tuning.breath_range * player_breath.range;
     for (Sentinel& sentinel : sentinels_) {
         if (!sentinel.alive) continue;
         // Tested against the target's centre pushed back toward the tip by its
@@ -547,12 +550,13 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
         const Vec3 toward = core::normalize(breath_origin_ - sentinel.position);
         const Vec3 near_point = sentinel.position + toward * tuning.sentinel_radius;
         if (!point_in_cone(sentinel.position, breath_origin_, breath_direction_, half_angle,
-                           tuning.breath_range) &&
+                           reach) &&
             !point_in_cone(near_point, breath_origin_, breath_direction_, half_angle,
-                           tuning.breath_range)) {
+                           reach)) {
             continue;
         }
-        damage_sentinel(sentinel, tuning.breath_damage_per_second * dt, events);
+        damage_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * dt,
+                        events);
     }
 }
 
@@ -586,7 +590,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     }
 
     if (breathing_) {
-        breath_ = core::maxf(breath_ - tuning.breath_drain * dt, 0.0f);
+        breath_ = core::maxf(breath_ - tuning.breath_drain * player_breath.drain * dt, 0.0f);
         time_since_breath_ = 0.0f;
         if (breath_ <= 0.0f) breathing_ = false;
     } else if (input.breath) {
@@ -627,11 +631,11 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     for (const BreathCone& flame : hostile_breaths_pending_) {
         if (health_ <= 0.0f) break;
         if (!point_in_cone(player.position, flame.origin, flame.direction,
-                           core::radians(tuning.hostile_breath_half_angle_deg),
-                           tuning.hostile_breath_range)) {
+                           core::radians(tuning.hostile_breath_half_angle_deg * flame.scales.angle),
+                           tuning.hostile_breath_range * flame.scales.range)) {
             continue;
         }
-        const float damage = tuning.hostile_breath_dps * dt;
+        const float damage = tuning.hostile_breath_dps * flame.scales.damage * dt;
         health_ -= damage;
         events.damage_taken += damage;
         events.damage_from = flame.origin;

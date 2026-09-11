@@ -49,6 +49,7 @@ add_executable(dragon
   src/game/rally.cpp
   src/game/autopilot.cpp
   src/game/combat.cpp
+  src/game/breath.cpp
   src/game/bot.cpp
   src/game/studio.cpp
   src/game/match.cpp
@@ -69,6 +70,12 @@ target_compile_options(dragon PRIVATE -Wall -Wextra -Wno-missing-field-initializ
 
 # Tests are a plain executable rather than a framework: `ctest` or just run it.
 enable_testing()
+add_executable(test_breath tests/test_breath.cpp src/game/breath.cpp)
+target_include_directories(test_breath PRIVATE src)
+target_link_libraries(test_breath PRIVATE SDL3::SDL3)
+target_compile_options(test_breath PRIVATE -Wall -Wextra)
+add_test(NAME breath COMMAND test_breath)
+
 add_executable(test_math tests/test_math.cpp)
 target_include_directories(test_math PRIVATE src)
 target_compile_options(test_math PRIVATE -Wall -Wextra)
@@ -157,6 +164,7 @@ add_test(NAME anim COMMAND test_anim)
 add_executable(test_combat
   tests/test_combat.cpp
   src/game/combat.cpp
+  src/game/breath.cpp
   src/game/bot.cpp
   src/game/autopilot.cpp
   src/game/bot.cpp
@@ -177,6 +185,7 @@ add_executable(test_bot
   src/game/bot.cpp
   src/game/autopilot.cpp
   src/game/combat.cpp
+  src/game/breath.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp
@@ -193,6 +202,7 @@ add_executable(test_match
   tests/test_match.cpp
   src/game/match.cpp
   src/game/combat.cpp
+  src/game/breath.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp

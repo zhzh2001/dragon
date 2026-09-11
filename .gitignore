@@ -29,6 +29,10 @@ assets/stormsail/
 assets/ashcoil/
 assets/cragjaw/
 assets/mossback/
+assets/rimefang/
+assets/blightmaw/
+assets/ironroot/
+assets/tidewrack/
 tools/__pycache__/
 artifacts/**/*.bmp
 artifacts/**/*.log

@@ -322,13 +322,12 @@ private:
         game::FlightTuning flight_tuning;
         std::string rig_tuning_path;
         std::string flight_tuning_path;
+        std::string breath_path;
         bool imported = false;
-        // Flame colour, hot core to cool tip. Per model because the breath is
-        // the clearest place a species reads as elemental, and because the
-        // tonemap ends in a gamma encode -- a pale breath clips to white, so
-        // these want to stay mid-value and saturated (see EFFECTS.md).
-        core::Vec3 breath_hot{2.2f, 1.5f, 0.7f};
-        core::Vec3 breath_cool{1.0f, 0.25f, 0.04f};
+        // What this species' breath does and looks like, from
+        // <model>.breath.cfg. The breath is the clearest place a species reads
+        // as elemental, so it is a property of the creature, not of combat.
+        game::BreathProfile breath;
         // The outermost wing joint per side, for the wingtip vortex trails.
         // -1 when the rig has no wings.
         int wingtip_joint[2] = {-1, -1};
@@ -347,10 +346,10 @@ private:
     }
     bool load_model(const std::string& path, LoadedModel& out);
     void find_wingtips(LoadedModel& model);
-    // `colour` names the model whose flame this is; null keeps the shared
-    // player/hostile colours.
+    // `profile` is the breathing species' breath; null keeps the shared
+    // player/hostile fire.
     void emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile, float dt,
-                    const LoadedModel* colour = nullptr);
+                    const game::BreathProfile* profile = nullptr);
     // Re-points the player at another entry in the roster. The rigs carry
     // spring state tied to a specific skeleton, so both are re-initialised.
     void set_player_model(int index);

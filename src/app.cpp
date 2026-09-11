@@ -179,6 +179,9 @@ bool App::init(const Options& options) {
     dragon_rig_.tuning = player_model().rig_tuning;
     ghost_rig_.tuning = dragon_rig_.tuning;
     model_rig_tuning_path_ = player_model().rig_tuning_path;
+    // Combat has no notion of species; it is told the player's scales here and
+    // on every model switch, so a headless run gets them without a panel.
+    combat_.player_breath = player_model().breath.scales;
 
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
@@ -830,17 +833,19 @@ void App::update(float dt) {
         }
         if (combat_.breathing()) {
             emit_flame(combat_.breath_origin(), combat_.breath_direction(),
-                       combat_.tuning.breath_range, false, dt, &player_model());
+                       combat_.tuning.breath_range * combat_.player_breath.range, false, dt,
+                       &player_model().breath);
         }
         for (const game::BreathCone& flame : combat_.hostile_breaths()) {
             // A bot tagged its cone with its model index; an untagged cone
             // (a sentinel) keeps the shared hostile blue.
-            const LoadedModel* colour =
+            const game::BreathProfile* profile =
                 flame.source >= 0 && size_t(flame.source) < models_.size()
-                    ? models_[size_t(flame.source)].get()
+                    ? &models_[size_t(flame.source)]->breath
                     : nullptr;
-            emit_flame(flame.origin, flame.direction, combat_.tuning.hostile_breath_range, true,
-                       dt, colour);
+            emit_flame(flame.origin, flame.direction,
+                       combat_.tuning.hostile_breath_range * flame.scales.range, true, dt,
+                       profile);
         }
         // A thin ember trail off every live round, so its path lingers a beat.
         for (const game::Projectile& projectile : combat_.projectiles()) {
@@ -1830,13 +1835,45 @@ void App::build_dragon_ui() {
         ImGui::ColorEdit3("hide hue", &player_hue_.x, ImGuiColorEditFlags_Float |
                                                           ImGuiColorEditFlags_HDR);
         ImGui::SliderFloat("hide recolour", &player_recolour_, 0.0f, 1.0f);
-        // Flame colour belongs to the model, not to combat: it is what makes a
-        // species read as elemental. HDR because the particles are additive and
-        // the hot core sits above 1.
-        ImGui::ColorEdit3("breath hot", &player_model().breath_hot.x,
+    }
+
+    // The breath belongs to the species, not to combat: it is the clearest
+    // place a creature reads as elemental. Open by default because it is the
+    // dial that decides whether a new species feels like a new species.
+    // Named to distinguish it from the Combat panel's "Breath", which holds
+    // the master dials these multiply.
+    if (ImGui::CollapsingHeader("Breath (this species)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        game::BreathProfile& b = player_model().breath;
+        // HDR because the particles are additive and the hot core sits above 1.
+        // Keep these mid-value: the tonemap whitens anything bright, so a pale
+        // frost breath clips to a white smear (EFFECTS.md).
+        ImGui::ColorEdit3("hot core", &b.hot.x,
                           ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
-        ImGui::ColorEdit3("breath cool", &player_model().breath_cool.x,
+        ImGui::ColorEdit3("cool tip", &b.cool.x,
                           ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::TextDisabled("multipliers on the Combat panel's master dials");
+        ImGui::SliderFloat("range x", &b.scales.range, 0.25f, 3.0f);
+        ImGui::SliderFloat("cone x", &b.scales.angle, 0.25f, 3.0f);
+        ImGui::SliderFloat("damage x", &b.scales.damage, 0.25f, 3.0f);
+        ImGui::SliderFloat("drain x", &b.scales.drain, 0.25f, 3.0f);
+        // Buoyancy is the single strongest character dial: positive billows
+        // like flame, negative pours downhill like frost or a heavy gas.
+        ImGui::SliderFloat("buoyancy", &b.buoyancy, -25.0f, 25.0f, "%.1f m/s2");
+        ImGui::SliderFloat("spread", &b.spread, 0.0f, 0.6f);
+        ImGui::SliderFloat("size start", &b.size_start, 0.2f, 12.0f);
+        ImGui::SliderFloat("size end", &b.size_end, 0.2f, 24.0f);
+        ImGui::SliderFloat("puff life", &b.life, 0.2f, 3.0f, "%.2f s");
+        ImGui::SliderFloat("rate", &b.rate, 40.0f, 800.0f, "%.0f /s");
+        ImGui::SliderFloat("drag", &b.drag, 0.2f, 5.0f);
+        ImGui::SliderFloat("brightness", &b.brightness, 0.05f, 3.0f);
+        if (ImGui::Button("save breath for this model")) {
+            game::save_breath_profile(b, player_model().breath_path.c_str());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("reset breath")) b = game::BreathProfile{};
+        // Combat reads the player's scales from here, so a slider drag takes
+        // effect on the next frame's cone rather than on the next spawn.
+        combat_.player_breath = b.scales;
     }
 
     if (ImGui::CollapsingHeader("Wings")) {
@@ -2199,10 +2236,12 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     const std::string cfg_stem = out.imported ? out.path : std::string(ASSET_ROOT "/dragon.glb");
     out.rig_tuning_path = cfg_stem + ".rig.cfg";
     out.flight_tuning_path = cfg_stem + ".flight.cfg";
+    out.breath_path = cfg_stem + ".breath.cfg";
     if (anim::load_rig_tuning(out.rig_tuning, out.rig_tuning_path.c_str())) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
     game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
+    game::load_breath_profile(out.breath, out.breath_path.c_str());
     return true;
 }
 
@@ -2223,6 +2262,7 @@ void App::set_player_model(int index) {
     apply_idle_clip(model, ghost_rig_);
     model_rig_tuning_path_ = model.rig_tuning_path;
     model_tuning_path_ = model.flight_tuning_path;
+    combat_.player_breath = model.breath.scales;
     LOG_INFO("player model: [%d] %s", index, model.path.c_str());
 }
 
@@ -2398,7 +2438,8 @@ void App::update_bots(float dt) {
         }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
-            combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model);
+            combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model,
+                                   model_at(bot->model).breath.scales);
         }
         anim::RigAction action;
         action.breath = decision.breathe ? 1.0f : 0.0f;
@@ -2428,7 +2469,7 @@ float App::particle_unit() {
 // slowing, buoyant at the end of their life the way combustion products are.
 // The damage cone is untouched -- this is what the cone LOOKS like.
 void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool hostile,
-                     float dt, const LoadedModel* colour) {
+                     float dt, const game::BreathProfile* profile) {
     const core::Vec3 side =
         core::normalize_or(core::cross(direction, core::Vec3::up()), core::Vec3::right());
     const core::Vec3 lift =
@@ -2437,38 +2478,40 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
     // Spawn rate in particles per second, integrated so frame rate does not
     // change the flame's density.
     static float carry = 0.0f;
-    carry += dt * 260.0f;
-    // Colour comes from the breathing model, so two species in one fight do
-    // not share a flame. The hostile default stays cold blue: it is what makes
+    // The breathing species decides both the colour and how the puffs move, so
+    // two species in one fight do not share a flame. A cone with no species
+    // (a sentinel drone) keeps the cold hostile blue, which is what makes
     // incoming fire readable as incoming at a glance.
-    const core::Vec3 hot = colour ? colour->breath_hot
-                                  : (hostile ? core::Vec3{1.3f, 1.7f, 2.2f}
-                                             : core::Vec3{2.2f, 1.5f, 0.7f});
-    const core::Vec3 cool = colour ? colour->breath_cool
-                                   : (hostile ? core::Vec3{0.2f, 0.4f, 1.0f}
-                                              : core::Vec3{1.0f, 0.25f, 0.04f});
+    game::BreathProfile fallback;
+    if (hostile && !profile) {
+        fallback.hot = core::Vec3{1.3f, 1.7f, 2.2f};
+        fallback.cool = core::Vec3{0.2f, 0.4f, 1.0f};
+    }
+    const game::BreathProfile& b = profile ? *profile : fallback;
+    const core::Vec3 hot = b.hot;
+    const core::Vec3 cool = b.cool;
     // Launch speed solved against drag so a puff's travel equals the damage
     // range: with velocity decaying as e^(-kt), distance = v(1-e^(-kT))/k.
     // The flame's visible length IS its reach, which is how the player judges
     // whether a target is in it.
-    const float drag = 1.4f;
-    const float life = 1.3f;
-    const float speed_for_range = range * drag / (1.0f - std::exp(-drag * life));
+    carry += dt * b.rate;
+    const float speed_for_range = range * b.drag / (1.0f - std::exp(-b.drag * b.life));
     while (carry >= 1.0f) {
         carry -= 1.0f;
         const float speed = speed_for_range * (1.0f + 0.08f * particle_unit());
         gfx::Particle p;
         p.position = origin + direction * (2.0f + particle_unit());
         p.velocity = direction * speed + (side * particle_unit() + lift * particle_unit()) *
-                                              (speed * 0.10f);
-        p.acceleration = core::Vec3{0.0f, 7.0f, 0.0f};  // buoyancy
-        p.drag = drag;
-        p.life = life * (1.0f + 0.08f * particle_unit());
-        p.size_start = 2.0f;
-        p.size_end = 5.5f;
+                                              (speed * b.spread);
+        // Positive billows like flame, negative pours like frost or heavy gas.
+        p.acceleration = core::Vec3{0.0f, b.buoyancy, 0.0f};
+        p.drag = b.drag;
+        p.life = b.life * (1.0f + 0.08f * particle_unit());
+        p.size_start = b.size_start;
+        p.size_end = b.size_end;
         p.color_start = hot;
         p.color_end = cool;
-        p.brightness = 0.85f;
+        p.brightness = b.brightness;
         particles_.spawn(p);
     }
 }

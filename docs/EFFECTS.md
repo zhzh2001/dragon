@@ -33,6 +33,30 @@ hostile flame swarms embers over the player's own dragon -- the vignette says
 rate-limited to one per 0.45 s: a flame deals damage every frame, and forty
 overlapping cries per second was the playtest's "strange loud flame".
 
+**The breath belongs to the species, not to combat.** `game::BreathProfile`
+(`src/game/breath.h`) is loaded from `<model>.breath.cfg` beside each glTF and
+says both what a breath does and how it moves. The behaviour half is
+*multipliers* on the Combat panel's dials -- a frost drake is "0.75 the reach,
+1.6 the cone", never "116 metres" -- so raising `breath_range` still moves every
+species together, which is what you want while balancing. The look half is the
+particle character, and it is what actually separates the elements: **buoyancy
+is the strongest single dial**, positive billowing like flame and negative
+pouring downhill like frost or a heavy gas, with `spread`, `life`, `size_end`
+and `rate` deciding whether a breath reads as a jet, a cone or a cloud. One
+emitter, six elements.
+
+Combat never learns what a species is: a `BreathCone` carries the breather's
+scales and an opaque source tag, and only the renderer resolves that tag to a
+profile. A cone with no tag -- a sentinel drone -- keeps the cold hostile blue,
+which is what makes incoming fire readable as incoming at a glance.
+
+Colour choice is constrained by the tonemap, not by taste. Because it ends in a
+gamma encode, **anything bright desaturates toward white**: a pale blue frost
+breath clips to a white smear and reads as nothing at all. Elemental colours
+have to stay mid-value and saturated -- deep cyan rather than white for frost,
+violet rather than pale blue for storm. This is the same rule that forced the
+damage flash to redden instead of brighten.
+
 `audio::Audio` synthesizes every sound at init -- **no audio assets**, in the
 same spirit as the procedural terrain. Continuous streams (wind through a
 lowpass whose cutoff opens with airspeed, so a dive gets brighter rather than
