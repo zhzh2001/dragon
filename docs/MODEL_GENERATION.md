@@ -1138,73 +1138,133 @@ building a library on top of this.
 
 ## The pipeline
 
-1. **Reference sheet — done.** All three designs from
-   `artifacts/dragon-options/concepts.png` have one:
-   `embercrest-`, `stormsail-` and `ironroot-reference-sheet.png`, each with
-   front, side and top plus head, wing-root and foot insets. Embercrest is
-   the design being taken forward, because its name is already on the
-   68-bone rig in step 5.
+This replaces the original plan, which is preserved only in git history. Nearly
+every step of it was superseded by measurement; the sections above say why, and
+each step below links to the one that justifies it.
 
-   A reference sheet is for a human, though, and a *generator* wants one
-   pose per view. The sheets do not have that — their front and top views
-   share a wings-spread pose but the side view is a walking pose with a
-   curved tail, and a multi-view generator reads that as two animals. So
-   `embercrest-turnaround.png` is the generator input: front, left, back and
-   right in one pose, one scale, one eye level, flat grey, no watermark,
-   which GPT Image 2 will produce if the prompt forbids perspective,
-   foreshortening, cast shadows and labels *explicitly* and the existing
-   sheet rides along as a subject reference. Split it into the four images an
-   API wants with:
+**A second creature has been through this end to end** (Stormsail, the wyvern
+of `concepts.png` panel B), so the numbers are from two runs, not one.
+
+1. **Reference sheet, then a turnaround.** All three designs have a sheet
+   (`artifacts/dragon-options/*-reference-sheet.png`). A sheet is drawn for a
+   human and a generator wants one pose per view, so generate a four-panel
+   turnaround from the sheet and crop it. **Reference the sheet, never a
+   derivative** — see "Image-to-image drift compounds". Resolution is not
+   worth chasing: "Does input resolution matter" measures the encoders at a
+   fixed 518 or 224 square. `artifacts/dragon-options/README.md` says which
+   plates to use and why.
+
+2. **One cloud generation. Nothing else.** Use the Hunyuan **one-shot**, not
+   the staged chain: it emits 1.5 M triangles *with* UVs and a PBR set in a
+   single run, and the staged chain cannot avoid retopo because 语义UV
+   refuses meshes over 30 K faces. `tools/hunyuan_oneshot.md` automates it
+   through chrome-use, including the three traps that cost a run each.
+   20/day pool, separate from the Studio's 30.
+
+   Skip: **低模生成** destroys wing fingers and ridge spikes; **Tripo** will
+   not export below its paid tier and its rigger classifies a winged creature
+   as `others`; **local models** lose to the cloud because it runs v3.1 and
+   the newest open weights are 2.1.
+
+3. **Decimate and rig locally, in one command.**
 
    ```sh
-   T=artifacts/dragon-options/embercrest-turnaround.png   # 2158x729, 4 panels
-   i=0; for n in front left back right; do
-     magick "$T" -crop 539x729+$((i*539))+0 +repage -trim +repage \
-       -bordercolor '#c9c9c9' -border 40 "views/tv-$n.png"; i=$((i+1))
-   done
+   blender --background --factory-startup --python tools/rig_embercrest_candidate.py -- \
+       --input assets/<candidate>.glb --stem <name> \
+       --skeleton tools/skeletons/<anatomy>.json --keep-uvs --target 80000
    ```
-2. **Cloud pass first, for calibration.** Everything here needs an account —
-   see the Spaces and cloud sections above; the one free no-signup path,
-   the Blender MCP's shared Rodin key, is drained. With a Hugging Face
-   token, `tools/trellis2_space.py` is the cheapest first candidate. Then
-   five each from Rodin and Tripo multi-view, plus Hunyuan Studio's 20/day.
-   Run Tripo's rig on its best one with `quadruped` and `avian` to see what
-   a commercial rigger does to the wings. Under $10 all in, and it sets the
-   bar the local models have to reach.
-3. **Local pass on x99.** ComfyUI 0.34, native TRELLIS.2 INT8, weights on
-   `/mnt/Data`, 1024 cascade at 8-12 steps with `low_vram`. Compare with the
-   cloud meshes in Blender, not by reasoning about them.
-4. **Clean and retopo** the winner: Merge by Distance, Make Manifold, Quad
-   Remesher or Quadriflow to 25-40K tris, bake textures back.
-5. **Skeleton on our terms.** Fit the Embercrest skeleton from
-   `tools/build_embercrest.py` to the new mesh in Blender. It already has
-   the 68 bones this engine's mapper expects, by name, and the optional test
-   proves every chain maps and responds.
-6. **Weights by ML, names preserved.** SkinTokens `--use_skeleton
-   --use_transfer` on x99, or `skin-tokens.cpp skin` anywhere. Apply the bone
-   tail fix or recompute tails in Blender. Check the wing fold and the open
-   jaw in Pose Mode, which is where weights bleed. Fallback: Voxel Heat for
-   the body, Blender's heat weighting for jaw and fingers only.
-7. **Export and accept.** glTF with skinning, tangents, deform bones only.
-   Then `--bind-pose`, `--skeleton`, and studio scenarios 0 to 9 on the new
-   `--model`, plus the optional rig test pointed at the new file.
+
+   That decimates 1.5 M to the target, fits the skeleton to the mesh bounds,
+   heat-binds, applies the continuous wing-membrane field, repairs tangents
+   and exports. It replaces the old steps 4, 5 and 6 — no Quad Remesher, no
+   `build_embercrest.py` skeleton, and **no ML skinner**: SkinTokens was
+   tested and discards the joint naming the engine depends on.
+
+   Budget: 80 K is fine. "Triangle count is not the bottleneck" measured an
+   80 K mesh rendering *faster* than a 38 K one.
+
+4. **Accept it in the engine.**
+
+   ```sh
+   ./build/dragon --headless --frames 40 --model assets/<name>.glb \
+       --bind-pose --skeleton --inspect 90 --screenshot /tmp/x.bmp
+   sips -s format png /tmp/x.bmp --out /tmp/x.png
+   ```
+
+   The load line is the acceptance test — it prints `mapped rig: neck N,
+   tail N, wing root N/N, fingers N/N, legs N/N, front legs N/N, feet N, jaw`.
+   Every chain must map and there must be no joint warnings. Then look at
+   `--studio 1` (flap), `--studio 4` (s-turns) and `--studio 8 --inspect-head`
+   (jaw). Judging a rig by its build stats does not work; the stats were
+   identical in a case where the mesh was visibly wrong.
+
+## Adding a creature that is not a dragon
+
+The seam is `tools/skeletons/*.json`, not the script. Two exist:
+
+| File | Anatomy | Bones |
+|---|---|---|
+| `winged-quadruped.json` | Embercrest: four legs plus two wings | 62 |
+| `winged-biped.json` | Stormsail: two hind legs, wing forelimbs, rudder tail | 55 |
+
+Each holds bone head/tail in a normalised space plus the `reference_bounds`
+they were authored against; the rigger remaps them onto the actual mesh, which
+is what lets one skeleton fit differently-proportioned meshes of the same
+anatomy. **Measure the mesh to place bones** — probing Stormsail found its
+wings carry *four* finger ribs, not the three a copied dragon skeleton would
+have given it.
+
+**Bone names are a contract.** `src/anim/dragon_rig.cpp` finds joints by name
+substring, and the rigger keys its anatomy passes off the same conventions
+(`wing*`, `tail*`, `toe*`, `_l`/`_r`). Follow them and the passes apply
+themselves; a numbered skeleton maps to nothing.
+
+**The engine already handles more than one body plan.** `dragon_rig.cpp:1562`
+derives `quadruped` from whether the front-leg chains are empty, and
+`drive_limb` tolerates empty chains, so the wyvern maps with `front legs 0/0`
+and no engine change at all. Do not assume a new creature needs engine work
+until an acceptance run says so.
+
+Two things in the rigger are still Embercrest-shaped, and both are opt-out in
+the JSON because the wyvern hit them:
+
+- `wing_field` — the membrane weight pass. Omit it, or use a skeleton with no
+  `wing*` bones, and the pass skips.
+- `jaw_mask` — the gap-following jaw mask is authored in *Embercrest*
+  canonical coordinates. On another head that region is the whole skull, which
+  put the mandible entirely on `head`. Set `"jaw_mask": null` to keep heat
+  weights.
+
+If a third anatomy hits another hardcoded constant, the fix is to lift it into
+the JSON with a default that preserves existing builds, then re-run the
+Embercrest build and check `max_weight_sum_error` and `ground_offset` are
+unchanged to the digit. That is the regression test.
 
 ## Open questions
 
-- Whether Tripo's Rig v2.5 really puts a finger chain on a winged quadruped.
-  It is now the only commercial candidate left, and it needs paid API
-  credits (Studio credits do not reach the API).
-- Whether the horn spires are a `中` artefact that `高` avoids, or inherent
-  to 低模拓扑 V1.5 on thin tapered shapes.
-- Turing (t5810, 11 GB) is still unrun. x99 answered the 16 GB half: the
-  native INT8 path peaks at 7.7 GB at 1536, so 11 GB looks reachable if a
-  cu130 build exists for sm_75.
-- SkinTokens' real VRAM floor (14 GB claimed, 4 GB in a wrapper) and whether
-  `--use_skeleton` copes with a 68-bone skeleton; its training rigs are
-  mostly under 64 bones.
-- Whether any rigger puts a finger chain on a winged quadruped. Hunyuan is
-  now excluded by test (`仅支持人形标准化`), leaving Tripo Rig v2.5 and
-  SkinTokens.
-- Rigel3D and AniGen (2026 papers) generate already-rigged, semantically
-  named creatures from one image. Neither has code. Worth rechecking in a
-  few months; if one ships, steps 4 to 6 collapse.
+Answered ones have been removed; the sections above hold the results. What is
+genuinely still unknown:
+
+- **Hunyuan's hosted terms have never been read.** This is the one that blocks
+  shipping rather than progress. Every generated mesh and texture set is
+  gitignored partly for it. Settle it before building an asset library on a
+  free tier.
+- Whether Tripo's Rig v2.5 really puts a finger chain on a winged creature.
+  It is the last commercial candidate and needs paid API credits, since
+  Studio credits do not reach the API. Its free pre-check answers
+  `rig_type: "others"` for our dragon, which is not encouraging.
+- Whether decimating locally to under 30 K and **uploading that** to the
+  Studio for 语义UV plus 纹理绘制 works. It is the only untested route that
+  would keep multi-view geometry *and* get cloud PBR without 低模生成.
+- Whether ComfyUI-SkinTokens' `use_transfer` path is fixable. It crashes at
+  export looking the input armature up by name; that is the branch that would
+  preserve UVs, textures and joint naming, and the environment work to retest
+  it is already done and recorded.
+- Rigel3D and AniGen (2026 papers) generate already-rigged, semantically named
+  creatures from one image. Neither has code. If one ships, step 3 of the
+  pipeline collapses into step 2.
+- Stormsail's shoulder/wing-root membrane junction and its flight leg fold are
+  heat-weight quality rather than hand-tuned. Fine for a candidate; someone
+  should look at them in `--studio 1` and `--studio 5` before it ships.
+- `build_stats.json` still reports `binding: "gap-following jaw mask ..."`
+  even when the mask is skipped. Cosmetic, but it misdescribes wyvern builds.

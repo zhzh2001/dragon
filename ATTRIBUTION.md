@@ -11,6 +11,30 @@ The GLB and its `.blend` are not committed; rebuild them with Blender as
 described in `docs/EMBERCREST.md`. It is kept as a reference attempt and is
 not the hero model.
 
+## Cloud-generated candidates: assets/embercrest-textured.glb, assets/stormsail.glb
+
+Generated with **Tencent Hunyuan 3D Studio** (`3d.hunyuan.tencent.com`) on its
+free tier, from original concept art made for this project, then decimated and
+rigged locally by `tools/rig_embercrest_candidate.py`. The full procedure is in
+`docs/MODEL_GENERATION.md`; the one-shot generation step is in
+`tools/hunyuan_oneshot.md`.
+
+- **Licence: UNRESOLVED.** The hosted Studio's terms of service were never
+  fetched or read. This is tracked as the first open question in
+  `docs/MODEL_GENERATION.md` and it is the item that blocks shipping, not the
+  one that blocks progress.
+- The meshes and their 4096² PBR sets are therefore **gitignored**
+  (`assets/*.glb`, `assets/embercrest-textures/`) — kept out of the repo
+  rather than redistributed, the same treatment as the NonCommercial models
+  below. Regenerate them rather than copying them around.
+- The *inputs* are ours and are committed: the concept sheets, turnarounds and
+  view plates in `artifacts/dragon-options/`, generated from prompts also in
+  that directory.
+
+**Settle the Studio terms before any of this ships or is published.** Free-tier
+output going into a distributed game is exactly the case those terms govern,
+and "we did not read them" is not a position to ship from.
+
 ## assets/dragon.glb
 
 **"Black Dragon with Idle Animation"** by **dennish2010**, via Sketchfab.

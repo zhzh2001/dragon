@@ -41,6 +41,16 @@ What is built, in the order it was built. The plan these came from is
   carved river with a reflective surface, a coarse skirt past the playable
   extent, four tree and three grass kinds placed by slope, altitude and water,
   landing and take-off states, and `heft` as per-model handling.
+- **Two generated hero candidates are rigged and load in the engine.**
+  `assets/embercrest-textured.glb` (six-limbed dragon, 80K tris, 62 joints)
+  and `assets/stormsail.glb` (wyvern, 80K tris, 55 joints), both with UVs and
+  4096² PBR sets, both accepted by the rig mapper with no joint warnings.
+  Generated from original concept art through Hunyuan's one-shot, then
+  decimated and rigged locally by `tools/rig_embercrest_candidate.py`. Neither
+  is wired in as the default model, and their licence is unresolved -- see
+  `ATTRIBUTION.md`. The whole procedure, and what was measured to arrive at
+  it, is `docs/MODEL_GENERATION.md`.
+
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
@@ -60,5 +70,10 @@ What is built, in the order it was built. The plan these came from is
   was seen from.
 - **Bots all fly the player's model.** One mesh and one rig are loaded, so a
   match cannot mix a dragon and a wyvern. The renderer and rig are per-bot
-  already; it is the asset loading that assumes one model.
+  already; it is the asset loading that assumes one model. **This is now the
+  binding constraint on visual variety rather than a hypothetical:** a rigged
+  wyvern exists (`assets/stormsail.glb`) and the rig mapper already handles
+  its body plan -- `src/anim/dragon_rig.cpp` derives `quadruped` from whether
+  the front-leg chains are empty, so it maps with `front legs 0/0` and no
+  engine change. Multi-model loading is the missing piece, not the asset.
 - **Nothing collides with a tree.** Vegetation is visual only.
