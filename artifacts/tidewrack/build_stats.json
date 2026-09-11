@@ -1,0 +1,56 @@
+{
+  "source": "tidewrack-cand-oneshot.glb",
+  "source_sha256": "8b26021a74586e926f58d0559b5e23ad6d70c6b66afcf7c95d9960a7b7662bbe",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 39994,
+  "bones": 55,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; heat-weight jaw (jaw_mask null); level wing bind",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 47560680,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 6.641143969038469,
+  "repaired_zero_tangents": 6,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    0.7526704668998718,
+    0.9109117984771729,
+    1.0202586650848389
+  ],
+  "bone_fit_bias": [
+    0.00016394257545471191,
+    -0.037699103355407715,
+    8.268497708741052e-08
+  ]
+}

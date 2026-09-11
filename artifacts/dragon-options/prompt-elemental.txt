@@ -1,0 +1,17 @@
+Generated with chatgpt-imagegen --backend web (GPT Image 2). Three new elemental
+variants to complete the roster: Embercrest is ember, Ironroot is stone,
+Stormsail is storm; these are frost, blight and tide.
+
+Two constraints are baked into the prompt and matter more than they look:
+
+1. TRADITIONAL BODY PLANS ONLY. A and B are six-limbed quadruped dragons that
+   must share tools/skeletons/winged-quadruped.json with Embercrest; C is a
+   wyvern that must share winged-biped.json with Stormsail. The rigger's fit is
+   a per-axis affine remap, so it absorbs proportion but NOT a change in
+   structure -- same neck length, same tail length, same number of wing finger
+   ribs. Hence "a neck of the same length", "three finger ribs", etc.
+2. MOUTH SLIGHTLY PARTED. Every Hunyuan sculpt so far has come back with the
+   mouth fused shut and no cavity, which leaves heat weighting no gap to split
+   on and turns a jaw rotation into a bent muzzle.
+
+Use case: stylized-concept. Create one polished landscape dragon design comparison board for a 3D dragon flight game, three equal vertical panels labeled A - RIMEFANG, B - BLIGHTMAW, C - TIDEWRACK. This is concept art for user selection, not an actual rig render. All three are painted realism with believable muscular anatomy, restrained natural colours, medium detail easily translated into a game mesh, elegant sculptural forms rather than cartoon or excessive tiny spikes. Neutral warm grey background, consistent studio illumination, full body three-quarter view in each panel with wings partly spread and every foot visible, nothing cropped, generous separation between panels. In all three the mouth is SLIGHTLY OPEN, parted just enough to show the teeth and a little of the tongue, not a wide roar. A - RIMEFANG, a frost dragon: a classic six-limbed dragon, FOUR legs plus TWO large bat wings with three finger ribs each, lean and streamlined with a long neck and a long tapering tail; pale blue-grey and slate scales with deep cyan shadow, translucent frost-white wing membranes, a crown of clear crystalline spines sweeping back from the skull and a matching ridge down the spine, narrow frost-rimed muzzle. B - BLIGHTMAW, a blight dragon: the same six-limbed build, FOUR legs plus TWO bat wings with three finger ribs each, but heavier through the chest and shoulders with a broad crested frill behind the jaw; mottled verdigris and olive scales with a sickly ochre underside, dark bronze-green membranes veined in yellow, corroded pitted horns, a barbed tail tip, heavy-lidded predatory eyes. C - TIDEWRACK, a deep-water wyvern: precisely TWO hind legs plus TWO large wing forelimbs, no front legs at all, a long flexible neck and a long rudder-finned tail; deep teal and storm-grey hide with a pale barnacled underside, dark blue-green membranes, a swept fan of fin-like webbing along the jaw and forearms, smooth hydrodynamic skull. Each subject equally sized, visible anatomy and membranous wing fingers, no saddles, riders, weapons, fire, water, environment, UI, or imitation of existing franchise dragons. Small footer: ORIGINAL DESIGN CONCEPTS.

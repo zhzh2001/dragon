@@ -353,6 +353,25 @@ the numbers show. **Use the four turnaround plates. Leave 顶 empty** unless the
 top view is drawn in the same pose as the other four, which is the one case
 this experiment does not cover and the obvious next test.
 
+**That next test has now run, on Rimefang, and the answer is still four.** A
+five-panel turnaround was generated with the top-down drawn in the *same*
+standing pose as the other four, so the two arms shared four byte-identical
+plates and the only variable was the fifth:
+
+| arm | X (wingspan) | Y (length) | Z |
+|---|---|---|---|
+| 4 views | 0.8447 | 0.9748 | 0.7075 |
+| 5 views, pose-consistent top | 0.7185 | 1.0173 | 0.6449 |
+
+The head no longer softens -- that part *was* the pose contradiction, and
+fixing the pose fixes it. But **the wingspan still narrows by 15%**, the same
+direction and nearly the same magnitude as the sheet-derived top. So the
+narrowing is not about a contradictory pose at all; a top-down plate is simply
+taller than it is wide in frame, and the generator appears to let that bias the
+fit. Two creatures, four runs in each arm's direction, one conclusion: **use
+the four cardinal plates.** A fifth buys nothing measurable and costs
+proportion.
+
 Driving all of this is `tools/hunyuan_oneshot.py`, which is the runbook in
 `tools/hunyuan_oneshot.md` made executable -- the three traps in that document
 are all silent successes, so every step asserts what it matched.
@@ -1188,11 +1207,25 @@ This replaces the original plan, which is preserved only in git history. Nearly
 every step of it was superseded by measurement; the sections above say why, and
 each step below links to the one that justifies it.
 
-**Five creatures have been through this end to end**, so the numbers are not
-from one run: Embercrest, Stormsail, and the three hoard-run designs of
-`concepts-hoard-run.png` (Ashcoil, Cragjaw, Mossback). The last three were
-generated in one sitting, and the one-shot's 20/day pool took three of them
-without complaint.
+**Nine creatures have been through this end to end**, so the numbers are not
+from one run: Embercrest, Stormsail, the three hoard-run designs of
+`concepts-hoard-run.png` (Ashcoil, Cragjaw, Mossback) and the four elemental
+variants (Rimefang, Blightmaw, Tidewrack, Ironroot). The one-shot's 20/day pool
+has never been the limit; several were generated in each sitting.
+
+**A variant of an existing anatomy is nearly free.** The four elemental dragons
+reuse `winged-quadruped.json` and `winged-biped.json` unchanged, so each cost
+one generation and a rigger run with no skeleton authoring at all. That only
+works because the concept prompt asked for the same *structure* -- same neck
+and tail length, same finger-rib count -- since the fit remaps proportion but
+not structure. Ask for a variant, not a redesign, and the rig comes free.
+
+**Draw the mouth slightly parted in every plate.** Every sculpt before the
+elemental batch came back with the mouth fused shut and no interior, which
+leaves heat weighting no gap to split on: Ashcoil's mandible measured 0.62 jaw
+/ 0.37 head and a jaw rotation bent the whole muzzle instead of opening it.
+Asking for a parted mouth showing the teeth, in every panel of the turnaround,
+produced a real mouth cavity on all four.
 
 1. **Reference sheet, then a turnaround.** Every design has a sheet
    (`artifacts/dragon-options/*-reference-sheet.png`). A sheet is drawn for a

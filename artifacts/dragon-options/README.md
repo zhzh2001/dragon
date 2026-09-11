@@ -71,6 +71,8 @@ same doc), so ~540 px of dragon is already above what it consumes.
 | `prompt.txt` | The prompt that produced `concepts.png` |
 | `concepts-hoard-run.png` | The three hoard-run designs, A Ashcoil / B Cragjaw / C Mossback. All three were taken forward |
 | `prompt-hoard-run.txt` | The prompt that produced it |
+| `concepts-elemental.png` | The three new elemental variants, A Rimefang / B Blightmaw / C Tidewrack. All three were taken forward |
+| `prompt-elemental.txt` | The prompt that produced it, and the two constraints baked into it |
 | `*-reference-sheet.png` | The creature for a human: front, side and top plus detail insets. Six exist — Embercrest, Stormsail, Ironroot, Ashcoil, Cragjaw, Mossback. Ironroot is the only one never built |
 | `*-turnaround.png` | The creature for a *generator*: front, left, back, right in one pose, one scale, one eye level. The reference sheets are not usable this way — their side view is a different pose from their front, and a multi-view generator reads that as two animals |
 
@@ -91,6 +93,38 @@ hue push.
 | **Cragjaw**, an armoured ground drake | ground defence | wingless quadruped, heavy plates, long tail |
 | **Mossback**, a shaggy horned grazer | prey herd | wingless quadruped, hooves, stub tail |
 
+### The elemental family
+
+Six species on **two** skeletons. The point of the family is that a rival read
+at flight range is a silhouette, and a hue push cannot change one -- but a
+variant that shares its anatomy costs no rigging at all, because the rigger's
+fit remaps one skeleton onto differently-proportioned meshes of the same
+structure.
+
+| Element | Design | Body plan | Skeleton |
+|---|---|---|---|
+| Ember | **Embercrest** | six-limbed dragon | `winged-quadruped.json` |
+| Stone | **Ironroot** | six-limbed dragon, heavy | `winged-quadruped.json` |
+| Frost | **Rimefang** | six-limbed dragon, lean | `winged-quadruped.json` |
+| Blight | **Blightmaw** | six-limbed dragon, broad | `winged-quadruped.json` |
+| Storm | **Stormsail** | wyvern | `winged-biped.json` |
+| Tide | **Tidewrack** | wyvern, finned | `winged-biped.json` |
+
+**That sharing is a constraint on the concept art, not a happy accident.** The
+fit is a per-axis affine remap, so it absorbs proportion but not a change in
+*structure*: the prompt has to ask for the same neck length, the same tail
+length and the same number of wing finger ribs, or the variant needs a
+skeleton of its own. `prompt-elemental.txt` records how that was asked for.
+
+**Draw the mouth slightly parted.** Every sculpt before this one came back with
+the mouth fused shut and no cavity, which leaves heat weighting no gap to split
+on -- Ashcoil's mandible measured 0.62 jaw / 0.37 head and a jaw rotation bent
+the whole muzzle. Asking for a parted mouth in every panel of the turnaround
+produced a real mouth interior on all four of these.
+
+Each species also carries `<model>.breath.cfg` (what its breath does and looks
+like) and `<model>.rig.cfg` (how it moves) beside its glTF.
+
 ## Comparisons
 
 | File | What it compares |
@@ -105,6 +139,8 @@ hue push.
 | `embercrest-model-field.png` | All four generators side by side on one camera |
 | `embercrest-cloud-vs-local-head.png` | Head detail: why the cloud wins. It runs v3.1; the newest open weights are 2.1, which has no multi-view variant |
 | `embercrest-hunyuan-textured.png` | The finished cloud asset — 19,965 quads, UVs, and a 4K PBR set |
+| `elemental-breath.png` | The six species breathing, one emitter driven by six `<model>.breath.cfg` files. Two rounds of retuning: the first storm violet and the first stone ochre both clipped to white, and tide landed on top of frost's cyan |
+| `elemental-roster.png` | Six species in one match, each bot wearing its own mesh, rig and breath |
 | `ashcoil-view-count.png` | Whether a fifth (top) plate helps the one-shot. Two runs per arm; four views win on head definition, and the top plate narrows the wingspan 14-20%. See "Four views beat five" in `docs/MODEL_GENERATION.md` |
 
 ## The meshes are not here

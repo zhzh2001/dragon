@@ -33,8 +33,11 @@ import sys
 import numpy as np
 from PIL import Image
 
-# Panel order as drawn, left to right, mapped to the upload slot names.
-PANEL_NAMES = ['1-front', '3-left', '2-back', '4-right']
+# Panel order as drawn, left to right, mapped to the upload slot names. A fifth
+# panel is a top-down of the same pose; note that a top plate is NOT wanted for
+# a normal one-shot -- see "Four views beat five" in docs/MODEL_GENERATION.md --
+# so five is for the experiment that measures it, not the default.
+PANEL_NAMES = ['1-front', '3-left', '2-back', '4-right', '5-top']
 
 
 def row_runs(row):
@@ -95,6 +98,8 @@ ap.add_argument('--threshold', type=int, default=14,
                 help='per-channel deviation from the background that counts as subject')
 ap.add_argument('--pad', type=float, default=0.06,
                 help='padding around each subject, as a fraction of its larger side')
+ap.add_argument('--panels', type=int, default=4, choices=(4, 5),
+                help='how many views the turnaround holds (default 4)')
 args = ap.parse_args()
 
 img = Image.open(args.image).convert('RGB')
@@ -105,19 +110,20 @@ h, w, _ = px.shape
 bg = np.median(px.reshape(-1, 3), axis=0)
 mask = np.abs(px - bg).max(axis=2) > args.threshold
 
+want = args.panels
 comps = sorted(components(mask), key=lambda c: -c[0])
-if len(comps) < 4:
-    print(f'FAIL {args.image}: {len(comps)} components, expected at least 4',
+if len(comps) < want:
+    print(f'FAIL {args.image}: {len(comps)} components, expected at least {want}',
           file=sys.stderr)
     sys.exit(1)
 
 # The four animals dwarf any speck of compression noise; check that, rather
 # than trusting the sort, so a turnaround where two views actually touch is
 # caught here instead of downstream in the generator.
-panels = comps[:4]
-if len(comps) > 4 and comps[4][0] * 8 > panels[3][0]:
-    print(f'FAIL {args.image}: 5th component has {comps[4][0]} px against the '
-          f'4th panel\'s {panels[3][0]} -- the panels did not separate cleanly',
+panels = comps[:want]
+if len(comps) > want and comps[want][0] * 8 > panels[want - 1][0]:
+    print(f'FAIL {args.image}: component {want + 1} has {comps[want][0]} px against '
+          f'panel {want}\'s {panels[want - 1][0]} -- the panels did not separate cleanly',
           file=sys.stderr)
     sys.exit(1)
 
@@ -133,7 +139,7 @@ for i, (_, _, runs) in enumerate(panels):
 out = pathlib.Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 
-for i, ((count, (x0, y0, x1, y1), _), name) in enumerate(zip(panels, PANEL_NAMES)):
+for i, ((count, (x0, y0, x1, y1), _), name) in enumerate(zip(panels, PANEL_NAMES[:want])):
     pad = int(round(args.pad * max(x1 - x0, y1 - y0)))
     bx0, by0 = max(0, x0 - pad), max(0, y0 - pad)
     bx1, by1 = min(w, x1 + 1 + pad), min(h, y1 + 1 + pad)

@@ -124,6 +124,30 @@ What is built, in the order it was built. The plan these came from is
   Verified: a 7200-frame mixed-species match, clean; single-model runs log
   `model roster: 1 entry(s)` and are otherwise byte-for-byte the old path.
 
+- **An elemental roster of six, on two skeletons.** Ember (Embercrest), stone
+  (Ironroot), frost (Rimefang), blight (Blightmaw) on `winged-quadruped.json`;
+  storm (Stormsail) and tide (Tidewrack) on `winged-biped.json`. The four new
+  ones cost one generation each and **no skeleton authoring at all** -- the
+  rigger's fit remaps an existing skeleton onto a differently-proportioned mesh
+  of the same structure, so a variant is nearly free where a new anatomy is
+  not. That only works because the concept prompt asked for the same neck
+  length, tail length and finger-rib count; ask for a variant, not a redesign.
+  All four rigged at 80 K tris with zero unweighted vertices and
+  `max_weight_sum_error` 5.2e-08, 62 bones for the dragons and 55 for the
+  wyvern.
+
+  **A creature is now a species, not just a mesh**: `<model>.rig.cfg` says how
+  it moves, `<model>.flight.cfg` how it handles, `<model>.breath.cfg` what it
+  breathes. All three are partial files, so a model that ships without one
+  behaves exactly as everything did before species existed.
+
+  Two things the generator finally does right, both fixed in the *plates*
+  rather than in code. **Mouths open**: every earlier sculpt came back fused
+  shut with no cavity, which left heat weighting nothing to split on; asking
+  for a parted mouth in every panel produced a real mouth interior on all four.
+  And the view count is settled -- see `MODEL_GENERATION.md` -- four cardinal
+  plates, no top.
+
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
