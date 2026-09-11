@@ -51,14 +51,6 @@ What is built, in the order it was built. The plan these came from is
   `ATTRIBUTION.md`. The whole procedure, and what was measured to arrive at
   it, is `docs/MODEL_GENERATION.md`.
 
-- **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
-  roguelite with growth as tuning), the art direction and its generated
-  targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
-  plan. `docs/RETRO.md` keeps the feature-by-feature ranking and the D3D9-era
-  port study; the port's first phase (extracting an RHI from `src/gfx`) is a
-  pure refactor that pays for itself even if the port never ships, and it
-  follows the polish work in DIRECTION.md.
-
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was
   overshooting its commanded angle by up to 49%, both from normalizers that
@@ -68,6 +60,14 @@ What is built, in the order it was built. The plan these came from is
   brake all the way down, so the dragon could not be landed deliberately.
   `docs/ANIMATION.md` has the detail. `assets/stormsail.glb` has its first rig
   profile and both generated assets now have a standing wing stow.
+
+- **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
+  roguelite with growth as tuning), the art direction and its generated
+  targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
+  plan. `docs/RETRO.md` keeps the feature-by-feature ranking and the D3D9-era
+  port study; the port's first phase (extracting an RHI from `src/gfx`) is a
+  pure refactor that pays for itself even if the port never ships, and it
+  follows the polish work in DIRECTION.md.
 
 ## Open questions
 
