@@ -10,6 +10,27 @@ separation is why the two counters never move together.
 Driven through `chrome-use` against a logged-in Chrome. Every step below was
 run this way for the Stormsail wyvern.
 
+**`tools/hunyuan_oneshot.py` is this document, executable.**
+
+```sh
+tools/hunyuan_oneshot.py run artifacts/dragon-options/ashcoil-views \
+    assets/ashcoil-cand-oneshot.glb        # submit, poll, download
+tools/hunyuan_oneshot.py submit <views-dir>     # just submit, prints the id
+tools/hunyuan_oneshot.py fetch <id> <out.glb>   # poll an existing job, download
+```
+
+Prefer it to driving the steps by hand: every trap below is a step that
+silently succeeds while doing the wrong thing, so the script asserts what it
+matched at each one. Chrome must actually be running -- the relay drives the
+user's logged-in browser, and with Chrome closed `chrome-use` reports the
+extension's MV3 worker as asleep rather than saying the browser is gone.
+
+**Use the four turnaround plates and leave 顶 empty.** That was an inherited
+convention until it was measured two runs against two; adding a top plate
+cropped from the reference sheet narrows the wingspan 14-20%, lengthens the
+body, softens the head and blunts the tail. See "Four views beat five" in
+`docs/MODEL_GENERATION.md`.
+
 ## 1. Open the one-shot panel
 
 From `https://3d.hunyuan.tencent.com/`, the entry is the banner's 立即开始.

@@ -105,6 +105,7 @@ hue push.
 | `embercrest-model-field.png` | All four generators side by side on one camera |
 | `embercrest-cloud-vs-local-head.png` | Head detail: why the cloud wins. It runs v3.1; the newest open weights are 2.1, which has no multi-view variant |
 | `embercrest-hunyuan-textured.png` | The finished cloud asset — 19,965 quads, UVs, and a 4K PBR set |
+| `ashcoil-view-count.png` | Whether a fifth (top) plate helps the one-shot. Two runs per arm; four views win on head definition, and the top plate narrows the wingspan 14-20%. See "Four views beat five" in `docs/MODEL_GENERATION.md` |
 
 ## The meshes are not here
 

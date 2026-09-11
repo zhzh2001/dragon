@@ -314,6 +314,49 @@ more than the successes:
 
 The asset to beat remains the original one-shot from the turnaround crops.
 
+### Four views beat five, measured two against two
+
+The 4-view rule in `tools/hunyuan_oneshot.md` was inherited from the Stormsail
+run, not measured -- and the one view-count measurement on record (three
+against five, above) pointed the other way, so it was worth settling. Run on
+Ashcoil, two one-shots per arm, the same four turnaround plates in both, the
+fifth plate being the TOP VIEW panel cropped out of its reference sheet:
+
+| arm | X (wingspan) | Y (length) | Z |
+|---|---|---|---|
+| 4 views, original | 1.1616 | 1.0678 | 0.3549 |
+| 4 views, repeat | 1.1632 | 0.9978 | 0.3435 |
+| 5 views, run A | 0.9969 | 1.1711 | 0.3397 |
+| 5 views, run B | 0.9317 | 1.1755 | 0.3280 |
+
+**Run-to-run variance is small enough for the comparison to mean something:**
+the two 4-view runs agree on wingspan to 0.1%, and the two 5-view runs agree on
+length to 0.4%. The gap *between* the arms is an order of magnitude larger --
+the top plate narrows the wingspan by 14-20% and lengthens the body by 10-17%,
+turning a creature wider than it is long into one longer than it is wide.
+
+And it is worse, not merely different. Both 5-view heads have a longer, thinner
+muzzle, a noisy fringed jaw line and a mane whose spikes fuse into clumps,
+against two crisp 4-view heads with a clean brow and separated spikes -- the
+same "mushy muzzle, jaw and brow losing definition" that the higher-resolution
+plates produced. At full body the 5-view runs also lose the whip taper of the
+tail, which on a serpent is most of the silhouette.
+
+**This does not contradict the three-against-five result; it completes it.**
+What the generator needs is the four cardinal views of the turnaround, because
+they carry the silhouette -- dropping the two side plates is what made the
+3-view run bad. The top plate adds no silhouette the sides do not already give,
+and it arrives in a *different pose*: in a reference sheet the serpent's body
+hangs straight down, while the turnaround extends it backward. The generator
+appears to reconcile the two by splitting the difference, which is exactly what
+the numbers show. **Use the four turnaround plates. Leave 顶 empty** unless the
+top view is drawn in the same pose as the other four, which is the one case
+this experiment does not cover and the obvious next test.
+
+Driving all of this is `tools/hunyuan_oneshot.py`, which is the runbook in
+`tools/hunyuan_oneshot.md` made executable -- the three traps in that document
+are all silent successes, so every step asserts what it matched.
+
 ### Triangle count is not the bottleneck: measured
 
 Before optimising the dragon mesh for low-end GPUs, measure. Three rigged
