@@ -53,13 +53,14 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--frames N` | Run exactly N frames then exit. |
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
+| `--telemetry [N]` | Log one line of flight state every N frames (default 60). A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--cam-mode chase\|action\|cinematic\|fp` | Pick a camera preset. |
 | `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon. Elevation 88 looks straight down -- the only view that shows a lateral tail wave. |
 | `--inspect-head` | With `--inspect`, orbit the ANIMATED head instead of the body (jaw, aim). |
 | `--skeleton` | Draw the posed joints as lines, to tell a rig problem from a skinning one. |
 | `--bind-pose` | Freeze the rig, to check an imported asset against its own bind pose. |
-| `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. |
+| `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Fly the selected course unattended. Doubles as a soak test. |
 | `--course N` | Select a generated course. |
 | `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack, 9 grounded. |

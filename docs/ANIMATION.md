@@ -397,3 +397,84 @@ Two dead ends, recorded so they are not repeated: cutting a rig down to fit a
 joint budget (weight transfer produces glitchy wings and snouts -- MAX_JOINTS is
 256 for this reason), and picking a pose-bake frame by proxy metrics rather than
 by rendering candidates and looking at them.
+
+### The wing was throwing away half of everything it was told
+
+Four separate normalizer and axis bugs, all in `drive_wings`, all found by
+measuring rather than by looking -- the poses were wrong in ways that read as
+"stiff" and "unnatural" without pointing at a cause. `tools/probe_wing_geometry.py`
+reads a `.glb` directly, replays `drive_wings` on it, and reports where the
+membrane ends up; it is the tool to reach for before touching any of this again.
+
+**The flap normalizer balanced rotation, not travel.** Its comment promises
+"the wingtip ends up rotated by the flap angle itself, whatever the chain
+length", and summing angles down a chain does get the tip BONE's orientation
+right -- while the tip POSITION travels a fraction of the arc, because an
+outboard joint pivots close to the tip and barely displaces it. The upstroke's
+shoulder cut deliberately shifts weight out to exactly where that leverage is
+worst. Add `wing_phase_lag` being applied outside the normalizer entirely, and
+the dragons flew 43-49% of the commanded stroke. The normalizer now weights each
+joint by its leverage over the membrane tip, measured once per side from the bind
+pose in `init()`, with the moment arm taken PERPENDICULAR to the flap axis -- the
+straight-line distance credits a swept wing with leverage it does not have.
+83-93% after. `test_wingtip_reaches_the_commanded_flap` pins it, on the generated
+rig and on both imported assets, because chain length is the variable that bites.
+
+**Sweep and fold borrowed that same normalizer**, which is `1 / sum of decay^k`
+and correct only for shares that are themselves `decay^k`. Theirs are
+`(0.4 + 0.6 * progress)` and `progress * scale`, so a commanded 88 degrees of
+tuck sweep arrived at the tip as 111 degrees on a three-plus-one wing and 131 on
+a four-plus-two. Past 90 the tip is rotated behind straight-back and the folded
+wing points inboard at the opposite flank: 71% and 99% of one wing's membrane
+inside the other's. Each term divides by the sum of its own shares now. The fold
+deliberately leaves the anatomical scales OUT of its normalizer, so closing the
+fingers harder does not quietly open the elbow -- separating those stations is
+the whole point of the profile, and a shared normalizer couples them back.
+
+**The fold axis was body up, which is only the hinge for a wing bound level.**
+The generated sculpts carry their membranes draped aft-down: the plane fitted
+through the wing joints is 44.5 degrees off horizontal on Stormsail and 35.3 on
+Embercrest, nearly all of it incidence. Folding those about body up rotates
+segments up to 61 degrees out of their own membrane plane and shears the inner
+membrane through the flank; about the fitted plane normal they stay within 6.
+`wing_fold_axis_` is that normal, per side, from `init()`. The two downloaded
+assets fit body up to within a degree, so nothing changed for them. One
+consequence to know: on a tilted wing the fold now bleeds into elevation -- an
+`upstroke_fold_deg` of 24 costs the top of the stroke real degrees, which is
+physically right and worth a per-model number.
+
+**The outermost finger bone was never driven on three of the four assets.**
+`significant_children` needs a subtree of two, so any bone whose child is a leaf
+ends its chain one bone early. That was written for the default asset, whose
+leaves are genuine `_end` export artifacts with no vertices. Everywhere else they
+are real: the wyvern's four finger ribs carry roughly half its membrane and rode
+rigidly on a 30 cm stub, giving the wing no knuckle to furl at. `descend_main`
+continues into a lone non-`_end` leaf -- only when the chain has already
+terminated AND there is exactly one child, because a lone leaf beside a real
+branch is a corrective and treating it as a branch ends the Prowler's arm at the
+shoulder. The default asset's `mapped rig:` line is unchanged, which is the test.
+
+### Standing is not tucking
+
+A tuck that closes as hard as a standing fold puts the two membranes through each
+other across the chest; a standing fold as open as a comfortable stoop is a bat
+cape. They are separate poses and now separate numbers: `ground_stow_sweep_deg`,
+`ground_stow_fold_deg`, `ground_stow_wrist_deg` and `ground_stow_finger_deg` add
+to the tuck with ground contact. The wrist rides high and the finger ribs hang
+down the flank, which is what closes a membrane into a narrow bundle -- see
+`docs/concept/wyvern-wing-reference.png`, stage 4.
+
+Off by default, and profiled per model, because the right angles depend on where
+a rig puts its wrist. It matters most for the two generated assets: **neither
+ships an authored clip at all**, so the procedural pose is the only stance they
+have, where the ground normally hands the whole body to the artist. The default
+asset is the opposite case and still looks worst on the ground: its wing root is
+two bones that bind at the model origin, and its authored clip is a flying idle
+with the wings spread, so there is no folded stance to fall back on either way.
+That one is an asset problem.
+
+The flight model also drives `wing_tuck` to 1 while grounded. The studio's
+grounded scenario always assumed that -- it sets a full tuck itself -- but the
+game did not, so a landed dragon stood with its wings half open unless the player
+kept holding the dive key. Lift is moot on the ground, so it costs the force
+model nothing.

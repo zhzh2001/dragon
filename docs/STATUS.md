@@ -59,6 +59,16 @@ What is built, in the order it was built. The plan these came from is
   pure refactor that pays for itself even if the port never ships, and it
   follows the polish work in DIRECTION.md.
 
+- **Wing motion and landing, after a playtest report.** The wingbeat was
+  flying 43-49% of the stroke the flight model commanded and the fold was
+  overshooting its commanded angle by up to 49%, both from normalizers that
+  balanced the wrong quantity; the fold hinged about body up on two assets
+  whose wings are bound 35-45 degrees off level; the outermost finger bone was
+  never driven on three of four assets; and the auto-flap assist fought the
+  brake all the way down, so the dragon could not be landed deliberately.
+  `docs/ANIMATION.md` has the detail. `assets/stormsail.glb` has its first rig
+  profile and both generated assets now have a standing wing stow.
+
 ## Open questions
 
 - **Ground beyond the fog.** The terrain builds a coarse skirt out to three
@@ -77,3 +87,17 @@ What is built, in the order it was built. The plan these came from is
   the front-leg chains are empty, so it maps with `front legs 0/0` and no
   engine change. Multi-model loading is the missing piece, not the asset.
 - **Nothing collides with a tree.** Vegetation is visual only.
+- **The default asset's grounded wings are a wide flat drape.** Its wing root
+  chain is two bones that bind at the model origin, so the shoulder sweep
+  pivots about the origin, and its authored clip is a flying idle with the
+  wings spread -- there is no folded stance to hand the ground to. Both the
+  procedural stow and the clip were tried and neither reads as a folded wing.
+  The wyvern and Embercrest, which have real wrist joints, stow correctly.
+- **`FlightTuning::safe_landing_speed` is not read by anything.** "Landing
+  softer than this keeps you intact; harder is a crash" describes a crash that
+  does not exist; a dragon can arrive at 26 m/s and simply stop. Either wire it
+  up or drop the field.
+- **A full-brake descent stalls rather than flares.** Holding the brake all the
+  way down settles at about 9 m/s airspeed and -5.7 m/s sink with the stall
+  flag set. Half brake gives a clean, controlled -4 m/s approach, so this is
+  flare drag tuning rather than a broken state machine.
