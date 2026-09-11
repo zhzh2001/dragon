@@ -454,6 +454,31 @@ terminated AND there is exactly one child, because a lone leaf beside a real
 branch is a corrective and treating it as a branch ends the Prowler's arm at the
 shoulder. The default asset's `mapped rig:` line is unchanged, which is the test.
 
+### A fan sweeps a membrane; it never closes one
+
+Raising the wings on the ground was not folding them, and no amount of extra
+`ground_stow_fold_deg` was going to help. Every rotation in `drive_wings` runs
+the same way down the chain -- progressive, same sign, normalized -- which is a
+fan. A fan sweeps a membrane around. Closing one needs two things that are
+deliberately neither progressive nor normalized:
+
+**`ground_stow_close_deg` zigzags the arm.** The forearm folds back against the
+humerus and the hand folds back against the forearm: the elbow takes the angle
+one way and the wrist the other, and the membrane collapses into the pleats
+between them. Give both hinges the same sign and the arm curls into a spiral --
+a longer wing, not a shut one.
+
+**`ground_stow_converge_deg` shuts the fan**, and this is the one that mattered.
+Each finger rib swings toward the innermost by its share of the closure. It is
+invisible from the code alone: the wyvern's four ribs all begin at the SAME
+point on the wrist, so they receive identical rotations and can never converge,
+however hard the fold is driven. That is why a "folded" wing kept its full bind
+spread and stayed an open sail. Embercrest has the same problem, milder.
+
+Both fade in with ground contact and low airspeed, so no flight pose changes.
+The general lesson is worth more than the two knobs: **when a pose will not
+close, check whether every joint in it is being told to rotate the same way.**
+
 ### Standing is not tucking
 
 A tuck that closes as hard as a standing fold puts the two membranes through each
