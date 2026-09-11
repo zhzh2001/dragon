@@ -191,18 +191,29 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
     state.climb_rate = state.velocity.y;
     state.ground_clearance = centre.y - ground_y;
     state.g_load = 1.0f;
-    state.wing_angle = core::radians(9.0f);  // glide dihedral
+    // The studio is a bench for the rig, so every number it feeds the rig comes
+    // from the flight model's own defaults rather than from a copy. The copy had
+    // drifted: it played an 8 +/- 36 degree stroke against the flight model's
+    // 4 +/- 46, understating the wingbeat by a fifth, so the scenario used to
+    // judge the flap was quietly milder than the one the player flies.
+    const FlightTuning flight;
+    state.wing_angle = core::radians(flight.glide_dihedral_deg);
 
     switch (scenario) {
         case StudioScenario::Flap: {
             state.flap_amplitude = 1.0f;
-            state.flap_phase = std::fmod(t / 0.9f, 1.0f);
+            state.flap_phase = std::fmod(t / flight.flap_period, 1.0f);
             // Fast powered downstroke, slower recovery -- the same asymmetry the
             // flight model uses.
             const float phase = state.flap_phase;
-            const float beat = phase < 0.4f ? std::cos(core::PI * phase / 0.4f)
-                                            : -std::cos(core::PI * (phase - 0.4f) / 0.6f);
-            state.wing_angle = core::radians(8.0f) + core::radians(36.0f) * beat;
+            const float down = core::clampf(flight.flap_downstroke_fraction, 0.05f, 0.95f);
+            const float beat = phase < down
+                                   ? std::cos(core::PI * phase / down)
+                                   : -std::cos(core::PI * (phase - down) / (1.0f - down));
+            const float up_angle = core::radians(flight.flap_up_angle_deg);
+            const float down_angle = core::radians(flight.flap_down_angle_deg);
+            state.wing_angle = (up_angle + down_angle) * 0.5f +
+                               (up_angle - down_angle) * 0.5f * beat;
             break;
         }
         case StudioScenario::TurnLeft:
