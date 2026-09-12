@@ -1449,6 +1449,38 @@ bag (Embercrest's hinge blend accepts the same artefact); and the line is
 measured on the *unlevelled* mesh in canonical space, which is correct, since
 the mask runs before the wing bind correction.
 
+**The plane is per head, and two more heads needed it.** Rimefang and Ironroot
+were rebuilt with `null` masks after the Blightmaw fault, on the theory that a
+sculpt with a parted mouth gives heat something to split on. It does not give
+it enough: on both, heat handed the whole *snout* to the `jaw` bone (jaw
+weight 0.9-1.0 over the nose, 3800 and 4500 total against 1300 and 1000 on
+`head`), so `jaw_rest_deg -24` lifted the nose like a lid and the breath
+clamped the snout down onto a fixed mandible. `tools/skeletons/rimefang.json`
+and `ironroot.json` are the shared files with a measured plane added; the bone
+lists are byte-identical, so Embercrest and Blightmaw (still on
+`winged-quadruped.json`) are untouched. How the line was found: cast vertical
+rays through the head in canonical space and read the crossings -- chin
+(normal down), mandible top or lower tooth (up), palate or upper tooth (down),
+snout top (up) -- so each column gives a window the line must pass through,
+and the widest-over-x mandible top and lowest palate per y bound it.
+Rimefang's windows run from [.3508, .3538] at y .32 to [.321, .341] at .37,
+shallow behind the teeth and steep at the chin, and **no straight line clears
+both ends**, so `line` now accepts more than two points (piecewise linear,
+end segments extrapolated). Ironroot's cheek is solid to y .345 and its
+windows from [.3214, .3273] at .35 to [.2842, .3088] at .40 take one segment of
+slope -0.63. Two more keys came out of the same measurement: `z_min`, because
+Rimefang carries its head over its chest and a box that bounds only x and y
+had 697 chest, upper-arm and forefoot vertices inside it (its floor is .29,
+between the neck base and the .303 chin); and
+`reclaim_above: true`, because the plane only ever *added* jaw below the line
+and would have left the snout on the jaw bone -- it moves jaw/jaw_tip weight
+above the line onto `head`, opt-in so Ashcoil's build reproduces. The windows,
+the choices and the renders are in `artifacts/<name>/jaw-mask/README.md`.
+The rebuild is the documented command with the per-species skeleton, and the
+shipped file is that output run through `repair_model_materials.py` with its
+defaults -- confirmed by re-running the repair on the previous raw rig and
+getting the shipped `.glb` byte for byte.
+
 If a further anatomy hits another hardcoded constant, the fix is the same:
 lift it into the JSON with a default that preserves existing builds, then
 re-run the Embercrest build and check `max_weight_sum_error` and

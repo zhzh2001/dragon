@@ -217,6 +217,19 @@ if JAW_MASK is None:print('JAW_MASK_SKIPPED','jaw_mask is null',flush=True)
 #   "jaw_mask": {"type": "plane", "x_max": .035, "y_min": .25,
 #                "line": [[y0, z0], [y1, z1]], "hinge_blend": [ya, yb]}
 # Below the (y,z) line within the box is jaw, blended in over hinge_blend.
+# Three optional keys, each added because a measured head needed it:
+#   "line" may hold more than two points (ascending y): the split is then
+#     piecewise linear through them, extrapolating the end segments. A real
+#     mouth line is convex -- shallow behind the teeth, steep at the chin --
+#     and Rimefang's has no straight line that clears both the rear tongue
+#     and the front palate.
+#   "z_min": a floor on the box. A head carried over the chest (Rimefang)
+#     puts the forefeet inside a box that only bounds x and y.
+#   "reclaim_above": true moves jaw/jaw_tip weight ABOVE the line onto head.
+#     Without it the plane only adds jaw below the line, and a heat bind that
+#     gave the whole snout to the jaw bone (Ironroot, Rimefang: the mouth
+#     opened by lifting the nose) keeps it. Opt-in so Ashcoil's build, the
+#     first plane mask, reproduces unchanged.
 JAW_PLANE=JAW_MASK if isinstance(JAW_MASK,dict) and JAW_MASK.get('type')=='plane' else None
 if JAW_PLANE:print('JAW_MASK_PLANE',json.dumps(JAW_PLANE),flush=True)
 head_group=body.vertex_groups.get('head');jaw_group=body.vertex_groups.get('jaw')
@@ -240,17 +253,30 @@ for v in (body.data.vertices if JAW_MASK=='embercrest' else []):
         # Lower mandible slopes down toward the muzzle. Upper teeth remain skull.
         jaw_line=.363 - .16*(y-.30)
         (jaw_group if z<jaw_line else head_group).add([v.index],1,'REPLACE')
+def jaw_plane_split(y):
+    pts=JAW_PLANE['line']
+    i=max(0,min(len(pts)-2,sum(1 for p in pts[1:-1] if y>=p[0])))
+    (ya,za),(yb,zb)=pts[i],pts[i+1]
+    return za+(zb-za)*(y-ya)/(yb-ya)
+JAW_PLANE_RECLAIMED=0
 for v in (body.data.vertices if JAW_PLANE else []):
     x,y,z=canonical(v.co)
-    if abs(x)>JAW_PLANE['x_max'] or y<JAW_PLANE['y_min']:continue
-    (y0,z0),(y1,z1)=JAW_PLANE['line']
-    split=z0+(z1-z0)*(y-y0)/(y1-y0)
-    if z>=split:continue
+    if abs(x)>JAW_PLANE['x_max'] or y<JAW_PLANE['y_min'] or z<JAW_PLANE.get('z_min',-1e9):continue
+    split=jaw_plane_split(y)
+    if z>=split:
+        if JAW_PLANE.get('reclaim_above'):
+            moved=0.
+            for gi,w in [(g.group,g.weight) for g in v.groups]:
+                if body.vertex_groups[gi].name in ('jaw','jaw_tip') and w>0:
+                    moved+=w;body.vertex_groups[gi].remove([v.index])
+            if moved>0:head_group.add([v.index],moved,'ADD');JAW_PLANE_RECLAIMED+=1
+        continue
     share=smoothstep(*JAW_PLANE['hinge_blend'],y)
     if share<=0:continue
     for gi in [g.group for g in v.groups]:body.vertex_groups[gi].remove([v.index])
     jaw_group.add([v.index],share,'REPLACE')
     if share<1:head_group.add([v.index],1-share,'REPLACE')
+if JAW_PLANE:print('JAW_MASK_PLANE_RECLAIMED',JAW_PLANE_RECLAIMED,'vertices above the line had jaw weight moved to head',flush=True)
 # Normalize explicitly after edits; vertex-group collection elements are live.
 for v in body.data.vertices:
     entries=[(g.group,g.weight) for g in v.groups if g.weight>0]
@@ -371,7 +397,7 @@ bpy.ops.wm.save_as_mainfile(filepath=str(OUT/(STEM+'.blend')),compress=True)
 weights=[sum(g.weight for g in v.groups) for v in body.data.vertices]
 stats={'source':SOURCE.name,'source_sha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),'source_triangles':original_faces,'triangles':len(body.data.polygons),'vertices':len(body.data.vertices),'bones':len(bones),'max_influences':max(len(v.groups) for v in body.data.vertices),'max_weight_sum_error':max(abs(w-1) for w in weights),'unweighted_vertices':sum(w==0 for w in weights),'binding':'; '.join(['Bone heat body']
     +(['continuous top-four wing field'] if WING_FIELD_RAN else [])
-    +([('gap-following jaw mask with hinge blend' if TEXTURED else 'rigid skull/jaw')] if JAW_MASK=='embercrest' else ['plane jaw mask with hinge blend'] if JAW_PLANE else ['heat-weight jaw (jaw_mask null)'])
+    +([('gap-following jaw mask with hinge blend' if TEXTURED else 'rigid skull/jaw')] if JAW_MASK=='embercrest' else [('plane jaw mask with hinge blend'+(f', {len(JAW_PLANE["line"])}-point line' if len(JAW_PLANE['line'])>2 else '')+(', snout reclaimed' if JAW_PLANE.get('reclaim_above') else ''))] if JAW_PLANE else ['heat-weight jaw (jaw_mask null)'])
     +([('level wing bind' if WING_LEVEL_DEG==35 else f'level wing bind {WING_LEVEL_DEG} deg')] if WING_LEVELLED else [])),'material':'Preserved source UVs and PBR textures' if TEXTURED else 'Neutral clay; source contains no UV or texture','glb_bytes':GLB.stat().st_size}
 assert stats['max_influences']<=4 and stats['max_weight_sum_error']<1e-6
 lo=[min(v.co[i] for v in body.data.vertices) for i in range(3)]

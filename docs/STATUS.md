@@ -159,9 +159,11 @@ What is built, in the order it was built. The plan these came from is
   "A wingbeat is not a wave".
 - **Roster polish after the first playtest of the beat.** The recovery flex
   moderated (it read as cloth). Tidewrack, Blightmaw and Stormsail close
-  their sculpted gapes at rest and open on the breath; Rimefang and Ironroot
-  had the jaw bone skinned to the snout, an asset fault (see `ANIMATION.md`,
-  "The jaw bone may own the wrong half of the mouth"). Rimefang, Blightmaw
+  their sculpted gapes at rest and open on the breath. Rimefang and Ironroot
+  had the jaw bone skinned to the snout, an asset fault; both were rebuilt
+  with per-head jaw masks (`tools/skeletons/{rimefang,ironroot}.json`,
+  `artifacts/*/jaw-mask/README.md`) and now close and gape like the others
+  (see `ANIMATION.md`, "The jaw bone may own the wrong half of the mouth"). Rimefang, Blightmaw
   and Ironroot carry leg profiles instead of the code defaults that hung
   their legs like landing gear. Blightmaw's neck is streamlined so the head
   flies level and the horns sweep back.
