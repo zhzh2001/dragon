@@ -157,6 +157,14 @@ What is built, in the order it was built. The plan these came from is
   Checked as an eight-phase contact sheet per species from the front and the
   side, and pinned by `test_wingbeat_is_not_a_wave`. `ANIMATION.md`,
   "A wingbeat is not a wave".
+- **Roster polish after the first playtest of the beat.** The recovery flex
+  moderated (it read as cloth). Tidewrack, Blightmaw and Stormsail close
+  their sculpted gapes at rest and open on the breath; Rimefang and Ironroot
+  had the jaw bone skinned to the snout, an asset fault (see `ANIMATION.md`,
+  "The jaw bone may own the wrong half of the mouth"). Rimefang, Blightmaw
+  and Ironroot carry leg profiles instead of the code defaults that hung
+  their legs like landing gear. Blightmaw's neck is streamlined so the head
+  flies level and the horns sweep back.
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced

@@ -571,3 +571,31 @@ just that term off, on the generated rig: the hand is nearer the spine
 mid-upstroke, further forward at the bottom and further aft at the top, the
 leading edge lower going down and higher going up, the root higher after the
 downstroke -- and none of it survives a tuck.
+
+### The jaw bone may own the wrong half of the mouth
+
+Three species were reported with a wrong attack jaw, and the bone was right on
+every one of them: `test_roster_jaws_open_downward` shows the jaw tip dropping
+26 degrees on the breath, in the head's frame, on all six. What differed was
+the SKIN. On Rimefang and Ironroot the rigger's jaw mask -- Embercrest's
+hand-authored cut applied to a head it was not drawn for, or heat weights on
+a sculpt that gave heat nothing to split on -- handed the snout to the jaw
+bone and left the mandible on the head, so "open" tilted the nose down onto a
+fixed lower jaw and the mouth clamped shut around the flame. On Tidewrack the
+weights were right and the profile was empty: a sculpt authored mouth-open
+hung its gape in flight and the attack dislocated it 26 degrees further. The
+two faults look alike from the cockpit and are fixed in different places --
+a per-head jaw mask and a rebuild for the first, two lines of `.rig.cfg`
+(`jaw_rest_deg` negative to close the sculpted gape, `jaw_open_deg` to open
+back to it) for the second.
+
+Two lessons about *finding* such things. **Small head crops lie.** Half a
+dozen contact sheets at 50% were read wrongly in both directions before one
+side-on render of the mouth at full size, bind beside `jaw_rest_deg -24`,
+settled each species in a glance: the part that moves when the bone is
+driven closed is the part the bone owns. And **geometric heuristics over an
+arbitrary rig are worse than a picture**: three attempts to classify
+mandible-vs-skull vertices by hinge height, by the bone axis and by weight
+ownership each flagged a different, wrong set of assets, because the hinge
+sits at a different place in the head on every rig. The bone-direction test
+stays; the skin is judged by rendering.

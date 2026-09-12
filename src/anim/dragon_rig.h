@@ -170,14 +170,17 @@ struct RigTuning {
     //    half-strokes have different silhouettes. Hinge angles at the named
     //    joints, not a normalized fan -- a positive value folds aft. Give the
     //    wrist the opposite sign to zigzag the arm instead of curling it.
-    float recovery_elbow_deg = 18.0f;
-    float recovery_wrist_deg = 28.0f;
-    float recovery_finger_deg = 22.0f;
+    //    Moderate by default: the first pass folded harder (18/28/22, droop
+    //    24) and read as a wing made of cloth. The span should shorten enough
+    //    to be seen from the front, not collapse.
+    float recovery_elbow_deg = 11.0f;
+    float recovery_wrist_deg = 17.0f;
+    float recovery_finger_deg = 13.0f;
     //    The hand also DROOPS on the upstroke: the elbow leads upward and the
     //    hand trails below the wrist, which is the M-shaped front silhouette
     //    of every large flyer mid-upstroke and the clearest difference from a
     //    plank. Degrees the hand hangs below the arm line at peak flex.
-    float recovery_droop_deg = 24.0f;
+    float recovery_droop_deg = 15.0f;
     // 3. The hand feathers. The outer wing pitches leading-edge-down through
     //    the downstroke and leading-edge-up through the upstroke, in
     //    proportion to how fast the wing is moving, so it is zero at both

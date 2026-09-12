@@ -554,7 +554,10 @@ void test_wingbeat_is_not_a_wave() {
     const float down_x = membrane_from_shoulder(*posed(mid_down, beat)).x;
     const float up_x = membrane_from_shoulder(*posed(mid_up, beat)).x;
     std::printf("  reach from shoulder: downstroke %.2f, upstroke %.2f\n", down_x, up_x);
-    CHECK(up_x < 0.93f * down_x);
+    // The generated rig has no finger ribs, so only the elbow and wrist hinges
+    // shorten it; the ribbed assets fold further. A few percent here is a
+    // visible shortening there.
+    CHECK(up_x < 0.97f * down_x);
 
     // 2. Stroke plane: with the tilt on, the hand ends the downstroke further
     //    FORWARD and the upstroke further AFT than the same pose without it.
@@ -1266,6 +1269,80 @@ void test_open_sculpt_jaw_calibration() {
     rig.set_action(anim::RigAction{});
     for (int i = 0; i < 180; ++i) rig.update(state, 1.0f / 60.0f);
     CHECK(angle(rig.pose().local[size_t(joints.jaw)].rotation, closed) < 0.1f);
+}
+
+// Every roster creature's jaw must open DOWNWARD on the breath, measured on
+// the asset itself, because the opening sign is probed from the bind pose and
+// a probe that reads the wrong descendant inverts silently: the mouth then
+// clamps shut on the attack and the fire leaves a closed face. Also prints
+// the resting gape, since most of these sculpts are authored mouth-open and
+// need a jaw_rest_deg in their profile to close at idle.
+void test_roster_jaws_open_downward() {
+    std::printf("every roster jaw opens downward on the breath\n");
+    namespace fs = std::filesystem;
+    for (const char* name : {"assets/embercrest-textured.glb", "assets/rimefang.glb",
+                             "assets/blightmaw.glb", "assets/ironroot.glb",
+                             "assets/stormsail.glb", "assets/tidewrack.glb"}) {
+        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        fs::path path = source_root / name;
+        if (!fs::is_regular_file(path)) path = fs::path(name);
+        if (!fs::is_regular_file(path)) {
+            std::printf("  %s absent; skipped\n", name);
+            continue;
+        }
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        if (!anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok) continue;
+        const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+        if (joints.jaw == anim::NO_PARENT || joints.head == anim::NO_PARENT) {
+            std::printf("  %s: no jaw mapped\n", name);
+            continue;
+        }
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        int tip = joints.jaw;
+        for (int i = 0; i < skeleton.count(); ++i) {
+            if (skeleton.joint(i).parent == joints.jaw) tip = i;
+        }
+        game::FlightState state;
+        state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        state.airspeed = 30.0f;
+        state.ground_clearance = 300.0f;
+        // Tip offset from the jaw pivot, in the HEAD's frame, so a raised or
+        // lowered neck cannot masquerade as a jaw movement.
+        auto tip_in_head = [&](float breath) {
+            anim::RigAction action;
+            action.breath = breath;
+            for (int i = 0; i < 240; ++i) {
+                rig.set_action(action);
+                rig.update(state, 1.0f / 60.0f);
+            }
+            const auto& w = rig.world_matrices();
+            const Quat head = core::quat_from_matrix(w[size_t(joints.head)]);
+            return core::rotate(core::conjugate(head),
+                                w[size_t(tip)].col[3].xyz() - w[size_t(joints.jaw)].col[3].xyz());
+        };
+        const Vec3 bind_tip = core::rotate(
+            core::conjugate(core::quat_from_matrix(skeleton.world_bind(joints.head))),
+            skeleton.world_bind(tip).translation_part() -
+                skeleton.world_bind(joints.jaw).translation_part());
+        const Vec3 rest = tip_in_head(0.0f);
+        const Vec3 open = tip_in_head(1.0f);
+        // "Down" in the head's frame is whatever direction the bind tip is
+        // displaced from a line through the head's forward axis; simpler and
+        // robust: measure the angle each pose makes with the bind tip about
+        // the head's X (the hinge), signed so that opening is positive.
+        auto hinge_angle = [&](const Vec3& v) {
+            return degrees(std::atan2(v.y, -v.z) - std::atan2(bind_tip.y, -bind_tip.z));
+        };
+        const float rest_deg = hinge_angle(rest), open_deg = hinge_angle(open);
+        std::printf("  %s: jaw '%s' tip '%s' -- rest %+.1f deg from bind, breath %+.1f deg "
+                    "(negative = lower)\n",
+                    name, skeleton.joint(joints.jaw).name.c_str(),
+                    skeleton.joint(tip).name.c_str(), rest_deg, open_deg);
+        CHECK(open_deg < rest_deg - 5.0f);
+    }
 }
 
 void test_attack_posture() {
@@ -2024,6 +2101,7 @@ int main() {
     test_neck_shares_the_aim();
     test_attack_posture();
     test_open_sculpt_jaw_calibration();
+    test_roster_jaws_open_downward();
     test_speed_posture();
     test_ground_stance_is_authored();
     test_studio_states_are_consistent();
