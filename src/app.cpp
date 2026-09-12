@@ -1909,6 +1909,24 @@ void App::build_dragon_ui() {
     }
 
     if (ImGui::CollapsingHeader("Wings")) {
+        // The beat first: these are what separate a wingbeat from a wave, and
+        // a dial that decides whether the flap reads belongs where it is seen.
+        ImGui::SeparatorText("wingbeat");
+        ImGui::SliderFloat("stroke plane tilt", &rig.stroke_plane_tilt_deg, -45.0f, 45.0f,
+                           "%.0f deg");
+        ImGui::SliderFloat("recovery elbow", &rig.recovery_elbow_deg, -60.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("recovery wrist", &rig.recovery_wrist_deg, -90.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("recovery fingers", &rig.recovery_finger_deg, -90.0f, 90.0f,
+                           "%.0f deg");
+        ImGui::SliderFloat("recovery hand droop", &rig.recovery_droop_deg, -45.0f, 60.0f,
+                           "%.0f deg");
+        ImGui::SliderFloat("reopen phase", &rig.wing_recovery_extend_phase, 0.0f, 0.95f);
+        ImGui::SliderFloat("hand twist", &rig.stroke_twist_deg, -45.0f, 45.0f, "%.0f deg");
+        ImGui::SliderFloat("outer beat delay", &rig.wing_phase_delay, 0.0f, 0.10f, "%.3f cycles");
+        ImGui::SliderFloat("body heave", &rig.beat_heave_m, 0.0f, 1.5f, "%.2f m");
+        ImGui::SliderFloat("heave lag", &rig.beat_heave_lag, 0.0f, 0.5f, "%.2f cycles");
+        ImGui::SliderFloat("body pitch", &rig.beat_pitch_deg, 0.0f, 8.0f, "%.1f deg");
+        ImGui::SeparatorText("stroke");
         ImGui::SliderFloat("flap amplitude", &rig.flap_shoulder_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("outboard decay", &rig.outboard_decay, 0.0f, 2.0f);
         ImGui::SliderFloat("phase lag", &rig.wing_phase_lag, 0.0f, 1.5f);
@@ -1924,9 +1942,7 @@ void App::build_dragon_ui() {
                            "%.0f deg");
         ImGui::SliderFloat("flap angle limit", &rig.wing_flap_limit_deg, 0.0f, 90.0f,
                            "%.0f deg");
-        ImGui::SliderFloat("outer beat delay", &rig.wing_phase_delay, 0.0f, 0.10f, "%.3f cycles");
         ImGui::SliderFloat("recovery fold", &rig.wing_recovery_fold_deg, 0.0f, 40.0f, "%.0f deg");
-        ImGui::SliderFloat("reopen phase", &rig.wing_recovery_extend_phase, 0.5f, 0.95f);
         ImGui::SeparatorText("standing stow");
         ImGui::SliderFloat("stow sweep", &rig.ground_stow_sweep_deg, 0.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("stow fold", &rig.ground_stow_fold_deg, 0.0f, 60.0f, "%.0f deg");

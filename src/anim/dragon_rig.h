@@ -91,7 +91,13 @@ struct RigTuning {
     // legacy `wing_phase_lag` above attenuates amplitude; this value actually
     // samples the asymmetric beat earlier for outer joints, so the elbow leads
     // the wrist and the fingers follow it. Zero preserves the legacy pose.
-    float wing_phase_delay = 0.0f;
+    //
+    // On by default: the tip of a real wing lags the shoulder by a tenth of a
+    // beat or so, and without any lag the whole wing reverses on one frame,
+    // which is the single strongest cue that it is being waved rather than
+    // beaten. Per joint, so a six-station wing lags about 0.15 of a beat at
+    // the tip (~8 frames at the default 0.9 s period).
+    float wing_phase_delay = 0.025f;
     // Match the flight model's fast powered downstroke and slower recovery.
     // This is only read when wing_phase_delay is enabled, and lets a model
     // profile track a custom FlightTuning value without changing shared code.
@@ -127,13 +133,69 @@ struct RigTuning {
     // Extra compacting fold during the middle of the recovery stroke. It fades
     // back out before the next downstroke, so the fingers reopen smoothly.
     float wing_recovery_fold_deg = 0.0f;
-    // Beat phase at which that recovery fold starts extending. Zero disables
-    // the timed recovery profile; positive values are in [downstroke, 1].
-    float wing_recovery_extend_phase = 0.0f;
+    // Beat phase at which the recovery flex (this fold and the recovery_*
+    // hinges below) starts extending again. Zero disables the whole timed
+    // recovery profile; positive values are in [downstroke, 1]. The flex
+    // ramps in over the first quarter of the upstroke, holds, and is fully
+    // extended again about 60% of the way from this phase to the top, so the
+    // downstroke always starts on a taut, fully open wing.
+    float wing_recovery_extend_phase = 0.72f;
     // On the upstroke the wrist flexes and the wing part-folds -- real bird
     // kinematics, and what keeps the two raised wings from crossing over the
     // spine at the top of the beat.
     float upstroke_fold_deg = 24.0f;
+
+    // ---- the beat itself: what separates a wingbeat from a wave ----
+    //
+    // A waved wing is a plank hinged at the shoulder, swinging up and down
+    // about one axis, the same shape on the way up as on the way down. A
+    // wingbeat differs from that in four ways that are each visible on their
+    // own, and every one of them is keyed to the beat's PHASE or VELOCITY, not
+    // to the wing's position, because position is symmetric between the two
+    // half-strokes and direction is not. All of them fade with flap amplitude,
+    // so a glide, a tuck and the ground stow are exactly what they were.
+    //
+    // 1. The stroke plane is tilted. Measured on a straight-flying bat the
+    //    wingtip's path is inclined about 50 degrees from horizontal: the tip
+    //    sweeps FORWARD on the downstroke and BACK on the upstroke, a crescent
+    //    from the side rather than a vertical line. Degrees of tilt of the
+    //    flap axis away from the body's fore-aft axis; applied at the shoulder
+    //    alone, as a yaw of the whole wing, because it is the shoulder that
+    //    moves -- putting it down the chain would shear the membrane.
+    float stroke_plane_tilt_deg = 22.0f;
+    // 2. The upstroke flexes. The wing is taut and straight on the powered
+    //    downstroke and pulled in on the recovery: elbow and wrist hinge aft
+    //    in the membrane plane and the finger ribs fold after them, so the
+    //    span shortens by a quarter or more at mid-upstroke and the two
+    //    half-strokes have different silhouettes. Hinge angles at the named
+    //    joints, not a normalized fan -- a positive value folds aft. Give the
+    //    wrist the opposite sign to zigzag the arm instead of curling it.
+    float recovery_elbow_deg = 18.0f;
+    float recovery_wrist_deg = 28.0f;
+    float recovery_finger_deg = 22.0f;
+    //    The hand also DROOPS on the upstroke: the elbow leads upward and the
+    //    hand trails below the wrist, which is the M-shaped front silhouette
+    //    of every large flyer mid-upstroke and the clearest difference from a
+    //    plank. Degrees the hand hangs below the arm line at peak flex.
+    float recovery_droop_deg = 24.0f;
+    // 3. The hand feathers. The outer wing pitches leading-edge-down through
+    //    the downstroke and leading-edge-up through the upstroke, in
+    //    proportion to how fast the wing is moving, so it is zero at both
+    //    reversals and largest mid-stroke. Degrees of twist at the tip at the
+    //    downstroke's peak rate; the wrist takes a third of it.
+    float stroke_twist_deg = 18.0f;
+    // 4. The body answers. Each downstroke lifts the body and each upstroke
+    //    lets it sink, and the nose rises a little with the push. A body that
+    //    hangs perfectly still under beating wings reads as a mannequin with
+    //    wings bolted on. Heave is in metres, peak to centre, applied to the
+    //    root joint (visual only -- the flight model's position is untouched,
+    //    so the chase camera does not bob with it); the lag is the fraction of
+    //    a beat by which the body's height trails the wing, since the body is
+    //    still rising when the downstroke ends.
+    float beat_heave_m = 0.30f;
+    float beat_heave_lag = 0.12f;
+    float beat_pitch_deg = 2.0f;
+
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
     // carries the wrist HIGH, above the shoulder, and lets the finger ribs hang
@@ -512,6 +574,7 @@ private:
                       float angle_b);
 
     void drive_wings(const game::FlightState& state);
+    void drive_body_beat(const game::FlightState& state);
     // The jaw, the breath tremor and the talons -- after the aim, because the
     // aim would otherwise correct the tremor away.
     void drive_attack(float airborne);

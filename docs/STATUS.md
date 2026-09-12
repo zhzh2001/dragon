@@ -148,6 +148,15 @@ What is built, in the order it was built. The plan these came from is
   And the view count is settled -- see `MODEL_GENERATION.md` -- four cardinal
   plates, no top.
 
+- **The wingbeat is a beat, not a wave.** Every species flapped as a plank
+  hinged at the shoulder, identical going up and coming down, because every
+  shaping term was keyed to the wing's position. Four terms keyed to the
+  beat's phase and velocity now give it direction -- a tilted stroke plane,
+  a phase-keyed recovery flex with the hand drooping, a velocity-keyed
+  feathering twist, and a body heave -- plus the spanwise lag on by default.
+  Checked as an eight-phase contact sheet per species from the front and the
+  side, and pinned by `test_wingbeat_is_not_a_wave`. `ANIMATION.md`,
+  "A wingbeat is not a wave".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced

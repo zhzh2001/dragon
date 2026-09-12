@@ -503,3 +503,71 @@ grounded scenario always assumed that -- it sets a full tuck itself -- but the
 game did not, so a landed dragon stood with its wings half open unless the player
 kept holding the dive key. Lift is moot on the ground, so it costs the force
 model nothing.
+
+### A wingbeat is not a wave
+
+Every generated species flapped like a hand waving: a flat plank hinged at
+the shoulder, swinging up and down about one axis, the same shape on the way
+up as on the way down. Eight frames across one beat from the front and from
+the side made it obvious -- one `--studio 1 --inspect` render per phase,
+stitched into a contact sheet -- where any single screenshot had looked fine.
+**Judge a cycle from a sheet of its phases, never from one frame.**
+
+The cause was structural, not a bad constant. Every shaping term was keyed to
+the wing's *position* (`upstroke_fold_deg` and the shoulder cut both switch
+on past 20 degrees of elevation), and position is symmetric between the two
+half-strokes: the wing at +30 going up was identical to the wing at +30 coming
+down. Direction is what a beat has and a wave does not. Published bat
+kinematics (Hipposideros, straight level flight) give the shape: the wingtip
+path is a crescent inclined ~50 degrees from horizontal, forward on the
+downstroke and back on the upstroke; the wing flexes hardest a fifth of the
+way into the upstroke and is fully extended again before the top; the outer
+wing pitches through ~100 degrees over the cycle; and the body rides the push.
+Four terms in `drive_wings`, all keyed to the beat's *phase* or *velocity*,
+all gated on flap amplitude so a glide, a tuck and the ground stow are
+unchanged, all sliders at the top of the Wings header:
+
+- **Stroke plane** (`stroke_plane_tilt_deg`): the shoulder yaws the whole
+  wing about the arm's up by a share of its elevation -- forward when down,
+  aft when up. At the shoulder alone, because that is the joint that moves;
+  distributing it down the chain would shear the membrane.
+- **Recovery flex** (`recovery_elbow_deg`, `recovery_wrist_deg`,
+  `recovery_finger_deg`, `recovery_droop_deg`): hinge angles at the named
+  joints, riding an envelope that is zero through the downstroke, one from a
+  quarter of the way into the upstroke, and zero again from
+  `wing_recovery_extend_phase` so the downstroke starts taut. The hand also
+  *droops* below the arm, which is the M-shaped front silhouette of every
+  large flyer mid-upstroke. That envelope used to be gated on
+  `wing_phase_delay` being non-zero, which left five of the six species with
+  no recovery at all; it now needs only a beat.
+- **Feathering** (`stroke_twist_deg`): wrist and ribs pitch leading-edge-down
+  in proportion to the wing's downward speed and leading-edge-up on the way
+  up -- zero at both reversals, largest mid-stroke.
+- **The body answers** (`beat_heave_m`, `beat_heave_lag`, `beat_pitch_deg`):
+  the root joint rises after each downstroke and the nose lifts with the push.
+  Visual only: the flight model's position is untouched, so the chase camera
+  does not bob.
+
+Plus a spanwise lag on by default (`wing_phase_delay` 0.025 per joint, ~8
+frames at the tip), because a wing whose every station reverses on the same
+frame is the single strongest waving cue.
+
+Two things learned getting there. **The recovery hinges turn about the arm's
+up, not about the membrane plane's normal the tuck folds about.** On Stormsail
+the fitted plane drapes 44 degrees, so "aft in the plane" is also "up", and
+the first version hooked the hands skyward at mid-upstroke by more than the
+droop could bring them back -- found by rendering the same frame with each
+new term switched off in a scratch rig profile (symlink the `.glb`, edit the
+`.rig.cfg` beside it). A wrist flexes level with the arm; the droop alone
+decides where the hand sits vertically, so the two knobs stay independent on
+every asset. And **the position-keyed shapers yield while the flex is in**:
+left at full strength the shoulder cut handed the raised wing's elevation to
+the wrist at exactly the moment the recovery wanted it hanging. They return
+as the wing extends, so the flick open at the top and the anti-crossing at
+the peak are as they were.
+
+`test_wingbeat_is_not_a_wave` pins all four against a control tuning with
+just that term off, on the generated rig: the hand is nearer the spine
+mid-upstroke, further forward at the bottom and further aft at the top, the
+leading edge lower going down and higher going up, the root higher after the
+downstroke -- and none of it survives a tuck.

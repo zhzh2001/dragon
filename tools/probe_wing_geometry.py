@@ -20,7 +20,11 @@ directly (numpy only -- no Blender, no pygltflib) and, per asset and per side:
   4. reports how far the skinned membrane reaches from every wing bone;
   5. replays `DragonRig::drive_wings` (progress, fold scales, outboard_decay,
      normalize, the Y-then-Z composition in `rotate_joint`) for the studio's
-     Dive and Grounded states about four fold axes -- A: body Y as shipped,
+     Dive and Grounded states -- neither of which has a beat, so the replay
+     leaves out everything the engine keys to flap phase or velocity (stroke
+     plane, recovery flex and droop, feathering twist, body heave; see
+     docs/ANIMATION.md "A wingbeat is not a wave") and stays exact for the
+     static poses it probes -- about four fold axes -- A: body Y as shipped,
      B: the wing-joint plane normal, D: the membrane-vertex plane normal,
      C: the anatomical hinge (bone in x bone out) at the elbow and wrist --
      skins the mesh with each result, and counts the membrane vertices that

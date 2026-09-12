@@ -384,7 +384,23 @@ void test_wingbeat_phase_articulation() {
         return core::rotate(rig.pose().local[size_t(joint)].rotation, Vec3::unit_x()).y;
     };
 
-    anim::RigTuning delayed;
+    // The rest of the beat -- stroke plane, recovery hinges, feathering, body
+    // bob -- is switched off so this test isolates the delay and the fan fold.
+    // Those terms have their own test below.
+    auto beat_only = []() {
+        anim::RigTuning t;
+        t.stroke_plane_tilt_deg = 0.0f;
+        t.recovery_elbow_deg = 0.0f;
+        t.recovery_wrist_deg = 0.0f;
+        t.recovery_finger_deg = 0.0f;
+        t.recovery_droop_deg = 0.0f;
+        t.stroke_twist_deg = 0.0f;
+        t.beat_heave_m = 0.0f;
+        t.beat_pitch_deg = 0.0f;
+        t.wing_recovery_extend_phase = 0.0f;
+        return t;
+    };
+    anim::RigTuning delayed = beat_only();
     delayed.wing_phase_lag = 0.0f;
     delayed.outboard_decay = 1.0f;
     delayed.flap_shoulder_deg = 36.0f;
@@ -414,16 +430,21 @@ void test_wingbeat_phase_articulation() {
     CHECK(minimum_phase[1] > minimum_phase[0] + 0.025f);
     CHECK(minimum_phase[2] > minimum_phase[1] + 0.025f);
 
-    // A zero phase delay and zero recovery profile are byte-for-byte the old
-    // pose path, even when the flight state contains an active beat.
-    const auto legacy = posed(0.31f, anim::RigTuning{});
-    anim::RigTuning explicit_legacy;
-    explicit_legacy.wing_phase_delay = 0.0f;
-    explicit_legacy.wing_recovery_fold_deg = 24.0f;
-    explicit_legacy.wing_recovery_extend_phase = 0.70f;
-    const auto disabled = posed(0.31f, explicit_legacy);
+    // The recovery profile is a creature of the UPSTROKE: through the
+    // downstroke it is byte-for-byte the plain pose path, whatever it is set
+    // to. And it no longer needs the phase delay switched on to work -- that
+    // gate was an accident, and it left five of the six generated species
+    // with no recovery at all because only one profile had set a delay.
+    anim::RigTuning plain = beat_only();
+    plain.wing_phase_delay = 0.0f;
+    const auto legacy = posed(0.31f, plain);
+    anim::RigTuning with_recovery = plain;
+    with_recovery.wing_recovery_fold_deg = 24.0f;
+    with_recovery.wing_recovery_extend_phase = 0.70f;
+    const auto disabled = posed(0.31f, with_recovery);
     CHECK(joint_palette_delta(*legacy, *disabled, shoulder) < 1e-5f);
     CHECK(joint_palette_delta(*legacy, *disabled, tip) < 1e-5f);
+    CHECK(joint_palette_delta(*posed(0.58f, plain), *posed(0.58f, with_recovery), tip) > 1e-3f);
 
     // The timed recovery fold belongs to the outer wing, peaks after the fast
     // downstroke, and fades before phase wraps so the membrane can reopen.
@@ -465,6 +486,136 @@ void test_wingbeat_phase_articulation() {
     const Vec3 left_tip = before_wrap->world_matrices()[size_t(left_tip_index)].col[3].xyz();
     CHECK(right_tip.x > 0.0f);
     CHECK(left_tip.x < 0.0f);
+}
+
+// The four things that separate a wingbeat from a wave, each measured on the
+// posed skeleton rather than judged from a screenshot: the wing shortens on
+// the upstroke, the tip sweeps forward on the downstroke and back on the
+// recovery, the hand pitches leading-edge-down while it moves down and up
+// while it moves up, and the body rises with the push. Every one is keyed to
+// the beat's phase or velocity -- a position-keyed shape is the same going up
+// as coming down, which is exactly what a wave is.
+void test_wingbeat_is_not_a_wave() {
+    std::printf("a wingbeat flexes, sweeps, feathers and lifts the body; a wave does none\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    const int shoulder = joints.wing_root[0].front();
+    const int tip = joints.wing_fingers[0].back().back();
+
+    auto beat_curve = [](float phase, float down) {
+        phase -= std::floor(phase);
+        if (phase < down) return std::cos(core::PI * phase / down);
+        return -std::cos(core::PI * (phase - down) / (1.0f - down));
+    };
+    auto state_at = [&](float phase, float amplitude) {
+        game::FlightState state;
+        state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        state.airspeed = 30.0f;
+        state.ground_clearance = 300.0f;
+        state.flap_phase = phase;
+        state.flap_amplitude = amplitude;
+        const float beating = 4.0f + 46.0f * beat_curve(phase, 0.40f);
+        state.wing_angle = radians(9.0f + amplitude * (beating - 9.0f));
+        return state;
+    };
+    auto posed = [&](float phase, const anim::RigTuning& tuning, float tuck = 0.0f) {
+        auto rig = std::make_unique<anim::DragonRig>();
+        rig->init(skeleton, joints);
+        rig->tuning = tuning;
+        game::FlightState s = state_at(phase, 1.0f);
+        s.wing_tuck = tuck;
+        rig->update(s, 1.0f / 60.0f);
+        return rig;
+    };
+    // Each cue is measured against a control with just that cue switched off,
+    // at the same phase, so nothing else in the pose can hide or fake it.
+    const anim::RigTuning beat;
+    // The membrane carries on one bone-length past the last joint, and that is
+    // what the player watches -- on the generated rig the last joint IS the
+    // wrist, and measuring its origin would miss the whole hand.
+    const int stem = joints.wing_root[0].back();
+    const Vec3 tip_bind = skeleton.world_bind(tip).translation_part();
+    const Vec3 stem_bind = skeleton.world_bind(stem).translation_part();
+    const Vec3 membrane_local =
+        transform_point(inverse(skeleton.world_bind(tip)), tip_bind + (tip_bind - stem_bind));
+    auto membrane_from_shoulder = [&](const anim::DragonRig& rig) {
+        const auto& w = rig.world_matrices();
+        return transform_point(w[size_t(tip)], membrane_local) - w[size_t(shoulder)].col[3].xyz();
+    };
+    // The generated rig faces -Z, so forward is -Z here. Mid-downstroke is
+    // where the wing moves fastest; the reversals are where the stroke plane
+    // has carried the tip furthest fore and aft.
+    const float mid_down = 0.20f, mid_up = 0.66f, bottom = 0.40f, top = 0.0f;
+
+    // 1. Span: the hand is nearer the spine mid-upstroke than mid-downstroke.
+    const float down_x = membrane_from_shoulder(*posed(mid_down, beat)).x;
+    const float up_x = membrane_from_shoulder(*posed(mid_up, beat)).x;
+    std::printf("  reach from shoulder: downstroke %.2f, upstroke %.2f\n", down_x, up_x);
+    CHECK(up_x < 0.93f * down_x);
+
+    // 2. Stroke plane: with the tilt on, the hand ends the downstroke further
+    //    FORWARD and the upstroke further AFT than the same pose without it.
+    anim::RigTuning flat = beat;
+    flat.stroke_plane_tilt_deg = 0.0f;
+    const float bottom_z = membrane_from_shoulder(*posed(bottom, beat)).z;
+    const float bottom_flat_z = membrane_from_shoulder(*posed(bottom, flat)).z;
+    const float top_z = membrane_from_shoulder(*posed(top, beat)).z;
+    const float top_flat_z = membrane_from_shoulder(*posed(top, flat)).z;
+    std::printf("  hand z at the bottom %.2f (flat %.2f), at the top %.2f (flat %.2f)\n",
+                bottom_z, bottom_flat_z, top_z, top_flat_z);
+    CHECK(bottom_z < bottom_flat_z - 0.3f);
+    CHECK(top_z > top_flat_z + 0.3f);
+
+    // 3. Feathering: leading edge lower than the untwisted pose while the wing
+    //    moves down, higher while it moves up.
+    anim::RigTuning untwisted = beat;
+    untwisted.stroke_twist_deg = 0.0f;
+    auto leading_edge_y = [&](const anim::DragonRig& rig) {
+        const Quat q = core::quat_from_matrix(rig.world_matrices()[size_t(tip)]);
+        return core::rotate(q, Vec3::forward()).y;
+    };
+    const float down_edge = leading_edge_y(*posed(mid_down, beat));
+    const float down_flat_edge = leading_edge_y(*posed(mid_down, untwisted));
+    const float up_edge = leading_edge_y(*posed(mid_up, beat));
+    const float up_flat_edge = leading_edge_y(*posed(mid_up, untwisted));
+    std::printf("  leading edge y: downstroke %.3f (untwisted %.3f), upstroke %.3f (untwisted %.3f)\n",
+                down_edge, down_flat_edge, up_edge, up_flat_edge);
+    CHECK(down_edge < down_flat_edge - 0.05f);
+    CHECK(up_edge > up_flat_edge + 0.05f);
+
+    // 4. The body answers: higher just after the downstroke than just before
+    //    it, and not at all with the heave switched off.
+    anim::RigTuning still = beat;
+    still.beat_heave_m = 0.0f;
+    still.beat_pitch_deg = 0.0f;
+    auto root_y = [&](const anim::DragonRig& rig) {
+        return rig.world_matrices()[size_t(joints.root)].col[3].xyz().y;
+    };
+    const float rest_y = root_y(*posed(0.02f, still));
+    const float before_y = root_y(*posed(0.02f, beat));
+    const float after_y = root_y(*posed(0.52f, beat));
+    std::printf("  root y: still %.3f, top of downstroke %.3f, after it %.3f\n", rest_y, before_y,
+                after_y);
+    CHECK(after_y > before_y + 0.05f);
+    CHECK(std::fabs(root_y(*posed(0.52f, still)) - rest_y) < 1e-4f);
+
+    // 5. And none of it survives a tuck: the beat gates all four, so a
+    //    tucked dragon with the flap key held poses exactly as it did before.
+    anim::RigTuning none = beat;
+    none.stroke_plane_tilt_deg = 0.0f;
+    none.recovery_elbow_deg = 0.0f;
+    none.recovery_wrist_deg = 0.0f;
+    none.recovery_finger_deg = 0.0f;
+    none.recovery_droop_deg = 0.0f;
+    none.stroke_twist_deg = 0.0f;
+    none.beat_heave_m = 0.0f;
+    none.beat_pitch_deg = 0.0f;
+    none.wing_recovery_extend_phase = 0.0f;
+    CHECK(joint_palette_delta(*posed(mid_up, beat, 1.0f), *posed(mid_up, none, 1.0f), tip) < 1e-4f);
+    CHECK(std::fabs(root_y(*posed(0.52f, beat, 1.0f)) - root_y(*posed(0.52f, none, 1.0f))) < 1e-5f);
 }
 
 void test_brake_leg_profile_floats_forward() {
@@ -1878,6 +2029,7 @@ int main() {
     test_studio_states_are_consistent();
     test_studio_ground_offset();
     test_wingtip_reaches_the_commanded_flap();
+    test_wingbeat_is_not_a_wave();
     test_legs_swing_with_the_frame();
     test_optional_embercrest_asset();
 

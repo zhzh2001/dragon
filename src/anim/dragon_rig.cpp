@@ -48,6 +48,19 @@ float wingbeat_curve(float phase, float downstroke_fraction) {
     return -std::cos(t * core::PI);  // -1 back up to +1
 }
 
+// d(wingbeat_curve)/d(phase), normalized so the downstroke's peak rate is -1.
+// Negative while the wing moves down. The recovery peaks at down/(1-down),
+// because the slower half-stroke moves the same distance in more time.
+float wingbeat_rate(float phase, float downstroke_fraction) {
+    const float down = core::clampf(downstroke_fraction, 0.05f, 0.95f);
+    phase = wrapped_phase(phase);
+    if (phase < down) {
+        return -std::sin(core::PI * phase / down);
+    }
+    const float t = (phase - down) / (1.0f - down);
+    return std::sin(t * core::PI) * down / (1.0f - down);
+}
+
 // A tube of `segments` rings skinned along a chain of joints.
 //
 // Each ring is bound to the two nearest joints in the chain, weighted by how far
@@ -328,6 +341,15 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(wing_recovery_fold_deg),
     RIG_FLOAT_FIELD(wing_recovery_extend_phase),
     RIG_FLOAT_FIELD(upstroke_fold_deg),
+    RIG_FLOAT_FIELD(stroke_plane_tilt_deg),
+    RIG_FLOAT_FIELD(recovery_elbow_deg),
+    RIG_FLOAT_FIELD(recovery_wrist_deg),
+    RIG_FLOAT_FIELD(recovery_finger_deg),
+    RIG_FLOAT_FIELD(recovery_droop_deg),
+    RIG_FLOAT_FIELD(stroke_twist_deg),
+    RIG_FLOAT_FIELD(beat_heave_m),
+    RIG_FLOAT_FIELD(beat_heave_lag),
+    RIG_FLOAT_FIELD(beat_pitch_deg),
     RIG_FLOAT_FIELD(ground_stow_sweep_deg),
     RIG_FLOAT_FIELD(ground_stow_fold_deg),
     RIG_FLOAT_FIELD(ground_stow_wrist_deg),
@@ -811,9 +833,8 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // Upstroke flex: as the wing rises past ~20 degrees the wrist folds in --
     // real bird kinematics, and it keeps two raised wings from crossing over
     // the spine at the top of the beat.
-    const float upstroke = core::smoothstep(core::radians(20.0f), core::radians(50.0f), base);
-    const float upstroke_fold = core::radians(tuning.upstroke_fold_deg) * upstroke;
-    const float flap_fold = core::radians(tuning.wing_flap_fold_deg) * upstroke;
+    // Declared here, scaled by the recovery envelope once that is known below.
+    float upstroke = core::smoothstep(core::radians(20.0f), core::radians(50.0f), base);
     // A positive delay means the outer joint is still on the previous part of
     // the beat while the shoulder has already changed direction. Reconstruct
     // only the cyclic component here; tuck, load flex and steering stay tied to
@@ -822,11 +843,51 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                                     state.flap_amplitude > 1e-4f;
     const float beat_strength = core::saturate(state.flap_amplitude) *
                                 (1.0f - core::saturate(state.wing_tuck));
+    // Everything keyed to the beat's phase or velocity -- the recovery flex,
+    // the feathering twist, the stroke plane -- is gated on there being a beat
+    // at all, so a glide, a tuck and the ground stow see none of it. It used
+    // to be gated on the phase DELAY being enabled as well, which was an
+    // accident of history: the delay is one thing the beat clock is used for,
+    // not the switch for the others.
+    const bool beat_active = beat_strength > 1e-4f;
+    const bool recovery_active = beat_active && tuning.wing_recovery_extend_phase > 1e-5f;
     const float current_phase = wrapped_phase(state.flap_phase);
     const float downstroke_fraction =
         core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
     const float current_beat =
         phase_articulation ? wingbeat_curve(current_phase, downstroke_fraction) : 0.0f;
+    // The stroke plane: how much of the wing's elevation becomes fore-aft
+    // sweep at the shoulder. A yaw about body up, forward when the wing is
+    // down, so the tip draws a tilted crescent instead of a vertical line.
+    const float stroke_plane =
+        std::tan(core::radians(core::clampf(tuning.stroke_plane_tilt_deg, -60.0f, 60.0f))) *
+        beat_strength;
+    // The recovery envelope: 0 through the downstroke, 1 mid-upstroke, 0 again
+    // before the top. The flex comes in fast -- a bat reaches peak flexion a
+    // fifth of the way into its upstroke -- holds through mid-recovery, and is
+    // gone well before the top so the downstroke starts on a taut wing.
+    auto recovery_envelope = [&](float phase) {
+        if (!recovery_active) return 0.0f;
+        const float compact_start = downstroke_fraction * 0.90f;
+        const float compact_end = downstroke_fraction + (1.0f - downstroke_fraction) * 0.25f;
+        const float extend_start =
+            core::clampf(tuning.wing_recovery_extend_phase, downstroke_fraction, 0.99f);
+        const float extend_end = extend_start + (1.0f - extend_start) * 0.60f;
+        return beat_strength * core::smoothstep(compact_start, compact_end, phase) *
+               (1.0f - core::smoothstep(extend_start, extend_end, phase));
+    };
+    // Mid-upstroke belongs to the phase-keyed flex. The two position-keyed
+    // shapers below -- the upstroke fan fold and the shoulder cut -- are keyed
+    // to elevation, which is the same going up as coming down, and left at
+    // full strength they fought the flex: the shoulder cut hands the raised
+    // wing's elevation to the wrist and fingers, which hooks the hand UP at
+    // exactly the moment the recovery wants it hanging. They now yield while
+    // the flex is in and return as it extends, so the wing flicks open at the
+    // top and the raised membranes still stay clear of the spine there.
+    const float recovery_now = recovery_envelope(current_phase);
+    upstroke *= 1.0f - recovery_now;
+    const float upstroke_fold = core::radians(tuning.upstroke_fold_deg) * upstroke;
+    const float flap_fold = core::radians(tuning.wing_flap_fold_deg) * upstroke;
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
@@ -1008,24 +1069,59 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 float(std::max<size_t>(root_len + longest_finger, 1u) - 1u);
             const float recovery_depth =
                 max_depth > 0.0f ? core::saturate(float(depth) / max_depth) : 0.0f;
-            const float recovery_start = downstroke_fraction * 0.85f;
-            const float recovery_end =
-                downstroke_fraction + (1.0f - downstroke_fraction) * 0.38f;
-            const float recovery_compact =
-                phase_articulation && tuning.wing_recovery_extend_phase > 1e-5f
-                    ? core::smoothstep(recovery_start, recovery_end, local_phase)
-                    : 0.0f;
-            const float extend_start =
-                core::clampf(tuning.wing_recovery_extend_phase, downstroke_fraction, 0.99f);
-            const float extend_end =
-                extend_start + (1.0f - extend_start) * 0.60f;
-            const float recovery_extend =
-                phase_articulation && tuning.wing_recovery_extend_phase > 1e-5f
-                    ? core::smoothstep(extend_start, extend_end, local_phase)
-                    : 0.0f;
+            // The envelope every recovery term rides, sampled at this joint's
+            // DELAYED phase so the flex travels outboard like the flap does.
+            const float recovery = recovery_envelope(local_phase);
             const float recovery_fold =
-                core::radians(tuning.wing_recovery_fold_deg) * beat_strength *
-                recovery_compact * (1.0f - recovery_extend) * recovery_depth;
+                core::radians(tuning.wing_recovery_fold_deg) * recovery * recovery_depth;
+            // Which hinge is this joint? The wrist is the last root joint on a
+            // three-plus-bone arm; on a two-bone arm (the generated rig) the
+            // finger bases sit at the wrist and play that part instead.
+            const bool root_joint = finger_index < 0;
+            const bool has_wrist_bone = root_len >= 3;
+            const bool is_wrist_hinge =
+                (root_joint && has_wrist_bone && size_t(index_in_chain + 1) == root_len) ||
+                (!root_joint && !has_wrist_bone && index_in_chain == 0);
+            const bool is_elbow_hinge = root_joint && index_in_chain > 0 && !is_wrist_hinge;
+            const bool is_finger_rib = !root_joint && !is_wrist_hinge;
+            // Ribs beyond the wrist share the finger fold evenly, so the tip
+            // closes through the named angle whatever the rib count.
+            const float rib_count = core::maxf(
+                float(has_wrist_bone ? chain_length : chain_length - 1), 1.0f);
+            // Hinges, positive aft like the fold. Not normalized and not
+            // progressive: they are angles at named joints, the same way the
+            // standing zigzag is, because that is what a flexing arm is. They
+            // turn about the ARM'S up (body up carried through the posed
+            // shoulder), not about the membrane plane's normal the tuck folds
+            // about: on a sculpt whose membrane drapes 44 degrees, "aft in the
+            // plane" is also "up", and the hand hooked skyward at mid-upstroke
+            // by more than the droop below could bring it back. A wrist flexes
+            // level with the arm; where the hand sits vertically is the droop's
+            // job alone, so the two knobs stay independent on every asset.
+            float recovery_hinge = 0.0f;
+            if (is_elbow_hinge) recovery_hinge = core::radians(tuning.recovery_elbow_deg);
+            if (is_wrist_hinge) recovery_hinge = core::radians(tuning.recovery_wrist_deg);
+            if (is_finger_rib) recovery_hinge = core::radians(tuning.recovery_finger_deg) / rib_count;
+            recovery_hinge *= recovery;
+            // The hand droops below the arm on the recovery: an elevation
+            // AGAINST the flap at the wrist, carried on down the ribs. The
+            // wrist takes 40%, the ribs the rest between them.
+            float droop_share = 0.0f;
+            if (is_wrist_hinge) droop_share = 0.4f;
+            if (is_finger_rib) droop_share = 0.6f / rib_count;
+            const float recovery_droop =
+                core::radians(tuning.recovery_droop_deg) * recovery * droop_share;
+            // Feathering: leading edge down while the wing moves down, up
+            // while it moves up, by the wing's speed. Same stations as the
+            // droop, so the hand pitches as one surface and the arm stays bone.
+            float twist_share = 0.0f;
+            if (is_wrist_hinge) twist_share = 0.35f;
+            if (is_finger_rib) twist_share = 0.65f / rib_count;
+            const float stroke_twist =
+                beat_active ? -core::radians(tuning.stroke_twist_deg) * beat_strength *
+                                  wingbeat_rate(local_phase, downstroke_fraction) * aft *
+                                  twist_share
+                            : 0.0f;
             // The zigzag closure is NOT normalized and NOT progressive: it is
             // two opposed hinge angles at two named joints, which is what a
             // wing shutting actually is. Everything else here is a fan.
@@ -1069,9 +1165,22 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             // are the same in-plane rotation about the wing's own hinge, which
             // is body up only for a wing bound level.
             rotate_joint(joint, wing_fold_axis_[side], sweep + fold, Vec3::unit_z(),
-                         flap_angle - flare_angle + flutter);
-            if (std::fabs(finger_twist) > 1e-5f) {
-                rotate_joint(joint, Vec3::unit_x(), finger_twist, true);
+                         flap_angle - flare_angle + flutter - recovery_droop * sign);
+            // Yaw about the arm's up, composed onto the posed joint so an
+            // already-elevated wing swings fore and aft level with itself.
+            // Positive is aft on either side of either facing. Two things
+            // live here: the stroke plane at the shoulder alone -- the whole
+            // wing yaws by a share of its elevation, forward when down, which
+            // is what the shoulder of a flying animal does while the outboard
+            // joints only ride -- and the recovery hinge at its own joint.
+            float yaw_aft = recovery_hinge;
+            if (depth == 0) yaw_aft += (local_base - non_flap_base) * stroke_plane;
+            if (std::fabs(yaw_aft) > 1e-5f) {
+                rotate_joint(joint, Vec3::unit_y(), yaw_aft * model_forward_z_ * sign, true);
+            }
+            const float total_twist = finger_twist + stroke_twist;
+            if (std::fabs(total_twist) > 1e-5f) {
+                rotate_joint(joint, Vec3::unit_x(), total_twist, true);
             }
             ++depth;
         };
@@ -1090,6 +1199,34 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             }
         }
     }
+}
+
+void DragonRig::drive_body_beat(const game::FlightState& state) {
+    // The body rises on the downstroke and sinks on the recovery, and the nose
+    // lifts a little with each push. Visual only, on the root joint: the
+    // flight model's position is the truth the camera and the combat read, and
+    // a chase camera that bobbed with every beat would be unwatchable. Gated
+    // on the beat and on being airborne, so a standing or gliding dragon is
+    // exactly where the flight model put it.
+    const int root = joints_.root;
+    if (root == NO_PARENT || size_t(root) >= pose_.local.size()) return;
+    const float beat = core::saturate(state.flap_amplitude) *
+                       (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
+    if (beat <= 1e-4f) return;
+    const float down = core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
+    const float phase = wrapped_phase(state.flap_phase);
+    // wingbeat_curve is +1 with the wing at the top, so its negative is the
+    // body's height: lowest as the downstroke begins, highest after it ends.
+    // The lag is the body still rising on its momentum when the wing reverses.
+    const float heave = -wingbeat_curve(phase - tuning.beat_heave_lag, down);
+    const float pitch = -wingbeat_curve(phase - 0.5f * tuning.beat_heave_lag, down);
+    // Root translation is in the model's own units; the tuning is in metres.
+    Transform& local = pose_.local[size_t(root)];
+    local.position += Vec3::unit_y() * (tuning.beat_heave_m * heave * beat / model_scale_);
+    // Nose up in engine terms is a rotation about model X whose sign follows
+    // the facing, the same convention the neck and tail steer use.
+    rotate_joint(root, Vec3::unit_x(),
+                 core::radians(tuning.beat_pitch_deg) * pitch * beat * -model_forward_z_, true);
 }
 
 void DragonRig::setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const {
@@ -1668,6 +1805,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     }
 
     drive_wings(state);
+    drive_body_beat(state);
 
     std::vector<int> neck_with_head = joints_.neck;
     if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
