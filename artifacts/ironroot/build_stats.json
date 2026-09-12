@@ -8,15 +8,15 @@
   "max_influences": 4,
   "max_weight_sum_error": 5.21540641784668e-08,
   "unweighted_vertices": 0,
-  "binding": "Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind",
+  "binding": "Bone heat body; continuous top-four wing field; heat-weight jaw (jaw_mask null); level wing bind",
   "material": "Preserved source UVs and PBR textures",
-  "glb_bytes": 50058660,
+  "glb_bytes": 50058168,
   "reference_span": {
     "axis": "x",
     "metres": 19
   },
-  "ground_offset": 3.415514511966397,
-  "repaired_zero_tangents": 10,
+  "ground_offset": 3.4155143512971433,
+  "repaired_zero_tangents": 9,
   "source_images": [
     {
       "name": "texture_pbr_20250901",
@@ -44,13 +44,13 @@
     }
   ],
   "bone_fit_scale": [
-    0.8180981874465942,
-    1.0909044742584229,
-    0.967060387134552
+    1.0,
+    1.0,
+    1.0
   ],
   "bone_fit_bias": [
-    0.0008925497531890869,
-    -0.009947001934051514,
-    -3.588241526131242e-08
+    0.0,
+    0.0,
+    0.0
   ]
 }
