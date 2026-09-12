@@ -8,7 +8,7 @@
   "max_influences": 4,
   "max_weight_sum_error": 5.21540641784668e-08,
   "unweighted_vertices": 0,
-  "binding": "Bone heat body; continuous top-four wing field; gap-following jaw mask with hinge blend; level wing bind",
+  "binding": "Bone heat body; continuous top-four wing field; heat-weight jaw (jaw_mask null); level wing bind",
   "material": "Preserved source UVs and PBR textures",
   "glb_bytes": 48264412,
   "reference_span": {

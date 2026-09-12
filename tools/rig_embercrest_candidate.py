@@ -43,6 +43,16 @@ parser.add_argument('--target',type=int,default=80000,help='triangle budget afte
 parser.add_argument('--skeleton',default='tools/skeletons/winged-quadruped.json',
                     help='skeleton JSON; bone names drive the anatomy-specific passes')
 parser.add_argument('--keep-uvs',action='store_true',help='treat the source as textured regardless of --textured')
+# The jaw mask is a property of the *head*, not of the anatomy, but it lives in
+# the per-anatomy skeleton JSON -- so every creature sharing winged-quadruped
+# silently inherited Embercrest's gap-following mask, whose coordinates are
+# authored in Embercrest canonical space. On another skull that band is the
+# whole muzzle and the mandible ends up welded to it: Ironroot's jaw would not
+# open at all. Override it per creature.
+parser.add_argument('--jaw-mask',choices=('inherit','none','embercrest'),default='inherit',
+                    help="override the skeleton's jaw_mask: 'none' keeps heat weights "
+                         "(right for a sculpt whose mouth is already open), 'embercrest' "
+                         "forces the gap-following mask, 'inherit' uses the JSON")
 args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
 TEXTURED=args.textured or args.keep_uvs
 STEM=args.stem or ('embercrest-textured' if args.textured else 'embercrest-selected')
@@ -197,7 +207,10 @@ bpy.ops.object.vertex_group_normalize_all(lock_active=False)
 # The mask below is authored in Embercrest canonical coordinates, so a skeleton
 # for another head opts out with "jaw_mask": null and keeps the heat weights.
 JAW_MASK=SKEL.get('jaw_mask','embercrest')
-if JAW_MASK is None:print('JAW_MASK_SKIPPED','skeleton sets jaw_mask null',flush=True)
+if args.jaw_mask!='inherit':
+    JAW_MASK=None if args.jaw_mask=='none' else args.jaw_mask
+    print('JAW_MASK_OVERRIDE',args.jaw_mask,flush=True)
+if JAW_MASK is None:print('JAW_MASK_SKIPPED','jaw_mask is null',flush=True)
 # A sealed-mouth sculpt gives heat nothing to split on, so the mandible ends
 # up half head, half jaw and the gape is a muzzle bend. The generic form is a
 # plane in canonical coordinates, authored per skeleton:
