@@ -110,6 +110,12 @@ struct Options {
     // --bot-range N spawns the bots N metres out instead of 650, so a capture
     // can hold the player and every rival in one frame.
     float bot_range = 0.0f;  // 0 = leave the default
+    // --cycle-models N swaps the player onto the next roster entry every N
+    // frames. It exists so the model-swap path -- which re-initialises both
+    // rigs and every per-species profile -- can be soaked without a human
+    // pressing M, and so a sweep of one scenario across every species is one
+    // command.
+    int cycle_models = 0;  // 0 = off
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
 

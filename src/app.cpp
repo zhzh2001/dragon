@@ -35,6 +35,8 @@ Options parse_options(int argc, char** argv) {
             options.course_index = SDL_atoi(argv[++i]);
         } else if (arg == "--model" && i + 1 < argc) {
             options.model = argv[++i];
+        } else if (arg == "--cycle-models" && i + 1 < argc) {
+            options.cycle_models = SDL_atoi(argv[++i]);
         } else if (arg == "--bot-range" && i + 1 < argc) {
             options.bot_range = float(SDL_atof(argv[++i]));
         } else if (arg == "--models" && i + 1 < argc) {
@@ -713,6 +715,16 @@ void App::pump_events() {
     }
     if (input_.pressed(SDL_SCANCODE_R)) respawn_dragon();
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
+    // M cycles the roster. The point is comparing species with the scenario
+    // held still, so this deliberately does not touch the studio state: the
+    // manoeuvre keeps playing and only the creature under it changes.
+    if (options_.cycle_models > 0 && models_.size() > 1 &&
+        frame_index_ > 0 && frame_index_ % options_.cycle_models == 0) {
+        set_player_model((player_model_ + 1) % int(models_.size()));
+    }
+    if (input_.pressed(SDL_SCANCODE_M) && models_.size() > 1) {
+        set_player_model((player_model_ + 1) % int(models_.size()));
+    }
     if (input_.pressed(SDL_SCANCODE_F1)) show_panels_ = !show_panels_;
     if (input_.pressed(SDL_SCANCODE_1)) apply_camera_preset(0);
     if (input_.pressed(SDL_SCANCODE_2)) apply_camera_preset(1);
@@ -1765,6 +1777,26 @@ void App::build_studio_ui() {
     if (ImGui::Checkbox("animation studio", &studio_active_) && studio_active_) {
         studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
         studio_time_ = 0.0f;
+    }
+
+    // Which creature is on the stand. At the top because comparing species is
+    // what the studio is FOR: the scenario stays put and the model changes
+    // under it, which is the only way to tell a rig fault from a species'
+    // character. M cycles it without leaving the keyboard.
+    if (models_.size() > 1) {
+        ImGui::TextDisabled("model  (M cycles)");
+        for (size_t i = 0; i < models_.size(); ++i) {
+            if (i % 2) ImGui::SameLine();
+            // Just the stem: the full asset path does not fit and every entry
+            // shares the prefix anyway.
+            const std::string& path = models_[i]->path;
+            const size_t slash = path.find_last_of('/');
+            const std::string stem = slash == std::string::npos ? path : path.substr(slash + 1);
+            if (ImGui::RadioButton(stem.c_str(), player_model_ == int(i))) {
+                set_player_model(int(i));
+            }
+        }
+        ImGui::Separator();
     }
     if (studio_active_) {
         const int count = int(game::StudioScenario::Count);

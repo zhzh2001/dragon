@@ -71,6 +71,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
+| `--cycle-models N` | Swap the player onto the next roster entry every N frames. Sweeps one scenario across every species in one command, and soaks the swap path (it re-initialises both rigs). |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
 Soaks that have caught real bugs:
@@ -92,7 +93,7 @@ assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.g
 Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
 has the tuning presets and `heft`, **Terrain > Vegetation** has the trees and
 grass, **Combat** has the difficulty dials and the bots, **Studio** drives the
-animation scenarios. Every panel except Combat starts collapsed.
+animation scenarios and picks which creature is on the stand. Every panel except Combat starts collapsed.
 
 ## Controls
 
@@ -110,6 +111,7 @@ animation scenarios. Every panel except Combat starts collapsed.
 | Ctrl | Flare and brake |
 | R | Restart the run |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
+| M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
 | V | First person, from behind the dragon's head |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
@@ -178,8 +180,12 @@ flight controls.
   species that lists only its character fields cannot close its wings.
 - Commit messages describe what changed and *why it was wrong before*.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
-  a one-liner -- to a Fable 5.1 subagent** (`Agent` with `model: "fable"`).
-  That means: fitting or refitting a deform skeleton to a generated mesh,
+  a one-liner.** Two workers have been measured on the same task; pick one and
+  say why. `Agent` with `model: "fable"` is the default. **`codex exec -m
+  gpt-6-astra` is the alternative, and it must not be started without checking
+  usage first -- see below.**
+
+  Work to delegate: fitting or refitting a deform skeleton to a generated mesh,
   diagnosing a bind pose or bone-axis problem inside a `.glb`, weight painting,
   anything driving Blender through `tools/`, and repairing a model that imports
   wrong. Give the subagent the asset paths, the relevant `tools/` script and
@@ -189,6 +195,49 @@ flight controls.
   Keep engine-side work (`src/anim`, `src/game`, the rig profiles) in the main
   session so the C++ and the asset do not get edited from two places at once,
   and scope each subagent to explicit paths -- the repo is shared.
+- **Before running a `codex` task, ask what the usage headroom is. Every time.**
+  One rig task is expensive and there is no way to read the meter from here:
+  `codex exec` prints token counts but no rate-limit data, nothing in
+  `~/.codex` carries a live figure, and even a do-nothing `codex exec` costs
+  **7.3 k tokens** of prompt overhead, so probing is not free either. Only the
+  interactive TUI shows the windows. So **ask the user to run `codex` and check
+  `/status`**, and let them decide -- do not spend the budget on their behalf.
+
+  Measured on 2026-09-12, both substantive rigging tasks:
+
+  | | tokens |
+  |---|---|
+  | fit a measured leg skeleton to one creature and rebuild | 93,011 |
+  | measure one creature's membrane field and rebuild | 75,737 |
+  | a `codex exec` that replies "OK" | 7,292 |
+
+  Two tasks plus one aborted launch consumed roughly **90% of the 5-hour
+  window**. Taking ~85 k as the price of a task, that is about **45% of the
+  5-hour window each, so two per window**; and since the 5-hour window is
+  roughly 15% of the weekly allowance, about **7% of the week per task** -- on
+  the order of fourteen in a week if nothing else uses it. Those last two
+  figures are inference from one data point, not measurement.
+
+- **Which worker.** Both produced a correct, verified fix to the same brief with
+  the bone-naming contract intact, so this is about cost and behaviour rather
+  than capability:
+  - **gpt-6-astra**: finished in ~12 minutes and one unattended pass at 93 k
+    tokens; placement was tighter and more consistent (-0.007..-0.013 against a
+    +-0.016 target); stayed inside the brief, and where it went beyond it, it
+    had measured the reason. Sparser in-file comments.
+  - **Fable 5.1**: ~22 minutes and 207 k tokens, and it stalled twice waiting on
+    its own background Blender build, needing the main session to notice.
+    Deeper measurement write-up and richer in-file documentation, closer to
+    house style. It also changed a constant it was not asked about
+    (`wing_bind_level_deg` 35 -> 40), which moved the wingspan 8%.
+  So: **Fable for work where the write-up and the in-file record matter and the
+  budget is Claude's own; gpt-6-astra when the task is well-specified and
+  numerically checkable, and only with usage headroom confirmed.**
+  Run `codex exec` with `-s workspace-write`, never
+  `--dangerously-bypass-approvals-and-sandbox`: given full access it
+  immediately reached outside its `-C` directory into the main checkout.
+  Give either one a **git worktree** (`git worktree add`) so two workers cannot
+  write the same file, and symlink the large gitignored input assets in.
 
 ## Cross-cutting lessons
 
