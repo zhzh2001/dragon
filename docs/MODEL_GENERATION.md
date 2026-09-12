@@ -1337,6 +1337,45 @@ The seam is `tools/skeletons/*.json`, not the script. Five exist:
 | `winged-serpent.json` | Ashcoil: **no legs at all**, two wings behind the skull, the trunk is a 14-segment tail chain, four finger ribs | 44 |
 | `armoured-quadruped.json` | Cragjaw: **no wings**, four splayed legs, eight-segment tail | 48 |
 | `grazing-quadruped.json` | Mossback: **no wings**, four column legs, two toes per foot (cloven), five-segment stub tail | 37 |
+| `heavy-quadruped.json` | Ironroot: the same six-limbed plan, but squat -- short legs under a deep body, measured independently | 62 |
+| `finned-biped.json` | Tidewrack: the wyvern plan with its own membrane-field gates | 55 |
+
+**A shared skeleton shares its author's measurements, and those do not
+transfer.** This is the lesson the elemental batch paid for. A skeleton JSON
+holds two different kinds of thing: per-*anatomy* topology (bone names,
+parents, chain lengths) which genuinely transfers, and per-*creature*
+measurements which do not -- leg bone positions, the `wing_field` gates, the
+`jaw_mask` coordinates, `reference_bounds` itself. Reuse the file and you
+inherit the measurements silently. Three faults out of one cause:
+
+- **Ironroot's leg bones were not in its legs.** Its shin head probed 0.046
+  *outside* the mesh against Embercrest's 0.014 inside, and the whole chain
+  bunched at the belly line, because the affine fit preserves proportion but
+  knows nothing about where the anatomy is and Ironroot's legs are far shorter
+  relative to its body. `heavy-quadruped.json` measures its own.
+- **Three creatures were rigged with Embercrest's jaw.** `winged-quadruped.json`
+  does not set `jaw_mask`, so it defaults to the gap-following mask authored in
+  *Embercrest* canonical space; on Blightmaw's skull that band welded the
+  mandible to the head and a jaw rotation stretched the muzzle flat. The mask
+  belongs to the head, not the anatomy, so the rigger now takes
+  `--jaw-mask inherit|none|embercrest`; `none` is right for any sculpt modelled
+  with its mouth already open.
+- **Tidewrack's membrane was bound with Stormsail's gates.** Its torso edge is
+  at |X| 0.045-0.055 where `span_x` assumed 0.1, so the field started outboard
+  of the real flank and left the inner sheet to chest and neck bleed -- 78%
+  wing-chain weight at the root, fixed to 92% by measuring its own.
+
+The rule that falls out: **before reusing a skeleton, probe the candidate's
+bone-to-surface distances against the creature the file was authored on.** A
+leg bone outside the mesh is a number, not an opinion, and it takes one
+Blender run to get.
+
+Two hypotheses that measured clean, recorded so nobody re-runs them: the
+fitted wing-fold axis is well conditioned on all six species
+(lambda_mid/lambda_min 21-26) and agrees between the two wyverns to half a
+degree; and coincident finger-rib heads do *not* defeat
+`ground_stow_converge_deg`, because its share is `finger_index/(finger_count-1)`
+-- an index, not a geometric measure.
 
 Cragjaw and Mossback are both wingless quadrupeds and still get separate
 files. The fit is a per-axis affine remap of the whole skeleton, so it absorbs

@@ -23,7 +23,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/EMBERCREST.md` | The script-built original dragon: what the Blender generator produced, why it is not the hero model, and how to rebuild it |
 | `docs/MODEL_GENERATION.md` | Generating a creature: which cloud and local tools were measured and what each one is actually good for, the four-step pipeline that survived, and how to add a creature that is not a dragon |
 | `tools/hunyuan_oneshot.md` | Driving the Hunyuan one-shot headlessly through chrome-use -- the generation step of that pipeline, and the traps that cost a run each |
-| `tools/skeletons/*.json` | The deform skeletons the rigger fits. One per anatomy: `winged-quadruped` (Embercrest), `winged-biped` (Stormsail). Bone names are a contract with `src/anim/dragon_rig.cpp` |
+| `tools/skeletons/*.json` | The deform skeletons the rigger fits, one per anatomy *and per set of measurements* -- a shared file shares its author's leg positions, `wing_field` gates and `jaw_mask`, and those do not transfer. Bone names are a contract with `src/anim/dragon_rig.cpp` |
 | `docs/ROADMAP.md` | The original plan and its phases |
 | `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
@@ -172,6 +172,10 @@ flight controls.
   (how it moves), `<model>.flight.cfg` (how it handles) and
   `<model>.breath.cfg` (what it breathes) beside its glTF. All three are
   partial files: absent or unknown keys leave the defaults alone.
+  Beware the asymmetry: a partial file inherits *code* defaults, and for the
+  `ground_stow_*` family the default is 0, meaning "do not fold at all". The
+  working values live only in the two hand-tuned assets' profiles, so a new
+  species that lists only its character fields cannot close its wings.
 - Commit messages describe what changed and *why it was wrong before*.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
   a one-liner -- to a Fable 5.1 subagent** (`Agent` with `model: "fable"`).
