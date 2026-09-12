@@ -28,6 +28,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
 | `.claude/skills/concept-art/SKILL.md` | Generating concept art, HUD mockups and creature reference sheets from a ChatGPT/Gemini subscription -- which backend suits which job, and which quota each one burns |
+| `tools/codex_usage.py` | How much of the Codex 5-hour and weekly windows is left, read out of the logged-in browser. Run it before starting a `codex` task |
 
 ## Build & run
 
@@ -195,13 +196,21 @@ flight controls.
   Keep engine-side work (`src/anim`, `src/game`, the rig profiles) in the main
   session so the C++ and the asset do not get edited from two places at once,
   and scope each subagent to explicit paths -- the repo is shared.
-- **Before running a `codex` task, ask what the usage headroom is. Every time.**
-  One rig task is expensive and there is no way to read the meter from here:
-  `codex exec` prints token counts but no rate-limit data, nothing in
-  `~/.codex` carries a live figure, and even a do-nothing `codex exec` costs
-  **7.3 k tokens** of prompt overhead, so probing is not free either. Only the
-  interactive TUI shows the windows. So **ask the user to run `codex` and check
-  `/status`**, and let them decide -- do not spend the budget on their behalf.
+- **Check the usage windows before starting a `codex` task: run
+  `tools/codex_usage.py`.** It reads the account analytics page out of the
+  logged-in Chrome through `chrome-use` and prints how much of the 5-hour and
+  weekly windows is left, plus how many rigging tasks that buys:
+
+  ```sh
+  tools/codex_usage.py            # 5-hour: 8.0% remaining (resets 20:00) ...
+  tools/codex_usage.py --json     # for a script
+  ```
+
+  Nothing local knows this figure -- `codex exec` prints token counts but no
+  rate-limit data, nothing under `~/.codex` carries a live one, and even a
+  do-nothing `codex exec` burns **7.3 k tokens** of prompt overhead, so probing
+  by running something is not free. The page is the only source, and it needs
+  Chrome up and signed in to ChatGPT.
 
   Measured on 2026-09-12, both substantive rigging tasks:
 
@@ -211,12 +220,15 @@ flight controls.
   | measure one creature's membrane field and rebuild | 75,737 |
   | a `codex exec` that replies "OK" | 7,292 |
 
-  Two tasks plus one aborted launch consumed roughly **90% of the 5-hour
-  window**. Taking ~85 k as the price of a task, that is about **45% of the
-  5-hour window each, so two per window**; and since the 5-hour window is
-  roughly 15% of the weekly allowance, about **7% of the week per task** -- on
-  the order of fourteen in a week if nothing else uses it. Those last two
-  figures are inference from one data point, not measurement.
+  Two tasks plus one aborted launch left the 5-hour window at **8% remaining**
+  and the weekly at **85%**, read off the page afterwards. So a task is about
+  **45% of the 5-hour window -- two per window** -- and about **7% of the
+  weekly**, i.e. the 5-hour window is the binding constraint by a wide margin
+  and the week is not worth worrying about. Plan around the 5-hour reset.
+
+  The same page carries a **usage reset** (one was available, expiring in
+  October) that restores a window early. Do not spend one without being asked
+  to: it is a scarce manual lever, not a way around pacing.
 
 - **Which worker.** Both produced a correct, verified fix to the same brief with
   the bone-naming contract intact, so this is about cost and behaviour rather
