@@ -656,3 +656,33 @@ appended (the loader takes the LAST occurrence of a key), render three views
 per candidate with `--studio 9` or `--studio 5`, and stitch the rows. Four
 candidates a round, three or four rounds a species. Nothing in the numbers
 predicted which row would win; only the pictures did.
+
+**The bench and the game disagreed about the standing wing.** Every stow above
+was tuned in the studio's grounded scenario and then reported as "a messed-up
+bunch" from a real landing. Landed in the game and rendered beside the bench,
+four of six species stood differently: the studio pinned the wing angle at
+18 degrees on the ground, the game supplied the 9-degree glide dihedral less
+a load flex from a zero-g reading, and that 13-degree gap through the stow's
+large in-plane rotations was enough to turn a wing folded along the flank
+back into two raised sails. The stow now OWNS the standing wing: the flight
+elevation, load flex, roll lean, flare, flutter and load twist all fade out
+with ground contact (`flight_share` in `drive_wings`), so the bench and the
+game agree by construction and a profile's stow angles are the whole pose.
+The wrist angles in every profile moved by the 18 degrees the bench had been
+supplying. **Whatever the bench pins, land in the game and look** --
+`--input -0.25,0,0,0,0,0 --frames 900` puts any species on the ground and
+stopped, and `--inspect` frames it.
+
+**Legs clear the beat only when they trail.** Tucked under the belly with the
+knees splayed, the hind legs sat exactly where the inner membrane sweeps at
+the bottom of the downstroke; seen from below (`--inspect 180 16 -50` at a
+bottom-of-stroke frame) the membrane passed through them. Pressed back along
+the tail base (tuck 80, trail 60/40) they stay behind it, and the glide is
+the more streamlined for it.
+
+The dials for all of this now sit in the **Studio panel under the scenario
+that judges them** -- the standing wing under Grounded, the tuck and legs
+under Dive, the beat under Flap -- with a button that saves the profile for
+the model on the stand. The Dragon panel's Wings header still has them all,
+but that header is collapsed inside a collapsed panel, and a dial that
+cannot be found does not exist.

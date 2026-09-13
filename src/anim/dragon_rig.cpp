@@ -1049,8 +1049,20 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float stow_angle = core::radians(stow_total) * stow /
                                      core::maxf(float(chain_length), 1.0f);
 
+            // Standing, the stow owns the elevation. The flight terms --
+            // the wing angle, the load flex, the roll lean, the flare below
+            // -- fade out with ground contact, because a standing wing must
+            // not depend on what the flight model happens to report there:
+            // the studio bench pinned the wing angle at 18 degrees and the
+            // game supplies the 9-degree glide dihedral less a load flex
+            // from a zero-g reading on the ground, and that 13-degree gap
+            // was enough to turn a stow tuned on the bench into two raised
+            // sails in the game. Now the bench and the game agree by
+            // construction, and a profile's stow angles are the whole pose.
+            const float flight_share = 1.0f - stow;
             const float flap_angle = (local_base * sign + roll_lean) *
-                                         flap_weight_at(size_t(depth)) * flap_normalize +
+                                         flap_weight_at(size_t(depth)) * flap_normalize *
+                                         flight_share +
                                      stow_angle * sign;
 
             // Folding closes progressively toward the tip, which is how a wing
@@ -1149,8 +1161,8 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                                 flap_fold + recovery_fold) *
                                    fold_progress * sign * aft * fold_normalize +
                                close * sign * aft;
-            const float flare_angle =
-                core::radians(tuning.brake_flare_deg) * flare * sign * flare_normalize;
+            const float flare_angle = core::radians(tuning.brake_flare_deg) * flare * sign *
+                                      flare_normalize * flight_share;
 
             // Flutter and twist live on the fingers only -- the arm is bone.
             // Flutter grows toward the tip (progress squared: the membrane
@@ -1162,8 +1174,8 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 flutter = flutter_amplitude * progress * progress *
                           (std::sin(core::TWO_PI * 13.0f * time_ + phase) +
                            0.6f * std::sin(core::TWO_PI * 21.7f * time_ + 1.7f * phase)) *
-                          sign * normalize;
-                finger_twist = twist * progress * normalize;
+                          sign * normalize * flight_share;
+                finger_twist = twist * progress * normalize * flight_share;
             }
 
             // Flap is a rotation about the body's forward axis; sweep and fold

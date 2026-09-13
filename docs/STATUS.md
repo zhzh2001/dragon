@@ -174,6 +174,10 @@ What is built, in the order it was built. The plan these came from is
   found by rendering candidate grids. Stormsail and Tidewrack plant their
   wrists as forelegs with the hand folded up the forearm, which took two
   new stow fields (`ground_stow_tuck_share`, `ground_stow_elbow_scale`).
+  The stow owns the standing wing outright now, after the bench and a real
+  landing were found to disagree by 13 degrees of elevation; the legs trail
+  along the tail base so the beat clears them; the stance dials live in the
+  Studio panel under their scenario.
   `ANIMATION.md`, "Wings on the ground, and in the dive, per species".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

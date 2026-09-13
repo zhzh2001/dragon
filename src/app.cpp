@@ -1817,6 +1817,60 @@ void App::build_studio_ui() {
         if (ImGui::Button("restart")) studio_time_ = 0.0f;
         ImGui::SameLine();
         ImGui::TextDisabled("t = %.1f s   tab for free camera", studio_time_);
+
+        // The dials that decide the pose being judged, right under the
+        // scenario that judges it. They are the same fields as in the Dragon
+        // panel's Wings header; that header is collapsed inside a collapsed
+        // panel, and a dial that cannot be found does not exist.
+        anim::RigTuning& rig = dragon_rig_.tuning;
+        const game::StudioScenario scenario = game::StudioScenario(studio_scenario_);
+        if (scenario == game::StudioScenario::Grounded) {
+            ImGui::SeparatorText("standing wing");
+            ImGui::SliderFloat("keeps tuck", &rig.ground_stow_tuck_share, 0.0f, 1.0f);
+            ImGui::SliderFloat("sweep aft", &rig.ground_stow_sweep_deg, -90.0f, 160.0f, "%.0f deg");
+            ImGui::SliderFloat("fold", &rig.ground_stow_fold_deg, -30.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("wrist up", &rig.ground_stow_wrist_deg, -170.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("fingers up", &rig.ground_stow_finger_deg, -180.0f, 180.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("wrist close", &rig.ground_stow_close_deg, 0.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("elbow share", &rig.ground_stow_elbow_scale, 0.0f, 1.5f);
+            ImGui::SliderFloat("fan close", &rig.ground_stow_converge_deg, 0.0f, 120.0f,
+                               "%.0f deg");
+            ImGui::SeparatorText("legs on the ground");
+            ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
+        } else if (scenario == game::StudioScenario::Dive ||
+                   scenario == game::StudioScenario::PullOut) {
+            ImGui::SeparatorText("tucked wing");
+            ImGui::SliderFloat("tuck sweep", &rig.tuck_sweep_deg, 0.0f, 120.0f, "%.0f deg");
+            ImGui::SliderFloat("tuck fold", &rig.tuck_fold_deg, 0.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
+            ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
+            ImGui::SeparatorText("legs");
+            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 110.0f, "%.0f deg");
+            ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
+                               "%.0f deg");
+        } else if (scenario == game::StudioScenario::Flap) {
+            ImGui::SeparatorText("wingbeat");
+            ImGui::SliderFloat("recovery wrist", &rig.recovery_wrist_deg, -90.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("recovery fingers", &rig.recovery_finger_deg, -90.0f, 90.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("recovery hand droop", &rig.recovery_droop_deg, -45.0f, 60.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("stroke plane tilt", &rig.stroke_plane_tilt_deg, -45.0f, 45.0f,
+                               "%.0f deg");
+            ImGui::SeparatorText("legs");
+            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 110.0f, "%.0f deg");
+            ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
+                               "%.0f deg");
+        }
+        if (ImGui::Button("save rig profile for this model")) {
+            anim::save_rig_tuning(rig, player_model().rig_tuning_path.c_str());
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", player_model().rig_tuning_path.c_str());
     } else {
         ImGui::TextDisabled("scripted manoeuvres for inspecting the rig");
     }
