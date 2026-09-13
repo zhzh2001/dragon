@@ -1109,6 +1109,14 @@ void App::update(float dt) {
     if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
 
     dragon_rig_.set_action(rig_action_);
+    // Where the ground is under each foot: the rig plants the standing limbs
+    // on the terrain they stand over, not on the one height under the body.
+    {
+        const game::FlightState& s = dragon_state();
+        dragon_rig_.set_ground(
+            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
+            [this](float x, float z) { return terrain_.surface_at(x, z); });
+    }
     if (!options_.bind_pose) dragon_rig_.update(dragon_state(), dt);
 
     // The ghost's rig is driven from its recording, reconstructed as a flight
@@ -1876,6 +1884,9 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("neck up", &rig.ground_neck_pitch_deg, -60.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("tail up", &rig.ground_tail_pitch_deg, -90.0f, 60.0f, "%.0f deg");
             ImGui::SliderFloat("extra lift", &rig.ground_lift_m, -1.0f, 2.0f, "%.2f m");
+            ImGui::SliderFloat("plant limbs on terrain", &rig.ground_ik, 0.0f, 1.0f);
+            ImGui::SliderFloat("terrain tilt limit", &rig.ground_ik_tilt_max_deg, 0.0f, 30.0f,
+                               "%.0f deg");
             ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
             {
                 std::string heights;
@@ -2614,6 +2625,12 @@ void App::update_bots(float dt) {
             bot->rig.set_aim_target(flight_.state().position);
         }
 
+        {
+            const game::FlightState& bs = bot->flight.state();
+            bot->rig.set_ground(core::Mat4::trs(bs.position, bs.orientation, core::Vec3::one()) *
+                                    model_at(bot->model).asset.matrix(),
+                                [this](float x, float z) { return terrain_.surface_at(x, z); });
+        }
         bot->rig.update(bot->flight.state(), dt);
         bot->was_alive = true;
     }

@@ -879,3 +879,37 @@ stream their legs back under the tail base like a flying bird's; the
 wyverns already did. Embercrest's had dangled instead, 1.9 m below, and it
 took the same values. **When a chain gets two angles at the same joint,
 check what their sum does before tuning either.**
+
+### Each limb plants on the terrain under it
+
+The flight model puts the body on the surface sampled at ONE point, so on a
+hillside the downhill feet floated and the uphill feet sank, and every
+stance above was tuned on a floor. The rig now takes the ground itself:
+`DragonRig::set_ground(model_to_world, height)` hands it the renderer's
+model transform for the frame and a surface query, and `plant_limbs` runs
+at the end of the stance on ground contact. It works in two passes. First
+the BODY: the contact error of every standing limb (the terrain under the
+contact plus the profile's lift, minus where the contact is) is averaged
+into a lift, and the fore/hind and left/right differences over their
+spacing into a pitch and a roll, clamped to `ground_ik_tilt_max_deg` so a
+boulder under one foot bends a leg rather than rolling the animal, and all
+three smoothed so a foot crossing a terrain triangle edge does not snap the
+body. Then each LIMB: a two-bone solve on hip-knee-foot, shoulder-elbow-hand
+and, when the wrists are planted, shoulder-elbow-wrist -- the middle joint
+bends about the limb's own plane until the chain's length matches the reach
+(law of cosines), then the chain is aimed at the target with `aim_bone`,
+twice, since each step disturbs the other. The foot beyond the ankle rides
+the shin as posed. `ground_ik` is the weight; the Studio slider is "plant
+limbs on terrain".
+
+Tested on Rimefang over a ground rising 0.3 m per metre across the body:
+a level body leaves the worst foot 0.50 m off its ground, the plant brings
+it to 0.00. Landed in the game, rendered at ground level, the quadrupeds'
+feet and the wyverns' wrists and feet all sit on the grass. The approach
+is the rig's -- planting fades in with ground contact like the stance -- and
+the ghost rig never sets a ground, so it is untouched.
+
+This is the practical half of "physics-based postures". The other half, a
+ragdoll settling under Jolt, would buy self-levelling the plant already
+gives and cost the deferred physics integration plus a pose that is hard to
+art-direct; it is not planned.

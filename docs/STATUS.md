@@ -212,7 +212,13 @@ What is built, in the order it was built. The plan these came from is
   wyverns drop the tail less. The hind feet flew two metres above the hips
   because tuck and trail both rotate the thigh; a glide probe screened a
   grid and the quadrupeds now stream their legs back under the tail.
-  CLAUDE.md gained a mandatory rendered-inspection list for pose changes. `ANIMATION.md`, "A folded wing is
+  CLAUDE.md gained a mandatory rendered-inspection list for pose changes.
+- **Limbs plant on the terrain.** The app hands the rig its model transform
+  and a surface query; on the ground the rig lifts and tilts the body onto
+  the mean contact and closes each standing limb (hip-knee-foot,
+  shoulder-elbow-hand, planted wing wrists) with a two-bone solve. Tested on
+  a 0.3 slope: 0.50 m worst foot error to 0.00. `ANIMATION.md`, "Each limb
+  plants on the terrain under it". `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

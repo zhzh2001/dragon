@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "anim/animation.h"
@@ -356,6 +357,17 @@ struct RigTuning {
     // joint -- a sole, or a wyvern's hand hanging under a planted wrist -- is
     // not the rig's to know. Positive raises the creature.
     float ground_lift_m = 0.0f;
+    // Plant each standing limb on the terrain under it. The flight model puts
+    // the body centre on the surface sampled at ONE point, so on a hillside
+    // the downhill feet floated and the uphill feet sank. With the ground
+    // query set (DragonRig::set_ground), the rig lifts and tilts the body
+    // onto the mean of its contacts and then closes each limb's residual with
+    // a two-bone solve: hip-knee-foot, shoulder-elbow-hand, and the wing arm
+    // when the wrists are planted. This is the weight of that correction; 0
+    // is off. Degrees of body tilt it may take, so a boulder under one foot
+    // bends a leg rather than rolling the animal.
+    float ground_ik = 1.0f;
+    float ground_ik_tilt_max_deg = 12.0f;
 
     // ---- neck and tail dynamics ----
     //
@@ -626,6 +638,15 @@ public:
     // Weapon use, read by the next update(). Persists until set again, so a
     // caller that stops attacking must say so.
     void set_action(const RigAction& action) { action_ = action; }
+    // The ground under the feet, for planting each limb on the terrain it
+    // stands over. `model_to_world` is the full model transform the renderer
+    // uses this frame (flight transform times the asset correction);
+    // `height` returns the surface height at a world x,z. Read on the next
+    // update() and used only on the ground; an empty function clears it.
+    void set_ground(const core::Mat4& model_to_world, std::function<float(float, float)> height) {
+        model_to_world_ = model_to_world;
+        ground_height_ = std::move(height);
+    }
     const RigAction& action() const { return action_; }
     // How open the jaw is, 0..1, after the last update. For probes and tests.
     float jaw_open() const { return jaw_open_; }
@@ -737,6 +758,11 @@ private:
     // the root lift that keeps the feet on the floor. `stow` is how far into
     // the stance the creature is (ground contact, at rest).
     void drive_stance(float stow);
+    // Plants the standing limbs on the terrain (needs set_ground); `stance` is
+    // the ground weight. Runs at the end of drive_stance.
+    void plant_limbs(float stance);
+    // Rotates `joint` about a model-space axis through its own origin.
+    void rotate_joint_about(int joint, core::Vec3 axis_model, float angle);
     // Rotates `joint` so the bone from it to `child` points along `target`
     // (model space), blended by `weight`. Needs world_ current; leaves it
     // recomputed.
@@ -802,6 +828,15 @@ private:
     // keeps the feet on.
     std::vector<int> stance_foot_joints_;
     float stance_floor_bind_ = 0.0f;
+    core::Mat4 model_to_world_ = core::Mat4::identity();
+    std::function<float(float, float)> ground_height_;
+    // The body correction the terrain asked for, smoothed so a foot crossing
+    // a triangle edge does not snap the whole animal: lift in metres, tilt in
+    // radians about model X and Z.
+    float plant_lift_ = 0.0f;
+    float plant_pitch_ = 0.0f;
+    float plant_roll_ = 0.0f;
+    float plant_dt_ = 1.0f / 60.0f;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     float clip_hold_time_ = -1.0f;

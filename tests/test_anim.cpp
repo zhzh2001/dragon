@@ -2069,6 +2069,82 @@ void test_stance_keeps_the_feet_on_the_floor() {
 // clip is sampled by joint index, so one authored for the previous skeleton
 // must not survive into the next: with it, a landed wyvern stood in the
 // default asset's idle pose and its jaw turned about a stranger's hinge.
+// On a hillside the flight model puts the body on the surface under ONE
+// point, so the downhill feet floated and the uphill feet sank. With a ground
+// query the rig plants each standing limb on the terrain under it: the body
+// lifts and tilts onto the mean contact, and a two-bone solve closes each
+// limb's residual. Checked on Rimefang over a ground that slopes across the
+// body, so the left and right feet want different heights.
+void test_limbs_plant_on_the_terrain() {
+    std::printf("each standing limb plants on the terrain under it\n");
+    namespace fs = std::filesystem;
+    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+    fs::path path = source_root / "assets/rimefang.glb";
+    if (!fs::is_regular_file(path)) path = fs::path("assets/rimefang.glb");
+    if (!fs::is_regular_file(path)) {
+        std::printf("  assets/rimefang.glb absent; skipped\n");
+        return;
+    }
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    if (!anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok) return;
+    const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+    CHECK(joints.foot_roots.size() == 4);
+
+    // The bind floor: the lowest foot root or toe.
+    float bind_floor = 1e9f;
+    for (int i = 0; i < skeleton.count(); ++i) {
+        for (int p = i; p != anim::NO_PARENT; p = skeleton.joint(p).parent) {
+            if (std::find(joints.foot_roots.begin(), joints.foot_roots.end(), p) !=
+                joints.foot_roots.end()) {
+                bind_floor = std::min(bind_floor, skeleton.world_bind(i).translation_part().y);
+                break;
+            }
+        }
+    }
+    const float scale = 15.6f;
+    // Ground rising 0.3 m per metre to the +X side: the right feet want to be
+    // about 0.5 m higher than the left ones.
+    auto ground = [](float x, float) { return 0.3f * x; };
+
+    auto run = [&](float ik_weight, float lift_m) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        rig.tuning.ground_ik = ik_weight;
+        rig.tuning.ground_lift_m = lift_m;
+        rig.set_model_scale(scale);
+        // The body where the flight model would put it over flat ground at
+        // the origin: bind floor plus the profile's lift on y = 0.
+        const core::Mat4 model_to_world = core::Mat4::trs(
+            Vec3{0.0f, -bind_floor * scale + lift_m, 0.0f}, Quat::identity(), Vec3(scale));
+        game::FlightState grounded;
+        grounded.grounded = true;
+        grounded.ground_clearance = 0.0f;
+        grounded.wing_tuck = 1.0f;
+        float worst = 0.0f;
+        for (int i = 0; i < 400; ++i) {
+            rig.set_ground(model_to_world, ground);
+            rig.update(grounded, 1.0f / 60.0f);
+        }
+        const auto& w = rig.world_matrices();
+        for (const int foot : joints.foot_roots) {
+            const Vec3 p = core::transform_point(model_to_world, w[size_t(foot)].col[3].xyz());
+            const float above_floor =
+                (skeleton.world_bind(foot).translation_part().y - bind_floor) * scale;
+            const float wanted = ground(p.x, p.z) + above_floor + lift_m;
+            worst = std::max(worst, std::fabs(p.y - wanted));
+        }
+        return worst;
+    };
+    const float without = run(0.0f, 0.15f);
+    const float with = run(1.0f, 0.15f);
+    std::printf("  worst foot off its ground: %.2f m without planting, %.2f m with\n",
+                double(without), double(with));
+    CHECK(without > 0.15f);  // the slope is real: a level body leaves feet off the ground
+    CHECK(with < 0.06f);
+}
+
 void test_reinit_drops_the_previous_clip() {
     std::printf("re-initialising the rig on another skeleton drops the previous clip\n");
     anim::DragonShape shape;
@@ -2320,6 +2396,7 @@ int main() {
     test_aimed_fold_points_the_bones();
     test_stance_keeps_the_feet_on_the_floor();
     test_reinit_drops_the_previous_clip();
+    test_limbs_plant_on_the_terrain();
     test_optional_embercrest_asset();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

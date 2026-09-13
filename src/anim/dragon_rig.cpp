@@ -381,6 +381,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_neck_pitch_deg),
     RIG_FLOAT_FIELD(ground_tail_pitch_deg),
     RIG_FLOAT_FIELD(ground_lift_m),
+    RIG_FLOAT_FIELD(ground_ik),
+    RIG_FLOAT_FIELD(ground_ik_tilt_max_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -1885,6 +1887,165 @@ void DragonRig::drive_stance(float stow) {
         }
         pose_.local[size_t(root)].position += lift;
     }
+
+    // Then the terrain under each foot, if the app told us where it is. On
+    // ground contact rather than the stance weight: a sculpt that stands in
+    // its bind pose has no stance and still lands on hillsides.
+    plant_limbs(stow);
+}
+
+void DragonRig::rotate_joint_about(int joint, Vec3 axis_model, float angle) {
+    if (joint == NO_PARENT || size_t(joint) >= world_.size() || std::fabs(angle) < 1e-6f) return;
+    if (core::length_sq(axis_model) < 1e-12f) return;
+    const Quat delta = Quat::from_axis_angle(core::normalize(axis_model), angle);
+    const int parent = skeleton_->joint(joint).parent;
+    const Quat parent_rotation =
+        parent == NO_PARENT ? Quat::identity() : core::quat_from_matrix(world_[size_t(parent)]);
+    const Quat world_rotation = core::quat_from_matrix(world_[size_t(joint)]);
+    pose_.local[size_t(joint)].rotation =
+        core::normalize(core::conjugate(parent_rotation) * delta * world_rotation);
+    compute_world_matrices(*skeleton_, pose_, world_);
+}
+
+void DragonRig::plant_limbs(float stance) {
+    const float weight = stance * core::saturate(tuning.ground_ik);
+    if (weight <= 1e-4f || !ground_height_ || !skeleton_ || joints_.root == NO_PARENT) return;
+
+    // The standing limbs: a two-bone chain (a, b) ending in the contact joint
+    // c -- the foot root under the leg, the hand under the arm, the wrist of a
+    // planted wing. The foot beyond the ankle rides the shin as posed.
+    struct Limb {
+        int a, b, c;
+        bool fore;
+    };
+    std::vector<Limb> limbs;
+    auto foot_root_under = [&](int chain_end) {
+        for (const int foot : joints_.foot_roots) {
+            for (int p = foot; p != NO_PARENT; p = skeleton_->joint(p).parent) {
+                if (p == chain_end) return foot;
+            }
+        }
+        return chain_end;
+    };
+    for (int side = 0; side < 2; ++side) {
+        const std::vector<int>& leg = joints_.leg[side];
+        if (leg.size() >= 2) limbs.push_back({leg[0], leg[1], foot_root_under(leg.back()), false});
+        const std::vector<int>& arm = joints_.front_leg[side];
+        if (arm.size() >= 2) limbs.push_back({arm[0], arm[1], foot_root_under(arm.back()), true});
+        const std::vector<int>& wing = joints_.wing_root[side];
+        if (tuning.ground_wing_plant > 0.5f && wing.size() >= 3) {
+            limbs.push_back({wing[0], wing[1], wing.back(), true});
+        }
+    }
+    if (limbs.empty()) return;
+
+    const core::Mat4 world_to_model = core::inverse(model_to_world_);
+    // One metre of world up, in model units and model space.
+    const Vec3 up_model = (world_to_model * core::Vec4{Vec3::up(), 0.0f}).xyz();
+    if (core::length_sq(up_model) < 1e-12f) return;
+    compute_world_matrices(*skeleton_, pose_, world_);
+    auto contact_world = [&](const Limb& l) {
+        return core::transform_point(model_to_world_, world_[size_t(l.c)].col[3].xyz());
+    };
+    // How far the contact must rise (metres, world up) to sit on the terrain
+    // under it. Feet stand a little above the mesh sole (ground_lift_m); a
+    // planted wrist is the contact itself.
+    auto contact_error = [&](const Limb& l) {
+        const Vec3 p = contact_world(l);
+        const float above_floor =
+            l.c == joints_.wing_root[0].back() || l.c == joints_.wing_root[1].back()
+                ? 0.0f
+                : (skeleton_->world_bind(l.c).translation_part().y - stance_floor_bind_) *
+                      model_scale_;
+        return ground_height_(p.x, p.z) + above_floor + tuning.ground_lift_m - p.y;
+    };
+
+    // ---- the body onto the mean contact ----
+    // Lift by the mean error; pitch by the fore/hind difference over their
+    // spacing; roll by the left/right difference. Smoothed, because a foot
+    // crossing a terrain triangle edge must not snap the whole animal, and
+    // clamped, because a boulder under one foot should bend a leg.
+    float sum = 0.0f;
+    float fore_sum = 0.0f, hind_sum = 0.0f, right_sum = 0.0f, left_sum = 0.0f;
+    Vec3 fore_pos{}, hind_pos{}, right_pos{}, left_pos{};
+    int fore_n = 0, hind_n = 0, right_n = 0, left_n = 0;
+    const Vec3 right_world = core::normalize_or(
+        (model_to_world_ * core::Vec4{Vec3::unit_x(), 0.0f}).xyz(), Vec3::right());
+    for (const Limb& l : limbs) {
+        const float e = contact_error(l);
+        const Vec3 p = contact_world(l);
+        sum += e;
+        if (l.fore) { fore_sum += e; fore_pos = fore_pos + p; ++fore_n; }
+        else { hind_sum += e; hind_pos = hind_pos + p; ++hind_n; }
+        const float side = core::dot(p - core::transform_point(model_to_world_, world_[size_t(joints_.root)].col[3].xyz()), right_world);
+        if (side >= 0.0f) { right_sum += e; right_pos = right_pos + p; ++right_n; }
+        else { left_sum += e; left_pos = left_pos + p; ++left_n; }
+    }
+    const float mean = sum / float(limbs.size());
+    float pitch = 0.0f, roll = 0.0f;
+    const float tilt_max = core::radians(core::maxf(tuning.ground_ik_tilt_max_deg, 0.0f));
+    if (fore_n > 0 && hind_n > 0) {
+        const Vec3 f = fore_pos * (1.0f / float(fore_n)), h = hind_pos * (1.0f / float(hind_n));
+        const float span = core::length(Vec3{f.x - h.x, 0.0f, f.z - h.z});
+        if (span > 0.5f) {
+            pitch = core::clampf(std::atan2(fore_sum / float(fore_n) - hind_sum / float(hind_n), span),
+                                 -tilt_max, tilt_max);
+        }
+    }
+    if (right_n > 0 && left_n > 0) {
+        const Vec3 r = right_pos * (1.0f / float(right_n)), l = left_pos * (1.0f / float(left_n));
+        const float span = core::length(Vec3{r.x - l.x, 0.0f, r.z - l.z});
+        if (span > 0.5f) {
+            roll = core::clampf(std::atan2(right_sum / float(right_n) - left_sum / float(left_n), span),
+                                -tilt_max, tilt_max);
+        }
+    }
+    plant_lift_ = core::damp(plant_lift_, mean, 0.12f, plant_dt_);
+    plant_pitch_ = core::damp(plant_pitch_, pitch, 0.12f, plant_dt_);
+    plant_roll_ = core::damp(plant_roll_, roll, 0.12f, plant_dt_);
+    {
+        const int root = joints_.root;
+        const int parent = skeleton_->joint(root).parent;
+        Vec3 lift = up_model * (plant_lift_ * weight);
+        if (parent != NO_PARENT) {
+            lift = core::rotate(core::conjugate(core::quat_from_matrix(world_[size_t(parent)])), lift);
+        }
+        pose_.local[size_t(root)].position += lift;
+        // Nose up is a rotation about model X whose sign follows the facing;
+        // a positive rotation about model Z raises the +X side.
+        rotate_joint(root, Vec3::unit_x(), plant_pitch_ * weight * -model_forward_z_, true);
+        rotate_joint(root, Vec3::unit_z(), plant_roll_ * weight, true);
+        compute_world_matrices(*skeleton_, pose_, world_);
+    }
+
+    // ---- each limb onto its own contact ----
+    // Two-bone: bend the middle joint about the limb's own plane until the
+    // chain's length matches the reach, then aim the chain at the target.
+    // Twice, since each step disturbs the other a little.
+    for (const Limb& l : limbs) {
+        for (int iteration = 0; iteration < 2; ++iteration) {
+            const float e = contact_error(l);
+            if (std::fabs(e) < 0.005f) break;
+            const Vec3 a = world_[size_t(l.a)].col[3].xyz();
+            const Vec3 b = world_[size_t(l.b)].col[3].xyz();
+            const Vec3 c = world_[size_t(l.c)].col[3].xyz();
+            const Vec3 target = c + up_model * e;
+            const float l1 = core::length(b - a), l2 = core::length(c - b);
+            if (l1 < 1e-5f || l2 < 1e-5f) break;
+            const float reach = core::clampf(core::length(target - a),
+                                             std::fabs(l1 - l2) * 1.02f + 1e-4f, (l1 + l2) * 0.995f);
+            const Vec3 ba = a - b, bc = c - b;
+            const float current = std::acos(core::clampf(core::dot(ba, bc) / (l1 * l2), -1.0f, 1.0f));
+            const float wanted = std::acos(core::clampf((l1 * l1 + l2 * l2 - reach * reach) /
+                                                            (2.0f * l1 * l2), -1.0f, 1.0f));
+            Vec3 axis = core::cross(ba, bc);
+            if (core::length_sq(axis) < 1e-10f) axis = core::cross(ba, up_model);
+            // Rotating bc about cross(ba, bc) by a positive angle opens the
+            // angle between them.
+            rotate_joint_about(l.b, axis, (wanted - current) * weight);
+            aim_bone(l.a, l.c, target - world_[size_t(l.a)].col[3].xyz(), weight);
+        }
+    }
 }
 
 std::vector<std::pair<std::string, float>> DragonRig::foot_heights() const {
@@ -2140,6 +2301,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     drive_legs(state, frame_acceleration, angular_acceleration, dt);
     // The standing stance, on top of everything the flight pose left: the same
     // "on the ground and at rest" signal the wing stow fades in with.
+    plant_dt_ = dt;
     drive_stance(ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f));
 
     // Feet: first anchor them to the posed legs (needs world matrices), then
