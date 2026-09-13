@@ -351,6 +351,11 @@ struct RigTuning {
     // still move the chain about the posed shape.
     float ground_neck_pitch_deg = 0.0f;
     float ground_tail_pitch_deg = 0.0f;
+    // Extra lift of the whole skeleton on the ground, metres. The floor above
+    // is where the lowest foot JOINT stood in bind, and the mesh below that
+    // joint -- a sole, or a wyvern's hand hanging under a planted wrist -- is
+    // not the rig's to know. Positive raises the creature.
+    float ground_lift_m = 0.0f;
 
     // ---- neck and tail dynamics ----
     //

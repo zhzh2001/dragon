@@ -197,10 +197,12 @@ What is built, in the order it was built. The plan these came from is
   without standing its wrist claws beside the head, and a jaw rest that
   does not swing the mandible through the skull. The wyverns rest on their
   wings: `ground_wing_plant` counts the wrists as feet, and since these
-  upright sculpts cannot reach the ground from a level body, they sit --
-  a deep hind-leg crouch with the wrists planted beside the feet (target
-  `docs/concept/standing-wyvern-reference.png`, and why it was not
-  followed literally, in `ANIMATION.md`). `ANIMATION.md`, "A folded wing is
+  upright sculpts cannot reach the ground from a level body, they crouch
+  with the wrists planted wide and ahead of the feet like the landed
+  wyvern of modern games (`docs/concept/landed-wyvern-reference.png`).
+  Cycling onto another model no longer carries the previous model's idle
+  clip into the rig, which had been reverting the wyverns' stance and
+  turning every jaw about a stranger's hinge on the ground. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

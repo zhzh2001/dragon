@@ -786,24 +786,56 @@ shuts. **Render the head when a stance changes** -- the neck chain and the
 body pitch move where the camera sees the jaw from, and an over-closure
 that hid in the glide showed on the ground.
 
-**The wyverns rest on their wings, but not the way the reference draws
-it.** `docs/concept/standing-wyvern-reference.png` is the pterosaur stance:
-body level, wrists planted ahead of the feet, wing finger folded back up
-past the shoulder. Stormsail and Tidewrack are sculpted upright like
-theropods with short wing arms -- shoulder 6.9 m up, arm plus forearm 5 m
--- so from a standing body the wrist cannot reach the ground at all, and
-the angle stow's "planted wrist" had always been a hand held in the air
-beside the body. `ground_wing_plant` makes the wrists count as feet for the
-floor, and `ground_neck_pitch_deg` and `ground_tail_pitch_deg` raise the
-head and drop the tail against whatever the body pitch does. With those,
-the reference stance screens level at 55 degrees of body pitch, and
-rendered it is a crawl: the mesh torso is steeper than its bones and the
-whole animal reads as diving at the ground. What fits the body is a
-SITTING crouch -- hips dropped by a deep hind-leg Z, a 25-35 degree
-forward lean, the arms hanging to the ground with the wrists planted beside
-the feet, the wing finger folded back up, neck raised, tail on the ground
--- the way a bat or a grounded pterosaur actually sits rather than the way
-the diagram stands one. 432 crouches were screened for wrists and feet on
-one floor, two rendered per species. **A reference is a target for the
-silhouette, not a set of joint angles; when the sculpt's proportions cannot
-reach the pose, find the pose the same animal would take in that body.**
+**The wyverns rest on their wings, wrists planted wide and forward.** The
+first target was a pterosaur diagram (body level, wrists under the chest),
+and the second look asked for dragon references instead, which is the right
+call: the grounded wyvern of modern games and films is what the player
+knows, and it is a different animal -- wrists planted well AHEAD of and
+WIDER than the hind feet, elbows high and out, the wing finger folded back
+up along the arm, body low, neck up, tail on the ground
+(`docs/concept/landed-wyvern-reference.png`). Stormsail and Tidewrack are
+sculpted upright like theropods with short wing arms (shoulder 6.9 m up,
+arm plus forearm 5 m), so from a standing body the wrist cannot reach the
+ground at all, and the angle stow's "planted wrist" had always been a hand
+held in the air beside the body. Three fields carry the stance:
+`ground_wing_plant` makes the wrists count as feet for the floor, so the
+fold that reaches them down is what sets the body's height;
+`ground_neck_pitch_deg` and `ground_tail_pitch_deg` raise the head and drop
+the tail against the lean; `ground_lift_m` raises the whole skeleton by the
+hand that hangs under the planted wrist joint, which the rig cannot see. The
+body reaches the reference as a crouch: hips dropped by a deep hind-leg Z,
+a 20-30 degree lean, the wing arm reaching down, forward and out. The
+screen ranked level crouches by how far ahead and out the wrists landed
+(the batch probe prints both), because the first level crouch found had
+them hanging beside the legs, which is the "wings too close to the legs"
+report. A level-bodied stance was screened and rendered first; it needs 55
+degrees of pitch on this torso and reads as a crawl. **A reference is a
+target for the silhouette, not a set of joint angles; when the sculpt's
+proportions cannot reach the pose, find the pose the same animal would
+take in that body.**
+
+**A clip belongs to the skeleton it was authored on.** The report was
+"every dragon's jaw goes up into the skull on the ground, and the wyverns
+revert to the old stance when I switch to them from the default asset".
+Both were one bug, and neither was in the jaw or the stance: cycling the
+player onto another model re-initialises the rig but left the previous
+model's idle clip in place, and a model without a clip never cleared it.
+A clip is sampled by joint INDEX, and on the ground the authored stance
+wins the whole body, so a wyvern landed after `dragon.glb` stood in the
+default asset's idle applied to a stranger's bones -- a reverted stance,
+and a jaw hinge that was some other joint. `DragonRig::init` now drops the
+clip and the app clears it for clipless models; a test re-initialises on
+another skeleton and checks the clip is gone. The jaw itself opens downward
+on the ground on every species (probe: grounded, breath held, tip in the
+head frame), and two were rendered landed with the breath held to be sure.
+**When a fault appears on every model at once, suspect state that outlives
+the model.**
+
+**Feet on a slope are still the flight model's problem.** The stance keeps
+the lowest foot on one floor under the body centre, and the ground under
+the body is sampled at one point; on a hillside the downhill feet float and
+the uphill feet sink. Planting each foot on the terrain under it is a
+per-limb IK problem (two-bone leg toward a terrain hit, body height and
+pitch from the four contacts), the same machinery a physically settled
+stance would need, and it is the next step if the grounded game matters
+more than it does today.

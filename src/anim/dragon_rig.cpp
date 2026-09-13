@@ -380,6 +380,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_wing_plant),
     RIG_FLOAT_FIELD(ground_neck_pitch_deg),
     RIG_FLOAT_FIELD(ground_tail_pitch_deg),
+    RIG_FLOAT_FIELD(ground_lift_m),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -524,6 +525,16 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     skeleton_ = &skeleton;
     joints_ = joints;
     pose_.reset_to_bind(skeleton);
+    // A clip belongs to the skeleton it was authored on. The rig is
+    // re-initialised when the player cycles onto another model, and the
+    // previous model's idle used to survive that: on the ground the authored
+    // stance wins the whole body, so a wyvern landed after the default asset
+    // stood in the default asset's pose sampled by joint INDEX -- a reverted
+    // stance and a jaw rotating about whatever that index happened to be.
+    // The caller sets a clip again if the new model has one.
+    base_clip_ = nullptr;
+    clip_hold_time_ = -1.0f;
+    clip_time_ = 0.0f;
 
     // Accumulate world bind rotations, then keep each joint's parent's inverse.
     // A local rotation is expressed in the parent's frame, so that inverse is
@@ -1866,7 +1877,8 @@ void DragonRig::drive_stance(float stow) {
         // model space; if it ever had one, the lift goes in that parent's frame.
         const int root = joints_.root;
         const int parent = skeleton_->joint(root).parent;
-        Vec3 lift = Vec3::unit_y() * ((stance_floor_bind_ - floor) * stance);
+        Vec3 lift = Vec3::unit_y() *
+                    ((stance_floor_bind_ - floor + tuning.ground_lift_m / model_scale_) * stance);
         if (parent != NO_PARENT) {
             lift = core::rotate(core::conjugate(core::quat_from_matrix(world_[size_t(parent)])),
                                 lift);

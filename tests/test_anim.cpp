@@ -2045,10 +2045,13 @@ void test_stance_keeps_the_feet_on_the_floor() {
         // Every foot on one floor, and that floor is the bind floor.
         float floor = 1e9f;
         for (const int joint : posed_standing) floor = std::min(floor, w[size_t(joint)].col[3].y);
-        if (std::fabs(floor - bind_floor) >= 0.01f) {
-            std::printf("  %s: floor moved %.3f units\n", name, double(floor - bind_floor));
+        // ...plus whatever extra lift the profile asks for (a wyvern's hand
+        // hangs below its planted wrist joint), in model units.
+        const float expected_floor = bind_floor + rig.tuning.ground_lift_m / 15.6f;
+        if (std::fabs(floor - expected_floor) >= 0.01f) {
+            std::printf("  %s: floor moved %.3f units\n", name, double(floor - expected_floor));
         }
-        CHECK(std::fabs(floor - bind_floor) < 0.01f);
+        CHECK(std::fabs(floor - expected_floor) < 0.01f);
         for (const auto& [foot_name, height] : rig.foot_heights()) {
             if (!(height >= 0.0f && height < 0.15f)) {
                 std::printf("  %s: %s is %.2f m off the floor\n", name, foot_name.c_str(),
@@ -2060,6 +2063,35 @@ void test_stance_keeps_the_feet_on_the_floor() {
     // The profiles under test carry the stance; a rename or a dropped block
     // would otherwise pass by skipping everything.
     if (fs::is_regular_file(source_root / "assets/rimefang.glb")) CHECK(with_stance >= 1);
+}
+
+// The rig is re-initialised when the player cycles onto another model. A
+// clip is sampled by joint index, so one authored for the previous skeleton
+// must not survive into the next: with it, a landed wyvern stood in the
+// default asset's idle pose and its jaw turned about a stranger's hinge.
+void test_reinit_drops_the_previous_clip() {
+    std::printf("re-initialising the rig on another skeleton drops the previous clip\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    anim::AnimationClip clip;
+    clip.name = "idle";
+    clip.duration = 1.0f;
+    anim::RotationTrack track;
+    track.joint = joints.tail[1];
+    track.times = {0.0f, 1.0f};
+    track.rotations = {Quat::from_axis_angle(Vec3::unit_x(), radians(30.0f)),
+                       Quat::from_axis_angle(Vec3::unit_x(), radians(30.0f))};
+    clip.tracks.push_back(track);
+
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    rig.set_base_clip(&clip, 0.0f);
+    CHECK(rig.has_base_clip());
+    rig.init(skeleton, joints);
+    CHECK(!rig.has_base_clip());
 }
 
 void test_optional_embercrest_asset() {
@@ -2287,6 +2319,7 @@ int main() {
     test_legs_swing_with_the_frame();
     test_aimed_fold_points_the_bones();
     test_stance_keeps_the_feet_on_the_floor();
+    test_reinit_drops_the_previous_clip();
     test_optional_embercrest_asset();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

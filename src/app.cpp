@@ -1875,6 +1875,7 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("wrists are feet (wyvern)", &rig.ground_wing_plant, 0.0f, 1.0f);
             ImGui::SliderFloat("neck up", &rig.ground_neck_pitch_deg, -60.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("tail up", &rig.ground_tail_pitch_deg, -90.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("extra lift", &rig.ground_lift_m, -1.0f, 2.0f, "%.2f m");
             ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
             {
                 std::string heights;
@@ -2275,7 +2276,13 @@ void App::choose_idle_clip(LoadedModel& model) const {
 }
 
 void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const {
-    if (model.idle_clip < 0 || size_t(model.idle_clip) >= model.animations.size()) return;
+    // A model without an idle must CLEAR the clip, not leave the previous
+    // model's in place: the rig samples a clip by joint index, and another
+    // skeleton's indices are a different creature's bones.
+    if (model.idle_clip < 0 || size_t(model.idle_clip) >= model.animations.size()) {
+        rig.set_base_clip(nullptr);
+        return;
+    }
     rig.set_base_clip(&model.animations[size_t(model.idle_clip)], model.idle_clip_hold);
 }
 
