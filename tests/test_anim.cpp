@@ -260,6 +260,8 @@ void test_rig_tuning_profile_round_trip() {
     written.leg_brake_extend = 0.7f;
     written.leg_brake_forward_deg = 28.0f;
     written.chain_iterations = 9;
+    written.ground_wing_arm_sweep_deg = 71.0f;
+    written.ground_hip_deg = -8.0f;
     CHECK(anim::save_rig_tuning(written, path.string().c_str()));
 
     anim::RigTuning loaded;
@@ -276,6 +278,8 @@ void test_rig_tuning_profile_round_trip() {
     CHECK(near(loaded.leg_brake_extend, written.leg_brake_extend));
     CHECK(near(loaded.leg_brake_forward_deg, written.leg_brake_forward_deg));
     CHECK(loaded.chain_iterations == written.chain_iterations);
+    CHECK(near(loaded.ground_wing_arm_sweep_deg, written.ground_wing_arm_sweep_deg));
+    CHECK(near(loaded.ground_hip_deg, written.ground_hip_deg));
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
 }
@@ -1886,6 +1890,134 @@ float joint_palette_delta(const anim::DragonRig& a, const anim::DragonRig& b, in
     return delta;
 }
 
+// The aimed fold is a promise about DIRECTIONS: whatever the sculpt's
+// membrane plane or the rigger's bone axes, each wing segment ends up pointing
+// where the profile says, in the body's frame. That is the whole reason it
+// exists -- the angle stow's rotations turned about axes the sculpt chose,
+// and the same numbers folded one wing into a hoop and stood another up as a
+// sail. Checked on the generated rig, which faces -Z; the direction
+// convention is sweep from straight out toward aft, elevation from horizontal.
+void test_aimed_fold_points_the_bones() {
+    std::printf("the aimed standing fold points each wing segment where the profile says\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    CHECK(joints.wing_root[0].size() >= 2);
+
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    rig.tuning.ground_wing_aim = 1.0f;
+    rig.tuning.ground_wing_arm_sweep_deg = 70.0f;
+    rig.tuning.ground_wing_arm_elev_deg = 25.0f;
+    rig.tuning.ground_wing_forearm_sweep_deg = -60.0f;
+    rig.tuning.ground_wing_forearm_elev_deg = 50.0f;
+
+    game::FlightState grounded;
+    grounded.grounded = true;
+    grounded.ground_clearance = 0.0f;
+    grounded.wing_tuck = 1.0f;
+    for (int i = 0; i < 300; ++i) rig.update(grounded, 1.0f / 60.0f);
+
+    auto bone_direction = [&](int a, int b) {
+        const auto& w = rig.world_matrices();
+        return normalize(w[size_t(b)].col[3].xyz() - w[size_t(a)].col[3].xyz());
+    };
+    // The generated rig's head is at -Z, so aft is +Z; side 0 is +X.
+    auto expected = [](float sweep_deg, float elev_deg, float out) {
+        const float sweep = radians(sweep_deg), elev = radians(elev_deg);
+        return Vec3{std::cos(elev) * std::cos(sweep) * out, std::sin(elev),
+                    std::cos(elev) * std::sin(sweep)};
+    };
+    for (int side = 0; side < 2; ++side) {
+        const std::vector<int>& root = joints.wing_root[side];
+        const float out = skeleton.world_bind(root.back()).translation_part().x >= 0.0f ? 1.0f
+                                                                                          : -1.0f;
+        const Vec3 arm = bone_direction(root[0], root[1]);
+        CHECK(dot(arm, expected(70.0f, 25.0f, out)) > 0.98f);
+        if (root.size() >= 3) {
+            const Vec3 forearm = bone_direction(root[1], root[2]);
+            CHECK(dot(forearm, expected(-60.0f, 50.0f, out)) > 0.98f);
+        } else if (!joints.wing_fingers[side].empty()) {
+            // A two-bone arm: the forearm runs from the elbow to the finger base.
+            const Vec3 forearm = bone_direction(root[1], joints.wing_fingers[side][0][0]);
+            CHECK(dot(forearm, expected(-60.0f, 50.0f, out)) > 0.98f);
+        }
+    }
+
+    // Airborne it is exactly the rig without the aim: the fold belongs to the
+    // ground alone.
+    anim::DragonRig bare;
+    bare.init(skeleton, joints);
+    game::FlightState glide;
+    glide.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    glide.airspeed = 30.0f;
+    glide.ground_clearance = 300.0f;
+    for (int i = 0; i < 300; ++i) {
+        rig.update(glide, 1.0f / 60.0f);
+        bare.update(glide, 1.0f / 60.0f);
+    }
+    for (const int joint : joints.wing_root[0]) {
+        const Quat a = rig.pose().local[size_t(joint)].rotation;
+        const Quat b = bare.pose().local[size_t(joint)].rotation;
+        CHECK(std::fabs(dot(a, b)) > 0.9999f);
+    }
+}
+
+// The stance re-poses a sculpt whose bind pose is not standing, and the one
+// thing it must never do is leave a foot in the air: the root is lifted so
+// the lowest foot returns to the floor the bind soles stood on, which is the
+// height flight.cfg's ground_offset was measured from. Checked on Rimefang,
+// whose profile carries the first stance, when the asset is present.
+void test_stance_keeps_the_feet_on_the_floor() {
+    std::printf("the standing stance keeps every foot on the bind floor\n");
+    namespace fs = std::filesystem;
+    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+    fs::path path = source_root / "assets/rimefang.glb";
+    if (!fs::is_regular_file(path)) path = fs::path("assets/rimefang.glb");
+    if (!fs::is_regular_file(path)) {
+        std::printf("  assets/rimefang.glb absent; skipped\n");
+        return;
+    }
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    if (!anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok) return;
+    const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+    CHECK(!joints.foot_roots.empty());
+    anim::DragonRig rig;
+    rig.init(skeleton, joints);
+    anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+    CHECK(rig.tuning.ground_stance > 0.5f);  // the profile under test carries a stance
+    rig.set_model_scale(15.6f);
+
+    float bind_floor = 1e9f;
+    for (const int foot : joints.foot_roots) {
+        bind_floor = std::min(bind_floor, skeleton.world_bind(foot).translation_part().y);
+    }
+    game::FlightState grounded;
+    grounded.grounded = true;
+    grounded.ground_clearance = 0.0f;
+    grounded.wing_tuck = 1.0f;
+    for (int i = 0; i < 300; ++i) rig.update(grounded, 1.0f / 60.0f);
+
+    // The stance did something: the spine is no longer at its bind pitch.
+    const Vec3 bind_spine = normalize(skeleton.world_bind(joints.chest).translation_part() -
+                                      skeleton.world_bind(joints.root).translation_part());
+    const auto& w = rig.world_matrices();
+    const Vec3 spine = normalize(w[size_t(joints.chest)].col[3].xyz() -
+                                 w[size_t(joints.root)].col[3].xyz());
+    CHECK(std::fabs(degrees(std::acos(clampf(dot(bind_spine, spine), -1.0f, 1.0f)))) > 5.0f);
+
+    // Every foot on one floor, and that floor is the bind floor.
+    float floor = 1e9f;
+    for (const int foot : joints.foot_roots) floor = std::min(floor, w[size_t(foot)].col[3].y);
+    CHECK(std::fabs(floor - bind_floor) < 0.01f);
+    for (const auto& [name, height] : rig.foot_heights()) {
+        CHECK(height >= 0.0f && height < 0.15f);
+    }
+}
+
 void test_optional_embercrest_asset() {
     std::printf("optional Embercrest asset validates when present\n");
 
@@ -2109,6 +2241,8 @@ int main() {
     test_wingtip_reaches_the_commanded_flap();
     test_wingbeat_is_not_a_wave();
     test_legs_swing_with_the_frame();
+    test_aimed_fold_points_the_bones();
+    test_stance_keeps_the_feet_on_the_floor();
     test_optional_embercrest_asset();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

@@ -268,6 +268,73 @@ struct RigTuning {
     // never converge however hard the fold is driven.
     float ground_stow_converge_deg = 0.0f;
 
+    // ---- the standing wing, aimed ----
+    //
+    // The stow above is a set of hinge ANGLES, and every one of them turns
+    // about an axis the sculpt chose: on a membrane bound 35-45 degrees off
+    // horizontal, "swept aft" is also "lifted", and four rounds of rendered
+    // grids per species still left Embercrest's wing curled into a hoop over
+    // its back and Rimefang's standing as two sails. A folded wing is better
+    // described by where its bones POINT than by how far its hinges turn:
+    // the reference (docs/concept/standing-dragon-reference.png, and any bat
+    // or bird at rest) is the upper arm swept back and up along the flank,
+    // the forearm folded forward and up so the wrist rises just above the
+    // shoulder, and the fingers folded back and hanging down the flank with
+    // the membrane pleated between them, tips trailing past the hips.
+    //
+    // So these are directions, in the body's frame, one per segment: sweep
+    // is measured from straight OUT (0) toward straight AFT (90; negative is
+    // forward), elevation from horizontal. Each bone is aimed at its
+    // direction in turn, shoulder outward, with a rotation about whatever
+    // axis gets it there -- the sculpt's membrane plane no longer matters.
+    // Fades in with ground contact like the angle stow, and replaces it when
+    // `ground_wing_aim` is 1 (blend below that). The angle stow stays for the
+    // wyverns, whose planted wrists it already reaches.
+    float ground_wing_aim = 0.0f;
+    float ground_wing_arm_sweep_deg = 70.0f;
+    float ground_wing_arm_elev_deg = 25.0f;
+    float ground_wing_forearm_sweep_deg = -60.0f;
+    float ground_wing_forearm_elev_deg = 50.0f;
+    float ground_wing_hand_sweep_deg = 100.0f;
+    float ground_wing_hand_elev_deg = -25.0f;
+    // Each successive finger rib hangs this much lower than the one before,
+    // so the closed fan reads as pleats rather than a single blade.
+    float ground_wing_fan_deg = 8.0f;
+
+    // ---- the standing body and legs ----
+    //
+    // On the ground the legs return to the bind pose, which is a stance only
+    // when the sculpt was made standing. Embercrest was; the four Hunyuan
+    // variants were generated from a rearing turnaround, so their bind pose
+    // is a leap -- chest high, hind legs trailing, forelegs reaching -- and
+    // the shared skeleton was remapped into it by bounding box, so its bones
+    // do not even run along the limbs. Nothing measured from those bones can
+    // find a stance; a set of angles tuned by eye can, which is what an
+    // authored idle would have been. Every angle is a swing about the body's
+    // X axis, positive moving the segment's far end FORWARD, composed onto
+    // the bind pose and faded in with ground contact. Off by default: a
+    // sculpt that stands needs none of it.
+    float ground_stance = 0.0f;
+    // The whole body at the root, positive nose UP (the beat_pitch_deg
+    // convention). A rearing sculpt wants a negative value here.
+    float ground_body_pitch_deg = 0.0f;
+    float ground_hip_deg = 0.0f;
+    float ground_knee_deg = 0.0f;
+    float ground_ankle_deg = 0.0f;
+    float ground_shoulder_deg = 0.0f;
+    float ground_elbow_deg = 0.0f;
+    float ground_wrist_deg = 0.0f;
+    // Lateral swing at the hip and the shoulder, positive spreading the feet
+    // apart, for a sculpt whose legs were remapped under the belly.
+    float ground_leg_splay_deg = 0.0f;
+    float ground_arm_splay_deg = 0.0f;
+    // Whether the root is lifted so the lowest posed foot stays on the floor
+    // the bind pose stood on. Re-posing the legs moves the feet, and the
+    // flight model's ground_offset was measured from the bind soles; lifting
+    // the skeleton inside the model keeps that number true, so nothing
+    // outside the rig has to know the stance exists. 1 is on.
+    float ground_feet_level = 1.0f;
+
     // ---- neck and tail dynamics ----
     //
     // The neck and tail are simulated as chains of point masses in the dragon's
@@ -574,6 +641,10 @@ public:
     // constraint from a broken reconstruction.
     const ChainDynamics& neck_sim() const { return neck_sim_; }
     const ChainDynamics& tail_sim() const { return tail_sim_; }
+    // Where each foot root stands after the last update: its name and its
+    // height above the lowest foot, in metres. A stance is tuned by eye, and
+    // this is the number that says which foot is off the ground.
+    std::vector<std::pair<std::string, float>> foot_heights() const;
 
     RigTuning tuning;
 
@@ -640,6 +711,14 @@ private:
                      float dt);
     void drive_legs(const game::FlightState& state, core::Vec3 frame_acceleration,
                     core::Vec3 angular_acceleration, float dt);
+    // The standing stance: body pitch, leg angles, the aimed wing fold and
+    // the root lift that keeps the feet on the floor. `stow` is how far into
+    // the stance the creature is (ground contact, at rest).
+    void drive_stance(float stow);
+    // Rotates `joint` so the bone from it to `child` points along `target`
+    // (model space), blended by `weight`. Needs world_ current; leaves it
+    // recomputed.
+    void aim_bone(int joint, int child, core::Vec3 target, float weight);
     // Turns the head toward `aim_target_`, after the chains have posed it.
     void aim_head(const game::FlightState& state);
     // Applies a body-space rotation to one joint, composed with its bind
@@ -696,6 +775,11 @@ private:
     };
     std::vector<FootAttach> foot_attach_;
     void attach_feet(float airborne);
+    // Every joint the creature stands on -- foot roots and their toes -- and
+    // the lowest of them in the bind pose (model units): the floor the stance
+    // keeps the feet on.
+    std::vector<int> stance_foot_joints_;
+    float stance_floor_bind_ = 0.0f;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     float clip_hold_time_ = -1.0f;

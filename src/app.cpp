@@ -1836,8 +1836,55 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("elbow share", &rig.ground_stow_elbow_scale, 0.0f, 1.5f);
             ImGui::SliderFloat("fan close", &rig.ground_stow_converge_deg, 0.0f, 120.0f,
                                "%.0f deg");
-            ImGui::SeparatorText("legs on the ground");
+            // The aimed fold: where each wing segment points, in the body's
+            // frame. This is what closes the wing on a sculpt whose membrane
+            // plane defeats the angle stow above (docs/ANIMATION.md, "A
+            // folded wing is where its bones point").
+            ImGui::SeparatorText("standing wing, aimed");
+            ImGui::SliderFloat("aim the fold", &rig.ground_wing_aim, 0.0f, 1.0f);
+            ImGui::SliderFloat("upper arm sweep aft", &rig.ground_wing_arm_sweep_deg, -90.0f,
+                               180.0f, "%.0f deg");
+            ImGui::SliderFloat("upper arm elevation", &rig.ground_wing_arm_elev_deg, -60.0f,
+                               90.0f, "%.0f deg");
+            ImGui::SliderFloat("forearm sweep aft", &rig.ground_wing_forearm_sweep_deg,
+                               -180.0f, 180.0f, "%.0f deg");
+            ImGui::SliderFloat("forearm elevation", &rig.ground_wing_forearm_elev_deg, -60.0f,
+                               90.0f, "%.0f deg");
+            ImGui::SliderFloat("hand sweep aft", &rig.ground_wing_hand_sweep_deg, -90.0f,
+                               180.0f, "%.0f deg");
+            ImGui::SliderFloat("hand elevation", &rig.ground_wing_hand_elev_deg, -90.0f, 60.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("fan pleat", &rig.ground_wing_fan_deg, 0.0f, 30.0f, "%.0f deg");
+            // The stance: for a sculpt whose bind pose is not a standing one.
+            // Positive swings a segment's far end forward; the readout below
+            // says which foot is off the ground while the angles are dragged.
+            ImGui::SeparatorText("standing body and legs");
+            ImGui::SliderFloat("stance", &rig.ground_stance, 0.0f, 1.0f);
+            ImGui::SliderFloat("body pitch (nose up)", &rig.ground_body_pitch_deg, -60.0f, 60.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("hip forward", &rig.ground_hip_deg, -90.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("knee forward", &rig.ground_knee_deg, -90.0f, 120.0f, "%.0f deg");
+            ImGui::SliderFloat("ankle forward", &rig.ground_ankle_deg, -90.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("shoulder forward", &rig.ground_shoulder_deg, -90.0f, 90.0f,
+                               "%.0f deg");
+            ImGui::SliderFloat("elbow forward", &rig.ground_elbow_deg, -120.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("wrist forward", &rig.ground_wrist_deg, -90.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("leg splay", &rig.ground_leg_splay_deg, -45.0f, 45.0f, "%.0f deg");
+            ImGui::SliderFloat("arm splay", &rig.ground_arm_splay_deg, -45.0f, 45.0f, "%.0f deg");
+            ImGui::SliderFloat("feet on the floor", &rig.ground_feet_level, 0.0f, 1.0f);
             ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
+            {
+                std::string heights;
+                for (const auto& [name, height] : dragon_rig_.foot_heights()) {
+                    char line[96];
+                    std::snprintf(line, sizeof line, "%s %+.2f m  ", name.c_str(),
+                                  double(height));
+                    heights += line;
+                }
+                if (!heights.empty()) {
+                    ImGui::TextDisabled("above the lowest foot: %s", heights.c_str());
+                }
+            }
         } else if (scenario == game::StudioScenario::Dive ||
                    scenario == game::StudioScenario::PullOut) {
             ImGui::SeparatorText("tucked wing");

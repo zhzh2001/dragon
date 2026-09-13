@@ -686,3 +686,81 @@ under Dive, the beat under Flap -- with a button that saves the profile for
 the model on the stand. The Dragon panel's Wings header still has them all,
 but that header is collapsed inside a collapsed panel, and a dial that
 cannot be found does not exist.
+
+### A folded wing is where its bones point; a stance is a pose the sculpt never had
+
+The report was two screenshots of the grounded scenario: Embercrest's
+folded wing curled into a hoop over its back, and Rimefang standing on its
+hands with the body pitched up and the hind legs a metre in the air. They
+were two different faults, and neither was a bad number.
+
+**The angle stow could not fold these wings.** Every `ground_stow_*` field
+is a hinge angle, and every hinge turns about an axis the sculpt chose --
+the fitted membrane-plane normal for sweep and fold, the arm's up for the
+zigzag. On a membrane bound 35-45 degrees off horizontal, "fingers up" is
+also "fingers inboard", and the closed fan met the humerus in a loop; four
+rounds of rendered grids per species had found the least bad set of eight
+coupled angles and no better. A folded wing is better described by where
+its segments POINT than by how far its hinges turn, and the reference for
+that is any bat or bird at rest, drawn for this engine as
+`docs/concept/standing-dragon-reference.png` (Nano Banana, orthographic,
+labelled): upper arm swept back and a little up along the flank, forearm
+folded forward and up so the wrist rises just above the shoulder line,
+fingers folded back and hanging down the flank with the membrane pleated
+between them and the tips trailing past the hips. `ground_wing_aim` turns
+that description on: each segment has a body-frame direction in the profile
+(`ground_wing_{arm,forearm,hand}_{sweep,elev}_deg`, sweep from straight out
+toward aft, elevation from horizontal), and `drive_stance` aims each bone at
+its direction in turn, shoulder outward, with whatever rotation gets it
+there (`aim_bone`: the model-space rotation between the posed bone and its
+target, carried into the parent's frame and composed onto the local
+rotation, then the world matrices recomputed so the next bone is aimed from
+where it now is). Each finger rib is aimed at the hand direction lowered by
+`ground_wing_fan_deg` per rib, so the closed fan reads as pleats. The
+membrane plane no longer matters, which is the point: **Embercrest's
+directions folded Rimefang's wing unchanged**, where the angle stow had
+needed a different recipe per sculpt. Four candidates were rendered for
+Embercrest side/front/rear/top; the anatomical defaults (forearm at 50
+degrees) stood the wrists up as ears, and 15/35 with the upper arm swept 75
+sits the wrist at the shoulder line. The angle stow stays for the wyverns,
+whose planted wrists it already reaches; a profile that aims should zero
+its `ground_stow_*` lines so nothing else moves under the aim.
+
+**Rimefang's bind pose is a leap, and the ground returns the legs to the
+bind pose.** The four Hunyuan variants were generated from a rearing
+turnaround -- chest high, hind legs trailing, forelegs reaching down -- and
+the shared `winged-quadruped.json` skeleton was remapped into that mesh by
+bounding box, so its bones do not run along the limbs (a thigh bone 23
+degrees forward of vertical sits inside a mesh thigh that trails aft), and
+nothing measured from the bones can find a stance. A skin-cloud probe was
+tried -- the principal axis of the vertices each bone dominates -- and gave
+nonsense on thick limbs. What an authored idle would have supplied is a set
+of angles, so that is what `ground_stance` is: `ground_body_pitch_deg` at
+the root (nose up positive, the beat_pitch convention), then
+`ground_{hip,knee,ankle}_deg` and `ground_{shoulder,elbow,wrist}_deg`,
+each a swing about body X with positive moving the segment's far end
+forward, plus a lateral splay per limb pair. Re-posing the legs moves the
+feet, and `flight.cfg`'s `ground_offset` was measured from the bind soles,
+so `ground_feet_level` lifts the root inside the model until the lowest
+foot joint is back on the floor the bind feet stood on: nothing outside the
+rig knows the stance exists, the body centre the camera follows moves by
+under a metre, and the bench and the game agree by construction (both were
+rendered; `artifacts/landed_in_game.png`).
+
+**Numbers screened the stance, pictures chose it.** The rig runs a species
+grounded in a few milliseconds without the renderer, so a scratch probe
+swept 1,600 angle sets and printed, per set, the height of the hind feet
+over the hands, the thigh, shin, upper-arm and forearm angles from vertical
+and the spine pitch; the sets with all four feet on one floor and plausible
+angles numbered a dozen, and three of those were rendered. A body levelled
+to the reference (-20 degrees) balanced only with the elbows hooked under
+the chest, a dog about to lie down; -15 stands it like an alert cat, chest a
+little high, and that is the profile. The Studio panel's Grounded section
+now carries every one of these dials and a readout of each foot's height
+above the lowest, so the same screening can be done by hand: drag the body
+pitch, watch which foot lifts, fix it at the hip or the shoulder.
+
+Blightmaw and Ironroot were not changed. Blightmaw's angle stow still reads
+as a hood over the shoulders; with Embercrest's aim directions its wrists
+stood up as ears (its arm is shorter), so it wants its own two elevations
+before it switches. Ironroot's short wings drape acceptably at the default.

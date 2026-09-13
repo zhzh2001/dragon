@@ -358,6 +358,25 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_stow_elbow_scale),
     RIG_FLOAT_FIELD(ground_stow_tuck_share),
     RIG_FLOAT_FIELD(ground_stow_converge_deg),
+    RIG_FLOAT_FIELD(ground_wing_aim),
+    RIG_FLOAT_FIELD(ground_wing_arm_sweep_deg),
+    RIG_FLOAT_FIELD(ground_wing_arm_elev_deg),
+    RIG_FLOAT_FIELD(ground_wing_forearm_sweep_deg),
+    RIG_FLOAT_FIELD(ground_wing_forearm_elev_deg),
+    RIG_FLOAT_FIELD(ground_wing_hand_sweep_deg),
+    RIG_FLOAT_FIELD(ground_wing_hand_elev_deg),
+    RIG_FLOAT_FIELD(ground_wing_fan_deg),
+    RIG_FLOAT_FIELD(ground_stance),
+    RIG_FLOAT_FIELD(ground_body_pitch_deg),
+    RIG_FLOAT_FIELD(ground_hip_deg),
+    RIG_FLOAT_FIELD(ground_knee_deg),
+    RIG_FLOAT_FIELD(ground_ankle_deg),
+    RIG_FLOAT_FIELD(ground_shoulder_deg),
+    RIG_FLOAT_FIELD(ground_elbow_deg),
+    RIG_FLOAT_FIELD(ground_wrist_deg),
+    RIG_FLOAT_FIELD(ground_leg_splay_deg),
+    RIG_FLOAT_FIELD(ground_arm_splay_deg),
+    RIG_FLOAT_FIELD(ground_feet_level),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -643,6 +662,18 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
             if (parent == root) foot_joints_.emplace_back(i, depth);
         }
         foot_joints_.emplace_back(root, 0);
+    }
+
+    // What the creature stands on, and the floor it stood on when bound. The
+    // stance re-poses the legs and then lifts the root so the lowest of these
+    // comes back to this height; the toes are included because a foot rotated
+    // by the stance may put a toe below its root.
+    stance_foot_joints_.clear();
+    for (const auto& [joint, depth] : foot_joints_) stance_foot_joints_.push_back(joint);
+    stance_floor_bind_ = 0.0f;
+    for (size_t i = 0; i < stance_foot_joints_.size(); ++i) {
+        const float y = skeleton.world_bind(stance_foot_joints_[i]).translation_part().y;
+        stance_floor_bind_ = i == 0 ? y : core::minf(stance_floor_bind_, y);
     }
 
     // Re-anchor each foot to the nearest leg-chain end. The feet are IK targets
@@ -1681,6 +1712,161 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
     }
 }
 
+void DragonRig::aim_bone(int joint, int child, Vec3 target, float weight) {
+    if (joint == NO_PARENT || child == NO_PARENT || weight <= 1e-5f) return;
+    if (size_t(joint) >= world_.size() || size_t(child) >= world_.size()) return;
+    const Vec3 origin = world_[size_t(joint)].col[3].xyz();
+    const Vec3 current = world_[size_t(child)].col[3].xyz() - origin;
+    if (core::length_sq(current) < 1e-10f || core::length_sq(target) < 1e-10f) return;
+    // The model-space rotation that turns the bone onto its target, re-expressed
+    // in the parent's frame so it can be composed onto the local rotation: the
+    // joint's new world rotation is delta * world, and local = parent^-1 * world.
+    const Quat delta = core::rotation_between(core::normalize(current), core::normalize(target));
+    const int parent = skeleton_->joint(joint).parent;
+    const Quat parent_rotation =
+        parent == NO_PARENT ? Quat::identity() : core::quat_from_matrix(world_[size_t(parent)]);
+    const Quat world_rotation = core::quat_from_matrix(world_[size_t(joint)]);
+    const Quat aimed =
+        core::normalize(core::conjugate(parent_rotation) * delta * world_rotation);
+    Transform& local = pose_.local[size_t(joint)];
+    local.rotation = core::normalize(core::slerp(local.rotation, aimed, core::saturate(weight)));
+    // Everything outboard moved with it; the next bone is aimed from where it
+    // now is.
+    compute_world_matrices(*skeleton_, pose_, world_);
+}
+
+void DragonRig::drive_stance(float stow) {
+    if (stow <= 1e-4f || !skeleton_) return;
+    // A positive rotation about model X swings a hanging limb toward -Z, which
+    // is forward on a model facing -Z and aft on one facing +Z.
+    const float forward = -model_forward_z_;
+    const float aft_z = -model_forward_z_;
+
+    // ---- body and legs: angles composed onto the bind pose ----
+    const float stance = stow * core::saturate(tuning.ground_stance);
+    if (stance > 1e-4f) {
+        // Nose up is a rotation about model X whose sign follows the facing --
+        // the beat pitch convention.
+        if (std::fabs(tuning.ground_body_pitch_deg) > 1e-3f) {
+            rotate_joint(joints_.root, Vec3::unit_x(),
+                         core::radians(tuning.ground_body_pitch_deg) * stance * -model_forward_z_,
+                         true);
+        }
+        auto swing_limb = [&](const std::vector<int>& chain, const float* angles_deg,
+                              float splay_deg) {
+            for (size_t i = 0; i < chain.size() && i < 3; ++i) {
+                if (std::fabs(angles_deg[i]) < 1e-3f) continue;
+                rotate_joint(chain[i], Vec3::unit_x(),
+                             core::radians(angles_deg[i]) * forward * stance, true);
+            }
+            // Lateral swing about model Z: a positive angle moves a hanging
+            // limb toward +X, so the side the limb is on decides the sign.
+            if (!chain.empty() && std::fabs(splay_deg) > 1e-3f) {
+                const float x = skeleton_->world_bind(chain.front()).translation_part().x;
+                const float outward = x >= 0.0f ? 1.0f : -1.0f;
+                rotate_joint(chain.front(), Vec3::unit_z(),
+                             core::radians(splay_deg) * outward * stance, true);
+            }
+        };
+        const float hind[3] = {tuning.ground_hip_deg, tuning.ground_knee_deg,
+                               tuning.ground_ankle_deg};
+        const float fore[3] = {tuning.ground_shoulder_deg, tuning.ground_elbow_deg,
+                               tuning.ground_wrist_deg};
+        for (int side = 0; side < 2; ++side) {
+            swing_limb(joints_.leg[side], hind, tuning.ground_leg_splay_deg);
+            swing_limb(joints_.front_leg[side], fore, tuning.ground_arm_splay_deg);
+        }
+    }
+
+    // ---- the wing, aimed segment by segment ----
+    const float aim = stow * core::saturate(tuning.ground_wing_aim);
+    const bool level_feet = stance > 1e-4f && tuning.ground_feet_level > 1e-4f;
+    if (aim > 1e-4f || level_feet) compute_world_matrices(*skeleton_, pose_, world_);
+    if (aim > 1e-4f) {
+        for (int side = 0; side < 2; ++side) {
+            const std::vector<int>& root = joints_.wing_root[side];
+            if (root.size() < 2) continue;
+            // Which way is out: the side the wing's bind wrist sits on.
+            const float x = skeleton_->world_bind(root.back()).translation_part().x;
+            const float out = x >= 0.0f ? 1.0f : -1.0f;
+            auto direction = [&](float sweep_deg, float elev_deg) {
+                const float sweep = core::radians(sweep_deg);
+                const float elev = core::radians(elev_deg);
+                return Vec3{std::cos(elev) * std::cos(sweep) * out, std::sin(elev),
+                            std::cos(elev) * std::sin(sweep) * aft_z};
+            };
+            // Upper arm, then the forearm; a root with more bones than that
+            // treats every bone past the first as forearm.
+            aim_bone(root[0], root[1],
+                     direction(tuning.ground_wing_arm_sweep_deg, tuning.ground_wing_arm_elev_deg),
+                     aim);
+            for (size_t i = 1; i + 1 < root.size(); ++i) {
+                aim_bone(root[i], root[i + 1],
+                         direction(tuning.ground_wing_forearm_sweep_deg,
+                                   tuning.ground_wing_forearm_elev_deg),
+                         aim);
+            }
+            // A two-bone arm (the generated rig) has no wrist bone: its forearm
+            // runs from the elbow to the finger base, and is aimed the same.
+            if (root.size() == 2 && !joints_.wing_fingers[side].empty() &&
+                !joints_.wing_fingers[side][0].empty()) {
+                aim_bone(root[1], joints_.wing_fingers[side][0][0],
+                         direction(tuning.ground_wing_forearm_sweep_deg,
+                                   tuning.ground_wing_forearm_elev_deg),
+                         aim);
+            }
+            // The hand: every rib straight along its own direction, each one
+            // hanging a little lower than the last, so the fan shuts into
+            // pleats. On a two-bone arm the finger base is the wrist and the
+            // same rule folds it.
+            int rib = 0;
+            for (const std::vector<int>& finger : joints_.wing_fingers[side]) {
+                const Vec3 hand = direction(
+                    tuning.ground_wing_hand_sweep_deg,
+                    tuning.ground_wing_hand_elev_deg - tuning.ground_wing_fan_deg * float(rib));
+                for (size_t i = 0; i + 1 < finger.size(); ++i) {
+                    aim_bone(finger[i], finger[i + 1], hand, aim);
+                }
+                ++rib;
+            }
+        }
+    }
+
+    // ---- the feet back on the floor ----
+    if (level_feet && !stance_foot_joints_.empty() && joints_.root != NO_PARENT) {
+        float floor = 0.0f;
+        for (size_t i = 0; i < stance_foot_joints_.size(); ++i) {
+            const float y = world_[size_t(stance_foot_joints_[i])].col[3].y;
+            floor = i == 0 ? y : core::minf(floor, y);
+        }
+        // The root has no parent on every rig this drives, so its position is
+        // model space; if it ever had one, the lift goes in that parent's frame.
+        const int root = joints_.root;
+        const int parent = skeleton_->joint(root).parent;
+        Vec3 lift = Vec3::unit_y() * ((stance_floor_bind_ - floor) * stance);
+        if (parent != NO_PARENT) {
+            lift = core::rotate(core::conjugate(core::quat_from_matrix(world_[size_t(parent)])),
+                                lift);
+        }
+        pose_.local[size_t(root)].position += lift;
+    }
+}
+
+std::vector<std::pair<std::string, float>> DragonRig::foot_heights() const {
+    std::vector<std::pair<std::string, float>> out;
+    if (!skeleton_ || world_.empty()) return out;
+    float floor = 0.0f;
+    for (size_t i = 0; i < joints_.foot_roots.size(); ++i) {
+        const float y = world_[size_t(joints_.foot_roots[i])].col[3].y;
+        floor = i == 0 ? y : core::minf(floor, y);
+    }
+    for (const int foot : joints_.foot_roots) {
+        out.emplace_back(skeleton_->joint(foot).name,
+                         (world_[size_t(foot)].col[3].y - floor) * model_scale_);
+    }
+    return out;
+}
+
 float DragonRig::flight_intensity(const game::FlightState& state) const {
     // Whichever signal is working the body hardest wins. Max rather than sum:
     // a fast, hard-turning dive should read as 1, not 3.
@@ -1911,6 +2097,9 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
                 neck_steer, neck_feel, dt);
     drive_legs(state, frame_acceleration, angular_acceleration, dt);
+    // The standing stance, on top of everything the flight pose left: the same
+    // "on the ground and at rest" signal the wing stow fades in with.
+    drive_stance(ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f));
 
     // Feet: first anchor them to the posed legs (needs world matrices), then
     // the relaxed hang and claw curl compose on top.

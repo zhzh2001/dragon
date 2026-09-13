@@ -179,6 +179,20 @@ What is built, in the order it was built. The plan these came from is
   along the tail base so the beat clears them; the stance dials live in the
   Studio panel under their scenario.
   `ANIMATION.md`, "Wings on the ground, and in the dive, per species".
+- **The standing wing is aimed, and a rearing sculpt gets a stance.** The
+  two grounded screenshots that started it: Embercrest's stow curled into a
+  hoop, Rimefang standing on its hands. The angle stow's hinges turn about
+  axes the sculpt chose, so the fold is now described by where each segment
+  points in the body frame (`ground_wing_aim` and six directions, target
+  `docs/concept/standing-dragon-reference.png`) and aimed bone by bone;
+  Embercrest's directions fold Rimefang unchanged. Rimefang's bind pose is
+  a leap, so `ground_stance` re-poses body pitch and legs by angle, and
+  `ground_feet_level` lifts the root so the lowest foot stays on the bind
+  floor and `ground_offset` stays true. 1,600 angle sets were screened
+  numerically for level feet before three were rendered. Studio's Grounded
+  section carries the dials and a per-foot height readout. Blightmaw and
+  Ironroot keep the angle stow for now. `ANIMATION.md`, "A folded wing is
+  where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
