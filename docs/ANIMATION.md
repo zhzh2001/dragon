@@ -849,9 +849,17 @@ been skipped.
 the mandible up through the upper teeth; rendered at -10, -13 and -16
 side-on in the glide (`--inspect 90 3.5 0 --inspect-head`), -13 is where
 the mouth just shuts. Tidewrack's snout warped as the jaw closed, which is
-not a number: heat weighting had given its `jaw` bone part of the snout,
-the fault Rimefang and Ironroot were rebuilt for, and it is being rebuilt
-the same way (per-head `jaw_mask` in `tools/skeletons/tidewrack.json`).
+not a number: heat weighting had given its `jaw` bone the snout tip and a
+smear over the skull top, the fault Rimefang and Ironroot were rebuilt for,
+and it was rebuilt the same way on a worktree branch by a subagent
+(`tools/skeletons/tidewrack.json`, `artifacts/tidewrack/jaw-mask/README.md`):
+same 55 joints, inverse binds identical, jaw weight on the snout 18 mm of
+displacement to zero. One caveat it found: outside the mask the wing and
+chest heat weights differ from the Sep 11 build, and a rebuild with the
+untouched shared skeleton gives the same difference, so the Sep 11 file came
+from a toolchain state that no longer reproduces; the membrane pleats differ
+by 0.4-1.8% of pixels. The old files are kept as `assets/*.sep11.bak`.
+The probes that screened all of this live in `tools/rig_probes/`.
 
 **"Feet below ground" on the flat bench was real, and small.** The stance
 keeps the lowest foot JOINT on the bind floor; the paw mesh under a foot the
