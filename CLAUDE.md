@@ -165,6 +165,27 @@ flight controls.
 
 - **Stop at milestones that need a human at the keyboard**, and say explicitly
   what to playtest and what to look for. Feel free to commit as you go.
+- **Every pose change ends with a rendered inspection, before it is called
+  done and before it is committed.** Not a number, not a test, not a
+  contact-sheet thumbnail: full-size renders of the thing that changed,
+  from the axis the change is in, on *every* model the change can reach
+  (a rig-code change reaches the whole roster; a profile change reaches
+  one). The minimum set is written down here because each item was once
+  skipped and cost a round with the playtester:
+  1. The changed pose from the side, the front, the rear and above
+     (`--studio N --inspect 90|0|180 14 6` and `--inspect 90 14 85`).
+  2. **The head, close** (`--inspect 90 3.5 0 --inspect-head`) in the
+     changed scenario *and* in the glide -- jaws over-close and snouts twist
+     out of sight of a body-scale render, and a jaw that looks fine in the
+     air can be wrong on the ground.
+  3. **The feet at ground level** (`--inspect 60 11 3`) for anything that
+     touches the ground: a stance that keeps the joints on the floor can
+     still sink the mesh under them.
+  4. **The same thing in the game, not just the bench**: land it
+     (`--input -0.25,0,0,0,0,0 --frames 900`) or fly it, and look again.
+  5. If the change can be reached by switching models (`M`, `--models`,
+     `--cycle-models`), switch onto it from `dragon.glb` and look once more.
+  Put the renders that matter beside the report in `artifacts/`, tracked.
 - **Every gameplay constant belongs behind an ImGui slider.** Feel is found by
   dragging sliders while playing, not by planning. A dial that decides whether
   the game is fun (aim assist, bot spread) belongs at the TOP of its panel,

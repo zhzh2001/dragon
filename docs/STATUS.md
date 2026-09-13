@@ -202,7 +202,17 @@ What is built, in the order it was built. The plan these came from is
   wyvern of modern games (`docs/concept/landed-wyvern-reference.png`).
   Cycling onto another model no longer carries the previous model's idle
   clip into the rig, which had been reverting the wyverns' stance and
-  turning every jaw about a stranger's hinge on the ground. `ANIMATION.md`, "A folded wing is
+  turning every jaw about a stranger's hinge on the ground.
+- **Second look: jaws, soles, legs in flight.** Rimefang's jaw rest was
+  over-closing; Tidewrack's snout warps on close because its jaw bone owns
+  part of the snout (rebuild with a per-head mask in progress). The soles
+  that sank on the flat bench were measured by CPU-skinning the mesh in the
+  stance, 0.14-0.35 m on the quadrupeds and two metres of TAIL on the
+  wyverns; each profile now carries the measured `ground_lift_m` and the
+  wyverns drop the tail less. The hind feet flew two metres above the hips
+  because tuck and trail both rotate the thigh; a glide probe screened a
+  grid and the quadrupeds now stream their legs back under the tail.
+  CLAUDE.md gained a mandatory rendered-inspection list for pose changes. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

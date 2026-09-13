@@ -839,3 +839,43 @@ per-limb IK problem (two-bone leg toward a terrain hit, body height and
 pitch from the four contacts), the same machinery a physically settled
 stance would need, and it is the next step if the grounded game matters
 more than it does today.
+
+### The second look: jaws, soles and the legs in flight
+
+Three reports after the stance shipped, each caught by a render that had
+been skipped.
+
+**Rimefang's jaw over-closed in every scenario.** `jaw_rest_deg -20` drove
+the mandible up through the upper teeth; rendered at -10, -13 and -16
+side-on in the glide (`--inspect 90 3.5 0 --inspect-head`), -13 is where
+the mouth just shuts. Tidewrack's snout warped as the jaw closed, which is
+not a number: heat weighting had given its `jaw` bone part of the snout,
+the fault Rimefang and Ironroot were rebuilt for, and it is being rebuilt
+the same way (per-head `jaw_mask` in `tools/skeletons/tidewrack.json`).
+
+**"Feet below ground" on the flat bench was real, and small.** The stance
+keeps the lowest foot JOINT on the bind floor; the paw mesh under a foot the
+stance has rotated reaches below that joint. Measured exactly by skinning
+the mesh on the CPU in the grounded stance and taking its lowest vertex
+against the bind floor (a scratch probe, worth keeping): Rimefang 0.14 m,
+Blightmaw 0.30, Ironroot 0.35, and the wyverns 2.1 and 2.6 m -- not the
+feet but the TAIL, dropped 60 degrees against the lean and driven through
+the ground. The wyverns' tail drop is -25 now, the remaining sink is the
+hind toe, and each profile's `ground_lift_m` is the measured number; every
+species now reads 0.00. **A joint on the floor is not a mesh on the floor;
+measure the mesh.**
+
+**The hind feet flew two metres above the hips.** Tuck and trail both
+rotate the thigh aft -- the first joint of the chain receives both -- so
+Rimefang's 80 of tuck over 60 of trail turned the thigh 117 degrees past
+vertical and the feet pointed at the sky, and Ironroot's, whose skeleton
+binds the thigh aft already, stood straight up. A glide probe printed the
+thigh and shin angles and the foot's height and distance behind the hip for
+a tuck x trail grid, screened for feet 0.6-1.4 m below the hips, 2.5-4 m
+aft, thigh 40-70 aft and the shin not folded past horizontal, and the
+survivors were rendered from behind and below in the glide and the flap,
+which is the one view the near wing does not cover. The four quadrupeds now
+stream their legs back under the tail base like a flying bird's; the
+wyverns already did. Embercrest's had dangled instead, 1.9 m below, and it
+took the same values. **When a chain gets two angles at the same joint,
+check what their sum does before tuning either.**
