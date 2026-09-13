@@ -1946,10 +1946,12 @@ void App::build_dragon_ui() {
         ImGui::SeparatorText("standing stow");
         ImGui::SliderFloat("stow sweep", &rig.ground_stow_sweep_deg, 0.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("stow fold", &rig.ground_stow_fold_deg, 0.0f, 60.0f, "%.0f deg");
-        ImGui::SliderFloat("stow wrist up", &rig.ground_stow_wrist_deg, 0.0f, 90.0f, "%.0f deg");
-        ImGui::SliderFloat("stow finger down", &rig.ground_stow_finger_deg, -180.0f, 0.0f,
+        ImGui::SliderFloat("stow wrist up", &rig.ground_stow_wrist_deg, -160.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("stow finger down", &rig.ground_stow_finger_deg, -180.0f, 180.0f,
                            "%.0f deg");
-        ImGui::SliderFloat("stow zigzag", &rig.ground_stow_close_deg, 0.0f, 160.0f, "%.0f deg");
+        ImGui::SliderFloat("stow zigzag", &rig.ground_stow_close_deg, 0.0f, 180.0f, "%.0f deg");
+        ImGui::SliderFloat("stow elbow share", &rig.ground_stow_elbow_scale, 0.0f, 1.5f);
+        ImGui::SliderFloat("stow keeps tuck", &rig.ground_stow_tuck_share, 0.0f, 1.0f);
         ImGui::SliderFloat("stow fan close", &rig.ground_stow_converge_deg, 0.0f, 120.0f,
                            "%.0f deg");
     }

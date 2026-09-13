@@ -167,6 +167,14 @@ What is built, in the order it was built. The plan these came from is
   and Ironroot carry leg profiles instead of the code defaults that hung
   their legs like landing gear. Blightmaw's neck is streamlined so the head
   flies level and the horns sweep back.
+- **Dive and ground wings per species; wyverns stand on their wrists.** The
+  dive tuck and the standing stow were Embercrest's numbers on every
+  species, which folded hands out sideways in the stoop and stood the
+  membranes up as sails on the ground; each species now carries its own,
+  found by rendering candidate grids. Stormsail and Tidewrack plant their
+  wrists as forelegs with the hand folded up the forearm, which took two
+  new stow fields (`ground_stow_tuck_share`, `ground_stow_elbow_scale`).
+  `ANIMATION.md`, "Wings on the ground, and in the dive, per species".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced

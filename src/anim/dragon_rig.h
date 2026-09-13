@@ -240,6 +240,23 @@ struct RigTuning {
     // pleats between them. The elbow takes this angle one way and the wrist
     // the other.
     float ground_stow_close_deg = 0.0f;
+    // The elbow's share of that zigzag, as a multiple of the wrist's angle and
+    // in the opposite sense. One is the alternating fold that shuts a wing
+    // over a quadruped's back. A wyvern standing on its wings wants something
+    // else: the arm nearly straight from shoulder to a wrist planted on the
+    // ground, and only the hand folded back up along the forearm -- the
+    // pterosaur stance. Near zero gives that.
+    float ground_stow_elbow_scale = 1.0f;
+    // How much of the flight TUCK still applies once the creature stands. The
+    // ground forces a full tuck (lift is moot there), and for a quadrupedal
+    // dragon the tuck's aft sweep and fold are the right start for a wing
+    // folded over its back, so the stow adds to them. A wyvern stands on its
+    // wings, and the tuck is the wrong start entirely: on a sculpt whose
+    // membrane plane drapes 44 degrees, "swept aft in the plane" is also
+    // "lifted", and no stow angle could plant the wrist while 64 degrees of
+    // stoop sweep held the arm up. At zero the stow alone owns the standing
+    // wing. Blends in with ground contact like the rest of the stow.
+    float ground_stow_tuck_share = 1.0f;
     // How far the outermost finger rib swings toward the innermost, closing
     // the fan. The other ribs take a proportional share, so the whole hand
     // shuts like a paper fan rather than staying spread.

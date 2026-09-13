@@ -599,3 +599,60 @@ mandible-vs-skull vertices by hinge height, by the bone axis and by weight
 ownership each flagged a different, wrong set of assets, because the hinge
 sits at a different place in the head on every rig. The bone-direction test
 stays; the skin is judged by rendering.
+
+### Wings on the ground, and in the dive, per species
+
+The report was "wing folding is broken on every dragon in the dive and on
+the ground; wings clip into other parts; wyverns should rest their wings on
+the ground." Rendered from the front, the side and above, it was three
+separate faults.
+
+**The dive tuck was the code default on four species** (88 degrees of sweep,
+52 of fold), and on these sculpts that folds the hands out sideways and
+hangs the membrane through the legs, while Embercrest's shallow 42/24 left a
+half-open delta. Three tucks were rendered per species at full tuck in the
+studio dive; 75/45/30 with the elbow kept open and the fingers closing
+harder suits Stormsail, Tidewrack, Blightmaw and Embercrest, Rimefang takes
+75/30/30 with no fold scales (see below why), and Ironroot's short wings
+were already an arrow at the default.
+
+**The standing stow was Embercrest's, seeded onto every species**, and on the
+others it stood the membranes up over the back like two sails. The cause is
+the one that bit the recovery hinge: these sculpts bind their membrane
+planes 35-45 degrees off horizontal, and the stow's sweep and fold turn
+about that plane's normal, so "swept aft" is also "lifted" -- 55 degrees of
+stow sweep on top of the tuck's raised the elbow high above the spine, and
+the membrane between a high elbow and the flank is a sail whatever the
+fingers do. Blightmaw, Rimefang and Ironroot now use a SMALL sweep (30-35),
+no extra fold, and a wrist LOWERED below the shoulder (-50 to -80), which
+lays the arm along the flank with the fingers hanging beside it. Embercrest
+keeps its own, which still holds under its new tuck. Two more lessons about
+finding this: the elbow and finger **fold scales shape the stow too**, not
+only the tuck -- with them Rimefang's hands crossed over the spine, so
+Rimefang's dive is the variant that needs none; and one grid row was
+misread at contact-sheet size as "folded at the flanks" and chased through
+four grids before a control render proved it had always been the same
+spread-wing pose. **Re-render the pose you think you are refining before
+you refine it.**
+
+**A wyvern stands on its wings.** Stormsail and Tidewrack have no forelegs;
+on the ground the wrist is the front foot, the arm a strut reaching down and
+a little forward, the hand folded back up along the forearm with the
+membrane pleated between -- the pterosaur stance. The existing knobs could
+not reach it for two reasons, each now a field. The ground forces a full
+tuck, and on a 44-degree membrane plane the tuck's aft sweep lifted the arm
+faster than any wrist elevation could lower it: `ground_stow_tuck_share` (0
+on the wyverns) hands the standing wing to the stow alone. And the zigzag
+close bent the elbow as much as the wrist, when a planted arm wants a
+straight elbow and only the hand folded: `ground_stow_elbow_scale` (0 on the
+wyverns) is the elbow's share of it. Found from an elevation-only pose --
+every other stow term zeroed, `-100` at the wrist, and the arm went down --
+then built up one term at a time; the profile is a 150-degree drop, the
+fingers 140 up, a 140-degree wrist close and the fan converged.
+
+The grid that did the work is worth keeping: symlink the `.glb` into a
+scratch directory beside a copy of its `.rig.cfg` with the candidate lines
+appended (the loader takes the LAST occurrence of a key), render three views
+per candidate with `--studio 9` or `--studio 5`, and stitch the rows. Four
+candidates a round, three or four rounds a species. Nothing in the numbers
+predicted which row would win; only the pictures did.

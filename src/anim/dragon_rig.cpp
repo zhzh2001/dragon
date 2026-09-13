@@ -355,6 +355,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_stow_wrist_deg),
     RIG_FLOAT_FIELD(ground_stow_finger_deg),
     RIG_FLOAT_FIELD(ground_stow_close_deg),
+    RIG_FLOAT_FIELD(ground_stow_elbow_scale),
+    RIG_FLOAT_FIELD(ground_stow_tuck_share),
     RIG_FLOAT_FIELD(ground_stow_converge_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
@@ -782,7 +784,6 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // drawn and the thrust that was generated cannot disagree. On top of it,
     // load flex: the wings bow upward under g, which is what makes a hard pull
     // look like it costs something. load_smoothed_ is maintained in update().
-    const float tuck = state.wing_tuck;
     const float flare = state.wing_brake;
     // Sweep and fold go AFT and twist is washout (leading edge down): both are
     // rotations whose sense depends on which way the model faces.
@@ -792,10 +793,14 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // whatever the tuck has not already taken.
     const float speed_factor =
         core::smoothstep(tuning.sweep_speed_start, tuning.sweep_speed_full, state.airspeed);
-    const float speed_share = speed_factor * (1.0f - tuck);
     // Standing closes further than any tuck should: the stow is added here so
     // the flight angles stay free to be as open as a stoop needs.
     const float stow = ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f);
+    // On the ground a species may hand the wing from the tuck to the stow --
+    // a wyvern plants its wrists, and the stoop fold is the wrong start.
+    const float tuck = state.wing_tuck *
+                       core::lerpf(1.0f, core::saturate(tuning.ground_stow_tuck_share), stow);
+    const float speed_share = speed_factor * (1.0f - tuck);
     const float sweep_deg = tuning.tuck_sweep_deg * tuck + tuning.speed_sweep_deg * speed_share -
                             tuning.load_forward_sweep_deg * core::maxf(load_smoothed_, 0.0f) +
                             tuning.ground_stow_sweep_deg * stow;
@@ -1130,7 +1135,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 const bool is_wrist = root_len >= 3 &&
                                       size_t(index_in_chain + 1) == root_len;
                 close = core::radians(tuning.ground_stow_close_deg) * stow *
-                        (is_wrist ? 1.0f : -1.0f);
+                        (is_wrist ? 1.0f : -tuning.ground_stow_elbow_scale);
             }
             // The fan shuts: each rib swings toward the innermost one, by a
             // share of the full closure. Applied at the finger's BASE so the
