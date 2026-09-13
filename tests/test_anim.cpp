@@ -1975,7 +1975,8 @@ void test_stance_keeps_the_feet_on_the_floor() {
     namespace fs = std::filesystem;
     const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
     int with_stance = 0;
-    for (const char* name : {"assets/rimefang.glb", "assets/blightmaw.glb", "assets/ironroot.glb"}) {
+    for (const char* name : {"assets/rimefang.glb", "assets/blightmaw.glb", "assets/ironroot.glb",
+                             "assets/stormsail.glb", "assets/tidewrack.glb"}) {
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
         if (!fs::is_regular_file(path)) {
@@ -2015,6 +2016,16 @@ void test_stance_keeps_the_feet_on_the_floor() {
         for (const int joint : standing) {
             bind_floor = std::min(bind_floor, skeleton.world_bind(joint).translation_part().y);
         }
+        // A wyvern stands on its wing wrists too; they join the posed floor,
+        // not the bind floor, since the bind pose spreads the wings.
+        std::vector<int> posed_standing = standing;
+        if (rig.tuning.ground_wing_plant > 0.5f) {
+            for (int side = 0; side < 2; ++side) {
+                if (joints.wing_root[side].size() >= 2) {
+                    posed_standing.push_back(joints.wing_root[side].back());
+                }
+            }
+        }
         game::FlightState grounded;
         grounded.grounded = true;
         grounded.ground_clearance = 0.0f;
@@ -2033,7 +2044,7 @@ void test_stance_keeps_the_feet_on_the_floor() {
 
         // Every foot on one floor, and that floor is the bind floor.
         float floor = 1e9f;
-        for (const int joint : standing) floor = std::min(floor, w[size_t(joint)].col[3].y);
+        for (const int joint : posed_standing) floor = std::min(floor, w[size_t(joint)].col[3].y);
         if (std::fabs(floor - bind_floor) >= 0.01f) {
             std::printf("  %s: floor moved %.3f units\n", name, double(floor - bind_floor));
         }

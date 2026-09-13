@@ -765,10 +765,45 @@ hung down the flanks to the ground like a tarp in the grounded scenario,
 and the model was a candidate for regeneration. With the same stance
 recipe -- body pitched down, legs under it, Embercrest's fold directions
 untouched -- the same membrane folds over the back like a bat's; the pose
-was hanging the wing, not the mesh. Ironroot needed its own hip: its
-skeleton (`tools/skeletons/ironroot.json`) binds the thigh 38 degrees aft,
-the trailing leg of the leap, so the hip swings 60 degrees forward where the
-shared skeleton's needed none; and its short wings with the large wrist
-claw wanted a lower fold than Embercrest's, or the claws stood beside the
-head like antlers. Every quadruped on the roster now carries a stance or
-stands in its bind pose, and the stance test walks all three that do.
+was hanging the wing, not the mesh.
+
+**Ironroot took three passes.** Its skeleton (`tools/skeletons/ironroot.json`)
+binds the thigh 38 degrees aft, the trailing leg of the leap, so the hip
+swings 60 degrees forward where the shared skeleton's needed none. Its
+short wings carry a large wrist claw, and the fold went wrong both ways
+before it went right: Embercrest's directions stood the claws beside the
+head like antlers; the fix, the forearm laid nearly straight forward along
+the flank, collapsed the membrane into a small pouch under the shoulder
+("folded too tight and small"); a forearm level with the ground put the
+claws out sideways like handlebars. The wrist raised above the shoulder
+line and a little forward shows the membrane as a wing along the flank
+with the claws standing up behind the head, which is where this sculpt's
+claws go when the wrist goes there. Its jaw was a separate fault under the
+same report: `jaw_rest_deg -22` over-closed it, the mandible swung up
+through the upper jaw and the teeth vanished into the skull. Four rest
+angles rendered side-on with `--inspect-head`; -12 is where the mouth just
+shuts. **Render the head when a stance changes** -- the neck chain and the
+body pitch move where the camera sees the jaw from, and an over-closure
+that hid in the glide showed on the ground.
+
+**The wyverns rest on their wings, but not the way the reference draws
+it.** `docs/concept/standing-wyvern-reference.png` is the pterosaur stance:
+body level, wrists planted ahead of the feet, wing finger folded back up
+past the shoulder. Stormsail and Tidewrack are sculpted upright like
+theropods with short wing arms -- shoulder 6.9 m up, arm plus forearm 5 m
+-- so from a standing body the wrist cannot reach the ground at all, and
+the angle stow's "planted wrist" had always been a hand held in the air
+beside the body. `ground_wing_plant` makes the wrists count as feet for the
+floor, and `ground_neck_pitch_deg` and `ground_tail_pitch_deg` raise the
+head and drop the tail against whatever the body pitch does. With those,
+the reference stance screens level at 55 degrees of body pitch, and
+rendered it is a crawl: the mesh torso is steeper than its bones and the
+whole animal reads as diving at the ground. What fits the body is a
+SITTING crouch -- hips dropped by a deep hind-leg Z, a 25-35 degree
+forward lean, the arms hanging to the ground with the wrists planted beside
+the feet, the wing finger folded back up, neck raised, tail on the ground
+-- the way a bat or a grounded pterosaur actually sits rather than the way
+the diagram stands one. 432 crouches were screened for wrists and feet on
+one floor, two rendered per species. **A reference is a target for the
+silhouette, not a set of joint angles; when the sculpt's proportions cannot
+reach the pose, find the pose the same animal would take in that body.**

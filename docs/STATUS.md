@@ -193,8 +193,14 @@ What is built, in the order it was built. The plan these came from is
   section carries the dials and a per-foot height readout. Blightmaw, which
   looked beyond saving with its membrane hanging to the ground, was only
   rearing: the same recipe folds it over the back. Ironroot needed its own
-  hip (its skeleton binds the thigh aft) and a lower fold for its short,
-  clawed wings. `ANIMATION.md`, "A folded wing is
+  hip (its skeleton binds the thigh aft), a fold that shows the membrane
+  without standing its wrist claws beside the head, and a jaw rest that
+  does not swing the mandible through the skull. The wyverns rest on their
+  wings: `ground_wing_plant` counts the wrists as feet, and since these
+  upright sculpts cannot reach the ground from a level body, they sit --
+  a deep hind-leg crouch with the wrists planted beside the feet (target
+  `docs/concept/standing-wyvern-reference.png`, and why it was not
+  followed literally, in `ANIMATION.md`). `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

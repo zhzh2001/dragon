@@ -377,6 +377,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_leg_splay_deg),
     RIG_FLOAT_FIELD(ground_arm_splay_deg),
     RIG_FLOAT_FIELD(ground_feet_level),
+    RIG_FLOAT_FIELD(ground_wing_plant),
+    RIG_FLOAT_FIELD(ground_neck_pitch_deg),
+    RIG_FLOAT_FIELD(ground_tail_pitch_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
     RIG_FLOAT_FIELD(chain_inertia),
@@ -1776,6 +1779,17 @@ void DragonRig::drive_stance(float stow) {
             swing_limb(joints_.leg[side], hind, tuning.ground_leg_splay_deg);
             swing_limb(joints_.front_leg[side], fore, tuning.ground_arm_splay_deg);
         }
+        // Neck and tail against the body pitch. Nose-up positive is the same
+        // rotation the body pitch uses; the tail is the same axis, and "up"
+        // for a chain running aft is the opposite sense of the same turn.
+        auto curve_chain = [&](const std::vector<int>& chain, float total_deg, float up_sign) {
+            if (chain.empty() || std::fabs(total_deg) < 1e-3f) return;
+            const float per_joint =
+                core::radians(total_deg) * stance * up_sign / float(chain.size());
+            for (const int joint : chain) rotate_joint(joint, Vec3::unit_x(), per_joint, true);
+        };
+        curve_chain(joints_.neck, tuning.ground_neck_pitch_deg, -model_forward_z_);
+        curve_chain(joints_.tail, tuning.ground_tail_pitch_deg, model_forward_z_);
     }
 
     // ---- the wing, aimed segment by segment ----
@@ -1839,6 +1853,15 @@ void DragonRig::drive_stance(float stow) {
             const float y = world_[size_t(stance_foot_joints_[i])].col[3].y;
             floor = i == 0 ? y : core::minf(floor, y);
         }
+        // A creature that stands on its wings has its wrists on the floor too.
+        // Their bind height is NOT part of the bind floor: a wyvern binds
+        // wings spread, and the stance is what brings the wrists down.
+        if (tuning.ground_wing_plant > 0.5f) {
+            for (int side = 0; side < 2; ++side) {
+                if (joints_.wing_root[side].size() < 2) continue;
+                floor = core::minf(floor, world_[size_t(joints_.wing_root[side].back())].col[3].y);
+            }
+        }
         // The root has no parent on every rig this drives, so its position is
         // model space; if it ever had one, the lift goes in that parent's frame.
         const int root = joints_.root;
@@ -1855,14 +1878,20 @@ void DragonRig::drive_stance(float stow) {
 std::vector<std::pair<std::string, float>> DragonRig::foot_heights() const {
     std::vector<std::pair<std::string, float>> out;
     if (!skeleton_ || world_.empty()) return out;
+    std::vector<int> standing = joints_.foot_roots;
+    if (tuning.ground_wing_plant > 0.5f) {
+        for (int side = 0; side < 2; ++side) {
+            if (joints_.wing_root[side].size() >= 2) standing.push_back(joints_.wing_root[side].back());
+        }
+    }
     float floor = 0.0f;
-    for (size_t i = 0; i < joints_.foot_roots.size(); ++i) {
-        const float y = world_[size_t(joints_.foot_roots[i])].col[3].y;
+    for (size_t i = 0; i < standing.size(); ++i) {
+        const float y = world_[size_t(standing[i])].col[3].y;
         floor = i == 0 ? y : core::minf(floor, y);
     }
-    for (const int foot : joints_.foot_roots) {
-        out.emplace_back(skeleton_->joint(foot).name,
-                         (world_[size_t(foot)].col[3].y - floor) * model_scale_);
+    for (const int joint : standing) {
+        out.emplace_back(skeleton_->joint(joint).name,
+                         (world_[size_t(joint)].col[3].y - floor) * model_scale_);
     }
     return out;
 }

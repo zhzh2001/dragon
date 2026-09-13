@@ -1872,6 +1872,9 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("leg splay", &rig.ground_leg_splay_deg, -45.0f, 45.0f, "%.0f deg");
             ImGui::SliderFloat("arm splay", &rig.ground_arm_splay_deg, -45.0f, 45.0f, "%.0f deg");
             ImGui::SliderFloat("feet on the floor", &rig.ground_feet_level, 0.0f, 1.0f);
+            ImGui::SliderFloat("wrists are feet (wyvern)", &rig.ground_wing_plant, 0.0f, 1.0f);
+            ImGui::SliderFloat("neck up", &rig.ground_neck_pitch_deg, -60.0f, 90.0f, "%.0f deg");
+            ImGui::SliderFloat("tail up", &rig.ground_tail_pitch_deg, -90.0f, 60.0f, "%.0f deg");
             ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
             {
                 std::string heights;

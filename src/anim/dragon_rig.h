@@ -334,6 +334,23 @@ struct RigTuning {
     // the skeleton inside the model keeps that number true, so nothing
     // outside the rig has to know the stance exists. 1 is on.
     float ground_feet_level = 1.0f;
+    // A wyvern stands on its wings: the wrist is a front foot. With this on,
+    // the wing wrists count as feet for the floor above, so the aimed fold
+    // that reaches them down to the ground is what sets the body's height,
+    // and the stance dials balance hind feet against wrists the way a
+    // quadruped's balance hind feet against hands. The pterosaur stance
+    // (docs/concept/standing-wyvern-reference.png): upper arm down and
+    // forward from the shoulder, forearm down to the planted wrist, the wing
+    // finger folded back up along the arm past the shoulder.
+    float ground_wing_plant = 0.0f;
+    // The neck and the tail ride the body pitch: a wyvern sculpted upright
+    // and pitched 45 degrees down to plant its wrists points its head at the
+    // ground and its tail at the sky. These raise the head and drop the tail
+    // back, positive up for both, spread along each chain so it curves
+    // rather than kinks. Applied after the chain simulation, so the springs
+    // still move the chain about the posed shape.
+    float ground_neck_pitch_deg = 0.0f;
+    float ground_tail_pitch_deg = 0.0f;
 
     // ---- neck and tail dynamics ----
     //
