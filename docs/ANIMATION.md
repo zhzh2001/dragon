@@ -760,7 +760,15 @@ now carries every one of these dials and a readout of each foot's height
 above the lowest, so the same screening can be done by hand: drag the body
 pitch, watch which foot lifts, fix it at the hip or the shoulder.
 
-Blightmaw and Ironroot were not changed. Blightmaw's angle stow still reads
-as a hood over the shoulders; with Embercrest's aim directions its wrists
-stood up as ears (its arm is shorter), so it wants its own two elevations
-before it switches. Ironroot's short wings drape acceptably at the default.
+**Blightmaw was not too broken; it was rearing.** Its broad, lobed membrane
+hung down the flanks to the ground like a tarp in the grounded scenario,
+and the model was a candidate for regeneration. With the same stance
+recipe -- body pitched down, legs under it, Embercrest's fold directions
+untouched -- the same membrane folds over the back like a bat's; the pose
+was hanging the wing, not the mesh. Ironroot needed its own hip: its
+skeleton (`tools/skeletons/ironroot.json`) binds the thigh 38 degrees aft,
+the trailing leg of the leap, so the hip swings 60 degrees forward where the
+shared skeleton's needed none; and its short wings with the large wrist
+claw wanted a lower fold than Embercrest's, or the claws stood beside the
+head like antlers. Every quadruped on the roster now carries a stance or
+stands in its bind pose, and the stance test walks all three that do.

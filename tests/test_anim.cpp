@@ -1974,48 +1974,81 @@ void test_stance_keeps_the_feet_on_the_floor() {
     std::printf("the standing stance keeps every foot on the bind floor\n");
     namespace fs = std::filesystem;
     const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
-    fs::path path = source_root / "assets/rimefang.glb";
-    if (!fs::is_regular_file(path)) path = fs::path("assets/rimefang.glb");
-    if (!fs::is_regular_file(path)) {
-        std::printf("  assets/rimefang.glb absent; skipped\n");
-        return;
-    }
-    Skeleton skeleton;
-    anim::SkinnedMeshData mesh;
-    if (!anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok) return;
-    const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
-    CHECK(!joints.foot_roots.empty());
-    anim::DragonRig rig;
-    rig.init(skeleton, joints);
-    anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
-    CHECK(rig.tuning.ground_stance > 0.5f);  // the profile under test carries a stance
-    rig.set_model_scale(15.6f);
+    int with_stance = 0;
+    for (const char* name : {"assets/rimefang.glb", "assets/blightmaw.glb", "assets/ironroot.glb"}) {
+        fs::path path = source_root / name;
+        if (!fs::is_regular_file(path)) path = fs::path(name);
+        if (!fs::is_regular_file(path)) {
+            std::printf("  %s absent; skipped\n", name);
+            continue;
+        }
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        if (!anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok) continue;
+        const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+        CHECK(!joints.foot_roots.empty());
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        if (rig.tuning.ground_stance <= 0.5f) {
+            std::printf("  %s carries no stance; skipped\n", name);
+            continue;
+        }
+        ++with_stance;
+        rig.set_model_scale(15.6f);
 
-    float bind_floor = 1e9f;
-    for (const int foot : joints.foot_roots) {
-        bind_floor = std::min(bind_floor, skeleton.world_bind(foot).translation_part().y);
-    }
-    game::FlightState grounded;
-    grounded.grounded = true;
-    grounded.ground_clearance = 0.0f;
-    grounded.wing_tuck = 1.0f;
-    for (int i = 0; i < 300; ++i) rig.update(grounded, 1.0f / 60.0f);
+        // What the creature stands on: each foot root and every toe under it.
+        // A stance that rotates a foot can put a toe below its root, and the
+        // rig keeps the LOWEST of these on the floor, so the test measures the
+        // same set.
+        std::vector<int> standing;
+        for (int i = 0; i < skeleton.count(); ++i) {
+            for (int p = i; p != anim::NO_PARENT; p = skeleton.joint(p).parent) {
+                if (std::find(joints.foot_roots.begin(), joints.foot_roots.end(), p) !=
+                    joints.foot_roots.end()) {
+                    standing.push_back(i);
+                    break;
+                }
+            }
+        }
+        float bind_floor = 1e9f;
+        for (const int joint : standing) {
+            bind_floor = std::min(bind_floor, skeleton.world_bind(joint).translation_part().y);
+        }
+        game::FlightState grounded;
+        grounded.grounded = true;
+        grounded.ground_clearance = 0.0f;
+        grounded.wing_tuck = 1.0f;
+        for (int i = 0; i < 300; ++i) rig.update(grounded, 1.0f / 60.0f);
 
-    // The stance did something: the spine is no longer at its bind pitch.
-    const Vec3 bind_spine = normalize(skeleton.world_bind(joints.chest).translation_part() -
-                                      skeleton.world_bind(joints.root).translation_part());
-    const auto& w = rig.world_matrices();
-    const Vec3 spine = normalize(w[size_t(joints.chest)].col[3].xyz() -
-                                 w[size_t(joints.root)].col[3].xyz());
-    CHECK(std::fabs(degrees(std::acos(clampf(dot(bind_spine, spine), -1.0f, 1.0f)))) > 5.0f);
+        // The stance did something: the spine is no longer at its bind pitch.
+        const Vec3 bind_spine =
+            normalize(skeleton.world_bind(joints.chest).translation_part() -
+                      skeleton.world_bind(joints.root).translation_part());
+        const auto& w = rig.world_matrices();
+        const Vec3 spine = normalize(w[size_t(joints.chest)].col[3].xyz() -
+                                     w[size_t(joints.root)].col[3].xyz());
+        CHECK(std::fabs(degrees(std::acos(clampf(dot(bind_spine, spine), -1.0f, 1.0f)))) >
+              5.0f);
 
-    // Every foot on one floor, and that floor is the bind floor.
-    float floor = 1e9f;
-    for (const int foot : joints.foot_roots) floor = std::min(floor, w[size_t(foot)].col[3].y);
-    CHECK(std::fabs(floor - bind_floor) < 0.01f);
-    for (const auto& [name, height] : rig.foot_heights()) {
-        CHECK(height >= 0.0f && height < 0.15f);
+        // Every foot on one floor, and that floor is the bind floor.
+        float floor = 1e9f;
+        for (const int joint : standing) floor = std::min(floor, w[size_t(joint)].col[3].y);
+        if (std::fabs(floor - bind_floor) >= 0.01f) {
+            std::printf("  %s: floor moved %.3f units\n", name, double(floor - bind_floor));
+        }
+        CHECK(std::fabs(floor - bind_floor) < 0.01f);
+        for (const auto& [foot_name, height] : rig.foot_heights()) {
+            if (!(height >= 0.0f && height < 0.15f)) {
+                std::printf("  %s: %s is %.2f m off the floor\n", name, foot_name.c_str(),
+                            double(height));
+            }
+            CHECK(height >= 0.0f && height < 0.15f);
+        }
     }
+    // The profiles under test carry the stance; a rename or a dropped block
+    // would otherwise pass by skipping everything.
+    if (fs::is_regular_file(source_root / "assets/rimefang.glb")) CHECK(with_stance >= 1);
 }
 
 void test_optional_embercrest_asset() {

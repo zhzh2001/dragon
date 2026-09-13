@@ -190,8 +190,11 @@ What is built, in the order it was built. The plan these came from is
   `ground_feet_level` lifts the root so the lowest foot stays on the bind
   floor and `ground_offset` stays true. 1,600 angle sets were screened
   numerically for level feet before three were rendered. Studio's Grounded
-  section carries the dials and a per-foot height readout. Blightmaw and
-  Ironroot keep the angle stow for now. `ANIMATION.md`, "A folded wing is
+  section carries the dials and a per-foot height readout. Blightmaw, which
+  looked beyond saving with its membrane hanging to the ground, was only
+  rearing: the same recipe folds it over the back. Ironroot needed its own
+  hip (its skeleton binds the thigh aft) and a lower fold for its short,
+  clawed wings. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
