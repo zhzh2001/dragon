@@ -921,3 +921,18 @@ This is the practical half of "physics-based postures". The other half, a
 ragdoll settling under Jolt, would buy self-levelling the plant already
 gives and cost the deferred physics integration plus a pose that is hard to
 art-direct; it is not planned.
+
+### Generated flight pose follow-up (2026-09-13)
+
+The generated sculpts already contain bent knees and ankles. Their previous
+flight tuck plus the inherited 30-degree foot hang and 16-degree toe curl
+still lifted the paws too far. The six generated profiles now use smaller
+species-specific leg folds and 10/8 foot hang/curl. The four newer models
+also limit the wingbeat to 34 degrees with a 14-degree upstroke fan fold to
+reduce horn crowding and wrist pinching. Tidewrack and Stormsail use a wider
+40/10 dive sweep/fold because 75/45 crossed their long fingers over the spine.
+
+See the [flight pose report](../artifacts/flight-pose-fix/README.md) for values,
+before/after renders, remaining membrane creasing, and the 19-view-per-model
+inspection set. `python3 tools/capture_flight_pose.py` reproduces the full-size
+Metal checks, including actual flight, landing, and switching from dragon.glb.

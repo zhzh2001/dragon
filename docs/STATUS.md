@@ -219,7 +219,14 @@ What is built, in the order it was built. The plan these came from is
   the mean contact and closes each standing limb (hip-knee-foot,
   shoulder-elbow-hand, planted wing wrists) with a two-bone solve. Tested on
   a 0.3 slope: 0.50 m worst foot error to 0.00. `ANIMATION.md`, "Each limb
-  plants on the terrain under it". `ANIMATION.md`, "A folded wing is
+  plants on the terrain under it".
+- **Flight legs, second pass (external, gpt-6).** Smaller per-species leg
+  folds and a 10/8 foot hang and toe curl on all six generated profiles so
+  the paws hang below the hips and off the chest; a 34-degree wingbeat cap
+  with a 14-degree upstroke fold on Blightmaw, Rimefang, Ironroot and
+  Tidewrack; a wider 40/10 dive tuck on the wyverns so the long fingers no
+  longer cross over the spine. `artifacts/flight-pose-fix/README.md`;
+  `tools/capture_flight_pose.py` regenerates the 19-view inspection set. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
