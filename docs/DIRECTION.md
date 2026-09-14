@@ -6,7 +6,9 @@ in isolation; this document decides the *shape* -- the genre the features
 serve, the look they should share, the interface that presents them and the
 assets they need -- and then sequences the work. Written 2026-09-06 from a
 read of the docs plus headless captures of the current build; revise it when a
-playtest disagrees.
+playtest disagrees. Revised 2026-09-13 after a week spent on the creature
+roster instead of on this plan -- see "What happened instead" in section 1
+and the melee item in sections 2 and 6.
 
 The one-paragraph version: **make it a hoard-run roguelite** where growth
 within a run is expressed as movement of the tuning sliders that already
@@ -52,6 +54,38 @@ against memory.
 None of this is a criticism of how it got here: every one of those was the
 right thing to do while the question was "does the flight feel good". The
 question has changed.
+
+### What happened instead (2026-09-11 to 13)
+
+The week after this was written went to the creatures, not to rows 1-3 of
+the sequence: an elemental roster of six generated dragons (four quadrupeds
+on two skeletons, two wyverns), each a species with its own rig, flight and
+breath profile, and then the animation work to make them stand, land, fold
+their wings, fly with their legs where a flying animal keeps them, and plant
+each foot on the terrain under it. The record is in `ANIMATION.md` (from
+"Wings on the ground, and in the dive, per species" onward),
+`MODEL_GENERATION.md`, and the tracked renders in `artifacts/`.
+
+Two honest notes for the next session. First, **making new dragons was not
+the priority this document set, and it was done because it was enjoyable**;
+that is a fine reason on a hobby project, but the run probe is still where
+the genre question gets answered, and it has not moved. Second, the detour
+paid for infrastructure the plan needs anyway: a species is now a folder of
+three partial config files, the rig plants limbs on terrain (the landing
+state the hoard cache and the prey herd depend on), every pose dial sits in
+the Studio panel, and CLAUDE.md carries a rendered-inspection rule that
+would have saved several playtest rounds. **The roster is done for now.** No
+new species until an encounter kind needs a silhouette the six do not have;
+the one open asset item is the default `dragon.glb`, whose wings still drape
+on the ground because its rig has no wrist.
+
+One playtest finding from flying the roster belongs in the plan rather than
+in an animation doc: **close-range combat has no answer.** The breath cone
+and the fireball both need the nose on the target, and in a turning fight the
+rival is very often twenty metres away and off the nose, where the player can
+do nothing but circle. A dragon that close should bite. Section 2 adds melee
+to the encounter kit and section 6 schedules it early, because it changes
+what the rival-dragon encounter feels like before the run probe measures it.
 
 ## 2. Genre: a hoard-run roguelite
 
@@ -131,6 +165,7 @@ Each is one system; the run generator places them.
 | **Prey herd** | Landing state, the terrain query, particles | A flock of simple ground movers that scatter from the dragon, a swoop-grab hit test, a bite gesture on the rig | medium |
 | **Thermal** | Flight model, emitters | A vertical wind column in `FlightModel`, circling debris to mark it | small, already in RETRO |
 | **Pass gate** | Rally ring, match results phase | Placement at the far end, the escape condition | small |
+| **Melee** (bite, claw, tail) | The lock (it already knows the nearest rival), the head aim and neck spit gesture on the rig, the hit flash and damage flow | A close-range attack that does NOT need the nose on the target: a bite when the mark is inside a wide forward cone within a few body lengths, a claw or tail strike when it is alongside or behind, with the neck lunging toward it; a cooldown, a lunge that steals a little airspeed, bots that use it too. Distance and cone tests only -- no Jolt | small-medium |
 | **Weather** | Wind in the flight model, fog uniforms | A wind field that varies along the valley, fog banks in side valleys, rain later | medium |
 
 **The readable target each of the first three kinds needed now exists as an
@@ -141,6 +176,13 @@ not the art -- and two engine assumptions block the wingless pair from being
 drawn at all, both recorded under Open questions in `STATUS.md`: a rig without
 wings is rejected outright, and model scale is derived from the X extent as
 though it were a wingspan.
+
+Melee is the one item here that comes from a playtest rather than from the
+design: "very annoying when you are close to the enemy but with the wrong
+heading." It is also what makes the rival-dragon encounter a fight rather
+than two flame-throwers jousting, so it goes before the run probe measures
+that encounter. Dials at the TOP of the Combat panel: bite range and cone,
+strike range, cooldown, damage; the feel is found by playing a 2-bot match.
 
 Deliberately later: team matches (a wingman could be a run reward but is not
 needed for the loop), water gameplay beyond dousing, ragdoll deaths.
@@ -312,7 +354,7 @@ scanned dragon never matches however well chosen.
 | Ground textures | **PolyHaven** tiling sets | CC0, PBR, the detail pass in section 3 |
 | Watchtower, ballista, huts, hoard pile | **Modelled in Blender via MCP** from primitives, with PolyHaven stone, wood and metal materials | Simple shapes; the shared textures are what make them belong. Hyper3D/Hunyuan generation is worth one experiment for the hoard pile and a ballista, where the mesh is static and the texture will be replaced |
 | Prey (goat, sheep, deer) | **Generated and rigged in-house** -- superseded the Sketchfab plan | `assets/mossback.glb` is a horned grazer taken through the one-shot pipeline: 80 K tris, a 37-bone rig on `tools/skeletons/grazing-quadruped.json`, repaired PBR. No licence question, and it shares the generator's material language. A herd still needs a walk cycle and a scatter; start with a bob-and-scatter |
-| Dragons (the player) | **Keep both.** No new hero models | The hero's CC BY-NC licence is the one long-term liability: replace it with a CC BY or original rig only if the project is ever published. A script-built original was tried on 2026-09-08 and fell short of both imported models; `EMBERCREST.md` records why |
+| Dragons (the player and the rivals) | **The roster of six is done for now.** No new species until an encounter needs a silhouette these do not have | Embercrest, Rimefang, Blightmaw, Ironroot (quadrupeds) and Stormsail, Tidewrack (wyverns), all generated and rigged in-house through the `MODEL_GENERATION.md` pipeline, each a species with `.rig/.flight/.breath.cfg`. They fly, land, fold their wings and plant their feet on terrain (`ANIMATION.md`). The imported hero `dragon.glb` (CC BY-NC) stays as the default asset but its rig has no wrist and its wings drape on the ground; the generated roster is the long-term answer to that licence question. Adding a species costs one generation plus a rebuild and a few rounds of rendered tuning; the traps are written down, so it is cheap -- which is exactly why it must not become the default thing to do |
 | Encounter creatures | **Generated and rigged in-house**, one per encounter kind | This is a revision: the original entry said the recolour system was enough. It is not -- a hue push does not change a silhouette, and a rival read at flight range is a silhouette. `MODEL_GENERATION.md` concludes generation pays exactly for things "few on screen, large, and want a unique silhouette", which is what an encounter creature is. Three exist: `ashcoil.glb` (rival dragon, a legless sky-wyrm), `cragjaw.glb` (ground defence), `mossback.glb` (prey). Each is a body plan the engine had not carried, so they separate by shape rather than by hue |
 | Clouds, leaf and bark textures | **Generated** (concept-art skill, NB2) or PolyHaven | Small painted textures are what the tool is good at, and they can be regenerated to the palette |
 
@@ -338,6 +380,7 @@ question is the one that could still change the plan.
 |---|---|---|---|
 | 1 | Shared lighting, sun angle, palette header, tree/ground grade | 1 | visuals |
 | 2 | HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines | 2 | UI |
+| 2b | **Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
 | 4 | Grading LUT and bloom | 1 | visuals |
 | 5 | Vegetation v2: leaf cards, bark, impostors | 2 | visuals + assets |
@@ -349,9 +392,14 @@ question is the one that could still change the plan.
 | 11 | Weather along the valley; wingman as a run reward | 2 | gameplay |
 | -- | Then the RHI extraction (`RETRO.md` R1) | | port |
 
-The playtest gates: after 3, is the corridor run fun; after 6, does growth
-change how you fly; after 8, can a new player start, die and try again
-without touching a panel.
+The playtest gates: after 2b, does a close fight resolve instead of
+circling; after 3, is the corridor run fun; after 6, does growth change how
+you fly; after 8, can a new player start, die and try again without touching
+a panel.
+
+Status on 2026-09-13: none of the rows has started; the week went to the
+roster (section 1, "What happened instead"). The next session starts at row 1
+or row 2b, and the roster is not a reason to reorder anything above.
 
 ## 7. Prototyping with concept art
 
