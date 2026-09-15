@@ -74,8 +74,10 @@ paid for infrastructure the plan needs anyway: a species is now a folder of
 three partial config files, the rig plants limbs on terrain (the landing
 state the hoard cache and the prey herd depend on), every pose dial sits in
 the Studio panel, and CLAUDE.md carries a rendered-inspection rule that
-would have saved several playtest rounds. **The roster is done for now.** No
-new species until an encounter kind needs a silhouette the six do not have;
+would have saved several playtest rounds. **The roster is done for now** (seven,
+after gpt-6 added Frostvein on 2026-09-14 as a second ice dragon built on its
+own measured skeleton). No new species until an encounter kind needs a
+silhouette these do not have;
 the one open asset item is the default `dragon.glb`, whose wings still drape
 on the ground because its rig has no wrist.
 
@@ -354,7 +356,7 @@ scanned dragon never matches however well chosen.
 | Ground textures | **PolyHaven** tiling sets | CC0, PBR, the detail pass in section 3 |
 | Watchtower, ballista, huts, hoard pile | **Modelled in Blender via MCP** from primitives, with PolyHaven stone, wood and metal materials | Simple shapes; the shared textures are what make them belong. Hyper3D/Hunyuan generation is worth one experiment for the hoard pile and a ballista, where the mesh is static and the texture will be replaced |
 | Prey (goat, sheep, deer) | **Generated and rigged in-house** -- superseded the Sketchfab plan | `assets/mossback.glb` is a horned grazer taken through the one-shot pipeline: 80 K tris, a 37-bone rig on `tools/skeletons/grazing-quadruped.json`, repaired PBR. No licence question, and it shares the generator's material language. A herd still needs a walk cycle and a scatter; start with a bob-and-scatter |
-| Dragons (the player and the rivals) | **The roster of six is done for now.** No new species until an encounter needs a silhouette these do not have | Embercrest, Rimefang, Blightmaw, Ironroot (quadrupeds) and Stormsail, Tidewrack (wyverns), all generated and rigged in-house through the `MODEL_GENERATION.md` pipeline, each a species with `.rig/.flight/.breath.cfg`. They fly, land, fold their wings and plant their feet on terrain (`ANIMATION.md`). The imported hero `dragon.glb` (CC BY-NC) stays as the default asset but its rig has no wrist and its wings drape on the ground; the generated roster is the long-term answer to that licence question. Adding a species costs one generation plus a rebuild and a few rounds of rendered tuning; the traps are written down, so it is cheap -- which is exactly why it must not become the default thing to do |
+| Dragons (the player and the rivals) | **The roster of seven is done for now.** No new species until an encounter needs a silhouette these do not have | Embercrest, Rimefang, Blightmaw, Ironroot, Frostvein (quadrupeds) and Stormsail, Tidewrack (wyverns), all generated and rigged in-house through the `MODEL_GENERATION.md` pipeline, each a species with `.rig/.flight/.breath.cfg`. They fly, land, fold their wings and plant their feet on terrain (`ANIMATION.md`). The imported hero `dragon.glb` (CC BY-NC) stays as the default asset but its rig has no wrist and its wings drape on the ground; the generated roster is the long-term answer to that licence question. Adding a species costs one generation plus a rebuild and a few rounds of rendered tuning; the traps are written down, so it is cheap -- which is exactly why it must not become the default thing to do |
 | Encounter creatures | **Generated and rigged in-house**, one per encounter kind | This is a revision: the original entry said the recolour system was enough. It is not -- a hue push does not change a silhouette, and a rival read at flight range is a silhouette. `MODEL_GENERATION.md` concludes generation pays exactly for things "few on screen, large, and want a unique silhouette", which is what an encounter creature is. Three exist: `ashcoil.glb` (rival dragon, a legless sky-wyrm), `cragjaw.glb` (ground defence), `mossback.glb` (prey). Each is a body plan the engine had not carried, so they separate by shape rather than by hue |
 | Clouds, leaf and bark textures | **Generated** (concept-art skill, NB2) or PolyHaven | Small painted textures are what the tool is good at, and they can be regenerated to the palette |
 

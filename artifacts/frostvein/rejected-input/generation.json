@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-14",
+  "name": "Frostvein",
+  "service": "Tencent Hunyuan one-shot",
+  "creation_id": "cff65d86-9a23-40c7-a1dd-5579c9d07088",
+  "output_field": "textureGlb",
+  "source": "assets/frostvein-cand-oneshot.glb",
+  "sha256": "efb69c5c16cce26c69acc913e4ec3ebecd1bcab2818cc7a2284fc7b199200e16",
+  "bytes": 91033536,
+  "images": 3,
+  "primitives": [
+    {
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "vertices": 874828,
+      "triangles": 1499808
+    }
+  ],
+  "plates": {
+    "artifacts/dragon-options/frostvein-views/1-front.png": "c102745ef784754b1275bfc87194f7998f65d6665bda6086c1ad0834aa53c0e1",
+    "artifacts/dragon-options/frostvein-views/2-back.png": "b7dde7e12c2af26257ca9230f440c804b704db410e4319a785830e64f1a60265",
+    "artifacts/dragon-options/frostvein-views/3-left.png": "16bad6ffa81f5a0c48573a7da25b536597cd8d33c04e96b504d9ec0fcf5e575d",
+    "artifacts/dragon-options/frostvein-views/4-right.png": "c9ddd1ce1dc2c2448a5e164ae46513dd668d7b94c66a0d177dd5394dc09f58df"
+  },
+  "empty_slots": [
+    "top",
+    "bottom",
+    "left45",
+    "right45"
+  ]
+}

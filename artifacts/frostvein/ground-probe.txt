@@ -1,0 +1,5 @@
+2026-09-15 09:55:33.322 frostvein-sink_probe[1888:2444260] inverse bind matrices: from file
+2026-09-15 09:55:33.902 frostvein-sink_probe[1888:2444260] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)
+2026-09-15 09:55:33.903 frostvein-sink_probe[1888:2444260] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw
+2026-09-15 09:55:33.905 frostvein-sink_probe[1888:2444260] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg
+assets/frostvein.glb               bind floor y -0.000, posed lowest y -0.000 -> sinks -0.00 m (lowest vertex on hand_r); current ground_lift_m 0.00

@@ -1213,12 +1213,17 @@ from one run: Embercrest, Stormsail, the three hoard-run designs of
 variants (Rimefang, Blightmaw, Tidewrack, Ironroot). The one-shot's 20/day pool
 has never been the limit; several were generated in each sitting.
 
-**A variant of an existing anatomy is nearly free.** The four elemental dragons
-reuse `winged-quadruped.json` and `winged-biped.json` unchanged, so each cost
-one generation and a rigger run with no skeleton authoring at all. That only
-works because the concept prompt asked for the same *structure* -- same neck
-and tail length, same finger-rib count -- since the fit remaps proportion but
-not structure. Ask for a variant, not a redesign, and the rig comes free.
+**Shared anatomy does not mean shared measurements.** The first elemental
+batch reused `winged-quadruped.json` and `winged-biped.json`, but subsequent
+leg, jaw and membrane repairs showed why that shortcut is unreliable.
+Matching limb and finger counts preserves the bone-naming contract; it does
+not preserve joint locations, jaw boundaries or membrane gates. Measure each
+generated mesh and keep its own skeleton JSON. Frostvein (2026-09-14, by
+gpt-6) is the first species built that way from the start: a new ice-dragon
+sculpt with its own measured 74-bone skeleton (`tools/skeletons/frostvein.json`,
+`artifacts/frostvein/README.md`), rather than another Rimefang repair on the
+shared file -- and it stood, flew and closed its mouth correctly on the
+first engine pass where every shared-skeleton species needed several.
 
 **Draw the mouth slightly parted in every plate.** Every sculpt before the
 elemental batch came back with the mouth fused shut and no interior, which

@@ -33,6 +33,7 @@ assets/rimefang/
 assets/blightmaw/
 assets/ironroot/
 assets/tidewrack/
+assets/frostvein/
 tools/__pycache__/
 artifacts/**/*.bmp
 artifacts/**/*.log

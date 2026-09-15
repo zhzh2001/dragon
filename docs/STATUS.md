@@ -226,7 +226,16 @@ What is built, in the order it was built. The plan these came from is
   with a 14-degree upstroke fold on Blightmaw, Rimefang, Ironroot and
   Tidewrack; a wider 40/10 dive tuck on the wyverns so the long fingers no
   longer cross over the spine. `artifacts/flight-pose-fix/README.md`;
-  `tools/capture_flight_pose.py` regenerates the 19-view inspection set. `ANIMATION.md`, "A folded wing is
+  `tools/capture_flight_pose.py` regenerates the 19-view inspection set.
+- **Frostvein, a seventh species (external, gpt-6, 2026-09-14).** A new ice
+  dragon generated from an original turnaround and rigged on its own
+  measured 74-bone skeleton with four finger chains, tip joints and a
+  measured jaw mask -- the first species built the way `MODEL_GENERATION.md`
+  now recommends. Reviewed here against the CLAUDE.md inspection list:
+  glide, flap, dive, head in glide and on the ground, soles at ground level,
+  an in-game landing and a switch from `dragon.glb`; probes read zero sink,
+  feet 1.9 m below the hips in the glide, jaw opening downward.
+  `artifacts/frostvein/README.md`; `tools/capture_frostvein.py`. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

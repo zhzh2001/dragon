@@ -1,0 +1,610 @@
+[
+  {
+    "case": "glide-side",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/glide-side.bmp --studio 0 --inspect 90 18 6",
+    "load": [
+      "2026-09-15 09:47:43.909 dragon[96488:2426666] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:43.909 dragon[96488:2426666] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:43.909 dragon[96488:2426666] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:43.943 dragon[96488:2426666] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:43.943 dragon[96488:2426666] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:43.944 dragon[96488:2426666] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:43.944 dragon[96488:2426666] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:43.944 dragon[96488:2426666]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:43.944 dragon[96488:2426666] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:43.944 dragon[96488:2426666] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:44.316 dragon[96488:2426666] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/glide-side.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "glide-front",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/glide-front.bmp --studio 0 --inspect 180 18 6",
+    "load": [
+      "2026-09-15 09:47:45.089 dragon[96502:2426795] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:45.089 dragon[96502:2426795] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:45.089 dragon[96502:2426795] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:45.121 dragon[96502:2426795] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:45.121 dragon[96502:2426795] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:45.121 dragon[96502:2426795] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:45.121 dragon[96502:2426795] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:45.121 dragon[96502:2426795]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:45.122 dragon[96502:2426795] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:45.122 dragon[96502:2426795] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:45.633 dragon[96502:2426795] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/glide-front.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "glide-rear",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/glide-rear.bmp --studio 0 --inspect 0 18 6",
+    "load": [
+      "2026-09-15 09:47:46.445 dragon[96510:2426830] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:46.445 dragon[96510:2426830] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:46.445 dragon[96510:2426830] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:46.479 dragon[96510:2426830] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:46.868 dragon[96510:2426830] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/glide-rear.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "glide-top",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/glide-top.bmp --studio 0 --inspect 90 18 85",
+    "load": [
+      "2026-09-15 09:47:47.670 dragon[96516:2426863] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:47.670 dragon[96516:2426863] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:47.670 dragon[96516:2426863] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:47.704 dragon[96516:2426863] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:48.041 dragon[96516:2426863] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/glide-top.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "glide-head",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/glide-head.bmp --studio 0 --inspect 90 3.5 0 --inspect-head",
+    "load": [
+      "2026-09-15 09:47:48.806 dragon[96529:2426920] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:48.806 dragon[96529:2426920] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:48.806 dragon[96529:2426920] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:48.838 dragon[96529:2426920] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:49.238 dragon[96529:2426920] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/glide-head.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "flap-side",
+    "frames": 108,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 108 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/flap-side.bmp --studio 1 --inspect 90 18 6",
+    "load": [
+      "2026-09-15 09:47:50.027 dragon[96538:2426969] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:50.027 dragon[96538:2426969] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:50.027 dragon[96538:2426969] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:50.060 dragon[96538:2426969] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:50.421 dragon[96538:2426969] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/flap-side.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "flap-front",
+    "frames": 108,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 108 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/flap-front.bmp --studio 1 --inspect 180 18 6",
+    "load": [
+      "2026-09-15 09:47:51.221 dragon[96553:2427033] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:51.221 dragon[96553:2427033] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:51.221 dragon[96553:2427033] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:51.255 dragon[96553:2427033] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:51.255 dragon[96553:2427033] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:51.255 dragon[96553:2427033] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:51.255 dragon[96553:2427033] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:51.255 dragon[96553:2427033]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:51.256 dragon[96553:2427033] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:51.256 dragon[96553:2427033] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:51.735 dragon[96553:2427033] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/flap-front.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "flap-rear",
+    "frames": 108,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 108 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/flap-rear.bmp --studio 1 --inspect 0 18 6",
+    "load": [
+      "2026-09-15 09:47:52.567 dragon[96561:2427072] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:52.568 dragon[96561:2427072] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:52.568 dragon[96561:2427072] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:52.599 dragon[96561:2427072] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:52.939 dragon[96561:2427072] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/flap-rear.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "flap-top",
+    "frames": 108,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 108 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/flap-top.bmp --studio 1 --inspect 90 18 85",
+    "load": [
+      "2026-09-15 09:47:53.755 dragon[96629:2427192] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:53.756 dragon[96629:2427192] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:53.756 dragon[96629:2427192] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:53.789 dragon[96629:2427192] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:54.173 dragon[96629:2427192] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/flap-top.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "flap-head",
+    "frames": 108,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 108 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/flap-head.bmp --studio 1 --inspect 90 3.5 0 --inspect-head",
+    "load": [
+      "2026-09-15 09:47:54.967 dragon[96642:2427246] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:54.967 dragon[96642:2427246] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:54.967 dragon[96642:2427246] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:55.000 dragon[96642:2427246] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:55.000 dragon[96642:2427246] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:55.000 dragon[96642:2427246] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:55.001 dragon[96642:2427246] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:55.001 dragon[96642:2427246]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:55.001 dragon[96642:2427246] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:55.001 dragon[96642:2427246] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:55.351 dragon[96642:2427246] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/flap-head.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "dive-side",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/dive-side.bmp --studio 5 --inspect 90 18 6",
+    "load": [
+      "2026-09-15 09:47:56.168 dragon[96658:2427294] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:56.168 dragon[96658:2427294] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:56.168 dragon[96658:2427294] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:56.201 dragon[96658:2427294] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:56.700 dragon[96658:2427294] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/dive-side.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "dive-front",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/dive-front.bmp --studio 5 --inspect 180 18 6",
+    "load": [
+      "2026-09-15 09:47:57.503 dragon[96671:2427351] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:57.503 dragon[96671:2427351] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:57.503 dragon[96671:2427351] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:57.536 dragon[96671:2427351] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:57.914 dragon[96671:2427351] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/dive-front.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "dive-rear",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/dive-rear.bmp --studio 5 --inspect 0 18 6",
+    "load": [
+      "2026-09-15 09:47:58.705 dragon[96679:2427384] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:58.705 dragon[96679:2427384] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:58.705 dragon[96679:2427384] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:58.738 dragon[96679:2427384] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:59.081 dragon[96679:2427384] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/dive-rear.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "dive-top",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/dive-top.bmp --studio 5 --inspect 90 18 85",
+    "load": [
+      "2026-09-15 09:47:59.857 dragon[96686:2427417] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:47:59.857 dragon[96686:2427417] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:47:59.857 dragon[96686:2427417] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:47:59.889 dragon[96686:2427417] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:00.279 dragon[96686:2427417] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/dive-top.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "dive-head",
+    "frames": 120,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 120 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/dive-head.bmp --studio 5 --inspect 90 3.5 0 --inspect-head",
+    "load": [
+      "2026-09-15 09:48:01.068 dragon[96700:2427473] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:01.068 dragon[96700:2427473] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:01.068 dragon[96700:2427473] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:01.101 dragon[96700:2427473] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:01.461 dragon[96700:2427473] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/dive-head.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-side",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-side.bmp --studio 9 --inspect 90 18 6",
+    "load": [
+      "2026-09-15 09:48:02.227 dragon[96706:2427505] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:02.227 dragon[96706:2427505] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:02.227 dragon[96706:2427505] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:02.260 dragon[96706:2427505] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:02.792 dragon[96706:2427505] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-side.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-front",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-front.bmp --studio 9 --inspect 180 18 6",
+    "load": [
+      "2026-09-15 09:48:03.608 dragon[96781:2427646] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:03.609 dragon[96781:2427646] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:03.609 dragon[96781:2427646] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:03.641 dragon[96781:2427646] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:04.307 dragon[96781:2427646] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-front.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-rear",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-rear.bmp --studio 9 --inspect 0 18 6",
+    "load": [
+      "2026-09-15 09:48:05.094 dragon[96789:2427683] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:05.095 dragon[96789:2427683] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:05.095 dragon[96789:2427683] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:05.127 dragon[96789:2427683] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:05.950 dragon[96789:2427683] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-rear.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-top",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-top.bmp --studio 9 --inspect 90 18 85",
+    "load": [
+      "2026-09-15 09:48:06.750 dragon[96802:2427751] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:06.750 dragon[96802:2427751] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:06.750 dragon[96802:2427751] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:06.784 dragon[96802:2427751] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:07.263 dragon[96802:2427751] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-top.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-head",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-head.bmp --studio 9 --inspect 90 3.5 0 --inspect-head",
+    "load": [
+      "2026-09-15 09:48:08.064 dragon[96816:2427797] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:08.064 dragon[96816:2427797] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:08.064 dragon[96816:2427797] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:08.098 dragon[96816:2427797] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:08.689 dragon[96816:2427797] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-head.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "attack-side",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/attack-side.bmp --studio 8 --inspect 90 18 6",
+    "load": [
+      "2026-09-15 09:48:09.485 dragon[96834:2427875] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:09.485 dragon[96834:2427875] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:09.485 dragon[96834:2427875] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:09.517 dragon[96834:2427875] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:10.091 dragon[96834:2427875] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/attack-side.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "attack-front",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/attack-front.bmp --studio 8 --inspect 180 18 6",
+    "load": [
+      "2026-09-15 09:48:10.885 dragon[96842:2427909] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:10.885 dragon[96842:2427909] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:10.885 dragon[96842:2427909] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:10.917 dragon[96842:2427909] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:11.606 dragon[96842:2427909] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/attack-front.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "attack-rear",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/attack-rear.bmp --studio 8 --inspect 0 18 6",
+    "load": [
+      "2026-09-15 09:48:12.402 dragon[96855:2427962] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:12.402 dragon[96855:2427962] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:12.402 dragon[96855:2427962] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:12.435 dragon[96855:2427962] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:12.991 dragon[96855:2427962] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/attack-rear.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "attack-top",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/attack-top.bmp --studio 8 --inspect 90 18 85",
+    "load": [
+      "2026-09-15 09:48:13.787 dragon[96947:2428144] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:13.787 dragon[96947:2428144] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:13.787 dragon[96947:2428144] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:13.822 dragon[96947:2428144] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:14.478 dragon[96947:2428144] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/attack-top.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "attack-head",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/attack-head.bmp --studio 8 --inspect 90 3.5 0 --inspect-head",
+    "load": [
+      "2026-09-15 09:48:15.264 dragon[96956:2428259] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:15.264 dragon[96956:2428259] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:15.264 dragon[96956:2428259] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:15.296 dragon[96956:2428259] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:15.819 dragon[96956:2428259] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/attack-head.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "bind",
+    "frames": 1,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 1 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/bind.bmp --bind-pose --inspect 140 18 12",
+    "load": [
+      "2026-09-15 09:48:16.633 dragon[96970:2428317] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:16.633 dragon[96970:2428317] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:16.633 dragon[96970:2428317] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:16.666 dragon[96970:2428317] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:16.700 dragon[96970:2428317] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/bind.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "ground-feet",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/ground-feet.bmp --studio 9 --inspect 60 11 3",
+    "load": [
+      "2026-09-15 09:48:17.486 dragon[96972:2428348] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:17.486 dragon[96972:2428348] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:17.486 dragon[96972:2428348] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:17.519 dragon[96972:2428348] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:17.975 dragon[96972:2428348] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/ground-feet.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "game-flight",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/game-flight.bmp --input 0,0,0,1,0,0 --inspect 150 18 6",
+    "load": [
+      "2026-09-15 09:48:18.748 dragon[96985:2428403] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:18.748 dragon[96985:2428403] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:18.748 dragon[96985:2428403] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:18.782 dragon[96985:2428403] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:19.290 dragon[96985:2428403] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/game-flight.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "game-landed",
+    "frames": 900,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 900 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/game-landed.bmp --input -0.25,0,0,0,0,0 --inspect 60 11 3",
+    "load": [
+      "2026-09-15 09:48:20.077 dragon[96991:2428437] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:20.078 dragon[96991:2428437] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:20.078 dragon[96991:2428437] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:20.110 dragon[96991:2428437] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:22.584 dragon[96991:2428437] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/game-landed.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "switch-flight",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/switch-flight.bmp --models assets/dragon.glb,assets/frostvein.glb --cycle-models 120 --studio 1 --inspect 150 18 6",
+    "load": [
+      "2026-09-15 09:48:23.401 dragon[97061:2428581] mapped rig: neck 4, tail 4, wing root 2/2, fingers 3/3, legs 2/2, front legs 2/2, feet 6, jaw Bone_024",
+      "2026-09-15 09:48:23.939 dragon[97061:2428581] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:23.939 dragon[97061:2428581] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:23.939 dragon[97061:2428581] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:23.972 dragon[97061:2428581] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:23.972 dragon[97061:2428581] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:23.972 dragon[97061:2428581] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:23.972 dragon[97061:2428581] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:23.972 dragon[97061:2428581]   [1] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:24.336 dragon[97061:2428581] player model: [1] assets/frostvein.glb",
+      "2026-09-15 09:48:24.497 dragon[97061:2428581] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/switch-flight.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "turn-soak",
+    "frames": 7200,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 7200 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/turn-soak.bmp --studio 4 --inspect 0 20 88",
+    "load": [
+      "2026-09-15 09:48:25.291 dragon[97081:2428645] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:25.291 dragon[97081:2428645] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:25.291 dragon[97081:2428645] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:25.324 dragon[97081:2428645] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:42.336 dragon[97081:2428645] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/turn-soak.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  },
+  {
+    "case": "frost-breath",
+    "frames": 180,
+    "command": "~/src/game-claude/build/dragon --headless --hide-ui --model assets/frostvein.glb --frames 180 --telemetry 120 --screenshot ~/src/game-claude/artifacts/frostvein/engine/frost-breath.bmp --combat --attack --inspect 90 24 10",
+    "load": [
+      "2026-09-15 09:48:43.122 dragon[97259:2429114] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)",
+      "2026-09-15 09:48:43.122 dragon[97259:2429114] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw",
+      "2026-09-15 09:48:43.122 dragon[97259:2429114] assets/frostvein.glb: alignment scale 13.8888, offset (0.01 -3.63 -1.83)",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded model rig from assets/frostvein.glb.rig.cfg",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded breath profile 'assets/frostvein.glb.breath.cfg' (18 field(s))",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114]   [0] assets/frostvein.glb (74 joints, scale 13.889)",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded 1 tuning values from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:43.156 dragon[97259:2429114] loaded model handling from assets/frostvein.glb.flight.cfg",
+      "2026-09-15 09:48:43.727 dragon[97259:2429114] screenshot -> ~/src/game-claude/artifacts/frostvein/engine/frost-breath.bmp (1280x720)"
+    ],
+    "exit_code": 0
+  }
+]

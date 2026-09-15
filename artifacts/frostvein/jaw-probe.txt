@@ -1,0 +1,10 @@
+2026-09-15 09:55:14.229 frostvein-jaw_probe[1675:2443717] inverse bind matrices: from file
+2026-09-15 09:55:14.767 frostvein-jaw_probe[1675:2443717] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)
+2026-09-15 09:55:14.767 frostvein-jaw_probe[1675:2443717] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw
+2026-09-15 09:55:14.768 frostvein-jaw_probe[1675:2443717] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg
+2026-09-15 09:55:14.770 frostvein-jaw_probe[1675:2443717] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg
+   jaw local angle from bind: rest 20.0 deg, open 10.0 deg; jaw open 1.00
+assets/frostvein.glb                 flight: tip.y bind +0.057 rest +0.064 open +0.051  -> opening DOWN by 0.014
+   jaw local angle from bind: rest 20.0 deg, open 10.0 deg; jaw open 1.00
+assets/frostvein.glb                 GROUND: tip.y bind +0.057 rest +0.064 open +0.051  -> opening DOWN by 0.014
+assets/frostvein.glb.rig.cfg: load failed

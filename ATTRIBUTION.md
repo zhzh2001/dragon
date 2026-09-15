@@ -14,7 +14,7 @@ not the hero model.
 ## Cloud-generated creatures
 
 `assets/embercrest-textured.glb`, `assets/stormsail.glb`, `assets/ashcoil.glb`,
-`assets/cragjaw.glb`, `assets/mossback.glb`.
+`assets/cragjaw.glb`, `assets/mossback.glb`, `assets/frostvein.glb`.
 
 Generated with **Tencent Hunyuan 3D** (`3d.hunyuan.tencent.com`) on its free
 tier, from original concept art made for this project, then decimated and
@@ -30,6 +30,13 @@ rigged locally by `tools/rig_embercrest_candidate.py` and finished by
 | `ashcoil.glb` | Ashcoil, serpentine sky-wyrm | one-shot |
 | `cragjaw.glb` | Cragjaw, armoured ground drake | one-shot |
 | `mossback.glb` | Mossback, horned grazer | one-shot |
+| `frostvein.glb` | Frostvein, original ice quadruped with its own measured skeleton | one-shot, 2026-09-14 |
+
+Frostvein's prompt and four input plates are in
+`artifacts/dragon-options/frostvein-prompt.md`; its generation ID and source
+hash are in `artifacts/frostvein/generation.json`. Use the dedicated
+`tools/skeletons/frostvein.json` when rebuilding. The local final model is
+`assets/frostvein.glb`; the existing generated-asset exclusion applies to it.
 
 - **Licence: UNRESOLVED.** The hosted Studio's terms of service were never
   fetched or read. This is tracked as the first open question in

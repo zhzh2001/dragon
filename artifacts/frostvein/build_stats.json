@@ -1,0 +1,56 @@
+{
+  "source": "frostvein-cand-oneshot.glb",
+  "source_sha256": "4a8e4ac9fb390e7639966e71f8088c2b1897d7dcaf94f34323e5f55bb6bf1d56",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 74,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; plane jaw mask with hinge blend, 4-point line, snout reclaimed; level wing bind 45 deg",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 47572236,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 3.646223633416887,
+  "repaired_zero_tangents": 1,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    -2.531486131829297e-10
+  ]
+}

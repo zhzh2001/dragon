@@ -1,0 +1,36 @@
+assets/frostvein-raw.glb: 66514 verts, 80000 tris, extent 1.3680
+before:
+  normal R: mean 0.498 std 0.034 p5 0.451 p50 0.498 p95 0.545
+  normal G: mean 0.498 std 0.030 p5 0.459 p50 0.498 p95 0.537
+  normal B: mean 0.992 std 0.021 p5 0.961 p50 0.996 p95 1.000
+  orm R: mean 1.000 std 0.000 p5 1.000 p50 1.000 p95 1.000
+  orm G: mean 0.592 std 0.035 p5 0.533 p50 0.600 p95 0.627
+  orm B: mean 0.049 std 0.011 p5 0.031 p50 0.051 p95 0.067
+bitangent points toward image-up (fraction of faces pointing down: 0.002)
+ray engine: trimesh.ray.ray_pyembree
+rasterising UVs at 2048...
+  50.1% of texels covered
+  joint groups: {'body': 2, 'neck': 3, 'head': 1, 'jaw': 2, 'tail': 8, 'wing': 6, 'finger': 24, 'leg': 16, 'toe': 12}
+measuring thickness...
+baking occlusion: 2102172 texels x 64 rays, radius 0.12 extent
+    ao pass 1/64  1s
+    ao pass 16/64  9s
+    ao pass 32/64  19s
+    ao pass 48/64  28s
+    ao pass 64/64  37s
+  zone coverage: membrane 36.9%  keratin 6.5%  belly 10.1%  mouth 0.1%
+  bake AO: mean 0.918 p5 0.633 p50 0.974
+  base-colour luminance vs baked AO: r = +0.385;  vs bind-pose up-facing: r = +0.178
+  (a clearly positive r means the generator already painted occlusion/skylight into the colour)
+rasterising UVs at 4096 for the island mask...
+deriving detail normal from base-colour luminance...
+after:
+  normal R: mean 0.499 std 0.055 p5 0.419 p50 0.498 p95 0.584
+  normal G: mean 0.498 std 0.051 p5 0.421 p50 0.498 p95 0.576
+  normal B: mean 0.994 std 0.017 p5 0.970 p50 1.000 p95 1.000
+  orm R: mean 0.898 std 0.148 p5 0.572 p50 0.962 p95 1.000
+  orm G: mean 0.672 std 0.134 p5 0.333 p50 0.693 p95 0.807
+  orm B: mean 0.049 std 0.011 p5 0.031 p50 0.051 p95 0.067
+encoding PNGs and writing assets/frostvein-final.glb...
+verified: 9 bufferViews byte-identical, JSON identical apart from buffer layout
+assets/frostvein-final.glb: 50.4 MB

@@ -1,0 +1,6 @@
+2026-09-15 09:55:14.799 frostvein-leg_probe[1572:2443725] inverse bind matrices: from file
+2026-09-15 09:55:15.352 frostvein-leg_probe[1572:2443725] glTF 'assets/frostvein.glb': 74 joints, 66514 verts, 80000 tris, 1 submesh(es), 3 texture(s)
+2026-09-15 09:55:15.352 frostvein-leg_probe[1572:2443725] mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4, jaw jaw
+2026-09-15 09:55:15.353 frostvein-leg_probe[1572:2443725] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg
+2026-09-15 09:55:15.353 frostvein-leg_probe[1572:2443725] loaded 30 rig tuning values from assets/frostvein.glb.rig.cfg
+frostvein.glb.rig.cfg      thigh  -40 shin  -64 | foot vs hip: -1.91 m up, +2.09 m aft | foot vs root -2.05 m up
