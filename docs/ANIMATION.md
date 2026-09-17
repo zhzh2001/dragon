@@ -936,3 +936,26 @@ See the [flight pose report](../artifacts/flight-pose-fix/README.md) for values,
 before/after renders, remaining membrane creasing, and the 19-view-per-model
 inspection set. `python3 tools/capture_flight_pose.py` reproduces the full-size
 Metal checks, including actual flight, landing, and switching from dragon.glb.
+
+### Legs that hang can swing; legs that are tucked cannot
+
+Frostvein's compact fold (tuck -40) answered "legs stretching too high" and
+produced "too rigid": a leg folded against the body has nowhere visible to
+swing, so eight frames through an s-turn looked like one. The pendulum was
+working -- `tools/rig_probes/leg_swing_probe` runs a studio scenario through
+the rig and prints the thigh's angular range, and it read 30 degrees fore-aft
+through the s-turn -- but on a tucked leg 30 degrees at the hip moves
+nothing the eye can see. A relaxed hang (tuck 10, trail 5: thigh 15 degrees
+aft, a 46-degree knee, feet 2.2 m below the hips) is what the pendulum can
+move. Two things about the pendulum itself, now retuned on every profile
+(swing 26 -> 40 degrees, response 1 -> 1.5, stiffness 16 -> 12, damping 6 ->
+4.5, brake float 0.65 -> 0.8 and 35 degrees forward): a coordinated turn
+puts the effective gravity straight down the body, so the legs correctly do
+NOT swing in a steady bank -- only the reversals and the brake move them --
+and the stiff spring followed those transients so closely that nothing
+lagged. Slower and less damped, the legs trail the reversal and settle after
+it. Judged as eight-frame sequences through the s-turn reversal (from
+behind and below) and the brake (side, below) on all seven species,
+`artifacts/legs_swing_*.png`. **A pose that hides its own motion is the
+wrong pose even when every number is right; judge a pendulum from a
+sequence, never from a frame.**
