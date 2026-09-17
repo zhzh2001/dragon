@@ -13,7 +13,7 @@ unchanged.
 - `assets/embercrest-selected.glb`: 80,000 triangles, 39,994 Blender vertices
   (51,743 exported vertices after normal/UV splits), 61 deform bones, 4.02 MB.
   Triangle count is reduced 94.7% from the 1.5 million triangle source.
-- `assets/embercrest/selected/embercrest-selected.blend`: editable mesh, FK
+- `assets/embercrest-scripted/selected/embercrest-selected.blend`: editable mesh, FK
   armature, grouped bones, preview camera/lights, and a deformation-check action.
   Scrub frames 1/101 for rest, 21 for flap, 41 for fold/leg tuck, 61 for
   head/jaw, and 81 for tail curl. These diagnostic poses are excluded from GLB;
@@ -69,7 +69,7 @@ python3 tools/capture_embercrest.py --model assets/embercrest-selected.glb \
 ```
 
 The new test override fails if its path is missing; default optional validation
-of the old `assets/embercrest.glb` is unchanged. Model files remain covered by
+of the old `assets/embercrest-scripted.glb` is unchanged. Model files remain covered by
 the repository's existing asset-ignore rules. No default game model was changed.
 
 ## Textured Hunyuan variant
@@ -80,8 +80,8 @@ acceptance.
 
 `tools/rig_embercrest_candidate.py -- --textured` applies the same workflow to
 `assets/embercrest-cand-hunyuan-textured.glb`. It writes a separate
-`assets/embercrest-textured.glb` and
-`assets/embercrest/textured/embercrest-textured.blend`.
+`assets/embercrest.glb` and
+`assets/embercrest-scripted/textured/embercrest.blend`.
 
 The output has **80,000 triangles, 40,000 mesh vertices (73,550 exported
 vertices after UV/normal splits), and 62 bones** in revision 2. The 1.5 million triangle input
@@ -104,13 +104,13 @@ clearance is 3.993398 m. Revision 1 passed **508 checks with zero
 failures**, with zero reported bind error and three loaded textures. See
 [the revision history](EMBERCREST_TEXTURED.md) for current animation fixes and
 validation. Blender pose renders and native Metal captures are retained under
-`artifacts/embercrest-textured/`.
+`artifacts/embercrest/`.
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
   --python tools/rig_embercrest_candidate.py -- --textured
-EMBERCREST_TEST_MODEL=assets/embercrest-textured.glb ./build/test_anim
-python3 tools/capture_embercrest.py --model assets/embercrest-textured.glb \
-  --output artifacts/embercrest-textured/runtime
-./build/dragon --model assets/embercrest-textured.glb
+EMBERCREST_TEST_MODEL=assets/embercrest.glb ./build/test_anim
+python3 tools/capture_embercrest.py --model assets/embercrest.glb \
+  --output artifacts/embercrest/runtime
+./build/dragon --model assets/embercrest.glb
 ```

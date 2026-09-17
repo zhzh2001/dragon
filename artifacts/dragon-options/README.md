@@ -48,7 +48,7 @@ For 纹理绘制 (texture), 图生纹理 takes the set's `1-front.png` alone.
 
 `views/` is the four panels of `embercrest-turnaround.png` plus the top-down
 panel of `embercrest-reference-sheet.png`, and **for Embercrest this is the
-set to use** — it is what produced `assets/embercrest-textured.glb`.
+set to use** — it is what produced `assets/embercrest.glb`.
 
 A higher-resolution set was generated (one full-frame image per view, 1536
 wide, ~1450 px of dragon instead of ~540) and then deleted, because it made

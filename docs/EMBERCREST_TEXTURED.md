@@ -1,8 +1,8 @@
 # Textured Embercrest — revision history
 
 The Hunyuan textured candidate is simplified and rigged as
-`assets/embercrest-textured.glb`, with editable source at
-`assets/embercrest/textured/embercrest-textured.blend`. The generator and exact
+`assets/embercrest.glb`, with editable source at
+`assets/embercrest-scripted/textured/embercrest.blend`. The generator and exact
 export validation are described in [EMBERCREST_SELECTED.md](EMBERCREST_SELECTED.md).
 
 Revision 1 contains 80,000 triangles, 61 deform bones, and the source's three
@@ -10,7 +10,7 @@ byte-identical 4096×4096 PBR maps. The export passes 508 animation checks with
 zero bind error. These checks establish loader, joint-mapping and skinning
 integrity; they do **not** establish animation quality.
 
-![Current textured model](../artifacts/embercrest-textured/rest.png)
+![Current textured model](../artifacts/embercrest/rest.png)
 
 ## Revision 3 — wingbeat timing and closed mouth
 
@@ -26,10 +26,10 @@ near the hinge; the old low plane incorrectly pinned part of the lower gum and
 teeth to the skull, creating angular strips during closure. Neck weights, UVs,
 and PBR maps are preserved.
 
-![Closed mouth](../artifacts/embercrest-textured/revision3/attack-rest.png)
-![Attack opening](../artifacts/embercrest-textured/revision3/attack-opening.png)
-![Authored gape at full attack](../artifacts/embercrest-textured/revision3/attack-mouth.png)
-![Closed again after attack](../artifacts/embercrest-textured/revision3/attack-closed-again.png)
+![Closed mouth](../artifacts/embercrest/revision3/attack-rest.png)
+![Attack opening](../artifacts/embercrest/revision3/attack-opening.png)
+![Authored gape at full attack](../artifacts/embercrest/revision3/attack-mouth.png)
+![Closed again after attack](../artifacts/embercrest/revision3/attack-closed-again.png)
 
 The wingbeat uses delayed cyclic sampling for outer joints and timed recovery
 folding, with extension before the next downstroke. The intent is overlapping
@@ -40,22 +40,22 @@ attenuation to 0.08, adds 18° of recovery fold, and starts reopening at phase
 0.68. Recovery strength fades with flapping amplitude and wing tuck; the visual
 flap limit is applied after the delayed sample.
 
-![Native wingbeat cycle](../artifacts/embercrest-textured/revision3/wingbeat.gif)
+![Native wingbeat cycle](../artifacts/embercrest/revision3/wingbeat.gif)
 
 This loop contains nine native frames sampled evenly through the 0.9-second
 studio cycle. It shows the motion under review; the concept below is not a
 render of the implementation.
 
 ```sh
-./build/dragon --model assets/embercrest-textured.glb
-python3 tools/capture_embercrest.py --model assets/embercrest-textured.glb \
-  --output artifacts/embercrest-textured/revision3
+./build/dragon --model assets/embercrest.glb
+python3 tools/capture_embercrest.py --model assets/embercrest.glb \
+  --output artifacts/embercrest/revision3
 ```
 
 The textured model and profile pass 546 animation checks, including actual
 ordering of joint reversal times, bounded jaw opening and return to the closed
 offset. Texture PNGs and materials still match the source exactly. The current
-binary audit is `artifacts/embercrest-textured/revision3/audit.json`. All 10
+binary audit is `artifacts/embercrest/revision3/audit.json`. All 10
 CTest suites pass; 25 native pose/phase captures completed, including the
 7,200-frame turn soak. These are regression and visual inspection results;
 human assessment of the final motion remains the acceptance gate.
@@ -63,9 +63,9 @@ human assessment of the final motion remains the acceptance gate.
 A six-panel concept reference was generated with the built-in imagegen tool,
 using the existing model render as its visual reference. It guides silhouette
 and timing rather than serving as anatomical or physical evidence. The full
-prompt is in `artifacts/embercrest-textured/revision3/concept-prompt.txt`.
+prompt is in `artifacts/embercrest/revision3/concept-prompt.txt`.
 
-![Wingbeat concept reference](../artifacts/embercrest-textured/revision3/wingbeat-concept.png)
+![Wingbeat concept reference](../artifacts/embercrest/revision3/wingbeat-concept.png)
 
 ## Revision 1 review
 
@@ -90,7 +90,7 @@ into the skull. The added landmark corrects the opening direction without
 changing the mesh weights or textures.
 
 Model-specific animation settings live in
-`assets/embercrest-textured.glb.rig.cfg`. The game loads this beside the GLB.
+`assets/embercrest.glb.rig.cfg`. The game loads this beside the GLB.
 The profile reduces hind/foreleg trail to 14°/10° and leg fold to 42°. Braking
 partially extends the limbs and offsets them forward. The wing now distributes
 fold between elbow, wrist and fingers, adds 14° of raised-wing folding, and
@@ -109,7 +109,7 @@ settings. This changes visual articulation; flight forces are unchanged.
 ### Reproducible pose review
 
 The six reported problem views are retained in
-`artifacts/embercrest-textured/revision1/` and `revision2/` with matching cameras
+`artifacts/embercrest/revision1/` and `revision2/` with matching cameras
 and times: `brake`, `flap-upstroke`, `tuck`, `pull-out`, `attack-rest`, and
 `attack-mouth`. The full revision-2 suite also includes bind views, glide,
 regular flap, ground, and a 7,200-frame turn soak.
@@ -121,10 +121,10 @@ User review further identified mechanical wingbeat timing.
 
 ```sh
 cmake --build build --target dragon test_anim
-EMBERCREST_TEST_MODEL=assets/embercrest-textured.glb ./build/test_anim
-python3 tools/capture_embercrest.py --model assets/embercrest-textured.glb \
-  --output artifacts/embercrest-textured/revision2
-./build/dragon --model assets/embercrest-textured.glb
+EMBERCREST_TEST_MODEL=assets/embercrest.glb ./build/test_anim
+python3 tools/capture_embercrest.py --model assets/embercrest.glb \
+  --output artifacts/embercrest/revision2
+./build/dragon --model assets/embercrest.glb
 ```
 
 The rebuilt GLB remains 80,000 triangles with 73,550 exported vertices. All
@@ -136,24 +136,24 @@ completed, including the turn soak. These checks cover regressions and the
 reviewed poses, not every possible collision between a membrane and the body.
 
 Tangent and weight checks pass; the exact audit is retained in
-`artifacts/embercrest-textured/revision2-audit.json`.
+`artifacts/embercrest/revision2-audit.json`.
 
 ## Reversible checkpoint
 
 The revision-1 GLB, Blender source, model handling configuration, generator and
 validation reports are copied under
-`assets/embercrest/textured/revisions/v1/`. A manifest records SHA-256 hashes.
+`assets/embercrest-scripted/textured/revisions/v1/`. A manifest records SHA-256 hashes.
 The large asset files remain local under the existing ignore rules; the source,
 documentation, configurations and selected evidence are committed to Git.
 
 The initial Git checkpoint is `a571198`; revision 2 is `e21d0ac`. Its GLB,
 Blender source and rig profile are also saved under
-`assets/embercrest/textured/revisions/v2/`. To inspect the exact old motion, use the
+`assets/embercrest-scripted/textured/revisions/v2/`. To inspect the exact old motion, use the
 archived executable as well as the archived model:
 
 ```sh
-assets/embercrest/textured/revisions/v1/dragon \
-  --model assets/embercrest/textured/revisions/v1/embercrest-textured.glb
+assets/embercrest-scripted/textured/revisions/v1/dragon \
+  --model assets/embercrest-scripted/textured/revisions/v1/embercrest.glb
 ```
 
 To regenerate the current textured version:

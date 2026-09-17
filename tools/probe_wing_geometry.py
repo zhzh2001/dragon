@@ -2,7 +2,7 @@
 
     python3 tools/probe_wing_geometry.py                       # the four shipped assets
     python3 tools/probe_wing_geometry.py assets/stormsail.glb  # one file
-    python3 tools/probe_wing_geometry.py --rig-cfg assets/embercrest-textured.glb.rig.cfg assets/embercrest-textured.glb
+    python3 tools/probe_wing_geometry.py --rig-cfg assets/embercrest.glb.rig.cfg assets/embercrest.glb
 
 Diagnosis tool for the "folded wings cross" complaint. It reads the GLB
 directly (numpy only -- no Blender, no pygltflib) and, per asset and per side:
@@ -60,7 +60,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ASSETS = [
     'assets/stormsail.glb',
-    'assets/embercrest-textured.glb',
+    'assets/embercrest.glb',
     'assets/dragon.glb',
     'assets/alt/prowler.glb',
 ]

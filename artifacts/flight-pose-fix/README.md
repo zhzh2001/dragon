@@ -39,7 +39,7 @@ human playtesting of every transition.
 
 | Model | Before flight legs | After flight legs | After dive |
 |---|---|---|---|
-| Embercrest | [side](embercrest-textured-before-side.png) | [side](final/embercrest-textured-glide-side.png) | [above](final/embercrest-textured-dive-top.png) |
+| Embercrest | [side](embercrest-before-side.png) | [side](final/embercrest-glide-side.png) | [above](final/embercrest-dive-top.png) |
 | Blightmaw | [side](blightmaw-before-side.png) | [side](final/blightmaw-glide-side.png) | [above](final/blightmaw-dive-top.png) |
 | Rimefang | [side](rimefang-before-side.png) | [side](final/rimefang-glide-side.png) | [above](final/rimefang-dive-top.png) |
 | Ironroot | [side](ironroot-before-side.png) | [side](final/ironroot-glide-side.png) | [above](final/ironroot-dive-top.png) |
@@ -62,7 +62,7 @@ From the repository root on macOS with a Metal display available:
 cmake --build build
 python3 tools/capture_flight_pose.py
 ctest --test-dir build --output-on-failure
-./build/dragon --models assets/dragon.glb,assets/embercrest-textured.glb,assets/blightmaw.glb,assets/rimefang.glb,assets/ironroot.glb,assets/tidewrack.glb,assets/stormsail.glb
+./build/dragon --models assets/dragon.glb,assets/embercrest.glb,assets/blightmaw.glb,assets/rimefang.glb,assets/ironroot.glb,assets/tidewrack.glb,assets/stormsail.glb
 ```
 
 Use M to switch, Space to flap, Shift to dive, and free look to inspect from

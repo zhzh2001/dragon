@@ -1,6 +1,6 @@
 # Third-party assets
 
-## Original asset: assets/embercrest.glb (experiment, not tracked)
+## Original asset: assets/embercrest-scripted.glb (experiment, not tracked)
 
 **Embercrest** is an original model built for this project by
 `tools/build_embercrest.py`: geometry, UVs, procedural PBR textures, skin
@@ -13,7 +13,7 @@ not the hero model.
 
 ## Cloud-generated creatures
 
-`assets/embercrest-textured.glb`, `assets/stormsail.glb`, `assets/ashcoil.glb`,
+`assets/embercrest.glb`, `assets/stormsail.glb`, `assets/ashcoil.glb`,
 `assets/cragjaw.glb`, `assets/mossback.glb`, `assets/frostvein.glb`.
 
 Generated with **Tencent Hunyuan 3D** (`3d.hunyuan.tencent.com`) on its free
@@ -25,7 +25,7 @@ rigged locally by `tools/rig_embercrest_candidate.py` and finished by
 
 | Asset | Design | Generated |
 |---|---|---|
-| `embercrest-textured.glb` | Embercrest, winged quadruped | Studio, staged chain |
+| `embercrest.glb` | Embercrest, winged quadruped | Studio, staged chain |
 | `stormsail.glb` | Stormsail, wyvern | one-shot |
 | `ashcoil.glb` | Ashcoil, serpentine sky-wyrm | one-shot |
 | `cragjaw.glb` | Cragjaw, armoured ground drake | one-shot |

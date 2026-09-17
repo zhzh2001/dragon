@@ -1284,7 +1284,7 @@ void test_open_sculpt_jaw_calibration() {
 void test_roster_jaws_open_downward() {
     std::printf("every roster jaw opens downward on the breath\n");
     namespace fs = std::filesystem;
-    for (const char* name : {"assets/embercrest-textured.glb", "assets/rimefang.glb",
+    for (const char* name : {"assets/embercrest.glb", "assets/rimefang.glb",
                              "assets/blightmaw.glb", "assets/ironroot.glb",
                              "assets/stormsail.glb", "assets/tidewrack.glb"}) {
         const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
@@ -1742,7 +1742,7 @@ void test_wingtip_reaches_the_commanded_flap() {
     // Whatever an imported asset is shaped like, its visible stroke must land
     // in the same band. Chain length is the variable this pins.
     namespace fs = std::filesystem;
-    for (const char* name : {"assets/stormsail.glb", "assets/embercrest-textured.glb"}) {
+    for (const char* name : {"assets/stormsail.glb", "assets/embercrest.glb"}) {
         const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
@@ -2186,9 +2186,9 @@ void test_optional_embercrest_asset() {
     } else {
         const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
         const fs::path candidates[] = {
-            fs::path("assets/embercrest.glb"),
-            fs::path("../assets/embercrest.glb"),
-            source_root / "assets/embercrest.glb",
+            fs::path("assets/embercrest-scripted.glb"),
+            fs::path("../assets/embercrest-scripted.glb"),
+            source_root / "assets/embercrest-scripted.glb",
         };
         for (const fs::path& candidate : candidates) {
             if (fs::is_regular_file(candidate)) {
@@ -2197,7 +2197,7 @@ void test_optional_embercrest_asset() {
             }
         }
         if (asset_path.empty()) {
-            std::printf("  assets/embercrest.glb absent; optional validation skipped\n");
+            std::printf("  assets/embercrest-scripted.glb absent; optional validation skipped\n");
             return;
         }
     }
@@ -2239,8 +2239,9 @@ void test_optional_embercrest_asset() {
     // Apply it here as the runtime does, so the optional pose checks exercise
     // the shipped tuning rather than the generic defaults.
     const std::string asset_name = asset_path.filename().string();
-    const bool is_textured_embercrest =
-        asset_name.find("embercrest-textured") != std::string::npos;
+    // The shipped hero is assets/embercrest.glb; the script-built experiment
+    // (embercrest-scripted.glb) ships no rig profile and is not held to this.
+    const bool is_textured_embercrest = asset_name == "embercrest.glb";
     const fs::path rig_profile_path = fs::path(asset_path.string() + ".rig.cfg");
     anim::RigTuning model_tuning;
     const bool has_model_tuning =

@@ -42,7 +42,7 @@ What is built, in the order it was built. The plan these came from is
   extent, four tree and three grass kinds placed by slope, altitude and water,
   landing and take-off states, and `heft` as per-model handling.
 - **Two generated hero candidates are rigged and load in the engine.**
-  `assets/embercrest-textured.glb` (six-limbed dragon, 80K tris, 62 joints)
+  `assets/embercrest.glb` (six-limbed dragon, 80K tris, 62 joints)
   and `assets/stormsail.glb` (wyvern, 80K tris, 55 joints), both with UVs and
   4096² PBR sets, both accepted by the rig mapper with no joint warnings.
   Generated from original concept art through Hunyuan's one-shot, then
@@ -235,7 +235,17 @@ What is built, in the order it was built. The plan these came from is
   glide, flap, dive, head in glide and on the ground, soles at ground level,
   an in-game landing and a switch from `dragon.glb`; probes read zero sink,
   feet 1.9 m below the hips in the glide, jaw opening downward.
-  `artifacts/frostvein/README.md`; `tools/capture_frostvein.py`. `ANIMATION.md`, "A folded wing is
+  `artifacts/frostvein/README.md`; `tools/capture_frostvein.py`.
+- **Asset names say which file ships (2026-09-16).** Every species now
+  follows one rule: `assets/<name>.glb` is the shipped, material-repaired
+  file; `<name>-raw.glb` the rigged file before the repair;
+  `<name>-cand-*.glb` the generator's output. Embercrest's hero, formerly
+  `embercrest-textured.glb`, is `embercrest.glb`, and the 2026-09-08
+  script-built experiment that held that name is `embercrest-scripted.glb`
+  (`docs/EMBERCREST.md`, `artifacts/embercrest-scripted/`). Frostvein's
+  shipped file was the unrepaired rig with the repaired build parked beside
+  it as `-final`; the repaired build is now `frostvein.glb` and the session's
+  intermediates are under `assets/frostvein/intermediates/`. `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated

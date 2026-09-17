@@ -1,5 +1,5 @@
 {
-  "model": "assets/embercrest-textured.glb",
+  "model": "assets/embercrest.glb",
   "sha256": "00b05181628a1d19b5331c0c0b77ecf616592e8bab6e65b81221d235357fc64d",
   "source_sha256": "af080a8b2be1e2ca61d0091a6176c8fcc2d8c0fc19048c2ac990f928eb43508a",
   "triangles": 80000,
@@ -38,7 +38,7 @@
   ],
   "turn_soak_frames": 7200,
   "visual_review": "Native closed/open/closed jaw sequence and nine-phase wingbeat captured and inspected; broader flight/ground and 7200-frame soak completed. Human motion-quality review remains open.",
-  "source_blend": "assets/embercrest/textured/embercrest-textured.blend",
+  "source_blend": "assets/embercrest-scripted/textured/embercrest.blend",
   "texture_preservation": "All three 4096x4096 PNGs byte-identical to source; material settings unchanged",
   "repaired_zero_tangents": 5,
   "texture_png_sha256": {
@@ -51,7 +51,7 @@
   "max_tangent_normal_dot": 0.00014529657534012586,
   "max_weight_sum_error": 1.4901161193847656e-07,
   "revision": 3,
-  "rig_profile": "assets/embercrest-textured.glb.rig.cfg",
+  "rig_profile": "assets/embercrest.glb.rig.cfg",
   "rig_profile_sha256": "e167cfb6afcda39f4185de9db8dfd63481cbe20c5e8009f01da506e6774322da",
   "checkpoint_commit": "a571198",
   "neutral_animation_checks": 543,

@@ -18,12 +18,18 @@ blender --background --factory-startup --python tools/rig_embercrest_candidate.p
   --input assets/frostvein-cand-oneshot.glb --stem frostvein \
   --skeleton tools/skeletons/frostvein.json --keep-uvs --target 80000
 cp assets/frostvein.glb assets/frostvein-raw.glb
-python3 tools/repair_model_materials.py assets/frostvein-raw.glb -o assets/frostvein-final.glb
-cp assets/frostvein-final.glb assets/frostvein.glb
+python3 tools/repair_model_materials.py assets/frostvein-raw.glb -o assets/frostvein.glb
 ```
 
-The source, final GLB, raw GLB and editable Blender file stay local under the
-existing generated-asset policy. The input art, skeleton, profiles, tools,
+Naming, as for every species: `assets/frostvein.glb` is the shipped file
+(rigged and material-repaired), `assets/frostvein-raw.glb` the rigged file
+before the repair, `assets/frostvein-cand-oneshot.glb` the generator's
+output. The first build left the repaired file as `frostvein-final.glb`
+beside an unrepaired `frostvein.glb`; the repaired build is now the shipped
+one, and the other intermediates of that session (first rig, field test,
+materials trial, rejected first candidate) are parked in
+`assets/frostvein/intermediates/`, ignored. The source, raw GLB and editable
+Blender file stay local under the existing generated-asset policy. The input art, skeleton, profiles, tools,
 measurements and inspection evidence are tracked. The rigger writes a fresh
 flight profile when rebuilding; preserve any subsequently tuned profile.
 

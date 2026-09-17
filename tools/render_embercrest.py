@@ -1,6 +1,6 @@
 """Render the real rig in a concept-like raised-wing pose, without changing GLB.
 
-blender --background assets/embercrest/source/embercrest.blend \
+blender --background assets/embercrest-scripted/source/embercrest.blend \
   --python tools/render_embercrest.py
 """
 import bpy
@@ -30,5 +30,5 @@ camera.rotation_euler=(Vector((0,-.15,3.55))-camera.location).to_track_quat('-Z'
 camera.data.ortho_scale=14.7
 scene.render.resolution_x=1800;scene.render.resolution_y=1500
 scene.cycles.samples=64
-scene.render.filepath=str(ROOT/'artifacts/embercrest/concept-pose.png')
+scene.render.filepath=str(ROOT/'artifacts/embercrest-scripted/concept-pose.png')
 bpy.ops.render.render(write_still=True)

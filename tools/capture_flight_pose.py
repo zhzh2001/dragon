@@ -5,7 +5,7 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = ['embercrest-textured', 'blightmaw', 'rimefang', 'ironroot', 'tidewrack', 'stormsail']
+MODELS = ['embercrest', 'blightmaw', 'rimefang', 'ironroot', 'tidewrack', 'stormsail']
 VIEWS = [('side', 90, 6), ('front', 180, 6), ('rear', 0, 6), ('top', 90, 85)]
 
 def main():

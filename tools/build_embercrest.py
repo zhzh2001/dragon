@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1] if '__file__' in globals() else Path(
 sys.path.insert(0,str(ROOT/'tools'))
 from embercrest_materials import generate_maps
 OUT = ROOT / 'assets/embercrest'
-CAP = ROOT / 'artifacts/embercrest'
+CAP = ROOT / 'artifacts/embercrest-scripted'
 for p in [OUT / 'source', OUT / 'textures', CAP]:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -496,7 +496,7 @@ def finish():
     # Tangents require triangles; triangulate at export without changing source mesh.
     tri=BODY.modifiers.new('Export triangulation','TRIANGULATE');tri.quad_method='BEAUTY'
     bpy.ops.object.select_all(action='DESELECT');BODY.select_set(True);ARM.select_set(True);bpy.context.view_layer.objects.active=ARM
-    bpy.ops.export_scene.gltf(filepath=str(ROOT/'assets/embercrest.glb'),export_format='GLB',use_selection=True,
+    bpy.ops.export_scene.gltf(filepath=str(ROOT/'assets/embercrest-scripted.glb'),export_format='GLB',use_selection=True,
         export_apply=True,export_animations=True,export_skins=True,export_def_bones=True,
         export_tangents=True,export_yup=True,export_image_format='AUTO',export_keep_originals=False,use_active_scene=True)
     BODY.modifiers.remove(tri)
@@ -517,7 +517,7 @@ def finish():
     lo=[min(v.co[i] for v in BODY.data.vertices) for i in range(3)]
     hi=[max(v.co[i] for v in BODY.data.vertices) for i in range(3)]
     ground=(hi[2]-lo[2])*.5*19/(hi[0]-lo[0])
-    (ROOT/'assets/embercrest.glb.flight.cfg').write_text(
+    (ROOT/'assets/embercrest-scripted.glb.flight.cfg').write_text(
         '# Embercrest: centered skinned bounds at the engine 19 m wingspan.\n'
         '# Resting clearance to the sole, plus 2 cm; no handling overrides.\n'
         f'ground_offset {ground+.02:.6f}\n')

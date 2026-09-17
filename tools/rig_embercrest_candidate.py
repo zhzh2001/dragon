@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--textured',action='store_true',help='Rig the textured Hunyuan candidate and retain its UVs and PBR maps')
 parser.add_argument('--input',help='source .glb to rig (default: the Embercrest candidate implied by --textured)')
-parser.add_argument('--stem',help='output name: writes assets/<stem>.glb and artifacts/<stem>/ (default embercrest-textured/-selected)')
+parser.add_argument('--stem',help='output name: writes assets/<stem>.glb and artifacts/<stem>/ (default embercrest/-selected)')
 parser.add_argument('--target',type=int,default=80000,help='triangle budget after decimation (default 80000)')
 parser.add_argument('--skeleton',default='tools/skeletons/winged-quadruped.json',
                     help='skeleton JSON; bone names drive the anatomy-specific passes')
@@ -55,12 +55,12 @@ parser.add_argument('--jaw-mask',choices=('inherit','none','embercrest'),default
                          "forces the gap-following mask, 'inherit' uses the JSON")
 args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
 TEXTURED=args.textured or args.keep_uvs
-STEM=args.stem or ('embercrest-textured' if args.textured else 'embercrest-selected')
+STEM=args.stem or ('embercrest' if args.textured else 'embercrest-selected')
 SOURCE = ROOT / (args.input if args.input else
                  ('assets/embercrest-cand-hunyuan-textured.glb' if args.textured
                   else 'assets/embercrest-cand-hunyuan-1p5m.glb'))
-OUT = ROOT / ('assets/embercrest/textured' if TEXTURED and not args.stem else
-              'assets/embercrest/selected' if not args.stem else 'assets/'+STEM)
+OUT = ROOT / ('assets/embercrest-scripted/textured' if TEXTURED and not args.stem else
+              'assets/embercrest-scripted/selected' if not args.stem else 'assets/'+STEM)
 CAP = ROOT / ('artifacts/'+STEM)
 GLB = ROOT / ('assets/'+STEM+'.glb')
 TARGET = args.target

@@ -8,7 +8,7 @@ import subprocess
 import argparse
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'artifacts/embercrest'
+OUT = ROOT / 'artifacts/embercrest-scripted'
 CASES = [
     ('bind-front', ['--bind-pose', '--inspect', '150', '18', '18'], 1),
     ('bind-side', ['--bind-pose', '--inspect', '90', '18', '10'], 1),
@@ -33,7 +33,7 @@ CASES += [(f'wing-cycle-{i}', ['--studio', '1', '--inspect', '150', '16', '18'],
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable', type=Path, default=ROOT/'build/dragon')
-    parser.add_argument('--model', type=Path, default=ROOT/'assets/embercrest.glb')
+    parser.add_argument('--model', type=Path, default=ROOT/'assets/embercrest-scripted.glb')
     parser.add_argument('--output', type=Path, default=OUT)
     parser.add_argument('--cases', nargs='+', choices=[case[0] for case in CASES])
     args = parser.parse_args()

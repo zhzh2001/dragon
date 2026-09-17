@@ -43,7 +43,7 @@ candidate can be judged before it is imported:
   exporter). `baseColorFactor` is ignored, so bake colour into the texture.
 - **Scale and frame**: scaled by X extent to a 19 m wingspan, so export
   with wings spread and forward at -Z, +Y up (the glTF default).
-- The optional test in `tests/test_anim.cpp` loads `assets/embercrest.glb`
+- The optional test in `tests/test_anim.cpp` loads `assets/embercrest-scripted.glb`
   when present and checks every chain maps and responds. Point it at a new
   asset and it becomes the acceptance test for the rig.
 
@@ -385,7 +385,7 @@ models through `--headless --frames N`, timing the *slope* between 300 and
 | Model | tris | images | startup | **ms/frame** |
 |---|---|---|---|---|
 | `dragon.glb` | 37,998 | 9 | 0.93 s | **5.01** |
-| `embercrest-textured.glb` | 80,000 | 3 | 0.88 s | **2.68** |
+| `embercrest.glb` | 80,000 | 3 | 0.88 s | **2.68** |
 | `embercrest-selected.glb` | 80,000 | 1 | 0.21 s | 3.47 |
 
 **The 80 K model is faster than the 38 K one.** At this scale — tens of
@@ -1493,7 +1493,7 @@ re-run the Embercrest build and check `max_weight_sum_error` and
 it passed across all five changes above — 5.122274160385132e-08 and
 3.9933978544450914, with the `binding` string byte-identical. Run it with a
 throwaway `--stem`: the real stem would overwrite the shipping
-`assets/embercrest-textured.glb` with an unrepaired rebuild.
+`assets/embercrest.glb` with an unrepaired rebuild.
 
 ## Open questions
 

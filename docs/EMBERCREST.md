@@ -9,7 +9,7 @@ is **not as good as either imported asset**, so the imported dragons remain the
 hero models. The attempt is kept here because the pipeline is reusable and the
 result is a useful measure of what procedural authoring can and cannot do.
 
-![Embercrest raised-wing render](../artifacts/embercrest/concept-pose.png)
+![Embercrest raised-wing render](../artifacts/embercrest-scripted/concept-pose.png)
 
 ## What was tried
 
@@ -27,7 +27,7 @@ The model was then built in Blender by a Python script rather than sculpted:
 | `tools/embercrest_materials.py` | NumPy-only procedural base, normal and ORM maps (cellular scutes, cracks, membrane veins, horn striations) |
 | `tools/render_embercrest.py` | Cycles render of the real rig in a raised-wing pose, for the picture above |
 | `tools/capture_embercrest.py` | In-engine acceptance captures via `--headless --model --studio --inspect` |
-| `assets/embercrest.glb.flight.cfg` | The one handling override: `ground_offset` from the model's resting clearance |
+| `assets/embercrest-scripted.glb.flight.cfg` | The one handling override: `ground_offset` from the model's resting clearance |
 
 Two revisions were made. The second raised the head into an upright neck,
 slimmed the waist, enlarged the wing fan, curved the tail, added physical
@@ -66,22 +66,22 @@ step kept as the back half.
 ## Rebuilding it
 
 The GLB, the `.blend`, the textures and the v1 revision are not tracked
-(`assets/embercrest/` and `assets/*.glb` are ignored). Regenerate with Blender
+(`assets/embercrest-scripted/` and `assets/*.glb` are ignored). Regenerate with Blender
 5.x from the repository root:
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender --background \
   --python tools/build_embercrest.py -- --build
 /Applications/Blender.app/Contents/MacOS/Blender --background \
-  assets/embercrest/source/embercrest.blend --python tools/render_embercrest.py
+  assets/embercrest-scripted/source/embercrest.blend --python tools/render_embercrest.py
 python3 tools/capture_embercrest.py     # needs ./build/dragon
 ```
 
 Then fly it:
 
 ```sh
-./build/dragon --model assets/embercrest.glb
-./build/dragon --model assets/embercrest.glb --studio 1 --inspect 150 16 18
+./build/dragon --model assets/embercrest-scripted.glb
+./build/dragon --model assets/embercrest-scripted.glb --studio 1 --inspect 150 16 18
 ```
 
 Blender coordinates are +Y forward, +Z up; the export is glTF -Z forward, +Y
@@ -98,8 +98,8 @@ it. The default argument preserves the old value for callers without tuning.
 
 | Image | What it shows |
 |---|---|
-| [`concept-pose.png`](../artifacts/embercrest/concept-pose.png) | Cycles render, raised-wing pose |
-| [`studio-0001.png`](../artifacts/embercrest/studio-0001.png) | Cycles render, three-quarter from above |
-| [`flap.png`](../artifacts/embercrest/flap.png) | In-engine, studio flap scenario |
-| [`ground.png`](../artifacts/embercrest/ground.png) | In-engine, grounded scenario with the derived `ground_offset` |
-| [`build_stats.json`](../artifacts/embercrest/build_stats.json) | Mesh, bone and texture counts from the last build |
+| [`concept-pose.png`](../artifacts/embercrest-scripted/concept-pose.png) | Cycles render, raised-wing pose |
+| [`studio-0001.png`](../artifacts/embercrest-scripted/studio-0001.png) | Cycles render, three-quarter from above |
+| [`flap.png`](../artifacts/embercrest-scripted/flap.png) | In-engine, studio flap scenario |
+| [`ground.png`](../artifacts/embercrest-scripted/ground.png) | In-engine, grounded scenario with the derived `ground_offset` |
+| [`build_stats.json`](../artifacts/embercrest-scripted/build_stats.json) | Mesh, bone and texture counts from the last build |

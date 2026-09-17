@@ -86,7 +86,7 @@ The elemental roster, and the two flags that make a multi-species capture
 possible at all -- at the default 650 m spawn the rivals are specks:
 
 ```sh
-./build/dragon --models assets/embercrest-textured.glb,assets/rimefang.glb,\
+./build/dragon --models assets/embercrest.glb,assets/rimefang.glb,\
 assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.glb \
   --bots 5 --bot-range 95 --combat
 ```
