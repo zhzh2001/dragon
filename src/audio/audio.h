@@ -16,6 +16,7 @@ enum class Clip : int {
     Screech,   // taking a hit: a wounded-animal cry, not a UI ping
     KnockOut,  // going down: a long dying cry over a heavy thump
     Boost,     // a rising rush of air
+    Bite,      // jaws snapping shut: a click over a short thud
     Flap,
     Count,
 };

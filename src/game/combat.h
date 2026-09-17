@@ -18,6 +18,28 @@ enum class Team : uint8_t { Player, Hostile };
 // Combat coefficients. Same rule as flight: everything here is meant to be
 // dragged in ImGui while playing.
 struct CombatTuning {
+    // ---- melee ----
+    //
+    // The close-range answer. The breath cone and the fireball both need the
+    // nose on the target, and in a turning fight the rival is very often
+    // twenty metres away and off the nose, where the player could do nothing
+    // but circle. A dragon that close bites. None of this needs aim: a BITE
+    // lands on anything inside a wide cone ahead of the mouth within a few
+    // body lengths; a claw or tail STRIKE lands on anything alongside or
+    // behind, inside a sphere around the body. Distance and cone tests only.
+    float bite_range = 26.0f;           // metres from the mouth, about three body lengths
+    float bite_half_angle_deg = 45.0f;  // wide on purpose: this is the no-aim weapon
+    float bite_damage = 24.0f;
+    float strike_range = 16.0f;         // from the body centre, any direction
+    float strike_damage = 14.0f;
+    float melee_cooldown = 1.3f;
+    // A lunge costs airspeed, so biting is a commitment rather than a free
+    // action spammed on cooldown.
+    float melee_lunge_speed_cost = 3.0f;  // m/s
+    // Bots bite with the same reach; their damage is its own dial, like their
+    // breath. A strike does 60% of it.
+    float hostile_melee_damage = 12.0f;
+
     // ---- fireball ----
     // Fast enough to lead a target rather than lob at it, slow enough that a
     // banking dragon can still slip the shot.
@@ -117,6 +139,20 @@ struct CombatInput {
     bool fire = false;          // edge: one fireball per press
     bool boost = false;         // edge
     bool cycle_target = false;  // edge: relock onto the next candidate
+    bool melee = false;         // edge: one bite or strike per press
+};
+
+// What a melee swing would connect with: the bite (ahead, from the mouth) or
+// the claw/tail strike (alongside or behind, from the body). Bite wins when
+// both apply.
+enum class MeleeKind : uint8_t { None, Bite, Strike };
+
+// A bot's swing, buffered like its flame and resolved against the player
+// inside update().
+struct MeleeSwing {
+    core::Vec3 mouth = core::Vec3::zero();
+    core::Vec3 forward = core::Vec3::forward();
+    core::Vec3 body = core::Vec3::zero();
 };
 
 struct Projectile {
@@ -203,6 +239,12 @@ struct CombatEvents {
     bool took_damage = false;
     // A fireball left the player's mouth this frame -- the rig's spit.
     bool fired = false;
+    // The player swung this frame -- the rig's lunge -- and what, if anything,
+    // it connected with.
+    bool melee_swung = false;
+    MeleeKind melee_hit = MeleeKind::None;
+    // Some of the damage taken this frame was a bite or a strike.
+    bool bitten = false;
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
@@ -233,6 +275,7 @@ public:
     // 0 when ready, 1 immediately after use.
     float fire_cooldown() const;
     float boost_cooldown() const;
+    float melee_cooldown() const;
     bool boost_active() const { return boost_timer_ > 0.0f; }
 
     // ---- world ----
@@ -288,6 +331,9 @@ public:
     // through the one path that owns them.
     void hostile_breath(core::Vec3 origin, core::Vec3 direction, int source = -1,
                         BreathScales scales = {});
+    // An external pilot biting or striking this frame: its mouth, the way it
+    // faces, and its body centre. Resolved against the player in update().
+    void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body);
 
     // The player's species scales, set by the app whenever the model changes.
     // Public like `tuning` is: it is data the owner sets, not state combat
@@ -313,6 +359,7 @@ private:
     void update_projectiles(float dt, const FlightState& player, CombatEvents& events);
     void update_sentinels(float dt, const FlightState& player, CombatEvents& events);
     void apply_breath(float dt, const FlightState& player, CombatEvents& events);
+    void apply_melee(const FlightState& player, CombatEvents& events);
     void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events);
     float random_unit();
     void update_lock(const FlightState& player);
@@ -331,6 +378,7 @@ private:
     float time_since_damage_ = 0.0f;
     float time_since_breath_ = 0.0f;
     float fire_timer_ = 0.0f;
+    float melee_timer_ = 0.0f;
     float boost_timer_ = 0.0f;
     float boost_cooldown_timer_ = 0.0f;
     int kills_ = 0;
@@ -341,6 +389,7 @@ private:
     std::vector<Impact> impacts_;
     std::vector<BreathCone> hostile_breaths_pending_;
     std::vector<BreathCone> hostile_breaths_drawn_;
+    std::vector<MeleeSwing> hostile_melee_pending_;
     core::Vec3 muzzle_override_ = core::Vec3::zero();
     bool has_muzzle_override_ = false;
 
@@ -355,6 +404,14 @@ private:
 // directly, and because targeting will want it later.
 bool point_in_cone(core::Vec3 point, core::Vec3 tip, core::Vec3 axis, float half_angle_radians,
                    float length);
+
+// Which melee weapon reaches a target of `target_radius` at `target` from a
+// dragon whose mouth is at `mouth`, facing `forward`, with its body centred at
+// `body`. The bite cone is tested against the target's near surface, like the
+// breath, so a target the jaws visibly close on counts. Exposed for tests and
+// for the bots, which decide with the same geometry the player's swing uses.
+MeleeKind melee_reach(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body, core::Vec3 target,
+                      float target_radius, const CombatTuning& tuning);
 
 // Closest approach between a swept sphere and a static one, used so a fast
 // projectile cannot pass through a target between two frames. Returns the

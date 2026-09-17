@@ -55,7 +55,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--frames N` | Run exactly N frames then exit. |
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
 | `--hide-ui` | Hide the ImGui panels, for world-only captures. |
-| `--telemetry [N]` | Log one line of flight state every N frames (default 60). A screenshot shows a pose; this shows the state machine behind it. |
+| `--telemetry [N]` | Log one line of flight state every N frames (default 60), plus a combat line (health, kills, bites swung/landed/taken) when combat is on. A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--cam-mode chase\|action\|cinematic\|fp` | Pick a camera preset. |
 | `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon. Elevation 88 looks straight down -- the only view that shows a lateral tail wave. |
@@ -65,9 +65,9 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Fly the selected course unattended. Doubles as a soak test. |
 | `--course N` | Select a generated course. |
-| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack, 9 grounded. |
+| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded. |
 | `--combat` | Arm the dragon and spawn a wave of sentinels. |
-| `--attack` | Also hold breath, fire and boost -- how flame, projectiles and boost get onto a screenshot. |
+| `--attack` | Also hold breath, fire, boost and bite -- how flame, projectiles, boost and the lunge get onto a screenshot. |
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
@@ -121,6 +121,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | F1 | Hide every ImGui panel (the HUD stays) |
 | F / left mouse | Fire breath (hold) -- gamepad LB |
 | G | Fireball -- gamepad RB |
+| C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 26 m, a claw or tail strike on anything within 16 m of the body. No aim needed; costs a little airspeed |
 | X | Boost -- gamepad X |
 | Esc | Release the mouse if captured; again to quit |
 

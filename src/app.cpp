@@ -993,7 +993,21 @@ void App::update(float dt) {
         // And the mouth: open on the flame, a spit on the fireball.
         rig_action_.breath = combat_.breathing() ? 1.0f : 0.0f;
         rig_action_.fire = events.fired;
+        rig_action_.bite = events.melee_swung;
         rig_action_.boost = combat_.boost_active() ? 1.0f : 0.0f;
+
+        if (events.melee_swung) {
+            ++bites_swung_;
+            if (events.melee_hit != game::MeleeKind::None) ++bites_landed_;
+            audio_.play(audio::Clip::Bite, events.melee_hit == game::MeleeKind::None ? 0.6f : 1.0f);
+            // The lunge spends airspeed: a bite is a commitment, not a free
+            // action on a cooldown. Taken off the velocity directly, the way a
+            // brake would take it, so the flight model sees a slower dragon.
+            game::FlightState& st = flight_.state();
+            const float speed = core::length(st.velocity);
+            const float cost = combat_.tuning.melee_lunge_speed_cost;
+            if (speed > cost + 1.0f) st.velocity = st.velocity * ((speed - cost) / speed);
+        }
 
         if (events.had_hit) {
             hit_marker_ = 0.35f;
@@ -1050,6 +1064,7 @@ void App::update(float dt) {
             }
         }
 
+        if (events.bitten) ++bites_taken_;
         if (events.damage_taken > 0.0f) {
             // Rate-limited: a flame deals damage every frame, and forty
             // overlapping cries per second was the "strange loud flame" of the
@@ -2791,6 +2806,7 @@ void App::update_bots(float dt) {
         if (!match_.weapons_live()) {
             decision.fire = false;
             decision.breathe = false;
+            decision.melee = false;
         }
 
         // Fire leaves the bot's mouth too: last frame's animated head, like
@@ -2814,9 +2830,18 @@ void App::update_bots(float dt) {
             combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model,
                                    model_at(bot->model).breath.scales);
         }
+        if (decision.melee) {
+            combat_.hostile_melee(muzzle, bot->flight.state().forward(), self.position);
+            // The same lunge cost the player pays.
+            game::FlightState& st = bot->flight.state();
+            const float speed = core::length(st.velocity);
+            const float cost = combat_.tuning.melee_lunge_speed_cost;
+            if (speed > cost + 1.0f) st.velocity = st.velocity * ((speed - cost) / speed);
+        }
         anim::RigAction action;
         action.breath = decision.breathe ? 1.0f : 0.0f;
         action.fire = decision.fire;
+        action.bite = decision.melee;
         bot->rig.set_action(action);
 
         // The head tracks the player when close and hunting -- the tell that a
@@ -2942,6 +2967,7 @@ game::CombatInput App::read_combat_input() const {
         in.breath = true;
         in.fire = true;   // the cooldown decides the actual rate
         in.boost = true;  // likewise: a burn at t=0 and every cooldown after
+        in.melee = true;  // and a bite every cooldown, for the lunge on a capture
         return in;
     }
 
@@ -2958,6 +2984,10 @@ game::CombatInput App::read_combat_input() const {
     in.boost = input_.pressed(SDL_SCANCODE_LSHIFT) && false;  // shift is tuck-dive
     in.boost = input_.pressed(SDL_SCANCODE_X) ||
                input_.gamepad_button(SDL_GAMEPAD_BUTTON_WEST);
+    // Bite is edge-triggered like the fireball; the gamepad button is held
+    // state, and the combat cooldown makes a held button a swing per cooldown,
+    // which is the same thing the fireball does.
+    in.melee = input_.pressed(SDL_SCANCODE_C) || input_.gamepad_button(SDL_GAMEPAD_BUTTON_EAST);
     in.cycle_target = cycle_requested_;
     return in;
 }
@@ -3136,6 +3166,7 @@ void App::draw_combat_hud() {
     };
     pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
     pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
+    pip(width * 0.5f - 78.0f, 1.0f - combat_.melee_cooldown(), "C", IM_COL32(230, 80, 70, 230));
 
     // ---- the match, writ large ----
     {
@@ -3396,8 +3427,22 @@ void App::build_combat_ui() {
         ImGui::TextDisabled("no lock -- put a target inside %.0f deg of the nose",
                             t.lock_cone_deg);
     }
-    ImGui::TextDisabled("F or LMB breath, G fireball, X boost, T relock");
-    ImGui::TextDisabled("gamepad: LB breath, RB fireball, X boost, R-stick click relock");
+    ImGui::TextDisabled("F or LMB breath, G fireball, C bite, X boost, T relock");
+    ImGui::TextDisabled("gamepad: LB breath, RB fireball, B bite, X boost, R-stick click relock");
+
+    // Melee first: it is the newest answer to the playtest's complaint (close
+    // to the rival with the wrong heading, nothing to do but circle), and its
+    // reach and cost are what decide whether a close fight resolves.
+    ImGui::Separator();
+    ImGui::Text("melee  (C / B)  %s", combat_.melee_cooldown() > 0.0f ? "recovering" : "ready");
+    ImGui::SliderFloat("bite range", &t.bite_range, 5.0f, 60.0f, "%.0f m");
+    ImGui::SliderFloat("bite cone", &t.bite_half_angle_deg, 10.0f, 90.0f, "%.0f deg half");
+    ImGui::SliderFloat("strike range", &t.strike_range, 0.0f, 40.0f, "%.0f m");
+    ImGui::SliderFloat("bite damage", &t.bite_damage, 0.0f, 80.0f, "%.0f");
+    ImGui::SliderFloat("strike damage", &t.strike_damage, 0.0f, 60.0f, "%.0f");
+    ImGui::SliderFloat("melee cooldown", &t.melee_cooldown, 0.2f, 4.0f, "%.2f s");
+    ImGui::SliderFloat("lunge speed cost", &t.melee_lunge_speed_cost, 0.0f, 12.0f, "%.1f m/s");
+    ImGui::SliderFloat("bot melee damage", &t.hostile_melee_damage, 0.0f, 40.0f, "%.0f");
 
     // The two dials that decide whether combat is fun, at the top level rather
     // than buried: aim assist is how easy hitting is, spread is how hard being
@@ -3860,12 +3905,17 @@ void App::render() {
 void App::log_telemetry() const {
     const game::FlightState& s = flight_.state();
     LOG_INFO("t=%6.2f y=%7.1f clr=%6.1f spd=%5.1f climb=%6.1f g=%4.1f aoa=%5.1f "
-             "flap=%.2f tuck=%.2f brake=%.2f %s%s",
+             "flap=%.2f tuck=%.2f brake=%.2f %s%s%s",
              double(frame_index_) / 60.0, double(s.position.y), double(s.ground_clearance),
              double(s.airspeed), double(s.climb_rate), double(s.g_load),
              double(core::degrees(s.angle_of_attack)), double(s.flap_amplitude),
              double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
-             s.stalling ? "STALL" : "");
+             s.stalling ? "STALL " : "", "");
+    if (combat_enabled_) {
+        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d",
+                 double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
+                 bites_taken_);
+    }
 }
 
 void App::run() {

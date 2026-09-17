@@ -547,6 +547,12 @@ struct RigTuning {
     // firing (m/s at the head, up and back), because a steer alone asks an
     // overdamped neck to move through its spring, and a spit is a snap.
     float spit_impulse = 4.0f;
+    // Bite: the neck lunges forward and down at the mark, jaws gaping, and
+    // snaps shut on the way back -- the spit's gesture mirrored. Peak lunge,
+    // duration, and the muscular kick that makes it a strike not a lean.
+    float bite_lunge_deg = 24.0f;
+    float bite_duration = 0.45f;
+    float bite_impulse = 5.0f;
     // Breath: the neck thrusts forward and down into the stream, stiffens
     // (a tensed neck holds the flame steady) and trembles faintly with the
     // effort. The tremor is on the head only, after the aim.
@@ -623,6 +629,7 @@ bool load_rig_tuning(RigTuning& tuning, const char* path);
 struct RigAction {
     float breath = 0.0f;  // 0..1, flame held
     bool fire = false;    // edge: a fireball left this frame
+    bool bite = false;    // edge: a melee swing this frame -- the neck lunges
     float boost = 0.0f;   // 0..1
 };
 
@@ -881,6 +888,7 @@ private:
     RigAction action_;
     float breath_smoothed_ = 0.0f;
     float spit_time_ = 1e9f;
+    float bite_time_ = 1e9f;
     float jaw_open_ = 0.0f;
     // Which way a positive body-X rotation of the jaw moves it: +1 opens, -1
     // closes. Measured at init, because the jaw bone points wherever the

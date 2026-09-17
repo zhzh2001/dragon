@@ -218,6 +218,11 @@ private:
 
     game::Combat combat_;
     bool combat_enabled_ = false;
+    // Melee bookkeeping for the telemetry line: a capture cannot show whether
+    // a bite connected, the counters can.
+    int bites_landed_ = 0;
+    int bites_taken_ = 0;
+    int bites_swung_ = 0;
 
     // M14: bot dragons. Each flies its own FlightModel through a BotPilot and
     // occupies an external hostile slot in Combat, which handles its health,

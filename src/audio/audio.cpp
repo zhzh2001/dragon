@@ -69,6 +69,22 @@ void Audio::synthesize_clips() {
         }
     }
 
+    // Bite: jaws snapping shut. A sharp click (a few milliseconds of bright
+    // noise) over a short low thud, so it reads as teeth meeting rather than
+    // as another shot.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Bite)];
+        clip.resize(seconds(0.22f));
+        float lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            lp += (synth_noise() - lp) * 0.6f;
+            const float click = lp * std::exp(-220.0f * t);
+            const float thud = 0.7f * std::sin(TWO_PI * 90.0f * t) * std::exp(-18.0f * t);
+            clip[i] = 0.8f * (click + thud);
+        }
+    }
+
     // Screech: a wounded-animal cry -- a pitch falling through harmonics with
     // vibrato and breath noise. FM-ish synthesis, because a pure sine reads as
     // a UI beep and taking a hit should sound like it happened to a creature.

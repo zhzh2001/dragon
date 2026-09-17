@@ -61,6 +61,12 @@ What is built, in the order it was built. The plan these came from is
   at the playable extent after the skirt was added, so the default course's
   start sat inside it and every run opened on a floor blended halfway to sky.
   Renders in `artifacts/visual-row1/`.
+- **M18** melee (row 2b): a bite in a wide cone ahead of the mouth and a
+  claw/tail strike around the body, no aim needed, on a cooldown that costs
+  airspeed; bots swing with the same geometry and an aligned attack now
+  presses to bite range before extending; the neck lunges and the jaw snaps
+  on the rig; dials at the top of the Combat panel; `bites swung/landed/
+  taken` on the telemetry line. `COMBAT.md`, "Melee".
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

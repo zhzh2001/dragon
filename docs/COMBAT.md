@@ -79,6 +79,55 @@ for: a nested "glow" shell just occludes its own core in a forward opaque
 pipeline, and a shot passing the chase camera at 3x exaggeration is a
 screen-filling balloon that reads as a volley of different-sized projectiles.
 
+### Melee (row 2b of `DIRECTION.md`)
+
+The close-range answer, from a playtest: "very annoying when you are close
+to the enemy but with the wrong heading." The breath cone and the fireball
+both need the nose on the target, and in a turning fight the rival is very
+often twenty metres away and off the nose, where the player could do nothing
+but circle. So a dragon that close bites, and **melee needs no aim**:
+
+- **Bite** (`bite_range` 26 m, `bite_half_angle_deg` 45): anything inside a
+  wide cone ahead of the MOUTH -- the rig's animated head, the same point
+  fire leaves from. Tested against the target's near surface like the
+  breath, so jaws that visibly close on a rival count.
+- **Strike** (`strike_range` 16 m): a claw or tail on anything inside a
+  sphere around the body, any direction -- alongside, behind, above.
+- One press (`C`, gamepad `B`) is one swing, whether or not anything is in
+  reach; `melee_cooldown` 1.3 s; the swing costs `melee_lunge_speed_cost`
+  (3 m/s) of airspeed, so a bite is a commitment rather than a free action.
+- `melee_reach()` is the geometry, exposed for the tests and shared by the
+  bots, so what the player's swing hits and what a bot's swing hits are the
+  same function.
+
+Bots swing through `Combat::hostile_melee`, buffered and resolved against the
+player inside `update()` exactly like their flames; damage is its own dial
+(`hostile_melee_damage`, a strike at 60%). The bot decides off the LIVE
+position, like its flame -- a bite is a contact, and pretending not to see a
+dragon fifteen metres away reads as blindness -- in any state, once per
+`melee_cooldown` stretched by its tempo. One doctrine change came with it:
+**an aligned attack presses to bite range before it extends.** The break-off
+range was 80 m in every case; a bot lined up within 25 degrees now presses to
+`melee_range * 0.7` instead, so a pass on the player's tail ends in a bite,
+while an off-axis pass (an overshoot about to happen) still breaks at 80 m.
+
+On the rig, the swing is `RigAction::bite`: the neck lunges forward and down
+(`bite_lunge_deg`, a kick of `bite_impulse` m/s through the chain, the neck
+stiffened as for the spit) and the jaw gapes through the lunge and snaps shut
+on the way back (`bite_duration` 0.45 s). Studio scenario 8 bites at 7.2 s
+of its cycle. The sound is a click over a short thud.
+
+How it was verified, because it could not be seen: the `--telemetry` line
+now carries `bites swung / landed / taken`. In a passive or autopilot match
+neither dragon comes within 26 m for minutes at a time -- bots break off at
+80 m and cannot follow a gliding player below their terrain floor -- so the
+in-game path was confirmed by pinning a bot 14 m ahead for half a second in a
+probe build: the player's swing landed (9 m from the mouth, 8 degrees off)
+and the bot's swings took health. The reach geometry and the bot's discipline
+are pinned in `test_combat` and `test_bot`. Whether the dials are right is
+the playtest question for a 2-bot match: does a close fight resolve instead
+of circling.
+
 ## Bots (M14)
 
 `game::BotPilot` is a pilot, not a puppeteer: it reads the world and emits the

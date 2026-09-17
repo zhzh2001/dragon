@@ -428,6 +428,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(spit_recoil_deg),
     RIG_FLOAT_FIELD(spit_duration),
     RIG_FLOAT_FIELD(spit_impulse),
+    RIG_FLOAT_FIELD(bite_lunge_deg),
+    RIG_FLOAT_FIELD(bite_duration),
+    RIG_FLOAT_FIELD(bite_impulse),
     RIG_FLOAT_FIELD(breath_neck_thrust_deg),
     RIG_FLOAT_FIELD(breath_neck_tone),
     RIG_FLOAT_FIELD(breath_tremor_deg),
@@ -2175,6 +2178,20 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         spit_time_ += dt;
     }
     action_.fire = false;  // an edge, consumed
+    if (action_.bite) {
+        bite_time_ = 0.0f;
+        // The lunge: kick the neck forward and a little down, toward the mark.
+        const Vec3 kick = core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) *
+                          tuning.bite_impulse;
+        const size_t points = neck_sim_.velocity.size();
+        for (size_t i = 1; i < points; ++i) {
+            const float progress = float(i) / float(points - 1);
+            neck_sim_.velocity[i] += kick * progress;
+        }
+    } else {
+        bite_time_ += dt;
+    }
+    action_.bite = false;
 
     // Wing load flex reads the g excess, smoothed because g_load is assembled
     // from this frame's forces and single-frame spikes would make the wings
@@ -2266,6 +2283,11 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         neck_steer.x += tuning.spit_recoil_deg * std::sin(core::TWO_PI * u) * (1.0f - u);
     }
+    // Bite: one lunge forward and back, same sign as the breath's thrust.
+    if (bite_time_ < tuning.bite_duration) {
+        const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
+        neck_steer.x -= tuning.bite_lunge_deg * std::sin(core::PI * u);
+    }
 
     // Named fields, not positional braces: a positional initializer here once
     // silently dropped the neck's brace, aero gate and articulation range when
@@ -2280,7 +2302,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // is a strike: several times stiffer for the gesture, which is what makes
     // an overdamped, heavy neck fast enough to rear and whip inside half a
     // second instead of absorbing the impulse.
-    const float spitting = spit_time_ < tuning.spit_duration ? 1.0f : 0.0f;
+    const float spitting =
+        (spit_time_ < tuning.spit_duration || bite_time_ < tuning.bite_duration) ? 1.0f : 0.0f;
     neck_feel.stiffness = tuning.neck_stiffness_scale *
                           (1.0f + tuning.breath_neck_tone * breath_smoothed_ + 6.0f * spitting);
     neck_feel.gravity = tuning.neck_gravity_scale;
@@ -2373,7 +2396,13 @@ void DragonRig::drive_attack(float airborne) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         spit_open = u < 0.7f ? std::sin(core::PI * u / 0.7f) : 0.0f;
     }
-    jaw_open_ = core::maxf(breath_smoothed_, spit_open);
+    // Bite: gape through the lunge, snap shut as the neck comes back.
+    float bite_open = 0.0f;
+    if (bite_time_ < tuning.bite_duration) {
+        const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
+        bite_open = u < 0.55f ? std::sin(core::PI * u / 0.55f) : 0.0f;
+    }
+    jaw_open_ = core::maxf(core::maxf(breath_smoothed_, spit_open), bite_open);
     if (joints_.jaw != NO_PARENT) {
         // A faint chatter on top of the breath -- the mouth is not a hatch.
         const float chatter = 1.0f + 0.06f * breath_smoothed_ *

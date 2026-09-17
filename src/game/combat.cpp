@@ -318,12 +318,58 @@ void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScale
         {origin, core::normalize_or(direction, Vec3::forward()), source, scales});
 }
 
+void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body) {
+    MeleeSwing swing;
+    swing.mouth = mouth;
+    swing.forward = core::normalize_or(forward, Vec3::forward());
+    swing.body = body;
+    hostile_melee_pending_.push_back(swing);
+}
+
+MeleeKind melee_reach(Vec3 mouth, Vec3 forward, Vec3 body, Vec3 target, float target_radius,
+                      const CombatTuning& tuning) {
+    // Bite: the target's near surface inside the cone ahead of the mouth.
+    const Vec3 toward_mouth = core::normalize_or(mouth - target, Vec3::zero());
+    const Vec3 near_point = target + toward_mouth * target_radius;
+    const float half_angle = core::radians(tuning.bite_half_angle_deg);
+    if (point_in_cone(target, mouth, forward, half_angle, tuning.bite_range) ||
+        point_in_cone(near_point, mouth, forward, half_angle, tuning.bite_range)) {
+        return MeleeKind::Bite;
+    }
+    // Strike: anywhere around the body, claw or tail.
+    if (core::distance(body, target) - target_radius <= tuning.strike_range) {
+        return MeleeKind::Strike;
+    }
+    return MeleeKind::None;
+}
+
+void Combat::apply_melee(const FlightState& player, CombatEvents& events) {
+    const Vec3 mouth = muzzle(player);
+    const Vec3 forward = player.forward();
+    for (Sentinel& sentinel : sentinels_) {
+        if (!sentinel.alive) continue;
+        const float radius = sentinel.radius > 0.0f ? sentinel.radius : tuning.sentinel_radius;
+        const MeleeKind kind =
+            melee_reach(mouth, forward, player.position, sentinel.position, radius, tuning);
+        if (kind == MeleeKind::None) continue;
+        damage_sentinel(sentinel, kind == MeleeKind::Bite ? tuning.bite_damage : tuning.strike_damage,
+                        events);
+        // A bite is the better hit; report it over a strike on another target.
+        if (kind == MeleeKind::Bite || events.melee_hit == MeleeKind::None) events.melee_hit = kind;
+    }
+}
+
 int Combat::sentinels_alive() const {
     int count = 0;
     for (const Sentinel& sentinel : sentinels_) {
         if (sentinel.alive) ++count;
     }
     return count;
+}
+
+float Combat::melee_cooldown() const {
+    if (tuning.melee_cooldown <= 0.0f) return 0.0f;
+    return core::saturate(melee_timer_ / tuning.melee_cooldown);
 }
 
 float Combat::fire_cooldown() const {
@@ -574,6 +620,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
 
     // ---- cooldowns ----
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
+    melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
     boost_cooldown_timer_ = core::maxf(boost_cooldown_timer_ - dt, 0.0f);
     boost_timer_ = core::maxf(boost_timer_ - dt, 0.0f);
     time_since_damage_ += dt;
@@ -618,6 +665,16 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         events.fired = true;
     }
 
+    // ---- melee ----
+    // The swing happens whether or not anything is in reach: the lunge and
+    // its airspeed cost are the player's to spend, and a bite at empty air is
+    // what teaches the reach.
+    if (input.melee && player_alive && melee_timer_ <= 0.0f) {
+        melee_timer_ = tuning.melee_cooldown;
+        events.melee_swung = true;
+        apply_melee(player, events);
+    }
+
     // ---- boost ----
     if (input.boost && player_alive && boost_cooldown_timer_ <= 0.0f) {
         boost_timer_ = tuning.boost_duration;
@@ -648,6 +705,28 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     }
     hostile_breaths_drawn_ = std::move(hostile_breaths_pending_);
     hostile_breaths_pending_.clear();
+
+    // Hostile bites and strikes, with the geometry the player's swing uses.
+    // The player's body is about the size of a sentinel for this purpose.
+    for (const MeleeSwing& swing : hostile_melee_pending_) {
+        if (health_ <= 0.0f) break;
+        const MeleeKind kind = melee_reach(swing.mouth, swing.forward, swing.body, player.position,
+                                           tuning.sentinel_radius, tuning);
+        if (kind == MeleeKind::None) continue;
+        const float damage =
+            tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f);
+        health_ -= damage;
+        events.damage_taken += damage;
+        events.damage_from = swing.mouth;
+        events.took_damage = true;
+        events.bitten = true;
+        time_since_damage_ = 0.0f;
+        if (health_ <= 0.0f) {
+            health_ = 0.0f;
+            events.player_died = true;
+        }
+    }
+    hostile_melee_pending_.clear();
 
     update_sentinels(dt, player, events);
     update_projectiles(dt, player, events);

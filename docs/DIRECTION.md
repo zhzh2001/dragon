@@ -382,7 +382,7 @@ question is the one that could still change the plan.
 |---|---|---|---|
 | 1 | ~~Shared lighting, sun angle, palette header, tree/ground grade~~ done 2026-09-17 | 1 | visuals |
 | 2 | HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines | 2 | UI |
-| 2b | **Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel | 1 | gameplay |
+| 2b | ~~**Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel~~ done 2026-09-17, awaiting the playtest gate | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
 | 4 | Grading LUT and bloom | 1 | visuals |
 | 5 | Vegetation v2: leaf cards, bark, impostors | 2 | visuals + assets |
@@ -413,6 +413,15 @@ the default course starts there, so the pale valley floor in every capture
 since M3 was the fade, not the grass or the fog. And per-tree colour variation
 (a warm push per instance) does more for "many trees" than any palette value;
 vegetation v2 should keep it. Next: row 2b (melee) or row 2 (HUD kit).
+
+Same day: **row 2b is built** (`STATUS.md` M18, `COMBAT.md` "Melee"). What it
+still needs is the playtest gate above -- does a close fight resolve instead
+of circling -- with the melee dials at the top of the Combat panel. One thing
+the headless checks could not answer: bots break off at 80 m and rarely come
+within bite range of a player who is not steering at them, so how often a
+RIVAL bites is a live question; the doctrine change (an aligned pass presses
+to bite range) is the first dial to turn if they never do. Next: row 2 (HUD
+kit) or row 3 (the run probe).
 
 ## 7. Prototyping with concept art
 

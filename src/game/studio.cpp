@@ -149,17 +149,22 @@ Vec3 studio_attack_target(float t, Vec3 centre) {
 anim::RigAction studio_action(StudioScenario scenario, float previous, float t) {
     anim::RigAction action;
     if (scenario != StudioScenario::Attack) return action;
-    // An 8 s cycle: spit at 0.5 s, breathe from 2 to 4.5 s, spit again at 6 s.
+    // An 8 s cycle: spit at 0.5 s, breathe from 2 to 4.5 s, spit again at
+    // 6 s, bite at 7.2 s.
     const float period = 8.0f;
     const float cycle = std::fmod(t, period);
     action.breath = (cycle > 2.0f && cycle < 4.5f) ? 1.0f : 0.0f;
-    for (const float shot : {0.5f, 6.0f}) {
-        // Crossed if the shot time lies in (previous, t], allowing for the wrap.
+    // Crossed if the event time lies in (previous, t], allowing for the wrap.
+    const auto crossed = [&](float when) {
         const float last = std::fmod(previous, period);
-        const bool crossed = last < cycle ? (shot > last && shot <= cycle)
-                                          : (shot > last || shot <= cycle);
-        if (crossed && t > previous) action.fire = true;
+        const bool hit = last < cycle ? (when > last && when <= cycle)
+                                      : (when > last || when <= cycle);
+        return hit && t > previous;
+    };
+    for (const float shot : {0.5f, 6.0f}) {
+        if (crossed(shot)) action.fire = true;
     }
+    if (crossed(7.2f)) action.bite = true;
     return action;
 }
 

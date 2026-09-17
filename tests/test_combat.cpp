@@ -107,6 +107,79 @@ void test_closest_point_fraction() {
     CHECK(near(game::closest_point_fraction(from, from, Vec3{1.0f, 1.0f, 1.0f}), 0.0f));
 }
 
+void test_melee_reach_and_cooldown() {
+    std::printf("a bite lands ahead without aim, a strike lands alongside, and both cool down\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 7u);
+    const FlightState player = player_at(Vec3::zero());
+    const float health = combat.tuning.sentinel_health;
+
+    // Twenty metres ahead but 25 degrees off the nose: twice the breath cone,
+    // nothing the fireball would do without aim, and exactly what the bite is
+    // for. (Measured from the mouth, which sits ahead of the body, the angle
+    // is wider still.)
+    const float off = radians(25.0f);
+    isolate_sentinel(combat, Vec3{std::sin(off) * 20.0f, 0.0f, -std::cos(off) * 20.0f});
+    CombatInput bite;
+    bite.melee = true;
+    game::CombatEvents events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(events.melee_swung);
+    CHECK(events.melee_hit == game::MeleeKind::Bite);
+    CHECK(near(combat.sentinels()[0].health, health - combat.tuning.bite_damage, 1e-3f));
+    CHECK(combat.melee_cooldown() > 0.9f);
+
+    // Held down: nothing more happens until the cooldown has run.
+    events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(!events.melee_swung);
+    CHECK(near(combat.sentinels()[0].health, health - combat.tuning.bite_damage, 1e-3f));
+    for (int i = 0; i < 200; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(near(combat.melee_cooldown(), 0.0f));
+
+    // Directly alongside, out of the bite cone but inside the claw's reach.
+    isolate_sentinel(combat, Vec3{12.0f, 0.0f, 0.0f});
+    events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(events.melee_hit == game::MeleeKind::Strike);
+    CHECK(near(combat.sentinels()[0].health, health - combat.tuning.strike_damage, 1e-3f));
+    for (int i = 0; i < 200; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+
+    // Ahead but past the bite's reach: a swing at empty air, still a swing.
+    isolate_sentinel(combat, Vec3{0.0f, 0.0f, -80.0f});
+    events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(events.melee_swung);
+    CHECK(events.melee_hit == game::MeleeKind::None);
+    CHECK(near(combat.sentinels()[0].health, health, 1e-3f));
+}
+
+void test_hostile_melee_reaches_the_player() {
+    std::printf("a bot's bite hurts the player only within reach\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 7u);
+    retire_all(combat);
+    const FlightState player = player_at(Vec3::zero());
+    const float health = combat.health();
+
+    // A rival ten metres ahead, facing back at the player: bite.
+    combat.hostile_melee(Vec3{0.0f, 0.0f, -10.0f}, Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 0.0f, -15.0f});
+    game::CombatEvents events = combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(events.bitten);
+    CHECK(near(combat.health(), health - combat.tuning.hostile_melee_damage, 1e-3f));
+    CHECK(events.took_damage);
+
+    // The same rival facing away, but close alongside: a strike at 60%.
+    const float after_bite = combat.health();
+    combat.hostile_melee(Vec3{10.0f, 0.0f, -8.0f}, Vec3{0.0f, 0.0f, -1.0f}, Vec3{10.0f, 0.0f, 0.0f});
+    events = combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(events.bitten);
+    CHECK(near(combat.health(), after_bite - combat.tuning.hostile_melee_damage * 0.6f, 1e-3f));
+
+    // A rival a hundred metres out swings at nothing.
+    const float before = combat.health();
+    combat.hostile_melee(Vec3{0.0f, 0.0f, -100.0f}, Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 0.0f, -105.0f});
+    events = combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(!events.bitten);
+    CHECK(near(combat.health(), before, 1e-3f));
+}
+
 void test_fireball_hits_and_kills() {
     std::printf("fireballs damage and destroy a sentinel\n");
     Combat combat;
@@ -648,6 +721,8 @@ int main() {
     test_aim_assist_lands_an_off_axis_shot();
     test_breath_follows_the_lock();
     test_closest_point_fraction();
+    test_melee_reach_and_cooldown();
+    test_hostile_melee_reaches_the_player();
     test_fireball_hits_and_kills();
     test_projectile_does_not_tunnel();
     test_breath_meter_latches();

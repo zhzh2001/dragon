@@ -65,6 +65,16 @@ struct BotTuning {
     float breath_burst = 2.2f;    // seconds of flame per burst
     float breath_recovery = 4.0f; // seconds to recharge after a burst
 
+    // ---- melee ----
+    // Bots bite too, or the rival-dragon fight is two flame-throwers jousting
+    // while the player gets bitten by nobody. Same reach the player has, read
+    // off the live position like the flame: a bite is a contact, and
+    // pretending not to see a dragon twenty metres away reads as blindness.
+    float melee_range = 24.0f;
+    float melee_cone_deg = 50.0f;  // half angle
+    float strike_range = 15.0f;
+    float melee_cooldown = 1.8f;
+
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
     float terrain_floor = 90.0f;
@@ -80,6 +90,8 @@ struct BotDecision {
     core::Vec3 fire_velocity = core::Vec3::zero();
     // Holding the flame this frame.
     bool breathe = false;
+    // Biting or striking this frame (an edge).
+    bool melee = false;
 };
 
 // The pilot. Owns only its own perception and rhythm state; the aircraft is the
@@ -112,6 +124,7 @@ private:
     BotState state_ = BotState::Attack;
     float state_time_ = 0.0f;
     float fire_timer_ = 0.0f;
+    float melee_timer_ = 0.0f;
     float jink_phase_ = 0.0f;
 
     // Stale-by-design perception, including the measured acceleration between

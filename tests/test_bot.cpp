@@ -44,6 +44,46 @@ FlightState target_at(Vec3 position, Vec3 velocity = Vec3::zero()) {
     return state;
 }
 
+void test_melee_discipline() {
+    std::printf("a bot bites when close, once per cooldown, and never at range\n");
+    BotPilot pilot;
+    pilot.reset(5u);
+    FlightState self;
+    self.position = Vec3::zero();
+    self.orientation = Quat::identity();  // facing -Z
+    self.velocity = Vec3{0.0f, 0.0f, -30.0f};
+
+    // Twenty metres ahead, twenty degrees off the nose: inside the bite cone.
+    const float off = radians(20.0f);
+    const Vec3 close{std::sin(off) * 20.0f, 0.0f, -std::cos(off) * 20.0f};
+    int swings = 0;
+    for (int i = 0; i < 60; ++i) {
+        const BotDecision decision = pilot.update(1.0f / 60.0f, self, target_at(close), true, -1e9f);
+        if (decision.melee) ++swings;
+    }
+    // One swing in the first second: the cooldown is longer than that even
+    // for the quickest tempo.
+    CHECK(swings == 1);
+
+    // Out at two hundred metres, still inside the cone: no swing, ever.
+    swings = 0;
+    for (int i = 0; i < 300; ++i) {
+        const BotDecision decision =
+            pilot.update(1.0f / 60.0f, self, target_at(Vec3{0.0f, 0.0f, -200.0f}), true, -1e9f);
+        if (decision.melee) ++swings;
+    }
+    CHECK(swings == 0);
+
+    // Directly behind, well inside the claw's reach: a strike without turning.
+    swings = 0;
+    for (int i = 0; i < 300; ++i) {
+        const BotDecision decision =
+            pilot.update(1.0f / 60.0f, self, target_at(Vec3{0.0f, 0.0f, 10.0f}), true, -1e9f);
+        if (decision.melee) ++swings;
+    }
+    CHECK(swings >= 1);
+}
+
 void test_pursuit_converges() {
     std::printf("a bot closes on a straight-flying target\n");
     FlightModel flight;
@@ -371,6 +411,7 @@ int main() {
     test_arc_lead_beats_linear_on_a_turn();
     test_breath_discipline_and_recovery();
     test_long_sim_stays_finite();
+    test_melee_discipline();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

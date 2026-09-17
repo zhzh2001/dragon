@@ -13,6 +13,7 @@ void BotPilot::reset(uint32_t seed) {
     state_ = BotState::Attack;
     state_time_ = 0.0f;
     fire_timer_ = 0.0f;
+    melee_timer_ = 0.0f;
     jink_phase_ = random_unit() * core::PI;
     breath_budget_ = 1.0f;
     breathing_ = false;
@@ -64,6 +65,7 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     BotDecision decision;
     state_time_ += dt;
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
+    melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
     jink_phase_ += tuning.jink_rate * dt;
 
     // ---- perception ----
@@ -94,13 +96,22 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
 
     // ---- state transitions ----
     switch (state_) {
-        case BotState::Attack:
+        case BotState::Attack: {
             // The attack clock only runs inside gun range, where a stalemated
             // turning fight is possible. Outside it the bot is approaching, not
             // attacking, and timing out of an approach just oscillates: nine
             // seconds of closing, seven seconds of extending away, no progress.
             if (range > tuning.fire_range * 0.8f) state_time_ = 0.0f;
-            if (!player_alive || range < tuning.min_attack_range ||
+            // The break-off range shrinks when the bot is lined up on the
+            // player: an aligned pass presses through the breath envelope to
+            // a bite before it extends. Off-axis, the old range holds -- that
+            // is an overshoot about to happen, and pressing it is a collision
+            // course, not an attack.
+            const Vec3 to_target = core::normalize_or(believed - self.position, self.forward());
+            const bool lined_up = core::dot(to_target, self.forward()) > std::cos(core::radians(25.0f));
+            const float break_off = lined_up ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
+                                             : tuning.min_attack_range;
+            if (!player_alive || range < break_off ||
                 state_time_ > tuning.attack_duration * tempo_) {
                 state_ = BotState::Extend;
                 state_time_ = 0.0f;
@@ -115,6 +126,7 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
                                 Vec3{0.0f, 60.0f, 0.0f};
             }
             break;
+        }
         case BotState::Extend:
             if (player_alive &&
                 (core::distance(self.position, extend_point_) < tuning.steering.arrive_radius *
@@ -223,6 +235,22 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
         breathing_ = false;
         breath_budget_ = core::minf(
             breath_budget_ + dt / core::maxf(tuning.breath_recovery, 0.1f), 1.0f);
+    }
+
+    // ---- melee ----
+    // In ANY state, like the flame: a bot extending past the player at
+    // fifteen metres claws them on the way through. A bite ahead inside the
+    // cone, or a strike at anything alongside; one swing, then the cooldown,
+    // stretched by the pilot's tempo like its other rhythms.
+    if (player_alive && !recovering && melee_timer_ <= 0.0f) {
+        const bool in_bite_cone =
+            live_range <= tuning.melee_range &&
+            core::dot(to_player, self.forward()) >= std::cos(core::radians(tuning.melee_cone_deg));
+        const bool in_strike_reach = live_range <= tuning.strike_range;
+        if (in_bite_cone || in_strike_reach) {
+            melee_timer_ = tuning.melee_cooldown * tempo_;
+            decision.melee = true;
+        }
     }
 
     // ---- gunnery ----
