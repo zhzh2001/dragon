@@ -116,6 +116,11 @@ struct Options {
     // pressing M, and so a sweep of one scenario across every species is one
     // command.
     int cycle_models = 0;  // 0 = off
+    // Headless only: alternate the fixed 1/60 s step between (1+j) and (1-j)
+    // times its length on even and odd frames. Reproduces the uneven frame
+    // pacing of a live window, which is what exposed the first-person camera
+    // lagging the head by a frame.
+    float frame_jitter = 0.0f;
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
 
@@ -203,6 +208,13 @@ private:
         return studio_active_ ? studio_state_ : flight_.state();
     }
     void build_studio_ui();
+    // Hand the chase camera this frame's head and the species' eye offsets.
+    void feed_first_person_head(float dt);
+    // The solved eye offsets, smoothed: they change only with the head's
+    // rotation, and the breath tremor would otherwise shake the whole view.
+    float first_person_up_smoothed_ = 0.0f;
+    float first_person_back_smoothed_ = 0.0f;
+    bool first_person_offsets_valid_ = false;
 
     game::Combat combat_;
     bool combat_enabled_ = false;
@@ -337,6 +349,33 @@ private:
         // The outermost wing joint per side, for the wingtip vortex trails.
         // -1 when the rig has no wings.
         int wingtip_joint[2] = {-1, -1};
+        // Bounds of the mesh the head carries (every vertex weighted mostly to
+        // the head joint or a bone under it: skull, jaw, horns, crest), in
+        // body-frame metres RELATIVE TO THE HEAD JOINT, measured in the bind
+        // pose. The first-person eye is placed off this box, so a species with
+        // a tall frill or a long skull is framed like one with neither.
+        core::Vec3 head_box_min = core::Vec3::zero();
+        core::Vec3 head_box_max = core::Vec3::zero();
+        bool head_box_valid = false;
+        // A top edge seen from the side: the highest vertex in each of BINS
+        // slices along the part's length (z0 front, z1 rear), in body-frame
+        // metres relative to the head joint, bind pose. What the eye must
+        // clear is the highest point AHEAD of it, which depends on where the
+        // eye is, so a box top alone is not enough: horns sweeping straight
+        // up put the eye so high that nothing showed. Two parts are measured
+        // because the eye sits over the neck, and a neck crest (rimefang's
+        // spines, blightmaw's horns are rigged to the last neck bone) rises
+        // into the view exactly as the skull does.
+        struct TopProfile {
+            static constexpr int BINS = 32;
+            float z0 = 0.0f;
+            float z1 = 0.0f;
+            float top[BINS] = {};
+            bool valid = false;
+            float z_at(int bin) const { return z0 + (float(bin) + 0.5f) / BINS * (z1 - z0); }
+        };
+        TopProfile head_profile;
+        TopProfile neck_profile;
     };
     // Held by pointer because a LoadedModel owns GPU handles and is referred to
     // by index from every bot; growth must not move one under a live reference.

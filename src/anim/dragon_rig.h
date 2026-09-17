@@ -531,14 +531,14 @@ struct RigTuning {
 
     // ---- first-person eye ----
     //
-    // Where the rider's-eye camera (V) sits, in body-frame metres from the
-    // head joint: up along the body's up, back along its aft axis. A species
-    // property because it is the silhouette that decides it: the defaults
-    // clear a plain skull, but a neck frill (tidewrack) or a horn crown
-    // (embercrest) needs the eye higher or further back to see past it.
-    // Found by toggling V and dragging the two sliders in the Camera panel.
-    float first_person_up = 1.1f;
-    float first_person_back = 1.6f;
+    // Nudge for the rider's-eye camera (V), in body-frame metres: up along
+    // the body's up, back along its aft axis. The eye is placed off the
+    // head's measured mesh box (see App::feed_first_person_head), which
+    // already frames every species alike; this is for the silhouette the box
+    // does not describe. Zero for every shipped species so far. Found by
+    // toggling V and dragging the two sliders in the Camera panel.
+    float first_person_up = 0.0f;
+    float first_person_back = 0.0f;
     // Fireball: the neck rears back and whips forward, a spit. Peak deflection
     // and the duration of the whole gesture.
     float spit_recoil_deg = 30.0f;

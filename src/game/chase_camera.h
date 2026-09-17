@@ -63,6 +63,18 @@ struct ChaseCameraTuning {
     // a flight game: you need to look at where you are about to go, and later at
     // whatever is shooting at you. The delta arrives already in degrees, so the
     // camera does not need to know which device produced it.
+    // ---- first person ----
+    // The composition every species is held to, measured off the original
+    // dragon's view (horn tips at the bottom of the frame, wing roots in the
+    // corners). The eye sits this many head WIDTHS behind the rear of the
+    // head's own mesh -- width, because a head that close fills the frame
+    // sideways before it does vertically -- and high enough that the highest
+    // point of head or neck in front of it appears this far down the frame
+    // (fraction of the half-height below the view axis: 0 is the centre, 1
+    // the bottom edge).
+    float first_person_setback = 1.0f;
+    float first_person_head_line = 0.67f;
+
     float free_look_return = 1.2f;  // half-life back to centre; 0 = holds
     float free_look_yaw_limit = 150.0f;
     float free_look_pitch_limit = 72.0f;
@@ -124,6 +136,12 @@ public:
         head_known_ = true;
     }
     void clear_first_person_head() { head_known_ = false; }
+    // Put the first-person camera on the head it was last given, with no
+    // smoothing. Called again after the rig has posed this frame's head, so
+    // the eye and the mesh agree; the eye otherwise trails the head by a
+    // frame, and with uneven frame times that trail changes length every
+    // frame and the horns twitch.
+    void place_first_person(const FlightState& state);
 
     // Diagnostics, for the tuning panel and debug draw.
     float arm_length() const { return arm_; }

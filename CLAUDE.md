@@ -74,6 +74,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
 | `--cycle-models N` | Swap the player onto the next roster entry every N frames. Sweeps one scenario across every species in one command, and soaks the swap path (it re-initialises both rigs). |
+| `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
 Soaks that have caught real bugs:
@@ -114,7 +115,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | R | Restart the run |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
-| V | First person, from just above and behind the animated head. The eye offsets are per species (`first_person_up/back` in the rig profile), because a frill or horn crown decides where the view is clear |
+| V | First person, from just above and behind the animated head. The eye is composed from the head's measured mesh so every species frames like `dragon.glb` (horn tips at the bottom of the frame); the two composition dials are in the Camera panel, and a species can nudge the result from its rig profile |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
 | F1 | Hide every ImGui panel (the HUD stays) |

@@ -37,6 +37,8 @@ Options parse_options(int argc, char** argv) {
             options.model = argv[++i];
         } else if (arg == "--cycle-models" && i + 1 < argc) {
             options.cycle_models = SDL_atoi(argv[++i]);
+        } else if (arg == "--frame-jitter" && i + 1 < argc) {
+            options.frame_jitter = core::clampf(float(SDL_atof(argv[++i])), 0.0f, 0.9f);
         } else if (arg == "--bot-range" && i + 1 < argc) {
             options.bot_range = float(SDL_atof(argv[++i]));
         } else if (arg == "--models" && i + 1 < argc) {
@@ -750,6 +752,96 @@ void App::pump_events() {
     }
 }
 
+void App::feed_first_person_head(float dt) {
+    const core::Vec3 head_model = dragon_rig_.head_position();
+    if (core::length_sq(head_model) < 1e-6f) {
+        chase_.clear_first_person_head();
+        return;
+    }
+    const game::FlightState& s = dragon_state();
+    const LoadedModel& model = player_model();
+    const core::Vec3 head_world = core::transform_point(
+        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * model.asset.matrix(),
+        head_model);
+
+    // Composition, the same for every species: the eye sits a fraction of a
+    // head length behind the head's rear, and exactly high enough that the
+    // highest point of head ahead of it appears on a chosen line of the
+    // frame -- the horn tips at the bottom, as on the original dragon. The
+    // species profile can nudge the result. Without the measurements (a
+    // generated rig), the nudge is added to a fixed offset.
+    float up = dragon_rig_.tuning.first_person_up;
+    float back = dragon_rig_.tuning.first_person_back;
+    if (model.head_box_valid && model.joints.head != anim::NO_PARENT &&
+        size_t(model.joints.head) < dragon_rig_.world_matrices().size()) {
+        // The profile was measured in the bind pose; the neck streamlines in
+        // flight and rears in a turn, pitching the head by tens of degrees,
+        // so the profile is carried through the head's current rotation
+        // (model space, then into the body frame through the asset
+        // correction) before anything is solved against it.
+        const core::Quat asset_rotation = core::quat_from_matrix(model.asset.matrix());
+        const core::Quat head_now =
+            core::quat_from_matrix(dragon_rig_.world_matrices()[size_t(model.joints.head)]);
+        const core::Quat head_bind = core::quat_from_matrix(model.skeleton.world_bind(model.joints.head));
+        const core::Quat head_delta =
+            asset_rotation * (head_now * core::conjugate(head_bind)) * core::conjugate(asset_rotation);
+
+        // The setback scales with the head's WIDTH, because that is what
+        // decides how much of the frame a head this close fills sideways.
+        // Blightmaw's horns span 2.2 m; one head length behind them they
+        // still filled the frame, while the rule read as satisfied because it
+        // only looked at height.
+        const float width = model.head_box_max.x - model.head_box_min.x;
+        // Depression of the head line below the view axis, at the base FOV
+        // so speed does not move the head about the frame.
+        const float slope = std::tan(core::radians(
+            core::clampf(chase_.tuning.first_person_head_line, 0.0f, 1.0f) *
+            0.5f * chase_.tuning.fov_base_deg));
+        // The eye sits behind the rearmost point of the posed head.
+        using TopProfile = LoadedModel::TopProfile;
+        float rear = -1e9f;
+        core::Vec3 posed[TopProfile::BINS];
+        for (int bin = 0; bin < TopProfile::BINS; ++bin) {
+            posed[bin] = core::rotate(head_delta, core::Vec3{0.0f, model.head_profile.top[bin],
+                                                             model.head_profile.z_at(bin)});
+            rear = core::maxf(rear, posed[bin].z);
+        }
+        const float solved_back = rear + chase_.tuning.first_person_setback * width;
+        // ...and high enough that nothing ahead of it -- head or neck -- rises
+        // above the head line. The neck is taken as authored: its base moves
+        // little, and it is the part right under the eye that matters.
+        float clear = -1e9f;
+        const auto raise_over = [&](core::Vec3 p) {
+            const float ahead = solved_back - p.z;  // +Z is aft: metres in front of the eye
+            if (ahead < 0.3f) return;               // too close to be in frame
+            clear = core::maxf(clear, p.y + slope * ahead);
+        };
+        for (const core::Vec3& p : posed) raise_over(p);
+        if (model.neck_profile.valid) {
+            for (int bin = 0; bin < TopProfile::BINS; ++bin) {
+                raise_over(core::Vec3{0.0f, model.neck_profile.top[bin], model.neck_profile.z_at(bin)});
+            }
+        }
+        if (clear < -1e8f) clear = model.head_box_max.y + 0.5f;
+        // dt <= 0 means "do not advance the smoothing": the pre-rig call each
+        // frame only re-feeds last frame's offsets so the snap path has them.
+        if (!first_person_offsets_valid_) {
+            first_person_up_smoothed_ = clear;
+            first_person_back_smoothed_ = solved_back;
+            first_person_offsets_valid_ = true;
+        } else if (dt > 0.0f) {
+            first_person_up_smoothed_ = core::damp(first_person_up_smoothed_, clear, 0.1f, dt);
+            first_person_back_smoothed_ = core::damp(first_person_back_smoothed_, solved_back, 0.1f, dt);
+        }
+        up += first_person_up_smoothed_;
+        back += first_person_back_smoothed_;
+    } else {
+        up += 1.1f;
+        back += 1.6f;
+    }
+    chase_.set_first_person_head(head_world, up, back);
+}
+
 void App::update(float dt) {
     time_seconds_ += dt;
 
@@ -779,23 +871,9 @@ void App::update(float dt) {
         rig_action_ = game::studio_action(scenario, studio_time_previous_, studio_time_);
     }
 
-    {
-        // The first-person eye rides the animated head, so it lands in the
-        // right place on every species. Last frame's head: the rig runs later
-        // this frame, and one frame of lag on a body-attached point is
-        // invisible (the muzzle uses the same trick).
-        const game::FlightState& s = dragon_state();
-        const core::Vec3 head_model = dragon_rig_.head_position();
-        if (core::length_sq(head_model) > 1e-6f) {
-            chase_.set_first_person_head(
-                core::transform_point(
-                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
-                    head_model),
-                dragon_rig_.tuning.first_person_up, dragon_rig_.tuning.first_person_back);
-        } else {
-            chase_.clear_first_person_head();
-        }
-    }
+    // The eye of the first-person view rides the animated head. This is last
+    // frame's head; it is fed again, with this frame's dt, after the rig runs.
+    feed_first_person_head(0.0f);
     chase_.update(dragon_state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
@@ -1135,6 +1213,15 @@ void App::update(float dt) {
             [this](float x, float z) { return terrain_.surface_at(x, z); });
     }
     if (!options_.bind_pose) dragon_rig_.update(dragon_state(), dt);
+    // Re-place the first-person eye on THIS frame's head. The camera ran
+    // before the rig, so it was holding last frame's head while the mesh
+    // draws this one; the gap is one frame of neck motion, invisible at a
+    // steady 60 Hz and a visible twitch of the horns as soon as frame times
+    // are uneven, because the gap then changes size every frame.
+    if (chase_.first_person) {
+        feed_first_person_head(dt);
+        chase_.place_first_person(dragon_state());
+    }
 
     // The ghost's rig is driven from its recording, reconstructed as a flight
     // state. Only the fields the rig reads need to be real.
@@ -1347,12 +1434,16 @@ void App::build_ui(float dt) {
         ImGui::SameLine();
         ImGui::Checkbox("free camera (tab)", &free_camera_);
         if (chase_.first_person) {
-            // Metres from the head joint, in the body frame. Up clears the
-            // skull; back keeps the snout in frame. These are species values
-            // (they live in the rig profile, saved from the Dragon panel),
-            // because a frill or a horn crown decides where the eye can be.
-            ImGui::SliderFloat("eye above head", &dragon_rig_.tuning.first_person_up, 0.0f, 5.0f, "%.2f m");
-            ImGui::SliderFloat("eye behind head", &dragon_rig_.tuning.first_person_back, -2.0f, 5.0f, "%.2f m");
+            // One composition for every species: how far behind the head's
+            // measured rear the eye sits, and on which line of the frame the
+            // head's highest visible point lands (0 = view centre, 1 = the
+            // bottom edge).
+            ImGui::SliderFloat("eye setback", &c.first_person_setback, 0.0f, 3.0f, "%.2f head widths");
+            ImGui::SliderFloat("head line", &c.first_person_head_line, 0.0f, 1.0f, "%.2f of half-height");
+            // Per-species nudge in metres, saved with the rig profile from the
+            // Dragon panel. Zero for every shipped species so far.
+            ImGui::SliderFloat("species eye up", &dragon_rig_.tuning.first_person_up, -2.0f, 2.0f, "%+.2f m");
+            ImGui::SliderFloat("species eye back", &dragon_rig_.tuning.first_person_back, -2.0f, 2.0f, "%+.2f m");
         }
 
         // Watching the arm shorten is how a collision response is told apart
@@ -2418,6 +2509,73 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         out.textures.push_back(gfx::create_texture_from_image(device_.gpu(), loaded.textures[i],
                                                               name.c_str(), srgb));
     }
+    // Measure the head and the neck for the first-person eye, in body metres
+    // relative to the head joint, bind pose. A vertex belongs to a part when
+    // most of its weight is on that part's bones: for the head, the head
+    // joint and everything under it (jaw, horns, crest); for the neck, the
+    // neck chain and whatever hangs off it that is not the head. A pose can
+    // pitch these but not resize them.
+    if (out.joints.head != anim::NO_PARENT) {
+        const int joint_count = out.skeleton.count();
+        std::vector<bool> under_head(size_t(joint_count), false);
+        std::vector<bool> under_neck(size_t(joint_count), false);
+        under_head[size_t(out.joints.head)] = true;
+        for (int neck : out.joints.neck) under_neck[size_t(neck)] = true;
+        for (int j = 0; j < joint_count; ++j) {
+            const int parent = out.skeleton.joint(j).parent;
+            if (parent == anim::NO_PARENT) continue;
+            if (under_head[size_t(parent)]) under_head[size_t(j)] = true;
+            else if (under_neck[size_t(parent)] && !under_head[size_t(j)]) under_neck[size_t(j)] = true;
+        }
+        const core::Mat4 to_body = out.asset.matrix();
+        const core::Vec3 head = core::transform_point(
+            to_body, out.skeleton.world_bind(out.joints.head).translation_part());
+
+        // Body-space positions of the vertices that belong to a part.
+        const auto collect = [&](const std::vector<bool>& mask) {
+            std::vector<core::Vec3> points;
+            for (const anim::SkinnedVertex& v : mesh_data.vertices) {
+                float weight = 0.0f;
+                for (int k = 0; k < 4; ++k) {
+                    if (v.joints[k] < mask.size() && mask[v.joints[k]]) weight += v.weights[k];
+                }
+                if (weight >= 0.5f) points.push_back(core::transform_point(to_body, v.position) - head);
+            }
+            return points;
+        };
+        const auto profile = [](const std::vector<core::Vec3>& points, LoadedModel::TopProfile& out_profile,
+                                core::Vec3* lo_out, core::Vec3* hi_out) {
+            if (points.empty()) return;
+            core::Vec3 lo{1e9f, 1e9f, 1e9f};
+            core::Vec3 hi{-1e9f, -1e9f, -1e9f};
+            for (const core::Vec3& p : points) {
+                lo = core::Vec3{core::minf(lo.x, p.x), core::minf(lo.y, p.y), core::minf(lo.z, p.z)};
+                hi = core::Vec3{core::maxf(hi.x, p.x), core::maxf(hi.y, p.y), core::maxf(hi.z, p.z)};
+            }
+            out_profile.z0 = lo.z;
+            out_profile.z1 = hi.z;
+            for (float& top : out_profile.top) top = lo.y;
+            const float length = core::maxf(hi.z - lo.z, 1e-3f);
+            for (const core::Vec3& p : points) {
+                const int bin = std::clamp(int((p.z - lo.z) / length * LoadedModel::TopProfile::BINS), 0,
+                                           LoadedModel::TopProfile::BINS - 1);
+                out_profile.top[bin] = core::maxf(out_profile.top[bin], p.y);
+            }
+            out_profile.valid = true;
+            if (lo_out) *lo_out = lo;
+            if (hi_out) *hi_out = hi;
+        };
+
+        profile(collect(under_head), out.head_profile, &out.head_box_min, &out.head_box_max);
+        out.head_box_valid = out.head_profile.valid;
+        profile(collect(under_neck), out.neck_profile, nullptr, nullptr);
+        if (out.head_box_valid) {
+            LOG_INFO("%s: head mesh %.2f tall, %.2f long; top %+.2f, rear %+.2f from the head joint%s",
+                     out.path.c_str(), out.head_box_max.y - out.head_box_min.y,
+                     out.head_box_max.z - out.head_box_min.z, out.head_box_max.y, out.head_box_max.z,
+                     out.neck_profile.valid ? "; neck measured" : "");
+        }
+    }
     out.mesh.upload(device_.gpu(), mesh_data, tag.c_str());
 
     if (!loaded.animations.empty()) {
@@ -2448,6 +2606,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
 void App::set_player_model(int index) {
     if (index < 0 || size_t(index) >= models_.size() || index == player_model_) return;
     player_model_ = index;
+    first_person_offsets_valid_ = false;  // a new head: snap the eye to it, do not glide from the old one
     LoadedModel& model = player_model();
     dragon_rig_.init(model.skeleton, model.joints);
     ghost_rig_.init(model.skeleton, model.joints);
@@ -3704,7 +3863,16 @@ void App::run() {
         dt = core::clampf(dt, 0.0f, 0.1f);
         // Headless runs have no wall-clock meaning, so a fixed step makes
         // captures reproducible.
-        if (options_.headless) dt = 1.0f / 60.0f;
+        if (options_.headless) {
+            dt = 1.0f / 60.0f;
+            // Uneven pacing on demand: a live window's frames are not equal,
+            // and anything that reads one frame's state from another shows
+            // up as a twitch only then.
+            if (options_.frame_jitter > 0.0f) {
+                dt *= (frame_index_ % 2 == 0) ? 1.0f + options_.frame_jitter
+                                              : 1.0f - options_.frame_jitter;
+            }
+        }
 
         frame_history_[frame_cursor_] = dt;
         frame_cursor_ = (frame_cursor_ + 1) % FRAME_HISTORY;

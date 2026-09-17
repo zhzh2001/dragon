@@ -121,6 +121,19 @@ Vec3 ChaseCamera::first_person_eye(const FlightState& state) const {
     return head_world_ + state.up() * head_up_ - state.forward() * head_back_;
 }
 
+void ChaseCamera::place_first_person(const FlightState& state) {
+    // Rigid to the head: no lag, no arm, no collision. The point of this view
+    // is that it does not smooth anything away.
+    position_ = first_person_eye(state);
+    // Looking down the negated arm direction means free look works here too.
+    aim_ = position_ - compute_arm_direction(state) * 200.0f;
+    camera_.position = position_;
+    camera_.fov_y_deg = fov_;
+    camera_.rotation = core::look_rotation(
+        aim_ - position_,
+        core::normalize_or(core::lerp(Vec3::up(), state.up(), 0.85f), Vec3::up()));
+}
+
 void ChaseCamera::snap_to(const FlightState& state) {
     free_look_ = Vec2{0.0f, 0.0f};
     pivot_ = compute_pivot(state);
@@ -162,19 +175,10 @@ void ChaseCamera::update(const FlightState& state, const Terrain* terrain, Vec2 
 
     // ---- first person ----
     if (first_person) {
-        // Rigid to the head: no lag, no arm, no collision. The point of this
-        // view is that it does not smooth anything away.
-        position_ = first_person_eye(state);
-        // Looking down the negated arm direction means free look works here too.
-        aim_ = position_ - compute_arm_direction(state) * 200.0f;
         fov_ = core::damp(fov_, core::minf(tuning.fov_base_deg + state.airspeed * tuning.fov_speed_gain,
                                           tuning.fov_max_deg),
                           tuning.fov_lag, dt);
-        camera_.position = position_;
-        camera_.fov_y_deg = fov_;
-        camera_.rotation = core::look_rotation(
-            aim_ - position_,
-            core::normalize_or(core::lerp(Vec3::up(), state.up(), 0.85f), Vec3::up()));
+        place_first_person(state);
         return;
     }
 
