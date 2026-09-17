@@ -94,15 +94,36 @@ public:
     const gfx::Camera& camera() const { return camera_; }
     ChaseCameraTuning tuning;
 
-    // First person, from just behind the dragon's head. Cheap to support and a
-    // completely different way to feel the same flight model.
+    // First person, from just behind and above the dragon's head. Cheap to
+    // support and a completely different way to feel the same flight model.
     //
     // Deliberately not at the eyes: from out at the snout you see no dragon at
     // all, which reads as a disembodied camera. Sitting back a little puts the
     // snout ahead and the wing roots in peripheral vision, so the creature you
     // are flying is present in the frame.
+    //
+    // The eye is placed relative to the ANIMATED HEAD, not the body origin.
+    // A fixed body offset was tuned on one asset, whose head sits 1.5 m above
+    // the origin; the generated species carry theirs two to five metres up
+    // and a further two metres forward, and the same offset put the camera
+    // inside the neck with the skull filling the frame. Whoever owns the rig
+    // hands over the head's world position each frame with
+    // set_first_person_head(), together with the species' offsets from it
+    // (RigTuning::first_person_up / _back, body-frame metres: up along the
+    // body's up to clear the skull and crest, back along its aft axis to keep
+    // the snout in frame). Neither offset follows the head's own rotation: a
+    // neck that lags a turn would otherwise roll and swing the whole view.
+    // Until the head is supplied, the eye falls back to `head_offset` from
+    // the body origin.
     bool first_person = false;
     core::Vec3 head_offset = core::Vec3{0.0f, 1.5f, -3.2f};
+    void set_first_person_head(core::Vec3 world_position, float up_metres, float back_metres) {
+        head_world_ = world_position;
+        head_up_ = up_metres;
+        head_back_ = back_metres;
+        head_known_ = true;
+    }
+    void clear_first_person_head() { head_known_ = false; }
 
     // Diagnostics, for the tuning panel and debug draw.
     float arm_length() const { return arm_; }
@@ -113,6 +134,8 @@ public:
 
 private:
     core::Vec3 compute_pivot(const FlightState& state) const;
+    // Where the first-person eye sits this frame, in world space.
+    core::Vec3 first_person_eye(const FlightState& state) const;
     // Arm direction in world space, including the free-look offset.
     core::Vec3 compute_arm_direction(const FlightState& state) const;
     core::Vec3 compute_aim(const FlightState& state) const;
@@ -121,6 +144,10 @@ private:
                     const Terrain* terrain) const;
 
     gfx::Camera camera_;
+    core::Vec3 head_world_ = core::Vec3::zero();
+    float head_up_ = 0.0f;
+    float head_back_ = 0.0f;
+    bool head_known_ = false;
     core::Vec3 position_ = core::Vec3::zero();
     core::Vec3 aim_ = core::Vec3::zero();
     core::Vec3 pivot_ = core::Vec3::zero();

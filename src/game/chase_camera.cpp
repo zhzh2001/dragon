@@ -116,6 +116,11 @@ float ChaseCamera::sweep_arm(Vec3 pivot, Vec3 direction, float desired,
     return core::maxf(clear, tuning.min_distance);
 }
 
+Vec3 ChaseCamera::first_person_eye(const FlightState& state) const {
+    if (!head_known_) return state.position + core::rotate(state.orientation, head_offset);
+    return head_world_ + state.up() * head_up_ - state.forward() * head_back_;
+}
+
 void ChaseCamera::snap_to(const FlightState& state) {
     free_look_ = Vec2{0.0f, 0.0f};
     pivot_ = compute_pivot(state);
@@ -126,7 +131,7 @@ void ChaseCamera::snap_to(const FlightState& state) {
     fov_ = tuning.fov_base_deg;
 
     if (first_person) {
-        position_ = state.position + core::rotate(state.orientation, head_offset);
+        position_ = first_person_eye(state);
         aim_ = position_ + state.forward() * 100.0f;
     }
 
@@ -159,7 +164,7 @@ void ChaseCamera::update(const FlightState& state, const Terrain* terrain, Vec2 
     if (first_person) {
         // Rigid to the head: no lag, no arm, no collision. The point of this
         // view is that it does not smooth anything away.
-        position_ = state.position + core::rotate(state.orientation, head_offset);
+        position_ = first_person_eye(state);
         // Looking down the negated arm direction means free look works here too.
         aim_ = position_ - compute_arm_direction(state) * 200.0f;
         fov_ = core::damp(fov_, core::minf(tuning.fov_base_deg + state.airspeed * tuning.fov_speed_gain,

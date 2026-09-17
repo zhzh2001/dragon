@@ -114,7 +114,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | R | Restart the run |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
-| V | First person, from behind the dragon's head |
+| V | First person, from just above and behind the animated head. The eye offsets are per species (`first_person_up/back` in the rig profile), because a frill or horn crown decides where the view is clear |
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
 | F1 | Hide every ImGui panel (the HUD stays) |

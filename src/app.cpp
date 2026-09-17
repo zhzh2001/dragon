@@ -779,6 +779,23 @@ void App::update(float dt) {
         rig_action_ = game::studio_action(scenario, studio_time_previous_, studio_time_);
     }
 
+    {
+        // The first-person eye rides the animated head, so it lands in the
+        // right place on every species. Last frame's head: the rig runs later
+        // this frame, and one frame of lag on a body-attached point is
+        // invisible (the muzzle uses the same trick).
+        const game::FlightState& s = dragon_state();
+        const core::Vec3 head_model = dragon_rig_.head_position();
+        if (core::length_sq(head_model) > 1e-6f) {
+            chase_.set_first_person_head(
+                core::transform_point(
+                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
+                    head_model),
+                dragon_rig_.tuning.first_person_up, dragon_rig_.tuning.first_person_back);
+        } else {
+            chase_.clear_first_person_head();
+        }
+    }
     chase_.update(dragon_state(), &terrain_, read_free_look(dt), dt);
     if (free_camera_) camera_.update(input_, dt, mouse_look_);
 
@@ -1329,6 +1346,14 @@ void App::build_ui(float dt) {
         ImGui::Checkbox("first person (V)", &chase_.first_person);
         ImGui::SameLine();
         ImGui::Checkbox("free camera (tab)", &free_camera_);
+        if (chase_.first_person) {
+            // Metres from the head joint, in the body frame. Up clears the
+            // skull; back keeps the snout in frame. These are species values
+            // (they live in the rig profile, saved from the Dragon panel),
+            // because a frill or a horn crown decides where the eye can be.
+            ImGui::SliderFloat("eye above head", &dragon_rig_.tuning.first_person_up, 0.0f, 5.0f, "%.2f m");
+            ImGui::SliderFloat("eye behind head", &dragon_rig_.tuning.first_person_back, -2.0f, 5.0f, "%.2f m");
+        }
 
         // Watching the arm shorten is how a collision response is told apart
         // from a tuning problem.

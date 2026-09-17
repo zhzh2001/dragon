@@ -423,6 +423,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(neck_aim_max_deg),
     RIG_FLOAT_FIELD(jaw_open_deg),
     RIG_FLOAT_FIELD(jaw_rest_deg),
+    RIG_FLOAT_FIELD(first_person_up),
+    RIG_FLOAT_FIELD(first_person_back),
     RIG_FLOAT_FIELD(spit_recoil_deg),
     RIG_FLOAT_FIELD(spit_duration),
     RIG_FLOAT_FIELD(spit_impulse),
