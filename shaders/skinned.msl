@@ -114,14 +114,13 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
         metallic = orm.b;
     }
 
-    float wrapped = saturate((dot(normal, to_sun) + 0.2) / 1.2);
+    // The shared lighting path: the creature is lit by the same sun, wrap and
+    // ambient as the ground it flies over, which is what keeps a scanned-grade
+    // asset from looking pasted onto a painted world.
     float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
                                       shadow_sampler);
-    float3 direct = scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
-
-    float sky_amount = saturate(normal.y * 0.5 + 0.5);
-    float3 ambient =
-        mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) * scene.terrain_params.w;
+    float3 direct = direct_sun(normal, visibility, scene);
+    float3 ambient = ambient_light(normal, scene);
 
     // The texture is sRGB, so the sample arrives already linear.
     float3 albedo = in.albedo;
@@ -156,9 +155,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
                  specular * scene.sun_color.rgb * scene.sun.w * visibility +
                  albedo * in.emissive;
 
-    float distance = length(in.world_position - scene.camera_position.xyz);
-    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(distance * density, 2.0));
-    float3 ray = normalize(in.world_position - scene.camera_position.xyz);
-    return float4(tonemap(mix(lit, sky_color(ray, scene), saturate(fog))), 1.0);
+    return float4(tonemap(apply_fog(lit, in.world_position, scene)), 1.0);
 }

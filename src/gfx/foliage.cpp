@@ -1,4 +1,5 @@
 #include "gfx/foliage.h"
+#include "gfx/palette.h"
 
 #include <cmath>
 #include <cstring>
@@ -95,11 +96,11 @@ void tube(MeshData& out, uint32_t ring_a, uint32_t ring_b, int sides) {
 }
 
 void cone(MeshData& out, int sides, float base_y, float radius, float apex_y, Vec3 color) {
-    const uint32_t base = ring(out, sides, Vec3{0.0f, base_y, 0.0f}, radius, color * 0.85f);
+    const uint32_t base = ring(out, sides, Vec3{0.0f, base_y, 0.0f}, radius, palette_dim(color, 0.85f));
     MeshVertex apex;
     apex.position = Vec3{0.0f, apex_y, 0.0f};
     apex.normal = Vec3::up();
-    apex.color = color * 1.1f;
+    apex.color = palette_dim(color, 1.1f);
     const uint32_t tip = uint32_t(out.vertices.size());
     out.vertices.push_back(apex);
     for (int i = 0; i < sides; ++i) {
@@ -127,7 +128,7 @@ void blob(MeshData& out, Vec3 centre, Vec3 radii, Vec3 color, int sides = 7, int
             v.position = centre + Vec3{std::cos(a) * r * radii.x * wobble, y * radii.y,
                                        std::sin(a) * r * radii.z * wobble};
             v.normal = Vec3::up();
-            v.color = color * (0.8f + 0.35f * t);
+            v.color = palette_dim(color, 0.8f + 0.35f * t);
             out.vertices.push_back(v);
         }
         rings.push_back(first);
@@ -135,8 +136,8 @@ void blob(MeshData& out, Vec3 centre, Vec3 radii, Vec3 color, int sides = 7, int
     MeshVertex bottom, top;
     bottom.position = centre - Vec3{0.0f, radii.y, 0.0f};
     top.position = centre + Vec3{0.0f, radii.y, 0.0f};
-    bottom.color = color * 0.7f;
-    top.color = color * 1.15f;
+    bottom.color = palette_dim(color, 0.7f);
+    top.color = palette_dim(color, 1.15f);
     bottom.normal = top.normal = Vec3::up();
     const uint32_t bottom_index = uint32_t(out.vertices.size());
     out.vertices.push_back(bottom);
@@ -224,56 +225,59 @@ float Foliage::grass_height(GrassKind kind) {
     }
 }
 
+// Plant meshes carry no colour: each vertex names a palette entry and a
+// brightness (see gfx/palette.h), and the foliage shader resolves it against
+// the live table. So the greens below are choices of ENTRY, and the numbers
+// are shading within a crown -- which parts of it are darker.
 MeshData make_tree_mesh(TreeKind kind) {
     MeshData mesh;
-    const Vec3 bark{0.26f, 0.17f, 0.10f};
+    const Vec3 bark = palette_vertex(PaletteEntry::Bark);
     const int sides = 7;
     switch (kind) {
         case TreeKind::Spruce: {
             // A tall spruce: three overlapping skirts on a short trunk.
-            const Vec3 needles{0.10f, 0.22f, 0.09f};
+            const Vec3 needles = palette_vertex(PaletteEntry::Spruce);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.45f, bark),
                  ring(mesh, sides, Vec3{0.0f, 4.0f, 0.0f}, 0.28f, bark), sides);
-            cone(mesh, sides, 2.4f, 3.4f, 8.2f, needles * 0.9f);
+            cone(mesh, sides, 2.4f, 3.4f, 8.2f, palette_dim(needles, 0.9f));
             cone(mesh, sides, 5.8f, 2.6f, 11.2f, needles);
-            cone(mesh, sides, 9.0f, 1.7f, 14.0f, needles * 1.15f);
+            cone(mesh, sides, 9.0f, 1.7f, 14.0f, palette_dim(needles, 1.15f));
             break;
         }
         case TreeKind::Pine: {
             // A mountain pine: long bare trunk, one broad flat crown and a cap.
-            const Vec3 needles{0.14f, 0.26f, 0.12f};
+            const Vec3 needles = palette_vertex(PaletteEntry::Pine);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.5f, bark),
                  ring(mesh, sides, Vec3{0.0f, 6.5f, 0.0f}, 0.3f, bark), sides);
-            cone(mesh, sides, 6.0f, 3.8f, 9.4f, needles * 0.9f);
-            cone(mesh, sides, 8.4f, 2.3f, 11.0f, needles * 1.1f);
+            cone(mesh, sides, 6.0f, 3.8f, 9.4f, palette_dim(needles, 0.9f));
+            cone(mesh, sides, 8.4f, 2.3f, 11.0f, palette_dim(needles, 1.1f));
             break;
         }
         case TreeKind::Broadleaf: {
-            // A valley-floor broadleaf: trunk, a fork, and three lumpy crowns of
-            // a lighter, warmer green.
-            // Darker and wider than tall, in four lumps: a round bright ball on a
-            // stick is a lollipop.
-            const Vec3 leaves{0.15f, 0.29f, 0.09f};
+            // A valley-floor broadleaf: trunk, a fork, and four lumpy crowns of
+            // a lighter, warmer green. Wider than tall, in lumps: a round
+            // bright ball on a stick is a lollipop.
+            const Vec3 leaves = palette_vertex(PaletteEntry::Broadleaf);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.5f, bark),
                  ring(mesh, sides, Vec3{0.0f, 4.2f, 0.0f}, 0.35f, bark), sides);
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{1.9f, 6.0f, 0.6f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{-1.5f, 5.9f, -1.2f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 4.6f, 0.0f}, Vec3{0.4f, 7.4f, 1.4f}, 0.22f, 0.10f, bark);
             blob(mesh, Vec3{0.0f, 7.0f, 0.0f}, Vec3{3.4f, 2.3f, 3.2f}, leaves);
-            blob(mesh, Vec3{2.2f, 6.3f, 0.9f}, Vec3{2.4f, 1.7f, 2.3f}, leaves * 0.9f);
-            blob(mesh, Vec3{-1.9f, 6.2f, -1.4f}, Vec3{2.3f, 1.6f, 2.2f}, leaves * 1.08f);
-            blob(mesh, Vec3{0.5f, 8.6f, 1.2f}, Vec3{1.8f, 1.5f, 1.8f}, leaves * 1.15f);
+            blob(mesh, Vec3{2.2f, 6.3f, 0.9f}, Vec3{2.4f, 1.7f, 2.3f}, palette_dim(leaves, 0.9f));
+            blob(mesh, Vec3{-1.9f, 6.2f, -1.4f}, Vec3{2.3f, 1.6f, 2.2f}, palette_dim(leaves, 1.08f));
+            blob(mesh, Vec3{0.5f, 8.6f, 1.2f}, Vec3{1.8f, 1.5f, 1.8f}, palette_dim(leaves, 1.15f));
             break;
         }
         case TreeKind::Dead:
         default: {
             // A dead snag near the treeline: a leaning trunk and bare branches,
             // bleached.
-            const Vec3 grey{0.42f, 0.38f, 0.32f};
-            tube(mesh, ring(mesh, sides, Vec3::zero(), 0.45f, grey * 0.8f),
+            const Vec3 grey = palette_vertex(PaletteEntry::Deadwood);
+            tube(mesh, ring(mesh, sides, Vec3::zero(), 0.45f, palette_dim(grey, 0.8f)),
                  ring(mesh, sides, Vec3{0.4f, 5.5f, 0.2f}, 0.22f, grey), sides);
             tube(mesh, ring(mesh, sides, Vec3{0.4f, 5.5f, 0.2f}, 0.22f, grey),
-                 ring(mesh, sides, Vec3{0.9f, 9.0f, 0.5f}, 0.08f, grey * 1.1f), sides);
+                 ring(mesh, sides, Vec3{0.9f, 9.0f, 0.5f}, 0.08f, palette_dim(grey, 1.1f)), sides);
             bar(mesh, Vec3{0.2f, 3.6f, 0.1f}, Vec3{-2.4f, 5.6f, 0.8f}, 0.16f, 0.05f, grey);
             bar(mesh, Vec3{0.5f, 5.0f, 0.2f}, Vec3{2.6f, 7.4f, -1.0f}, 0.14f, 0.05f, grey);
             bar(mesh, Vec3{0.6f, 6.8f, 0.3f}, Vec3{-1.2f, 8.8f, -1.6f}, 0.10f, 0.04f, grey);
@@ -291,9 +295,9 @@ MeshData make_grass_mesh(GrassKind kind) {
     MeshData mesh;
     switch (kind) {
         case GrassKind::Tuft: {
-            // Eight blades to about a metre and a half, greener at the root.
-            const Vec3 base{0.17f, 0.31f, 0.09f};
-            const Vec3 tip{0.36f, 0.50f, 0.16f};
+            // Eight blades to about a metre and a half, darker at the root.
+            const Vec3 base = palette_vertex(PaletteEntry::GrassBlade);
+            const Vec3 tip = palette_dim(base, 1.7f);
             for (int b = 0; b < 8; ++b) {
                 const float a = core::TWO_PI * float(b) / 8.0f + 0.35f * float(b % 3);
                 const float height = 1.1f + 0.45f * float((b * 5) % 4) / 3.0f;
@@ -303,8 +307,8 @@ MeshData make_grass_mesh(GrassKind kind) {
         }
         case GrassKind::Reed: {
             // Tall thin reeds for the waterside, pale and straight.
-            const Vec3 base{0.30f, 0.40f, 0.14f};
-            const Vec3 tip{0.62f, 0.58f, 0.28f};
+            const Vec3 base = palette_vertex(PaletteEntry::Reed);
+            const Vec3 tip = palette_dim(base, 1.8f);
             for (int b = 0; b < 6; ++b) {
                 const float a = core::TWO_PI * float(b) / 6.0f + 0.5f * float(b % 2);
                 const float height = 2.1f + 0.6f * float((b * 3) % 3) / 2.0f;
@@ -315,9 +319,9 @@ MeshData make_grass_mesh(GrassKind kind) {
         case GrassKind::Bush:
         default: {
             // A low shrub: two lumps of darker leaf.
-            const Vec3 leaf{0.12f, 0.24f, 0.08f};
+            const Vec3 leaf = palette_vertex(PaletteEntry::Bush);
             blob(mesh, Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.3f, 1.0f, 1.2f}, leaf, 6, 3);
-            blob(mesh, Vec3{0.9f, 0.7f, 0.5f}, Vec3{0.9f, 0.7f, 0.8f}, leaf * 1.1f, 6, 3);
+            blob(mesh, Vec3{0.9f, 0.7f, 0.5f}, Vec3{0.9f, 0.7f, 0.8f}, palette_dim(leaf, 1.1f), 6, 3);
             break;
         }
     }

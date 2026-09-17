@@ -2,6 +2,7 @@
 
 #include "core/math.h"
 #include "gfx/camera.h"
+#include "gfx/palette.h"
 
 namespace gfx {
 
@@ -29,6 +30,8 @@ struct SceneUniforms {
     core::Vec4 view_params;     // x tan(fov/2), y aspect, z time, w terrain half extent
     core::Vec4 terrain_params;  // x water level, y snow line, z rock slope, w ambient
     core::Vec4 shadow_params;   // x texel size, y depth bias, z strength, w enabled
+    core::Vec4 light_params;    // x sun wrap, y foliage translucency, z ground bounce
+    core::Vec4 palette[PALETTE_COUNT];
 };
 
 // Per-object transform plus procedural deformation parameters.
@@ -56,22 +59,39 @@ struct ModelUniforms {
 // authored as azimuth/elevation because that is how a person thinks about time
 // of day, not as a direction vector.
 struct Lighting {
-    float sun_azimuth_deg = 135.0f;
-    float sun_elevation_deg = 26.0f;
-    // Kept near 1.5: the terrain shader tonemaps with Reinhard, and anything
-    // much brighter drives rock and snow albedo straight into white.
-    float sun_intensity = 1.95f;
-    float sun_color[3] = {1.0f, 0.92f, 0.78f};
+    // Late afternoon: a low, warm sun. The noon-flat 26 degrees it replaced was
+    // the cruellest condition for a style seam -- it removed the long shadows
+    // and the warm/cool split that tie materials of different detail levels
+    // together. From the south-west, so a flight up the valley (toward -Z)
+    // has the light raking across from the front-left and every ridge throws
+    // a shadow into the frame.
+    float sun_azimuth_deg = 235.0f;
+    float sun_elevation_deg = 14.0f;
+    // The terrain tonemaps with Reinhard; brighter than this drives snow and
+    // pale rock straight to white.
+    float sun_intensity = 2.3f;
+    float sun_color[3] = {1.0f, 0.80f, 0.58f};
 
-    // LINEAR colours, not display colours. Everything now goes through the
-    // shared tonemap, and these same values double as the ambient term, which
-    // was always meant to be linear -- so the previous display-space values were
-    // making both the sky and the ambient light too bright.
-    float sky_zenith[3] = {0.012f, 0.058f, 0.303f};
-    float sky_horizon[3] = {0.284f, 0.397f, 0.556f};
-    float fog_color[3] = {0.274f, 0.356f, 0.492f};
-    float fog_density = 0.00030f;
-    float ambient = 0.55f;
+    // LINEAR colours, not display colours. Everything goes through the shared
+    // tonemap, and the sky values double as the ambient term, which was
+    // always meant to be linear.
+    float sky_zenith[3] = {0.020f, 0.070f, 0.280f};
+    float sky_horizon[3] = {0.300f, 0.400f, 0.560f};
+    float fog_color[3] = {0.300f, 0.360f, 0.470f};
+    float fog_density = 0.00027f;
+    // Cut from 0.55 so shadow sides go dark and cool; the warm ground bounce
+    // (ground_bounce, below) is what keeps undersides from going black.
+    float ambient = 0.36f;
+
+    // The shared lighting terms every world shader now uses. `sun_wrap` is how
+    // far direct light reaches past the terminator (0 is a hard Lambert
+    // cutoff); `foliage_translucency` is the sun leaking through a crown lit
+    // from behind; `ground_bounce` scales the warm upward ambient.
+    float sun_wrap = 0.22f;
+    float foliage_translucency = 0.30f;
+    float ground_bounce = 1.0f;
+
+    Palette palette;
 
     core::Vec3 sun_direction() const {
         const float azimuth = core::radians(sun_azimuth_deg);
@@ -88,9 +108,10 @@ struct TerrainMaterial {
     float snow_line = 400.0f;
     // Lower means rock appears only on steeper ground, leaving more green.
     float rock_slope = 0.62f;
-    // Used to fade the terrain into the sky at the map boundary, so the map's
-    // hard edge is not visible as a cliff on the horizon.
-    float half_extent = 2500.0f;
+    // The terrain fades into the sky over the outermost fifth of this: the
+    // skirt's extent (playable half extent times the skirt factor), so the
+    // ground's hard edge is never seen as a cliff on the horizon.
+    float half_extent = 7500.0f;
 };
 
 // Assembles the per-frame uniform block. Shadow fields are filled from the

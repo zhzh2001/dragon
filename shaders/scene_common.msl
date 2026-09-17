@@ -7,6 +7,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
+#include "palette.msl"
+
 struct SceneUniforms {
     float4x4 view_proj;
     float4x4 light_view_proj;
@@ -31,6 +33,11 @@ struct SceneUniforms {
     // x = world-space size of one shadow texel, y = depth bias,
     // z = strength (0 disables), w = one shadow texel in UV space
     float4 shadow_params;
+    // x = sun wrap (how far past the terminator direct light reaches),
+    // y = foliage translucency, z = ground bounce strength, w unused
+    float4 light_params;
+    // The world's named colours; see palette.msl for the indices.
+    float4 palette[PALETTE_COUNT];
 };
 
 // Reinhard tonemap plus gamma, shared by every shader that writes to the scene
@@ -109,4 +116,58 @@ static inline float3 sky_color(float3 ray, constant SceneUniforms& scene) {
     base += scene.sun_color.rgb * glow;
 
     return base;
+}
+
+// ---- the one lighting path.
+//
+// Terrain, plants, props and the skinned creature all go through these three
+// functions. They used to each carry a copy with its own wrap constant and its
+// own ambient mix, and the copies drifted: the foliage's wider wrap and its
+// ambient term lifted every tree brighter than the ground it stood on, which
+// read as three visual languages in one frame. The seam is closed by
+// construction now -- there is nothing per-shader left to drift.
+
+// Direct sun on a surface, wrapped a little past the terminator so a slope
+// turning away keeps its shape instead of going flat black. `visibility` is
+// the shadow-map term from sun_visibility().
+static inline float3 direct_sun(float3 normal, float visibility, constant SceneUniforms& scene) {
+    float wrap = scene.light_params.x;
+    float3 to_sun = normalize(scene.sun.xyz);
+    float wrapped = saturate((dot(normal, to_sun) + wrap) / (1.0 + wrap));
+    return scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
+}
+
+// Hemispheric ambient: cool sky from above, the warm bounce off sunlit ground
+// from below. The split is what a low sun gives a real landscape -- shadow
+// sides go cool and dark, undersides pick up warmth -- and it is the same on
+// a rock, a crown and a wing membrane.
+static inline float3 ambient_light(float3 normal, constant SceneUniforms& scene) {
+    float sky_amount = saturate(normal.y * 0.5 + 0.5);
+    float3 sky = mix(scene.sky_horizon.rgb, scene.sky_zenith.rgb, 0.6);
+    float3 bounce = scene.palette[PALETTE_GROUND_BOUNCE].rgb * scene.light_params.z *
+                    scene.sun_color.rgb * saturate(scene.sun.xyz.y * 4.0);
+    return mix(bounce, sky, sky_amount) * scene.terrain_params.w;
+}
+
+// Sunlight leaking through a thin thing lit from behind: a crown, a blade, a
+// wing. Zero for solid surfaces. Reads as the glow of foliage against a low
+// sun, which the wrap alone cannot give because the wrap never exceeds the
+// front-lit value.
+static inline float3 translucent_sun(float3 normal, float visibility, float translucency,
+                                     constant SceneUniforms& scene) {
+    float3 to_sun = normalize(scene.sun.xyz);
+    float behind = saturate(-dot(normal, to_sun));
+    return scene.sun_color.rgb * scene.sun.w * behind * translucency * visibility;
+}
+
+// Exponential-squared height fog toward the sky colour along the view ray, so
+// distance dissolves into exactly what is behind it and thins with altitude
+// so peaks stay legible while the valley floor still reads as far.
+static inline float3 apply_fog(float3 lit, float3 world_position, constant SceneUniforms& scene) {
+    float3 to_point = world_position - scene.camera_position.xyz;
+    float distance = length(to_point);
+    float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
+    float fog = 1.0 - exp(-pow(distance * density, 2.0));
+    float3 ray = to_point / max(distance, 1e-3);
+    return mix(lit, sky_color(ray, scene), saturate(fog));
 }

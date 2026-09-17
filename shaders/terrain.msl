@@ -59,14 +59,14 @@ static float fbm(float2 p) {
 // retuned by saving the file while flying.
 static float3 terrain_albedo(float3 world_position, float3 normal,
                              constant SceneUniforms& scene) {
-    const float3 SAND       = float3(0.52, 0.46, 0.34);
-    const float3 GRASS      = float3(0.15, 0.25, 0.11);
-    const float3 GRASS_DRY  = float3(0.28, 0.30, 0.15);
-    // Warm-toned rock, so it separates from the cool sky ambient instead of
-    // blending into the same grey.
-    const float3 ROCK       = float3(0.29, 0.255, 0.21);
-    const float3 ROCK_DARK  = float3(0.155, 0.135, 0.12);
-    const float3 SNOW       = float3(0.86, 0.88, 0.93);
+    // Colours come from the shared palette, so the ground is graded together
+    // with the plants standing on it.
+    const float3 SAND       = scene.palette[PALETTE_SAND].rgb;
+    const float3 GRASS      = scene.palette[PALETTE_GRASS].rgb;
+    const float3 GRASS_DRY  = scene.palette[PALETTE_GRASS_DRY].rgb;
+    const float3 ROCK       = scene.palette[PALETTE_ROCK].rgb;
+    const float3 ROCK_DARK  = scene.palette[PALETTE_ROCK_DARK].rgb;
+    const float3 SNOW       = scene.palette[PALETTE_SNOW].rgb;
 
     float water_level = scene.terrain_params.x;
     float snow_line   = scene.terrain_params.y;
@@ -92,8 +92,12 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
     float steepness = 1.0 - flatness;
     rock *= 1.0 + (strata - 0.5) * 0.55 * smoothstep(0.25, 0.7, steepness);
 
-    // A narrow sand band right at the waterline, then grass above it.
-    float3 albedo = mix(SAND, grass, smoothstep(water_level, water_level + 10.0, height));
+    // A narrow gravel bar right at the waterline, then grass above it. The
+    // valley floor sits only a few metres above the river, so a 10 m band
+    // turned the whole floor pale beige; the bar is 3 m now, ragged with the
+    // patch noise so it reads as bars rather than a contour.
+    float bar_top = water_level + 1.0 + 3.0 * patches;
+    float3 albedo = mix(SAND, grass, smoothstep(water_level + 0.3, bar_top, height));
 
     // Rock takes over on anything steep, and earlier at altitude where there is
     // less soil to hold on.
@@ -135,19 +139,10 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
 
     float3 albedo = terrain_albedo(in.world_position, normal, scene) * in.tint;
 
-    // Direct sun, wrapped slightly so slopes turning away keep some shape
-    // instead of going flat black, then gated by the shadow map.
-    float wrapped = saturate((dot(normal, to_sun) + 0.25) / 1.25);
+    // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
                                       shadow_sampler);
-    float3 direct = scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
-
-    // Hemispheric ambient: sky from above, bounced ground light from below.
-    float sky_amount = saturate(normal.y * 0.5 + 0.5);
-    float3 ambient = mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) *
-                     scene.terrain_params.w;
-
-    float3 lit = albedo * (direct + ambient);
+    float3 lit = albedo * (direct_sun(normal, visibility, scene) + ambient_light(normal, scene));
 
     // Snow glints: a modest specular lobe only where the surface is bright and
     // cold, which reads as crust without turning the mountains to plastic.
@@ -159,27 +154,19 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
         lit += scene.sun_color.rgb * scene.sun.w * glint * 0.35 * snowiness * visibility;
     }
 
-    // Exponential-squared height fog, thinning with altitude so mountain peaks
-    // stay legible while valley distance still reads.
-    float distance = camera_distance;
-    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(distance * density, 2.0));
+    float3 fogged = apply_fog(lit, in.world_position, scene);
 
-    // The map has a hard edge, and from altitude you can see it as a cliff at
-    // the horizon. Ramp fog to full over the outermost band so the terrain
-    // dissolves into the sky instead of stopping.
+    // The ground has a hard edge (the skirt's), and from altitude you can see
+    // it as a cliff at the horizon. Ramp to full sky over the outermost band
+    // so the terrain dissolves instead of stopping.
     float half_extent = scene.view_params.w;
     if (half_extent > 0.0) {
         // Chebyshev distance, because the map is square: this reaches 1 on all
         // four edges at once rather than only at the corners.
         float edge = max(abs(in.world_position.x), abs(in.world_position.z)) / half_extent;
-        fog = max(fog, smoothstep(0.80, 0.99, edge));
+        float3 ray = normalize(in.world_position - scene.camera_position.xyz);
+        fogged = mix(fogged, sky_color(ray, scene), smoothstep(0.80, 0.99, edge));
     }
-
-    // Fog toward the actual sky colour along this view ray, so distant terrain
-    // dissolves into the sky rather than into a flat band.
-    float3 ray = normalize(in.world_position - scene.camera_position.xyz);
-    float3 fogged = mix(lit, sky_color(ray, scene), saturate(fog));
 
     return float4(tonemap(fogged), 1.0);
 }

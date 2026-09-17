@@ -110,8 +110,14 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
             if (kind == TreeKind::Dead) scale *= 0.85f;
             const float y = height - 0.3f - sink_for(normal, settings.slope_sink);
             tree.position_scale = Vec4{x, y, z, scale};
+            // w is the warm push (toward the palette's plant_warm): a forest
+            // reads as many trees when its colour varies tree by tree, and
+            // broadleaf turns yellow far more than a spruce does.
+            const float warm_range = kind == TreeKind::Broadleaf ? 1.0f
+                                     : kind == TreeKind::Pine    ? 0.45f
+                                                                 : 0.25f;
             tree.params = Vec4{core::TWO_PI * hash.next(), 0.7f + 0.6f * hash.next(),
-                               core::TWO_PI * hash.next(), 0.0f};
+                               core::TWO_PI * hash.next(), warm_range * hash.next()};
             trees_[int(kind)].push_back(tree);
         }
     }
@@ -173,7 +179,7 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
             plant.position_scale =
                 Vec4{x, height - 0.05f - sink_for(normal, settings.slope_sink * 0.5f), z, scale};
             plant.params = Vec4{core::TWO_PI * hash.next(), 0.75f + 0.5f * hash.next(),
-                                core::TWO_PI * hash.next(), 0.0f};
+                                core::TWO_PI * hash.next(), 0.5f * hash.next()};
             out[int(kind)].push_back(plant);
             ++total;
         }

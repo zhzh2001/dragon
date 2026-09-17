@@ -47,7 +47,9 @@ could fly into and land on, out toward the sky. The terrain now builds a
 coarse **skirt** (36 m cells to three times the half extent) from the same
 function, drawn with the terrain shader and queried by the same triangle
 lookup, so there is ground under the sky all the way to the fog. It gets no
-plants.
+plants. The terrain shader's sky fade over the outermost band now keys off
+the skirt's extent, not the playable one: left where it was, it started 500 m
+inside the map, and the default course's start sat in it.
 
 The surface query also exposed a frame-time weakness: under the rally test's
 4x frame jitter the bank-limited autopilot orbited Canyon Weave's rings that

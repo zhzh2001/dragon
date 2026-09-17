@@ -1,0 +1,21 @@
+// Named palette entries. Must match gfx::PaletteEntry in src/gfx/palette.h.
+#pragma once
+
+constexpr constant int PALETTE_SAND = 0;
+constexpr constant int PALETTE_GRASS = 1;
+constexpr constant int PALETTE_GRASS_DRY = 2;
+constexpr constant int PALETTE_ROCK = 3;
+constexpr constant int PALETTE_ROCK_DARK = 4;
+constexpr constant int PALETTE_SNOW = 5;
+constexpr constant int PALETTE_BARK = 6;
+constexpr constant int PALETTE_SPRUCE = 7;
+constexpr constant int PALETTE_PINE = 8;
+constexpr constant int PALETTE_BROADLEAF = 9;
+constexpr constant int PALETTE_DEADWOOD = 10;
+constexpr constant int PALETTE_GRASS_BLADE = 11;
+constexpr constant int PALETTE_REED = 12;
+constexpr constant int PALETTE_BUSH = 13;
+constexpr constant int PALETTE_GROUND_BOUNCE = 14;
+constexpr constant int PALETTE_PLANT_WARM = 15;
+constexpr constant int PALETTE_WATER_DEEP = 16;
+constexpr constant int PALETTE_COUNT = 17;

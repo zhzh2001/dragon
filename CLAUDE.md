@@ -150,6 +150,12 @@ flight controls.
   `gfx::PipelineCache` inlines them itself and watches every included file.
   Include `scene_common.msl` first -- it pulls in `<metal_stdlib>` and opens the
   `metal` namespace.
+- **Lighting is one path.** Every world shader lights through `direct_sun`,
+  `ambient_light` and `apply_fog` in `scene_common.msl` (plants add
+  `translucent_sun`). Do not add a per-shader wrap or ambient: the seam
+  between the trees and the ground was exactly that. World colours live in
+  `gfx/palette.h` and reach shaders as uniforms; plant meshes store a palette
+  index and a brightness in their vertex colour, not an RGB.
 - **Shadows**: one directional map following the camera, using a conventional
   [0,1] depth range with a LESS compare -- deliberately unlike the reversed-Z
   main pass, since an independent pass is easier to debug with standard depth.

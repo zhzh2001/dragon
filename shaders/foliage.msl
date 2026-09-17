@@ -60,7 +60,14 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
     float3 world = place_vertex(in, params, scene.camera_position.xyz, normal);
     out.world_position = world;
     out.world_normal = normalize(normal);
-    out.albedo = in.color * in.params.y;
+    // The mesh carries (palette entry, brightness) rather than a colour, so
+    // the plant takes its green from the shared table. Per-instance shade
+    // darkens or lightens the whole plant; the warm push (params.w) shifts a
+    // crown toward yellow, which is what makes a forest read as many trees
+    // rather than one green stamped a thousand times.
+    int entry = clamp(int(in.color.x + 0.5), 0, PALETTE_COUNT - 1);
+    float3 base = scene.palette[entry].rgb * in.color.y * in.params.y;
+    out.albedo = mix(base, base * scene.palette[PALETTE_PLANT_WARM].rgb, in.params.w);
     out.clip_position = scene.view_proj * float4(world, 1.0);
     return out;
 }
@@ -70,25 +77,15 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
                         depth2d<float> shadow_map [[texture(0)]],
                         sampler shadow_sampler [[sampler(0)]]) {
     float3 normal = normalize(in.world_normal);
-    float3 to_sun = normalize(scene.sun.xyz);
     float3 to_camera = normalize(scene.camera_position.xyz - in.world_position);
     if (dot(normal, to_camera) < 0.0) normal = -normal;
 
-    // Foliage is translucent in the mass: light leaks through a canopy, so the
-    // wrap is wider than a solid surface gets.
-    float wrapped = saturate((dot(normal, to_sun) + 0.35) / 1.35);
+    // The shared lighting path, plus the one thing a crown has that rock does
+    // not: sun leaking through it from behind.
     float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
                                       shadow_sampler);
-    float3 direct = scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
-    float sky_amount = saturate(normal.y * 0.5 + 0.5);
-    float3 ambient =
-        mix(scene.fog_color.rgb, scene.sky_zenith.rgb, sky_amount) * scene.terrain_params.w;
-    float3 lit = in.albedo * (direct + ambient);
-
-    float distance = length(in.world_position - scene.camera_position.xyz);
-    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(distance * density, 2.0));
-    float3 ray = normalize(in.world_position - scene.camera_position.xyz);
-    float3 fogged = mix(lit, sky_color(ray, scene), saturate(fog));
-    return float4(tonemap(fogged), 1.0);
+    float3 light = direct_sun(normal, visibility, scene) + ambient_light(normal, scene) +
+                   translucent_sun(normal, visibility, scene.light_params.y, scene);
+    float3 lit = in.albedo * light;
+    return float4(tonemap(apply_fog(lit, in.world_position, scene)), 1.0);
 }

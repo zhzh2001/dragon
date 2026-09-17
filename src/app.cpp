@@ -637,7 +637,12 @@ void App::regenerate_terrain() {
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
     material_.rock_slope = 0.62f;
-    material_.half_extent = terrain_settings_.half_extent;
+    // The terrain shader dissolves the ground into the sky over the outermost
+    // band of this extent. It is the SKIRT's edge, not the playable one: the
+    // fade predates the skirt, and left at the playable extent it began 500 m
+    // inside the map -- exactly where the default course puts the start, so
+    // every run opened on a valley floor blended halfway to sky.
+    material_.half_extent = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
     // High enough that snow reads as mountain caps rather than covering the
     // whole upper valley.
     material_.snow_line = core::lerpf(terrain_.min_height(), terrain_.max_height(), 0.74f);
@@ -1577,6 +1582,18 @@ void App::build_ui(float dt) {
         ImGui::ColorEdit3("fog", lighting_.fog_color);
         ImGui::SliderFloat("fog density", &lighting_.fog_density, 0.0f, 0.003f, "%.5f");
         ImGui::SliderFloat("ambient", &lighting_.ambient, 0.0f, 1.0f);
+        ImGui::SliderFloat("sun wrap", &lighting_.sun_wrap, 0.0f, 0.6f, "%.2f");
+        ImGui::SliderFloat("foliage translucency", &lighting_.foliage_translucency, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
+    }
+
+    // The world's colours, live. Drag a tree green toward the ground green
+    // while flying; that is how the grade between them was found.
+    if (ImGui::CollapsingHeader("Palette")) {
+        for (int i = 0; i < gfx::PALETTE_COUNT; ++i) {
+            ImGui::ColorEdit3(gfx::Palette::name(i), &lighting_.palette.colors[i].x,
+                              ImGuiColorEditFlags_Float);
+        }
     }
 
     if (ImGui::CollapsingHeader("Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {

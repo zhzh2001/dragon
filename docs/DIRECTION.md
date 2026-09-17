@@ -380,7 +380,7 @@ question is the one that could still change the plan.
 
 | # | Work | Sessions | Area |
 |---|---|---|---|
-| 1 | Shared lighting, sun angle, palette header, tree/ground grade | 1 | visuals |
+| 1 | ~~Shared lighting, sun angle, palette header, tree/ground grade~~ done 2026-09-17 | 1 | visuals |
 | 2 | HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines | 2 | UI |
 | 2b | **Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
@@ -402,6 +402,17 @@ a panel.
 Status on 2026-09-13: none of the rows has started; the week went to the
 roster (section 1, "What happened instead"). The next session starts at row 1
 or row 2b, and the roster is not a reason to reorder anything above.
+
+Status on 2026-09-17: **row 1 is done** (`STATUS.md` M17 part; before/after in
+`artifacts/visual-row1/`). Lighting is one path in `scene_common.msl`, the sun
+is at 14 degrees from the south-west, the palette is `gfx/palette.h` with a
+Palette panel, and plants index it instead of carrying colours. Two things
+learned doing it, for rows 4-9: the comparison capture found a bug no target
+would have -- the map-edge sky fade sat 500 m inside the playable extent, and
+the default course starts there, so the pale valley floor in every capture
+since M3 was the fade, not the grass or the fog. And per-tree colour variation
+(a warm push per instance) does more for "many trees" than any palette value;
+vegetation v2 should keep it. Next: row 2b (melee) or row 2 (HUD kit).
 
 ## 7. Prototyping with concept art
 

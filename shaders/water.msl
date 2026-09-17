@@ -39,7 +39,7 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     reflected.y = abs(reflected.y);  // never reflect what is under the water
     float3 reflection = sky_color(reflected, scene);
 
-    const float3 DEEP = float3(0.04, 0.10, 0.11);
+    const float3 DEEP = scene.palette[PALETTE_WATER_DEEP].rgb;
     float cosine = saturate(dot(-ray, normal));
     float fresnel = 0.04 + 0.96 * pow(1.0 - cosine, 5.0);
     float3 color = mix(DEEP, reflection, fresnel);
@@ -47,8 +47,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 180.0);
     color += scene.sun_color.rgb * scene.sun.w * glint * 0.6;
 
-    float density = scene.fog_color.a * exp(-max(in.world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(distance * density, 2.0));
-    float3 fogged = mix(color, sky_color(ray, scene), saturate(fog));
-    return float4(tonemap(fogged), 1.0);
+    return float4(tonemap(apply_fog(color, in.world_position, scene)), 1.0);
 }

@@ -50,6 +50,17 @@ What is built, in the order it was built. The plan these came from is
   is wired in as the default model, and their licence is unresolved -- see
   `ATTRIBUTION.md`. The whole procedure, and what was measured to arrive at
   it, is `docs/MODEL_GENERATION.md`.
+- **M17 (part)** visuals, row 1 of `DIRECTION.md`: one lighting path for
+  terrain, plants, props and the skinned creature (`direct_sun`,
+  `ambient_light`, `translucent_sun`, `apply_fog` in `scene_common.msl`), a
+  late-afternoon sun at 14 degrees from the south-west, a hemispheric ambient
+  with a warm ground bounce, and the world's colours as a named palette pushed
+  as uniforms (`gfx/palette.h`, the Palette panel). Plant meshes carry palette
+  indices, not colours, and each tree gets a per-instance warm push. Also found
+  and fixed while comparing captures: the terrain's map-edge sky fade was still
+  at the playable extent after the skirt was added, so the default course's
+  start sat inside it and every run opened on a floor blended halfway to sky.
+  Renders in `artifacts/visual-row1/`.
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was
