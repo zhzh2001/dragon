@@ -14,7 +14,7 @@ they are records of what was already tried and why it is the way it is.
 
 | Doc | What is in it |
 |---|---|
-| `docs/ANIMATION.md` | The procedural rig, glTF import, the two assets, the animation studio, and the frame/scale traps that cost the most time |
+| `docs/ANIMATION.md` | The procedural rig, glTF import, the seven-species roster and the default asset, the standing stance and terrain plant, the animation studio, and the frame/scale traps that cost the most time |
 | `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop |
 | `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement |
 | `docs/EFFECTS.md` | Particles, the per-species breath profiles, and the fully synthesized audio |
@@ -29,6 +29,7 @@ they are records of what was already tried and why it is the way it is.
 | `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
 | `.claude/skills/concept-art/SKILL.md` | Generating concept art, HUD mockups and creature reference sheets from a ChatGPT/Gemini subscription -- which backend suits which job, and which quota each one burns |
 | `tools/codex_usage.py` | How much of the Codex 5-hour and weekly windows is left, read out of the logged-in browser. Run it before starting a `codex` task |
+| `tools/rig_probes/` | Renderer-free probes that run the rig on a species and print numbers -- foot heights, sink below the floor, leg angles in the glide, leg swing through a manoeuvre, jaw direction -- and a candidate renderer. Ten milliseconds a candidate against two seconds a render: they decide what to render, they do not replace looking |
 
 ## Build & run
 
@@ -86,9 +87,9 @@ The elemental roster, and the two flags that make a multi-species capture
 possible at all -- at the default 650 m spawn the rivals are specks:
 
 ```sh
-./build/dragon --models assets/embercrest.glb,assets/rimefang.glb,\
+./build/dragon --models assets/embercrest.glb,assets/rimefang.glb,assets/frostvein.glb,\
 assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.glb \
-  --bots 5 --bot-range 95 --combat
+  --bots 6 --bot-range 95 --combat
 ```
 
 Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
@@ -197,9 +198,14 @@ flight controls.
   `<model>.breath.cfg` (what it breathes) beside its glTF. All three are
   partial files: absent or unknown keys leave the defaults alone.
   Beware the asymmetry: a partial file inherits *code* defaults, and for the
-  `ground_stow_*` family the default is 0, meaning "do not fold at all". The
-  working values live only in the two hand-tuned assets' profiles, so a new
-  species that lists only its character fields cannot close its wings.
+  standing wing (`ground_wing_aim` and its directions, or the older
+  `ground_stow_*` angles) and the stance (`ground_stance`) the default is
+  off, meaning "do not fold, do not re-pose". Every shipped profile carries
+  its own block; a new species that lists only its character fields cannot
+  close its wings or stand. Copy a sibling's blocks and re-tune by render.
+  Asset names follow one rule: `assets/<name>.glb` ships, `<name>-raw.glb` is
+  the rig before the material repair, `<name>-cand-*.glb` the generator's
+  output.
 - Commit messages describe what changed and *why it was wrong before*.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
   a one-liner.** Two workers have been measured on the same task; pick one and

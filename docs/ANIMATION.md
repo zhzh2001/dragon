@@ -1,8 +1,13 @@
 # Animation: the rig, the assets, and everything they taught us
 
 The procedural dragon rig, the glTF import path, and the hard-won lessons from
-driving two very different rigs with the same code. The studio for inspecting
-it all is described at the end of the first half.
+driving very different rigs with the same code: the imported default asset,
+the two hand-tuned models it was written against, and the seven-species
+generated roster that came after (four quadrupeds on shared skeletons,
+Frostvein on its own measured one, two wyverns). The studio for inspecting it
+all is described at the end of the first half; the sections from "Wings on
+the ground, and in the dive, per species" onward are the roster's ground
+stance, terrain planting and flight-leg work, in the order it happened.
 
 ## Importing a rigged model
 

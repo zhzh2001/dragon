@@ -245,12 +245,19 @@ What is built, in the order it was built. The plan these came from is
   (`docs/EMBERCREST.md`, `artifacts/embercrest-scripted/`). Frostvein's
   shipped file was the unrepaired rig with the repaired build parked beside
   it as `-final`; the repaired build is now `frostvein.glb` and the session's
-  intermediates are under `assets/frostvein/intermediates/`. `ANIMATION.md`, "A folded wing is
+  intermediates are under `assets/frostvein/intermediates/`.
+- **Legs that hang can swing (2026-09-16).** Frostvein's compact leg fold was
+  tidy and rigid; it now hangs its legs (thigh 15 degrees aft, a 46-degree
+  knee) and every profile's leg pendulum swings wider, springs slower and
+  floats further on the brake, so the reversals and the brake visibly move
+  the legs. `tools/rig_probes/leg_swing_probe` measures the travel; eight-
+  frame sequences on all seven species are `artifacts/legs_swing_*.png`.
+  `ANIMATION.md`, "Legs that hang can swing; legs that are tucked cannot". `ANIMATION.md`, "A folded wing is
   where its bones point".
 - **Next:** see `docs/DIRECTION.md` -- the shape of the game (a hoard-run
   roguelite with growth as tuning), the art direction and its generated
   targets in `docs/concept/`, the HUD kit, the asset policy, and a sequenced
-  plan. Revised 2026-09-13: the roster of six species is done for now, and
+  plan. Revised 2026-09-13: the roster (seven species) is done for now, and
   **melee** (bite and claw when the rival is close but off the nose, the
   playtest's one loud complaint) is scheduled before the run probe. `docs/RETRO.md` keeps the feature-by-feature ranking and the D3D9-era
   port study; the port's first phase (extracting an RHI from `src/gfx`) is a
