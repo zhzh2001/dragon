@@ -14,6 +14,8 @@ void BotPilot::reset(uint32_t seed) {
     state_time_ = 0.0f;
     fire_timer_ = 0.0f;
     melee_timer_ = 0.0f;
+    boost_hold_ = 0.0f;
+    boost_timer_ = 0.0f;
     jink_phase_ = random_unit() * core::PI;
     breath_budget_ = 1.0f;
     breathing_ = false;
@@ -60,12 +62,20 @@ void BotPilot::notify_hit() {
     }
 }
 
+namespace {
+float live_range_for_boost(const FlightState& self, const FlightState& player) {
+    return core::distance(self.position, player.position);
+}
+}  // namespace
+
 BotDecision BotPilot::update(float dt, const FlightState& self, const FlightState& player,
                              bool player_alive, float ground_height) {
     BotDecision decision;
     state_time_ += dt;
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
     melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
+    boost_hold_ = core::maxf(boost_hold_ - dt, 0.0f);
+    boost_timer_ = core::maxf(boost_timer_ - dt, 0.0f);
     jink_phase_ += tuning.jink_rate * dt;
 
     // ---- perception ----
@@ -93,12 +103,18 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     const Vec3 believed = predict(snapshot_age_);
 
     const float range = core::distance(self.position, believed);
-    // Lined up: the believed target within 25 degrees of the nose. Decides
-    // whether a close pass is a bite run or an overshoot.
-    const Vec3 to_target = core::normalize_or(believed - self.position, self.forward());
-    const bool lined_up = core::dot(to_target, self.forward()) > std::cos(core::radians(25.0f));
+    // Lined up: the target inside the bot's own bite cone. Read off the LIVE
+    // position, like the bite itself -- a charging dragon is looking at the
+    // one in front of it, and the stale sample put a turning player 60
+    // degrees off a nose that was in fact 30 degrees from them, which ended
+    // every charge at 80 m as an "overshoot". Fairness lives in the aim
+    // spread and the reaction window, not in pretending not to see.
+    const Vec3 to_live = core::normalize_or(player.position - self.position, self.forward());
+    const bool lined_up =
+        core::dot(to_live, self.forward()) > std::cos(core::radians(tuning.melee_cone_deg));
     // The charge: a lined-up attack inside charge range, pressing to a bite.
     const bool charging = state_ == BotState::Attack && lined_up && range < tuning.charge_range;
+    charging_ = charging;
 
     // ---- state transitions ----
     switch (state_) {
@@ -115,7 +131,7 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
             // a bite before it extends. Off-axis, the old range holds -- that
             // is an overshoot about to happen, and pressing it is a collision
             // course, not an attack.
-            const float break_off = lined_up ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
+            const float break_off = charging ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
                                              : tuning.min_attack_range;
             if (!player_alive || range < break_off ||
                 state_time_ > tuning.attack_duration * tempo_) {
@@ -169,6 +185,10 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
                               core::maxf(tuning.projectile_speed, 1.0f);
             }
             aim_point = predict(snapshot_age_ + flight_time);
+            // Charging: fly at the body, a quarter second ahead of it, not
+            // at where a round would need to go. A bite is a contact, and
+            // the contact point is the dragon.
+            if (charging) aim_point = player.position + player.velocity * 0.25f;
             break;
         }
         case BotState::Extend:
@@ -212,7 +232,23 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // Charging: wings on, to actually close. The steering flies the firing
     // solution, which is ahead of the player, so speed is what turns a
     // three-metre-a-second stalk into a pass.
-    if (charging && !recovering) decision.flight.flap = 1.0f;
+    if (charging && !recovering) {
+        // Speed to close, then speed to MATCH: a boosted 76 m/s pass at a
+        // 45 m/s target that is turning overshoots by fifty metres every
+        // time (the probe's closest approach sat at 47 m), so the boost goes
+        // in beyond 150 m and inside it the bot flaps only while slower than
+        // the player. The steering's overspeed brake is lifted: braking at
+        // the top of a charge is how a bite run turned into a stall.
+        const float live_range = live_range_for_boost(self, player);
+        decision.flight.brake = 0.0f;
+        decision.flight.flap =
+            (live_range > 80.0f || self.airspeed < player.airspeed + 4.0f) ? 1.0f : 0.0f;
+        if (boost_timer_ <= 0.0f && live_range > 150.0f) {
+            boost_hold_ = tuning.charge_boost_duration;
+            boost_timer_ = tuning.charge_boost_cooldown;
+        }
+    }
+    if (boost_hold_ > 0.0f && !recovering) decision.flight.boost = 1.0f;
     if (recovering) {
         decision.flight.flap = 1.0f;
         // Braking in a dive adds drag AND lift: it tightens the pull-out the

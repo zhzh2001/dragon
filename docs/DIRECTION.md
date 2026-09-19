@@ -432,6 +432,14 @@ is the bite bench; and a **training room** of passive dummies is a click
 away at the top of the Combat panel. Back to the same gate: does a close
 fight resolve. Then row 2 or row 3.
 
+Second playtest, same day: melee feels good, bots bit once in three matches,
+the bite read as calmly eating, no claw or tail. `STATUS.md` M18.2: the bite
+is a strike now; three gestures by bearing (bite, claw, tail) with their own
+studio scenarios; and the bot charge was rebuilt from measurements -- live
+alignment, body steering, boost then speed-match -- taking the closest
+approach in a passive two-minute match from 47 m to a bite pass at 16 m.
+Gate unchanged; the dials are `charge_range` and the bot melee cone.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

@@ -92,18 +92,22 @@ void test_charge_presses_the_attack() {
     self.position = Vec3::zero();
     self.orientation = Quat::identity();  // facing -Z
     self.velocity = Vec3{0.0f, 0.0f, -40.0f};
-    // A target 150 m dead ahead, cruising the same way: the stalk that used
+    // A target 250 m dead ahead, cruising the same way: the stalk that used
     // to run the attack clock out at three metres a second.
-    const FlightState target = target_at(Vec3{0.0f, 0.0f, -150.0f}, Vec3{0.0f, 0.0f, -37.0f});
+    const FlightState target = target_at(Vec3{0.0f, 0.0f, -250.0f}, Vec3{0.0f, 0.0f, -37.0f});
     int flapping = 0;
+    int boosting = 0;
     for (int i = 0; i < 60 * 15; ++i) {
         const BotDecision decision = pilot.update(1.0f / 60.0f, self, target, true, -1e9f);
         if (decision.flight.flap >= 0.99f) ++flapping;
+        if (decision.flight.boost >= 0.99f) ++boosting;
     }
     // Fifteen seconds is past attack_duration at any tempo: still attacking,
-    // and flapping the whole way.
+    // flapping the whole way, and boosting in bursts on a cooldown -- two or
+    // three bursts of about a second in fifteen.
     CHECK(pilot.state() == BotState::Attack);
     CHECK(flapping > 60 * 13);
+    CHECK(boosting >= 60 && boosting <= 60 * 4);
 }
 
 void test_pursuit_converges() {

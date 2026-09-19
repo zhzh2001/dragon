@@ -343,9 +343,36 @@ MeleeKind melee_reach(Vec3 mouth, Vec3 forward, Vec3 body, Vec3 target, float ta
     return MeleeKind::None;
 }
 
+MeleeGesture melee_gesture_for(Vec3 body, Vec3 forward, Vec3 right, Vec3 target, float& side) {
+    const Vec3 to = core::normalize_or(target - body, forward);
+    side = core::dot(to, right) >= 0.0f ? 1.0f : -1.0f;
+    const float ahead = core::dot(to, forward);
+    if (ahead >= std::cos(core::radians(60.0f))) return MeleeGesture::Bite;
+    if (ahead <= std::cos(core::radians(125.0f))) return MeleeGesture::Tail;
+    return MeleeGesture::Claw;
+}
+
 void Combat::apply_melee(const FlightState& player, CombatEvents& events) {
     const Vec3 mouth = muzzle(player);
     const Vec3 forward = player.forward();
+    // The gesture follows the nearest thing worth swinging at, hit or miss:
+    // a swing at empty air still throws the limb the mark would have needed.
+    {
+        float best = 2.0f * tuning.bite_range;
+        const Sentinel* mark = nullptr;
+        for (const Sentinel& sentinel : sentinels_) {
+            if (!sentinel.alive) continue;
+            const float d = core::distance(player.position, sentinel.position);
+            if (d < best) {
+                best = d;
+                mark = &sentinel;
+            }
+        }
+        if (mark) {
+            events.melee_gesture = melee_gesture_for(player.position, forward, player.right(),
+                                                     mark->position, events.melee_side);
+        }
+    }
     // The chain: a hit inside the window of the last one steps the multiplier.
     const int chain = combo_timer_ > 0.0f ? combo_ : 0;
     const float multiplier = 1.0f + tuning.melee_combo_bonus * float(std::min(chain, 2));

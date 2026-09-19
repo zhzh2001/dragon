@@ -550,12 +550,26 @@ struct RigTuning {
     // Bite: the neck lunges forward and down at the mark, jaws gaping, and
     // snaps shut on the way back -- the spit's gesture mirrored. Peak lunge,
     // duration, and the muscular kick that makes it a strike not a lean.
-    // Big: at 24 degrees and a 5 m/s kick the bite was not told from the
-    // breath's thrust in play, and a swing that cannot be seen cannot be
-    // timed.
-    float bite_lunge_deg = 36.0f;
-    float bite_duration = 0.5f;
-    float bite_impulse = 9.0f;
+    // Big and FAST: at 24 degrees and a 5 m/s kick over half a second the
+    // bite was not told from the breath's thrust in play, and at 36 degrees
+    // over the same half second it read as calmly eating. A strike is out in
+    // a third of its time and back in the rest.
+    float bite_lunge_deg = 38.0f;
+    float bite_duration = 0.32f;
+    float bite_impulse = 14.0f;
+    // Claw: the near foreleg (hind leg on a wyvern) rakes forward and down
+    // with the talons spread, and returns.
+    float claw_swing_deg = 95.0f;
+    float claw_duration = 0.4f;
+    // The rake also carries the limb OUT from the body: a swing straight
+    // forward stayed under the wing and read as nothing from every angle
+    // but below.
+    float claw_out_deg = 35.0f;
+    // Tail: a lateral whip toward the mark and back, a kick through the
+    // chain like the spit's.
+    float tail_whip_deg = 85.0f;
+    float tail_duration = 0.75f;
+    float tail_impulse = 18.0f;
     // Breath: the neck thrusts forward and down into the stream, stiffens
     // (a tensed neck holds the flame steady) and trembles faintly with the
     // effort. The tremor is on the head only, after the aim.
@@ -632,7 +646,10 @@ bool load_rig_tuning(RigTuning& tuning, const char* path);
 struct RigAction {
     float breath = 0.0f;  // 0..1, flame held
     bool fire = false;    // edge: a fireball left this frame
-    bool bite = false;    // edge: a melee swing this frame -- the neck lunges
+    bool bite = false;    // edge: a melee swing with the jaws -- the neck lunges
+    bool claw = false;    // edge: a swing with a foreleg (hind leg on a wyvern)
+    bool tail = false;    // edge: a tail whip
+    float side = 1.0f;    // which side the claw or tail goes: +1 right, -1 left
     float boost = 0.0f;   // 0..1
 };
 
@@ -892,6 +909,10 @@ private:
     float breath_smoothed_ = 0.0f;
     float spit_time_ = 1e9f;
     float bite_time_ = 1e9f;
+    float claw_time_ = 1e9f;
+    float claw_side_ = 1.0f;
+    float tail_time_ = 1e9f;
+    float tail_side_ = 1.0f;
     float jaw_open_ = 0.0f;
     // Which way a positive body-X rotation of the jaw moves it: +1 opens, -1
     // closes. Measured at init, because the jaw bone points wherever the

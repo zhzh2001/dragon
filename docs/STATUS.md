@@ -74,6 +74,14 @@ What is built, in the order it was built. The plan these came from is
   camera jolt, bots charge a lined-up target instead of timing out, studio
   scenario 10 for the bite, and the **training room** (`--training`): six
   passive dummies ahead of the spawn.
+- **M18.2** after the second playtest ("bots rarely bite, the bite is slow
+  like calmly eating, no claw or tail animation"): the charge judges
+  alignment on the live position inside the bot's bite cone, flies at the
+  body, boosts beyond 150 m and matches speed inside 80 m (closest approach
+  47 m -> a bite pass at 16 m); the bite is out in a third of 0.32 s; **three
+  gestures** chosen by the mark's bearing -- bite, claw (foreleg, or hind leg
+  on a wyvern, forward and out), tail whip -- with studio scenarios 11 and
+  12 on a still body to diff them frame to frame. `COMBAT.md`, "Melee".
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

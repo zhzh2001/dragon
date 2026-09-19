@@ -883,7 +883,8 @@ void App::update(float dt) {
                                           flight_.tuning.ground_offset);
         if (scenario == game::StudioScenario::Attack) {
             dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
-        } else if (scenario == game::StudioScenario::Melee) {
+        } else if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||
+                   scenario == game::StudioScenario::Tail) {
             dragon_rig_.set_aim_target(game::studio_melee_target(studio_time_, studio_centre_));
         }
         rig_action_ = game::studio_action(scenario, studio_time_previous_, studio_time_);
@@ -1006,7 +1007,12 @@ void App::update(float dt) {
         // And the mouth: open on the flame, a spit on the fireball.
         rig_action_.breath = combat_.breathing() ? 1.0f : 0.0f;
         rig_action_.fire = events.fired;
-        rig_action_.bite = events.melee_swung;
+        // The swing's gesture follows the nearest mark: jaws ahead, a claw
+        // alongside, the tail behind.
+        rig_action_.bite = events.melee_swung && events.melee_gesture == game::MeleeGesture::Bite;
+        rig_action_.claw = events.melee_swung && events.melee_gesture == game::MeleeGesture::Claw;
+        rig_action_.tail = events.melee_swung && events.melee_gesture == game::MeleeGesture::Tail;
+        rig_action_.side = events.melee_side;
         rig_action_.boost = combat_.boost_active() ? 1.0f : 0.0f;
 
         if (events.melee_swung) {
@@ -2886,7 +2892,13 @@ void App::update_bots(float dt) {
         anim::RigAction action;
         action.breath = decision.breathe ? 1.0f : 0.0f;
         action.fire = decision.fire;
-        action.bite = decision.melee;
+        if (decision.melee) {
+            const game::MeleeGesture gesture = game::melee_gesture_for(
+                self.position, self.forward(), self.right(), flight_.state().position, action.side);
+            action.bite = gesture == game::MeleeGesture::Bite;
+            action.claw = gesture == game::MeleeGesture::Claw;
+            action.tail = gesture == game::MeleeGesture::Tail;
+        }
         bot->rig.set_action(action);
 
         // The head tracks the player when close and hunting -- the tell that a

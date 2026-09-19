@@ -25,6 +25,8 @@ enum class StudioScenario : int {
     Attack,
     Grounded,
     Melee,  // appended, so the numbers in the docs and scripts stay
+    Claw,
+    Tail,
     Count,
 };
 

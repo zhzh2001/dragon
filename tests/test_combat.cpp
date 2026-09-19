@@ -226,6 +226,25 @@ void test_training_room_is_passive() {
     CHECK(combat.sentinels()[0].alive);
 }
 
+void test_melee_gesture_follows_the_mark() {
+    std::printf("jaws for a mark ahead, a claw alongside, the tail behind\n");
+    const Vec3 body = Vec3::zero();
+    const Vec3 forward = Vec3::forward();  // -Z
+    const Vec3 right = Vec3::right();      // +X
+    float side = 0.0f;
+    CHECK(game::melee_gesture_for(body, forward, right, Vec3{3.0f, 0.0f, -20.0f}, side) ==
+          game::MeleeGesture::Bite);
+    CHECK(game::melee_gesture_for(body, forward, right, Vec3{15.0f, 0.0f, -2.0f}, side) ==
+          game::MeleeGesture::Claw);
+    CHECK(side > 0.0f);
+    CHECK(game::melee_gesture_for(body, forward, right, Vec3{-15.0f, 0.0f, 1.0f}, side) ==
+          game::MeleeGesture::Claw);
+    CHECK(side < 0.0f);
+    CHECK(game::melee_gesture_for(body, forward, right, Vec3{2.0f, -3.0f, 18.0f}, side) ==
+          game::MeleeGesture::Tail);
+    CHECK(side > 0.0f);
+}
+
 void test_hostile_melee_reaches_the_player() {
     std::printf("a bot's bite hurts the player only within reach\n");
     Combat combat;
@@ -802,6 +821,7 @@ int main() {
     test_melee_reach_and_cooldown();
     test_melee_stuns_knocks_and_chains();
     test_training_room_is_passive();
+    test_melee_gesture_follows_the_mark();
     test_hostile_melee_reaches_the_player();
     test_fireball_hits_and_kills();
     test_projectile_does_not_tunnel();

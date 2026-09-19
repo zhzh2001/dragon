@@ -431,6 +431,12 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(bite_lunge_deg),
     RIG_FLOAT_FIELD(bite_duration),
     RIG_FLOAT_FIELD(bite_impulse),
+    RIG_FLOAT_FIELD(claw_swing_deg),
+    RIG_FLOAT_FIELD(claw_duration),
+    RIG_FLOAT_FIELD(claw_out_deg),
+    RIG_FLOAT_FIELD(tail_whip_deg),
+    RIG_FLOAT_FIELD(tail_duration),
+    RIG_FLOAT_FIELD(tail_impulse),
     RIG_FLOAT_FIELD(breath_neck_thrust_deg),
     RIG_FLOAT_FIELD(breath_neck_tone),
     RIG_FLOAT_FIELD(breath_tremor_deg),
@@ -1730,6 +1736,33 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         drive_limb(joints_.leg[side], trail);
         drive_limb(joints_.front_leg[side],
                    core::radians(tuning.front_leg_trail_deg) * flight_fold);
+
+        // The claw: the near limb rakes forward and down and returns. The
+        // foreleg where there is one, the hind leg on a wyvern. Side 0 is
+        // the right (+X), matching RigAction::side.
+        const bool this_side = (side == 0) == (claw_side_ >= 0.0f);
+        if (this_side && claw_time_ < tuning.claw_duration) {
+            const float u = claw_time_ / core::maxf(tuning.claw_duration, 1e-3f);
+            const float rake = u < 0.4f ? std::sin(core::HALF_PI * u / 0.4f)
+                                        : std::cos(core::HALF_PI * (u - 0.4f) / 0.6f);
+            const std::vector<int>& limb =
+                joints_.front_leg[side].empty() ? joints_.leg[side] : joints_.front_leg[side];
+            if (!limb.empty()) {
+                // Forward is against the trail, hence the negative aft; the
+                // second joint unfolds so the foot reaches rather than tucks.
+                rotate_joint(limb.front(), Vec3::unit_x(),
+                             -core::radians(tuning.claw_swing_deg) * rake * aft, true);
+                // Out to the side: +X is the right, and a limb hanging down
+                // rotated about +Z moves its tip toward +X.
+                rotate_joint(limb.front(), Vec3::unit_z(),
+                             (side == 0 ? 1.0f : -1.0f) * core::radians(tuning.claw_out_deg) * rake,
+                             true);
+                if (limb.size() > 1) {
+                    rotate_joint(limb[1], Vec3::unit_x(),
+                                 core::radians(tuning.claw_swing_deg) * 0.5f * rake * aft, true);
+                }
+            }
+        }
     }
 }
 
@@ -2192,6 +2225,30 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         bite_time_ += dt;
     }
     action_.bite = false;
+    if (action_.claw) {
+        claw_time_ = 0.0f;
+        claw_side_ = action_.side >= 0.0f ? 1.0f : -1.0f;
+    } else {
+        claw_time_ += dt;
+    }
+    action_.claw = false;
+    if (action_.tail) {
+        tail_time_ = 0.0f;
+        tail_side_ = action_.side >= 0.0f ? 1.0f : -1.0f;
+        // The whip: kick the tail's points sideways toward the mark, more
+        // toward the tip. Engine body frame (right +X), carried into model
+        // space like every other frame vector.
+        const Vec3 kick = core::rotate(body_to_model_, Vec3{tail_side_, 0.15f, 0.0f}) *
+                          tuning.tail_impulse;
+        const size_t points = tail_sim_.velocity.size();
+        for (size_t i = 1; i < points; ++i) {
+            const float progress = float(i) / float(points - 1);
+            tail_sim_.velocity[i] += kick * progress * progress;
+        }
+    } else {
+        tail_time_ += dt;
+    }
+    action_.tail = false;
 
     // Wing load flex reads the g excess, smoothed because g_load is assembled
     // from this frame's forces and single-frame spikes would make the wings
@@ -2283,10 +2340,18 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         neck_steer.x += tuning.spit_recoil_deg * std::sin(core::TWO_PI * u) * (1.0f - u);
     }
-    // Bite: one lunge forward and back, same sign as the breath's thrust.
+    // Bite: out in the first third, back in the rest -- a strike, not a
+    // bow. Same sign as the breath's thrust.
     if (bite_time_ < tuning.bite_duration) {
         const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
-        neck_steer.x -= tuning.bite_lunge_deg * std::sin(core::PI * u);
+        const float lunge = u < 0.35f ? std::sin(core::HALF_PI * u / 0.35f)
+                                      : std::cos(core::HALF_PI * (u - 0.35f) / 0.65f);
+        neck_steer.x -= tuning.bite_lunge_deg * lunge;
+    }
+    // Tail whip: across toward the mark and back through, decaying.
+    if (tail_time_ < tuning.tail_duration) {
+        const float u = tail_time_ / core::maxf(tuning.tail_duration, 1e-3f);
+        tail_steer.y += tuning.tail_whip_deg * tail_side_ * std::sin(core::TWO_PI * u) * (1.0f - u);
     }
 
     // Named fields, not positional braces: a positional initializer here once
@@ -2338,9 +2403,14 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         // Hang and curl were settled by eye on the +Z-facing asset.
         const float root_angle = core::radians(tuning.foot_hang_deg) * airborne * model_forward_z_;
         // Talons open on the attack: the relaxed curl gives way to a spread.
-        const float curl_angle = core::radians(tuning.toe_curl_deg -
-                                               tuning.attack_toe_spread_deg * breath_smoothed_) *
-                                 airborne * model_forward_z_;
+        float clawing = 0.0f;
+        if (claw_time_ < tuning.claw_duration) {
+            clawing = std::sin(core::PI * claw_time_ / core::maxf(tuning.claw_duration, 1e-3f));
+        }
+        const float curl_angle =
+            core::radians(tuning.toe_curl_deg -
+                          tuning.attack_toe_spread_deg * core::maxf(breath_smoothed_, clawing)) *
+            airborne * model_forward_z_;
         for (const auto& [joint, depth] : foot_joints_) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
         }
@@ -2396,11 +2466,13 @@ void DragonRig::drive_attack(float airborne) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         spit_open = u < 0.7f ? std::sin(core::PI * u / 0.7f) : 0.0f;
     }
-    // Bite: gape through the lunge, snap shut as the neck comes back.
+    // Bite: gape on the way out, snap shut at the end of the lunge, stay
+    // shut on the way back.
     float bite_open = 0.0f;
     if (bite_time_ < tuning.bite_duration) {
         const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
-        bite_open = u < 0.55f ? std::sin(core::PI * u / 0.55f) : 0.0f;
+        bite_open = u < 0.3f ? std::sin(core::HALF_PI * u / 0.3f)
+                             : (u < 0.5f ? std::cos(core::HALF_PI * (u - 0.3f) / 0.2f) : 0.0f);
     }
     jaw_open_ = core::maxf(core::maxf(breath_smoothed_, spit_open), bite_open);
     if (joints_.jaw != NO_PARENT) {

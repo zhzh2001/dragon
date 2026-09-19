@@ -70,15 +70,20 @@ struct BotTuning {
     // while the player gets bitten by nobody. Same reach the player has, read
     // off the live position like the flame: a bite is a contact, and
     // pretending not to see a dragon twenty metres away reads as blindness.
-    float melee_range = 28.0f;
-    float melee_cone_deg = 50.0f;  // half angle
-    float strike_range = 15.0f;
+    float melee_range = 30.0f;
+    float melee_cone_deg = 60.0f;  // half angle
+    float strike_range = 16.0f;
     float melee_cooldown = 0.9f;
     // The charge: inside this range and lined up on the player, an attack
-    // does not time out and the bot puts on speed. Without it a bot closing
-    // at three metres a second ran out its attack clock at 300 m and went to
-    // extend, so no bot was ever within bite range of a fleeing player.
-    float charge_range = 260.0f;
+    // does not time out, the bot flies at the player's BODY rather than at
+    // the firing solution ahead of it, holds flap, and spends a boost to
+    // close. Without it a bot closing at three metres a second ran out its
+    // attack clock at 300 m and went to extend, so no bot was ever within
+    // bite range of a fleeing player; with flap alone one bite landed in a
+    // two-minute match, and the playtest still saw a bite once in three.
+    float charge_range = 400.0f;
+    float charge_boost_duration = 1.1f;
+    float charge_boost_cooldown = 6.0f;
 
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
@@ -122,6 +127,8 @@ public:
     // For probes: what the pilot currently believes about the target's motion.
     core::Vec3 seen_acceleration() const { return seen_acceleration_; }
     const char* state_name() const;
+    // For probes and the panel: pressing a lined-up attack to bite range.
+    bool charging() const { return charging_; }
 
 private:
     float random_unit();  // [-1, 1]
@@ -130,6 +137,9 @@ private:
     float state_time_ = 0.0f;
     float fire_timer_ = 0.0f;
     float melee_timer_ = 0.0f;
+    bool charging_ = false;
+    float boost_hold_ = 0.0f;   // seconds of charge boost left
+    float boost_timer_ = 0.0f;  // cooldown until the next
     float jink_phase_ = 0.0f;
 
     // Stale-by-design perception, including the measured acceleration between

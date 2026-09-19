@@ -164,6 +164,18 @@ struct CombatInput {
 // both apply.
 enum class MeleeKind : uint8_t { None, Bite, Strike };
 
+// Which limb a swing is thrown with, decided by where the mark is: the jaws
+// for anything ahead, a claw for anything alongside, the tail for anything
+// behind. It changes only how the swing LOOKS (the rig plays a different
+// gesture); what it hits is melee_reach()'s business.
+enum class MeleeGesture : uint8_t { Bite, Claw, Tail };
+
+// The gesture for a swing at `target` from a dragon at `body` facing
+// `forward` with `right` to its right. `side` comes back +1 for the right
+// side, -1 for the left. With no target in mind, a bite.
+MeleeGesture melee_gesture_for(core::Vec3 body, core::Vec3 forward, core::Vec3 right,
+                               core::Vec3 target, float& side);
+
 // A bot's swing, buffered like its flame and resolved against the player
 // inside update().
 struct MeleeSwing {
@@ -273,6 +285,10 @@ struct CombatEvents {
     MeleeKind melee_hit = MeleeKind::None;
     // Where the best melee hit landed, for the impact burst.
     core::Vec3 melee_hit_position = core::Vec3::zero();
+    // The gesture the swing was thrown with (toward the nearest target in
+    // mind, a bite when there is none) and which side, for the rig.
+    MeleeGesture melee_gesture = MeleeGesture::Bite;
+    float melee_side = 1.0f;
     // Length of the chain the hit extended (1 for a first hit), for the HUD.
     int melee_combo = 0;
     // Some of the damage taken this frame was a bite or a strike, and the

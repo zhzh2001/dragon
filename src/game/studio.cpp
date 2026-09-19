@@ -48,6 +48,11 @@ Quat orientation_at(StudioScenario scenario, float t) {
                    Quat::from_axis_angle(Vec3::unit_x(), pitch) *
                    Quat::from_axis_angle(Vec3::unit_z(), bank);
         }
+        case StudioScenario::Claw:
+        case StudioScenario::Tail:
+            // Dead level and still: the only thing moving is the limb, so a
+            // frame-to-frame diff is the gesture and nothing else.
+            return Quat::identity();
         case StudioScenario::Melee: {
             // Nearly level, a slow weave: the body stays quiet so the lunge
             // reads as the neck's own motion and not as the turn's.
@@ -99,7 +104,9 @@ float speed_at(StudioScenario scenario, float t) {
             // chains feel is smooth and periodic rather than a loop-point snap.
             return 29.0f + 11.0f * std::cos(core::TWO_PI * t / 4.0f);
         case StudioScenario::Attack: return 36.0f;
-        case StudioScenario::Melee: return 34.0f;
+        case StudioScenario::Melee:
+        case StudioScenario::Claw:
+        case StudioScenario::Tail: return 34.0f;
         case StudioScenario::Grounded: return 0.0f;
         default: return 26.0f;
     }
@@ -120,6 +127,8 @@ const char* studio_scenario_name(StudioScenario scenario) {
         case StudioScenario::Attack: return "attack";
         case StudioScenario::Grounded: return "grounded";
         case StudioScenario::Melee: return "melee";
+        case StudioScenario::Claw: return "claw";
+        case StudioScenario::Tail: return "tail";
         default: return "?";
     }
 }
@@ -146,7 +155,11 @@ const char* studio_scenario_notes(StudioScenario scenario) {
         case StudioScenario::Grounded:
             return "wings stowed, legs planted, idle clip at full strength";
         case StudioScenario::Melee:
-            return "a bite every 1.6 s at a mark weaving close ahead: neck lunges, jaw gapes then snaps";
+            return "bite, claw, tail in turn every 1.6 s at a mark close ahead; sides alternate";
+        case StudioScenario::Claw:
+            return "a foreleg rake every 1.4 s, sides alternating: limb forward and down, talons spread";
+        case StudioScenario::Tail:
+            return "a tail whip every 1.6 s, sides alternating -- look from above (--inspect 90 14 85)";
         default: return "";
     }
 }
@@ -166,15 +179,31 @@ Vec3 studio_attack_target(float t, Vec3 centre) {
 
 anim::RigAction studio_action(StudioScenario scenario, float previous, float t) {
     anim::RigAction action;
-    if (scenario == StudioScenario::Melee) {
-        // One bite every 1.6 s: the whole gesture plus a beat of rest, so the
-        // lunge and the snap can each be seen before the next.
-        const float period = 1.6f;
+    if (scenario == StudioScenario::Melee || scenario == StudioScenario::Claw ||
+        scenario == StudioScenario::Tail) {
+        // One swing per period, at 0.3 s into it: the whole gesture plus a
+        // beat of rest, so each can be seen before the next. Which limb, and
+        // which side, cycles with the period count.
+        const float period = scenario == StudioScenario::Claw ? 1.4f : 1.6f;
         const float cycle = std::fmod(t, period);
         const float last = std::fmod(previous, period);
         const float when = 0.3f;
         const bool hit = last < cycle ? (when > last && when <= cycle) : (when > last || when <= cycle);
-        if (hit && t > previous) action.bite = true;
+        if (hit && t > previous) {
+            const int count = int(std::floor(t / period));
+            action.side = (count % 2 == 0) ? 1.0f : -1.0f;
+            if (scenario == StudioScenario::Claw) {
+                action.claw = true;
+            } else if (scenario == StudioScenario::Tail) {
+                action.tail = true;
+            } else {
+                switch (count % 3) {
+                    case 0: action.bite = true; break;
+                    case 1: action.claw = true; break;
+                    default: action.tail = true; break;
+                }
+            }
+        }
         return action;
     }
     if (scenario != StudioScenario::Attack) return action;

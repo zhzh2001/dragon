@@ -123,24 +123,55 @@ position, like its flame -- a bite is a contact, and pretending not to see a
 dragon fifteen metres away reads as blindness -- in any state, once per
 `melee_cooldown` (0.9 s) stretched by its tempo. Two doctrine changes came
 with it. **An aligned attack presses to bite range before it extends:** the
-break-off range was 80 m in every case; a bot lined up within 25 degrees now
-presses to `melee_range * 0.7`, while an off-axis pass (an overshoot about to
-happen) still breaks at 80 m. And **the charge** (`charge_range` 260 m): a
-lined-up attack inside that range neither times out nor coasts -- the bot
-holds flap to close. Without it a bot stalking a fleeing player at three
-metres a second ran its attack clock out at 300 m and went to extend, and no
-bot in a two-minute match ever came within bite range. With it one did, and
-the player's health went to 19 on the way; how often is the playtest's
-question, and `charge_range` is the dial.
+break-off range was 80 m in every case; a charging bot now presses to
+`melee_range * 0.7`, while an off-axis pass (an overshoot about to happen)
+still breaks at 80 m. And **the charge** (`charge_range` 400 m): inside that
+range with the player inside the bot's own bite cone (`melee_cone_deg` 60,
+read off the LIVE position -- the stale sample put a turning player 60
+degrees off a nose that was in fact 30 from them, and ended every charge at
+80 m), the attack clock does not run, the bot flies at the player's BODY a
+quarter second ahead rather than at the firing solution, and it manages
+speed to close and then to match: a boost (`charge_boost_duration` 1.1 s,
+`charge_boost_cooldown` 6 s) beyond 150 m, flap inside 80 m only while slower
+than the player, and the steering's overspeed brake lifted. Each of those was
+a measured failure: without the charge a bot stalking at three metres a
+second ran its attack clock out at 300 m; with flap alone the closest
+approach in two minutes was 47 m; a boosted 76 m/s pass at a turning 45 m/s
+target overshot by fifty metres every time. With speed matching one bot in a
+two-minute autopilot match reached 16 m, swung four times and bit twice.
+The playtest before that saw a bite once in three matches, with a player who
+steers toward the rivals; `charge_range` and the speed-match band are the
+dials.
 
-On the rig, the swing is `RigAction::bite`: the neck lunges forward and down
-(`bite_lunge_deg` 36, a kick of `bite_impulse` 9 m/s through the chain, the
-neck stiffened as for the spit) and the jaw gapes through the lunge and snaps
-shut on the way back (`bite_duration` 0.5 s). The first cut at 24 degrees and
-5 m/s could not be told from the breath's thrust in play. **Studio scenario
-10, "melee"**, is the bench for it: a bite every 1.6 s at a mark weaving
-twenty metres off the nose, on a nearly level body so the lunge reads as the
-neck's own motion; scenario 8 also bites once at 7.2 s of its attack cycle.
+**Three gestures**, chosen by where the mark is (`melee_gesture_for`: within
+60 degrees of the nose the jaws, behind 125 degrees the tail, otherwise a claw
+on that side) and thrown even at a miss, toward the nearest thing worth
+swinging at. What a swing HITS is still `melee_reach()`'s business; the
+gesture only decides how it looks.
+
+- **Bite** (`RigAction::bite`): the neck lunges forward and down --
+  `bite_lunge_deg` 38 with a `bite_impulse` 14 m/s kick through the chain, out
+  in the first third of `bite_duration` (0.32 s) and back in the rest -- and
+  the jaw gapes on the way out and snaps shut at the end of the lunge. The
+  first cut, 24 degrees and 5 m/s over half a second, could not be told from
+  the breath's thrust; the second, 36 degrees over the same half second, read
+  as calmly eating. A strike is fast out and slow back.
+- **Claw** (`RigAction::claw`, `side`): the near foreleg (hind leg on a
+  wyvern) rakes forward `claw_swing_deg` 95 and out `claw_out_deg` 35 with
+  the talons spread, over `claw_duration` 0.4 s. The outward component is
+  what makes it visible: straight forward it stayed under the wing from every
+  angle but below.
+- **Tail** (`RigAction::tail`, `side`): a lateral whip toward the mark --
+  `tail_whip_deg` 85 of steer and an `tail_impulse` 18 m/s kick weighted to
+  the tip -- across and back over `tail_duration` 0.75 s.
+
+**Studio scenarios 10-12** are the bench: 10 "melee" cycles bite, claw, tail
+every 1.6 s at a mark weaving twenty metres off the nose; 11 "claw" and 12
+"tail" swing every 1.4 / 1.6 s with sides alternating on a dead-still body,
+so a frame-to-frame diff is the gesture and nothing else. Look at the claw
+from the front-below (`--inspect 0 14 -25`) and the tail from above
+(`--inspect 90 14 85`); scenario 8 also bites once at 7.2 s of its attack
+cycle.
 
 **The training room** (`--training`, or the button at the top of the Combat
 panel) replaces the targets with six passive dummies laid out ahead of the
