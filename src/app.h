@@ -123,6 +123,8 @@ struct Options {
     float frame_jitter = 0.0f;
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
+    // The training room: passive dummies ahead of the spawn instead of a wave.
+    bool training = false;
 
     // --telemetry [N] logs one line of flight state every N frames (default
     // 60, so once a second at the headless fixed step). A screenshot shows a
@@ -210,6 +212,9 @@ private:
     void build_studio_ui();
     // Hand the chase camera this frame's head and the species' eye offsets.
     void feed_first_person_head(float dt);
+    // Replace the targets with the training room's dummies, laid out ahead of
+    // the player's current heading.
+    void spawn_training_room();
     // The solved eye offsets, smoothed: they change only with the head's
     // rotation, and the breath tremor would otherwise shake the whole view.
     float first_person_up_smoothed_ = 0.0f;

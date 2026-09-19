@@ -162,6 +162,7 @@ void ChaseCamera::update(const FlightState& state, const Terrain* terrain, Vec2 
     }
 
     shake_time_ += dt;
+    kick_ = core::damp(kick_, 0.0f, 0.10f, dt);
 
     // ---- free look ----
     free_look_.x = core::clampf(free_look_.x - free_look_degrees.x, -tuning.free_look_yaw_limit,
@@ -230,7 +231,8 @@ void ChaseCamera::update(const FlightState& state, const Terrain* terrain, Vec2 
     const float shake_amount =
         core::minf(state.airspeed * tuning.shake_speed +
                        std::fabs(state.g_load - 1.0f) * tuning.shake_g * 10.0f,
-                   tuning.shake_max);
+                   tuning.shake_max) +
+        kick_;
     Vec3 aim_point = aim_;
     if (shake_amount > 0.001f) {
         const Vec3 right = core::normalize_or(core::cross(aim_ - position_, up_reference),

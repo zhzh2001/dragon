@@ -90,6 +90,9 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--match") {
             options.combat = true;
             options.match = true;
+        } else if (arg == "--training") {
+            options.combat = true;
+            options.training = true;
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -243,6 +246,7 @@ bool App::init(const Options& options) {
     if (options.combat) {
         combat_enabled_ = true;
         combat_.reset(&terrain_, flight_.state().position, 20260824u);
+        if (options.training) spawn_training_room();
         if (options.bots > 0) spawn_bots(options.bots);
         if (options.match) {
             bot_count_ = options.bots > 0 ? options.bots : bot_count_;
@@ -847,6 +851,13 @@ void App::feed_first_person_head(float dt) {
     chase_.set_first_person_head(head_world, up, back);
 }
 
+void App::spawn_training_room() {
+    bots_.clear();
+    const game::FlightState& s = flight_.state();
+    combat_.spawn_training(s.position, s.forward(), s.right());
+    LOG_INFO("training room: six passive dummies laid out ahead; R to fly the line again");
+}
+
 void App::update(float dt) {
     time_seconds_ += dt;
 
@@ -872,6 +883,8 @@ void App::update(float dt) {
                                           flight_.tuning.ground_offset);
         if (scenario == game::StudioScenario::Attack) {
             dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
+        } else if (scenario == game::StudioScenario::Melee) {
+            dragon_rig_.set_aim_target(game::studio_melee_target(studio_time_, studio_centre_));
         }
         rig_action_ = game::studio_action(scenario, studio_time_previous_, studio_time_);
     }
@@ -998,8 +1011,18 @@ void App::update(float dt) {
 
         if (events.melee_swung) {
             ++bites_swung_;
-            if (events.melee_hit != game::MeleeKind::None) ++bites_landed_;
-            audio_.play(audio::Clip::Bite, events.melee_hit == game::MeleeKind::None ? 0.6f : 1.0f);
+            audio_.play(audio::Clip::Bite, 0.9f);
+            if (events.melee_hit != game::MeleeKind::None) {
+                ++bites_landed_;
+                // A landed bite is an event, not a number: the crunch, a burst
+                // of embers where the jaws met, and a jolt through the camera
+                // that grows with the chain.
+                audio_.play(audio::Clip::BiteHit, 1.0f);
+                emit_impact(events.melee_hit_position, false, false);
+                chase_.kick(0.5f + 0.25f * float(events.melee_combo));
+                hit_marker_ = 0.35f;
+                hit_marker_position_ = events.melee_hit_position;
+            }
             // The lunge spends airspeed: a bite is a commitment, not a free
             // action on a cooldown. Taken off the velocity directly, the way a
             // brake would take it, so the flight model sees a slower dragon.
@@ -1064,7 +1087,15 @@ void App::update(float dt) {
             }
         }
 
-        if (events.bitten) ++bites_taken_;
+        if (events.bitten) {
+            ++bites_taken_;
+            // Knocked: the shove goes straight into the velocity, and the
+            // camera jolts hard. Never a stun for the player -- the controls
+            // stay theirs.
+            flight_.state().velocity = flight_.state().velocity + events.knockback;
+            chase_.kick(1.2f);
+            audio_.play(audio::Clip::BiteHit, 0.9f);
+        }
         if (events.damage_taken > 0.0f) {
             // Rate-limited: a flame deals damage every frame, and forty
             // overlapping cries per second was the "strange loud flame" of the
@@ -2751,6 +2782,20 @@ void App::update_bots(float dt) {
         }
         game::BotDecision decision =
             bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground);
+        // Bitten: the shove goes into the flight model, and while the stun
+        // lasts nobody is flying -- controls centred, wings limp, weapons
+        // cold. The flight model tumbles it honestly from there.
+        if (core::length_sq(slot.knockback) > 0.0f) {
+            bot->flight.state().velocity = bot->flight.state().velocity + slot.knockback;
+            slot.knockback = core::Vec3::zero();
+            bot->pilot.notify_hit();
+        }
+        if (slot.stun > 0.0f) {
+            decision.flight = game::FlightInput{};
+            decision.fire = false;
+            decision.breathe = false;
+            decision.melee = false;
+        }
         const float sink_before = bot->flight.state().climb_rate;
         bot->flight.update(decision.flight, &terrain_, dt);
 
@@ -3167,6 +3212,13 @@ void App::draw_combat_hud() {
     pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
     pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
     pip(width * 0.5f - 78.0f, 1.0f - combat_.melee_cooldown(), "C", IM_COL32(230, 80, 70, 230));
+    if (combat_.melee_combo() > 1) {
+        char combo[8];
+        std::snprintf(combo, sizeof(combo), "x%d", combat_.melee_combo());
+        const ImVec2 size = ImGui::CalcTextSize(combo);
+        draw->AddText(ImVec2(width * 0.5f - 78.0f - size.x * 0.5f, y + 58.0f - 15.0f - size.y - 2.0f),
+                      IM_COL32(255, 120, 90, 240), combo);
+    }
 
     // ---- the match, writ large ----
     {
@@ -3434,15 +3486,28 @@ void App::build_combat_ui() {
     // to the rival with the wrong heading, nothing to do but circle), and its
     // reach and cost are what decide whether a close fight resolves.
     ImGui::Separator();
-    ImGui::Text("melee  (C / B)  %s", combat_.melee_cooldown() > 0.0f ? "recovering" : "ready");
+    ImGui::Text("melee  (C / B)  %s%s", combat_.melee_cooldown() > 0.0f ? "recovering" : "ready",
+                combat_.melee_combo() > 1 ? "  CHAIN" : "");
+    // The room to learn it in: six passive dummies laid out ahead of the
+    // current heading, no return fire; R flies the line again.
+    if (ImGui::Button("training room")) spawn_training_room();
+    ImGui::SameLine();
+    if (ImGui::Button("sentinel wave")) {
+        bots_.clear();
+        combat_.reset(&terrain_, flight_.state().position, 20260824u);
+    }
     ImGui::SliderFloat("bite range", &t.bite_range, 5.0f, 60.0f, "%.0f m");
     ImGui::SliderFloat("bite cone", &t.bite_half_angle_deg, 10.0f, 90.0f, "%.0f deg half");
     ImGui::SliderFloat("strike range", &t.strike_range, 0.0f, 40.0f, "%.0f m");
     ImGui::SliderFloat("bite damage", &t.bite_damage, 0.0f, 80.0f, "%.0f");
     ImGui::SliderFloat("strike damage", &t.strike_damage, 0.0f, 60.0f, "%.0f");
     ImGui::SliderFloat("melee cooldown", &t.melee_cooldown, 0.2f, 4.0f, "%.2f s");
+    ImGui::SliderFloat("stun", &t.melee_stun, 0.0f, 4.0f, "%.1f s");
+    ImGui::SliderFloat("knockback", &t.melee_knockback, 0.0f, 40.0f, "%.0f m/s");
+    ImGui::SliderFloat("combo bonus", &t.melee_combo_bonus, 0.0f, 1.0f, "+%.2f per hit");
     ImGui::SliderFloat("lunge speed cost", &t.melee_lunge_speed_cost, 0.0f, 12.0f, "%.1f m/s");
     ImGui::SliderFloat("bot melee damage", &t.hostile_melee_damage, 0.0f, 40.0f, "%.0f");
+    ImGui::SliderFloat("bot charge range", &bot_tuning_.charge_range, 0.0f, 600.0f, "%.0f m");
 
     // The two dials that decide whether combat is fun, at the top level rather
     // than buried: aim assist is how easy hitting is, spread is how hard being

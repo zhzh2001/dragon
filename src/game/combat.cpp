@@ -346,16 +346,80 @@ MeleeKind melee_reach(Vec3 mouth, Vec3 forward, Vec3 body, Vec3 target, float ta
 void Combat::apply_melee(const FlightState& player, CombatEvents& events) {
     const Vec3 mouth = muzzle(player);
     const Vec3 forward = player.forward();
+    // The chain: a hit inside the window of the last one steps the multiplier.
+    const int chain = combo_timer_ > 0.0f ? combo_ : 0;
+    const float multiplier = 1.0f + tuning.melee_combo_bonus * float(std::min(chain, 2));
+    bool landed = false;
     for (Sentinel& sentinel : sentinels_) {
         if (!sentinel.alive) continue;
         const float radius = sentinel.radius > 0.0f ? sentinel.radius : tuning.sentinel_radius;
         const MeleeKind kind =
             melee_reach(mouth, forward, player.position, sentinel.position, radius, tuning);
         if (kind == MeleeKind::None) continue;
-        damage_sentinel(sentinel, kind == MeleeKind::Bite ? tuning.bite_damage : tuning.strike_damage,
+        const bool bite = kind == MeleeKind::Bite;
+        damage_sentinel(sentinel, (bite ? tuning.bite_damage : tuning.strike_damage) * multiplier,
                         events);
+        // Stun and knock: away from whichever part of the dragon connected,
+        // with a little lift so the rival is thrown up out of the line.
+        sentinel.stun = core::maxf(sentinel.stun, tuning.melee_stun * (bite ? 1.0f : 0.6f));
+        const Vec3 from = bite ? mouth : player.position;
+        const Vec3 away = core::normalize_or(sentinel.position - from, forward);
+        const Vec3 shove = core::normalize_or(away + Vec3{0.0f, 0.35f, 0.0f}, away) *
+                           tuning.melee_knockback;
+        if (sentinel.external) {
+            sentinel.knockback = sentinel.knockback + shove;
+        } else {
+            // A drone's position is rebuilt from its orbit each frame, so the
+            // orbit itself is moved: a quarter second of the shove.
+            sentinel.centre = sentinel.centre + shove * 0.25f;
+        }
         // A bite is the better hit; report it over a strike on another target.
-        if (kind == MeleeKind::Bite || events.melee_hit == MeleeKind::None) events.melee_hit = kind;
+        if (bite || events.melee_hit == MeleeKind::None) {
+            events.melee_hit = kind;
+            events.melee_hit_position = sentinel.position;
+        }
+        landed = true;
+    }
+    if (landed) {
+        combo_ = std::min(chain + 1, 3);
+        combo_timer_ = tuning.melee_combo_window;
+    } else {
+        combo_ = 0;
+        combo_timer_ = 0.0f;
+    }
+    events.melee_combo = landed ? combo_ : 0;
+}
+
+void Combat::spawn_training(Vec3 origin, Vec3 forward, Vec3 right) {
+    sentinels_.clear();
+    locked_ = -1;
+    const Vec3 ahead = core::normalize_or(Vec3{forward.x, 0.0f, forward.z}, Vec3::forward());
+    const Vec3 side = core::normalize_or(Vec3{right.x, 0.0f, right.z}, Vec3::right());
+    // Six dummies out to 420 m. The first two sit inside the bite cone of a
+    // straight flight, the next pair a strike's width to either side, the far
+    // pair further out for the breath and the fireball. A pass through the
+    // whole line takes about ten seconds at cruise; R puts you back on it.
+    const float distances[6] = {60.0f, 110.0f, 170.0f, 240.0f, 320.0f, 420.0f};
+    const float offsets[6] = {4.0f, -6.0f, 12.0f, -12.0f, 22.0f, -18.0f};
+    const float heights[6] = {0.0f, 3.0f, -4.0f, 5.0f, -3.0f, 8.0f};
+    for (int i = 0; i < 6; ++i) {
+        Sentinel dummy;
+        dummy.passive = true;
+        dummy.centre = origin + ahead * distances[i] + side * offsets[i] +
+                       Vec3{0.0f, heights[i], 0.0f};
+        if (terrain_) {
+            dummy.centre.y = core::maxf(dummy.centre.y,
+                                        terrain_->height_at(dummy.centre.x, dummy.centre.z) + 40.0f);
+        }
+        dummy.orbit_radius = 0.0f;
+        dummy.orbit_speed = 0.0f;
+        dummy.bob = 0.0f;
+        dummy.health = tuning.sentinel_health * 6.0f;
+        dummy.max_health = dummy.health;
+        dummy.alive = true;
+        dummy.fire_timer = 1e9f;
+        dummy.position = orbit_position(dummy);
+        sentinels_.push_back(dummy);
     }
 }
 
@@ -416,7 +480,7 @@ void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& eve
     if (sentinel.health <= 0.0f) {
         sentinel.alive = false;
         sentinel.health = 0.0f;
-        sentinel.respawn_timer = tuning.sentinel_respawn;
+        sentinel.respawn_timer = sentinel.passive ? 2.5f : tuning.sentinel_respawn;
         ++kills_;
         ++events.kills;
     }
@@ -516,6 +580,10 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
     for (Sentinel& sentinel : sentinels_) {
         sentinel.hit_flash = core::maxf(sentinel.hit_flash - dt * 4.0f, 0.0f);
         sentinel.time_since_damage += dt;
+        // Stunned: held bright for as long as it lasts, so the state reads at
+        // range the way a hit does.
+        sentinel.stun = core::maxf(sentinel.stun - dt, 0.0f);
+        if (sentinel.stun > 0.0f) sentinel.hit_flash = core::maxf(sentinel.hit_flash, 0.55f);
 
         // External hostiles regenerate after a lull, exactly like the player:
         // pressing the attack matters, and half-dead bots do not accumulate.
@@ -530,7 +598,9 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
             if (sentinel.respawn_timer <= 0.0f) {
                 sentinel.alive = true;
                 sentinel.health = sentinel.max_health;
-                sentinel.fire_timer = tuning.sentinel_fire_interval;
+                sentinel.stun = 0.0f;
+                sentinel.knockback = Vec3::zero();
+                sentinel.fire_timer = sentinel.passive ? 1e9f : tuning.sentinel_fire_interval;
                 if (!sentinel.external) {
                     // Back on its orbit, not at the origin: this branch returns
                     // early, so nothing else would place it this frame.
@@ -547,13 +617,13 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         if (sentinel.external) continue;
 
         // Fixed orbit, no steering. Motion exists to make the target lead a
-        // shot, not to be clever.
+        // shot, not to be clever. A stunned drone hangs where the bite left it.
         const Vec3 previous = sentinel.position;
-        sentinel.phase += sentinel.orbit_speed * dt;
+        if (sentinel.stun <= 0.0f) sentinel.phase += sentinel.orbit_speed * dt;
         sentinel.position = orbit_position(sentinel);
         sentinel.velocity = dt > 0.0f ? (sentinel.position - previous) / dt : Vec3::zero();
 
-        if (health_ <= 0.0f) continue;
+        if (health_ <= 0.0f || sentinel.passive || sentinel.stun > 0.0f) continue;
 
         sentinel.fire_timer -= dt;
         if (sentinel.fire_timer > 0.0f) continue;
@@ -621,6 +691,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     // ---- cooldowns ----
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
     melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
+    combo_timer_ = core::maxf(combo_timer_ - dt, 0.0f);
     boost_cooldown_timer_ = core::maxf(boost_cooldown_timer_ - dt, 0.0f);
     boost_timer_ = core::maxf(boost_timer_ - dt, 0.0f);
     time_since_damage_ += dt;
@@ -720,6 +791,8 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         events.damage_from = swing.mouth;
         events.took_damage = true;
         events.bitten = true;
+        const Vec3 away = core::normalize_or(player.position - swing.mouth, swing.forward);
+        events.knockback = events.knockback + away * tuning.hostile_melee_knockback;
         time_since_damage_ = 0.0f;
         if (health_ <= 0.0f) {
             health_ = 0.0f;

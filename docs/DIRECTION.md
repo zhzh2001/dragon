@@ -423,6 +423,15 @@ RIVAL bites is a live question; the doctrine change (an aligned pass presses
 to bite range) is the first dial to turn if they never do. Next: row 2 (HUD
 kit) or row 3 (the run probe).
 
+2026-09-19, after the first playtest of it ("underpowered, harder to land
+than the breath, animation and sound indistinguishable, bots never use it"):
+`STATUS.md` M18.1. Melee is now a flurry (0.55 s) whose hits stun, knock and
+chain, with its own swing and hit sounds and a camera jolt; bots charge a
+lined-up target and one did bite in a two-minute autopilot match; studio 10
+is the bite bench; and a **training room** of passive dummies is a click
+away at the top of the Combat panel. Back to the same gate: does a close
+fight resolve. Then row 2 or row 3.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

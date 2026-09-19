@@ -61,9 +61,9 @@ void test_melee_discipline() {
         const BotDecision decision = pilot.update(1.0f / 60.0f, self, target_at(close), true, -1e9f);
         if (decision.melee) ++swings;
     }
-    // One swing in the first second: the cooldown is longer than that even
-    // for the quickest tempo.
-    CHECK(swings == 1);
+    // One or two swings in the first second: the cooldown is 0.9 s scaled by
+    // the pilot's tempo, so never three, never none.
+    CHECK(swings >= 1 && swings <= 2);
 
     // Out at two hundred metres, still inside the cone: no swing, ever.
     swings = 0;
@@ -82,6 +82,28 @@ void test_melee_discipline() {
         if (decision.melee) ++swings;
     }
     CHECK(swings >= 1);
+}
+
+void test_charge_presses_the_attack() {
+    std::printf("a lined-up bot inside charge range puts on speed and does not time out\n");
+    BotPilot pilot;
+    pilot.reset(3u);
+    FlightState self;
+    self.position = Vec3::zero();
+    self.orientation = Quat::identity();  // facing -Z
+    self.velocity = Vec3{0.0f, 0.0f, -40.0f};
+    // A target 150 m dead ahead, cruising the same way: the stalk that used
+    // to run the attack clock out at three metres a second.
+    const FlightState target = target_at(Vec3{0.0f, 0.0f, -150.0f}, Vec3{0.0f, 0.0f, -37.0f});
+    int flapping = 0;
+    for (int i = 0; i < 60 * 15; ++i) {
+        const BotDecision decision = pilot.update(1.0f / 60.0f, self, target, true, -1e9f);
+        if (decision.flight.flap >= 0.99f) ++flapping;
+    }
+    // Fifteen seconds is past attack_duration at any tempo: still attacking,
+    // and flapping the whole way.
+    CHECK(pilot.state() == BotState::Attack);
+    CHECK(flapping > 60 * 13);
 }
 
 void test_pursuit_converges() {
@@ -412,6 +434,7 @@ int main() {
     test_breath_discipline_and_recovery();
     test_long_sim_stays_finite();
     test_melee_discipline();
+    test_charge_presses_the_attack();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -24,6 +24,7 @@ enum class StudioScenario : int {
     Brake,
     Attack,
     Grounded,
+    Melee,  // appended, so the numbers in the docs and scripts stay
     Count,
 };
 
@@ -42,6 +43,8 @@ FlightState studio_state(StudioScenario scenario, float t, core::Vec3 centre, fl
 
 // Where the attack scenario's target orbits, for the head aim.
 core::Vec3 studio_attack_target(float t, core::Vec3 centre);
+// The mark the melee scenario snaps at: close ahead, weaving across the nose.
+core::Vec3 studio_melee_target(float t, core::Vec3 centre);
 
 // What the dragon does with its weapons over the interval (previous, t]: the
 // attack scenario holds its breath and spits on a schedule, so the jaw, the

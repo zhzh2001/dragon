@@ -136,6 +136,10 @@ public:
         head_known_ = true;
     }
     void clear_first_person_head() { head_known_ = false; }
+    // A one-off jolt of shake, in degrees, decaying over a fraction of a
+    // second: a bite landing, a bite taken. Sits on top of the speed and
+    // g-load shake.
+    void kick(float degrees) { kick_ = core::maxf(kick_, degrees); }
     // Put the first-person camera on the head it was last given, with no
     // smoothing. Called again after the rig has posed this frame's head, so
     // the eye and the mesh agree; the eye otherwise trails the head by a
@@ -174,6 +178,7 @@ private:
     float requested_arm_ = 22.0f;
     core::Vec2 free_look_ = core::Vec2{0.0f, 0.0f};  // degrees, yaw then pitch
     float shake_time_ = 0.0f;
+    float kick_ = 0.0f;
     bool initialized_ = false;
 };
 

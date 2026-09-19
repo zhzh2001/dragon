@@ -69,19 +69,49 @@ void Audio::synthesize_clips() {
         }
     }
 
-    // Bite: jaws snapping shut. A sharp click (a few milliseconds of bright
-    // noise) over a short low thud, so it reads as teeth meeting rather than
-    // as another shot.
+    // Bite, the swing: a whoosh rising for a fifth of a second (the neck
+    // coming through the air) that ends in the snap -- a bright click over a
+    // short low thud. The first cut was the snap alone, 0.2 s, and in play it
+    // vanished under the flap; the whoosh is what makes it a gesture you can
+    // hear starting.
     {
         std::vector<float>& clip = clips_[int(Clip::Bite)];
-        clip.resize(seconds(0.22f));
+        clip.resize(seconds(0.42f));
         float lp = 0.0f;
+        const float snap_at = 0.2f;
         for (uint32_t i = 0; i < clip.size(); ++i) {
             const float t = float(i) / SAMPLE_RATE;
-            lp += (synth_noise() - lp) * 0.6f;
-            const float click = lp * std::exp(-220.0f * t);
-            const float thud = 0.7f * std::sin(TWO_PI * 90.0f * t) * std::exp(-18.0f * t);
-            clip[i] = 0.8f * (click + thud);
+            // Whoosh: filtered noise whose cutoff rises toward the snap.
+            const float u = core::saturate(t / snap_at);
+            const float cutoff = 0.05f + 0.35f * u * u;
+            lp += (synth_noise() - lp) * cutoff;
+            const float whoosh = lp * std::sin(3.14159f * core::minf(u, 1.0f)) * 0.9f;
+            float snap = 0.0f;
+            if (t >= snap_at) {
+                const float s = t - snap_at;
+                snap = synth_noise() * std::exp(-260.0f * s) * 1.4f +
+                       0.9f * std::sin(TWO_PI * 85.0f * s) * std::exp(-16.0f * s);
+            }
+            clip[i] = 0.9f * (whoosh + snap);
+        }
+    }
+
+    // Bite landing: a crunch -- a burst of dense noise chewed by a fast
+    // tremolo -- over a heavy thud, longer and lower than the swing's snap so
+    // a hit and a miss are told apart with the eyes shut.
+    {
+        std::vector<float>& clip = clips_[int(Clip::BiteHit)];
+        clip.resize(seconds(0.38f));
+        float brown = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            brown += synth_noise() * 0.35f;
+            brown *= 0.97f;
+            const float tremolo = 0.6f + 0.4f * std::sin(TWO_PI * 38.0f * t);
+            const float crunch = brown * tremolo * std::exp(-9.0f * t);
+            const float thud = 1.0f * std::sin(TWO_PI * 60.0f * t * (1.0f - 0.3f * t)) *
+                               std::exp(-7.0f * t);
+            clip[i] = 0.95f * (crunch + thud);
         }
     }
 

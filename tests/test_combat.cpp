@@ -3,6 +3,7 @@
 // The two that actually matter in a 3D dogfight are hard to see by eye and easy
 // to get wrong: a fast projectile must not pass through a target between frames,
 // and a resource meter must not be tappable at zero. Both are pinned here.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -150,6 +151,81 @@ void test_melee_reach_and_cooldown() {
     CHECK(near(combat.sentinels()[0].health, health, 1e-3f));
 }
 
+void test_melee_stuns_knocks_and_chains() {
+    std::printf("a bite stuns and knocks its target, and hits chain inside the window\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 7u);
+    // Enough health to take the chain: at the default 60 the second, stepped
+    // hit killed the target and the test measured the remainder.
+    combat.tuning.sentinel_health = 300.0f;
+    const FlightState player = player_at(Vec3::zero());
+    const float health = combat.tuning.sentinel_health;
+    const Vec3 spot{0.0f, 0.0f, -18.0f};
+    isolate_sentinel(combat, spot);
+    CombatInput bite;
+    bite.melee = true;
+
+    game::CombatEvents events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(events.melee_hit == game::MeleeKind::Bite);
+    CHECK(events.melee_combo == 1);
+    const game::Sentinel& target = combat.sentinels()[0];
+    CHECK(target.stun > 0.0f);
+    // The orbit centre moved away from the mouth (further out along -Z).
+    CHECK(target.centre.z < spot.z - 0.5f);
+    const float first = health - target.health;
+    CHECK(near(first, combat.tuning.bite_damage, 1e-3f));
+
+    // Second hit inside the combo window: stepped damage.
+    for (int i = 0; i < 40; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(combat.melee_combo() == 1);
+    combat.sentinels()[0].centre = spot;  // put it back in reach
+    const float before = combat.sentinels()[0].health;
+    events = combat.update(1.0f / 60.0f, player, bite);
+    CHECK(events.melee_combo == 2);
+    std::printf("  second hit: %.1f damage (kind %d), first was %.1f\n",
+                before - combat.sentinels()[0].health, int(events.melee_hit), first);
+    CHECK(near(before - combat.sentinels()[0].health,
+               combat.tuning.bite_damage * (1.0f + combat.tuning.melee_combo_bonus), 1e-3f));
+
+    // Let the window lapse: the chain is gone.
+    for (int i = 0; i < 120; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(combat.melee_combo() == 0);
+}
+
+void test_training_room_is_passive() {
+    std::printf("training dummies sit still ahead, never fire, and come back fast\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 7u);
+    const FlightState player = player_at(Vec3::zero());
+    combat.spawn_training(Vec3::zero(), Vec3::forward(), Vec3::right());
+    CHECK(combat.sentinels().size() == 6);
+    // The first dummy sits ahead, and a straight flight brings it into the
+    // bite cone: from twenty metres short of it, dead ahead, it is a bite.
+    const Vec3 first = combat.sentinels()[0].position;
+    CHECK(first.z < 0.0f);
+    const FlightState approaching = player_at(first + Vec3{0.0f, 0.0f, 20.0f});
+    CHECK(game::melee_reach(combat.muzzle(approaching), Vec3::forward(), approaching.position,
+                            first, combat.tuning.sentinel_radius,
+                            combat.tuning) == game::MeleeKind::Bite);
+    // Ten seconds in reach of six dummies: not a single hostile round, and
+    // nothing moved.
+    const float health = combat.health();
+    for (int i = 0; i < 600; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(near(combat.health(), health, 1e-3f));
+    CHECK(combat.projectiles().empty() ||
+          std::none_of(combat.projectiles().begin(), combat.projectiles().end(),
+                       [](const game::Projectile& p) { return p.alive; }));
+    CHECK(near(distance(combat.sentinels()[0].position, first), 0.0f, 1e-3f));
+    // Killed, a dummy is back inside three seconds.
+    combat.sentinels()[0].health = 1.0f;
+    CombatInput bite;
+    bite.melee = true;
+    combat.update(1.0f / 60.0f, approaching, bite);
+    CHECK(!combat.sentinels()[0].alive);
+    for (int i = 0; i < 200; ++i) combat.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(combat.sentinels()[0].alive);
+}
+
 void test_hostile_melee_reaches_the_player() {
     std::printf("a bot's bite hurts the player only within reach\n");
     Combat combat;
@@ -164,6 +240,8 @@ void test_hostile_melee_reaches_the_player() {
     CHECK(events.bitten);
     CHECK(near(combat.health(), health - combat.tuning.hostile_melee_damage, 1e-3f));
     CHECK(events.took_damage);
+    // Knocked away from the biter's mouth, which was ahead: the shove points +Z.
+    CHECK(events.knockback.z > 1.0f);
 
     // The same rival facing away, but close alongside: a strike at 60%.
     const float after_bite = combat.health();
@@ -722,6 +800,8 @@ int main() {
     test_breath_follows_the_lock();
     test_closest_point_fraction();
     test_melee_reach_and_cooldown();
+    test_melee_stuns_knocks_and_chains();
+    test_training_room_is_passive();
     test_hostile_melee_reaches_the_player();
     test_fireball_hits_and_kills();
     test_projectile_does_not_tunnel();

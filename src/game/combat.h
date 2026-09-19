@@ -27,18 +27,35 @@ struct CombatTuning {
     // lands on anything inside a wide cone ahead of the mouth within a few
     // body lengths; a claw or tail STRIKE lands on anything alongside or
     // behind, inside a sphere around the body. Distance and cone tests only.
-    float bite_range = 26.0f;           // metres from the mouth, about three body lengths
-    float bite_half_angle_deg = 45.0f;  // wide on purpose: this is the no-aim weapon
-    float bite_damage = 24.0f;
+    float bite_range = 30.0f;           // metres from the mouth, about four body lengths
+    float bite_half_angle_deg = 50.0f;  // wide on purpose: this is the no-aim weapon
+    float bite_damage = 28.0f;
     float strike_range = 16.0f;         // from the body centre, any direction
-    float strike_damage = 14.0f;
-    float melee_cooldown = 1.3f;
-    // A lunge costs airspeed, so biting is a commitment rather than a free
-    // action spammed on cooldown.
-    float melee_lunge_speed_cost = 3.0f;  // m/s
+    float strike_damage = 18.0f;
+    // Short: the first cut at 1.3 s made melee harder to land than the
+    // breath, because a close pass lasts about a second and one swing in it
+    // was one chance. A swing every half second turns a pass into a flurry.
+    float melee_cooldown = 0.55f;
+    // A lunge costs a little airspeed, so biting is a commitment rather than
+    // a free action spammed on cooldown -- but only a little, or the flurry
+    // above stalls the dragon.
+    float melee_lunge_speed_cost = 2.0f;  // m/s
+    // What a landed hit does beyond damage, in the Spyro tradition: the
+    // target is STUNNED (a bot loses its controls and weapons, a drone stops
+    // shooting and orbiting) and KNOCKED away from the biter. A hit that only
+    // subtracts a number is indistinguishable from the flame; a hit that
+    // sends the rival tumbling is a bite.
+    float melee_stun = 1.6f;        // seconds; a strike stuns for 60% of it
+    float melee_knockback = 14.0f;  // m/s added to the target's velocity, away from the biter
+    // Hits inside this window of the last one chain: each step adds `bonus`
+    // to the damage, up to three steps (x1.7). A miss breaks the chain.
+    float melee_combo_window = 1.4f;
+    float melee_combo_bonus = 0.35f;
     // Bots bite with the same reach; their damage is its own dial, like their
-    // breath. A strike does 60% of it.
+    // breath. A strike does 60% of it. Their bite knocks the player, never
+    // stuns: losing the controls is the one thing a player must not suffer.
     float hostile_melee_damage = 12.0f;
+    float hostile_melee_knockback = 10.0f;
 
     // ---- fireball ----
     // Fast enough to lead a target rather than lob at it, slow enough that a
@@ -179,6 +196,17 @@ struct Sentinel {
     // by a real FlightModel outside, and they fire through fire_hostile()
     // instead of the orbit timer.
     bool external = false;
+    // A training dummy: never fires, holds still, and comes back quickly.
+    // The room to learn the reach of a bite in, without being shot at.
+    bool passive = false;
+    // Seconds of stun left after a melee hit. A stunned drone neither orbits
+    // nor fires; a stunned external is flown by nobody (its owner reads this
+    // and drops the pilot's controls).
+    float stun = 0.0f;
+    // Velocity a melee hit has added, m/s, waiting for the owner of an
+    // external slot to apply to its flight model and zero. Drones take theirs
+    // directly on the orbit centre.
+    core::Vec3 knockback = core::Vec3::zero();
     // Hit-sphere radius. Drones use the tuned default; an external dragon's
     // body is its own size.
     float radius = 0.0f;
@@ -243,8 +271,14 @@ struct CombatEvents {
     // it connected with.
     bool melee_swung = false;
     MeleeKind melee_hit = MeleeKind::None;
-    // Some of the damage taken this frame was a bite or a strike.
+    // Where the best melee hit landed, for the impact burst.
+    core::Vec3 melee_hit_position = core::Vec3::zero();
+    // Length of the chain the hit extended (1 for a first hit), for the HUD.
+    int melee_combo = 0;
+    // Some of the damage taken this frame was a bite or a strike, and the
+    // velocity it added to the player (the owner applies it).
     bool bitten = false;
+    core::Vec3 knockback = core::Vec3::zero();
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
@@ -276,6 +310,8 @@ public:
     float fire_cooldown() const;
     float boost_cooldown() const;
     float melee_cooldown() const;
+    // Current melee chain length (0 when no chain is live), for the HUD.
+    int melee_combo() const { return combo_timer_ > 0.0f ? combo_ : 0; }
     bool boost_active() const { return boost_timer_ > 0.0f; }
 
     // ---- world ----
@@ -313,6 +349,11 @@ public:
     // Spawns a ring of sentinels around the arena centre. Called by reset, and
     // again from the UI to restock.
     void spawn_wave(int count);
+    // The training room: replaces the targets with a line of passive dummies
+    // ahead of `origin` along `forward`, staggered to either side, so a
+    // straight flight passes one after another inside bite or strike reach.
+    // They never fire, hold still, take a beating and come back in seconds.
+    void spawn_training(core::Vec3 origin, core::Vec3 forward, core::Vec3 right);
 
     // ---- external hostiles (bots) ----
     // Claims a slot; returns its index into sentinels().
@@ -379,6 +420,8 @@ private:
     float time_since_breath_ = 0.0f;
     float fire_timer_ = 0.0f;
     float melee_timer_ = 0.0f;
+    int combo_ = 0;
+    float combo_timer_ = 0.0f;
     float boost_timer_ = 0.0f;
     float boost_cooldown_timer_ = 0.0f;
     int kills_ = 0;

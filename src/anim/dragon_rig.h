@@ -550,9 +550,12 @@ struct RigTuning {
     // Bite: the neck lunges forward and down at the mark, jaws gaping, and
     // snaps shut on the way back -- the spit's gesture mirrored. Peak lunge,
     // duration, and the muscular kick that makes it a strike not a lean.
-    float bite_lunge_deg = 24.0f;
-    float bite_duration = 0.45f;
-    float bite_impulse = 5.0f;
+    // Big: at 24 degrees and a 5 m/s kick the bite was not told from the
+    // breath's thrust in play, and a swing that cannot be seen cannot be
+    // timed.
+    float bite_lunge_deg = 36.0f;
+    float bite_duration = 0.5f;
+    float bite_impulse = 9.0f;
     // Breath: the neck thrusts forward and down into the stream, stiffens
     // (a tensed neck holds the flame steady) and trembles faintly with the
     // effort. The tremor is on the head only, after the aim.

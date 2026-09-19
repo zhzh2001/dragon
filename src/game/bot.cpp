@@ -93,6 +93,12 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     const Vec3 believed = predict(snapshot_age_);
 
     const float range = core::distance(self.position, believed);
+    // Lined up: the believed target within 25 degrees of the nose. Decides
+    // whether a close pass is a bite run or an overshoot.
+    const Vec3 to_target = core::normalize_or(believed - self.position, self.forward());
+    const bool lined_up = core::dot(to_target, self.forward()) > std::cos(core::radians(25.0f));
+    // The charge: a lined-up attack inside charge range, pressing to a bite.
+    const bool charging = state_ == BotState::Attack && lined_up && range < tuning.charge_range;
 
     // ---- state transitions ----
     switch (state_) {
@@ -101,14 +107,14 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
             // turning fight is possible. Outside it the bot is approaching, not
             // attacking, and timing out of an approach just oscillates: nine
             // seconds of closing, seven seconds of extending away, no progress.
-            if (range > tuning.fire_range * 0.8f) state_time_ = 0.0f;
+            // Nor does it run during a charge: closing on a lined-up target is
+            // progress by definition.
+            if (range > tuning.fire_range * 0.8f || charging) state_time_ = 0.0f;
             // The break-off range shrinks when the bot is lined up on the
             // player: an aligned pass presses through the breath envelope to
             // a bite before it extends. Off-axis, the old range holds -- that
             // is an overshoot about to happen, and pressing it is a collision
             // course, not an attack.
-            const Vec3 to_target = core::normalize_or(believed - self.position, self.forward());
-            const bool lined_up = core::dot(to_target, self.forward()) > std::cos(core::radians(25.0f));
             const float break_off = lined_up ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
                                              : tuning.min_attack_range;
             if (!player_alive || range < break_off ||
@@ -203,6 +209,10 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
         aim_point = self.position + level_forward * 120.0f + Vec3{0.0f, 220.0f, 0.0f};
     }
     decision.flight = steer_toward(self, aim_point, tuning.steering, ground_height);
+    // Charging: wings on, to actually close. The steering flies the firing
+    // solution, which is ahead of the player, so speed is what turns a
+    // three-metre-a-second stalk into a pass.
+    if (charging && !recovering) decision.flight.flap = 1.0f;
     if (recovering) {
         decision.flight.flap = 1.0f;
         // Braking in a dive adds drag AND lift: it tightens the pull-out the

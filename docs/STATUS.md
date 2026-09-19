@@ -67,6 +67,13 @@ What is built, in the order it was built. The plan these came from is
   presses to bite range before extending; the neck lunges and the jaw snaps
   on the rig; dials at the top of the Combat panel; `bites swung/landed/
   taken` on the telemetry line. `COMBAT.md`, "Melee".
+- **M18.1** melee after the first playtest ("underpowered, harder to land
+  than the breath, cannot tell the animation, bots never use it"): cooldown
+  0.55 s, a hit stuns and knocks its target and hits chain to x1.7, a bigger
+  lunge, a swing sound and a separate hit sound with an ember burst and a
+  camera jolt, bots charge a lined-up target instead of timing out, studio
+  scenario 10 for the bite, and the **training room** (`--training`): six
+  passive dummies ahead of the spawn.
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

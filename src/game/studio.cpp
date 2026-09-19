@@ -48,6 +48,14 @@ Quat orientation_at(StudioScenario scenario, float t) {
                    Quat::from_axis_angle(Vec3::unit_x(), pitch) *
                    Quat::from_axis_angle(Vec3::unit_z(), bank);
         }
+        case StudioScenario::Melee: {
+            // Nearly level, a slow weave: the body stays quiet so the lunge
+            // reads as the neck's own motion and not as the turn's.
+            const float phase = core::TWO_PI * t / 6.0f;
+            const float bank = core::radians(12.0f) * std::sin(phase);
+            return Quat::from_axis_angle(Vec3::unit_y(), 0.1f * -std::cos(phase)) *
+                   Quat::from_axis_angle(Vec3::unit_z(), bank);
+        }
         case StudioScenario::Dive:
             return Quat::from_axis_angle(Vec3::unit_x(), core::radians(-55.0f));
         case StudioScenario::PullOut: {
@@ -91,6 +99,7 @@ float speed_at(StudioScenario scenario, float t) {
             // chains feel is smooth and periodic rather than a loop-point snap.
             return 29.0f + 11.0f * std::cos(core::TWO_PI * t / 4.0f);
         case StudioScenario::Attack: return 36.0f;
+        case StudioScenario::Melee: return 34.0f;
         case StudioScenario::Grounded: return 0.0f;
         default: return 26.0f;
     }
@@ -110,6 +119,7 @@ const char* studio_scenario_name(StudioScenario scenario) {
         case StudioScenario::Brake: return "brake";
         case StudioScenario::Attack: return "attack";
         case StudioScenario::Grounded: return "grounded";
+        case StudioScenario::Melee: return "melee";
         default: return "?";
     }
 }
@@ -135,8 +145,16 @@ const char* studio_scenario_notes(StudioScenario scenario) {
             return "neck and head hold the mark; jaw gapes on the breath, rears back on the spit";
         case StudioScenario::Grounded:
             return "wings stowed, legs planted, idle clip at full strength";
+        case StudioScenario::Melee:
+            return "a bite every 1.6 s at a mark weaving close ahead: neck lunges, jaw gapes then snaps";
         default: return "";
     }
+}
+
+Vec3 studio_melee_target(float t, Vec3 centre) {
+    // Twenty metres off the nose, drifting across it: inside bite reach, so
+    // the head that snaps is the head that would connect.
+    return centre + Vec3{9.0f * std::sin(0.7f * t), 3.0f * std::sin(1.1f * t), -20.0f};
 }
 
 Vec3 studio_attack_target(float t, Vec3 centre) {
@@ -148,6 +166,17 @@ Vec3 studio_attack_target(float t, Vec3 centre) {
 
 anim::RigAction studio_action(StudioScenario scenario, float previous, float t) {
     anim::RigAction action;
+    if (scenario == StudioScenario::Melee) {
+        // One bite every 1.6 s: the whole gesture plus a beat of rest, so the
+        // lunge and the snap can each be seen before the next.
+        const float period = 1.6f;
+        const float cycle = std::fmod(t, period);
+        const float last = std::fmod(previous, period);
+        const float when = 0.3f;
+        const bool hit = last < cycle ? (when > last && when <= cycle) : (when > last || when <= cycle);
+        if (hit && t > previous) action.bite = true;
+        return action;
+    }
     if (scenario != StudioScenario::Attack) return action;
     // An 8 s cycle: spit at 0.5 s, breathe from 2 to 4.5 s, spit again at
     // 6 s, bite at 7.2 s.

@@ -65,8 +65,9 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Fly the selected course unattended. Doubles as a soak test. |
 | `--course N` | Select a generated course. |
-| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded. |
+| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (a bite every 1.6 s at a close mark). |
 | `--combat` | Arm the dragon and spawn a wave of sentinels. |
+| `--training` | Arm the dragon and lay out the training room instead: six passive dummies ahead of the spawn, no return fire, back in 2.5 s. With `--attack`, the melee reach on a screenshot; `R` flies the line again. |
 | `--attack` | Also hold breath, fire, boost and bite -- how flame, projectiles, boost and the lunge get onto a screenshot. |
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
@@ -121,7 +122,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | F1 | Hide every ImGui panel (the HUD stays) |
 | F / left mouse | Fire breath (hold) -- gamepad LB |
 | G | Fireball -- gamepad RB |
-| C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 26 m, a claw or tail strike on anything within 16 m of the body. No aim needed; costs a little airspeed |
+| C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 30 m, a claw or tail strike on anything within 16 m of the body. No aim needed; a hit stuns and knocks the target, hits chain to x1.7 |
 | X | Boost -- gamepad X |
 | Esc | Release the mouse if captured; again to quit |
 

@@ -94,8 +94,24 @@ but circle. So a dragon that close bites, and **melee needs no aim**:
 - **Strike** (`strike_range` 16 m): a claw or tail on anything inside a
   sphere around the body, any direction -- alongside, behind, above.
 - One press (`C`, gamepad `B`) is one swing, whether or not anything is in
-  reach; `melee_cooldown` 1.3 s; the swing costs `melee_lunge_speed_cost`
-  (3 m/s) of airspeed, so a bite is a commitment rather than a free action.
+  reach; `melee_cooldown` 0.55 s; the swing costs `melee_lunge_speed_cost`
+  (2 m/s) of airspeed. The first cut was 1.3 s and 3 m/s, and the playtest
+  found it harder to land than the breath: a close pass lasts about a second,
+  and one swing in it was one chance. Half a second turns a pass into a
+  flurry.
+- **A hit stuns and knocks** (`melee_stun` 1.6 s, `melee_knockback` 14 m/s),
+  in the Spyro tradition. A stunned bot loses its controls and weapons and
+  tumbles on whatever velocity the shove gave it; a stunned drone stops
+  orbiting and firing; both hold their hit flash for the duration so the
+  state reads at range. A bite on the player knocks but never stuns -- the
+  controls stay theirs.
+- **Hits chain** (`melee_combo_window` 1.4 s, `melee_combo_bonus` +0.35 per
+  step, three steps): the HUD shows `x2`, `x3` over the C pip, and the camera
+  jolt grows with the chain. A miss breaks it.
+- The swing is heard starting -- a whoosh rising into the snap -- and a hit
+  is a different sound (a crunch and a thud) with an ember burst where the
+  jaws met and a jolt through the camera. The first cut's click-only snap
+  vanished under the wingbeat in play.
 - `melee_reach()` is the geometry, exposed for the tests and shared by the
   bots, so what the player's swing hits and what a bot's swing hits are the
   same function.
@@ -105,17 +121,34 @@ player inside `update()` exactly like their flames; damage is its own dial
 (`hostile_melee_damage`, a strike at 60%). The bot decides off the LIVE
 position, like its flame -- a bite is a contact, and pretending not to see a
 dragon fifteen metres away reads as blindness -- in any state, once per
-`melee_cooldown` stretched by its tempo. One doctrine change came with it:
-**an aligned attack presses to bite range before it extends.** The break-off
-range was 80 m in every case; a bot lined up within 25 degrees now presses to
-`melee_range * 0.7` instead, so a pass on the player's tail ends in a bite,
-while an off-axis pass (an overshoot about to happen) still breaks at 80 m.
+`melee_cooldown` (0.9 s) stretched by its tempo. Two doctrine changes came
+with it. **An aligned attack presses to bite range before it extends:** the
+break-off range was 80 m in every case; a bot lined up within 25 degrees now
+presses to `melee_range * 0.7`, while an off-axis pass (an overshoot about to
+happen) still breaks at 80 m. And **the charge** (`charge_range` 260 m): a
+lined-up attack inside that range neither times out nor coasts -- the bot
+holds flap to close. Without it a bot stalking a fleeing player at three
+metres a second ran its attack clock out at 300 m and went to extend, and no
+bot in a two-minute match ever came within bite range. With it one did, and
+the player's health went to 19 on the way; how often is the playtest's
+question, and `charge_range` is the dial.
 
 On the rig, the swing is `RigAction::bite`: the neck lunges forward and down
-(`bite_lunge_deg`, a kick of `bite_impulse` m/s through the chain, the neck
-stiffened as for the spit) and the jaw gapes through the lunge and snaps shut
-on the way back (`bite_duration` 0.45 s). Studio scenario 8 bites at 7.2 s
-of its cycle. The sound is a click over a short thud.
+(`bite_lunge_deg` 36, a kick of `bite_impulse` 9 m/s through the chain, the
+neck stiffened as for the spit) and the jaw gapes through the lunge and snaps
+shut on the way back (`bite_duration` 0.5 s). The first cut at 24 degrees and
+5 m/s could not be told from the breath's thrust in play. **Studio scenario
+10, "melee"**, is the bench for it: a bite every 1.6 s at a mark weaving
+twenty metres off the nose, on a nearly level body so the lunge reads as the
+neck's own motion; scenario 8 also bites once at 7.2 s of its attack cycle.
+
+**The training room** (`--training`, or the button at the top of the Combat
+panel) replaces the targets with six passive dummies laid out ahead of the
+current heading at 60 to 420 m, staggered a strike's width to either side:
+they never fire, hold still, take six drones' worth of health and come back
+in 2.5 s. A straight flight with the attack held lands seven bites in the
+first pass; R flies the line again. It is where the reach of a bite is
+learned without being shot at, and where the dials above are tuned.
 
 How it was verified, because it could not be seen: the `--telemetry` line
 now carries `bites swung / landed / taken`. In a passive or autopilot match

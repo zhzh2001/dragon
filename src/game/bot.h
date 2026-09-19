@@ -70,10 +70,15 @@ struct BotTuning {
     // while the player gets bitten by nobody. Same reach the player has, read
     // off the live position like the flame: a bite is a contact, and
     // pretending not to see a dragon twenty metres away reads as blindness.
-    float melee_range = 24.0f;
+    float melee_range = 28.0f;
     float melee_cone_deg = 50.0f;  // half angle
     float strike_range = 15.0f;
-    float melee_cooldown = 1.8f;
+    float melee_cooldown = 0.9f;
+    // The charge: inside this range and lined up on the player, an attack
+    // does not time out and the bot puts on speed. Without it a bot closing
+    // at three metres a second ran out its attack clock at 300 m and went to
+    // extend, so no bot was ever within bite range of a fleeing player.
+    float charge_range = 260.0f;
 
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
