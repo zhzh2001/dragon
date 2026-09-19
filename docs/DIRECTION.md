@@ -440,6 +440,14 @@ alignment, body steering, boost then speed-match -- taking the closest
 approach in a passive two-minute match from 47 m to a bite pass at 16 m.
 Gate unchanged; the dials are `charge_range` and the bot melee cone.
 
+Third pass, same day ("still too weak and mechanical -- the other body parts
+should move accordingly"): `STATUS.md` M18.3, the gesture layer. Every swing
+is wind-up, strike, settle, and the root, wings, neck and tail answer the
+limb; the directions are pinned by a test and the renders are in
+`artifacts/melee/gesture_*`. The reference asked for was Legend of Spyro and
+Glyde; nothing frame-level was findable online, so this is animation
+principle (anticipation, weight, follow-through) rather than a copy.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

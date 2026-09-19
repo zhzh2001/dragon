@@ -239,6 +239,37 @@ asks an overdamped neck to move through its spring and a spit is a snap. The
 lock through the spring while the head snaps the residual -- an animal looking
 40 degrees off its body turns its whole neck. Talons open while breathing.
 
+**Melee is the whole animal** (`drive_gestures`, `gesture_*` in RigTuning).
+The first melee gestures moved one limb on a still body and the playtest
+called them weak and mechanical, which they were. Every swing (`bite`,
+`claw`, `tail` edges on `RigAction`, with `side`) now has three beats -- a
+WIND-UP the other way for the first `gesture_anticipation` (25%) of its time,
+a STRIKE that is out in the first 30% of what is left and back in the rest,
+and the settle -- and the rest of the body answers each through the same
+additive layer as the beat and the load flex:
+
+- **bite**: the nose pulls up and the wings flare in the wind-up; then the
+  root pitches down `gesture_body_pitch_deg` and SURGES forward
+  `gesture_surge_m` (1.1 m -- a chain can only rotate, and pitching a curved
+  neck down arcs the head BACK as it drops, so the forward travel of a bite is
+  the body's), the wings sweep back, the jaws gape out and snap at the peak.
+- **claw**: the body rolls away, then rolls `gesture_body_roll_deg` and yaws
+  `gesture_body_yaw_deg` INTO the strike side; that wing drops and the other
+  rises (`gesture_wing_deg`); the near foreleg (hind leg on a wyvern) rakes
+  forward and out with the talons spread; the head dips toward the mark
+  (`gesture_neck_deg`); the tail swings the other way
+  (`gesture_tail_counter_deg`).
+- **tail**: the body coils toward the mark, then counter-turns as the tail
+  whips across (`tail_whip_deg`, a tip-weighted kick); the head swings
+  opposite; the near wing dips.
+
+Directions are pinned on the generated rig in `test_anim`
+(`test_melee_gestures_move_the_body`): a right claw drops the right wingtip
+and swings the tail left, a right whip sends the tail tip right and the head
+left, a bite lowers the head and surges the root forward. Studio scenarios
+10, 11 and 12 are the bench (`COMBAT.md`, "Melee"); renders of all three on
+three species are in `artifacts/melee/gesture_*`.
+
 Speed shapes the wing on its own: past cruise the wings **sweep back and
 part-fold** whether or not the tuck is held (`speed_sweep_deg`, blending into
 the full tuck angles), the outer membrane **flutters** with the square of a

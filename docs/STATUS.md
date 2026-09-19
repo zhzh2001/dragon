@@ -82,6 +82,12 @@ What is built, in the order it was built. The plan these came from is
   gestures** chosen by the mark's bearing -- bite, claw (foreleg, or hind leg
   on a wyvern, forward and out), tail whip -- with studio scenarios 11 and
   12 on a still body to diff them frame to frame. `COMBAT.md`, "Melee".
+- **M18.3** the gesture layer: every melee swing is wind-up, strike and
+  settle, and the whole body answers it -- the bite rears and flares its
+  wings then surges and sweeps them back; the claw rolls and yaws into the
+  strike with the tail balancing; the tail whip counter-turns the body and
+  swings the head. Directions pinned in `test_anim`. `ANIMATION.md`, "Melee
+  is the whole animal".
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

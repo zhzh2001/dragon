@@ -437,6 +437,14 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tail_whip_deg),
     RIG_FLOAT_FIELD(tail_duration),
     RIG_FLOAT_FIELD(tail_impulse),
+    RIG_FLOAT_FIELD(gesture_anticipation),
+    RIG_FLOAT_FIELD(gesture_body_pitch_deg),
+    RIG_FLOAT_FIELD(gesture_body_roll_deg),
+    RIG_FLOAT_FIELD(gesture_body_yaw_deg),
+    RIG_FLOAT_FIELD(gesture_surge_m),
+    RIG_FLOAT_FIELD(gesture_wing_deg),
+    RIG_FLOAT_FIELD(gesture_neck_deg),
+    RIG_FLOAT_FIELD(gesture_tail_counter_deg),
     RIG_FLOAT_FIELD(breath_neck_thrust_deg),
     RIG_FLOAT_FIELD(breath_neck_tone),
     RIG_FLOAT_FIELD(breath_tremor_deg),
@@ -861,7 +869,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float speed_share = speed_factor * (1.0f - tuck);
     const float sweep_deg = tuning.tuck_sweep_deg * tuck + tuning.speed_sweep_deg * speed_share -
                             tuning.load_forward_sweep_deg * core::maxf(load_smoothed_, 0.0f) +
-                            tuning.ground_stow_sweep_deg * stow;
+                            tuning.ground_stow_sweep_deg * stow + gesture_wing_sweep_deg_;
     const float fold_deg = tuning.tuck_fold_deg * tuck + tuning.speed_fold_deg * speed_share +
                            tuning.ground_stow_fold_deg * stow;
     const float droop_deg =
@@ -872,9 +880,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const float limit = core::radians(tuning.wing_flap_limit_deg);
         flap_angle = core::clampf(flap_angle, -limit, limit);
     }
-    const float non_flap_base =
+    const float non_flap_base_common =
         core::radians(tuning.wing_load_flex_deg) * load_smoothed_ - core::radians(droop_deg);
-    const float base = flap_angle + non_flap_base;
+    const float base = flap_angle + non_flap_base_common;
     // Membrane flutter: the outer wing buffets at speed and shudders in a
     // flare. Two incommensurate frequencies so it never reads as a metronome,
     // squared speed factor so cruise is calm and a dive is alive.
@@ -1089,11 +1097,13 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                     ? core::radians(tuning.flap_shoulder_deg) *
                           core::saturate(state.flap_amplitude) * (delayed_beat - current_beat)
                     : 0.0f;
-            float local_base = base + delayed_flap;
+            // The gesture layer's brace is a posture term like the load flex.
+            float local_base = base + delayed_flap + gesture_wing_raise_[side];
             if (tuning.wing_flap_limit_deg > 0.0f) {
                 // The ceiling applies to the complete delayed cyclic sample,
                 // while load flex and droop remain additive posture terms.
                 const float limit = core::radians(tuning.wing_flap_limit_deg);
+                const float non_flap_base = non_flap_base_common + gesture_wing_raise_[side];
                 const float cyclic_base =
                     core::clampf(local_base - non_flap_base, -limit, limit);
                 local_base = cyclic_base + non_flap_base;
@@ -1249,7 +1259,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             // is what the shoulder of a flying animal does while the outboard
             // joints only ride -- and the recovery hinge at its own joint.
             float yaw_aft = recovery_hinge;
-            if (depth == 0) yaw_aft += (local_base - non_flap_base) * stroke_plane;
+            if (depth == 0) {
+                yaw_aft += (local_base - non_flap_base_common - gesture_wing_raise_[side]) * stroke_plane;
+            }
             if (std::fabs(yaw_aft) > 1e-5f) {
                 rotate_joint(joint, Vec3::unit_y(), yaw_aft * model_forward_z_ * sign, true);
             }
@@ -1273,6 +1285,84 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 apply(finger[i], int(i), int(finger.size()));
             }
         }
+    }
+}
+
+// Which sign of a chain's steer.y sends it toward the body's RIGHT (+X).
+// Measured on the generated rig by test_anim's gesture test; flip here if a
+// future steer convention change moves it.
+constexpr float GESTURE_YAW_SIGN = 1.0f;
+
+namespace {
+// The three beats of a swing over u in [0, 1). The wind-up is a bump that
+// fills the first `a`; the strike is fast out (the first 30% of what is
+// left) and slow back, so a strike reads as a strike and not a bow.
+float gesture_wind(float u, float a) {
+    return (u >= 0.0f && u < a) ? std::sin(core::PI * u / a) : 0.0f;
+}
+float gesture_strike(float u, float a) {
+    if (u < a || u >= 1.0f) return 0.0f;
+    const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
+    return v < 0.3f ? std::sin(core::HALF_PI * v / 0.3f) : std::cos(core::HALF_PI * (v - 0.3f) / 0.7f);
+}
+}  // namespace
+
+// The rest of the animal answering a swing. Computed once per frame, before
+// the wings, the body beat and the chains, which each add their share.
+void DragonRig::drive_gestures() {
+    gesture_pitch_ = gesture_roll_ = gesture_yaw_ = gesture_surge_ = 0.0f;
+    gesture_wing_raise_[0] = gesture_wing_raise_[1] = 0.0f;
+    gesture_wing_sweep_deg_ = gesture_neck_pitch_deg_ = gesture_neck_yaw_deg_ = 0.0f;
+    gesture_tail_yaw_deg_ = gesture_limb_rake_ = gesture_tail_whip_ = 0.0f;
+    const float a = core::clampf(tuning.gesture_anticipation, 0.0f, 0.6f);
+    const float body_pitch = core::radians(tuning.gesture_body_pitch_deg);
+    const float body_roll = core::radians(tuning.gesture_body_roll_deg);
+    const float body_yaw = core::radians(tuning.gesture_body_yaw_deg);
+    const float wing = core::radians(tuning.gesture_wing_deg);
+
+    // Bite: rear up, then down and forward into it, wings up then back.
+    if (bite_time_ < tuning.bite_duration) {
+        const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
+        const float wind = gesture_wind(u, a);
+        const float strike = gesture_strike(u, a);
+        gesture_pitch_ += body_pitch * (0.4f * wind - strike);
+        gesture_surge_ += tuning.gesture_surge_m * strike;
+        gesture_wing_raise_[0] += wing * (wind - 0.3f * strike);
+        gesture_wing_raise_[1] += wing * (wind - 0.3f * strike);
+        gesture_wing_sweep_deg_ += tuning.gesture_wing_deg * strike;
+        gesture_neck_pitch_deg_ += tuning.bite_lunge_deg * (0.45f * wind - strike);
+    }
+    // Claw: away, then roll and yaw into the strike side; the near wing
+    // drops, the far one rises, the head dips to the mark, the tail balances.
+    if (claw_time_ < tuning.claw_duration) {
+        const float u = claw_time_ / core::maxf(tuning.claw_duration, 1e-3f);
+        const float wind = gesture_wind(u, a);
+        const float strike = gesture_strike(u, a);
+        const float side = claw_side_;
+        gesture_roll_ += body_roll * side * (strike - 0.4f * wind);
+        gesture_yaw_ += body_yaw * side * strike;
+        const int near = side >= 0.0f ? 0 : 1;
+        gesture_wing_raise_[near] -= wing * strike;
+        gesture_wing_raise_[1 - near] += wing * 0.6f * strike;
+        gesture_neck_yaw_deg_ += tuning.gesture_neck_deg * side * strike;
+        gesture_neck_pitch_deg_ -= tuning.gesture_neck_deg * 0.5f * strike;
+        gesture_tail_yaw_deg_ -= tuning.gesture_tail_counter_deg * side * strike;
+        gesture_limb_rake_ = core::maxf(gesture_limb_rake_, strike);
+    }
+    // Tail: coil toward the mark, then the body counter-turns as the tail
+    // whips across; the head swings the other way, the near wing dips.
+    if (tail_time_ < tuning.tail_duration) {
+        const float u = tail_time_ / core::maxf(tuning.tail_duration, 1e-3f);
+        const float wind = gesture_wind(u, a);
+        const float strike = gesture_strike(u, a);
+        const float side = tail_side_;
+        gesture_yaw_ += body_yaw * side * (0.5f * wind - strike);
+        gesture_roll_ += body_roll * 0.6f * side * strike;
+        gesture_neck_yaw_deg_ -= tuning.gesture_neck_deg * side * strike;
+        const int near = side >= 0.0f ? 0 : 1;
+        gesture_wing_raise_[near] -= wing * 0.6f * strike;
+        gesture_wing_raise_[1 - near] += wing * 0.4f * strike;
+        gesture_tail_whip_ = side * (strike - 0.35f * wind);
     }
 }
 
@@ -1741,10 +1831,8 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // foreleg where there is one, the hind leg on a wyvern. Side 0 is
         // the right (+X), matching RigAction::side.
         const bool this_side = (side == 0) == (claw_side_ >= 0.0f);
-        if (this_side && claw_time_ < tuning.claw_duration) {
-            const float u = claw_time_ / core::maxf(tuning.claw_duration, 1e-3f);
-            const float rake = u < 0.4f ? std::sin(core::HALF_PI * u / 0.4f)
-                                        : std::cos(core::HALF_PI * (u - 0.4f) / 0.6f);
+        if (this_side && gesture_limb_rake_ > 1e-4f) {
+            const float rake = gesture_limb_rake_;
             const std::vector<int>& limb =
                 joints_.front_leg[side].empty() ? joints_.leg[side] : joints_.front_leg[side];
             if (!limb.empty()) {
@@ -2285,8 +2373,28 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         }
     }
 
+    drive_gestures();
     drive_wings(state);
     drive_body_beat(state);
+    // The gesture layer on the root: pitch, roll and yaw in engine terms,
+    // and the surge along the body's forward axis. Same sign conventions as
+    // the body beat's pitch and the wings' roll lean.
+    if (joints_.root != NO_PARENT && size_t(joints_.root) < pose_.local.size()) {
+        if (std::fabs(gesture_pitch_) > 1e-5f) {
+            rotate_joint(joints_.root, Vec3::unit_x(), gesture_pitch_ * -model_forward_z_, true);
+        }
+        if (std::fabs(gesture_roll_) > 1e-5f) {
+            rotate_joint(joints_.root, Vec3::unit_z(), gesture_roll_ * model_forward_z_, true);
+        }
+        if (std::fabs(gesture_yaw_) > 1e-5f) {
+            rotate_joint(joints_.root, Vec3::unit_y(), -gesture_yaw_, true);
+        }
+        if (std::fabs(gesture_surge_) > 1e-5f) {
+            Transform& local = pose_.local[size_t(joints_.root)];
+            local.position += core::rotate(body_to_model_, Vec3::forward()) *
+                              (gesture_surge_ / model_scale_);
+        }
+    }
 
     std::vector<int> neck_with_head = joints_.neck;
     if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
@@ -2340,19 +2448,15 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         neck_steer.x += tuning.spit_recoil_deg * std::sin(core::TWO_PI * u) * (1.0f - u);
     }
-    // Bite: out in the first third, back in the rest -- a strike, not a
-    // bow. Same sign as the breath's thrust.
-    if (bite_time_ < tuning.bite_duration) {
-        const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
-        const float lunge = u < 0.35f ? std::sin(core::HALF_PI * u / 0.35f)
-                                      : std::cos(core::HALF_PI * (u - 0.35f) / 0.65f);
-        neck_steer.x -= tuning.bite_lunge_deg * lunge;
-    }
-    // Tail whip: across toward the mark and back through, decaying.
-    if (tail_time_ < tuning.tail_duration) {
-        const float u = tail_time_ / core::maxf(tuning.tail_duration, 1e-3f);
-        tail_steer.y += tuning.tail_whip_deg * tail_side_ * std::sin(core::TWO_PI * u) * (1.0f - u);
-    }
+    // The gesture layer's share of the neck and the tail (drive_gestures):
+    // the bite's rear-and-lunge, the head dipping to a claw's mark or
+    // swinging against a tail whip, the tail balancing a claw or whipping.
+    // Steer pitch is + head up here, like the breath's thrust is -; steer
+    // yaw follows the rudder's sign, measured once against the generated rig
+    // in test_anim and fixed by GESTURE_YAW_SIGN.
+    neck_steer.x += gesture_neck_pitch_deg_;
+    neck_steer.y += GESTURE_YAW_SIGN * gesture_neck_yaw_deg_;
+    tail_steer.y += GESTURE_YAW_SIGN * (gesture_tail_yaw_deg_ + tuning.tail_whip_deg * gesture_tail_whip_);
 
     // Named fields, not positional braces: a positional initializer here once
     // silently dropped the neck's brace, aero gate and articulation range when
@@ -2466,13 +2570,15 @@ void DragonRig::drive_attack(float airborne) {
         const float u = spit_time_ / core::maxf(tuning.spit_duration, 1e-3f);
         spit_open = u < 0.7f ? std::sin(core::PI * u / 0.7f) : 0.0f;
     }
-    // Bite: gape on the way out, snap shut at the end of the lunge, stay
-    // shut on the way back.
+    // Bite: the jaws open through the wind-up and the lunge out, snap shut
+    // at the lunge's peak, stay shut on the way back.
     float bite_open = 0.0f;
     if (bite_time_ < tuning.bite_duration) {
         const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
-        bite_open = u < 0.3f ? std::sin(core::HALF_PI * u / 0.3f)
-                             : (u < 0.5f ? std::cos(core::HALF_PI * (u - 0.3f) / 0.2f) : 0.0f);
+        const float a = core::clampf(tuning.gesture_anticipation, 0.0f, 0.6f);
+        const float peak = a + (1.0f - a) * 0.3f;  // where gesture_strike tops out
+        bite_open = u < peak ? std::sin(core::HALF_PI * u / core::maxf(peak, 1e-3f))
+                             : (u < peak + 0.12f ? std::cos(core::HALF_PI * (u - peak) / 0.12f) : 0.0f);
     }
     jaw_open_ = core::maxf(core::maxf(breath_smoothed_, spit_open), bite_open);
     if (joints_.jaw != NO_PARENT) {

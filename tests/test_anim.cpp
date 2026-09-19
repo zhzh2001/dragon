@@ -2363,7 +2363,100 @@ void test_optional_embercrest_asset() {
 
 }  // namespace
 
+// The melee gestures move the whole animal, and each direction is a sign
+// convention that was wrong at least once in this file's history. Pinned on
+// the generated rig, which faces -Z with +X to its right: a claw to the right
+// rolls the right wing down and swings the tail left; a tail whip to the
+// right sends the tail tip right; a bite drops the nose and surges forward.
+void test_melee_gestures_move_the_body() {
+    std::printf("melee gestures: the body answers the swing in the right directions\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+
+    game::FlightState glide;
+    glide.velocity = Vec3{0.0f, 0.0f, -30.0f};
+    glide.airspeed = 30.0f;
+    glide.ground_clearance = 300.0f;
+
+    // Settle, swing, and sample at the strike's peak.
+    auto sample = [&](anim::RigAction action, float at) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        for (int i = 0; i < 120; ++i) rig.update(glide, 1.0f / 60.0f);
+        struct Sample {
+            Vec3 root, right_tip, left_tip, tail_tip, right_foot, head;
+        };
+        auto grab = [&]() {
+            const auto& w = rig.world_matrices();
+            Sample out;
+            out.root = w[size_t(joints.root)].col[3].xyz();
+            out.right_tip = w[size_t(joints.wing_fingers[0].front().back())].col[3].xyz();
+            out.left_tip = w[size_t(joints.wing_fingers[1].front().back())].col[3].xyz();
+            out.tail_tip = w[size_t(joints.tail.back())].col[3].xyz();
+            out.right_foot = w[size_t(joints.leg[0].back())].col[3].xyz();
+            out.head = w[size_t(joints.head)].col[3].xyz();
+            return out;
+        };
+        const Sample before = grab();
+        rig.set_action(action);
+        const int frames = int(at * 60.0f + 0.5f);
+        for (int i = 0; i < frames; ++i) {
+            rig.update(glide, 1.0f / 60.0f);
+            action = anim::RigAction{};
+        }
+        return std::pair<Sample, Sample>(before, grab());
+    };
+    const anim::RigTuning t;
+    const float a = t.gesture_anticipation;
+
+    // Claw, right side, at the strike peak.
+    {
+        anim::RigAction claw;
+        claw.claw = true;
+        claw.side = 1.0f;
+        const float peak = t.claw_duration * (a + (1.0f - a) * 0.3f);
+        const auto [before, at] = sample(claw, peak);
+        // Roll into the strike: the right wingtip lower, the left higher.
+        CHECK(at.right_tip.y < before.right_tip.y - 0.05f);
+        CHECK(at.left_tip.y > before.left_tip.y + 0.05f);
+        // The right foot forward (-Z) and out (+X); the tail tip swung LEFT.
+        CHECK(at.right_foot.z < before.right_foot.z - 0.1f);
+        CHECK(at.right_foot.x > before.right_foot.x + 0.05f);
+        CHECK(at.tail_tip.x < before.tail_tip.x - 0.1f);
+    }
+    // Tail whip, right side, at the strike peak: the tip goes RIGHT, the head
+    // swings left.
+    {
+        anim::RigAction whip;
+        whip.tail = true;
+        whip.side = 1.0f;
+        const float peak = t.tail_duration * (a + (1.0f - a) * 0.3f);
+        const auto [before, at] = sample(whip, peak);
+        std::printf("  tail tip x %.2f -> %.2f, head x %.2f -> %.2f\n", before.tail_tip.x,
+                    at.tail_tip.x, before.head.x, at.head.x);
+        CHECK(at.tail_tip.x > before.tail_tip.x + 0.1f);
+        CHECK(at.head.x < before.head.x - 0.02f);
+    }
+    // Bite at the strike peak: the head lower and further forward, the root
+    // surged forward (-Z).
+    {
+        anim::RigAction bite;
+        bite.bite = true;
+        const float peak = t.bite_duration * (a + (1.0f - a) * 0.3f);
+        const auto [before, at] = sample(bite, peak);
+        std::printf("  head %.2f,%.2f -> %.2f,%.2f  root z %.2f -> %.2f\n", before.head.y,
+                    before.head.z, at.head.y, at.head.z, before.root.z, at.root.z);
+        CHECK(at.head.y < before.head.y - 0.05f);
+        CHECK(at.head.z < before.head.z - 0.05f);
+        CHECK(at.root.z < before.root.z - 0.05f);
+    }
+}
+
 int main() {
+    test_melee_gestures_move_the_body();
     test_hierarchy();
     test_bind_pose_is_identity();
     test_rotation_moves_children();

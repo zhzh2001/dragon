@@ -554,13 +554,16 @@ struct RigTuning {
     // bite was not told from the breath's thrust in play, and at 36 degrees
     // over the same half second it read as calmly eating. A strike is out in
     // a third of its time and back in the rest.
-    float bite_lunge_deg = 38.0f;
-    float bite_duration = 0.32f;
+    // The neck's share is modest: a chain can only ROTATE, and pitching a
+    // curved neck down arcs the head back as it drops. The forward travel of
+    // a bite comes from the body's surge (gesture_surge_m) and pitch.
+    float bite_lunge_deg = 24.0f;
+    float bite_duration = 0.42f;  // a quarter of it the wind-up (gesture_anticipation)
     float bite_impulse = 14.0f;
     // Claw: the near foreleg (hind leg on a wyvern) rakes forward and down
     // with the talons spread, and returns.
     float claw_swing_deg = 95.0f;
-    float claw_duration = 0.4f;
+    float claw_duration = 0.45f;
     // The rake also carries the limb OUT from the body: a swing straight
     // forward stayed under the wing and read as nothing from every angle
     // but below.
@@ -570,6 +573,29 @@ struct RigTuning {
     float tail_whip_deg = 85.0f;
     float tail_duration = 0.75f;
     float tail_impulse = 18.0f;
+
+    // ---- the gesture layer: a swing is the whole animal ----
+    //
+    // A limb moving on a body that does not was the playtest's "weak and
+    // mechanical". Every swing now has three beats -- a WIND-UP the other way
+    // (the first `gesture_anticipation` of its time), the STRIKE (fast out,
+    // slow back), and a settle -- and the rest of the body answers each:
+    //   bite  nose pulls up, then the body pitches down and SURGES into the
+    //         lunge, wings flare up in the wind-up and sweep back on the strike
+    //   claw  the body rolls away, then rolls and yaws INTO the strike side;
+    //         that wing drops and the other rises; the head dips toward the
+    //         mark; the tail swings the other way to balance
+    //   tail  the body coils toward the mark, then counter-turns as the tail
+    //         whips; the head swings opposite; the near wing dips
+    // All of it is additive on the flight pose and gone within the gesture.
+    float gesture_anticipation = 0.25f;       // fraction of each gesture spent winding up
+    float gesture_body_pitch_deg = 10.0f;     // bite: nose down into the lunge
+    float gesture_body_roll_deg = 18.0f;      // claw: into the strike; tail: counter-roll
+    float gesture_body_yaw_deg = 12.0f;       // claw: nose to the mark; tail: counter-turn
+    float gesture_surge_m = 1.1f;             // bite: the body pushes forward
+    float gesture_wing_deg = 24.0f;           // wings brace: raise/dip asymmetry, bite sweep-back
+    float gesture_neck_deg = 26.0f;           // claw/tail: the head swings to balance or to the mark
+    float gesture_tail_counter_deg = 40.0f;   // claw: the tail swings opposite
     // Breath: the neck thrusts forward and down into the stream, stiffens
     // (a tensed neck holds the flame steady) and trembles faintly with the
     // effort. The tremor is on the head only, after the aim.
@@ -913,6 +939,20 @@ private:
     float claw_side_ = 1.0f;
     float tail_time_ = 1e9f;
     float tail_side_ = 1.0f;
+    // The gesture layer's outputs this frame (see drive_gestures): engine
+    // conventions, pitch + nose up, roll + right wing down, yaw + nose right.
+    float gesture_pitch_ = 0.0f;              // radians
+    float gesture_roll_ = 0.0f;
+    float gesture_yaw_ = 0.0f;
+    float gesture_surge_ = 0.0f;              // metres forward
+    float gesture_wing_raise_[2] = {0.0f, 0.0f};  // radians of elevation per side (0 right)
+    float gesture_wing_sweep_deg_ = 0.0f;
+    float gesture_neck_pitch_deg_ = 0.0f;     // + raises the head
+    float gesture_neck_yaw_deg_ = 0.0f;       // + toward the right
+    float gesture_tail_yaw_deg_ = 0.0f;       // + toward the right
+    float gesture_limb_rake_ = 0.0f;          // 0..1 strike envelope for the claw
+    float gesture_tail_whip_ = 0.0f;          // signed whip envelope, + toward the right
+    void drive_gestures();
     float jaw_open_ = 0.0f;
     // Which way a positive body-X rotation of the jaw moves it: +1 opens, -1
     // closes. Measured at init, because the jaw bone points wherever the

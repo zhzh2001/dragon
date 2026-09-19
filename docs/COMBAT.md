@@ -147,7 +147,10 @@ dials.
 60 degrees of the nose the jaws, behind 125 degrees the tail, otherwise a claw
 on that side) and thrown even at a miss, toward the nearest thing worth
 swinging at. What a swing HITS is still `melee_reach()`'s business; the
-gesture only decides how it looks.
+gesture only decides how it looks. And each is the WHOLE animal -- wind-up,
+strike, settle, with the body, wings, neck and tail answering the limb
+(`ANIMATION.md`, "Melee is the whole animal"): the playtest called a limb
+moving on a still body weak and mechanical, and it was.
 
 - **Bite** (`RigAction::bite`): the neck lunges forward and down --
   `bite_lunge_deg` 38 with a `bite_impulse` 14 m/s kick through the chain, out
