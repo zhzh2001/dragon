@@ -2,6 +2,7 @@
 
 #include "game/autopilot.h"
 #include "game/flight.h"
+#include "game/maneuver.h"
 
 namespace game {
 
@@ -85,6 +86,23 @@ struct BotTuning {
     float charge_boost_duration = 1.1f;
     float charge_boost_cooldown = 6.0f;
 
+    // ---- personality ----
+    // How much of a fight this pilot wants. 0 is cautious: breaks off early,
+    // extends long, jinks when hit, runs when wounded. 1 is reckless: presses
+    // the attack, comes back fast, and answers a hit from behind by flipping
+    // round to face it. Each pilot draws its own from `aggression` plus or
+    // minus `aggression_spread` at reset, and its NERVE this moment is that
+    // aggression pushed up by good health and down by wounds. The playtest's
+    // complaint -- bots flee when chased even with a good shot -- was every
+    // pilot sharing one cautious doctrine.
+    float aggression = 0.55f;
+    float aggression_spread = 0.3f;
+    // Below this health fraction a cautious pilot runs (Extend, boosted, far).
+    float flee_health = 0.3f;
+    // A hit from behind within this range, with the nerve for it, is answered
+    // with a flip; a hit from any side with a roll rather than a jink.
+    float flip_range = 320.0f;
+
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
     float terrain_floor = 90.0f;
@@ -102,6 +120,10 @@ struct BotDecision {
     bool breathe = false;
     // Biting or striking this frame (an edge).
     bool melee = false;
+    // A manoeuvre to begin this frame (an edge; the caller owns the Maneuver
+    // that flies it, through the same code the player's does).
+    ManeuverKind maneuver = ManeuverKind::None;
+    float maneuver_direction = 1.0f;
 };
 
 // The pilot. Owns only its own perception and rhythm state; the aircraft is the
@@ -117,8 +139,9 @@ public:
     // `ground_height` should be the highest terrain the caller can see along
     // the flight path -- below the bot AND ahead of it -- not just directly
     // underneath: avoidance that only looks down flies into rising slopes.
+    // `health_fraction` is this bot's own health, 0..1; it moves the nerve.
     BotDecision update(float dt, const FlightState& self, const FlightState& player,
-                       bool player_alive, float ground_height);
+                       bool player_alive, float ground_height, float health_fraction = 1.0f);
 
     // The caller saw this bot take damage; the pilot reacts.
     void notify_hit();
@@ -129,6 +152,10 @@ public:
     const char* state_name() const;
     // For probes and the panel: pressing a lined-up attack to bite range.
     bool charging() const { return charging_; }
+    // This pilot's drawn aggression, and its nerve this moment (aggression
+    // moved by health).
+    float aggression() const { return aggression_; }
+    float nerve() const { return nerve_; }
 
 private:
     float random_unit();  // [-1, 1]
@@ -138,6 +165,9 @@ private:
     float fire_timer_ = 0.0f;
     float melee_timer_ = 0.0f;
     bool charging_ = false;
+    float aggression_ = 0.5f;
+    float nerve_ = 0.5f;
+    bool hit_pending_ = false;  // notify_hit() arrived; update() decides the answer
     float boost_hold_ = 0.0f;   // seconds of charge boost left
     float boost_timer_ = 0.0f;  // cooldown until the next
     float jink_phase_ = 0.0f;

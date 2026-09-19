@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <string>
+
+#include "game/maneuver.h"
 #include <vector>
 
 #include "core/input.h"
@@ -121,6 +123,9 @@ struct Options {
     // pacing of a live window, which is what exposed the first-person camera
     // lagging the head by a frame.
     float frame_jitter = 0.0f;
+    // Headless: begin this manoeuvre ("roll" or "flip") at frame 30, so the
+    // aerobatics can be rendered without a key press.
+    int maneuver = 0;  // 0 none, 1 roll, 2 flip
     // --match starts a deathmatch against the spawned bots immediately.
     bool match = false;
     // The training room: passive dummies ahead of the spawn instead of a wave.
@@ -154,7 +159,10 @@ private:
     void frame_camera_on_valley();
     void respawn_dragon();
     void update_stick(float dt);
-    game::FlightInput read_flight_input() const;
+    game::FlightInput read_flight_input(float dt);
+    // The player's aerobatics: Z / d-pad down rolls, B / d-pad up flips.
+    game::Maneuver maneuver_;
+    game::ManeuverTuning maneuver_tuning_;
     core::Vec2 read_free_look(float dt) const;
     void apply_camera_preset(int index);
     gfx::ModelUniforms dragon_model_uniforms() const;
@@ -236,6 +244,7 @@ private:
     struct BotShip {
         game::FlightModel flight;
         game::BotPilot pilot;
+        game::Maneuver maneuver;  // the flip or roll the pilot asked for
         anim::DragonRig rig;
         // Which entry of models_ this bot wears. A flight of rivals reads as a
         // flight of rivals only if they differ in silhouette; the hue below

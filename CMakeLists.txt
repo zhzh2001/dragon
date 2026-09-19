@@ -43,6 +43,7 @@ add_executable(dragon
   src/game/debug_camera.cpp
   src/game/terrain.cpp
   src/game/flight.cpp
+  src/game/maneuver.cpp
   src/game/chase_camera.cpp
 
   src/game/course.cpp
@@ -90,6 +91,7 @@ add_test(NAME camera COMMAND test_camera)
 add_executable(test_flight
   tests/test_flight.cpp
   src/game/flight.cpp
+  src/game/maneuver.cpp
   src/game/terrain.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp

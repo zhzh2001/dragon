@@ -75,6 +75,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
 | `--cycle-models N` | Swap the player onto the next roster entry every N frames. Sweeps one scenario across every species in one command, and soaks the swap path (it re-initialises both rigs). |
+| `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 
@@ -95,7 +96,7 @@ assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.g
 ```
 
 Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
-has the tuning presets and `heft`, **Terrain > Vegetation** has the trees and
+has the tuning presets, `heft` and the aerobatics dials, **Terrain > Vegetation** has the trees and
 grass, **Combat** has the difficulty dials and the bots, **Studio** drives the
 animation scenarios and picks which creature is on the stand. Every panel except Combat starts collapsed.
 
@@ -124,6 +125,8 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | G | Fireball -- gamepad RB |
 | C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 30 m, a claw or tail strike on anything within 16 m of the body. No aim needed; a hit stuns and knocks the target, hits chain to x1.7 |
 | X | Boost -- gamepad X |
+| Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad down. A dodge: it kicks sideways as it starts |
+| B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
 | Esc | Release the mouse if captured; again to quit |
 
 ImGui keyboard and gamepad navigation are deliberately disabled: with them on,

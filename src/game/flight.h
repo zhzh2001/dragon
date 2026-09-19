@@ -159,6 +159,12 @@ struct FlightInput {
     // 0..1, a burst of thrust. Combat owns the cooldown; the force belongs here
     // so that everything pushing the dragon forward lives in one place.
     float boost = 0.0f;
+    // A scripted manoeuvre (game/maneuver.h) is driving the stick this frame:
+    // the assists that would fight it -- auto-level and the bank limit --
+    // stand down, and the control rates are scaled by `agility`, because a
+    // dragon throwing its weight into a roll turns faster than one cruising.
+    bool maneuver = false;
+    float agility = 1.0f;
 };
 
 // Everything the flight model produces. The derived fields exist for telemetry

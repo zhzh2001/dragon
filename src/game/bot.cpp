@@ -23,8 +23,12 @@ void BotPilot::reset(uint32_t seed) {
     seen_before_ = false;
     seen_acceleration_ = Vec3::zero();
     // Personality: each pilot runs its rhythm a little fast or slow, so a
-    // flight of them breaks formation naturally.
+    // flight of them breaks formation naturally -- and wants more or less of
+    // a fight than the next.
     tempo_ = 1.0f + 0.25f * random_unit();
+    aggression_ = core::saturate(tuning.aggression + tuning.aggression_spread * random_unit());
+    nerve_ = aggression_;
+    hit_pending_ = false;
 }
 
 float BotPilot::random_unit() {
@@ -53,13 +57,10 @@ Vec3 BotPilot::predict(float ahead) const {
 }
 
 void BotPilot::notify_hit() {
-    // Getting hit interrupts anything. Re-notification refreshes the jink
-    // rather than stacking states.
-    if (state_ != BotState::Evade) {
-        state_ = BotState::Evade;
-        state_time_ = 0.0f;
-        jink_phase_ = random_unit() * core::PI;
-    }
+    // Getting hit interrupts anything. What it turns into -- a jink, a roll,
+    // or a flip round to face the attacker -- is decided in update(), where
+    // the geometry and the nerve are known.
+    hit_pending_ = true;
 }
 
 namespace {
@@ -69,9 +70,40 @@ float live_range_for_boost(const FlightState& self, const FlightState& player) {
 }  // namespace
 
 BotDecision BotPilot::update(float dt, const FlightState& self, const FlightState& player,
-                             bool player_alive, float ground_height) {
+                             bool player_alive, float ground_height, float health_fraction) {
     BotDecision decision;
     state_time_ += dt;
+    // Nerve: the drawn aggression, raised by good health and lowered by
+    // wounds. Everything below that decides how hard to press reads it.
+    nerve_ = core::saturate(aggression_ + 0.6f * (core::saturate(health_fraction) - 0.5f));
+    const float nerve = nerve_;
+    const bool wounded = health_fraction < tuning.flee_health;
+    const bool fleeing = wounded && nerve < 0.6f;
+
+    // ---- the answer to a hit ----
+    // A cautious pilot jinks. A pilot with nerve answers a hit from behind by
+    // FLIPPING round to face the shooter, and a hit from anywhere else with a
+    // dodge roll while pressing on -- the playtest's "they flee when chased
+    // even with a good opportunity to attack" was every pilot jinking.
+    if (hit_pending_) {
+        hit_pending_ = false;
+        const Vec3 to_live = core::normalize_or(player.position - self.position, self.forward());
+        const float ahead = core::dot(to_live, self.forward());
+        const float live_range = core::distance(self.position, player.position);
+        if (nerve > 0.65f && !fleeing && ahead < -0.3f && live_range < tuning.flip_range) {
+            decision.maneuver = ManeuverKind::Flip;
+            state_ = BotState::Attack;
+            state_time_ = 0.0f;
+        } else if (nerve > 0.5f && !fleeing) {
+            decision.maneuver = ManeuverKind::Roll;
+            decision.maneuver_direction = random_unit() >= 0.0f ? 1.0f : -1.0f;
+            // Stay on the attack; the roll is the dodge.
+        } else if (state_ != BotState::Evade) {
+            state_ = BotState::Evade;
+            state_time_ = 0.0f;
+            jink_phase_ = random_unit() * core::PI;
+        }
+    }
     fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
     melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
     boost_hold_ = core::maxf(boost_hold_ - dt, 0.0f);
@@ -113,7 +145,8 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     const bool lined_up =
         core::dot(to_live, self.forward()) > std::cos(core::radians(tuning.melee_cone_deg));
     // The charge: a lined-up attack inside charge range, pressing to a bite.
-    const bool charging = state_ == BotState::Attack && lined_up && range < tuning.charge_range;
+    const bool charging = state_ == BotState::Attack && lined_up &&
+                          range < tuning.charge_range * (0.6f + 0.8f * nerve);
     charging_ = charging;
 
     // ---- state transitions ----
@@ -131,10 +164,13 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
             // a bite before it extends. Off-axis, the old range holds -- that
             // is an overshoot about to happen, and pressing it is a collision
             // course, not an attack.
-            const float break_off = charging ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
-                                             : tuning.min_attack_range;
-            if (!player_alive || range < break_off ||
-                state_time_ > tuning.attack_duration * tempo_) {
+            // Nerve presses the attack: a reckless pilot breaks off later and
+            // stays on it longer; a wounded, cautious one runs.
+            const float break_off =
+                charging ? core::minf(tuning.min_attack_range, tuning.melee_range * 0.7f)
+                         : tuning.min_attack_range * (1.4f - 0.8f * nerve);
+            const float attack_for = tuning.attack_duration * tempo_ * (0.6f + 0.9f * nerve);
+            if (!player_alive || fleeing || range < break_off || state_time_ > attack_for) {
                 state_ = BotState::Extend;
                 state_time_ = 0.0f;
                 // Out past the player and offset to a random side, climbing a
@@ -143,17 +179,21 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
                                                      self.forward());
                 const Vec3 side = core::normalize_or(core::cross(away, Vec3::up()),
                                                      Vec3::right());
-                extend_point_ = self.position + away * tuning.extend_distance +
-                                side * (tuning.extend_distance * 0.45f * random_unit()) +
+                // Running goes twice as far.
+                const float distance = tuning.extend_distance * (fleeing ? 2.0f : 1.0f);
+                extend_point_ = self.position + away * distance +
+                                side * (distance * 0.45f * random_unit()) +
                                 Vec3{0.0f, 60.0f, 0.0f};
             }
             break;
         }
         case BotState::Extend:
-            if (player_alive &&
+            // A pilot with nerve comes back sooner; one running for its life
+            // does not come back until it has to.
+            if (player_alive && !fleeing &&
                 (core::distance(self.position, extend_point_) < tuning.steering.arrive_radius *
                                                                     3.0f ||
-                 state_time_ > tuning.extend_duration * tempo_)) {
+                 state_time_ > tuning.extend_duration * tempo_ * (1.4f - 0.8f * nerve))) {
                 state_ = BotState::Attack;
                 state_time_ = 0.0f;
             }
@@ -232,7 +272,13 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // Charging: wings on, to actually close. The steering flies the firing
     // solution, which is ahead of the player, so speed is what turns a
     // three-metre-a-second stalk into a pass.
-    if (charging && !recovering) {
+    // Terrain outranks every speed-up below: a charge that lifts the brake and
+    // boosts over a rising slope is how the ten-minute soak ended on the deck
+    // at 82 s. With less than this much ground under it, the bot keeps the
+    // steering's own flap and brake and does not boost.
+    const bool terrain_close =
+        ground_height > -1e8f && (self.position.y - ground_height) < 160.0f;
+    if (charging && !recovering && !terrain_close) {
         // Speed to close, then speed to MATCH: a boosted 76 m/s pass at a
         // 45 m/s target that is turning overshoots by fifty metres every
         // time (the probe's closest approach sat at 47 m), so the boost goes
@@ -248,7 +294,19 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
             boost_timer_ = tuning.charge_boost_cooldown;
         }
     }
-    if (boost_hold_ > 0.0f && !recovering) decision.flight.boost = 1.0f;
+    // Boost to run, when running: the same burst, spent on distance.
+    if (fleeing && state_ == BotState::Extend && boost_timer_ <= 0.0f && !recovering &&
+        !terrain_close) {
+        boost_hold_ = tuning.charge_boost_duration;
+        boost_timer_ = tuning.charge_boost_cooldown;
+    }
+    // And a pilot with nerve boosts to close from far out, not only in the charge.
+    if (!charging && state_ == BotState::Attack && nerve > 0.7f && range > 300.0f &&
+        lined_up && boost_timer_ <= 0.0f && !recovering && !terrain_close) {
+        boost_hold_ = tuning.charge_boost_duration;
+        boost_timer_ = tuning.charge_boost_cooldown * 1.5f;
+    }
+    if (boost_hold_ > 0.0f && !recovering && !terrain_close) decision.flight.boost = 1.0f;
     if (recovering) {
         decision.flight.flap = 1.0f;
         // Braking in a dive adds drag AND lift: it tightens the pull-out the

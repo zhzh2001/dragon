@@ -37,6 +37,10 @@ Options parse_options(int argc, char** argv) {
             options.model = argv[++i];
         } else if (arg == "--cycle-models" && i + 1 < argc) {
             options.cycle_models = SDL_atoi(argv[++i]);
+        } else if (arg == "--maneuver" && i + 1 < argc) {
+            const std::string which = argv[++i];
+            options.maneuver = which == "roll" ? 1 : which == "flip" ? 2 : 0;
+            if (options.maneuver == 0) LOG_WARN("--maneuver expects roll|flip");
         } else if (arg == "--frame-jitter" && i + 1 < argc) {
             options.frame_jitter = core::clampf(float(SDL_atof(argv[++i])), 0.0f, 0.9f);
         } else if (arg == "--bot-range" && i + 1 < argc) {
@@ -462,7 +466,7 @@ void App::apply_camera_preset(int index) {
     base_fov_ = chase_.tuning.fov_base_deg;
 }
 
-game::FlightInput App::read_flight_input() const {
+game::FlightInput App::read_flight_input(float dt) {
     game::FlightInput in;
 
     if (autopilot_) {
@@ -590,6 +594,28 @@ game::FlightInput App::read_flight_input() const {
         in.flap = core::maxf(in.flap, input_.gamepad_button(SDL_GAMEPAD_BUTTON_SOUTH) ? 1.0f : 0.0f);
         in.brake = core::maxf(in.brake, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     }
+
+    // Aerobatics. A roll goes the way the stick is held, right by default; a
+    // flip needs no direction. Both are edges, and both run through the same
+    // Maneuver the bots fly, overriding the stick while they last.
+    if (!free_camera_ && !ui_.wants_keyboard()) {
+        const bool roll = input_.pressed(SDL_SCANCODE_Z) ||
+                          input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        const bool flip = input_.pressed(SDL_SCANCODE_B) ||
+                          input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_UP);
+        if (roll) {
+            const float direction = std::fabs(stick_.x) > 0.2f ? core::signf(stick_.x) : 1.0f;
+            maneuver_.start(game::ManeuverKind::Roll, direction, flight_.state(), maneuver_tuning_);
+        } else if (flip) {
+            maneuver_.start(game::ManeuverKind::Flip, 1.0f, flight_.state(), maneuver_tuning_);
+        }
+    }
+    // A capture's manoeuvre, on cue.
+    if (options_.maneuver != 0 && frame_index_ == 30) {
+        maneuver_.start(options_.maneuver == 1 ? game::ManeuverKind::Roll : game::ManeuverKind::Flip,
+                        1.0f, flight_.state(), maneuver_tuning_);
+    }
+    maneuver_.apply(in, flight_.state(), maneuver_tuning_, dt);
     return in;
 }
 
@@ -871,7 +897,7 @@ void App::update(float dt) {
 
     // The dragon always flies, even while the free camera is being used to look
     // at it -- otherwise you cannot inspect a manoeuvre from outside.
-    flight_.update(read_flight_input(), &terrain_, dt);
+    flight_.update(read_flight_input(dt), &terrain_, dt);
 
     rig_action_ = anim::RigAction{};
     if (studio_active_) {
@@ -2397,6 +2423,7 @@ void App::apply_bot_skill(int level) {
             t.fire_cooldown = 2.3f;
             t.lead_curvature = 0.3f;
             t.damage = 9.0f;
+            t.aggression = 0.35f;
             bot_health_ = 60.0f;
             combat_.tuning.hostile_regen = 0.0f;
             break;
@@ -2404,6 +2431,7 @@ void App::apply_bot_skill(int level) {
             t.reaction_interval = 0.30f;
             t.aim_spread_deg = 2.5f;
             t.fire_cooldown = 1.6f;
+            t.aggression = 0.55f;
             bot_health_ = 80.0f;
             combat_.tuning.hostile_regen = 4.0f;
             break;
@@ -2413,6 +2441,7 @@ void App::apply_bot_skill(int level) {
             t.fire_cooldown = 1.1f;
             t.damage = 14.0f;
             t.fire_range = 650.0f;
+            t.aggression = 0.8f;
             bot_health_ = 100.0f;
             combat_.tuning.hostile_regen = 8.0f;
             break;
@@ -2786,8 +2815,17 @@ void App::update_bots(float dt) {
             const core::Vec3 ahead = self.position + self.velocity * look;
             ground = core::maxf(ground, terrain_.height_at(ahead.x, ahead.z));
         }
+        const float health_fraction =
+            slot.max_health > 0.0f ? core::saturate(slot.health / slot.max_health) : 1.0f;
         game::BotDecision decision =
-            bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground);
+            bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground, health_fraction);
+        // The manoeuvre the pilot asked for, flown by the same code the
+        // player's Z and B run through.
+        if (decision.maneuver != game::ManeuverKind::None) {
+            bot->maneuver.start(decision.maneuver, decision.maneuver_direction,
+                                bot->flight.state(), maneuver_tuning_);
+        }
+        bot->maneuver.apply(decision.flight, bot->flight.state(), maneuver_tuning_, dt);
         // Bitten: the shove goes into the flight model, and while the stun
         // lasts nobody is flying -- controls centred, wings limp, weapons
         // cold. The flight model tumbles it honestly from there.
@@ -3559,6 +3597,11 @@ void App::build_combat_ui() {
     }
     ImGui::Separator();
 
+    // Personality: how much of a fight the bots want. Every pilot draws its
+    // own around this at spawn; health moves it live (the panel shows each
+    // bot's nerve in the roster below).
+    ImGui::SliderFloat("bot aggression", &bot_tuning_.aggression, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("aggression spread", &bot_tuning_.aggression_spread, 0.0f, 0.5f, "%.2f");
     if (ImGui::RadioButton("rookie", bot_skill_ == 0)) apply_bot_skill(0);
     ImGui::SameLine();
     if (ImGui::RadioButton("veteran", bot_skill_ == 1)) apply_bot_skill(1);
@@ -3670,6 +3713,17 @@ void App::build_flight_ui() {
 
     if (ImGui::Button("respawn (R)")) respawn_dragon();
 
+    if (ImGui::CollapsingHeader("Aerobatics")) {
+        ImGui::TextDisabled("Z / d-pad down: roll (the way the stick is held); B / d-pad up: flip");
+        ImGui::Text("%s", maneuver_.active() ? (maneuver_.kind == game::ManeuverKind::Roll ? "ROLLING" : "FLIPPING")
+                                             : (maneuver_.cooldown > 0.0f ? "recovering" : "ready"));
+        ImGui::SliderFloat("roll duration", &maneuver_tuning_.roll_duration, 0.3f, 2.0f, "%.2f s");
+        ImGui::SliderFloat("roll agility", &maneuver_tuning_.roll_agility, 1.0f, 4.0f, "x%.1f");
+        ImGui::SliderFloat("roll dodge", &maneuver_tuning_.roll_dodge_impulse, 0.0f, 20.0f, "%.0f m/s");
+        ImGui::SliderFloat("flip agility", &maneuver_tuning_.flip_agility, 1.0f, 4.0f, "x%.1f");
+        ImGui::SliderFloat("flip min speed", &maneuver_tuning_.flip_min_airspeed, 10.0f, 50.0f, "%.0f m/s");
+        ImGui::SliderFloat("manoeuvre cooldown", &maneuver_tuning_.cooldown, 0.0f, 4.0f, "%.1f s");
+    }
     if (ImGui::CollapsingHeader("Assists", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::RadioButton("relaxed", assist_preset_ == 0)) apply_assist_preset(0);
         ImGui::SameLine();
@@ -3816,7 +3870,7 @@ void App::build_flight_ui() {
     ImGui::TextDisabled(controls_.invert_pitch ? "W nose down, S nose up, A/D roll"
                                               : "W nose up, S nose down, A/D roll");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
-    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake, d-pad rudder");
+    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake, d-pad rudder, d-pad up flip / down roll");
     ImGui::TextDisabled("R respawn, V first person, 1/2/3 camera");
     ImGui::TextDisabled("right-drag or right stick to look around");
     ImGui::End();

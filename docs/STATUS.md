@@ -88,6 +88,13 @@ What is built, in the order it was built. The plan these came from is
   strike with the tail balancing; the tail whip counter-turns the body and
   swings the head. Directions pinned in `test_anim`. `ANIMATION.md`, "Melee
   is the whole animal".
+- **M19** aerobatics and bot personality: a one-button roll (a dodge) and
+  flip (a half loop and roll-out to face a chaser), written as control
+  inputs to the real flight model with the assists stood down; bots draw an
+  aggression each, their nerve follows their health, a hit is answered with
+  a flip, a roll or a jink by nerve, wounded pilots run boosted, bold ones
+  boost to close; terrain outranks all of it. `COMBAT.md`, "Personality,
+  nerve and aerobatics".
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

@@ -110,6 +110,55 @@ void test_charge_presses_the_attack() {
     CHECK(boosting >= 60 && boosting <= 60 * 4);
 }
 
+void test_personality_answers_a_hit() {
+    std::printf("a bold pilot flips onto a chaser; a cautious one jinks; wounds sap nerve\n");
+    FlightState self;
+    self.position = Vec3::zero();
+    self.orientation = Quat::identity();  // facing -Z
+    self.velocity = Vec3{0.0f, 0.0f, -40.0f};
+    // The shooter is 150 m BEHIND (+Z).
+    const FlightState chaser = target_at(Vec3{0.0f, 0.0f, 150.0f}, Vec3{0.0f, 0.0f, -38.0f});
+
+    BotPilot bold;
+    bold.tuning.aggression = 1.0f;
+    bold.tuning.aggression_spread = 0.0f;
+    bold.reset(3u);
+    bold.update(1.0f / 60.0f, self, chaser, true, -1e9f, 1.0f);
+    bold.notify_hit();
+    const BotDecision answer = bold.update(1.0f / 60.0f, self, chaser, true, -1e9f, 1.0f);
+    CHECK(answer.maneuver == game::ManeuverKind::Flip);
+    CHECK(bold.state() == BotState::Attack);
+
+    BotPilot timid;
+    timid.tuning.aggression = 0.0f;
+    timid.tuning.aggression_spread = 0.0f;
+    timid.reset(3u);
+    timid.update(1.0f / 60.0f, self, chaser, true, -1e9f, 1.0f);
+    timid.notify_hit();
+    const BotDecision jink = timid.update(1.0f / 60.0f, self, chaser, true, -1e9f, 1.0f);
+    CHECK(jink.maneuver == game::ManeuverKind::None);
+    CHECK(timid.state() == BotState::Evade);
+
+    // The bold pilot, nearly dead, has lost its nerve: the same hit is a jink.
+    BotPilot hurt;
+    hurt.tuning.aggression = 0.7f;
+    hurt.tuning.aggression_spread = 0.0f;
+    hurt.reset(3u);
+    hurt.update(1.0f / 60.0f, self, chaser, true, -1e9f, 0.1f);
+    CHECK(hurt.nerve() < 0.5f);
+    hurt.notify_hit();
+    const BotDecision run = hurt.update(1.0f / 60.0f, self, chaser, true, -1e9f, 0.1f);
+    CHECK(run.maneuver == game::ManeuverKind::None);
+    CHECK(hurt.state() != BotState::Attack);
+
+    // Spread: two seeds draw two aggressions.
+    BotPilot a, b;
+    a.tuning.aggression_spread = b.tuning.aggression_spread = 0.3f;
+    a.reset(11u);
+    b.reset(29u);
+    CHECK(std::fabs(a.aggression() - b.aggression()) > 0.02f);
+}
+
 void test_pursuit_converges() {
     std::printf("a bot closes on a straight-flying target\n");
     FlightModel flight;
@@ -224,8 +273,12 @@ void test_fire_discipline() {
 }
 
 void test_damage_triggers_evasion_and_rhythm_cycles() {
-    std::printf("a hit forces a jink, and the fight cycles attack and extend\n");
+    std::printf("a hit forces a cautious pilot's jink, and the fight cycles attack and extend\n");
     BotPilot pilot;
+    // The jink is the CAUTIOUS answer to a hit; a bolder pilot rolls or flips
+    // instead (test_personality_answers_a_hit).
+    pilot.tuning.aggression = 0.2f;
+    pilot.tuning.aggression_spread = 0.0f;
     pilot.reset(23u);
     FlightState self;
     self.position = Vec3::zero();
@@ -234,6 +287,7 @@ void test_damage_triggers_evasion_and_rhythm_cycles() {
 
     CHECK(pilot.state() == BotState::Attack);
     pilot.notify_hit();
+    pilot.update(1.0f / 60.0f, self, player, true, -1e9f);  // the hit is answered on the next update
     CHECK(pilot.state() == BotState::Evade);
 
     // The jink runs its course, then the bot repositions rather than resuming
@@ -303,8 +357,18 @@ void test_long_sim_stays_finite() {
         const BotDecision d = pilot.update(
             dt, flight.state(), target_at(target), true,
             maxf(terrain.height_at(self.x, self.z), terrain.height_at(ahead.x, ahead.z)));
+        const float speed_before = flight.state().airspeed;
+        const float clearance_before = flight.state().ground_clearance;
         flight.update(d.flight, &terrain, dt);
-        if (flight.state().grounded) ++grounded_frames;
+        if (flight.state().grounded) {
+            if (grounded_frames == 0) {
+                std::printf("  first grounding at %.0f s: state %s, speed %.0f, clearance %.0f, "
+                            "boost %.1f flap %.1f brake %.1f, nerve %.2f\n",
+                            t, pilot.state_name(), speed_before, clearance_before, d.flight.boost,
+                            d.flight.flap, d.flight.brake, pilot.nerve());
+            }
+            ++grounded_frames;
+        }
         if (i % 600 == 0) pilot.notify_hit();  // keep every state exercised
     }
     const Vec3 p = flight.state().position;
@@ -439,6 +503,7 @@ int main() {
     test_long_sim_stays_finite();
     test_melee_discipline();
     test_charge_presses_the_attack();
+    test_personality_answers_a_hit();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "game/flight.h"
+#include "game/maneuver.h"
 #include "game/terrain.h"
 
 using namespace core;
@@ -544,7 +545,63 @@ void test_landing_and_takeoff() {
     CHECK(heavy_bank > 0.0f);
 }
 
+// The scripted aerobatics fly through the real model: a roll goes all the
+// way round and comes back upright, a flip reverses the heading and levels
+// out, both inside their time, both with the bank limit that would otherwise
+// stop them switched on.
+void test_roll_and_flip_complete() {
+    std::printf("a roll comes back upright and a flip reverses the heading\n");
+    game::ManeuverTuning tuning;
+
+    FlightModel flight;
+    flight.tuning.bank_limit_deg = 78.0f;  // the assist that used to forbid this
+    flight.reset(Vec3{0.0f, 900.0f, 0.0f}, Quat::identity(), 45.0f);
+    for (int i = 0; i < 120; ++i) flight.update(FlightInput{}, nullptr, 1.0f / 60.0f);
+
+    // Roll: right wing goes down past vertical and the dragon returns upright
+    // within a second and a half.
+    game::Maneuver roll;
+    CHECK(roll.start(game::ManeuverKind::Roll, 1.0f, flight.state(), tuning));
+    float lowest_up = 1.0f;
+    for (int i = 0; i < 90; ++i) {
+        FlightInput in;
+        roll.apply(in, flight.state(), tuning, 1.0f / 60.0f);
+        flight.update(in, nullptr, 1.0f / 60.0f);
+        lowest_up = minf(lowest_up, flight.state().up().y);
+    }
+    std::printf("  roll: lowest up.y %.2f, ended up.y %.2f\n", lowest_up, flight.state().up().y);
+    CHECK(lowest_up < -0.5f);  // it went over
+    CHECK(!roll.active());
+    for (int i = 0; i < 60; ++i) flight.update(FlightInput{}, nullptr, 1.0f / 60.0f);
+    CHECK(flight.state().up().y > 0.7f);  // and came back
+
+    // Flip: heading reversed, upright at the end.
+    flight.reset(Vec3{0.0f, 900.0f, 0.0f}, Quat::identity(), 45.0f);
+    for (int i = 0; i < 120; ++i) flight.update(FlightInput{}, nullptr, 1.0f / 60.0f);
+    const Vec3 before = flight.state().forward();
+    game::Maneuver flip;
+    CHECK(flip.start(game::ManeuverKind::Flip, 1.0f, flight.state(), tuning));
+    int frames = 0;
+    while (flip.active() && frames < 60 * 4) {
+        FlightInput in;
+        flip.apply(in, flight.state(), tuning, 1.0f / 60.0f);
+        flight.update(in, nullptr, 1.0f / 60.0f);
+        ++frames;
+    }
+    const Vec3 after = flight.state().forward();
+    std::printf("  flip: %d frames, heading dot %.2f, up.y %.2f, airspeed %.0f\n", frames,
+                dot(before, after), flight.state().up().y, flight.state().airspeed);
+    CHECK(dot(Vec3{before.x, 0.0f, before.z}, Vec3{after.x, 0.0f, after.z}) < -0.5f);
+    CHECK(flight.state().up().y > 0.6f);
+    CHECK(frames < 60 * 4);
+    // Too slow, it is refused rather than stalled into.
+    flight.reset(Vec3{0.0f, 900.0f, 0.0f}, Quat::identity(), 15.0f);
+    game::Maneuver refused;
+    CHECK(!refused.start(game::ManeuverKind::Flip, 1.0f, flight.state(), tuning));
+}
+
 int main() {
+    test_roll_and_flip_complete();
     test_landing_and_takeoff();
     test_glide_loses_energy_slowly();
     test_dive_trades_altitude_for_speed();

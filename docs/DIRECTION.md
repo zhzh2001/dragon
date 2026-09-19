@@ -448,6 +448,14 @@ limb; the directions are pinned by a test and the renders are in
 Glyde; nothing frame-level was findable online, so this is animation
 principle (anticipation, weight, follow-through) rather than a copy.
 
+Fourth pass ("add flip and roll; bots are conservative, flee when chased;
+personality by health or at random; they lack boost"): `STATUS.md` M19.
+Aerobatics on Z and B through the real flight model, and a personality
+layer -- drawn aggression, health-moved nerve, flips and rolls as the answer
+to a hit, boosts to close or to run. Gate unchanged. Next: row 2 (HUD kit)
+or row 3 (the run probe); the melee/bot work has had four passes and should
+now be left to playtesting.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

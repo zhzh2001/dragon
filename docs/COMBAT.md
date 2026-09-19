@@ -289,6 +289,52 @@ a gamma encode, so anything bright desaturates toward white; adding two units of
 sunlight on top of a flame turns it into a white balloon. A light source should
 not also be lit.
 
+### Personality, nerve and aerobatics
+
+The playtest after melee: "bots feel conservative -- they flee when chased
+even with a good opportunity to attack." They did, because every pilot
+shared one doctrine and one answer to being hit (the jink). Two things
+changed that.
+
+**Personality.** Each pilot draws an `aggression` at reset from the tuning's
+value plus or minus `aggression_spread` (rookie 0.35, veteran 0.55, ace 0.8,
+spread 0.3; both are dials in the Combat panel). Its **nerve** this moment is
+that aggression pushed up by good health and down by wounds (`nerve =
+aggression + 0.6 * (health - 0.5)`), and the doctrine reads the nerve rather
+than fixed numbers: the attack lasts `0.6 + 0.9 * nerve` times as long and
+breaks off at `1.4 - 0.8 * nerve` times the range, the extend leg is shorter
+for a bold pilot, and the charge reaches `0.6 + 0.8 * nerve` times as far. A
+wounded pilot (`flee_health` 0.3) with nerve below 0.6 RUNS: it extends twice
+as far, boosted, and does not come back until it has healed past the line.
+
+**The answer to a hit** is decided in `update()`, where the geometry is
+known, not in `notify_hit()`. Nerve above 0.65 and the shooter behind within
+`flip_range` (320 m): a **flip** round to face it, and the attack goes on.
+Nerve above 0.5: a dodge **roll**, staying on the attack. Otherwise the jink
+(Evade) as before. Bold pilots also **boost** to close from beyond 300 m, not
+only in the charge; cautious ones only boost to run.
+
+**Aerobatics are shared code.** `game/maneuver.h`: a `Maneuver` writes
+control inputs to the same flight model as the stick, with the assists that
+would fight it (auto-level, the bank limit) stood down through
+`FlightInput::maneuver` and the control rates scaled by `agility`. The
+**roll** (`Z`, d-pad down) is one full roll in `roll_duration` (0.85 s) at
+`roll_agility` (x2.4) with a `roll_dodge_impulse` (7 m/s) sideways at the
+start, so it moves the dragon off its line. The **flip** (`B`, d-pad up) pulls
+until the heading has reversed, then rolls out to upright; it is refused
+below `flip_min_airspeed` (26 m/s), because below that it is a stall, and it
+eats energy (45 to 27 m/s in the test), so it is a decision. Both are pinned
+in `test_flight` (the roll goes over and comes back; the flip reverses the
+heading upright, with the bank limit ON) and rendered in
+`artifacts/aerobatics/`. The bots fly the same `Maneuver`; `--maneuver
+roll|flip` triggers the player's at frame 30 for a capture.
+
+**Terrain outranks nerve.** The first soak with the bolder doctrine ended on
+the deck at 82 s: a longer, closer attack with the charge lifting the brake
+over a rising slope. Every speed-up -- charge flap and brake, every boost --
+now requires 160 m of ground under the bot, and the ten-minute soak is back
+to zero grounded frames.
+
 ## The match loop (M15)
 
 **Weapons-cold gating must precede everything that consumes the decision**: it

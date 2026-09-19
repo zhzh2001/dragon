@@ -252,7 +252,8 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
 
     // Commanded body rates. Positive pitch about +X raises the nose; yaw right
     // and roll right are both negative about their axes, given forward is -Z.
-    const float rate_scale = 1.0f / std::sqrt(core::maxf(tuning.heft, 0.05f));
+    const float rate_scale = core::clampf(input.agility, 0.25f, 4.0f) /
+                             std::sqrt(core::maxf(tuning.heft, 0.05f));
     Vec3 commanded{state_.control.x * tuning.pitch_rate * rate_scale,
                    -state_.control.y * tuning.yaw_rate * rate_scale,
                    -state_.control.z * tuning.roll_rate * rate_scale};
@@ -282,7 +283,8 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     // useless rate. Its one weakness is that it is also zero when exactly
     // inverted, so past ninety degrees we command full deflection and commit to
     // a direction rather than balancing on the singularity.
-    const float roll_released = 1.0f - core::saturate(std::fabs(state_.control.z) * 4.0f);
+    const float roll_released =
+        input.maneuver ? 0.0f : 1.0f - core::saturate(std::fabs(state_.control.z) * 4.0f);
     if (roll_released > 0.0f) {
         const float right_up = core::dot(right, Vec3::up());
         const float up_up = core::dot(up, Vec3::up());
@@ -301,7 +303,7 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     // Bank limit. Applied after auto-level so it has the final say, and unlike
     // auto-level it works even while the player is holding roll -- that is the
     // whole point.
-    if (tuning.bank_limit_deg > 0.0f) {
+    if (tuning.bank_limit_deg > 0.0f && !input.maneuver) {
         const float limit = core::radians(tuning.bank_limit_deg);
         // The fade has to start well before the limit. Roll rate is around
         // 170 deg/s and the rate damping has a ~0.4 s half-life, so a narrow
