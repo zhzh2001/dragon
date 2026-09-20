@@ -55,6 +55,7 @@ add_executable(dragon
   src/game/studio.cpp
   src/game/match.cpp
   src/editor/imgui_layer.cpp
+  src/ui/hud.cpp
 )
 
 target_include_directories(dragon PRIVATE src)

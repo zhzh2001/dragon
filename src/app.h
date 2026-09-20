@@ -4,6 +4,7 @@
 #include <string>
 
 #include "game/maneuver.h"
+#include "ui/hud.h"
 #include <vector>
 
 #include "core/input.h"
@@ -60,6 +61,8 @@ struct Options {
 
     // Hides the ImGui panels, for captures that should show only the world.
     bool hide_ui = false;
+    // Hide the tool panels but keep the HUD: a capture of what the player sees.
+    bool hide_panels = false;
 
     // --cam-mode chase|action|cinematic|fp selects the camera for a capture.
     int camera_mode = 0;
@@ -453,8 +456,9 @@ private:
     // Unit-radius torus, scaled per ring, so one mesh serves every checkpoint.
     static constexpr float RING_MESH_RADIUS = 1.0f;
     bool show_hud_ = true;
+    ui::Hud hud_;  // the HUD kit every readout draws through
     bool show_ghost_ = true;
-    bool show_ring_path_ = true;
+    bool show_ring_path_ = false;   // debug draw: off in play, on from the Rally panel
     bool autopilot_ = false;
     game::AutopilotTuning autopilot_tuning_;
 
@@ -533,7 +537,7 @@ private:
     int camera_preset_ = 0;  // 0 chase, 1 action, 2 cinematic
     bool show_camera_rig_ = false;
     bool show_forces_ = false;
-    bool show_flight_path_ = true;
+    bool show_flight_path_ = false;  // debug draw
 
     // Rolling telemetry for the ImGui plots. Reading these while flying is how
     // the flight model actually gets tuned.
@@ -569,7 +573,7 @@ private:
     // Scene tuning, all live-editable.
     bool show_grid_ = false;
     bool show_probes_ = false;
-    bool show_ground_probe_ = true;
+    bool show_ground_probe_ = false;  // debug draw
 
     // Rolling frame-time average, so the readout is steady enough to read.
     static constexpr int FRAME_HISTORY = 90;

@@ -54,7 +54,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--headless` | No visible window; still renders offscreen. Frame time is pinned to 1/60 s. |
 | `--frames N` | Run exactly N frames then exit. |
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
-| `--hide-ui` | Hide the ImGui panels, for world-only captures. |
+| `--hide-ui` | Hide the ImGui panels AND the HUD, for world-only captures. |
+| `--hide-panels` | Hide the panels but keep the HUD: a capture of what the player sees. |
 | `--telemetry [N]` | Log one line of flight state every N frames (default 60), plus a combat line (health, kills, bites swung/landed/taken) when combat is on. A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--cam-mode chase\|action\|cinematic\|fp` | Pick a camera preset. |
@@ -148,6 +149,16 @@ flight controls.
 - **UI**: Dear ImGui draws in its own pass (`begin_ui_pass`) because its
   pipelines declare no depth attachment, and a pipeline can only be bound in a
   pass whose attachments match it.
+- **The HUD is one kit.** Every playing readout goes through `ui::Hud`
+  (`src/ui/hud.h`): its tokens (one gold accent, red for threat and damage
+  only, off-white on charcoal plates), its primitives (plate, bar, arc,
+  bracket, pip, edge arrow) and its two faces (a condensed display face for
+  numerals, a humanist sans for labels, loaded from the system's TTFs with
+  ImGui's default as the fallback). Layout is in frame units, 1/720 of the
+  height, so it survives any aspect. The panels wear the same theme and dock
+  along the right edge, never over the centre. Do not draw a readout with raw
+  `AddText` and pixel constants again -- that is what read as debug output
+  with gold paint.
 - **Shaders**: MSL source in `shaders/`, read from the source tree at runtime and
   hot-reloaded on save (polled every 0.25s). A failed compile logs an error and
   keeps the last working pipeline, so a bad save never blanks the screen.
@@ -343,7 +354,8 @@ src/game/    flight model, chase + debug cameras, terrain, vegetation,
              course/rally, autopilot, combat, breath profiles, bots, match
              loop, studio
 src/audio/   synthesized audio -- every sound generated at startup
-src/editor/  ImGui integration
+src/editor/  ImGui integration: context, the two HUD faces, the panel theme
+src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     MSL, hot-reloaded from the source tree

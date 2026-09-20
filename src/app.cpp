@@ -37,6 +37,8 @@ Options parse_options(int argc, char** argv) {
             options.model = argv[++i];
         } else if (arg == "--cycle-models" && i + 1 < argc) {
             options.cycle_models = SDL_atoi(argv[++i]);
+        } else if (arg == "--hide-panels") {
+            options.hide_panels = true;
         } else if (arg == "--maneuver" && i + 1 < argc) {
             const std::string which = argv[++i];
             options.maneuver = which == "roll" ? 1 : which == "flip" ? 2 : 0;
@@ -142,6 +144,8 @@ bool App::init(const Options& options) {
     if (!device_.init(config)) return false;
 
     if (!ui_.init(device_)) return false;
+    hud_.set_fonts(ui_.numeral_font(), ui_.label_font());
+    if (options.hide_panels) show_panels_ = false;
 
     pipelines_.init(&device_, SHADER_ROOT);
     if (!debug_.init(&device_, &pipelines_)) return false;
@@ -1496,8 +1500,10 @@ void App::build_ui(float dt) {
     build_combat_ui();
     build_studio_ui();
 
-    ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
+    // Every panel docks to the right edge, stacked: the tool layer never
+    // sits over the centre of the frame where the game is.
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: it is the tallest panel and holds the settings
     // touched least often, so it is most of the clutter and none of the play.
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
@@ -1738,25 +1744,42 @@ bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float widt
 void App::draw_hud() {
     if (!show_hud_ || options_.hide_ui || studio_active_) return;
 
+    hud_.begin(float(device_.width()), float(device_.height()));
+    const ui::Tokens& tk = hud_.tokens();
+    const float width = hud_.width();
+    const float height = hud_.height();
+    const float margin = hud_.margin();
+    char line[96];
+
     if (combat_enabled_) draw_combat_hud();
 
-    // During a match the rally HUD stands down: you are fighting, not racing,
-    // and the checkpoint marker collides with the scoreline.
+    // ---- airspeed, bottom centre ----
+    // Diegetic first: speed is the wind and the FOV surge, so the numeral is
+    // modest -- read at a glance, not studied. The ability pips sit beside
+    // it when combat is on (draw_combat_hud adds them).
+    {
+        const float plate_w = hud_.px(150.0f);
+        const float plate_h = hud_.px(56.0f);
+        const ImVec2 min(width * 0.5f - plate_w * 0.5f, height - margin - plate_h);
+        hud_.plate(min, ImVec2(min.x + plate_w, min.y + plate_h));
+        std::snprintf(line, sizeof(line), "%.0f", flight_.state().airspeed);
+        const float numeral_size = 40.0f;
+        const float w = hud_.numeral_width(line, numeral_size);
+        const float unit_w = hud_.label_width("m/s", 14.0f);
+        const float total = w + hud_.px(6.0f) + unit_w;
+        const float x = width * 0.5f - total * 0.5f;
+        hud_.numeral(ImVec2(x, min.y + hud_.px(6.0f)), line, tk.text, numeral_size);
+        hud_.label(ImVec2(x + w + hud_.px(6.0f), min.y + hud_.px(30.0f)), "m/s", tk.text_dim, 14.0f);
+    }
+
+    // During a match the rally readout stands down: you are fighting, not
+    // racing, and the checkpoint marker collides with the scoreline.
     if (match_.phase() != game::MatchPhase::Idle) return;
 
     const game::Course& course = rally_.course();
     if (course.rings.empty()) return;
 
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const float width = float(device_.width());
-    const float height = float(device_.height());
     const core::Mat4 view_proj = active_camera().view_projection(device_.aspect());
-
-    const ImU32 WHITE = IM_COL32(255, 255, 255, 230);
-    const ImU32 DIM = IM_COL32(210, 220, 235, 150);
-    const ImU32 GOLD = IM_COL32(255, 190, 70, 235);
-    const ImU32 AHEAD = IM_COL32(120, 235, 140, 240);
-    const ImU32 BEHIND = IM_COL32(255, 120, 100, 240);
 
     // ---- next checkpoint marker ----
     if (const game::Ring* next = rally_.next_ring()) {
@@ -1765,26 +1788,24 @@ void App::draw_hud() {
                                screen.x > 0.0f && screen.x < width && screen.y > 0.0f &&
                                screen.y < height;
         const float range = core::distance(flight_.state().position, next->position);
+        std::snprintf(line, sizeof(line), "%.0f m", range);
 
         if (on_screen) {
             // A reticle scaled to the ring's apparent size, so it frames the
             // checkpoint instead of hiding it.
-            const float apparent = core::clampf(next->radius / core::maxf(range, 1.0f) * height *
-                                                    0.5f,
-                                                14.0f, 260.0f);
-            draw->AddCircle(screen, apparent, GOLD, 40, 2.0f);
-            // Corner ticks read as a target even when the circle is large.
+            const float apparent = core::clampf(next->radius / core::maxf(range, 1.0f) * height * 0.5f,
+                                                hud_.px(14.0f), hud_.px(260.0f));
+            hud_.draw()->AddCircle(screen, apparent, tk.accent, 48, hud_.px(2.0f));
             for (int i = 0; i < 4; ++i) {
                 const float angle = core::PI * 0.25f + core::PI * 0.5f * float(i);
                 const ImVec2 inner(screen.x + std::cos(angle) * apparent * 0.72f,
                                    screen.y + std::sin(angle) * apparent * 0.72f);
                 const ImVec2 outer(screen.x + std::cos(angle) * apparent * 1.05f,
                                    screen.y + std::sin(angle) * apparent * 1.05f);
-                draw->AddLine(inner, outer, GOLD, 2.0f);
+                hud_.draw()->AddLine(inner, outer, tk.accent, hud_.px(2.0f));
             }
-            char label[32];
-            std::snprintf(label, sizeof(label), "%.0f m", range);
-            draw->AddText(ImVec2(screen.x + apparent + 8.0f, screen.y - 8.0f), GOLD, label);
+            hud_.label(ImVec2(screen.x + apparent + hud_.px(8.0f), screen.y - hud_.px(8.0f)), line,
+                       tk.accent, 14.0f);
         } else {
             // Off screen: an arrow pinned near the edge, pointing the shortest
             // way to turn. Without this, losing a checkpoint means flying in
@@ -1794,105 +1815,92 @@ void App::draw_hud() {
             const float right = core::dot(to_ring, camera.right());
             const float up = core::dot(to_ring, camera.up());
             const float ahead = core::dot(to_ring, camera.forward());
-
             core::Vec2 direction{right, -up};
-            // Behind the camera, the shortest turn is sideways, so bias the
-            // arrow outward rather than letting it collapse to the centre.
             if (ahead < 0.0f && core::length(core::Vec3{direction.x, direction.y, 0.0f}) < 1e-3f) {
                 direction = core::Vec2{1.0f, 0.0f};
             }
             const float length = core::length(core::Vec3{direction.x, direction.y, 0.0f});
             if (length > 1e-4f) direction *= 1.0f / length;
-
             const ImVec2 centre(width * 0.5f, height * 0.5f);
             const float radius = core::minf(width, height) * 0.36f;
+            hud_.edge_arrow(centre, direction, radius, tk.accent, hud_.px(11.0f));
             const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
-            const float angle = std::atan2(direction.y, direction.x);
-            const ImVec2 left(tip.x + std::cos(angle + 2.5f) * 22.0f,
-                              tip.y + std::sin(angle + 2.5f) * 22.0f);
-            const ImVec2 back(tip.x + std::cos(angle - 2.5f) * 22.0f,
-                              tip.y + std::sin(angle - 2.5f) * 22.0f);
-            draw->AddTriangleFilled(tip, left, back, GOLD);
-
-            char label[32];
-            std::snprintf(label, sizeof(label), "%.0f m", range);
-            draw->AddText(ImVec2(tip.x - 18.0f, tip.y + 22.0f), GOLD, label);
+            hud_.label(ImVec2(tip.x, tip.y + hud_.px(22.0f)), line, tk.accent, 14.0f, ui::Align::Centre);
         }
     }
 
-    // ---- timer block, top centre ----
-    const float timer_x = width * 0.5f;
-    char line[64];
+    // ---- the top strip: timer, checkpoints, progress ----
+    {
+        const float strip_w = hud_.px(420.0f);
+        const float strip_h = hud_.px(46.0f);
+        const ImVec2 min(width * 0.5f - strip_w * 0.5f, margin);
+        hud_.plate(min, ImVec2(min.x + strip_w, min.y + strip_h));
+        const float mid_y = min.y + strip_h * 0.5f;
+        const std::string elapsed = game::format_time(rally_.elapsed());
+        hud_.numeral(ImVec2(min.x + hud_.px(16.0f), min.y + hud_.px(7.0f)), elapsed.c_str(),
+                     rally_.phase() == game::RunPhase::Running ? tk.text : tk.text_dim, 30.0f);
+        // Divider, checkpoint count, divider, progress bar.
+        float x = min.x + hud_.px(16.0f) + hud_.numeral_width(elapsed.c_str(), 30.0f) + hud_.px(14.0f);
+        hud_.draw()->AddLine(ImVec2(x, min.y + hud_.px(10.0f)), ImVec2(x, min.y + strip_h - hud_.px(10.0f)),
+                             tk.plate_edge, 1.0f);
+        x += hud_.px(14.0f);
+        std::snprintf(line, sizeof(line), "%d / %zu", rally_.rings_passed(), course.rings.size());
+        hud_.numeral(ImVec2(x, min.y + hud_.px(9.0f)), line, tk.text, 24.0f);
+        hud_.label(ImVec2(x, min.y + strip_h - hud_.px(14.0f)), "checkpoints", tk.text_dim, 10.0f);
+        x += hud_.numeral_width(line, 24.0f) + hud_.px(22.0f);
+        const float bar_w = min.x + strip_w - hud_.px(16.0f) - x;
+        if (bar_w > hud_.px(40.0f)) {
+            const float progress = course.rings.empty()
+                                       ? 0.0f
+                                       : float(rally_.rings_passed()) / float(course.rings.size());
+            hud_.bar(ImVec2(x, mid_y - hud_.px(3.0f)), bar_w, hud_.px(6.0f), progress, tk.accent);
+        }
 
-    // Scaled text rather than the default UI size: a HUD timer is read at a
-    // glance while flying, not studied.
-    ImFont* font = ImGui::GetFont();
-    constexpr float TIMER_SIZE = 38.0f;
-    constexpr float LABEL_SIZE = 16.0f;
-    auto centred = [&](const char* text, float size, float y, ImU32 colour) {
-        const float w = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text).x;
-        draw->AddText(font, size, ImVec2(timer_x - w * 0.5f, y), colour, text);
-    };
+        // Below the strip: the record and the state hint.
+        float y = min.y + strip_h + hud_.px(6.0f);
+        if (rally_.best_time() > 0.0f) {
+            std::snprintf(line, sizeof(line), "best %s", game::format_time(rally_.best_time()).c_str());
+            hud_.label(ImVec2(width * 0.5f, y), line, tk.text_dim, 13.0f, ui::Align::Centre);
+            y += hud_.px(18.0f);
+        }
+        switch (rally_.phase()) {
+            case game::RunPhase::Ready:
+                hud_.label(ImVec2(width * 0.5f, y), "fly through the first ring to start", tk.accent,
+                           13.0f, ui::Align::Centre);
+                break;
+            case game::RunPhase::Finished:
+                hud_.label(ImVec2(width * 0.5f, y),
+                           rally_.last_run_was_record() ? "NEW RECORD  --  R to run again"
+                                                        : "finished  --  R to run again",
+                           rally_.last_run_was_record() ? tk.ahead : tk.text_dim, 13.0f,
+                           ui::Align::Centre);
+                break;
+            case game::RunPhase::Running:
+                break;
+        }
+        y += hud_.px(22.0f);
 
-    const std::string elapsed = game::format_time(rally_.elapsed());
-
-    // Panel behind the readout, so it stays legible over snow and sky alike.
-    draw->AddRectFilled(ImVec2(timer_x - 150.0f, 8.0f), ImVec2(timer_x + 150.0f, 118.0f),
-                        IM_COL32(10, 14, 20, 155), 8.0f);
-
-    centred(elapsed.c_str(), TIMER_SIZE, 12.0f,
-            rally_.phase() == game::RunPhase::Running ? WHITE : DIM);
-
-    std::snprintf(line, sizeof(line), "checkpoint %d / %zu", rally_.rings_passed(),
-                  course.rings.size());
-    centred(line, LABEL_SIZE, 56.0f, DIM);
-
-    if (rally_.best_time() > 0.0f) {
-        std::snprintf(line, sizeof(line), "best %s", game::format_time(rally_.best_time()).c_str());
-    } else {
-        std::snprintf(line, sizeof(line), "no record yet");
+        // ---- split delta and miss flashes ----
+        if (split_flash_ > 0.0f && rally_.has_ghost() && rally_.last_split_delta() != 0.0f) {
+            const float delta = rally_.last_split_delta();
+            std::snprintf(line, sizeof(line), "%+.2f s", delta);
+            const ImU32 colour = delta < 0.0f ? tk.ahead : tk.behind;
+            const float alpha = core::saturate(split_flash_ / 1.6f);
+            const ImU32 faded = (colour & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
+            hud_.numeral(ImVec2(width * 0.5f, y), line, faded, 28.0f, ui::Align::Centre);
+            y += hud_.px(32.0f);
+        }
+        if (miss_flash_ > 0.0f) {
+            std::snprintf(line, sizeof(line), "missed by %.0f m", rally_.last_miss_distance());
+            const float alpha = core::saturate(miss_flash_ / 1.2f);
+            const ImU32 faded = (tk.behind & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
+            hud_.label(ImVec2(width * 0.5f, y), line, faded, 15.0f, ui::Align::Centre);
+        }
     }
-    centred(line, LABEL_SIZE, 74.0f, DIM);
-
-    switch (rally_.phase()) {
-        case game::RunPhase::Ready:
-            centred("fly through the first ring to start", LABEL_SIZE, 94.0f, GOLD);
-            break;
-        case game::RunPhase::Finished:
-            centred(rally_.last_run_was_record() ? "NEW RECORD  --  R to run again"
-                                                 : "finished  --  R to run again",
-                    LABEL_SIZE, 94.0f, rally_.last_run_was_record() ? AHEAD : DIM);
-            break;
-        case game::RunPhase::Running:
-            break;
-    }
-
-    // ---- split delta flash ----
-    // Only meaningful once there is a ghost to be measured against.
-    if (split_flash_ > 0.0f && rally_.has_ghost() && rally_.last_split_delta() != 0.0f) {
-        const float delta = rally_.last_split_delta();
-        std::snprintf(line, sizeof(line), "%+.2f s", delta);
-        const ImU32 colour = delta < 0.0f ? AHEAD : BEHIND;
-        // Fade out over the flash, so it draws the eye and then gets out of it.
-        const float alpha = core::saturate(split_flash_ / 1.6f);
-        const ImU32 faded = (colour & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
-        centred(line, 26.0f, 124.0f, faded);
-    }
-
-    if (miss_flash_ > 0.0f) {
-        std::snprintf(line, sizeof(line), "missed by %.0f m", rally_.last_miss_distance());
-        const float alpha = core::saturate(miss_flash_ / 1.2f);
-        const ImU32 faded = (BEHIND & 0x00FFFFFF) | (ImU32(alpha * 240.0f) << 24);
-        centred(line, 20.0f, 156.0f, faded);
-    }
-
-    // ---- airspeed, bottom centre ----
-    std::snprintf(line, sizeof(line), "%.0f m/s", flight_.state().airspeed);
-    centred(line, 24.0f, height - 46.0f, WHITE);
 }
 
 void App::build_rally_ui() {
-    ImGui::SetNextWindowPos(ImVec2(392.0f, float(device_.height()) - 236.0f),
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 52.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -1992,7 +2000,7 @@ void App::build_rally_ui() {
 // The studio panel: pick a manoeuvre, read what to look for, drag the rig
 // sliders in the Dragon panel while it loops.
 void App::build_studio_ui() {
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) * 0.5f - 190.0f, 12.0f),
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 92.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -2163,8 +2171,8 @@ void App::build_dragon_ui() {
     // Right of the Engine window and above Rally. Placement matters: the first
     // version of this panel opened underneath Engine and was invisible, which
     // is indistinguishable from not having built it at all.
-    ImGui::SetNextWindowPos(ImVec2(408.0f, 12.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(384, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 132.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
     // the rest stay one click away.
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
@@ -3200,120 +3208,126 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
 // being shot at: how much have I got left, can I shoot yet, and where is the
 // thing hitting me. A number they have to read is a number they will not read.
 void App::draw_combat_hud() {
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    const float width = float(device_.width());
-    const float height = float(device_.height());
+    // Called from draw_hud after hud_.begin().
+    const ui::Tokens& tk = hud_.tokens();
+    ImDrawList* draw = hud_.draw();
+    const float width = hud_.width();
+    const float height = hud_.height();
+    const float margin = hud_.margin();
     const core::Mat4 view_proj = active_camera().view_projection(device_.aspect());
+    char line[96];
 
     // ---- taking fire ----
     // A full-screen vignette rather than a number: peripheral, unmissable, and
     // it does not compete with the thing you are trying to aim at.
     if (damage_flash_ > 0.0f) {
         const float strength = core::saturate(damage_flash_);
-        const ImU32 edge = IM_COL32(190, 30, 25, int(120.0f * strength));
+        const ImU32 edge = (tk.danger & 0x00FFFFFF) | (ImU32(120.0f * strength) << 24);
+        const ImU32 clear = tk.danger & 0x00FFFFFF;
         const float band = height * 0.22f;
-        draw->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(width, band), edge, edge,
-                                      IM_COL32(190, 30, 25, 0), IM_COL32(190, 30, 25, 0));
-        draw->AddRectFilledMultiColor(ImVec2(0, height - band), ImVec2(width, height),
-                                      IM_COL32(190, 30, 25, 0), IM_COL32(190, 30, 25, 0), edge,
-                                      edge);
+        draw->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(width, band), edge, edge, clear, clear);
+        draw->AddRectFilledMultiColor(ImVec2(0, height - band), ImVec2(width, height), clear, clear,
+                                      edge, edge);
     }
 
-    // ---- health and breath ----
-    const float bar_width = 260.0f;
-    const float bar_height = 14.0f;
-    const float x = width * 0.5f - bar_width * 0.5f;
-    const float y = height - 96.0f;
-
-    auto bar = [&](float top, float fraction, ImU32 fill, const char* label) {
-        draw->AddRectFilled(ImVec2(x, top), ImVec2(x + bar_width, top + bar_height),
-                            IM_COL32(10, 14, 20, 170), 3.0f);
-        draw->AddRectFilled(ImVec2(x, top),
-                            ImVec2(x + bar_width * core::saturate(fraction), top + bar_height),
-                            fill, 3.0f);
-        draw->AddRect(ImVec2(x, top), ImVec2(x + bar_width, top + bar_height),
-                      IM_COL32(255, 255, 255, 60), 3.0f);
-        draw->AddText(ImVec2(x - 62.0f, top - 1.0f), IM_COL32(220, 230, 245, 190), label);
-    };
-
-    const float health = combat_.health_fraction();
-    // Red below a third: the threshold where disengaging is the right call.
-    const ImU32 health_colour = health > 0.33f ? IM_COL32(90, 200, 110, 220)
-                                               : IM_COL32(225, 70, 55, 235);
-    bar(y, health, health_colour, "HEALTH");
-    bar(y + bar_height + 6.0f, combat_.breath(),
-        combat_.breathing() ? IM_COL32(255, 150, 40, 230) : IM_COL32(230, 190, 90, 190), "BREATH");
-
-    // ---- ability readiness ----
-    // Filling back to full is the cue, so it can be read at a glance without
-    // parsing a countdown.
-    auto pip = [&](float centre_x, float ready, const char* label, ImU32 colour) {
-        const float radius = 15.0f;
-        const ImVec2 middle(centre_x, y + 58.0f);
-        draw->AddCircleFilled(middle, radius, IM_COL32(10, 14, 20, 170), 20);
-        if (ready >= 1.0f) {
-            draw->AddCircleFilled(middle, radius - 3.0f, colour, 20);
-        } else {
-            draw->PathArcTo(middle, radius - 3.0f, -core::HALF_PI,
-                            -core::HALF_PI + core::TWO_PI * ready, 20);
-            draw->PathLineTo(middle);
-            draw->PathFillConvex(IM_COL32(colour >> IM_COL32_R_SHIFT & 0xff,
-                                          colour >> IM_COL32_G_SHIFT & 0xff,
-                                          colour >> IM_COL32_B_SHIFT & 0xff, 110));
-        }
-        draw->AddCircle(middle, radius, IM_COL32(255, 255, 255, 70), 20);
-        const ImVec2 size = ImGui::CalcTextSize(label);
-        draw->AddText(ImVec2(middle.x - size.x * 0.5f, middle.y - size.y * 0.5f),
-                      IM_COL32(255, 255, 255, 230), label);
-    };
-    pip(width * 0.5f - 26.0f, 1.0f - combat_.fire_cooldown(), "G", IM_COL32(255, 140, 40, 230));
-    pip(width * 0.5f + 26.0f, 1.0f - combat_.boost_cooldown(), "X", IM_COL32(90, 180, 255, 230));
-    pip(width * 0.5f - 78.0f, 1.0f - combat_.melee_cooldown(), "C", IM_COL32(230, 80, 70, 230));
-    if (combat_.melee_combo() > 1) {
-        char combo[8];
-        std::snprintf(combo, sizeof(combo), "x%d", combat_.melee_combo());
-        const ImVec2 size = ImGui::CalcTextSize(combo);
-        draw->AddText(ImVec2(width * 0.5f - 78.0f - size.x * 0.5f, y + 58.0f - 15.0f - size.y - 2.0f),
-                      IM_COL32(255, 120, 90, 240), combo);
-    }
-
-    // ---- the match, writ large ----
+    // ---- health and breath, top left ----
     {
-        char line[96];
-        const ImU32 GOLD = IM_COL32(255, 205, 90, 245);
+        const float plate_w = hud_.px(330.0f);
+        const float plate_h = hud_.px(64.0f);
+        const ImVec2 min(margin, margin);
+        hud_.plate(min, ImVec2(min.x + plate_w, min.y + plate_h));
+        const float label_x = min.x + hud_.px(12.0f);
+        const float bar_x = min.x + hud_.px(84.0f);
+        const float bar_w = plate_w - hud_.px(96.0f);
+        const float bar_h = hud_.px(12.0f);
+        const float health = combat_.health_fraction();
+        // The bar dims toward the danger red as it empties; below a third,
+        // the threshold where disengaging is the right call, it flashes.
+        ImU32 health_colour = tk.health;
+        if (health < 0.33f) {
+            const float pulse = 0.65f + 0.35f * std::sin(time_seconds_ * 6.0f);
+            health_colour = (tk.danger & 0x00FFFFFF) | (ImU32(255.0f * pulse) << 24);
+        }
+        hud_.label(ImVec2(label_x, min.y + hud_.px(10.0f)), "HEALTH", tk.text_dim, 12.0f);
+        hud_.bar(ImVec2(bar_x, min.y + hud_.px(11.0f)), bar_w, bar_h, health, health_colour);
+        hud_.label(ImVec2(label_x, min.y + hud_.px(36.0f)), "BREATH", tk.text_dim, 12.0f);
+        hud_.bar(ImVec2(bar_x, min.y + hud_.px(37.0f)), bar_w, bar_h, combat_.breath(),
+                 combat_.breathing() ? tk.breath_hot : tk.breath);
+    }
+
+    // ---- ability readiness, beside the airspeed plate ----
+    // Filling back to full is the cue, so it can be read at a glance without
+    // parsing a countdown. Bite, fireball, boost, manoeuvre.
+    {
+        const float radius = hud_.px(14.0f);
+        const float step = hud_.px(34.0f);
+        const float y = height - margin - hud_.px(28.0f);
+        const float x0 = width * 0.5f + hud_.px(75.0f) + hud_.px(24.0f);
+        hud_.pip(ImVec2(x0, y), radius, 1.0f - combat_.melee_cooldown(), "C", tk.danger);
+        hud_.pip(ImVec2(x0 + step, y), radius, 1.0f - combat_.fire_cooldown(), "G", tk.breath_hot);
+        hud_.pip(ImVec2(x0 + step * 2.0f, y), radius, 1.0f - combat_.boost_cooldown(), "X", tk.cool);
+        const float maneuver_ready =
+            maneuver_.active() ? 0.0f
+            : maneuver_tuning_.cooldown > 0.0f
+                ? 1.0f - core::saturate(maneuver_.cooldown / maneuver_tuning_.cooldown)
+                : 1.0f;
+        hud_.pip(ImVec2(x0 + step * 3.0f, y), radius, maneuver_ready, "Z", tk.accent);
+        if (combat_.melee_combo() > 1) {
+            std::snprintf(line, sizeof(line), "x%d", combat_.melee_combo());
+            hud_.numeral(ImVec2(x0, y - radius - hud_.px(20.0f)), line, tk.breath_hot, 20.0f,
+                         ui::Align::Centre);
+        }
+    }
+
+    // ---- the match, in the top strip and writ large ----
+    {
         if (match_.phase() == game::MatchPhase::Countdown) {
             std::snprintf(line, sizeof(line), "%d", int(std::ceil(match_.countdown_remaining())));
-            const ImVec2 size = ImGui::CalcTextSize(line);
-            draw->AddText(nullptr, 64.0f,
-                          ImVec2(width * 0.5f - size.x * 2.0f, height * 0.30f), GOLD, line);
-        } else if (match_.phase() == game::MatchPhase::Fighting) {
-            if (match_.settings.time_limit > 0.0f) {
-                std::snprintf(line, sizeof(line), "YOU %d : %d BOTS   first to %d   %d:%02d",
-                              match_.player_kills(), match_.player_deaths(),
-                              match_.settings.target_kills, int(match_.time_remaining()) / 60,
-                              int(match_.time_remaining()) % 60);
-            } else {
-                std::snprintf(line, sizeof(line), "YOU %d : %d BOTS   first to %d",
-                              match_.player_kills(), match_.player_deaths(),
-                              match_.settings.target_kills);
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.28f), line, tk.accent, 96.0f, ui::Align::Centre);
+            hud_.label(ImVec2(width * 0.5f, height * 0.28f + hud_.px(100.0f)), "weapons live at zero",
+                       tk.text_dim, 14.0f, ui::Align::Centre);
+        } else if (match_.phase() == game::MatchPhase::Fighting ||
+                   match_.phase() == game::MatchPhase::Results) {
+            const float strip_w = hud_.px(420.0f);
+            const float strip_h = hud_.px(46.0f);
+            const ImVec2 min(width * 0.5f - strip_w * 0.5f, margin);
+            hud_.plate(min, ImVec2(min.x + strip_w, min.y + strip_h));
+            // Score, as numerals: YOU n : m BOTS.
+            std::snprintf(line, sizeof(line), "%d : %d", match_.player_kills(), match_.player_deaths());
+            const float score_w = hud_.numeral_width(line, 30.0f);
+            const float score_x = min.x + hud_.px(70.0f);
+            hud_.label(ImVec2(score_x - hud_.px(8.0f), min.y + hud_.px(17.0f)), "YOU", tk.text_dim, 11.0f,
+                       ui::Align::Right);
+            hud_.numeral(ImVec2(score_x, min.y + hud_.px(7.0f)), line, tk.text, 30.0f);
+            hud_.label(ImVec2(score_x + score_w + hud_.px(8.0f), min.y + hud_.px(17.0f)), "BOTS",
+                       tk.text_dim, 11.0f);
+            float x = score_x + score_w + hud_.px(52.0f);
+            draw->AddLine(ImVec2(x, min.y + hud_.px(10.0f)), ImVec2(x, min.y + strip_h - hud_.px(10.0f)),
+                          tk.plate_edge, 1.0f);
+            x += hud_.px(14.0f);
+            // The clock: time remaining with a limit, the fight's duration without.
+            const float seconds = match_.phase() == game::MatchPhase::Fighting
+                                      ? (match_.settings.time_limit > 0.0f ? match_.time_remaining()
+                                                                           : match_.fight_duration())
+                                      : match_.fight_duration();
+            std::snprintf(line, sizeof(line), "%d:%02d", int(seconds) / 60, int(seconds) % 60);
+            hud_.numeral(ImVec2(x, min.y + hud_.px(7.0f)), line, tk.text, 30.0f);
+            x += hud_.numeral_width(line, 30.0f) + hud_.px(14.0f);
+            draw->AddLine(ImVec2(x, min.y + hud_.px(10.0f)), ImVec2(x, min.y + strip_h - hud_.px(10.0f)),
+                          tk.plate_edge, 1.0f);
+            x += hud_.px(14.0f);
+            std::snprintf(line, sizeof(line), "first to %d", match_.settings.target_kills);
+            hud_.label(ImVec2(x, min.y + hud_.px(15.0f)), line, tk.text_dim, 13.0f);
+
+            if (match_.phase() == game::MatchPhase::Results) {
+                const char* verdict = match_.draw() ? "DRAW" : (match_.player_won() ? "VICTORY" : "DEFEAT");
+                const ImU32 colour = match_.draw() ? tk.text : match_.player_won() ? tk.accent : tk.danger;
+                hud_.numeral(ImVec2(width * 0.5f, height * 0.28f), verdict, colour, 72.0f, ui::Align::Centre);
+                std::snprintf(line, sizeof(line), "%d : %d in %.0f s   --   ENTER to rematch",
+                              match_.player_kills(), match_.player_deaths(), match_.fight_duration());
+                hud_.label(ImVec2(width * 0.5f, height * 0.28f + hud_.px(80.0f)), line, tk.text, 15.0f,
+                           ui::Align::Centre);
             }
-            const ImVec2 size = ImGui::CalcTextSize(line);
-            draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, 14.0f), GOLD, line);
-        } else if (match_.phase() == game::MatchPhase::Results) {
-            const char* verdict =
-                match_.draw() ? "DRAW" : (match_.player_won() ? "VICTORY" : "DEFEAT");
-            const ImU32 colour = match_.draw() ? IM_COL32(220, 220, 220, 245)
-                                : match_.player_won() ? IM_COL32(140, 235, 140, 245)
-                                                      : IM_COL32(255, 90, 70, 245);
-            ImVec2 size = ImGui::CalcTextSize(verdict);
-            draw->AddText(nullptr, 56.0f, ImVec2(width * 0.5f - size.x * 3.4f, height * 0.30f),
-                          colour, verdict);
-            std::snprintf(line, sizeof(line), "%d : %d in %.0f s  --  ENTER to rematch",
-                          match_.player_kills(), match_.player_deaths(),
-                          match_.fight_duration());
-            size = ImGui::CalcTextSize(line);
-            draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, height * 0.30f + 64.0f),
-                          IM_COL32(230, 235, 245, 220), line);
         }
     }
 
@@ -3327,22 +3341,19 @@ void App::draw_combat_hud() {
             combat_.muzzle(player) + combat_.fireball_direction(player) * 260.0f;
         ImVec2 screen;
         if (project_to_screen(view_proj, aim_at, width, height, screen)) {
-            const ImU32 colour = IM_COL32(255, 235, 200, combat_.has_lock() ? 245 : 170);
-            const float arm = 14.0f;
-            const float gap = 4.5f;
-            draw->AddLine(ImVec2(screen.x - arm, screen.y), ImVec2(screen.x - gap, screen.y),
-                          colour, 2.4f);
-            draw->AddLine(ImVec2(screen.x + gap, screen.y), ImVec2(screen.x + arm, screen.y),
-                          colour, 2.4f);
-            draw->AddLine(ImVec2(screen.x, screen.y - arm), ImVec2(screen.x, screen.y - gap),
-                          colour, 2.4f);
-            draw->AddLine(ImVec2(screen.x, screen.y + gap), ImVec2(screen.x, screen.y + arm),
-                          colour, 2.4f);
-            draw->AddCircleFilled(ImVec2(screen.x, screen.y), 2.0f, colour, 10);
+            const ImU32 colour = combat_.has_lock() ? tk.lock : tk.text_dim;
+            const float arm = hud_.px(14.0f);
+            const float gap = hud_.px(4.5f);
+            const float thick = hud_.px(2.0f);
+            draw->AddLine(ImVec2(screen.x - arm, screen.y), ImVec2(screen.x - gap, screen.y), colour, thick);
+            draw->AddLine(ImVec2(screen.x + gap, screen.y), ImVec2(screen.x + arm, screen.y), colour, thick);
+            draw->AddLine(ImVec2(screen.x, screen.y - arm), ImVec2(screen.x, screen.y - gap), colour, thick);
+            draw->AddLine(ImVec2(screen.x, screen.y + gap), ImVec2(screen.x, screen.y + arm), colour, thick);
+            draw->AddCircleFilled(ImVec2(screen.x, screen.y), hud_.px(2.0f), colour, 10);
             // A ring when locked: the marker doubles as the "shots will bend"
             // cue, so it visibly changes state with the lock.
             if (combat_.has_lock() && !manual_aim_) {
-                draw->AddCircle(ImVec2(screen.x, screen.y), arm * 0.75f, colour, 20, 1.5f);
+                draw->AddCircle(ImVec2(screen.x, screen.y), arm * 0.75f, colour, 24, hud_.px(1.5f));
             }
         }
     }
@@ -3370,44 +3381,29 @@ void App::draw_combat_hud() {
         }
         // The locked target is unmistakable. Everything else is a faint mark:
         // if every target looks equally important, none of them read.
-        const ImU32 colour = flaming ? IM_COL32(255, 60, 20, 255)
-                             : locked ? IM_COL32(255, 205, 70, 245)
-                                      : IM_COL32(255, 110, 90, 150);
+        const ImU32 colour = flaming ? tk.flame : locked ? tk.lock : tk.mark;
         if (on_screen) {
             // Brackets rather than a box: they read as a target at any size and
             // do not obscure what they surround.
-            const float size = core::clampf(2600.0f / core::maxf(range, 1.0f), 10.0f, 60.0f);
-            const float arm = size * 0.35f;
-            const ImVec2 corners[4] = {ImVec2(screen.x - size, screen.y - size),
-                                       ImVec2(screen.x + size, screen.y - size),
-                                       ImVec2(screen.x + size, screen.y + size),
-                                       ImVec2(screen.x - size, screen.y + size)};
-            const ImVec2 steps[4] = {ImVec2(arm, arm), ImVec2(-arm, arm), ImVec2(-arm, -arm),
-                                     ImVec2(arm, -arm)};
-            for (int i = 0; i < 4; ++i) {
-                draw->AddLine(corners[i], ImVec2(corners[i].x + steps[i].x, corners[i].y), colour,
-                              1.8f);
-                draw->AddLine(corners[i], ImVec2(corners[i].x, corners[i].y + steps[i].y), colour,
-                              1.8f);
+            const float half = core::clampf(2600.0f / core::maxf(range, 1.0f), hud_.px(10.0f), hud_.px(60.0f));
+            hud_.bracket(screen, half, colour, hud_.px(1.8f));
+            std::snprintf(line, sizeof(line), flaming ? "%.0f m  FLAME" : "%.0f m", range);
+            hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
+                       flaming ? tk.flame : locked ? tk.lock : tk.mark, 12.0f);
+            if (sentinel.stun > 0.0f) {
+                hud_.label(ImVec2(screen.x, screen.y + half + hud_.px(4.0f)), "STUNNED", tk.accent, 11.0f,
+                           ui::Align::Centre);
             }
-            char label[32];
-            std::snprintf(label, sizeof(label), flaming ? "%.0f m  FLAME" : "%.0f m", range);
-            draw->AddText(ImVec2(screen.x + size + 5.0f, screen.y - 7.0f),
-                          flaming ? IM_COL32(255, 90, 40, 255)
-                          : locked ? IM_COL32(255, 225, 160, 230)
-                                   : IM_COL32(255, 200, 190, 150),
-                          label);
             if (locked) {
-                draw->AddCircle(ImVec2(screen.x, screen.y), size * 1.35f, colour, 24, 1.4f);
+                draw->AddCircle(ImVec2(screen.x, screen.y), half * 1.35f, colour, 28, hud_.px(1.4f));
                 // Where the shot is actually going. Drawing the lead point makes
                 // the assist legible instead of magic -- and when the assist is
                 // turned down, it shows exactly how much lead is left to the
                 // player.
                 ImVec2 lead;
                 if (project_to_screen(view_proj, combat_.lock_intercept(), width, height, lead)) {
-                    draw->AddLine(ImVec2(screen.x, screen.y), lead,
-                                  IM_COL32(255, 225, 160, 110), 1.2f);
-                    draw->AddCircleFilled(lead, 3.5f, IM_COL32(255, 240, 190, 220), 12);
+                    draw->AddLine(ImVec2(screen.x, screen.y), lead, tk.accent_dim, hud_.px(1.2f));
+                    draw->AddCircleFilled(lead, hud_.px(3.5f), tk.lock, 12);
                 }
             }
         } else {
@@ -3424,19 +3420,8 @@ void App::draw_combat_hud() {
             const float span = core::length(direction);
             if (span < 1e-3f) continue;
             direction = core::Vec2{direction.x / span, direction.y / span};
-
-            const float radius = core::minf(width, height) * 0.36f;
-            const ImVec2 centre(width * 0.5f, height * 0.5f);
-            const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
-            const ImVec2 perpendicular(-direction.y, direction.x);
-            const float wing = 8.0f;
-            draw->AddTriangleFilled(
-                tip,
-                ImVec2(tip.x - direction.x * 16.0f + perpendicular.x * wing,
-                       tip.y - direction.y * 16.0f + perpendicular.y * wing),
-                ImVec2(tip.x - direction.x * 16.0f - perpendicular.x * wing,
-                       tip.y - direction.y * 16.0f - perpendicular.y * wing),
-                colour);
+            hud_.edge_arrow(ImVec2(width * 0.5f, height * 0.5f), direction,
+                            core::minf(width, height) * 0.36f, colour, hud_.px(8.0f));
         }
     }
 
@@ -3455,30 +3440,24 @@ void App::draw_combat_hud() {
         if (span > 1e-3f) {
             direction = core::Vec2{direction.x / span, direction.y / span};
             const float fade = core::saturate(damage_marker_ / 3.0f);
-            const int alpha = int(210.0f * fade);
-            const ImVec2 centre(width * 0.5f, height * 0.5f);
-            const float radius = core::minf(width, height) * 0.30f;
+            const ImU32 colour = (tk.danger & 0x00FFFFFF) | (ImU32(210.0f * fade) << 24);
             // A thick arc rather than an arrow: it reads at the very edge of
             // attention, which is where a player looking at their target is.
-            const float angle = std::atan2(direction.y, direction.x);
-            draw->PathArcTo(centre, radius, angle - 0.34f, angle + 0.34f, 20);
-            draw->PathStroke(IM_COL32(255, 90, 70, alpha), 0, 7.0f);
+            hud_.edge_arc(ImVec2(width * 0.5f, height * 0.5f), direction,
+                          core::minf(width, height) * 0.30f, colour, hud_.px(7.0f));
         }
     }
 
     if (!combat_.alive()) {
-        const char* text = "DOWNED";
-        const ImVec2 size = ImGui::CalcTextSize(text);
-        draw->AddText(ImVec2(width * 0.5f - size.x * 0.5f, height * 0.42f),
-                      IM_COL32(255, 80, 70, 240), text);
+        hud_.numeral(ImVec2(width * 0.5f, height * 0.40f), "DOWNED", tk.danger, 56.0f, ui::Align::Centre);
     }
 }
 
 void App::build_combat_ui() {
     game::CombatTuning& t = combat_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(408.0f, 396.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(384, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 212.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     ImGui::Begin("Combat");
 
     if (ImGui::Checkbox("combat enabled", &combat_enabled_) && combat_enabled_) {
@@ -3699,7 +3678,7 @@ void App::build_flight_ui() {
     const game::FlightState& s = flight_.state();
     game::FlightTuning& t = flight_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 12.0f),
+    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 172.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;

@@ -95,6 +95,15 @@ What is built, in the order it was built. The plan these came from is
   a flip, a roll or a jink by nerve, wounded pilots run boosted, bold ones
   boost to close; terrain outranks all of it. `COMBAT.md`, "Personality,
   nerve and aerobatics".
+- **M20** the HUD kit (row 2 of `DIRECTION.md`): `ui::Hud` with tokens,
+  primitives and two TTF faces; the rally and combat HUDs ported onto it
+  (health and breath plate top-left, one top strip for score/clock/target or
+  timer/checkpoints/progress, airspeed plate with the ability pips at the
+  bottom, gold reticles and brackets, red only for threat and damage); the
+  panels themed the same and docked along the right edge; the debug lines
+  (flight path, ground probe, course spline) off by default;
+  `--hide-panels` for a player's-eye capture. Before/after in
+  `artifacts/hud/`. The screens (title, pause, results, shop) are row 8.
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

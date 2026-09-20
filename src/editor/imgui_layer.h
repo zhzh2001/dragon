@@ -4,6 +4,8 @@
 
 #include "gfx/device.h"
 
+struct ImFont;
+
 namespace editor {
 
 // Dear ImGui setup and per-frame plumbing.
@@ -15,6 +17,10 @@ namespace editor {
 class ImGuiLayer {
 public:
     bool init(gfx::Device& device);
+    // The HUD kit's two faces, or null when no TTF was found (the kit and the
+    // panels then draw with ImGui's default).
+    ImFont* numeral_font() const { return numeral_font_; }
+    ImFont* label_font() const { return label_font_; }
     void shutdown();
 
     // Feed every SDL event here. Returns true if ImGui consumed it, so gameplay
@@ -37,6 +43,8 @@ public:
 
 private:
     bool initialized_ = false;
+    ImFont* numeral_font_ = nullptr;
+    ImFont* label_font_ = nullptr;
     bool has_draw_data_ = false;
 };
 

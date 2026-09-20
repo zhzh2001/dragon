@@ -381,7 +381,7 @@ question is the one that could still change the plan.
 | # | Work | Sessions | Area |
 |---|---|---|---|
 | 1 | ~~Shared lighting, sun angle, palette header, tree/ground grade~~ done 2026-09-17 | 1 | visuals |
-| 2 | HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines | 2 | UI |
+| 2 | ~~HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines~~ done 2026-09-20 | 2 | UI |
 | 2b | ~~**Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel~~ done 2026-09-17, awaiting the playtest gate | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
 | 4 | Grading LUT and bloom | 1 | visuals |
@@ -455,6 +455,16 @@ layer -- drawn aggression, health-moved nerve, flips and rolls as the answer
 to a hit, boosts to close or to run. Gate unchanged. Next: row 2 (HUD kit)
 or row 3 (the run probe); the melee/bot work has had four passes and should
 now be left to playtesting.
+
+2026-09-20: **row 2 is done** (`STATUS.md` M20, before/after in
+`artifacts/hud/`). The kit is `ui::Hud`; the two faces come from the
+machine's system fonts (DIN Condensed Bold for numerals, Avenir Next for
+labels) with ImGui's default as the fallback -- shipping fonts is an asset
+question for later. Two things from section 4 deliberately did not move:
+the Combat panel still opens by default, because its two fun dials have
+nowhere else to live until the pause screen exists (row 8), and the rally
+and match strips share one plate but not one state machine, which the
+screens will bring. Next: row 3, the run probe.
 
 ## 7. Prototyping with concept art
 
