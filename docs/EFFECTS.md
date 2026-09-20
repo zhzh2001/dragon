@@ -50,12 +50,20 @@ scales and an opaque source tag, and only the renderer resolves that tag to a
 profile. A cone with no tag -- a sentinel drone -- keeps the cold hostile blue,
 which is what makes incoming fire readable as incoming at a glance.
 
-Colour choice is constrained by the tonemap, not by taste. Because it ends in a
-gamma encode, **anything bright desaturates toward white**: a pale blue frost
-breath clips to a white smear and reads as nothing at all. Elemental colours
-have to stay mid-value and saturated -- deep cyan rather than white for frost,
-violet rather than pale blue for storm. This is the same rule that forced the
-damage flash to redden instead of brighten.
+Colour choice was constrained by the tonemap, not by taste. Per-channel
+Reinhard plus a gamma encode sends **anything bright toward white**: a pale
+blue frost breath clipped to a white smear, and fire -- many additive puffs
+stacked -- read as cream. Since M23 the composite tonemaps with a
+hue-preserving curve (`hue_preserve` under Grade & bloom: the luminance goes
+through Reinhard, the colour ratios are kept, and a colour that would leave
+the gamut is scaled back by its peak channel rather than clipped channel by
+channel), so a stack of puffs keeps its RATIO however bright it gets -- which
+makes the ratio the colour the player sees. The default fire is therefore a
+deep orange (2.4, 1.15, 0.35), not the old yellow (2.2, 1.5, 0.7). Elemental
+colours still want to be saturated -- deep cyan for frost, violet for storm --
+because a desaturated ratio is a desaturated breath at every brightness now,
+not only at the top. The damage flash still reddens rather than brightens:
+it is drawn on the HUD, after the tonemap.
 
 `audio::Audio` synthesizes every sound at init -- **no audio assets**, in the
 same spirit as the procedural terrain. Continuous streams (wind through a

@@ -115,6 +115,22 @@ struct RigTuning {
     // stoop.
     float tuck_droop_deg = 22.0f;
     float brake_flare_deg = 30.0f;
+    // The flare itself. A landing bird rotates its WHOLE BODY nose-up and
+    // brings the wings forward and up -- protracted, cupped, the tail spread
+    // and dropped -- so the wing plane faces the airflow (pigeon landing
+    // kinematics: the wing is most protracted at the end of the landing, when
+    // the body angle is highest, and wing plane and tail rotate with the
+    // body). The old brake had only the finger flare above and read as a
+    // glide with a shiver in it.
+    float brake_body_pitch_deg = 12.0f;  // root nose-up
+    float brake_raise_deg = 14.0f;       // wings lifted above the glide plane
+    float brake_protract_deg = 16.0f;    // wings swept forward
+    float brake_tail_drop_deg = 14.0f;   // tail below the body line
+    // In a banked braking turn the pitch-up and the protraction ease by this
+    // share of the roll input, and the protraction goes asymmetric -- the low
+    // (inside) wing protracts less, the high wing more -- so the body leans
+    // into the turn instead of sitting up on it, which was the unnatural part.
+    float brake_bank_relief = 0.6f;
     // Folding is distributed by anatomy rather than by one uniform rotation.
     // The values scale the shared fold at the elbow, wrist and fingers. A
     // value of 1 preserves the original progressive profile; an imported wing
@@ -643,11 +659,12 @@ struct RigTuning {
     float leg_trail_deg = 38.0f;
     float front_leg_trail_deg = 30.0f;
     // During an air-brake a flying animal begins to unfold its landing limbs
-    // and lets them float into the airflow. The defaults are zero so existing
-    // models retain the original tucked pose; a model config can opt in to a
-    // partial extension and an engine-forward hip offset.
-    float leg_brake_extend = 0.0f;
-    float leg_brake_forward_deg = 0.0f;
+    // and lets them float into the airflow: a partial extension and an
+    // engine-forward hip offset. Every shipped profile carries its own pair;
+    // the defaults are for a model without one (the hero asset), which used
+    // to brake with its legs still tucked.
+    float leg_brake_extend = 0.6f;
+    float leg_brake_forward_deg = 30.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
     // bird's relaxed foot, not a planted one. This asset parents its feet to the
     // body, so nothing else would ever move them once the ground idle fades.

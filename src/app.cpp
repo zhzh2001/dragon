@@ -1638,6 +1638,12 @@ void App::build_ui(float dt) {
                                               800.0f, "%.0f m");
             replant_now |= ImGui::SliderFloat("tree max slope", &vegetation_settings_.tree_max_slope,
                                               0.3f, 1.0f);
+            replant_now |= ImGui::SliderFloat("skirt trees", &vegetation_settings_.skirt_trees, 1.0f,
+                                              3.0f, "%.2f x extent");
+            replant_now |= ImGui::SliderFloat("skirt cover", &vegetation_settings_.skirt_cover, 0.0f,
+                                              1.0f);
+            ImGui::SliderFloat("tree draw distance", &foliage_.tree_draw_distance, 500.0f, 9000.0f,
+                               "%.0f m");
             replant_now |= ImGui::SliderFloat("slope sink", &vegetation_settings_.slope_sink, 0.0f,
                                               12.0f, "%.1f m");
             ImGui::SliderFloat("grass radius", &vegetation_settings_.grass_radius, 30.0f, 250.0f,
@@ -1647,7 +1653,8 @@ void App::build_ui(float dt) {
             ImGui::SliderFloat("wind", &vegetation_settings_.wind, 0.0f, 3.0f);
             ImGui::SliderFloat("crown detail distance", &foliage_.lod_distance, 40.0f, 800.0f,
                                "%.0f m");
-            ImGui::TextDisabled("%u trees, %u grass tufts near the camera", foliage_.tree_count(),
+            ImGui::TextDisabled("%u trees (%u drawn), %u grass tufts near the camera", foliage_.tree_count(),
+                                foliage_.trees_drawn(),
                                 foliage_.grass_count());
             if (replant_now && !ImGui::IsAnyItemActive()) replant();
             ImGui::TreePop();
@@ -1699,6 +1706,7 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("lift", &g.lift, -0.1f, 0.2f, "%.3f");
         ImGui::SliderFloat("gamma", &g.gamma, 0.6f, 1.6f, "%.2f");
         ImGui::SliderFloat("vignette", &g.vignette, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("hue preserve", &g.hue_preserve, 0.0f, 1.0f, "%.2f");
         ImGui::ColorEdit3("shadows toward", g.shadows_rgb, ImGuiColorEditFlags_Float);
         ImGui::SliderFloat("shadows strength", &g.shadows_strength, 0.0f, 1.0f, "%.2f");
         ImGui::ColorEdit3("highlights toward", g.highlights_rgb, ImGuiColorEditFlags_Float);
@@ -2307,6 +2315,11 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("upstroke fold", &rig.upstroke_fold_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("brake flare", &rig.brake_flare_deg, 0.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("brake body pitch", &rig.brake_body_pitch_deg, 0.0f, 30.0f, "%.0f deg");
+        ImGui::SliderFloat("brake raise", &rig.brake_raise_deg, 0.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("brake protract", &rig.brake_protract_deg, 0.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("brake tail drop", &rig.brake_tail_drop_deg, 0.0f, 40.0f, "%.0f deg");
+        ImGui::SliderFloat("brake bank relief", &rig.brake_bank_relief, 0.0f, 1.0f);
         ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
         ImGui::SliderFloat("wrist fold scale", &rig.wing_wrist_fold_scale, 0.0f, 2.0f);
         ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
@@ -3426,13 +3439,9 @@ void App::draw_combat_hud() {
             std::snprintf(line, sizeof(line), flaming ? "%.0f m  FLAME" : "%.0f m", range);
             hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
                        flaming ? tk.flame : locked ? tk.lock : tk.mark, 12.0f);
-            // A rival's health and its aggression under the bracket. Health
-            // says whether to press the attack; aggression is drawn once per
-            // pilot and held for the match, so it is what tells the bots
-            // apart -- the wary one and the one that will turn into you. The
-            // tick on the aggression bar is its nerve this moment: that
-            // aggression moved by its wounds, the number its next decision
-            // actually uses.
+            // A rival's health under the bracket: whether to press the attack.
+            // (Its aggression was drawn there too for one build and told the
+            // player nothing they acted on; the Combat panel still lists it.)
             const BotShip* ship = nullptr;
             for (const auto& bot : bots_) {
                 if (bot->slot == index) ship = bot.get();
@@ -3440,17 +3449,10 @@ void App::draw_combat_hud() {
             float below = screen.y + half + hud_.px(4.0f);
             if (ship) {
                 const float bar_w = core::maxf(half * 2.0f, hud_.px(40.0f));
-                const float x = screen.x - bar_w * 0.5f;
                 const float health_h = hud_.px(4.5f);
-                const float aggression_h = hud_.px(3.0f);
                 const float health = sentinel.max_health > 0.0f ? sentinel.health / sentinel.max_health : 0.0f;
-                hud_.bar(ImVec2(x, below), bar_w, health_h, health, tk.health);
-                below += health_h + hud_.px(2.0f);
-                hud_.bar(ImVec2(x, below), bar_w, aggression_h, ship->pilot.aggression(), tk.accent);
-                const float tick_x = x + bar_w * core::saturate(ship->pilot.nerve());
-                draw->AddLine(ImVec2(tick_x, below - hud_.px(1.5f)),
-                              ImVec2(tick_x, below + aggression_h + hud_.px(1.5f)), tk.text, hud_.px(1.2f));
-                below += aggression_h + hud_.px(3.0f);
+                hud_.bar(ImVec2(screen.x - bar_w * 0.5f, below), bar_w, health_h, health, tk.health);
+                below += health_h + hud_.px(3.0f);
             }
             if (sentinel.stun > 0.0f) {
                 hud_.label(ImVec2(screen.x, below), "STUNNED", tk.accent, 11.0f, ui::Align::Centre);

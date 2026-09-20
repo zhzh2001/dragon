@@ -333,6 +333,11 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tuck_fold_deg),
     RIG_FLOAT_FIELD(tuck_droop_deg),
     RIG_FLOAT_FIELD(brake_flare_deg),
+    RIG_FLOAT_FIELD(brake_body_pitch_deg),
+    RIG_FLOAT_FIELD(brake_raise_deg),
+    RIG_FLOAT_FIELD(brake_protract_deg),
+    RIG_FLOAT_FIELD(brake_tail_drop_deg),
+    RIG_FLOAT_FIELD(brake_bank_relief),
     RIG_FLOAT_FIELD(wing_elbow_fold_scale),
     RIG_FLOAT_FIELD(wing_wrist_fold_scale),
     RIG_FLOAT_FIELD(wing_finger_fold_scale),
@@ -854,6 +859,15 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // Sweep and fold go AFT and twist is washout (leading edge down): both are
     // rotations whose sense depends on which way the model faces.
     const float aft = model_forward_z_;
+    // The brake posture. Bank relief: a braking turn is a lean, not a sit-up,
+    // so the roll input eases the pitch-up and the protraction and makes the
+    // protraction asymmetric below. The root pitch rides on the gesture
+    // layer's pitch, which drive_gestures() reset just before this and the
+    // root application after drive_wings() reads (pitch + is nose up).
+    const float bank = core::clampf(state.control.z, -1.0f, 1.0f);
+    const float bank_relief =
+        1.0f - core::saturate(tuning.brake_bank_relief) * std::fabs(bank);
+    gesture_pitch_ += core::radians(tuning.brake_body_pitch_deg) * flare * bank_relief;
     // Past cruise the wings sweep back and part-fold on their own -- a stoop
     // is a shape speed makes, not only a button. The speed posture fills in
     // whatever the tuck has not already taken.
@@ -880,8 +894,11 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         const float limit = core::radians(tuning.wing_flap_limit_deg);
         flap_angle = core::clampf(flap_angle, -limit, limit);
     }
+    // The raise is a posture term like the load flex, so the flap ceiling
+    // does not eat it.
     const float non_flap_base_common =
-        core::radians(tuning.wing_load_flex_deg) * load_smoothed_ - core::radians(droop_deg);
+        core::radians(tuning.wing_load_flex_deg) * load_smoothed_ - core::radians(droop_deg) +
+        core::radians(tuning.brake_raise_deg) * flare;
     const float base = flap_angle + non_flap_base_common;
     // Membrane flutter: the outer wing buffets at speed and shudders in a
     // flare. Two incommensurate frequencies so it never reads as a metronome,
@@ -962,6 +979,12 @@ void DragonRig::drive_wings(const game::FlightState& state) {
 
     for (int side = 0; side < 2; ++side) {
         const float sign = side == 0 ? 1.0f : -1.0f;
+        // Protraction in the flare, less on the inside (low) wing of a banked
+        // brake and more on the high one. Negative sweep is forward.
+        const float protract_asymmetry =
+            1.0f - 0.5f * core::saturate(tuning.brake_bank_relief) * bank * sign;
+        const float side_sweep_deg =
+            sweep_deg - tuning.brake_protract_deg * flare * bank_relief * protract_asymmetry;
 
         // Walk outward from the shoulder, then continue into every finger.
         //
@@ -1143,7 +1166,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             const float progress = progress_at(size_t(index_in_chain), size_t(chain_length));
             const float fold_progress =
                 fold_share(size_t(index_in_chain), size_t(chain_length), finger_index >= 0);
-            const float sweep = core::radians(sweep_deg) * sign * aft *
+            const float sweep = core::radians(side_sweep_deg) * sign * aft *
                                 (0.4f + 0.6f * progress) * sweep_normalize;
             // Recovery compacts the outer wing first and then lets it reopen
             // before the phase wraps. Multiplying by the extension envelope
@@ -2404,7 +2427,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // input works it as an elevator, dropping the tail as the nose rises. The
     // control positions are already smoothed by the flight model.
     core::Vec2 tail_steer{
-        state.control.x * tuning.tail_elevator_deg,
+        state.control.x * tuning.tail_elevator_deg +
+            core::saturate(state.wing_brake) * tuning.brake_tail_drop_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
 
     // The neck leads the manoeuvre and lowers into the wind at speed -- and a

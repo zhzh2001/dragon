@@ -54,7 +54,7 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
     if (!settings.trees) return;
 
     const TerrainSettings& t = terrain.settings();
-    const float extent = t.half_extent - 30.0f;
+    const float extent = t.half_extent * core::maxf(settings.skirt_trees, 1.0f) - 30.0f;
     const float spacing = core::maxf(settings.tree_spacing, 3.0f);
     const float floor = t.valley_floor;
     const float treeline = floor + settings.treeline_above_floor;
@@ -71,8 +71,13 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
             // an even sprinkle. Both read from the air.
             const float stands = forest_.fbm(x / 420.0f, z / 420.0f, 3);
             const float clumps = forest_.fbm(x / 55.0f + 17.0f, z / 55.0f - 9.0f, 2);
+            // Past the playable edge the cover thins to the skirt share, over
+            // a band wide enough that the edge is not a ruler line.
+            const float outside =
+                core::saturate((core::maxf(std::fabs(x), std::fabs(z)) - t.half_extent) / 150.0f);
             const float density = core::saturate((stands + 0.55f) * 0.95f) *
-                                  core::saturate(0.55f + clumps * 1.4f) * settings.forest_cover * 2.0f;
+                                  core::saturate(0.55f + clumps * 1.4f) * settings.forest_cover * 2.0f *
+                                  core::lerpf(1.0f, core::saturate(settings.skirt_cover), outside);
             if (hash.next() > density) continue;
 
             const float height = terrain.height_at(x, z);
@@ -141,7 +146,7 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
     const int ix1 = int(std::ceil((centre.x + radius) / spacing));
     const int iz0 = int(std::floor((centre.z - radius) / spacing));
     const int iz1 = int(std::ceil((centre.z + radius) / spacing));
-    const float limit = t.half_extent - 10.0f;
+    const float limit = t.half_extent * core::maxf(settings.skirt_trees, 1.0f) - 10.0f;
     size_t total = 0;
 
     for (int iz = iz0; iz <= iz1; ++iz) {

@@ -32,6 +32,13 @@ struct PostSettings {
     float bloom_threshold = 1.1f;
     float bloom_knee = 0.5f;
     float vignette = 0.12f;
+    // How much of the tonemap preserves hue. Reinhard per channel sends every
+    // bright colour to white -- a stack of additive fire puffs became cream,
+    // frost became a white smear. At 1 the curve maps luminance only and
+    // keeps the ratios, so fire stays orange however bright it gets; at 0 it
+    // is the old per-channel curve. The default keeps a little of the
+    // white-hot core.
+    float hue_preserve = 0.8f;
     float temperature = 0.03f;  // a touch warm
     float tint = 0.0f;
     float lift = 0.0f;

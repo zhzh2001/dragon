@@ -125,6 +125,23 @@ What is built, in the order it was built. The plan these came from is
   coarse cards are the impostor, in one draw. `WORLD.md`, "Vegetation v2".
   Renders in `artifacts/vegetation-v2/`.
 
+- **M23** after the row 4/5 playtest: the composite tonemaps with a
+  hue-preserving curve (luminance through Reinhard, ratios kept, an
+  out-of-gamut colour scaled by its peak channel; `hue_preserve` 0.8 blends
+  a little of the old white-hot core back in), so a stack of fire puffs is
+  orange and frost is blue instead of both going cream; the default fire is
+  a deeper orange to match. The brake is a flare: root nose-up, wings
+  raised and protracted, tail dropped, legs forward, eased and made
+  asymmetric by the roll input so a braking turn leans instead of sitting
+  up (pigeon landing kinematics; `brake_*` dials in the Dragon panel).
+  Trees continue onto the skirt at a thinner cover (`skirt_trees`,
+  `skirt_cover`), the ground behind the spawn no longer bare; the tree
+  instances are uploaded sorted into 320 m ground cells and each pass draws
+  only the cells its frustum and `tree_draw_distance` admit, so half again
+  as many trees cost the same frame. The health and breath plate went back
+  to the bottom centre, bots got a health bar under the bracket, and the
+  grade was retuned in perceptual space after reading a stop dark.
+  Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was
   overshooting its commanded angle by up to 49%, both from normalizers that

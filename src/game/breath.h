@@ -35,9 +35,12 @@ struct BreathScales {
 struct BreathProfile {
     BreathScales scales;
 
-    // Hot core and cool tip, additive. Values above 1 are deliberate.
-    core::Vec3 hot{2.2f, 1.5f, 0.7f};
-    core::Vec3 cool{1.0f, 0.25f, 0.04f};
+    // Hot core and cool tip, additive. Values above 1 are deliberate. The
+    // core is a deep orange, not a yellow: since the tonemap preserves hue,
+    // a stack of puffs keeps this ratio however bright it gets, so the ratio
+    // is the colour the player sees -- the old (2.2, 1.5, 0.7) read as cream.
+    core::Vec3 hot{2.4f, 1.15f, 0.35f};
+    core::Vec3 cool{1.0f, 0.2f, 0.03f};
 
     // Vertical acceleration on each puff: positive billows upward like flame,
     // negative makes a heavy breath pour downward like frost or gas.

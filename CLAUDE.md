@@ -341,10 +341,13 @@ These are not about one system, and every one of them cost real time.
   the anchor count.
 - **A copy pass cannot open inside a render pass.** Per-frame uploads
   (particles, grass) stage before the pass begins.
-- **The tonemap ends in a gamma encode**, so anything bright desaturates
-  toward white -- since the post stack, it blooms first, which is the fix, but
-  the whitening is still there past the bloom. A white flash is unreadable as
-  damage; redden instead. A light source should not also be lit.
+- **The tonemap preserves hue** (`hue_preserve` in the composite): a bright
+  colour keeps its ratios and is scaled back by its peak channel instead of
+  clipping channel by channel, so fire is orange and frost is blue however
+  many puffs stack. Before it, per-channel Reinhard sent everything bright to
+  white and every emissive colour had to be tuned around that. A light source
+  should still not also be lit, and a damage flash still reddens rather than
+  brightens -- it is on the HUD, past the tonemap.
 - **Initialise derived state at spawn, not on the first tick.** A sentinel
   whose position was only set by its update sat at the world origin as a live,
   shootable target.

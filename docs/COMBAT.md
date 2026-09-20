@@ -233,12 +233,10 @@ flagged external -- the belt to the button's braces.
 A **manual aim** checkbox zeroes the assist (and restores the exact slider
 value after), the aim cross is big enough to see, and a bot holding its flame
 turns its HUD bracket red with a FLAME tag -- the head tracking is the diegetic
-tell, but a tell nobody notices is not a tell. Under every bot's bracket sit
-two bars: its health in the dull red, and its drawn aggression in gold with a
-tick at its nerve this moment. Health says whether to press; aggression is
-fixed per pilot for the match, so it is what tells the bots apart -- the wary
-one and the one that will turn into you. The Combat panel's bot list prints
-both numbers.
+tell, but a tell nobody notices is not a tell. Under every bot's bracket sits
+its health bar, in the dull red: whether to press. (Its aggression was drawn
+there too for one build and told the player nothing they acted on; the Combat
+panel's bot list prints aggression and nerve.)
 
 **Fire leaves the mouth.** The app feeds the rig's animated head position to
 `Combat::set_muzzle` each frame, so the player's flame and fireballs start

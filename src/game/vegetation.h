@@ -32,6 +32,12 @@ struct VegetationSettings {
     // A plant on a slope sinks this many metres per unit of (1 - normal.y), so
     // its downhill skirt meets the ground instead of hanging in the air.
     float slope_sink = 6.0f;
+    // Trees continue past the playable edge onto the skirt, out to this
+    // multiple of the half extent and at this share of the cover. The spawn
+    // sits at 90% of the extent, so without this the ground behind the start
+    // was bare to the horizon.
+    float skirt_trees = 1.6f;
+    float skirt_cover = 0.6f;
 
     // Grass lives only near the camera: tufts this far out, thinned by distance.
     float grass_radius = 110.0f;

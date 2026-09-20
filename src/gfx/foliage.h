@@ -44,6 +44,11 @@ public:
                           const core::Mat4& light_view_proj, float time);
 
     uint32_t tree_count() const;
+    // Trees drawn in the last main pass, after the cell culling.
+    uint32_t trees_drawn() const { return trees_drawn_; }
+    // Trees past this distance from the camera are not drawn at all. Beyond
+    // it a tree is under a pixel; the LOD dither has already taken its crowns.
+    float tree_draw_distance = 4200.0f;
     uint32_t grass_count() const;
 
     // Sway amplitude in metres at the top of a plant.
@@ -70,11 +75,24 @@ private:
     SDL_GPUSampler* card_sampler_ = nullptr;
     // Binds the two card textures at fragment slots `first` and `first + 1`.
     void bind_cards(SDL_GPURenderPass* pass, uint32_t first) const;
+    // Static instances are uploaded sorted into square ground cells, each
+    // with a bounding sphere, so a draw is one instanced call per cell that
+    // the frustum and the distance admit. Six thousand trees over the valley
+    // were one draw; sixteen thousand out to the skirt could not be.
+    struct Cell {
+        core::Vec3 centre;
+        float radius = 0.0f;
+        uint32_t first = 0;
+        uint32_t count = 0;
+    };
     struct StaticSet {
         Mesh mesh;
         SDL_GPUBuffer* instances = nullptr;
         uint32_t count = 0;
+        std::vector<Cell> cells;
     };
+    static constexpr float CELL_SIZE = 320.0f;
+    uint32_t trees_drawn_ = 0;
     struct StreamSet {
         Mesh mesh;
         SDL_GPUBuffer* instances = nullptr;

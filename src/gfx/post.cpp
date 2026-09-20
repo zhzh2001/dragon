@@ -61,7 +61,8 @@ PostUniforms PostProcess::uniforms_for(const PostSettings& s, float w, float h,
                                        core::Vec2 direction) const {
     PostUniforms u;
     u.grade = core::Vec4{s.exposure, s.contrast, s.saturation, s.enabled ? s.bloom_strength : 0.0f};
-    u.bloom = core::Vec4{s.bloom_threshold, s.bloom_knee, s.enabled ? s.vignette : 0.0f, 0.0f};
+    u.bloom = core::Vec4{s.bloom_threshold, s.bloom_knee, s.enabled ? s.vignette : 0.0f,
+                         s.enabled ? s.hue_preserve : 0.0f};
     u.shadows = core::Vec4{s.shadows_rgb[0], s.shadows_rgb[1], s.shadows_rgb[2],
                            s.enabled ? s.shadows_strength : 0.0f};
     u.highlights = core::Vec4{s.highlights_rgb[0], s.highlights_rgb[1], s.highlights_rgb[2],

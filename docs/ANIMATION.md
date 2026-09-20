@@ -995,3 +995,24 @@ behind and below) and the brake (side, below) on all seven species,
 `artifacts/legs_swing_*.png`. **A pose that hides its own motion is the
 wrong pose even when every number is right; judge a pendulum from a
 sequence, never from a frame.**
+
+**The brake is a flare (M23).** The brake had only the finger flare and the
+buffet, and read as a glide with a shiver in it -- and in a braking turn the
+level body under a banked wing read as a skid. A landing bird rotates its
+whole body nose-up and brings the wings forward and up so the wing plane
+faces the airflow, the tail spread and dropped, the legs reaching (pigeon
+landing kinematics: the wing is most protracted at the end of the landing,
+when the body angle is highest, and wing plane and tail rotate WITH the
+body). So the rig now adds, scaled by `wing_brake`: a root pitch-up on the
+gesture layer's pitch (`brake_body_pitch_deg` 12), a wing raise as a posture
+term outside the flap ceiling (`brake_raise_deg` 14), a forward sweep
+(`brake_protract_deg` 16), a tail drop through the elevator
+(`brake_tail_drop_deg` 14), and the leg float that the shipped profiles
+already carried, now also the code default (0.6, 30 degrees) so the hero
+asset gets it too. `brake_bank_relief` (0.6) is the turn: the roll input
+eases the pitch-up and the protraction by that share, and the protraction
+goes asymmetric -- the low wing protracts less, the high wing more -- so a
+braking turn is a lean, not a sit-up. Verified from the side, rear, quarter
+and above in `--studio 7`, in a braking turn (`--input 0.3,0.7,0,0,0,1`),
+at the head, and on stormsail, blightmaw, rimefang and tidewrack:
+`artifacts/brake/`.

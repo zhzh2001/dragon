@@ -10,7 +10,23 @@
 // is that bright things now bloom before they clip instead of desaturating
 // toward white, and that there is a grade at all.
 
-static float3 tonemap(float3 color) { return color / (1.0 + color); }
+static float3 tonemap_channel(float3 color) { return color / (1.0 + color); }
+
+// The same curve on the luminance alone, the colour ratios kept, and a bright
+// colour that would leave the gamut scaled back by its peak channel instead of
+// clipped channel by channel. Per-channel Reinhard turns every bright colour
+// white; this keeps fire orange and frost blue however many puffs stack.
+static float3 tonemap_hue(float3 color) {
+    const float3 LUMA = float3(0.2126, 0.7152, 0.0722);
+    float l = dot(color, LUMA);
+    float3 mapped = color * ((l / (1.0 + l)) / max(l, 1e-4));
+    float peak = max(mapped.r, max(mapped.g, mapped.b));
+    return peak > 1.0 ? mapped / peak : mapped;
+}
+
+static float3 tonemap(float3 color, float hue_preserve) {
+    return mix(tonemap_channel(color), tonemap_hue(color), hue_preserve);
+}
 
 fragment float4 fs_main(PostVertex in [[stage_in]],
                         constant PostUniforms& post [[buffer(0)]],
@@ -30,7 +46,7 @@ fragment float4 fs_main(PostVertex in [[stage_in]],
     c *= float3(1.0 + temperature, 1.0 - tint * 0.5, 1.0 - temperature) *
          float3(1.0, 1.0 + tint, 1.0);
 
-    c = tonemap(max(c, 0.0));
+    c = tonemap(max(c, 0.0), post.bloom.w);
 
     // Everything from here is done on the DISPLAY-REFERRED, gamma-encoded
     // value. The first grade did its contrast in linear light about a pivot

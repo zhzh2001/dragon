@@ -1,6 +1,7 @@
 #include "gfx/foliage.h"
 #include "gfx/palette.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -505,12 +506,86 @@ void Foliage::set_trees(Device& device, TreeKind kind, const std::vector<Foliage
     if (set.instances) SDL_ReleaseGPUBuffer(device.gpu(), set.instances);
     set.instances = nullptr;
     set.count = 0;
+    set.cells.clear();
     if (trees.empty()) return;
-    set.instances = create_buffer_with_data(device.gpu(), trees.data(),
-                                            uint32_t(trees.size() * sizeof(FoliageInstance)),
+
+    // Sort into ground cells so each cell is one contiguous instance range.
+    auto cell_key = [](const FoliageInstance& t) {
+        const int cx = int(std::floor(t.position_scale.x / CELL_SIZE));
+        const int cz = int(std::floor(t.position_scale.z / CELL_SIZE));
+        return (int64_t(cz) << 32) ^ int64_t(uint32_t(cx));
+    };
+    std::vector<FoliageInstance> sorted = trees;
+    std::stable_sort(sorted.begin(), sorted.end(), [&](const FoliageInstance& a,
+                                                        const FoliageInstance& b) {
+        return cell_key(a) < cell_key(b);
+    });
+    const float height = tree_height(kind);
+    size_t begin = 0;
+    while (begin < sorted.size()) {
+        size_t end = begin + 1;
+        while (end < sorted.size() && cell_key(sorted[end]) == cell_key(sorted[begin])) ++end;
+        Cell cell;
+        core::Vec3 lo = sorted[begin].position_scale.xyz(), hi = lo;
+        for (size_t i = begin; i < end; ++i) {
+            const core::Vec3 p = sorted[i].position_scale.xyz();
+            lo = core::Vec3{core::minf(lo.x, p.x), core::minf(lo.y, p.y), core::minf(lo.z, p.z)};
+            hi = core::Vec3{core::maxf(hi.x, p.x), core::maxf(hi.y, p.y), core::maxf(hi.z, p.z)};
+        }
+        // The sphere covers the bases plus the tallest tree's crown and sway.
+        hi.y += height * 1.8f;
+        cell.centre = (lo + hi) * 0.5f;
+        cell.radius = core::length(hi - lo) * 0.5f + height * 0.5f;
+        cell.first = uint32_t(begin);
+        cell.count = uint32_t(end - begin);
+        set.cells.push_back(cell);
+        begin = end;
+    }
+
+    set.instances = create_buffer_with_data(device.gpu(), sorted.data(),
+                                            uint32_t(sorted.size() * sizeof(FoliageInstance)),
                                             SDL_GPU_BUFFERUSAGE_VERTEX, "trees");
-    if (set.instances) set.count = uint32_t(trees.size());
+    if (set.instances) set.count = uint32_t(sorted.size());
 }
+
+namespace {
+
+// The six clip planes of a [0, 1] clip-depth projection (Gribb/Hartmann),
+// each normalised, as (normal, d) with inside being dot(n, p) + d >= 0. Row i
+// of the column-major matrix is col[c][i]. Valid for the reversed-Z main
+// projection and the conventional shadow ortho alike: both keep z in [0, w].
+struct Frustum {
+    core::Vec4 planes[6];
+    int count = 0;
+
+    explicit Frustum(const core::Mat4& m) {
+        auto row = [&](int i) {
+            return core::Vec4{m.col[0][i], m.col[1][i], m.col[2][i], m.col[3][i]};
+        };
+        const core::Vec4 r0 = row(0), r1 = row(1), r2 = row(2), r3 = row(3);
+        auto add = [&](core::Vec4 p) {
+            const float len = core::length(p.xyz());
+            if (len < 1e-6f) return;
+            planes[count++] = core::Vec4{p.x / len, p.y / len, p.z / len, p.w / len};
+        };
+        add(core::Vec4{r3.x + r0.x, r3.y + r0.y, r3.z + r0.z, r3.w + r0.w});  // left
+        add(core::Vec4{r3.x - r0.x, r3.y - r0.y, r3.z - r0.z, r3.w - r0.w});  // right
+        add(core::Vec4{r3.x + r1.x, r3.y + r1.y, r3.z + r1.z, r3.w + r1.w});  // bottom
+        add(core::Vec4{r3.x - r1.x, r3.y - r1.y, r3.z - r1.z, r3.w - r1.w});  // top
+        add(r2);                                                                // z >= 0
+        add(core::Vec4{r3.x - r2.x, r3.y - r2.y, r3.z - r2.z, r3.w - r2.w});  // z <= w
+    }
+
+    bool sees(core::Vec3 centre, float radius) const {
+        for (int i = 0; i < count; ++i) {
+            const core::Vec4& p = planes[i];
+            if (p.x * centre.x + p.y * centre.y + p.z * centre.z + p.w < -radius) return false;
+        }
+        return true;
+    }
+};
+
+}  // namespace
 
 bool Foliage::ensure_capacity(StreamSet& set, uint32_t count, const char* name) {
     if (count <= set.capacity) return true;
@@ -594,9 +669,42 @@ void Foliage::draw(Device& device, SDL_GPURenderPass* pass, const SceneUniforms&
 
 void Foliage::draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene) {
     // No fade: a forest that thins out with distance is a forest that pops.
+    // One instanced draw per ground cell the frustum and the distance admit.
+    trees_drawn_ = 0;
+    if (!pass) return;
+    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(pipeline_);
+    if (!pipeline) return;
+    const Frustum frustum(scene.view_proj);
+    const core::Vec3 eye = scene.camera_position.xyz();
+    SDL_BindGPUGraphicsPipeline(pass, pipeline);
+    SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
+    SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
+    if (shadow_map_ && shadow_map_->texture()) {
+        SDL_GPUTextureSamplerBinding binding = {};
+        binding.texture = shadow_map_->texture();
+        binding.sampler = shadow_map_->sampler();
+        SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+    }
+    bind_cards(pass, 1);
     for (int k = 0; k < TREE_KINDS; ++k) {
-        draw(device, pass, scene, trees_[k].mesh, trees_[k].instances, trees_[k].count, 1e8f,
-             2e8f, tree_height(TreeKind(k)));
+        const StaticSet& set = trees_[k];
+        if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
+        Params params;
+        params.wind_time_fade = core::Vec4{wind, scene.view_params.z, 1e8f, 2e8f};
+        params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, 0.0f, 0.0f};
+        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
+        SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
+        set.mesh.bind(pass);
+        SDL_GPUBufferBinding instance_binding = {};
+        instance_binding.buffer = set.instances;
+        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        for (const Cell& cell : set.cells) {
+            if (core::distance(eye, cell.centre) - cell.radius > tree_draw_distance) continue;
+            if (!frustum.sees(cell.centre, cell.radius)) continue;
+            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0,
+                                         cell.first);
+            trees_drawn_ += cell.count;
+        }
     }
 }
 
@@ -626,7 +734,14 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
         SDL_GPUBufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
         SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
-        SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), set.count, 0, 0, 0);
+        // The light's box is the shadow map's extent about the camera; a
+        // cell outside it cannot shadow anything that is drawn.
+        const Frustum light(light_view_proj);
+        for (const Cell& cell : set.cells) {
+            if (!light.sees(cell.centre, cell.radius)) continue;
+            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0,
+                                         cell.first);
+        }
     }
 }
 

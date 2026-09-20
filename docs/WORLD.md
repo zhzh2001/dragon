@@ -106,3 +106,23 @@ generates.
 What v1 got right stays: instancing, the sway, the palette, the placement
 by slope and altitude. Renders before and after in `artifacts/vegetation-v2/`.
 
+## Trees on the skirt, and cells (2026-09-20)
+
+Placement stopped at the playable edge, and the spawn sits at 90% of the
+extent, so the ground behind the start was bare to the horizon. Trees now
+continue onto the skirt out to `skirt_trees` times the half extent (1.6),
+thinning over a 150 m band to `skirt_cover` (0.6) of the cover; the skirt
+grid's `height_at` places them, and the grass follows the same limit. That
+took the valley from 6.7 k to 9.9 k trees.
+
+The renderer stopped drawing them all. `Foliage::set_trees` uploads each
+kind sorted into 320 m ground cells, each with a bounding sphere over its
+bases plus the tallest crown; `draw_trees` extracts the six clip planes from
+the view-projection (Gribb/Hartmann, valid for the reversed-Z main
+projection and the shadow ortho alike) and issues one instanced draw per
+cell the frustum and `tree_draw_distance` (4200 m) admit, and the depth pass
+does the same against the light's box. The Vegetation panel prints trees
+placed and trees drawn. Six hundred headless frames took the same wall time
+before and after with half again as many trees. `artifacts/vegetation-v2/
+skirt_trees_behind_start.png` is the view back over the spawn.
+
