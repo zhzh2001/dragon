@@ -32,18 +32,33 @@ fragment float4 fs_main(PostVertex in [[stage_in]],
 
     c = tonemap(max(c, 0.0));
 
-    // Split-toning on the display-referred value: shadows toward one colour,
-    // highlights toward another, by luminance.
-    float luma = dot(c, float3(0.2126, 0.7152, 0.0722));
-    float shadow_weight = 1.0 - smoothstep(0.0, 0.5, luma);
-    float highlight_weight = smoothstep(0.4, 1.0, luma);
-    c = mix(c, c * post.shadows.rgb, shadow_weight * post.shadows.a);
-    c = mix(c, c * post.highlights.rgb, highlight_weight * post.highlights.a);
+    // Everything from here is done on the DISPLAY-REFERRED, gamma-encoded
+    // value. The first grade did its contrast in linear light about a pivot
+    // of 0.18, and a shadow at 0.02 linear pushed away from that pivot went
+    // to 0.005 -- a third of its brightness on screen. The whole picture
+    // read a stop darker than the ungraded one, with the dark half crushed.
+    // In perceptual space the same dial moves shadows and highlights by the
+    // same amount the eye sees, which is what a contrast slider is for.
+    c = pow(c, float3(1.0 / 2.2));
+    const float3 LUMA = float3(0.2126, 0.7152, 0.0722);
 
-    // Contrast about middle grey, saturation about the luma, lift and gamma.
-    const float pivot = 0.18;
+    // Split-toning: shadows toward one colour, highlights toward another, by
+    // luminance. The tone colours are normalised to unit luminance so they
+    // shift hue without changing brightness -- a cool shadow is not a darker
+    // shadow.
+    float luma = dot(c, LUMA);
+    float shadow_weight = 1.0 - smoothstep(0.0, 0.6, luma);
+    float highlight_weight = smoothstep(0.5, 1.0, luma);
+    float3 shadow_tone = post.shadows.rgb / max(dot(post.shadows.rgb, LUMA), 1e-3);
+    float3 highlight_tone = post.highlights.rgb / max(dot(post.highlights.rgb, LUMA), 1e-3);
+    c = mix(c, c * shadow_tone, shadow_weight * post.shadows.a);
+    c = mix(c, c * highlight_tone, highlight_weight * post.highlights.a);
+
+    // Contrast about display middle grey, saturation about the luma, lift and
+    // gamma.
+    const float pivot = 0.46;
     c = (c - pivot) * post.grade.y + pivot;
-    luma = dot(c, float3(0.2126, 0.7152, 0.0722));
+    luma = dot(c, LUMA);
     c = mix(float3(luma), c, post.grade.z);
     c = c + post.balance.z * (1.0 - c);
     c = pow(max(c, 0.0), float3(1.0 / max(post.balance.w, 0.05)));
@@ -54,5 +69,5 @@ fragment float4 fs_main(PostVertex in [[stage_in]],
     float v = 1.0 - post.bloom.z * smoothstep(0.35, 0.95, length(d) * 1.4142);
     c *= v;
 
-    return float4(pow(saturate(c), float3(1.0 / 2.2)), 1.0);
+    return float4(saturate(c), 1.0);
 }

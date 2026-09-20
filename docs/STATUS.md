@@ -97,7 +97,8 @@ What is built, in the order it was built. The plan these came from is
   nerve and aerobatics".
 - **M20** the HUD kit (row 2 of `DIRECTION.md`): `ui::Hud` with tokens,
   primitives and two TTF faces; the rally and combat HUDs ported onto it
-  (health and breath plate top-left, one top strip for score/clock/target or
+  (health and breath plate at the bottom centre above the airspeed -- it
+  spent one build top-left and was read only once empty -- one top strip for score/clock/target or
   timer/checkpoints/progress, airspeed plate with the ability pips at the
   bottom, gold reticles and brackets, red only for threat and damage); the
   panels themed the same and docked along the right edge; the debug lines
@@ -110,7 +111,13 @@ What is built, in the order it was built. The plan these came from is
   lighting value was tuned against) and grades -- exposure, contrast,
   saturation, white balance, split-toning, lift, gamma, vignette -- into the
   8-bit target the HUD draws onto. Fire glows instead of clipping to white.
-  Before/after in `artifacts/post/`.
+  Before/after in `artifacts/post/`. The first grade read a stop dark: it
+  applied contrast in linear light about 0.18, which crushed every shadow
+  below the pivot, and its split-tone colours darkened as they tinted. The
+  grade now works on the gamma-encoded value about display middle grey,
+  the tone colours are normalised to unit luminance, and the graded frame
+  measures within two percent of the ungraded one (`--no-post` renders that
+  for comparison; `artifacts/post/grade_*.png`).
 - **M22** vegetation v2 (row 5): crowns are alpha-tested leaf and needle
   cards cut from two grey detail maps rendered in Blender and coloured by
   the palette; bark streaked in the shader; dark undersides; card-shaped

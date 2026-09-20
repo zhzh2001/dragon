@@ -56,6 +56,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
 | `--hide-ui` | Hide the ImGui panels AND the HUD, for world-only captures. |
 | `--hide-panels` | Hide the panels but keep the HUD: a capture of what the player sees. |
+| `--no-post` | Skip the grade and the bloom: the same frame as it was before the post stack, for a before/after. |
 | `--telemetry [N]` | Log one line of flight state every N frames (default 60), plus a combat line (health, kills, bites swung/landed/taken) when combat is on. A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--cam-mode chase\|action\|cinematic\|fp` | Pick a camera preset. |

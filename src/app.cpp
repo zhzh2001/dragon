@@ -39,6 +39,8 @@ Options parse_options(int argc, char** argv) {
             options.cycle_models = SDL_atoi(argv[++i]);
         } else if (arg == "--hide-panels") {
             options.hide_panels = true;
+        } else if (arg == "--no-post") {
+            options.no_post = true;
         } else if (arg == "--maneuver" && i + 1 < argc) {
             const std::string which = argv[++i];
             options.maneuver = which == "roll" ? 1 : which == "flip" ? 2 : 0;
@@ -146,6 +148,7 @@ bool App::init(const Options& options) {
     if (!ui_.init(device_)) return false;
     hud_.set_fonts(ui_.numeral_font(), ui_.label_font());
     if (options.hide_panels) show_panels_ = false;
+    if (options.no_post) post_settings_.enabled = false;
 
     pipelines_.init(&device_, SHADER_ROOT);
     if (!debug_.init(&device_, &pipelines_)) return false;
@@ -3257,11 +3260,17 @@ void App::draw_combat_hud() {
                                       edge, edge);
     }
 
-    // ---- health and breath, top left ----
+    // ---- health and breath, bottom centre, above the airspeed ----
+    // They spent one build in the top-left corner and came back: in a fight
+    // the eye lives at the bottom centre -- the airspeed, the pips, the
+    // dragon's own body -- and a bar in the corner was read only once it was
+    // already empty. So the cluster is one stack: bars, airspeed, pips.
     {
         const float plate_w = hud_.px(330.0f);
         const float plate_h = hud_.px(64.0f);
-        const ImVec2 min(margin, margin);
+        const float speed_h = hud_.px(56.0f);
+        const ImVec2 min(width * 0.5f - plate_w * 0.5f,
+                         height - margin - speed_h - hud_.px(6.0f) - plate_h);
         hud_.plate(min, ImVec2(min.x + plate_w, min.y + plate_h));
         const float label_x = min.x + hud_.px(12.0f);
         const float bar_x = min.x + hud_.px(84.0f);
@@ -3417,9 +3426,34 @@ void App::draw_combat_hud() {
             std::snprintf(line, sizeof(line), flaming ? "%.0f m  FLAME" : "%.0f m", range);
             hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
                        flaming ? tk.flame : locked ? tk.lock : tk.mark, 12.0f);
+            // A rival's health and its aggression under the bracket. Health
+            // says whether to press the attack; aggression is drawn once per
+            // pilot and held for the match, so it is what tells the bots
+            // apart -- the wary one and the one that will turn into you. The
+            // tick on the aggression bar is its nerve this moment: that
+            // aggression moved by its wounds, the number its next decision
+            // actually uses.
+            const BotShip* ship = nullptr;
+            for (const auto& bot : bots_) {
+                if (bot->slot == index) ship = bot.get();
+            }
+            float below = screen.y + half + hud_.px(4.0f);
+            if (ship) {
+                const float bar_w = core::maxf(half * 2.0f, hud_.px(40.0f));
+                const float x = screen.x - bar_w * 0.5f;
+                const float health_h = hud_.px(4.5f);
+                const float aggression_h = hud_.px(3.0f);
+                const float health = sentinel.max_health > 0.0f ? sentinel.health / sentinel.max_health : 0.0f;
+                hud_.bar(ImVec2(x, below), bar_w, health_h, health, tk.health);
+                below += health_h + hud_.px(2.0f);
+                hud_.bar(ImVec2(x, below), bar_w, aggression_h, ship->pilot.aggression(), tk.accent);
+                const float tick_x = x + bar_w * core::saturate(ship->pilot.nerve());
+                draw->AddLine(ImVec2(tick_x, below - hud_.px(1.5f)),
+                              ImVec2(tick_x, below + aggression_h + hud_.px(1.5f)), tk.text, hud_.px(1.2f));
+                below += aggression_h + hud_.px(3.0f);
+            }
             if (sentinel.stun > 0.0f) {
-                hud_.label(ImVec2(screen.x, screen.y + half + hud_.px(4.0f)), "STUNNED", tk.accent, 11.0f,
-                           ui::Align::Centre);
+                hud_.label(ImVec2(screen.x, below), "STUNNED", tk.accent, 11.0f, ui::Align::Centre);
             }
             if (locked) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), half * 1.35f, colour, 28, hud_.px(1.4f));
@@ -3648,9 +3682,9 @@ void App::build_combat_ui() {
         const auto& bot = bots_[i];
         if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
         const game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
-        ImGui::TextDisabled("bot %zu  %-7s  %5.0f hp  %4.0f m/s  %s", i,
+        ImGui::TextDisabled("bot %zu  %-7s  %5.0f hp  aggr %.2f nerve %.2f  %4.0f m/s  %s", i,
                             slot.alive ? bot->pilot.state_name() : "down", slot.health,
-                            bot->flight.state().airspeed,
+                            bot->pilot.aggression(), bot->pilot.nerve(), bot->flight.state().airspeed,
                             combat_.locked_index() == bot->slot ? "LOCKED" : "");
     }
 

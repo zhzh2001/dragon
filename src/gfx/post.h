@@ -23,7 +23,7 @@ struct PostUniforms {
 // looking at the picture; the defaults are the "painted realism, late
 // afternoon" target in DIRECTION.md, judged against docs/concept/valley-target.png.
 struct PostSettings {
-    float exposure = 1.0f;
+    float exposure = 1.12f;
     float contrast = 1.08f;
     float saturation = 1.04f;
     float bloom_strength = 0.35f;
@@ -31,7 +31,7 @@ struct PostSettings {
     // glow well above. Below the threshold nothing blooms.
     float bloom_threshold = 1.1f;
     float bloom_knee = 0.5f;
-    float vignette = 0.28f;
+    float vignette = 0.12f;
     float temperature = 0.03f;  // a touch warm
     float tint = 0.0f;
     float lift = 0.0f;
@@ -39,9 +39,9 @@ struct PostSettings {
     // Split-toning: cool shadows, warm highlights -- the late-afternoon split
     // the lighting already makes, pushed a little further in the grade.
     float shadows_rgb[3] = {0.88f, 0.93f, 1.04f};
-    float shadows_strength = 0.35f;
+    float shadows_strength = 0.4f;
     float highlights_rgb[3] = {1.04f, 0.98f, 0.90f};
-    float highlights_strength = 0.30f;
+    float highlights_strength = 0.35f;
     bool enabled = true;
 };
 
