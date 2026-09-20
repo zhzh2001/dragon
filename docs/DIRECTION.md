@@ -385,7 +385,7 @@ question is the one that could still change the plan.
 | 2b | ~~**Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel~~ done 2026-09-17, awaiting the playtest gate | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
 | 4 | ~~Grading LUT and bloom~~ done 2026-09-20 (a parametric grade rather than a LUT: every term is a slider) | 1 | visuals |
-| 5 | Vegetation v2: leaf cards, bark, impostors | 2 | visuals + assets |
+| 5 | ~~Vegetation v2: leaf cards, bark, impostors~~ done 2026-09-20 (the impostor is the crown's own coarse cards, not a baked billboard) | 2 | visuals + assets |
 | 6 | Growth stages as tuning tables; prey herd; hoard persistence | 2-3 | gameplay |
 | 7 | Terrain detail textures, instanced rocks, ridge octave; static glTF loader | 2 | visuals + assets |
 | 8 | Screens: title, pause, results, shop; gamepad focus model | 2 | UI |
@@ -465,6 +465,17 @@ the Combat panel still opens by default, because its two fun dials have
 nowhere else to live until the pause screen exists (row 8), and the rally
 and match strips share one plate but not one state machine, which the
 screens will bring. Next: row 3, the run probe.
+
+2026-09-20, later: **rows 4 and 5 are done** (`STATUS.md` M21, M22), the
+arena being fun enough to want it prettier first. The post stack is a
+parametric grade and a half-resolution bloom, not a LUT -- every term is a
+slider, which is the house rule. Vegetation v2 kept the generator and changed
+what it generates: card crowns cut from two Blender-rendered grey maps that
+the palette colours, so the tree greens are still dials. What section 3
+still lists: row 7 (terrain detail textures, instanced rocks, a ridge
+octave; the static glTF loader), row 9 (sky, clouds, aerial perspective), and
+the fire retune (item 6) now that bloom exists. Next: row 3, the run probe,
+or row 7 if the picture is still the priority.
 
 ## 7. Prototyping with concept art
 

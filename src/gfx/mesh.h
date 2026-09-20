@@ -16,6 +16,9 @@ struct MeshVertex {
     core::Vec3 position;
     core::Vec3 normal;
     core::Vec3 color;
+    // Texture coordinate. Plants use it for their leaf cards and their bark;
+    // terrain and props leave it zero and their shaders never read it.
+    core::Vec2 uv = core::Vec2{0.0f, 0.0f};
 };
 
 // CPU-side geometry, before upload. Kept around after upload when the data is

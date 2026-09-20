@@ -51,6 +51,10 @@ public:
     // Grass shrinks to nothing between these camera distances.
     float grass_fade_start = 90.0f;
     float grass_fade_end = 130.0f;
+    // Past this camera distance a crown's detail cards are dropped and its
+    // coarse cards carry it: the impostor, without a second mesh or a second
+    // draw. Dithered over a band so trees do not pop.
+    float lod_distance = 240.0f;
 
     // Nominal height of each kind at scale 1, for the sway's height fraction.
     static float tree_height(TreeKind kind);
@@ -59,8 +63,13 @@ public:
 private:
     struct Params {
         core::Vec4 wind_time_fade;  // x wind, y time, z fade start, w fade end
-        core::Vec4 extra;           // x nominal height
+        core::Vec4 extra;           // x nominal height, y LOD distance
     };
+    SDL_GPUTexture* leaf_texture_ = nullptr;
+    SDL_GPUTexture* needle_texture_ = nullptr;
+    SDL_GPUSampler* card_sampler_ = nullptr;
+    // Binds the two card textures at fragment slots `first` and `first + 1`.
+    void bind_cards(SDL_GPURenderPass* pass, uint32_t first) const;
     struct StaticSet {
         Mesh mesh;
         SDL_GPUBuffer* instances = nullptr;

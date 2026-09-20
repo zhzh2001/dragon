@@ -16,13 +16,20 @@ struct VertexIn {
     float3 position       [[attribute(0)]];
     float3 normal         [[attribute(1)]];
     float3 color          [[attribute(2)]];
-    float4 position_scale [[attribute(3)]];
-    float4 params         [[attribute(4)]];
+    float2 uv             [[attribute(3)]];
+    float4 position_scale [[attribute(4)]];
+    float4 params         [[attribute(5)]];
 };
 
-vertex float4 vs_main(VertexIn in [[stage_in]],
-                      constant ShadowUniforms& shadow [[buffer(0)]],
-                      constant FoliageParams& params [[buffer(1)]]) {
+struct DepthOut {
+    float4 clip_position [[position]];
+    float2 uv;
+    float material;
+};
+
+vertex DepthOut vs_main(VertexIn in [[stage_in]],
+                        constant ShadowUniforms& shadow [[buffer(0)]],
+                        constant FoliageParams& params [[buffer(1)]]) {
     float yaw = in.params.x;
     float c = cos(yaw), s = sin(yaw);
     float3 local = in.position * in.position_scale.w;
@@ -33,7 +40,25 @@ vertex float4 vs_main(VertexIn in [[stage_in]],
                  (sin(t * 1.3 + in.params.z) + 0.5 * sin(t * 2.9 + in.params.z * 1.7));
     rotated.x += sway;
     rotated.z += sway * 0.6;
-    return shadow.light_view_proj * float4(in.position_scale.xyz + rotated, 1.0);
+    DepthOut out;
+    out.clip_position = shadow.light_view_proj * float4(in.position_scale.xyz + rotated, 1.0);
+    out.uv = in.uv;
+    int tag = int(in.color.z + 0.5);
+    out.material = float(tag >= 10 ? tag - 10 : tag);
+    return out;
 }
 
-fragment void fs_main() {}
+// A card's shadow is the shape cut out of it, not the quad: the same alpha
+// test as the colour pass, against the same textures (1 leaf, 2 needle).
+fragment void fs_main(DepthOut in [[stage_in]],
+                      texture2d<float> leaf_card [[texture(0)]],
+                      sampler leaf_sampler [[sampler(0)]],
+                      texture2d<float> needle_card [[texture(1)]],
+                      sampler needle_sampler [[sampler(1)]]) {
+    int material = int(in.material + 0.5);
+    if (material == 1 || material == 2) {
+        float alpha = material == 1 ? leaf_card.sample(leaf_sampler, in.uv).a
+                                    : needle_card.sample(needle_sampler, in.uv).a;
+        if (alpha < 0.45) discard_fragment();
+    }
+}

@@ -79,9 +79,23 @@ struct Palette {
     }
 };
 
-// Vertex colour for a plant mesh: which palette entry, and how bright.
-inline core::Vec3 palette_vertex(PaletteEntry entry, float brightness = 1.0f) {
-    return core::Vec3{float(int(entry)), brightness, 0.0f};
+// The third channel of a plant vertex's colour names its MATERIAL: how the
+// foliage shader reads the vertex. Must match FOLIAGE_MAT_* in foliage.msl.
+// Adding FOLIAGE_DETAIL marks a card the distance LOD may drop: the coarse
+// cards that are left are the crown's impostor.
+enum FoliageMaterial : int {
+    FOLIAGE_MAT_PLAIN = 0,   // flat colour: grass blades, bushes, deadwood
+    FOLIAGE_MAT_LEAF = 1,    // an alpha-tested broadleaf cluster card
+    FOLIAGE_MAT_NEEDLE = 2,  // an alpha-tested needle spray card
+    FOLIAGE_MAT_BARK = 3,    // trunk and branches, streaked in the shader
+    FOLIAGE_DETAIL = 10,
+};
+
+// Vertex colour for a plant mesh: which palette entry, how bright, and what
+// material.
+inline core::Vec3 palette_vertex(PaletteEntry entry, float brightness = 1.0f,
+                                 int material = FOLIAGE_MAT_PLAIN) {
+    return core::Vec3{float(int(entry)), brightness, float(material)};
 }
 // Brighten or darken a palette vertex colour without touching its entry.
 inline core::Vec3 palette_dim(core::Vec3 color, float factor) {

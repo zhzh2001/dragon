@@ -111,6 +111,12 @@ What is built, in the order it was built. The plan these came from is
   saturation, white balance, split-toning, lift, gamma, vignette -- into the
   8-bit target the HUD draws onto. Fire glows instead of clipping to white.
   Before/after in `artifacts/post/`.
+- **M22** vegetation v2 (row 5): crowns are alpha-tested leaf and needle
+  cards cut from two grey detail maps rendered in Blender and coloured by
+  the palette; bark streaked in the shader; dark undersides; card-shaped
+  shadows; and a distance LOD that drops a crown's detail cards so its
+  coarse cards are the impostor, in one draw. `WORLD.md`, "Vegetation v2".
+  Renders in `artifacts/vegetation-v2/`.
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

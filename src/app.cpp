@@ -1642,6 +1642,8 @@ void App::build_ui(float dt) {
             ImGui::SliderFloat("grass spacing", &vegetation_settings_.grass_spacing, 1.0f, 8.0f,
                                "%.1f m");
             ImGui::SliderFloat("wind", &vegetation_settings_.wind, 0.0f, 3.0f);
+            ImGui::SliderFloat("crown detail distance", &foliage_.lod_distance, 40.0f, 800.0f,
+                               "%.0f m");
             ImGui::TextDisabled("%u trees, %u grass tufts near the camera", foliage_.tree_count(),
                                 foliage_.grass_count());
             if (replant_now && !ImGui::IsAnyItemActive()) replant();

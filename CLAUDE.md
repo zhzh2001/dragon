@@ -16,7 +16,7 @@ they are records of what was already tried and why it is the way it is.
 |---|---|
 | `docs/ANIMATION.md` | The procedural rig, glTF import, the seven-species roster and the default asset, the standing stance and terrain plant, the animation studio, and the frame/scale traps that cost the most time |
 | `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop |
-| `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement |
+| `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement and the card-built plants |
 | `docs/EFFECTS.md` | Particles, the per-species breath profiles, and the fully synthesized audio |
 | `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
 | `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
@@ -176,7 +176,13 @@ flight controls.
   `translucent_sun`). Do not add a per-shader wrap or ambient: the seam
   between the trees and the ground was exactly that. World colours live in
   `gfx/palette.h` and reach shaders as uniforms; plant meshes store a palette
-  index and a brightness in their vertex colour, not an RGB.
+  index, a brightness and a MATERIAL tag (`FoliageMaterial`: plain, leaf
+  card, needle card, bark, plus 10 for a detail card the distance LOD drops)
+  in their vertex colour, not an RGB. Crowns are alpha-tested cards cut from
+  `assets/textures/leaf_cluster.png` and `needle_spray.png`, grey detail maps
+  rendered in Blender and coloured by the palette; the coarse cards of a
+  crown are its impostor, so a far tree is the same mesh with its detail
+  cards discarded.
 - **Shadows**: one directional map following the camera, using a conventional
   [0,1] depth range with a LESS compare -- deliberately unlike the reversed-Z
   main pass, since an independent pass is easier to debug with standard depth.

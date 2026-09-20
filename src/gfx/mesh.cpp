@@ -83,13 +83,14 @@ std::vector<SDL_GPUVertexBufferDescription> Mesh::buffer_descriptions() {
 
 std::vector<SDL_GPUVertexAttribute> Mesh::attributes() {
     std::vector<SDL_GPUVertexAttribute> attributes;
-    const uint32_t offsets[3] = {offsetof(MeshVertex, position), offsetof(MeshVertex, normal),
-                                 offsetof(MeshVertex, color)};
-    for (uint32_t i = 0; i < 3; ++i) {
+    const uint32_t offsets[4] = {offsetof(MeshVertex, position), offsetof(MeshVertex, normal),
+                                 offsetof(MeshVertex, color), offsetof(MeshVertex, uv)};
+    for (uint32_t i = 0; i < 4; ++i) {
         SDL_GPUVertexAttribute attribute = {};
         attribute.location = i;
         attribute.buffer_slot = 0;
-        attribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+        attribute.format = i == 3 ? SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2
+                                  : SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
         attribute.offset = offsets[i];
         attributes.push_back(attribute);
     }

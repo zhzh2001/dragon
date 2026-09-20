@@ -3,6 +3,11 @@
 
 #include <cmath>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+
+#include "core/log.h"
+#include "gfx/texture.h"
 
 #include "gfx/buffer.h"
 #include "gfx/device.h"
@@ -31,7 +36,7 @@ std::vector<SDL_GPUVertexAttribute> foliage_attributes() {
                                  offsetof(FoliageInstance, params)};
     for (uint32_t i = 0; i < 2; ++i) {
         SDL_GPUVertexAttribute attribute = {};
-        attribute.location = 3 + i;
+        attribute.location = 4 + i;  // after the mesh's position, normal, colour, uv
         attribute.buffer_slot = 1;
         attribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attribute.offset = offsets[i];
@@ -45,8 +50,8 @@ PipelineDesc make_foliage_desc() {
     desc.name = "foliage";
     desc.shader_path = "foliage.msl";
     desc.vs_uniform_buffers = 2;  // 0 scene, 1 params
-    desc.fs_uniform_buffers = 1;
-    desc.fs_samplers = 1;  // the shadow map
+    desc.fs_uniform_buffers = 2;  // 0 scene, 1 params (the LOD distance)
+    desc.fs_samplers = 3;  // the shadow map, the leaf card, the needle card
     desc.vertex_buffers = foliage_buffers();
     desc.vertex_attributes = foliage_attributes();
     // Blades and cone skirts are seen from both sides.
@@ -59,6 +64,7 @@ PipelineDesc make_foliage_depth_desc(SDL_GPUTextureFormat depth_format) {
     desc.name = "shadow_foliage";
     desc.shader_path = "foliage_depth.msl";
     desc.vs_uniform_buffers = 2;  // 0 light view-proj, 1 params
+    desc.fs_samplers = 2;  // the leaf and needle cards, for alpha-tested shadows
     desc.vertex_buffers = foliage_buffers();
     desc.vertex_attributes = foliage_attributes();
     desc.no_color_target = true;
@@ -78,6 +84,9 @@ uint32_t ring(MeshData& out, int sides, Vec3 centre, float r, Vec3 color, float 
         v.position = centre + Vec3{std::cos(a) * r, 0.0f, std::sin(a) * r};
         v.normal = Vec3::up();
         v.color = color;
+        // Cylindrical: around the trunk in u, up it in v (metres, so the bark
+        // streaks keep their scale on a tall trunk and a short one alike).
+        v.uv = core::Vec2{float(i) / float(sides), centre.y * 0.25f};
         out.vertices.push_back(v);
     }
     return first;
@@ -175,6 +184,72 @@ void bar(MeshData& out, Vec3 a, Vec3 b, float radius_a, float radius_b, Vec3 col
     tube(out, square(a, radius_a), square(b, radius_b), 4);
 }
 
+// One leaf card: a textured quad at `centre`, facing `normal`, `width` across
+// and `height` tall, with `roll` turning it about its own normal. Two
+// triangles, four vertices, UV 0..1; the alpha in the card's texture cuts the
+// leaves out of it. `material` names the texture (FOLIAGE_MAT_LEAF or
+// FOLIAGE_MAT_NEEDLE), plus FOLIAGE_DETAIL for a card the distance LOD drops.
+void card(MeshData& out, Vec3 centre, Vec3 normal, float roll, float width, float height,
+          Vec3 color, int material) {
+    const Vec3 n = core::normalize_or(normal, Vec3::up());
+    Vec3 right = core::normalize_or(core::cross(n, std::fabs(n.y) > 0.9f ? Vec3::right() : Vec3::up()),
+                                    Vec3::right());
+    Vec3 up = core::cross(right, n);
+    const float c = std::cos(roll), s = std::sin(roll);
+    const Vec3 r2 = right * c + up * s;
+    const Vec3 u2 = up * c - right * s;
+    right = r2 * (width * 0.5f);
+    up = u2 * (height * 0.5f);
+    const uint32_t first = uint32_t(out.vertices.size());
+    const Vec3 corners[4] = {centre - right - up, centre + right - up, centre + right + up,
+                             centre - right + up};
+    const core::Vec2 uvs[4] = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}};
+    Vec3 colour = color;
+    colour.z = float(material);
+    for (int i = 0; i < 4; ++i) {
+        MeshVertex v;
+        v.position = corners[i];
+        v.normal = n;
+        v.color = colour;
+        v.uv = uvs[i];
+        out.vertices.push_back(v);
+    }
+    out.indices.push_back(first);
+    out.indices.push_back(first + 1);
+    out.indices.push_back(first + 2);
+    out.indices.push_back(first);
+    out.indices.push_back(first + 2);
+    out.indices.push_back(first + 3);
+}
+
+// A crown of cards scattered over an ellipsoid shell around `centre`. The
+// largest `coarse` of them are the crown's impostor (always drawn); the rest
+// are detail the distance LOD drops. Cards face roughly outward with a random
+// tilt, so a crown reads as a mass of foliage from every side.
+void card_crown(MeshData& out, Vec3 centre, Vec3 radii, int count, int coarse, float size,
+                Vec3 color, int material, uint32_t seed) {
+    uint32_t rng = seed ? seed : 1u;
+    auto unit = [&rng]() {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        return float(rng & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
+    };
+    for (int i = 0; i < count; ++i) {
+        // A point on the shell, biased slightly upward: crowns are fuller on top.
+        Vec3 d = core::normalize_or(Vec3{unit(), unit() * 0.8f + 0.25f, unit()}, Vec3::up());
+        const float shell = 0.75f + 0.25f * std::fabs(unit());
+        const Vec3 p = centre + Vec3{d.x * radii.x, d.y * radii.y, d.z * radii.z} * shell;
+        // Facing outward, tilted, so silhouettes vary; detail cards are smaller.
+        const Vec3 n = core::normalize_or(d + Vec3{unit(), unit(), unit()} * 0.45f, d);
+        const bool is_coarse = i < coarse;
+        const float card_size = is_coarse ? size * 1.5f : size * (0.85f + 0.3f * std::fabs(unit()));
+        card(out, p, n, unit() * core::PI, card_size, card_size * 0.85f,
+             palette_dim(color, 0.85f + 0.3f * std::fabs(unit())),
+             material + (is_coarse ? 0 : FOLIAGE_DETAIL));
+    }
+}
+
 // One leaning blade: a thin triangle from the root.
 void blade(MeshData& out, float angle, float lean, float height, float width, Vec3 base_color,
            Vec3 tip_color) {
@@ -229,44 +304,79 @@ float Foliage::grass_height(GrassKind kind) {
 // brightness (see gfx/palette.h), and the foliage shader resolves it against
 // the live table. So the greens below are choices of ENTRY, and the numbers
 // are shading within a crown -- which parts of it are darker.
+// Vegetation v2: crowns are CARDS -- textured quads whose alpha cuts leaves
+// or needles out of them -- not the solid blobs and cones of v1. A blob is a
+// single facet of green per triangle, which is why the forest read as pastel
+// polygon blobs against a scanned dragon; a card carries the mid-frequency
+// detail of real leaves at the cost of two triangles. Each crown is a scatter
+// of cards over a shell: a few large COARSE ones, always drawn, that are the
+// tree's impostor from a distance, and many smaller DETAIL ones the LOD drops
+// past `lod_distance`. Trunks and branches are bark, streaked in the shader.
 MeshData make_tree_mesh(TreeKind kind) {
     MeshData mesh;
-    const Vec3 bark = palette_vertex(PaletteEntry::Bark);
+    const Vec3 bark = palette_vertex(PaletteEntry::Bark, 1.0f, FOLIAGE_MAT_BARK);
     const int sides = 7;
     switch (kind) {
         case TreeKind::Spruce: {
-            // A tall spruce: three overlapping skirts on a short trunk.
+            // A tall spruce: a short trunk and a cone of needle sprays,
+            // widest low down, drooping like skirts.
             const Vec3 needles = palette_vertex(PaletteEntry::Spruce);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.45f, bark),
-                 ring(mesh, sides, Vec3{0.0f, 4.0f, 0.0f}, 0.28f, bark), sides);
-            cone(mesh, sides, 2.4f, 3.4f, 8.2f, palette_dim(needles, 0.9f));
-            cone(mesh, sides, 5.8f, 2.6f, 11.2f, needles);
-            cone(mesh, sides, 9.0f, 1.7f, 14.0f, palette_dim(needles, 1.15f));
+                 ring(mesh, sides, Vec3{0.0f, 5.0f, 0.0f}, 0.22f, bark), sides);
+            // Coarse: three tall cards crossed through the axis -- the cone
+            // silhouette from any side.
+            for (int i = 0; i < 3; ++i) {
+                const float a = core::PI * float(i) / 3.0f;
+                card(mesh, Vec3{0.0f, 8.4f, 0.0f}, Vec3{std::cos(a), 0.0f, std::sin(a)}, 0.0f, 5.6f,
+                     11.5f, palette_dim(needles, 0.95f), FOLIAGE_MAT_NEEDLE);
+            }
+            // Detail: sprays in layers, tilted downward and outward.
+            uint32_t rng = 17u;
+            auto unit = [&rng]() {
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                return float(rng & 0xffffffu) / float(0xffffff) * 2.0f - 1.0f;
+            };
+            for (int layer = 0; layer < 6; ++layer) {
+                const float y = 3.0f + 1.8f * float(layer);
+                const float radius = 3.1f * (1.0f - float(layer) / 6.5f);
+                const int count = 7 - layer / 2;
+                for (int i = 0; i < count; ++i) {
+                    const float a = core::TWO_PI * float(i) / float(count) + 0.5f * float(layer) + 0.2f * unit();
+                    const Vec3 out_dir{std::cos(a), 0.0f, std::sin(a)};
+                    const Vec3 p = out_dir * (radius * 0.55f) + Vec3{0.0f, y, 0.0f};
+                    // Facing out and DOWN: a spruce skirt hangs.
+                    const Vec3 n = core::normalize_or(out_dir + Vec3{0.0f, -0.55f, 0.0f}, out_dir);
+                    card(mesh, p, n, unit() * 0.4f, radius * 1.5f, radius * 1.1f,
+                         palette_dim(needles, 0.85f + 0.3f * std::fabs(unit())),
+                         FOLIAGE_MAT_NEEDLE + FOLIAGE_DETAIL);
+                }
+            }
             break;
         }
         case TreeKind::Pine: {
-            // A mountain pine: long bare trunk, one broad flat crown and a cap.
+            // A mountain pine: long bare trunk, one broad flat crown of sprays.
             const Vec3 needles = palette_vertex(PaletteEntry::Pine);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.5f, bark),
-                 ring(mesh, sides, Vec3{0.0f, 6.5f, 0.0f}, 0.3f, bark), sides);
-            cone(mesh, sides, 6.0f, 3.8f, 9.4f, palette_dim(needles, 0.9f));
-            cone(mesh, sides, 8.4f, 2.3f, 11.0f, palette_dim(needles, 1.1f));
+                 ring(mesh, sides, Vec3{0.0f, 7.0f, 0.0f}, 0.28f, bark), sides);
+            bar(mesh, Vec3{0.0f, 6.2f, 0.0f}, Vec3{2.6f, 7.6f, 0.8f}, 0.2f, 0.08f, bark);
+            bar(mesh, Vec3{0.0f, 6.6f, 0.0f}, Vec3{-2.2f, 8.0f, -1.4f}, 0.2f, 0.08f, bark);
+            card_crown(mesh, Vec3{0.0f, 8.3f, 0.0f}, Vec3{3.7f, 1.5f, 3.5f}, 22, 5, 3.0f, needles,
+                       FOLIAGE_MAT_NEEDLE, 23u);
             break;
         }
         case TreeKind::Broadleaf: {
-            // A valley-floor broadleaf: trunk, a fork, and four lumpy crowns of
-            // a lighter, warmer green. Wider than tall, in lumps: a round
-            // bright ball on a stick is a lollipop.
+            // A valley-floor broadleaf: trunk, a fork, and a crown of leaf
+            // clusters, wider than tall.
             const Vec3 leaves = palette_vertex(PaletteEntry::Broadleaf);
             tube(mesh, ring(mesh, sides, Vec3::zero(), 0.5f, bark),
                  ring(mesh, sides, Vec3{0.0f, 4.2f, 0.0f}, 0.35f, bark), sides);
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{1.9f, 6.0f, 0.6f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{-1.5f, 5.9f, -1.2f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 4.6f, 0.0f}, Vec3{0.4f, 7.4f, 1.4f}, 0.22f, 0.10f, bark);
-            blob(mesh, Vec3{0.0f, 7.0f, 0.0f}, Vec3{3.4f, 2.3f, 3.2f}, leaves);
-            blob(mesh, Vec3{2.2f, 6.3f, 0.9f}, Vec3{2.4f, 1.7f, 2.3f}, palette_dim(leaves, 0.9f));
-            blob(mesh, Vec3{-1.9f, 6.2f, -1.4f}, Vec3{2.3f, 1.6f, 2.2f}, palette_dim(leaves, 1.08f));
-            blob(mesh, Vec3{0.5f, 8.6f, 1.2f}, Vec3{1.8f, 1.5f, 1.8f}, palette_dim(leaves, 1.15f));
+            card_crown(mesh, Vec3{0.0f, 7.0f, 0.0f}, Vec3{3.2f, 2.3f, 3.0f}, 34, 7, 3.0f, leaves,
+                       FOLIAGE_MAT_LEAF, 41u);
             break;
         }
         case TreeKind::Dead:
@@ -335,6 +445,25 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     shadow_map_ = shadow_map;
     pipeline_ = pipelines_->create(make_foliage_desc());
     depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
+
+    // The two card textures: grey detail maps with the leaves cut out in
+    // alpha, rendered in Blender (tools: the concept-art skill's notes) and
+    // coloured by the palette in the shader. Missing files are not fatal --
+    // the shader falls back to a solid card -- but they are logged.
+    const auto load = [&](const char* path, const char* name) -> SDL_GPUTexture* {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            LOG_WARN("foliage: no %s at %s; cards will be solid", name, path);
+            return nullptr;
+        }
+        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
+                                   std::istreambuf_iterator<char>());
+        const ImageData image = decode_image(bytes.data(), bytes.size());
+        return create_texture_from_image(device->gpu(), image, name, false);
+    };
+    leaf_texture_ = load(ASSET_ROOT "/textures/leaf_cluster.png", "leaf_cluster");
+    needle_texture_ = load(ASSET_ROOT "/textures/needle_spray.png", "needle_spray");
+    card_sampler_ = create_model_sampler(device->gpu());
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
     static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};
     for (int k = 0; k < TREE_KINDS; ++k) {
@@ -351,6 +480,11 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
 }
 
 void Foliage::shutdown(Device& device) {
+    if (leaf_texture_) SDL_ReleaseGPUTexture(device.gpu(), leaf_texture_);
+    if (needle_texture_) SDL_ReleaseGPUTexture(device.gpu(), needle_texture_);
+    if (card_sampler_) SDL_ReleaseGPUSampler(device.gpu(), card_sampler_);
+    leaf_texture_ = needle_texture_ = nullptr;
+    card_sampler_ = nullptr;
     SDL_GPUDevice* gpu = device.gpu();
     for (StaticSet& set : trees_) {
         set.mesh.release(gpu);
@@ -437,18 +571,20 @@ void Foliage::draw(Device& device, SDL_GPURenderPass* pass, const SceneUniforms&
 
     Params params;
     params.wind_time_fade = core::Vec4{wind, scene.view_params.z, fade_start, fade_end};
-    params.extra = core::Vec4{height, 0.0f, 0.0f, 0.0f};
+    params.extra = core::Vec4{height, lod_distance, 0.0f, 0.0f};
 
     SDL_BindGPUGraphicsPipeline(pass, pipeline);
     SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
     SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
     SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
+    SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
     if (shadow_map_ && shadow_map_->texture()) {
         SDL_GPUTextureSamplerBinding binding = {};
         binding.texture = shadow_map_->texture();
         binding.sampler = shadow_map_->sampler();
         SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
     }
+    bind_cards(pass, 1);
     mesh.bind(pass);
     SDL_GPUBufferBinding instance_binding = {};
     instance_binding.buffer = instances;
@@ -478,6 +614,7 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
     if (!pipeline) return;
     SDL_BindGPUGraphicsPipeline(pass, pipeline);
     SDL_PushGPUVertexUniformData(device.cmd(), 0, &light_view_proj, sizeof(core::Mat4));
+    bind_cards(pass, 0);
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
@@ -491,6 +628,21 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
         SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
         SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), set.count, 0, 0, 0);
     }
+}
+
+void Foliage::bind_cards(SDL_GPURenderPass* pass, uint32_t first) const {
+    // A missing texture binds the other one, so the slot is never empty; the
+    // shader's alpha test then cuts the wrong shape, which is visible and
+    // logged at load rather than a validation crash.
+    SDL_GPUTexture* leaf = leaf_texture_ ? leaf_texture_ : needle_texture_;
+    SDL_GPUTexture* needle = needle_texture_ ? needle_texture_ : leaf_texture_;
+    if (!leaf || !card_sampler_) return;
+    SDL_GPUTextureSamplerBinding bindings[2] = {};
+    bindings[0].texture = leaf;
+    bindings[0].sampler = card_sampler_;
+    bindings[1].texture = needle;
+    bindings[1].sampler = card_sampler_;
+    SDL_BindGPUFragmentSamplers(pass, first, bindings, 2);
 }
 
 uint32_t Foliage::tree_count() const {
