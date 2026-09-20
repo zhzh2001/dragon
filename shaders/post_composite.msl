@@ -1,0 +1,58 @@
+#include "post_common.msl"
+
+// The last word on every pixel of the world: bloom added, exposure, the
+// tonemap, then one grade applied to everything -- which is the strongest
+// glue there is between assets of different origins -- and the gamma encode.
+// The HUD is drawn after this, onto the 8-bit result, so it is never graded.
+//
+// The tonemap is Reinhard, as it was when every world shader did this itself,
+// because every lighting value in the game was tuned against it; what changed
+// is that bright things now bloom before they clip instead of desaturating
+// toward white, and that there is a grade at all.
+
+static float3 tonemap(float3 color) { return color / (1.0 + color); }
+
+fragment float4 fs_main(PostVertex in [[stage_in]],
+                        constant PostUniforms& post [[buffer(0)]],
+                        texture2d<float> scene [[texture(0)]],
+                        sampler scene_sampler [[sampler(0)]],
+                        texture2d<float> bloom [[texture(1)]],
+                        sampler bloom_sampler [[sampler(1)]]) {
+    float3 c = scene.sample(scene_sampler, in.uv).rgb;
+    float3 glow = bloom.sample(bloom_sampler, in.uv).rgb;
+    c += glow * post.grade.w;
+    c *= post.grade.x;  // exposure
+
+    // White balance in linear light, before the curve: a warm push raises red
+    // and drops blue, tint trades green against magenta.
+    float temperature = post.balance.x;
+    float tint = post.balance.y;
+    c *= float3(1.0 + temperature, 1.0 - tint * 0.5, 1.0 - temperature) *
+         float3(1.0, 1.0 + tint, 1.0);
+
+    c = tonemap(max(c, 0.0));
+
+    // Split-toning on the display-referred value: shadows toward one colour,
+    // highlights toward another, by luminance.
+    float luma = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float shadow_weight = 1.0 - smoothstep(0.0, 0.5, luma);
+    float highlight_weight = smoothstep(0.4, 1.0, luma);
+    c = mix(c, c * post.shadows.rgb, shadow_weight * post.shadows.a);
+    c = mix(c, c * post.highlights.rgb, highlight_weight * post.highlights.a);
+
+    // Contrast about middle grey, saturation about the luma, lift and gamma.
+    const float pivot = 0.18;
+    c = (c - pivot) * post.grade.y + pivot;
+    luma = dot(c, float3(0.2126, 0.7152, 0.0722));
+    c = mix(float3(luma), c, post.grade.z);
+    c = c + post.balance.z * (1.0 - c);
+    c = pow(max(c, 0.0), float3(1.0 / max(post.balance.w, 0.05)));
+
+    // Vignette: a soft darkening toward the corners, which is where the eye
+    // is not, and which frames the centre without a border.
+    float2 d = in.uv - 0.5;
+    float v = 1.0 - post.bloom.z * smoothstep(0.35, 0.95, length(d) * 1.4142);
+    c *= v;
+
+    return float4(pow(saturate(c), float3(1.0 / 2.2)), 1.0);
+}

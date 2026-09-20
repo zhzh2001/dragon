@@ -40,16 +40,13 @@ struct SceneUniforms {
     float4 palette[PALETTE_COUNT];
 };
 
-// Reinhard tonemap plus gamma, shared by every shader that writes to the scene
-// target.
-//
-// It has to be shared: the sky was previously written untonemapped while terrain
-// was tonemapped, so terrain fogged "to the sky colour" did not actually match
-// the sky, and the mismatch showed up as a hard seam along the horizon.
-static inline float3 tonemap(float3 color) {
-    float3 mapped = color / (1.0 + color);
-    return pow(mapped, 1.0 / 2.2);
-}
+// What a world shader writes: LINEAR light, into the 16-bit scene target. The
+// tonemap and the gamma live in post_composite.msl now, after the bloom, so
+// bright things glow before they clip instead of desaturating toward white.
+// Every world shader goes through this one function for the same reason the
+// old tonemap was shared: the sky was once written differently from the
+// terrain fogging toward it, and the seam showed along the horizon.
+static inline float3 scene_out(float3 color) { return max(color, 0.0); }
 
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //

@@ -27,5 +27,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 ray = normalize(scene.camera_forward.xyz +
                            scene.camera_right.xyz * in.ndc.x * tan_half_fov * aspect +
                            scene.camera_up.xyz * in.ndc.y * tan_half_fov);
-    return float4(tonemap(sky_color(ray, scene)), 1.0);
+    return float4(scene_out(sky_color(ray, scene)), 1.0);
 }

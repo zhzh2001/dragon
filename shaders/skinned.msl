@@ -155,5 +155,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
                  specular * scene.sun_color.rgb * scene.sun.w * visibility +
                  albedo * in.emissive;
 
-    return float4(tonemap(apply_fog(lit, in.world_position, scene)), 1.0);
+    return float4(scene_out(apply_fog(lit, in.world_position, scene)), 1.0);
 }

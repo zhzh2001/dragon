@@ -184,9 +184,11 @@ bool PipelineCache::build(Entry& entry) {
     }
 
     SDL_GPUColorTargetDescription color_target = {};
+    // World pipelines render into the HDR scene target; the post-process
+    // composite and the UI are the only things that write the 8-bit one.
     color_target.format = d.color_format != SDL_GPU_TEXTUREFORMAT_INVALID
                               ? d.color_format
-                              : device_->scene_color_format();
+                              : device_->scene_hdr_format();
     color_target.blend_state = blend;
 
     SDL_GPUGraphicsPipelineCreateInfo info = {};
@@ -216,7 +218,7 @@ bool PipelineCache::build(Entry& entry) {
 
     info.target_info.color_target_descriptions = d.no_color_target ? nullptr : &color_target;
     info.target_info.num_color_targets = d.no_color_target ? 0 : 1;
-    info.target_info.has_depth_stencil_target = true;
+    info.target_info.has_depth_stencil_target = !d.no_depth_target && (true);
     info.target_info.depth_stencil_format = d.depth_format != SDL_GPU_TEXTUREFORMAT_INVALID
                                                 ? d.depth_format
                                                 : device_->depth_format();

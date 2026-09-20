@@ -150,6 +150,7 @@ bool App::init(const Options& options) {
     pipelines_.init(&device_, SHADER_ROOT);
     if (!debug_.init(&device_, &pipelines_)) return false;
     if (!world_.init(&device_, &pipelines_)) return false;
+    if (!post_.init(&device_, &pipelines_)) return false;
     if (!shadow_.init(&device_, &pipelines_)) return false;
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
@@ -1676,6 +1677,30 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("sun wrap", &lighting_.sun_wrap, 0.0f, 0.6f, "%.2f");
         ImGui::SliderFloat("foliage translucency", &lighting_.foliage_translucency, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
+    }
+
+    // The last word on the picture: bloom and the grade. One grade on
+    // everything is the strongest glue there is between assets of different
+    // origins, and the tonemap's whitening of bright things is what the
+    // bloom fixes properly.
+    if (ImGui::CollapsingHeader("Grade & bloom", ImGuiTreeNodeFlags_DefaultOpen)) {
+        gfx::PostSettings& g = post_settings_;
+        ImGui::Checkbox("enabled", &g.enabled);
+        ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");
+        ImGui::SliderFloat("contrast", &g.contrast, 0.6f, 1.6f, "%.2f");
+        ImGui::SliderFloat("saturation", &g.saturation, 0.0f, 1.8f, "%.2f");
+        ImGui::SliderFloat("temperature", &g.temperature, -0.3f, 0.3f, "%.2f");
+        ImGui::SliderFloat("tint", &g.tint, -0.3f, 0.3f, "%.2f");
+        ImGui::SliderFloat("lift", &g.lift, -0.1f, 0.2f, "%.3f");
+        ImGui::SliderFloat("gamma", &g.gamma, 0.6f, 1.6f, "%.2f");
+        ImGui::SliderFloat("vignette", &g.vignette, 0.0f, 1.0f, "%.2f");
+        ImGui::ColorEdit3("shadows toward", g.shadows_rgb, ImGuiColorEditFlags_Float);
+        ImGui::SliderFloat("shadows strength", &g.shadows_strength, 0.0f, 1.0f, "%.2f");
+        ImGui::ColorEdit3("highlights toward", g.highlights_rgb, ImGuiColorEditFlags_Float);
+        ImGui::SliderFloat("highlights strength", &g.highlights_strength, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("bloom strength", &g.bloom_strength, 0.0f, 1.5f, "%.2f");
+        ImGui::SliderFloat("bloom threshold", &g.bloom_threshold, 0.0f, 4.0f, "%.2f");
+        ImGui::SliderFloat("bloom knee", &g.bloom_knee, 0.01f, 2.0f, "%.2f");
     }
 
     // The world's colours, live. Drag a tree green toward the ground green
@@ -4011,6 +4036,10 @@ void App::render() {
 
     debug_.draw(device_, pass, camera.view_projection(aspect));
     device_.end_pass(pass);
+
+    // The world is in the linear HDR target; bloom it, tonemap it and grade
+    // it into the 8-bit target, which the UI then draws onto ungraded.
+    post_.run(device_, post_settings_);
 
     SDL_GPURenderPass* ui_pass = device_.begin_ui_pass();
     ui_.render(device_, ui_pass);

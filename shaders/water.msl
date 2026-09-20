@@ -47,5 +47,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 180.0);
     color += scene.sun_color.rgb * scene.sun.w * glint * 0.6;
 
-    return float4(tonemap(apply_fog(color, in.world_position, scene)), 1.0);
+    return float4(scene_out(apply_fog(color, in.world_position, scene)), 1.0);
 }

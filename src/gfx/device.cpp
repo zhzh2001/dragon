@@ -50,6 +50,9 @@ void Device::shutdown() {
     if (gpu_) {
         SDL_WaitForGPUIdle(gpu_);
         if (scene_color_) SDL_ReleaseGPUTexture(gpu_, scene_color_);
+        if (scene_hdr_) SDL_ReleaseGPUTexture(gpu_, scene_hdr_);
+        if (bloom_a_) SDL_ReleaseGPUTexture(gpu_, bloom_a_);
+        if (bloom_b_) SDL_ReleaseGPUTexture(gpu_, bloom_b_);
         if (depth_) SDL_ReleaseGPUTexture(gpu_, depth_);
         scene_color_ = nullptr;
         depth_ = nullptr;
@@ -69,8 +72,14 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     if (w == 0 || h == 0) return false;
 
     if (scene_color_) SDL_ReleaseGPUTexture(gpu_, scene_color_);
+    if (scene_hdr_) SDL_ReleaseGPUTexture(gpu_, scene_hdr_);
+    if (bloom_a_) SDL_ReleaseGPUTexture(gpu_, bloom_a_);
+    if (bloom_b_) SDL_ReleaseGPUTexture(gpu_, bloom_b_);
     if (depth_) SDL_ReleaseGPUTexture(gpu_, depth_);
     scene_color_ = nullptr;
+    scene_hdr_ = nullptr;
+    bloom_a_ = nullptr;
+    bloom_b_ = nullptr;
     depth_ = nullptr;
     render_w_ = render_h_ = 0;
 
@@ -85,6 +94,18 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     color_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
     scene_color_ = SDL_CreateGPUTexture(gpu_, &color_info);
     if (!scene_color_) return SDL_FAIL("SDL_CreateGPUTexture(scene_color)");
+
+    // The linear scene, and the two half-size bloom targets.
+    SDL_GPUTextureCreateInfo hdr_info = color_info;
+    hdr_info.format = SCENE_HDR_FORMAT;
+    scene_hdr_ = SDL_CreateGPUTexture(gpu_, &hdr_info);
+    if (!scene_hdr_) return SDL_FAIL("SDL_CreateGPUTexture(scene_hdr)");
+    SDL_GPUTextureCreateInfo bloom_info = hdr_info;
+    bloom_info.width = w / 2 > 0 ? w / 2 : 1;
+    bloom_info.height = h / 2 > 0 ? h / 2 : 1;
+    bloom_a_ = SDL_CreateGPUTexture(gpu_, &bloom_info);
+    bloom_b_ = SDL_CreateGPUTexture(gpu_, &bloom_info);
+    if (!bloom_a_ || !bloom_b_) return SDL_FAIL("SDL_CreateGPUTexture(bloom)");
 
     SDL_GPUTextureCreateInfo depth_info = {};
     depth_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -139,7 +160,7 @@ bool Device::begin_frame() {
 
 SDL_GPURenderPass* Device::begin_main_pass(float r, float g, float b) {
     SDL_GPUColorTargetInfo color = {};
-    color.texture = scene_color_;
+    color.texture = scene_hdr_;
     color.clear_color = SDL_FColor{r, g, b, 1.0f};
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
@@ -155,6 +176,16 @@ SDL_GPURenderPass* Device::begin_main_pass(float r, float g, float b) {
     depth.cycle = true;
 
     return SDL_BeginGPURenderPass(cmd_, &color, 1, &depth);
+}
+
+SDL_GPURenderPass* Device::begin_color_pass(SDL_GPUTexture* target, bool clear) {
+    SDL_GPUColorTargetInfo color = {};
+    color.texture = target;
+    color.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    color.load_op = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+    color.store_op = SDL_GPU_STOREOP_STORE;
+    color.cycle = clear;
+    return SDL_BeginGPURenderPass(cmd_, &color, 1, nullptr);
 }
 
 SDL_GPURenderPass* Device::begin_ui_pass() {

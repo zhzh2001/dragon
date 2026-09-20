@@ -65,10 +65,23 @@ public:
     SDL_Window* window() const { return window_; }
     SDL_GPUCommandBuffer* cmd() const { return cmd_; }
 
-    // Pipelines must declare this as their color target format, not the
-    // swapchain format, since the main pass renders offscreen.
+    // The world renders LINEAR into a 16-bit float target; the post-process
+    // composite tonemaps and grades it into the 8-bit scene colour target,
+    // which the UI then draws onto and the blit and the screenshot read. World
+    // pipelines declare the HDR format (the pipeline cache's default); only the
+    // composite and Dear ImGui declare the 8-bit one.
     SDL_GPUTextureFormat scene_color_format() const { return SCENE_COLOR_FORMAT; }
+    SDL_GPUTextureFormat scene_hdr_format() const { return SCENE_HDR_FORMAT; }
     SDL_GPUTextureFormat depth_format() const { return depth_format_; }
+    SDL_GPUTexture* scene_hdr() const { return scene_hdr_; }
+    SDL_GPUTexture* scene_color() const { return scene_color_; }
+    // Half-resolution ping-pong targets for the bloom.
+    SDL_GPUTexture* bloom_a() const { return bloom_a_; }
+    SDL_GPUTexture* bloom_b() const { return bloom_b_; }
+    uint32_t bloom_width() const { return render_w_ / 2; }
+    uint32_t bloom_height() const { return render_h_ / 2; }
+    // A colour-only pass on any of the targets above, cleared or loaded.
+    SDL_GPURenderPass* begin_color_pass(SDL_GPUTexture* target, bool clear);
 
     uint32_t width() const { return render_w_; }
     uint32_t height() const { return render_h_; }
@@ -79,6 +92,8 @@ private:
     // format when HDR tonemapping arrives.
     static constexpr SDL_GPUTextureFormat SCENE_COLOR_FORMAT =
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    static constexpr SDL_GPUTextureFormat SCENE_HDR_FORMAT =
+        SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
 
     bool ensure_targets(uint32_t w, uint32_t h);
     void save_screenshot();
@@ -92,6 +107,9 @@ private:
     uint32_t swapchain_w_ = 0, swapchain_h_ = 0;
 
     SDL_GPUTexture* scene_color_ = nullptr;
+    SDL_GPUTexture* scene_hdr_ = nullptr;
+    SDL_GPUTexture* bloom_a_ = nullptr;
+    SDL_GPUTexture* bloom_b_ = nullptr;
     SDL_GPUTexture* depth_ = nullptr;
     uint32_t render_w_ = 0, render_h_ = 0;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;

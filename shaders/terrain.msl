@@ -168,5 +168,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
         fogged = mix(fogged, sky_color(ray, scene), smoothstep(0.80, 0.99, edge));
     }
 
-    return float4(tonemap(fogged), 1.0);
+    return float4(scene_out(fogged), 1.0);
 }

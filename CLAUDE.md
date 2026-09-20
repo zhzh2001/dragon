@@ -143,9 +143,14 @@ flight controls.
 - **Depth**: reversed-Z. Near maps to 1, far to 0; depth clears to **0** and the
   compare op is **GREATER**. Use `core::perspective_reverse_z`. This buys the
   depth precision a flight game needs at multi-kilometre view distances.
-- **Rendering**: the frame renders into an offscreen `scene_color` target, then
-  blits to the swapchain. Pipelines must declare
-  `device.scene_color_format()` as their color target, not the swapchain format.
+- **Rendering**: the world renders LINEAR into a 16-bit `scene_hdr` target
+  (the pipeline cache's default colour format); `gfx::PostProcess` then blooms
+  it at half resolution, tonemaps and grades it into the 8-bit `scene_color`
+  target, the UI draws onto that, and it blits to the swapchain. World shaders
+  end in `scene_out()` and never tonemap themselves -- the tonemap and the
+  gamma live in `post_composite.msl`, after the bloom. Only the composite and
+  Dear ImGui declare `scene_color_format()`. The dials are under Grade &
+  bloom in the Engine panel.
 - **UI**: Dear ImGui draws in its own pass (`begin_ui_pass`) because its
   pipelines declare no depth attachment, and a pipeline can only be bound in a
   pass whose attachments match it.
@@ -330,8 +335,9 @@ These are not about one system, and every one of them cost real time.
 - **A copy pass cannot open inside a render pass.** Per-frame uploads
   (particles, grass) stage before the pass begins.
 - **The tonemap ends in a gamma encode**, so anything bright desaturates
-  toward white. A white flash is unreadable as damage; redden instead. A light
-  source should not also be lit.
+  toward white -- since the post stack, it blooms first, which is the fix, but
+  the whitening is still there past the bloom. A white flash is unreadable as
+  damage; redden instead. A light source should not also be lit.
 - **Initialise derived state at spawn, not on the first tick.** A sentinel
   whose position was only set by its update sat at the world origin as a live,
   shootable target.

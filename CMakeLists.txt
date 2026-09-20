@@ -38,6 +38,7 @@ add_executable(dragon
   src/anim/gltf_loader.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
+  src/gfx/post.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp

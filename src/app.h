@@ -5,6 +5,7 @@
 
 #include "game/maneuver.h"
 #include "ui/hud.h"
+#include "gfx/post.h"
 #include <vector>
 
 #include "core/input.h"
@@ -189,6 +190,8 @@ private:
 
     gfx::Device device_;
     gfx::PipelineCache pipelines_;
+    gfx::PostProcess post_;
+    gfx::PostSettings post_settings_;
     gfx::DebugDraw debug_;
     gfx::WorldRenderer world_;
     gfx::ShadowMap shadow_;

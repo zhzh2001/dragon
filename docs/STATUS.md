@@ -104,6 +104,13 @@ What is built, in the order it was built. The plan these came from is
   (flight path, ground probe, course spline) off by default;
   `--hide-panels` for a player's-eye capture. Before/after in
   `artifacts/hud/`. The screens (title, pause, results, shop) are row 8.
+- **M21** grading and bloom (row 4): the world renders linear into a 16-bit
+  target; `gfx::PostProcess` runs a half-resolution bright pass and two
+  blurs, then a composite that adds the bloom, tonemaps (Reinhard, as every
+  lighting value was tuned against) and grades -- exposure, contrast,
+  saturation, white balance, split-toning, lift, gamma, vignette -- into the
+  8-bit target the HUD draws onto. Fire glows instead of clipping to white.
+  Before/after in `artifacts/post/`.
 
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was

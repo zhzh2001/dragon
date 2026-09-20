@@ -87,5 +87,5 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
     float3 light = direct_sun(normal, visibility, scene) + ambient_light(normal, scene) +
                    translucent_sun(normal, visibility, scene.light_params.y, scene);
     float3 lit = in.albedo * light;
-    return float4(tonemap(apply_fog(lit, in.world_position, scene)), 1.0);
+    return float4(scene_out(apply_fog(lit, in.world_position, scene)), 1.0);
 }

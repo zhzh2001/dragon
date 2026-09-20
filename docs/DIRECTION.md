@@ -384,7 +384,7 @@ question is the one that could still change the plan.
 | 2 | ~~HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines~~ done 2026-09-20 | 2 | UI |
 | 2b | ~~**Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel~~ done 2026-09-17, awaiting the playtest gate | 1 | gameplay |
 | 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
-| 4 | Grading LUT and bloom | 1 | visuals |
+| 4 | ~~Grading LUT and bloom~~ done 2026-09-20 (a parametric grade rather than a LUT: every term is a slider) | 1 | visuals |
 | 5 | Vegetation v2: leaf cards, bark, impostors | 2 | visuals + assets |
 | 6 | Growth stages as tuning tables; prey herd; hoard persistence | 2-3 | gameplay |
 | 7 | Terrain detail textures, instanced rocks, ridge octave; static glTF loader | 2 | visuals + assets |

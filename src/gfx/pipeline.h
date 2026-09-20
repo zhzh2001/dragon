@@ -51,6 +51,8 @@ struct PipelineDesc {
 
     // Depth-only passes (shadow maps) have no colour attachment at all.
     bool no_color_target = false;
+    // Colour-only passes (post-process) have no depth attachment at all.
+    bool no_depth_target = false;
 
     // Overrides the colour target format. Zero means "use the scene format".
     SDL_GPUTextureFormat color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
