@@ -588,9 +588,11 @@ game::FlightInput App::read_flight_input(float dt) {
         // shoulders belong to combat: with rudder there too, firing a fireball
         // also yawed the dragon right, and holding breath dragged it left --
         // which bled energy and read as the assists being broken.
-        const float pad_yaw = (input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) ? 1.0f : 0.0f) -
-                              (input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_LEFT) ? 1.0f : 0.0f);
-        in.yaw = core::clampf(in.yaw + pad_yaw, -1.0f, 1.0f);
+        // The d-pad's left and right were the rudder; they are the roll
+        // dodge now (below), because the playtest could not reach d-pad down
+        // in a fight and a dodge has to be reachable. The rudder stays on Q/E
+        // -- turn coordination yaws into a bank on its own, and the pad has
+        // no other pair to give it.
         in.flap = core::maxf(in.flap, input_.gamepad_button(SDL_GAMEPAD_BUTTON_SOUTH) ? 1.0f : 0.0f);
         in.brake = core::maxf(in.brake, input_.gamepad_trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     }
@@ -599,12 +601,17 @@ game::FlightInput App::read_flight_input(float dt) {
     // flip needs no direction. Both are edges, and both run through the same
     // Maneuver the bots fly, overriding the stick while they last.
     if (!free_camera_ && !ui_.wants_keyboard()) {
-        const bool roll = input_.pressed(SDL_SCANCODE_Z) ||
-                          input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        const bool pad_left = input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+        const bool pad_right = input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        const bool roll = input_.pressed(SDL_SCANCODE_Z) || pad_left || pad_right;
         const bool flip = input_.pressed(SDL_SCANCODE_B) ||
                           input_.gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_UP);
         if (roll) {
-            const float direction = std::fabs(stick_.x) > 0.2f ? core::signf(stick_.x) : 1.0f;
+            // On the pad the button IS the direction; on the keyboard the
+            // stick is, right by default.
+            float direction = std::fabs(stick_.x) > 0.2f ? core::signf(stick_.x) : 1.0f;
+            if (pad_left) direction = -1.0f;
+            if (pad_right) direction = 1.0f;
             maneuver_.start(game::ManeuverKind::Roll, direction, flight_.state(), maneuver_tuning_);
         } else if (flip) {
             maneuver_.start(game::ManeuverKind::Flip, 1.0f, flight_.state(), maneuver_tuning_);
@@ -3714,7 +3721,8 @@ void App::build_flight_ui() {
     if (ImGui::Button("respawn (R)")) respawn_dragon();
 
     if (ImGui::CollapsingHeader("Aerobatics")) {
-        ImGui::TextDisabled("Z / d-pad down: roll (the way the stick is held); B / d-pad up: flip");
+        ImGui::TextDisabled("Z (the way the stick is held) or d-pad left/right: roll; B / d-pad up: flip");
+        ImGui::SliderFloat("roll dodge push", &maneuver_tuning_.roll_dodge_push, 0.0f, 120.0f, "%.0f m/s2");
         ImGui::Text("%s", maneuver_.active() ? (maneuver_.kind == game::ManeuverKind::Roll ? "ROLLING" : "FLIPPING")
                                              : (maneuver_.cooldown > 0.0f ? "recovering" : "ready"));
         ImGui::SliderFloat("roll duration", &maneuver_tuning_.roll_duration, 0.3f, 2.0f, "%.2f s");
@@ -3870,7 +3878,7 @@ void App::build_flight_ui() {
     ImGui::TextDisabled(controls_.invert_pitch ? "W nose down, S nose up, A/D roll"
                                               : "W nose up, S nose down, A/D roll");
     ImGui::TextDisabled("space flap, shift tuck-dive, ctrl brake");
-    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake, d-pad rudder, d-pad up flip / down roll");
+    ImGui::TextDisabled("gamepad: left stick, A flap, triggers dive/brake, d-pad left/right roll, up flip");
     ImGui::TextDisabled("R respawn, V first person, 1/2/3 camera");
     ImGui::TextDisabled("right-drag or right stick to look around");
     ImGui::End();

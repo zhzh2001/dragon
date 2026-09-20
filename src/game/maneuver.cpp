@@ -22,7 +22,7 @@ bool Maneuver::start(ManeuverKind what, float roll_direction, FlightState& state
     return true;
 }
 
-void Maneuver::apply(FlightInput& in, const FlightState& state, const ManeuverTuning& tuning,
+void Maneuver::apply(FlightInput& in, FlightState& state, const ManeuverTuning& tuning,
                      float dt) {
     cooldown = core::maxf(cooldown - dt, 0.0f);
     if (!active()) return;
@@ -37,6 +37,15 @@ void Maneuver::apply(FlightInput& in, const FlightState& state, const ManeuverTu
             in.pitch = 0.15f;
             in.tuck = 0.0f;
             in.agility = tuning.roll_agility;
+            // The dodge continues through the first part of the roll, along
+            // the direction the dragon was rolling toward when it started --
+            // its own right axis swings round as it rolls, so the push uses
+            // the horizontal of the start heading's right.
+            if (time < tuning.roll_duration * tuning.roll_dodge_fraction) {
+                const Vec3 side = core::normalize_or(
+                    core::cross(Vec3{start_forward.x, 0.0f, start_forward.z}, Vec3::up()), state.right());
+                state.velocity = state.velocity + side * (direction * tuning.roll_dodge_push * dt);
+            }
             if (time >= tuning.roll_duration) {
                 kind = ManeuverKind::None;
                 cooldown = tuning.cooldown;

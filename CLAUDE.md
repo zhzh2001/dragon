@@ -106,7 +106,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 |---|---|
 | W/S | Pitch (W = nose up) |
 | A/D | Roll |
-| Q/E | Rudder -- gamepad d-pad left/right |
+| Q/E | Rudder (keyboard only: the d-pad pair went to the roll dodge; turn coordination yaws into a bank on its own) |
 | Gamepad left stick | Pitch and roll (absolute, best feel of the three) |
 | Gamepad A / triggers | Flap / tuck-dive (RT) and brake (LT) |
 | T / right-stick click | Relock onto the next target |
@@ -125,7 +125,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | G | Fireball -- gamepad RB |
 | C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 30 m, a claw or tail strike on anything within 16 m of the body. No aim needed; a hit stuns and knocks the target, hits chain to x1.7 |
 | X | Boost -- gamepad X |
-| Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad down. A dodge: it kicks sideways as it starts |
+| Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad left/right, which is also the direction. A dodge: a sideways kick and a push through the first half of the roll, about ten metres |
 | B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
 | Esc | Release the mouse if captured; again to quit |
 
