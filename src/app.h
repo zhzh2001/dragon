@@ -21,6 +21,7 @@
 #include "game/debug_camera.h"
 #include "game/autopilot.h"
 #include "game/course.h"
+#include "game/hoard_run.h"
 #include "game/flight.h"
 #include "game/rally.h"
 #include "game/terrain.h"
@@ -137,6 +138,14 @@ struct Options {
     bool match = false;
     // The training room: passive dummies ahead of the spawn instead of a wave.
     bool training = false;
+    // --run [seed] starts the hoard run (DIRECTION.md row 3): one generated
+    // valley, head to pass, rivals and towers along it, caches to land on.
+    // With no seed the clock picks one; --seed N fixes it.
+    bool run = false;
+    uint32_t seed = 0;
+    // --run-empty: the run with no rivals and no towers, so the autopilot can
+    // fly the corridor to the pass -- the soak for the banking path.
+    bool run_empty = false;
 
     // --telemetry [N] logs one line of flight state every N frames (default
     // 60, so once a second at the headless fixed step). A screenshot shows a
@@ -269,6 +278,13 @@ private:
         float grounded_time = 0.0f;
         float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
+        // The run's rivals hold a post until the run wakes them; hunters are
+        // the dragonslayers loosed behind the player on the clock.
+        bool dormant = false;
+        bool hunter = false;
+        int rival = -1;
+        core::Vec3 post = core::Vec3::zero();
+        float loiter_phase = 0.0f;
     };
     std::vector<std::unique_ptr<BotShip>> bots_;
     int bot_count_ = 2;
@@ -290,6 +306,29 @@ private:
     // rematch. Idle means free play, which everything else already was.
     game::Match match_;
     void start_match();
+
+    // ---- the run probe (DIRECTION.md row 3) ----
+    // One generated valley flown head to pass under pressure, for a hoard.
+    // The arena (the match) is untouched: a run is a mode beside it, entered
+    // with --run or from the Combat panel, left with "leave run".
+    game::HoardRun hoard_run_;
+    game::RunRecords run_records_;
+    bool run_mode_ = false;
+    uint32_t run_seed_ = 7;
+    int run_seed_input_ = 7;
+    bool last_run_record_ = false;
+    float collect_flash_ = 0.0f;
+    float hunter_flash_ = 0.0f;
+    void start_run(uint32_t seed);
+    void end_run();
+    uint32_t fresh_seed() const;
+    void update_run(float dt, const game::CombatEvents& events);
+    // A rival at its post in the layout, or (rival_index -1, hunter) a hunter
+    // loosed behind the player.
+    void spawn_rival(int rival_index, bool hunter);
+    std::unique_ptr<BotShip> make_bot(int index);
+    void draw_run_world(SDL_GPURenderPass* pass);
+    void draw_run_hud();
     void apply_bot_skill(int level);
     void spawn_bots(int count);
     // How far bot hides are recoloured toward their hue; 0 leaves the texture.

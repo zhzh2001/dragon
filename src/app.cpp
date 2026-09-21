@@ -101,6 +101,14 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--training") {
             options.combat = true;
             options.training = true;
+        } else if (arg == "--run") {
+            options.run = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--run-empty") {
+            options.run = true;
+            options.run_empty = true;
+        } else if (arg == "--seed" && i + 1 < argc) {
+            options.seed = uint32_t(SDL_atoi(argv[++i]));
         } else if (arg == "--autopilot") {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
@@ -226,6 +234,7 @@ bool App::init(const Options& options) {
     if (!options.headless) audio_.init();
     rebuild_courses();
     best_times_.load(ASSET_ROOT "/best_times.txt");
+    run_records_.load(ASSET_ROOT "/runs.txt");
     current_course_ = options.course_index;
     apply_assist_preset(0);
 
@@ -264,6 +273,14 @@ bool App::init(const Options& options) {
             bot_count_ = options.bots > 0 ? options.bots : bot_count_;
             start_match();
         }
+    }
+    if (options.run) {
+        if (options.run_empty) {
+            hoard_run_.settings.rivals = 0;
+            hoard_run_.settings.defences = 0;
+            hoard_run_.settings.max_hunters = 0;
+        }
+        start_run(options.seed ? options.seed : fresh_seed());
     }
 
     if (options.has_camera) {
@@ -350,6 +367,13 @@ void App::respawn_dragon() {
         const float ground_here = terrain_.height_at(spawn.x, spawn.z);
         spawn.y = core::maxf(spawn.y, ground_here + 60.0f);
         look = first.position;
+    }
+    // A run starts at the valley head the layout chose, facing down the
+    // corridor; a death in a run puts you back there too (the run itself is
+    // over -- the HUD says so -- and R or Enter starts the next).
+    if (run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle) {
+        spawn = hoard_run_.layout().start;
+        look = hoard_run_.layout().start_look;
     }
 
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
@@ -482,12 +506,17 @@ game::FlightInput App::read_flight_input(float dt) {
         // over. The autopilot flies through the same FlightInput a player uses,
         // so it cannot cheat the flight model.
         const game::Ring* target = rally_.next_ring();
-        const core::Vec3 aim =
-            target ? target->position
-                   : flight_.state().position + flight_.state().forward() * 500.0f;
+        core::Vec3 aim = target ? target->position
+                                : flight_.state().position + flight_.state().forward() * 500.0f;
         // Passing the ring's normal makes it line up on the approach axis rather
         // than cutting across the plane and clipping the rim.
-        const core::Vec3 approach = target ? target->normal() : core::Vec3::zero();
+        core::Vec3 approach = target ? target->normal() : core::Vec3::zero();
+        // In a run it flies the corridor's spine to the pass: the soak for the
+        // run loop, and how a headless run gets through the gate.
+        if (run_mode_) {
+            aim = hoard_run_.next_waypoint(flight_.state().position);
+            approach = core::Vec3::zero();
+        }
         const core::Vec3 position = flight_.state().position;
         return game::steer_through(flight_.state(), aim, approach, autopilot_tuning_,
                                    terrain_.height_at(position.x, position.z));
@@ -765,7 +794,11 @@ void App::pump_events() {
             camera_.set_position(from.position, from.position + from.forward() * 60.0f);
         }
     }
-    if (input_.pressed(SDL_SCANCODE_R)) respawn_dragon();
+    if (input_.pressed(SDL_SCANCODE_R)) {
+        // In a run, R flies the same valley again from the head.
+        if (run_mode_) start_run(run_seed_);
+        else respawn_dragon();
+    }
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
     // M cycles the roster. The point is comparing species with the scenario
     // held still, so this deliberately does not touch the studio state: the
@@ -991,6 +1024,7 @@ void App::update(float dt) {
         update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
         match_.update(dt, events);
+        if (run_mode_) update_run(dt, events);
         for (const game::Impact& impact : combat_.impacts()) {
             emit_impact(impact.position, impact.team == game::Team::Hostile, impact.on_terrain);
             // Loudness by proximity to the ear, not to the dragon: the chase
@@ -1035,6 +1069,12 @@ void App::update(float dt) {
         if (match_.phase() == game::MatchPhase::Results &&
             input_.pressed(SDL_SCANCODE_RETURN)) {
             start_match();
+        }
+        // A run that has ended: Enter deals a new valley.
+        if (run_mode_ && input_.pressed(SDL_SCANCODE_RETURN) &&
+            (hoard_run_.phase() == game::HoardPhase::Banked ||
+             hoard_run_.phase() == game::HoardPhase::Lost)) {
+            start_run(fresh_seed());
         }
 
         // The head turns toward whatever is locked, so the dragon visibly looks
@@ -1283,7 +1323,8 @@ void App::update(float dt) {
         previous_fire_cooldown_ = combat_.fire_cooldown();
     }
 
-    if (!studio_active_) rally_.update(flight_.state(), dt);
+    // The rally stands down in a run: the corridor is the course.
+    if (!studio_active_ && !run_mode_) rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
     if (rally_.just_missed_ring()) miss_flash_ = 1.2f;
     split_flash_ = core::maxf(split_flash_ - dt, 0.0f);
@@ -1790,6 +1831,7 @@ void App::draw_hud() {
     char line[96];
 
     if (combat_enabled_) draw_combat_hud();
+    if (run_mode_) draw_run_hud();
 
     // ---- airspeed, bottom centre ----
     // Diegetic first: speed is the wind and the FOV surge, so the numeral is
@@ -1812,7 +1854,7 @@ void App::draw_hud() {
 
     // During a match the rally readout stands down: you are fighting, not
     // racing, and the checkpoint marker collides with the scoreline.
-    if (match_.phase() != game::MatchPhase::Idle) return;
+    if (match_.phase() != game::MatchPhase::Idle || run_mode_) return;
 
     const game::Course& course = rally_.course();
     if (course.rings.empty()) return;
@@ -2778,43 +2820,348 @@ void App::set_player_model(int index) {
     LOG_INFO("player model: [%d] %s", index, model.path.c_str());
 }
 
+std::unique_ptr<App::BotShip> App::make_bot(int index) {
+    auto bot = std::make_unique<BotShip>();
+    bot->slot = combat_.spawn_external(bot_health_, 6.5f);
+    // Deal the roster round-robin, skipping the player's own entry when
+    // there is anything else to fly. With a one-model roster this is the
+    // player's model for everyone, exactly as it was before.
+    bot->model = models_.size() > 1
+                     ? int((size_t(player_model_) + 1 + size_t(index)) % models_.size())
+                     : player_model_;
+    LoadedModel& worn = model_at(bot->model);
+    bot->rig.init(worn.skeleton, worn.joints);
+    bot->rig.set_model_scale(worn.asset.scale);
+    apply_idle_clip(worn, bot->rig);
+    // Pose and handling both follow the species, not the player.
+    bot->rig.tuning = worn.rig_tuning;
+    bot->flight.tuning = worn.flight_tuning;
+    bot->pilot.tuning = bot_tuning_;
+    // Four hides, cycling: rust, bone, moss, violet. Recoloured at the
+    // texture's own luminance (a multiplicative tint on this dark hide
+    // produced four indistinguishable greys), so "the green one" is a
+    // thing a player can say across a fight -- the cheapest variety there
+    // is. Values above 1 are deliberate: the hide is dark and the hue has
+    // to carry it back into the visible range.
+    static const core::Vec3 palette[] = {
+        {2.0f, 0.55f, 0.35f},  // rust
+        {1.9f, 1.6f, 0.95f},   // bone
+        {0.75f, 1.7f, 0.6f},   // moss
+        {1.4f, 0.7f, 2.0f},    // violet
+    };
+    bot->hue = palette[size_t(index) % 4];
+    bot->last_health = bot_health_;
+    LOG_INFO("bot %d: %s", index, worn.path.c_str());
+    return bot;
+}
+
 void App::spawn_bots(int count) {
     combat_.clear_hostiles();
     bots_.clear();
     for (int i = 0; i < count; ++i) {
-        auto bot = std::make_unique<BotShip>();
-        bot->slot = combat_.spawn_external(bot_health_, 6.5f);
-        // Deal the roster round-robin, skipping the player's own entry when
-        // there is anything else to fly. With a one-model roster this is the
-        // player's model for everyone, exactly as it was before.
-        bot->model = models_.size() > 1
-                         ? int((size_t(player_model_) + 1 + size_t(i)) % models_.size())
-                         : player_model_;
-        LoadedModel& worn = model_at(bot->model);
-        bot->rig.init(worn.skeleton, worn.joints);
-        bot->rig.set_model_scale(worn.asset.scale);
-        apply_idle_clip(worn, bot->rig);
-        // Pose and handling both follow the species, not the player.
-        bot->rig.tuning = worn.rig_tuning;
-        bot->flight.tuning = worn.flight_tuning;
-        bot->pilot.tuning = bot_tuning_;
-        // Four hides, cycling: rust, bone, moss, violet. Recoloured at the
-        // texture's own luminance (a multiplicative tint on this dark hide
-        // produced four indistinguishable greys), so "the green one" is a
-        // thing a player can say across a fight -- the cheapest variety there
-        // is. Values above 1 are deliberate: the hide is dark and the hue has
-        // to carry it back into the visible range.
-        static const core::Vec3 palette[] = {
-            {2.0f, 0.55f, 0.35f},  // rust
-            {1.9f, 1.6f, 0.95f},   // bone
-            {0.75f, 1.7f, 0.6f},   // moss
-            {1.4f, 0.7f, 2.0f},    // violet
-        };
-        bot->hue = palette[size_t(i) % 4];
-        LOG_INFO("bot %d: %s", i, worn.path.c_str());
+        auto bot = make_bot(i);
         place_bot(*bot, uint32_t(20260826 + i * 977));
-        bot->last_health = bot_health_;
         bots_.push_back(std::move(bot));
+    }
+}
+
+// ---- the run ----
+
+uint32_t App::fresh_seed() const {
+    // The clock, folded: the design wants a random valley when none is named,
+    // and the seed is printed so a good one can be flown again.
+    return (uint32_t(SDL_GetTicksNS() / 1000000ull) * 2654435761u) | 1u;
+}
+
+void App::start_run(uint32_t seed) {
+    run_mode_ = true;
+    combat_enabled_ = true;
+    match_.abandon();
+    run_seed_ = seed;
+    run_seed_input_ = int(seed & 0x7fffffffu);
+    last_run_record_ = false;
+    collect_flash_ = hunter_flash_ = 0.0f;
+    hoard_run_.settings.seed = seed;
+    hoard_run_.start(terrain_, terrain_settings_.half_extent);
+    const game::RunLayout& layout = hoard_run_.layout();
+
+    // The arena is rebuilt around the corridor's middle: towers where the
+    // layout put them, rivals at their posts, no drones.
+    bots_.clear();
+    combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed);
+    for (const game::RunDefence& defence : layout.defences) combat_.spawn_defence(defence.position);
+    for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
+    respawn_dragon();  // at the layout's start, facing down the corridor
+    LOG_INFO("run: seed %u, %.1f km of corridor, %zu caches, %zu towers, %zu rivals", seed,
+             double(layout.length() / 1000.0f), layout.caches.size(), layout.defences.size(),
+             layout.rivals.size());
+    // Where everything stands, for placing a capture camera on it.
+    for (size_t i = 0; i < layout.caches.size(); ++i) {
+        const core::Vec3 p = layout.caches[i].position;
+        LOG_INFO("  cache %zu at %.0f,%.0f,%.0f worth %.0f", i, double(p.x), double(p.y), double(p.z),
+                 double(layout.caches[i].value));
+    }
+    for (size_t i = 0; i < layout.defences.size(); ++i) {
+        const core::Vec3 p = layout.defences[i].position;
+        LOG_INFO("  tower %zu at %.0f,%.0f,%.0f", i, double(p.x), double(p.y), double(p.z));
+    }
+    for (size_t i = 0; i < layout.rivals.size(); ++i) {
+        const core::Vec3 p = layout.rivals[i].position;
+        LOG_INFO("  rival %zu at %.0f,%.0f,%.0f", i, double(p.x), double(p.y), double(p.z));
+    }
+    {
+        const core::Vec3 p = layout.gate.position;
+        LOG_INFO("  gate at %.0f,%.0f,%.0f  start at %.0f,%.0f,%.0f", double(p.x), double(p.y),
+                 double(p.z), double(layout.start.x), double(layout.start.y), double(layout.start.z));
+    }
+}
+
+void App::end_run() {
+    run_mode_ = false;
+    hoard_run_.abandon();
+    bots_.clear();
+    combat_.reset(&terrain_, flight_.state().position, 20260824u);
+}
+
+void App::spawn_rival(int rival_index, bool hunter) {
+    auto bot = make_bot(int(bots_.size()));
+    const uint32_t seed = hoard_run_.settings.seed * 7919u + uint32_t(bots_.size()) * 977u +
+                          (hunter ? 31u : 0u);
+    core::Vec3 position, facing;
+    if (hunter) {
+        // Loosed behind the player, already coming: reckless, and it does not
+        // run when hurt. It wears red.
+        const game::FlightState& player = flight_.state();
+        const core::Vec3 back = core::normalize_or(
+            core::Vec3{-player.forward().x, 0.0f, -player.forward().z}, core::Vec3::forward());
+        position = player.position + back * 700.0f + core::Vec3{0.0f, 80.0f, 0.0f};
+        position.y = core::maxf(position.y, terrain_.height_at(position.x, position.z) + 150.0f);
+        facing = back * -1.0f;
+        bot->hunter = true;
+        bot->pilot.tuning.aggression = 0.95f;
+        bot->pilot.tuning.aggression_spread = 0.03f;
+        bot->pilot.tuning.flee_health = 0.0f;
+        bot->hue = core::Vec3{2.1f, 0.4f, 0.3f};
+    } else {
+        const game::RunRival& rival = hoard_run_.layout().rivals[size_t(rival_index)];
+        position = rival.position;
+        facing = rival.facing;
+        bot->dormant = true;
+        bot->post = rival.position;
+        bot->rival = rival_index;
+        bot->loiter_phase = float(rival_index) * 2.1f;
+    }
+    bot->flight.reset(position, core::look_rotation(facing, core::Vec3::up()), 42.0f);
+    bot->pilot.reset(seed);
+    bot->was_alive = true;
+    bots_.push_back(std::move(bot));
+}
+
+void App::update_run(float dt, const game::CombatEvents& events) {
+    hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
+    if (hoard_run_.take_hunter_request()) {
+        spawn_rival(-1, true);
+        // A distant cry, pitched down: something is coming.
+        audio_.play(audio::Clip::Screech, 0.8f, 0.7f);
+        hunter_flash_ = 4.0f;
+    }
+    if (hoard_run_.just_collected()) {
+        audio_.play(audio::Clip::BiteHit, 0.6f, 0.8f);
+        collect_flash_ = 2.0f;
+    }
+    if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
+        const game::RunResult result = hoard_run_.result();
+        last_run_record_ = run_records_.submit(result);
+        run_records_.save(ASSET_ROOT "/runs.txt");
+        audio_.play(hoard_run_.just_banked() ? audio::Clip::Boost : audio::Clip::KnockOut, 1.0f);
+        LOG_INFO("run over: %s  hoard %.0f (carried %.0f)  caches %d  kills %d  hunters %d  %.0f s  %.0f m",
+                 result.banked ? "BANKED" : "LOST", double(result.hoard), double(result.carried),
+                 result.caches, result.kills, result.hunters, double(result.time),
+                 double(result.distance));
+    }
+    collect_flash_ = core::maxf(collect_flash_ - dt, 0.0f);
+    hunter_flash_ = core::maxf(hunter_flash_ - dt, 0.0f);
+}
+
+// The run's things in the world: the pass gate as a ring, and each cache as a
+// landing ring on the ground with the pile in it.
+void App::draw_run_world(SDL_GPURenderPass* pass) {
+    if (!run_mode_ || hoard_run_.phase() == game::HoardPhase::Idle || !ring_mesh_.valid()) return;
+    const game::RunLayout& layout = hoard_run_.layout();
+    const bool flying = hoard_run_.phase() == game::HoardPhase::Flying;
+    const float pulse = 0.55f + 0.45f * std::sin(time_seconds_ * 3.0f);
+    {
+        gfx::ModelUniforms model;
+        model.model = core::Mat4::trs(layout.gate.position, layout.gate.orientation,
+                                      core::Vec3(layout.gate.radius / RING_MESH_RADIUS));
+        model.tint = flying ? core::Vec4{1.0f, 0.72f, 0.22f, 0.4f + pulse * 0.8f}
+                            : core::Vec4{0.16f, 0.20f, 0.22f, 0.0f};
+        world_.draw_mesh(device_, pass, ring_mesh_, model);
+    }
+    // A ring lies flat when its normal points up.
+    const core::Quat flat = core::look_rotation(core::Vec3::up(), core::Vec3::forward());
+    for (size_t i = 0; i < layout.caches.size(); ++i) {
+        const game::RunCache& cache = layout.caches[i];
+        gfx::ModelUniforms ring;
+        ring.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 0.8f, 0.0f}, flat,
+                                     core::Vec3(hoard_run_.settings.cache_radius / RING_MESH_RADIUS));
+        ring.tint = cache.collected ? core::Vec4{0.16f, 0.20f, 0.22f, 0.0f}
+                                    : core::Vec4{1.0f, 0.72f, 0.22f, 0.3f + pulse * 0.6f};
+        world_.draw_mesh(device_, pass, ring_mesh_, ring);
+        if (!cache.collected && sphere_mesh_.valid()) {
+            // The pile: it sinks as it is taken.
+            const float left = 1.0f - 0.85f * cache.progress;
+            gfx::ModelUniforms pile;
+            pile.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 1.2f * left, 0.0f},
+                                         core::Quat::identity(),
+                                         core::Vec3{7.0f * left, 3.2f * left, 7.0f * left});
+            pile.tint = core::Vec4{1.0f, 0.78f, 0.28f, 0.35f + 0.4f * pulse};
+            world_.draw_mesh(device_, pass, sphere_mesh_, pile);
+        }
+    }
+}
+
+void App::draw_run_hud() {
+    const ui::Tokens& tk = hud_.tokens();
+    ImDrawList* draw = hud_.draw();
+    const float width = hud_.width();
+    const float height = hud_.height();
+    const float margin = hud_.margin();
+    const game::HoardPhase phase = hoard_run_.phase();
+    if (phase == game::HoardPhase::Idle) return;
+    const game::RunLayout& layout = hoard_run_.layout();
+    const core::Mat4 view_proj = active_camera().view_projection(device_.aspect());
+    const game::FlightState& player = flight_.state();
+    char line[160];
+
+    // ---- the run strip, top centre: hoard, caches, the pass, the hunters ----
+    {
+        const float strip_w = hud_.px(520.0f);
+        const float strip_h = hud_.px(46.0f);
+        const ImVec2 min(width * 0.5f - strip_w * 0.5f, margin);
+        hud_.plate(min, ImVec2(min.x + strip_w, min.y + strip_h));
+        float x = min.x + hud_.px(16.0f);
+        hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "HOARD", tk.text_dim, 10.0f);
+        std::snprintf(line, sizeof(line), "%.0f", hoard_run_.hoard());
+        hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line,
+                     collect_flash_ > 0.0f ? tk.accent : tk.text, 28.0f);
+        x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(20.0f);
+        // One pip per cache: filled when taken, filling while you sit on it.
+        for (size_t i = 0; i < layout.caches.size(); ++i) {
+            const float ready = layout.caches[i].collected ? 1.0f
+                                : int(i) == hoard_run_.collecting() ? hoard_run_.collect_progress()
+                                                                     : 0.0f;
+            hud_.pip(ImVec2(x + hud_.px(9.0f), min.y + strip_h * 0.5f), hud_.px(9.0f), ready, "",
+                     tk.accent);
+            x += hud_.px(24.0f);
+        }
+        x += hud_.px(10.0f);
+        draw->AddLine(ImVec2(x, min.y + hud_.px(10.0f)), ImVec2(x, min.y + strip_h - hud_.px(10.0f)),
+                      tk.plate_edge, 1.0f);
+        x += hud_.px(14.0f);
+        const float to_pass = core::distance(player.position, layout.gate.position);
+        std::snprintf(line, sizeof(line), "%.1f km", double(to_pass / 1000.0f));
+        hud_.numeral(ImVec2(x, min.y + hud_.px(7.0f)), line, tk.text, 30.0f);
+        hud_.label(ImVec2(x, min.y + strip_h - hud_.px(14.0f)), "to the pass", tk.text_dim, 10.0f);
+        x += hud_.numeral_width(line, 30.0f) + hud_.px(20.0f);
+        if (hoard_run_.hunters_loosed() > 0) {
+            draw->AddLine(ImVec2(x, min.y + hud_.px(10.0f)),
+                          ImVec2(x, min.y + strip_h - hud_.px(10.0f)), tk.plate_edge, 1.0f);
+            x += hud_.px(14.0f);
+            const int n = hoard_run_.hunters_loosed();
+            std::snprintf(line, sizeof(line), "%d HUNTER%s", n, n > 1 ? "S" : "");
+            // Blinks for a few seconds when one is loosed.
+            const bool blink = hunter_flash_ > 0.0f && std::fmod(time_seconds_, 0.5f) < 0.25f;
+            hud_.label(ImVec2(x, min.y + hud_.px(15.0f)), line, blink ? tk.text : tk.danger, 13.0f);
+        }
+    }
+
+    // ---- objective markers: the nearest hoard, and the pass ----
+    auto marker = [&](core::Vec3 position, float world_radius, const char* text, ImU32 colour,
+                      float progress) {
+        ImVec2 screen;
+        const bool on_screen =
+            project_to_screen(view_proj, position, width, height, screen) && screen.x > 0.0f &&
+            screen.x < width && screen.y > 0.0f && screen.y < height;
+        const float range = core::distance(player.position, position);
+        if (on_screen) {
+            const float apparent = core::clampf(world_radius / core::maxf(range, 1.0f) * height * 0.5f,
+                                                hud_.px(12.0f), hud_.px(220.0f));
+            draw->AddCircle(screen, apparent, colour, 40, hud_.px(1.8f));
+            if (progress > 0.0f) {
+                hud_.arc(screen, apparent + hud_.px(6.0f), -core::HALF_PI, core::HALF_PI * 3.0f, progress,
+                         tk.accent, hud_.px(4.0f));
+            }
+            hud_.label(ImVec2(screen.x + apparent + hud_.px(8.0f), screen.y - hud_.px(8.0f)), text,
+                       colour, 14.0f);
+        } else {
+            const gfx::Camera& camera = active_camera();
+            const core::Vec3 to = position - camera.position;
+            core::Vec2 direction{core::dot(to, camera.right()), -core::dot(to, camera.up())};
+            if (core::dot(to, camera.forward()) < 0.0f) direction = core::Vec2{-direction.x, -direction.y};
+            const float span = core::length(direction);
+            if (span < 1e-3f) return;
+            direction = core::Vec2{direction.x / span, direction.y / span};
+            const ImVec2 centre(width * 0.5f, height * 0.5f);
+            const float radius = core::minf(width, height) * 0.40f;
+            hud_.edge_arrow(centre, direction, radius, colour, hud_.px(10.0f));
+            const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
+            hud_.label(ImVec2(tip.x, tip.y + hud_.px(18.0f)), text, colour, 13.0f, ui::Align::Centre);
+        }
+    };
+    if (phase == game::HoardPhase::Flying) {
+        const int nearest = hoard_run_.nearest_cache(player.position);
+        if (nearest >= 0) {
+            const game::RunCache& cache = layout.caches[size_t(nearest)];
+            const float range = core::distance(player.position, cache.position);
+            if (hoard_run_.collecting() == nearest) {
+                std::snprintf(line, sizeof(line), "TAKING THE HOARD");
+            } else if (range < 160.0f) {
+                std::snprintf(line, sizeof(line), "LAND HERE  %.0f", double(cache.value));
+            } else {
+                std::snprintf(line, sizeof(line), "HOARD  %.0f m", double(range));
+            }
+            marker(cache.position + core::Vec3{0.0f, 3.0f, 0.0f}, hoard_run_.settings.cache_radius, line,
+                   tk.accent, hoard_run_.collecting() == nearest ? hoard_run_.collect_progress() : 0.0f);
+        }
+        const bool all_taken = hoard_run_.caches_collected() == int(layout.caches.size());
+        std::snprintf(line, sizeof(line), "THE PASS  %.0f m",
+                      double(core::distance(player.position, layout.gate.position)));
+        marker(layout.gate.position, layout.gate.radius, line, all_taken ? tk.accent : tk.text_dim, 0.0f);
+
+        if (hoard_run_.elapsed() < 9.0f) {
+            hud_.label(ImVec2(width * 0.5f, margin + hud_.px(56.0f)),
+                       "fly the corridor to the pass -- land on a hoard to take it -- the longer you stay, the more come",
+                       tk.text_dim, 13.0f, ui::Align::Centre);
+        }
+    }
+
+    // ---- results ----
+    if (phase == game::HoardPhase::Banked || phase == game::HoardPhase::Lost) {
+        const bool banked = phase == game::HoardPhase::Banked;
+        const game::RunResult result = hoard_run_.result();
+        float y = height * 0.24f;
+        hud_.numeral(ImVec2(width * 0.5f, y), banked ? "HOARD BANKED" : "RUN LOST",
+                     banked ? tk.accent : tk.danger, 64.0f, ui::Align::Centre);
+        y += hud_.px(76.0f);
+        if (last_run_record_) {
+            hud_.label(ImVec2(width * 0.5f, y), "NEW RECORD", tk.ahead, 15.0f, ui::Align::Centre);
+            y += hud_.px(22.0f);
+        }
+        std::snprintf(line, sizeof(line), "%s %.0f   %d / %zu caches   %d kills   %d:%02d   %.1f km",
+                      banked ? "banked" : "lost", double(banked ? result.hoard : result.carried),
+                      result.caches, layout.caches.size(), result.kills, int(result.time) / 60,
+                      int(result.time) % 60, double(result.distance / 1000.0f));
+        hud_.label(ImVec2(width * 0.5f, y), line, tk.text, 16.0f, ui::Align::Centre);
+        y += hud_.px(24.0f);
+        std::snprintf(line, sizeof(line), "best hoard %.0f   fastest %d:%02d   %d runs, %d banked",
+                      double(run_records_.best_hoard), int(run_records_.best_time) / 60,
+                      int(run_records_.best_time) % 60, run_records_.runs, run_records_.banked);
+        hud_.label(ImVec2(width * 0.5f, y), line, tk.text_dim, 14.0f, ui::Align::Centre);
+        y += hud_.px(30.0f);
+        std::snprintf(line, sizeof(line), "R  this valley again      ENTER  a new valley      seed %u",
+                      layout.seed);
+        hud_.label(ImVec2(width * 0.5f, y), line, tk.text_dim, 13.0f, ui::Align::Centre);
     }
 }
 
@@ -2861,6 +3208,10 @@ void App::update_bots(float dt) {
             }
         }
         bot->hit_cry_cooldown = core::maxf(bot->hit_cry_cooldown - dt, 0.0f);
+        // Shooting a rival at its post wakes it, range or no range.
+        if (run_mode_ && bot->rival >= 0 && slot.health < bot->last_health - 0.01f) {
+            hoard_run_.engage_rival(bot->rival);
+        }
         bot->last_health = slot.health;
 
         const game::FlightState& self = bot->flight.state();
@@ -2875,8 +3226,28 @@ void App::update_bots(float dt) {
         }
         const float health_fraction =
             slot.max_health > 0.0f ? core::saturate(slot.health / slot.max_health) : 1.0f;
-        game::BotDecision decision =
-            bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground, health_fraction);
+        // A run's rival holds its post until the run wakes it: a slow circle
+        // over the post through the rally autopilot's steering, weapons cold.
+        // Then it is a bot like any other.
+        if (run_mode_ && bot->dormant) {
+            const auto& rivals = hoard_run_.layout().rivals;
+            if (bot->rival >= 0 && size_t(bot->rival) < rivals.size() &&
+                rivals[size_t(bot->rival)].engaged) {
+                bot->dormant = false;
+            }
+        }
+        game::BotDecision decision;
+        if (run_mode_ && bot->dormant) {
+            bot->loiter_phase += dt * 0.22f;
+            const core::Vec3 aim =
+                bot->post + core::Vec3{std::cos(bot->loiter_phase), 0.0f, std::sin(bot->loiter_phase)} *
+                                170.0f;
+            decision.flight = game::steer_through(self, aim, core::Vec3::zero(),
+                                                  bot->pilot.tuning.steering, ground);
+        } else {
+            decision = bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground,
+                                         health_fraction);
+        }
         // The manoeuvre the pilot asked for, flown by the same code the
         // player's Z and B run through.
         if (decision.maneuver != game::ManeuverKind::None) {
@@ -3175,6 +3546,21 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // A hit flashes HOT ORANGE, because the other bright thing a sentinel
         // does -- firing -- puts a blue-white bolt on top of it, and two white
         // flashes are indistinguishable at range.
+        if (sentinel.ground) {
+            // A watchtower: a dark stone shaft with a brazier on top that
+            // flashes hot when hit and shrinks as it dies. A prop mesh is row
+            // 10; this is the readable target the probe needs today.
+            gfx::ModelUniforms shaft;
+            shaft.model = core::Mat4::trs(sentinel.position - core::Vec3{0.0f, 6.0f, 0.0f},
+                                          core::Quat::identity(), core::Vec3{5.0f, 15.0f, 5.0f});
+            const float stone = 0.30f + 0.5f * flash;
+            shaft.tint = core::Vec4{stone, stone * 0.95f, stone * 0.9f, flash * 0.6f};
+            world_.draw_mesh(device_, pass, sphere_mesh_, shaft);
+            draw_ball(sentinel.position + core::Vec3{0.0f, 9.5f, 0.0f}, 2.2f + 1.8f * health,
+                      core::lerp(core::Vec3{1.0f, 0.42f, 0.10f}, core::Vec3{1.0f, 0.8f, 0.3f}, flash),
+                      0.9f + flash, true);
+            continue;
+        }
         const core::Vec3 base{0.72f, 0.24f, 0.18f};
         const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, flash);
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
@@ -3423,6 +3809,7 @@ void App::draw_combat_hud() {
 
         const int index = int(&sentinel - combat_.sentinels().data());
         const bool locked = combat_.locked_index() == index;
+        if (!locked && range > combat_.tuning.mark_range) continue;
         // A bot holding its flame is the most urgent thing on screen.
         bool flaming = false;
         for (const auto& bot : bots_) {
@@ -3535,6 +3922,59 @@ void App::build_combat_ui() {
         ImGui::End();
         return;
     }
+
+    // ---- the run (DIRECTION.md row 3) ----
+    // Above the match because it is the question the build is asking now: is
+    // the corridor under pressure more fun than the arena?
+    ImGui::SeparatorText("run");
+    if (!run_mode_) {
+        if (ImGui::Button("start run")) start_run(uint32_t(std::max(run_seed_input_, 1)));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110.0f);
+        ImGui::InputInt("seed", &run_seed_input_);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("random")) start_run(fresh_seed());
+    } else {
+        ImGui::Text("run %s   seed %u   hoard %.0f   caches %d/%zu   kills %d   hunters %d   %.0f s",
+                    hoard_run_.phase_name(), hoard_run_.layout().seed, hoard_run_.hoard(),
+                    hoard_run_.caches_collected(), hoard_run_.layout().caches.size(),
+                    hoard_run_.kills(), hoard_run_.hunters_loosed(), hoard_run_.elapsed());
+        if (ImGui::Button("retry (R)")) start_run(run_seed_);
+        ImGui::SameLine();
+        if (ImGui::Button("new valley (enter)")) start_run(fresh_seed());
+        ImGui::SameLine();
+        if (ImGui::Button("leave run")) end_run();
+    }
+    ImGui::TextDisabled("records: %d runs, %d banked, best hoard %.0f, fastest %.0f s",
+                        run_records_.runs, run_records_.banked, run_records_.best_hoard,
+                        run_records_.best_time);
+    if (ImGui::TreeNode("run dials (apply at the next start)")) {
+        game::HoardRunSettings& r = hoard_run_.settings;
+        ImGui::SliderInt("rivals", &r.rivals, 0, 6);
+        ImGui::SliderInt("defences", &r.defences, 0, 8);
+        ImGui::SliderInt("caches", &r.caches, 1, 6);
+        ImGui::SliderFloat("cache value", &r.cache_value, 10.0f, 500.0f, "%.0f");
+        ImGui::SliderFloat("cache radius", &r.cache_radius, 8.0f, 60.0f, "%.0f m");
+        ImGui::SliderFloat("collect time", &r.collect_time, 0.5f, 8.0f, "%.1f s");
+        ImGui::SliderFloat("pass radius", &r.pass_radius, 30.0f, 150.0f, "%.0f m");
+        ImGui::SliderFloat("engage range", &r.engage_range, 100.0f, 1200.0f, "%.0f m");
+        ImGui::SliderFloat("pressure after", &r.pressure_after, 10.0f, 400.0f, "%.0f s");
+        ImGui::SliderFloat("pressure interval", &r.pressure_interval, 5.0f, 120.0f, "%.0f s");
+        ImGui::SliderInt("max hunters", &r.max_hunters, 0, 6);
+        ImGui::SliderFloat("cache offset", &r.cache_offset_max, 20.0f, 300.0f, "%.0f m");
+        ImGui::SliderFloat("defence offset min", &r.defence_offset_min, 50.0f, 400.0f, "%.0f m");
+        ImGui::SliderFloat("defence offset max", &r.defence_offset_max, 100.0f, 600.0f, "%.0f m");
+        ImGui::SeparatorText("towers (live)");
+        ImGui::SliderFloat("tower range", &t.defence_range, 100.0f, 900.0f, "%.0f m");
+        ImGui::SliderFloat("tower damage", &t.defence_damage, 1.0f, 40.0f, "%.0f");
+        ImGui::SliderFloat("tower interval", &t.defence_fire_interval, 0.5f, 8.0f, "%.1f s");
+        ImGui::SliderFloat("bolt speed", &t.defence_projectile_speed, 60.0f, 400.0f, "%.0f m/s");
+        ImGui::SliderFloat("bolt gravity", &t.defence_gravity, 0.0f, 40.0f, "%.0f m/s2");
+        ImGui::SliderFloat("bolt spread", &t.defence_spread, 0.0f, 40.0f, "%.0f m");
+        ImGui::SliderFloat("tower health", &t.defence_health, 20.0f, 300.0f, "%.0f");
+        ImGui::TreePop();
+    }
+    ImGui::Separator();
 
     // ---- the match ----
     switch (match_.phase()) {
@@ -3719,6 +4159,7 @@ void App::build_combat_ui() {
 
     if (ImGui::CollapsingHeader("Targeting")) {
         ImGui::SliderFloat("lock cone", &t.lock_cone_deg, 4.0f, 80.0f, "%.0f deg");
+        ImGui::SliderFloat("bracket range", &t.mark_range, 200.0f, 5000.0f, "%.0f m");
         ImGui::SliderFloat("lock hold cone", &t.lock_hold_cone_deg, 10.0f, 170.0f, "%.0f deg");
         ImGui::SliderFloat("lock range", &t.lock_range, 200.0f, 4000.0f, "%.0f m");
         ImGui::SliderFloat("lock distance weight", &t.lock_distance_weight, 0.0f, 0.1f,
@@ -3984,7 +4425,7 @@ void App::render() {
         // Only the live checkpoint casts a shadow. Shadowing all of them costs
         // little but reads as clutter, and the shadow's job here is to tell you
         // where the next ring is relative to the ground.
-        if (const game::Ring* next = rally_.next_ring()) {
+        if (const game::Ring* next = run_mode_ ? nullptr : rally_.next_ring()) {
             gfx::ModelUniforms model;
             model.model = core::Mat4::trs(next->position, next->orientation,
                                           core::Vec3(next->radius / RING_MESH_RADIUS));
@@ -4012,7 +4453,7 @@ void App::render() {
     // rings that instancing would be premature. Hidden in the studio, whose
     // whole point is an uncluttered look at the dragon.
     static const game::Course no_course;
-    const game::Course& course = studio_active_ ? no_course : rally_.course();
+    const game::Course& course = (studio_active_ || run_mode_) ? no_course : rally_.course();
     for (size_t i = 0; i < course.rings.size(); ++i) {
         const game::Ring& ring = course.rings[i];
         const int index = int(i);
@@ -4033,6 +4474,7 @@ void App::render() {
         }
         world_.draw_mesh(device_, pass, ring_mesh_, model);
     }
+    draw_run_world(pass);
 
     // Bot dragons: the real model, warmed slightly red so a target reads as a
     // target at a glance without a hint of UI.
@@ -4100,6 +4542,13 @@ void App::log_telemetry() const {
         LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
                  bites_taken_);
+    }
+    if (run_mode_) {
+        LOG_INFO("   run: %s  seed %u  hoard %.0f  caches %d/%zu  kills %d  hunters %d  %.0f s  %.0f m",
+                 hoard_run_.phase_name(), hoard_run_.layout().seed, double(hoard_run_.hoard()),
+                 hoard_run_.caches_collected(), hoard_run_.layout().caches.size(),
+                 hoard_run_.kills(), hoard_run_.hunters_loosed(), double(hoard_run_.elapsed()),
+                 double(hoard_run_.distance()));
     }
 }
 

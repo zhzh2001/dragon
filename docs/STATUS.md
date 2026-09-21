@@ -142,6 +142,17 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M24** the run probe (row 3): `--run [seed]` and a "run" section at the
+  top of the Combat panel. `game::HoardRun` lays a seeded valley out along
+  the corridor's spine -- three caches on flat ground to land on, four
+  towers on the slopes firing a heavy arcing bolt, three rivals dormant at
+  posts until the player comes within range, the pass gate at the far end,
+  hunters loosed behind the player on a hidden clock -- and keeps score:
+  death loses the hoard, the gate banks it, results beside the best
+  previous run (`assets/runs.txt`). The arena is untouched: a run is a mode
+  beside the match. Twelfth suite. `COMBAT.md` "The hoard run". Renders in
+  `artifacts/run/`. The playtest gate is the genre question itself: is the
+  corridor under pressure more fun than the free-form match?
 - **Wing motion and landing, after a playtest report.** The wingbeat was
   flying 43-49% of the stroke the flight model commanded and the fold was
   overshooting its commanded angle by up to 49%, both from normalizers that

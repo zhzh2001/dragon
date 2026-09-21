@@ -147,6 +147,23 @@ struct CombatTuning {
     float sentinel_spread = 18.0f;
     float sentinel_range = 700.0f;
     float sentinel_respawn = 8.0f;
+
+    // Targets further than this get no bracket on the HUD (the locked one
+    // always does). A run lays seven hostiles down a five-kilometre valley,
+    // and seven range labels at the start read as a spreadsheet.
+    float mark_range = 1400.0f;
+
+    // ---- ground defences (the run's watchtowers) ----
+    // Pinned to a point on the terrain; a slower, heavier bolt with a visible
+    // arc, so a flight straight down the corridor is in their reach and a
+    // flight along the ridge above them is not. Destroyed ones stay down.
+    float defence_health = 90.0f;
+    float defence_fire_interval = 2.4f;
+    float defence_projectile_speed = 170.0f;
+    float defence_gravity = 14.0f;
+    float defence_damage = 14.0f;
+    float defence_spread = 14.0f;
+    float defence_range = 420.0f;
 };
 
 // What the player is asking combat to do this frame. Held vs edge is decided by
@@ -187,6 +204,9 @@ struct MeleeSwing {
 struct Projectile {
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
+    // Downward acceleration, m/s^2. A fireball's is the tuning's; a ground
+    // defence's bolt is heavier and arcs visibly.
+    float gravity = 0.0f;
     float life = 0.0f;
     float damage = 0.0f;
     float radius = 0.0f;
@@ -211,6 +231,9 @@ struct Sentinel {
     // A training dummy: never fires, holds still, and comes back quickly.
     // The room to learn the reach of a bite in, without being shot at.
     bool passive = false;
+    // A ground defence: pinned to the terrain, fires the heavy bolt, and
+    // does not come back once destroyed.
+    bool ground = false;
     // Seconds of stun left after a melee hit. A stunned drone neither orbits
     // nor fires; a stunned external is flown by nobody (its owner reads this
     // and drops the pilot's controls).
@@ -370,6 +393,9 @@ public:
     // straight flight passes one after another inside bite or strike reach.
     // They never fire, hold still, take a beating and come back in seconds.
     void spawn_training(core::Vec3 origin, core::Vec3 forward, core::Vec3 right);
+    // A ground defence at `position` (already on the terrain), added to
+    // whatever targets exist.
+    void spawn_defence(core::Vec3 position);
 
     // ---- external hostiles (bots) ----
     // Claims a slot; returns its index into sentinels().
@@ -411,6 +437,8 @@ public:
     }
 
 private:
+    void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
+                         float blast, Team team, float gravity);
     void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
                          float blast, Team team);
     void update_projectiles(float dt, const FlightState& player, CombatEvents& events);

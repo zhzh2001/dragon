@@ -360,3 +360,71 @@ Bots regenerate like the player does (`hostile_regen`, after a lull), scaled
 by skill tier along with their health: a rookie never heals and loses wars of
 attrition; an ace refuses to stay wounded. Disengage-and-recover cuts both
 ways, which is the balance the player asked for.
+
+## The hoard run (M24, row 3 of `DIRECTION.md`)
+
+The run probe: one generated valley flown from its head to the pass at the
+far end, under pressure, for a hoard. It is a MODE beside the arena, not a
+replacement for it -- `--run [seed]` or "start run" at the top of the Combat
+panel enters it, "leave run" returns to free play, and `--match` is exactly
+what it was. The question it exists to answer is whether flying the corridor
+under pressure is more fun than the free-form match, and whether altitude and
+route matter; if not, the roguelite is the wrong shape (`DIRECTION.md`).
+
+`game::HoardRun` (`src/game/hoard_run.h`) is pure layout and scorekeeping,
+like `Match`: given the terrain and a seed it places the encounters, given the
+player's flight state each frame it collects, banks and loses, and it owns no
+bots, no combat and no rendering. `generate_run_layout` builds the corridor's
+**spine** from `valley_center_x` (24 points at 150 m over the floor, the span
+the valley course flies) and hangs everything off fractions of it with a
+seeded xorshift, so the same seed is the same valley on every machine:
+
+- **Caches** (3): on dry, flat ground within `cache_offset_max` (110 m) of
+  the spine, one early, one mid, one near the pass, worth `cache_value` times
+  1 + 0.5 x depth -- the far end pays most. Collected by being GROUNDED inside
+  `cache_radius` (26 m) for `collect_time` (2.5 s); taking off drains the
+  progress at twice the rate. Drawn as a gold ring lying on the ground with
+  the pile in it, which sinks as it is taken; the HUD marks the nearest
+  uncollected one and fills an arc while you sit on it.
+- **Towers** (4): `Combat::spawn_defence` -- a sentinel with `ground` set,
+  pinned to the terrain `defence_offset_min..max` (160..320 m) to alternate
+  sides of the spine, never on a peak far above it. They fire the heavy bolt
+  (`defence_*` tuning: 170 m/s, 14 m/s^2 of drop, 2.4 s interval, 420 m
+  range, lead corrected for the drop), so a flight straight down the middle
+  is inside their reach and a flight along the ridge above them is not. A
+  destroyed tower stays destroyed; projectiles now carry their own gravity.
+  Drawn as a stone shaft with a brazier that flashes when hit -- a prop mesh
+  is row 10.
+- **Rivals** (3): bots at posts over the corridor, facing back toward the
+  head, DORMANT until the run wakes them: `App::update_bots` flies a dormant
+  rival in a slow circle over its post through the rally autopilot's
+  `steer_through`, weapons cold, and hands it to its pilot once the player is
+  within `engage_range` (520 m) of the post or has shot it. Then it is a bot
+  like any other, personality and all.
+- **The pass gate**: a ring (`pass_radius` 70 m) at the far end facing along
+  the corridor, tested as a segment crossing like a checkpoint. Crossing it
+  banks the hoard.
+- **The dragonslayers**: after `pressure_after` (120 s) a hunter is loosed
+  700 m behind the player every `pressure_interval` (45 s) up to
+  `max_hunters` (3): an ace-tempered bot in red that does not flee. The clock
+  is never shown; the hunter count in the run strip is.
+- **Death** ends the run and the hoard is lost; the dragon respawns at the
+  head with the results up. R flies the same seed again, Enter deals a new
+  valley. **Results**: hoard banked or lost, caches, kills, time, distance,
+  beside the best previous run's numbers from `assets/runs.txt`
+  (`RunRecords`: runs, banked, best hoard, fastest banked time).
+
+The rally stands down in a run (no rings, no strip); the autopilot flies the
+spine instead of the course, which is the soak: `--run-empty --autopilot
+--frames 8400` banks at 110 s; `--run 7 --autopilot` dies at 50 s to the
+rivals and towers, flying straight and never fighting back, which says the
+pressure is real without saying whether it is right -- that is the
+playtest's. The Combat panel's run section has every dial, and target
+brackets now stop at `mark_range` (1400 m): seven hostiles down a
+five-kilometre valley put seven range labels on the opening frame.
+
+`tests/test_hoard_run.cpp` pins the layout (determinism, caches dry and
+ordered and richer with depth, towers on the ground beside the spine, rivals
+over it facing back, the gate at the end), collection (needs the ground and
+the time, drains on takeoff), banking, losing, engagement, the hunter clock,
+and the records. Renders in `artifacts/run/`.

@@ -15,7 +15,7 @@ they are records of what was already tried and why it is the way it is.
 | Doc | What is in it |
 |---|---|
 | `docs/ANIMATION.md` | The procedural rig, glTF import, the seven-species roster and the default asset, the standing stance and terrain plant, the animation studio, and the frame/scale traps that cost the most time |
-| `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop |
+| `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop, the hoard run |
 | `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement and the card-built plants |
 | `docs/EFFECTS.md` | Particles, the per-species breath profiles, and the fully synthesized audio |
 | `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
@@ -37,7 +37,7 @@ they are records of what was already tried and why it is the way it is.
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # eleven suites, plain executables, no framework
+ctest --test-dir build            # twelve suites, plain executables, no framework
 ```
 
 ### Verifying without a human at the keyboard
@@ -73,6 +73,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--attack` | Also hold breath, fire, boost and bite -- how flame, projectiles, boost and the lunge get onto a screenshot. |
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
+| `--run [seed]` | The hoard run (`DIRECTION.md` row 3): one generated valley flown head to pass, rivals at posts and towers on the slopes along it, three hoard caches to land on, the pass gate, death ending it, results text. No seed picks one from the clock; the seed is printed and on the results screen so a good valley can be flown again. `--seed N` also sets it. |
+| `--run-empty` | The run with no rivals and no towers: how the autopilot soaks the banking path (`--run-empty --autopilot --frames 8400` banks at the pass). |
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
@@ -116,7 +118,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
-| R | Restart the run |
+| R | Restart the run (in a hoard run: the same valley again, from the head) |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
 | V | First person, from just above and behind the animated head. The eye is composed from the head's measured mesh so every species frames like `dragon.glb` (horn tips at the bottom of the frame); the two composition dials are in the Camera panel, and a species can nudge the result from its rig profile |
@@ -129,6 +131,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | X | Boost -- gamepad X |
 | Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad left/right, which is also the direction. A dodge: a sideways kick and a push through the first half of the roll, about ten metres |
 | B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
+| Enter | Rematch from the arena results; in a hoard run that has ended, a new valley |
 | Esc | Release the mouse if captured; again to quit |
 
 ImGui keyboard and gamepad navigation are deliberately disabled: with them on,
@@ -368,14 +371,14 @@ src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
 src/game/    flight model, chase + debug cameras, terrain, vegetation,
              course/rally, autopilot, combat, breath profiles, bots, match
-             loop, studio
+             loop, the hoard run, studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration: context, the two HUD faces, the panel theme
 src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     MSL, hot-reloaded from the source tree
-tests/       eleven suites: math, camera, camera_rig, flight, rally, anim,
+tests/       twelve suites: math, camera, camera_rig, flight, rally, anim, hoard_run,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

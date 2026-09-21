@@ -383,7 +383,7 @@ question is the one that could still change the plan.
 | 1 | ~~Shared lighting, sun angle, palette header, tree/ground grade~~ done 2026-09-17 | 1 | visuals |
 | 2 | ~~HUD kit: fonts, tokens, primitives; port `draw_hud`/`draw_combat_hud`; theme ImGui; hide debug lines~~ done 2026-09-20 | 2 | UI |
 | 2b | ~~**Melee**: bite in a wide forward cone within a few body lengths, claw or tail strike alongside, neck lunge on the rig, cooldown, bots use it; dials at the top of the Combat panel~~ done 2026-09-17, awaiting the playtest gate | 1 | gameplay |
-| 3 | Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text | 2-3 | gameplay |
+| 3 | ~~Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text~~ built 2026-09-20, awaiting the playtest gate | 2-3 | gameplay |
 | 4 | ~~Grading LUT and bloom~~ done 2026-09-20 (a parametric grade rather than a LUT: every term is a slider) | 1 | visuals |
 | 5 | ~~Vegetation v2: leaf cards, bark, impostors~~ done 2026-09-20 (the impostor is the crown's own coarse cards, not a baked billboard) | 2 | visuals + assets |
 | 6 | Growth stages as tuning tables; prey herd; hoard persistence | 2-3 | gameplay |
@@ -476,6 +476,24 @@ still lists: row 7 (terrain detail textures, instanced rocks, a ridge
 octave; the static glTF loader), row 9 (sky, clouds, aerial perspective), and
 the fire retune (item 6) now that bloom exists. Next: row 3, the run probe,
 or row 7 if the picture is still the priority.
+
+2026-09-20, later still: **row 3 is built** (`STATUS.md` M24, `COMBAT.md`
+"The hoard run"). Everything the first-probe paragraph listed is in:
+`--run [seed]`, rivals and towers along the corridor, three caches taken by
+landing, the pass gate, death ending the run, results text beside the best
+previous run. No growth, as specified. Three things learned building it, for
+row 6 and the playtest: the encounters hang off FRACTIONS of the corridor's
+spine, so "spaced by flight time" is one dial away (scale the fractions by a
+speed) and growth can reuse the same placement; the towers needed the
+projectile to carry its own gravity, which is also what a slower, heavier
+anything will need; and the run's rivals had to be DORMANT at their posts --
+three bots that all attack from spawn made the corridor a brawl at the head
+and empty after it, which is the arena, not a run. The autopilot dies to the
+default pressure at 50 s flying straight and unarmed, and banks the empty
+corridor at 110 s. **Now the gate:** fly it ten times. Is the corridor under
+pressure more fun than the arena, and do altitude and route matter? If yes,
+row 6 (growth, prey); if no, the boss-duel probe from `RETRO.md`. The
+arena, the match and every earlier mode are unchanged.
 
 ## 7. Prototyping with concept art
 

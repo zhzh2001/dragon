@@ -270,6 +270,22 @@ void Combat::spawn_wave(int count) {
     }
 }
 
+void Combat::spawn_defence(Vec3 position) {
+    Sentinel tower;
+    tower.ground = true;
+    tower.centre = position;
+    tower.orbit_radius = 0.0f;
+    tower.orbit_speed = 0.0f;
+    tower.bob = 0.0f;
+    tower.health = tuning.defence_health;
+    tower.max_health = tower.health;
+    tower.alive = true;
+    // Staggered by position so a line of towers does not volley as one.
+    tower.fire_timer = tuning.defence_fire_interval * (0.4f + 0.6f * std::fabs(random_unit()));
+    tower.position = orbit_position(tower);
+    sentinels_.push_back(tower);
+}
+
 int Combat::spawn_external(float health, float radius) {
     Sentinel bot;
     bot.external = true;
@@ -475,9 +491,15 @@ float Combat::boost_cooldown() const {
 
 void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius, float blast,
                              Team team) {
+    fire_projectile(position, velocity, damage, radius, blast, team, tuning.fireball_gravity);
+}
+
+void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius, float blast,
+                             Team team, float gravity) {
     Projectile projectile;
     projectile.position = position;
     projectile.velocity = velocity;
+    projectile.gravity = gravity;
     projectile.life = tuning.fireball_lifetime;
     projectile.damage = damage;
     projectile.radius = radius;
@@ -507,7 +529,9 @@ void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& eve
     if (sentinel.health <= 0.0f) {
         sentinel.alive = false;
         sentinel.health = 0.0f;
-        sentinel.respawn_timer = sentinel.passive ? 2.5f : tuning.sentinel_respawn;
+        // A destroyed tower stays destroyed: the run's ground fire is a
+        // resource the player can spend fire on clearing.
+        sentinel.respawn_timer = sentinel.ground ? 1e9f : sentinel.passive ? 2.5f : tuning.sentinel_respawn;
         ++kills_;
         ++events.kills;
     }
@@ -524,7 +548,7 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
         }
 
         const Vec3 previous = projectile.position;
-        projectile.velocity.y -= tuning.fireball_gravity * dt;
+        projectile.velocity.y -= projectile.gravity * dt;
         projectile.position += projectile.velocity * dt;
 
         // Swept against each candidate rather than point-tested: at 210 m/s a
@@ -654,23 +678,29 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
 
         sentinel.fire_timer -= dt;
         if (sentinel.fire_timer > 0.0f) continue;
-        sentinel.fire_timer = tuning.sentinel_fire_interval;
+        const bool ground = sentinel.ground;
+        sentinel.fire_timer = ground ? tuning.defence_fire_interval : tuning.sentinel_fire_interval;
 
         const Vec3 to_player = player.position - sentinel.position;
         const float distance = core::length(to_player);
-        if (distance > tuning.sentinel_range || distance < 1e-3f) continue;
+        const float range = ground ? tuning.defence_range : tuning.sentinel_range;
+        if (distance > range || distance < 1e-3f) continue;
 
         // Lead the shot, then spoil it. Perfect prediction is not difficulty,
         // it is a guarantee, and a guaranteed hit removes any reason to
-        // manoeuvre.
-        const float flight_time = distance / core::maxf(tuning.sentinel_projectile_speed, 1.0f);
+        // manoeuvre. A ground bolt also lifts its aim for the drop.
+        const float speed = ground ? tuning.defence_projectile_speed : tuning.sentinel_projectile_speed;
+        const float gravity = ground ? tuning.defence_gravity : 0.0f;
+        const float flight_time = distance / core::maxf(speed, 1.0f);
         Vec3 aim = player.position + player.velocity * flight_time;
-        aim += Vec3{random_unit(), random_unit(), random_unit()} * tuning.sentinel_spread;
+        aim.y += 0.5f * gravity * flight_time * flight_time;
+        aim += Vec3{random_unit(), random_unit(), random_unit()} *
+               (ground ? tuning.defence_spread : tuning.sentinel_spread);
 
         const Vec3 direction = core::normalize(aim - sentinel.position);
         fire_projectile(sentinel.position + direction * (tuning.sentinel_radius + 1.0f),
-                        direction * tuning.sentinel_projectile_speed, tuning.sentinel_damage,
-                        2.5f, 0.0f, Team::Hostile);
+                        direction * speed, ground ? tuning.defence_damage : tuning.sentinel_damage,
+                        2.5f, 0.0f, Team::Hostile, gravity);
     }
 }
 
