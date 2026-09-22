@@ -87,6 +87,8 @@ Options parse_options(int argc, char** argv) {
             options.skeleton = true;
         } else if (arg == "--studio" && i + 1 < argc) {
             options.studio_scenario = SDL_atoi(argv[++i]);
+        } else if (arg == "--studio-speed" && i + 1 < argc) {
+            options.studio_speed = core::clampf(float(SDL_atof(argv[++i])), 0.05f, 2.0f);
         } else if (arg == "--combat") {
             options.combat = true;
         } else if (arg == "--attack") {
@@ -252,6 +254,7 @@ bool App::init(const Options& options) {
     }
     if (options.studio_scenario >= 0) {
         studio_active_ = true;
+        studio_time_scale_ = options.studio_speed;
         studio_scenario_ = options.studio_scenario % int(game::StudioScenario::Count);
         studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
     }
@@ -1351,7 +1354,10 @@ void App::update(float dt) {
             core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
             [this](float x, float z) { return terrain_.surface_at(x, z); });
     }
-    if (!options_.bind_pose) dragon_rig_.update(dragon_state(), dt);
+    // The scenario and rig must share a clock: otherwise slow motion spaces
+    // attacks farther apart but every actual swing still runs at full speed.
+    if (!options_.bind_pose) dragon_rig_.update(dragon_state(),
+                                               dt * (studio_active_ ? studio_time_scale_ : 1.0f));
     // Re-place the first-person eye on THIS frame's head. The camera ran
     // before the rig, so it was holding last frame's head while the mesh
     // draws this one; the gap is one frame of neck motion, invisible at a
@@ -2233,6 +2239,25 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
                                "%.0f deg");
+        }
+        if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||
+            scenario == game::StudioScenario::Tail || scenario == game::StudioScenario::Attack) {
+            ImGui::SeparatorText("whole-body melee");
+            ImGui::SliderFloat("wind-up share", &rig.gesture_anticipation, 0.0f, 0.6f);
+            ImGui::SliderFloat("bite body pitch", &rig.gesture_body_pitch_deg, 0.0f, 30.0f, "%.0f deg");
+            ImGui::SliderFloat("strike body roll", &rig.gesture_body_roll_deg, 0.0f, 45.0f, "%.0f deg");
+            ImGui::SliderFloat("strike body turn", &rig.gesture_body_yaw_deg, 0.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("body reach", &rig.gesture_surge_m, 0.0f, 3.0f, "%.2f m");
+            ImGui::SliderFloat("claw body shift", &rig.gesture_sway_m, 0.0f, 2.0f, "%.2f m");
+            ImGui::SliderFloat("wing brace", &rig.gesture_wing_deg, 0.0f, 35.0f, "%.0f deg");
+            ImGui::SliderFloat("neck counter", &rig.gesture_neck_deg, 0.0f, 40.0f, "%.0f deg");
+            ImGui::SliderFloat("tail counter", &rig.gesture_tail_counter_deg, 0.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("bite duration", &rig.bite_duration, 0.2f, 1.2f, "%.2f s");
+            ImGui::SliderFloat("claw duration", &rig.claw_duration, 0.2f, 1.2f, "%.2f s");
+            ImGui::SliderFloat("tail duration", &rig.tail_duration, 0.3f, 1.4f, "%.2f s");
+            ImGui::SliderFloat("claw reach", &rig.claw_swing_deg, 0.0f, 110.0f, "%.0f deg");
+            ImGui::SliderFloat("claw spread", &rig.claw_out_deg, 0.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("tail whip", &rig.tail_whip_deg, 0.0f, 100.0f, "%.0f deg");
         }
         if (ImGui::Button("save rig profile for this model")) {
             anim::save_rig_tuning(rig, player_model().rig_tuning_path.c_str());

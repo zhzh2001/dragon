@@ -250,7 +250,7 @@ additive layer as the beat and the load flex:
 
 - **bite**: the nose pulls up and the wings flare in the wind-up; then the
   root pitches down `gesture_body_pitch_deg` and SURGES forward
-  `gesture_surge_m` (1.1 m -- a chain can only rotate, and pitching a curved
+  `gesture_surge_m` (1.8 m -- a chain can only rotate, and pitching a curved
   neck down arcs the head BACK as it drops, so the forward travel of a bite is
   the body's), the wings sweep back, the jaws gape out and snap at the peak.
 - **claw**: the body rolls away, then rolls `gesture_body_roll_deg` and yaws
@@ -262,6 +262,20 @@ additive layer as the beat and the load flex:
 - **tail**: the body coils toward the mark, then counter-turns as the tail
   whips across (`tail_whip_deg`, a tip-weighted kick); the head swings
   opposite; the near wing dips.
+
+The load now stays engaged until the strike takes over, rather than returning
+through neutral first. Smoothstep release/recovery removes the abrupt stop.
+Body pitch/roll/yaw defaults are 14/26/32 degrees; the claw also shifts the body
+1 m toward the strike (`gesture_sway_m`) and slightly forward. Tail attacks
+use 1.6 times the body yaw. Wings, claw and tail trail the torso by staggered
+fractions of the swing; delayed envelopes still finish at the original end.
+Neck/tail impulses release at the end of anticipation. Reinitialising a rig
+cancels any pending attack, so switching does not inherit a half-finished swing.
+
+Studio's speed now scales the rig as well as its scenario clock; use
+`--studio-speed 0.5` or the speed slider. Scenarios 8/10/11/12 expose the
+body, timing, wing brace and extremity controls with the profile save button.
+See `artifacts/melee-body/README.md` for this pass's captures and limitations.
 
 Directions are pinned on the generated rig in `test_anim`
 (`test_melee_gestures_move_the_body`): a right claw drops the right wingtip

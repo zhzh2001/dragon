@@ -605,10 +605,11 @@ struct RigTuning {
     //         whips; the head swings opposite; the near wing dips
     // All of it is additive on the flight pose and gone within the gesture.
     float gesture_anticipation = 0.25f;       // fraction of each gesture spent winding up
-    float gesture_body_pitch_deg = 10.0f;     // bite: nose down into the lunge
-    float gesture_body_roll_deg = 18.0f;      // claw: into the strike; tail: counter-roll
-    float gesture_body_yaw_deg = 12.0f;       // claw: nose to the mark; tail: counter-turn
-    float gesture_surge_m = 1.1f;             // bite: the body pushes forward
+    float gesture_body_pitch_deg = 14.0f;     // bite: nose down into the lunge
+    float gesture_body_roll_deg = 26.0f;      // claw: into the strike; tail: counter-roll
+    float gesture_body_yaw_deg = 32.0f;       // claw: nose to the mark; tail: counter-turn
+    float gesture_sway_m = 1.0f;              // claw: commit sideways into the mark
+    float gesture_surge_m = 1.8f;             // bite: the body pushes forward
     float gesture_wing_deg = 24.0f;           // wings brace: raise/dip asymmetry, bite sweep-back
     float gesture_neck_deg = 26.0f;           // claw/tail: the head swings to balance or to the mark
     float gesture_tail_counter_deg = 40.0f;   // claw: the tail swings opposite
@@ -961,13 +962,14 @@ private:
     float gesture_pitch_ = 0.0f;              // radians
     float gesture_roll_ = 0.0f;
     float gesture_yaw_ = 0.0f;
+    float gesture_sway_ = 0.0f;               // metres right
     float gesture_surge_ = 0.0f;              // metres forward
     float gesture_wing_raise_[2] = {0.0f, 0.0f};  // radians of elevation per side (0 right)
     float gesture_wing_sweep_deg_ = 0.0f;
     float gesture_neck_pitch_deg_ = 0.0f;     // + raises the head
     float gesture_neck_yaw_deg_ = 0.0f;       // + toward the right
     float gesture_tail_yaw_deg_ = 0.0f;       // + toward the right
-    float gesture_limb_rake_ = 0.0f;          // 0..1 strike envelope for the claw
+    float gesture_limb_rake_ = 0.0f;          // signed load/strike envelope for the claw
     float gesture_tail_whip_ = 0.0f;          // signed whip envelope, + toward the right
     void drive_gestures();
     float jaw_open_ = 0.0f;

@@ -2455,7 +2455,63 @@ void test_melee_gestures_move_the_body() {
     }
 }
 
+// Hold the loaded pose until launch, recover without residual root motion,
+// and never carry a pending attack onto a newly selected skeleton. Imported
+// models exercise the opposite facing convention and their actual root scale.
+void test_melee_load_recovery_and_switch() {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(__FILE__).parent_path().parent_path();
+    for (const char* name : {"dragon", "embercrest", "rimefang", "frostvein", "blightmaw",
+                             "ironroot", "stormsail", "tidewrack", "alt/prowler"}) {
+        const fs::path path = root / (std::string("assets/") + name + ".glb");
+        if (!fs::exists(path)) continue;
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        CHECK(anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok);
+        const auto joints = anim::map_dragon_joints(skeleton);
+        CHECK(joints.root != anim::NO_PARENT);
+        if (joints.root == anim::NO_PARENT) continue;
+        float lo = 1e9f, hi = -1e9f;
+        for (const auto& v : mesh.vertices) { lo = std::min(lo, v.position.x); hi = std::max(hi, v.position.x); }
+        const float scale = 19.0f / (hi - lo);
+        game::FlightState state;
+        state.velocity = Vec3{0,0,-30}; state.airspeed = 30; state.ground_clearance = 300;
+        for (int kind = 0; kind < 3; ++kind) for (float side : {-1.0f, 1.0f}) {
+            anim::DragonRig rig;
+            rig.init(skeleton, joints); rig.set_model_scale(scale);
+            anim::load_rig_tuning(rig.tuning, (path.string()+".rig.cfg").c_str());
+            for (int i=0; i<120; ++i) rig.update(state, 1.0f/120.0f);
+            const auto rest = rig.world_matrices()[size_t(joints.root)];
+            const float duration = kind == 0 ? rig.tuning.bite_duration :
+                                   kind == 1 ? rig.tuning.claw_duration : rig.tuning.tail_duration;
+            anim::RigAction action;
+            action.bite = kind == 0; action.claw = kind == 1; action.tail = kind == 2; action.side = side;
+            rig.set_action(action); rig.update(state, 1.0f/120.0f);
+            // At the very end of anticipation the old bump was already back
+            // near neutral. A loaded body must still be distinctly rotated.
+            const int load_frames = int(duration * rig.tuning.gesture_anticipation * 120.0f);
+            for (int i=0; i<load_frames; ++i) rig.update(state, 1.0f/120.0f);
+            const auto loaded = rig.world_matrices()[size_t(joints.root)];
+            const auto relative = core::quat_from_matrix(loaded) * core::conjugate(core::quat_from_matrix(rest));
+            CHECK(std::fabs(relative.w) < 0.9995f);
+            // Switching cancels the loaded action and its not-yet-fired kick.
+            rig.init(skeleton, joints);
+            rig.update(state, 1.0f/120.0f);
+            const auto reset = rig.world_matrices()[size_t(joints.root)];
+            CHECK(core::distance(reset.col[3].xyz(), rest.col[3].xyz()) * scale < 1e-4f);
+            CHECK(std::fabs(core::dot(reset.col[0].xyz(), rest.col[0].xyz()) /
+                             (core::length(reset.col[0].xyz()) * core::length(rest.col[0].xyz())) - 1.0f) < 1e-4f);
+            rig.set_action(action); rig.update(state, 1.0f/120.0f);
+            for (int i=0; i<int((duration + 0.1f)*120.0f); ++i) rig.update(state, 1.0f/120.0f);
+            const auto recovered = rig.world_matrices()[size_t(joints.root)];
+            CHECK(core::distance(recovered.col[3].xyz(), rest.col[3].xyz()) * scale < 1e-4f);
+            CHECK(core::length(recovered.col[0].xyz() - rest.col[0].xyz()) < 1e-4f);
+        }
+    }
+}
+
 int main() {
+    test_melee_load_recovery_and_switch();
     test_melee_gestures_move_the_body();
     test_hierarchy();
     test_bind_pose_is_identity();

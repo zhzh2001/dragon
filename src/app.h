@@ -112,6 +112,7 @@ struct Options {
     // pinned in place flying a scripted, repeatable manoeuvre, for looking at
     // the rig instead of chasing it.
     int studio_scenario = -1;  // -1 = off
+    float studio_speed = 1.0f;  // --studio-speed, shared by scenario and rig
     // --attack holds breath and fires continuously. The combat equivalent of
     // --input: it puts the flame and the projectiles on screen for a capture.
     bool attack = false;

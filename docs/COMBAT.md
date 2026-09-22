@@ -154,14 +154,14 @@ moving on a still body weak and mechanical, and it was.
 
 - **Bite** (`RigAction::bite`): the neck lunges forward and down --
   `bite_lunge_deg` 38 with a `bite_impulse` 14 m/s kick through the chain, out
-  in the first third of `bite_duration` (0.32 s) and back in the rest -- and
+  in the first third of `bite_duration` (0.42 s) and back in the rest -- and
   the jaw gapes on the way out and snaps shut at the end of the lunge. The
   first cut, 24 degrees and 5 m/s over half a second, could not be told from
   the breath's thrust; the second, 36 degrees over the same half second, read
   as calmly eating. A strike is fast out and slow back.
 - **Claw** (`RigAction::claw`, `side`): the near foreleg (hind leg on a
   wyvern) rakes forward `claw_swing_deg` 95 and out `claw_out_deg` 35 with
-  the talons spread, over `claw_duration` 0.4 s. The outward component is
+  the talons spread, over `claw_duration` 0.45 s. The outward component is
   what makes it visible: straight forward it stayed under the wing from every
   angle but below.
 - **Tail** (`RigAction::tail`, `side`): a lateral whip toward the mark --
@@ -175,6 +175,12 @@ so a frame-to-frame diff is the gesture and nothing else. Look at the claw
 from the front-below (`--inspect 0 14 -25`) and the tail from above
 (`--inspect 90 14 85`); scenario 8 also bites once at 7.2 s of its attack
 cycle.
+
+The gesture includes a 25% anticipation, then reaches its body strike peak
+30% into the remaining time. Combat damage, stun and hit feedback still resolve
+on the input edge; this animation pass does not synchronize damage with the
+later visual contact. Grounded clips/stance can override the additive gesture.
+These are remaining integration limits, especially when judging hit feel.
 
 **The training room** (`--training`, or the button at the top of the Combat
 panel) replaces the targets with six passive dummies laid out ahead of the

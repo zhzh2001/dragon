@@ -446,6 +446,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(gesture_body_pitch_deg),
     RIG_FLOAT_FIELD(gesture_body_roll_deg),
     RIG_FLOAT_FIELD(gesture_body_yaw_deg),
+    RIG_FLOAT_FIELD(gesture_sway_m),
     RIG_FLOAT_FIELD(gesture_surge_m),
     RIG_FLOAT_FIELD(gesture_wing_deg),
     RIG_FLOAT_FIELD(gesture_neck_deg),
@@ -561,6 +562,9 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     base_clip_ = nullptr;
     clip_hold_time_ = -1.0f;
     clip_time_ = 0.0f;
+    action_ = RigAction{};
+    spit_time_ = bite_time_ = claw_time_ = tail_time_ = 1e9f;
+    breath_smoothed_ = jaw_open_ = 0.0f;
 
     // Accumulate world bind rotations, then keep each joint's parent's inverse.
     // A local rotation is expressed in the parent's frame, so that inverse is
@@ -1317,22 +1321,30 @@ void DragonRig::drive_wings(const game::FlightState& state) {
 constexpr float GESTURE_YAW_SIGN = 1.0f;
 
 namespace {
-// The three beats of a swing over u in [0, 1). The wind-up is a bump that
-// fills the first `a`; the strike is fast out (the first 30% of what is
-// left) and slow back, so a strike reads as a strike and not a bow.
+// Keep the loaded pose until the strike takes over. A separate sine bump
+// returned to neutral BEFORE striking, making two unrelated nods. Smoothstep
+// also gives zero endpoint velocity, so recovery does not stop at a wall.
 float gesture_wind(float u, float a) {
-    return (u >= 0.0f && u < a) ? std::sin(core::PI * u / a) : 0.0f;
+    if (u < 0.0f || u >= 1.0f || a <= 1e-5f) return 0.0f;
+    const float peak = a + (1.0f - a) * 0.3f;
+    return core::smoothstep(0.0f, a, u) * (1.0f - core::smoothstep(a, peak, u));
 }
 float gesture_strike(float u, float a) {
     if (u < a || u >= 1.0f) return 0.0f;
     const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
-    return v < 0.3f ? std::sin(core::HALF_PI * v / 0.3f) : std::cos(core::HALF_PI * (v - 0.3f) / 0.7f);
+    return v < 0.3f ? core::smoothstep(0.0f, 0.3f, v)
+                    : 1.0f - core::smoothstep(0.3f, 1.0f, v);
+}
+// Overlap the extremities behind the torso, but still finish at u == 1.
+float gesture_trail(float u, float a, float lag) {
+    return gesture_strike((u - lag) / (1.0f - lag), a);
 }
 }  // namespace
 
 // The rest of the animal answering a swing. Computed once per frame, before
 // the wings, the body beat and the chains, which each add their share.
 void DragonRig::drive_gestures() {
+    gesture_sway_ = 0.0f;
     gesture_pitch_ = gesture_roll_ = gesture_yaw_ = gesture_surge_ = 0.0f;
     gesture_wing_raise_[0] = gesture_wing_raise_[1] = 0.0f;
     gesture_wing_sweep_deg_ = gesture_neck_pitch_deg_ = gesture_neck_yaw_deg_ = 0.0f;
@@ -1349,10 +1361,10 @@ void DragonRig::drive_gestures() {
         const float wind = gesture_wind(u, a);
         const float strike = gesture_strike(u, a);
         gesture_pitch_ += body_pitch * (0.4f * wind - strike);
-        gesture_surge_ += tuning.gesture_surge_m * strike;
+        gesture_surge_ += tuning.gesture_surge_m * (strike - 0.3f * wind);
         gesture_wing_raise_[0] += wing * (wind - 0.3f * strike);
         gesture_wing_raise_[1] += wing * (wind - 0.3f * strike);
-        gesture_wing_sweep_deg_ += tuning.gesture_wing_deg * strike;
+        gesture_wing_sweep_deg_ += tuning.gesture_wing_deg * gesture_trail(u, a, 0.08f);
         gesture_neck_pitch_deg_ += tuning.bite_lunge_deg * (0.45f * wind - strike);
     }
     // Claw: away, then roll and yaw into the strike side; the near wing
@@ -1363,14 +1375,19 @@ void DragonRig::drive_gestures() {
         const float strike = gesture_strike(u, a);
         const float side = claw_side_;
         gesture_roll_ += body_roll * side * (strike - 0.4f * wind);
-        gesture_yaw_ += body_yaw * side * strike;
+        gesture_yaw_ += body_yaw * side * (strike - 0.65f * wind);
+        gesture_pitch_ -= body_pitch * 0.3f * strike;
+        gesture_sway_ += tuning.gesture_sway_m * side * (strike - 0.3f * wind);
+        gesture_surge_ += tuning.gesture_surge_m * 0.35f * (strike - 0.3f * wind);
         const int near = side >= 0.0f ? 0 : 1;
-        gesture_wing_raise_[near] -= wing * strike;
-        gesture_wing_raise_[1 - near] += wing * 0.6f * strike;
+        const float brace = gesture_trail(u, a, 0.08f) - 0.35f * wind;
+        gesture_wing_raise_[near] -= wing * brace;
+        gesture_wing_raise_[1 - near] += wing * 0.6f * brace;
         gesture_neck_yaw_deg_ += tuning.gesture_neck_deg * side * strike;
         gesture_neck_pitch_deg_ -= tuning.gesture_neck_deg * 0.5f * strike;
-        gesture_tail_yaw_deg_ -= tuning.gesture_tail_counter_deg * side * strike;
-        gesture_limb_rake_ = core::maxf(gesture_limb_rake_, strike);
+        gesture_tail_yaw_deg_ -= tuning.gesture_tail_counter_deg * side *
+                                 (gesture_trail(u, a, 0.12f) - 0.4f * wind);
+        gesture_limb_rake_ = gesture_trail(u, a, 0.04f) - 0.22f * wind;
     }
     // Tail: coil toward the mark, then the body counter-turns as the tail
     // whips across; the head swings the other way, the near wing dips.
@@ -1379,13 +1396,13 @@ void DragonRig::drive_gestures() {
         const float wind = gesture_wind(u, a);
         const float strike = gesture_strike(u, a);
         const float side = tail_side_;
-        gesture_yaw_ += body_yaw * side * (0.5f * wind - strike);
+        gesture_yaw_ += body_yaw * 1.6f * side * (0.65f * wind - strike);
         gesture_roll_ += body_roll * 0.6f * side * strike;
         gesture_neck_yaw_deg_ -= tuning.gesture_neck_deg * side * strike;
         const int near = side >= 0.0f ? 0 : 1;
         gesture_wing_raise_[near] -= wing * 0.6f * strike;
         gesture_wing_raise_[1 - near] += wing * 0.4f * strike;
-        gesture_tail_whip_ = side * (strike - 0.35f * wind);
+        gesture_tail_whip_ = side * (gesture_trail(u, a, 0.12f) - 0.5f * wind);
     }
 }
 
@@ -1854,7 +1871,7 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // foreleg where there is one, the hind leg on a wyvern. Side 0 is
         // the right (+X), matching RigAction::side.
         const bool this_side = (side == 0) == (claw_side_ >= 0.0f);
-        if (this_side && gesture_limb_rake_ > 1e-4f) {
+        if (this_side && std::fabs(gesture_limb_rake_) > 1e-4f) {
             const float rake = gesture_limb_rake_;
             const std::vector<int>& limb =
                 joints_.front_leg[side].empty() ? joints_.leg[side] : joints_.front_leg[side];
@@ -2324,7 +2341,13 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     action_.fire = false;  // an edge, consumed
     if (action_.bite) {
         bite_time_ = 0.0f;
-        // The lunge: kick the neck forward and a little down, toward the mark.
+    } else {
+        bite_time_ += dt;
+    }
+    const float bite_launch = tuning.bite_duration * core::clampf(tuning.gesture_anticipation, 0.0f, 0.6f);
+    if ((action_.bite && bite_launch <= 0.0f) ||
+        (!action_.bite && bite_time_ >= bite_launch && bite_time_ - dt < bite_launch)) {
+        // Release the neck AFTER loading, not on the input edge.
         const Vec3 kick = core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) *
                           tuning.bite_impulse;
         const size_t points = neck_sim_.velocity.size();
@@ -2332,8 +2355,6 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
             const float progress = float(i) / float(points - 1);
             neck_sim_.velocity[i] += kick * progress;
         }
-    } else {
-        bite_time_ += dt;
     }
     action_.bite = false;
     if (action_.claw) {
@@ -2346,6 +2367,12 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     if (action_.tail) {
         tail_time_ = 0.0f;
         tail_side_ = action_.side >= 0.0f ? 1.0f : -1.0f;
+    } else {
+        tail_time_ += dt;
+    }
+    const float tail_launch = tuning.tail_duration * core::clampf(tuning.gesture_anticipation, 0.0f, 0.6f);
+    if ((action_.tail && tail_launch <= 0.0f) ||
+        (!action_.tail && tail_time_ >= tail_launch && tail_time_ - dt < tail_launch)) {
         // The whip: kick the tail's points sideways toward the mark, more
         // toward the tip. Engine body frame (right +X), carried into model
         // space like every other frame vector.
@@ -2356,8 +2383,6 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
             const float progress = float(i) / float(points - 1);
             tail_sim_.velocity[i] += kick * progress * progress;
         }
-    } else {
-        tail_time_ += dt;
     }
     action_.tail = false;
 
@@ -2411,6 +2436,10 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         }
         if (std::fabs(gesture_yaw_) > 1e-5f) {
             rotate_joint(joints_.root, Vec3::unit_y(), -gesture_yaw_, true);
+        }
+        if (std::fabs(gesture_sway_) > 1e-5f) {
+            pose_.local[size_t(joints_.root)].position +=
+                core::rotate(body_to_model_, Vec3::right()) * (gesture_sway_ / model_scale_);
         }
         if (std::fabs(gesture_surge_) > 1e-5f) {
             Transform& local = pose_.local[size_t(joints_.root)];
