@@ -516,6 +516,45 @@ void test_landing_and_takeoff() {
     CHECK(dot(model.state().up(), normal) > 0.99f);
     CHECK(state_is_sane(model));
 
+    // Walking: the stick moves a landed dragon along its facing and turns it
+    // in place, and it stays on its feet. Before, a grounded dragon could not
+    // move at all, so landing ON a hoard cache was luck.
+    {
+        game::FlightModel walker = model;
+        const Vec3 start = walker.state().position;
+        const Vec3 facing = normalize(Vec3{walker.state().forward().x, 0.0f,
+                                           walker.state().forward().z});
+        game::FlightInput walk;
+        walk.walk = 1.0f;
+        int airborne = 0;
+        for (int i = 0; i < 180; ++i) {
+            walker.update(walk, &terrain, 1.0f / 60.0f);
+            if (!walker.state().grounded) ++airborne;
+        }
+        const Vec3 moved = walker.state().position - start;
+        std::printf("  walked %.1f m in 3 s (%.1f m along the facing), airborne %d frames\n",
+                    length(Vec3{moved.x, 0.0f, moved.z}), dot(moved, facing), airborne);
+        CHECK(dot(moved, facing) > walker.tuning.walk_speed * 2.0f);
+        CHECK(airborne < 5);
+        CHECK(state_is_sane(walker));
+        // Let go and it stops.
+        for (int i = 0; i < 120; ++i) walker.update(idle, &terrain, 1.0f / 60.0f);
+        CHECK(length(walker.state().velocity) < 0.5f);
+        // Turning right in place for a second yaws the facing clockwise from
+        // above (toward +X from -Z) by about the turn rate.
+        const Vec3 before = normalize(Vec3{walker.state().forward().x, 0.0f,
+                                           walker.state().forward().z});
+        game::FlightInput turn;
+        turn.walk_turn = 1.0f;
+        for (int i = 0; i < 60; ++i) walker.update(turn, &terrain, 1.0f / 60.0f);
+        const Vec3 after = normalize(Vec3{walker.state().forward().x, 0.0f,
+                                          walker.state().forward().z});
+        const float turned = std::acos(core::clampf(dot(before, after), -1.0f, 1.0f));
+        CHECK(std::fabs(turned - walker.tuning.walk_turn_rate) < 0.25f);
+        CHECK(cross(before, after).y < 0.0f);  // clockwise from above is -y
+        CHECK(walker.state().grounded);
+    }
+
     // A flap from the ground: airborne within a second, and climbing.
     game::FlightInput flap;
     flap.flap = 1.0f;

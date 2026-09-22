@@ -145,6 +145,14 @@ struct FlightTuning {
     float ground_stop_speed = 1.6f;
     // Landing softer than this keeps you intact; harder is a crash.
     float safe_landing_speed = 18.0f;
+    // Walking. A landed dragon used to be rooted to the spot: the only way to
+    // move was to take off, which made landing ON something -- a hoard cache
+    // -- a matter of luck. On the ground the stick walks: forward and back
+    // along the facing, turning in place about the surface.
+    float walk_speed = 7.0f;       // m/s forward
+    float walk_back_speed = 2.5f;  // m/s backing up
+    float walk_turn_rate = 1.6f;   // rad/s
+    float walk_response = 0.25f;   // s to reach the commanded pace
 };
 
 // Player intent, all normalized. Produced by keyboard, gamepad, or an AI pilot
@@ -165,6 +173,11 @@ struct FlightInput {
     // dragon throwing its weight into a roll turns faster than one cruising.
     bool maneuver = false;
     float agility = 1.0f;
+    // On the ground only: -1..1 walk along the facing (+ forward), and turn
+    // (+ right). The app fills these from the stick in whatever sense reads
+    // as "that way" on each device, independent of the pitch inversion.
+    float walk = 0.0f;
+    float walk_turn = 0.0f;
 };
 
 // Everything the flight model produces. The derived fields exist for telemetry
@@ -246,6 +259,8 @@ private:
     void integrate_forces(const FlightInput& input, float dt);
     void integrate_rotation(const FlightInput& input, float dt);
     void resolve_ground(const Terrain* terrain, float dt);
+    void walk(const FlightInput& input, float dt);
+    bool walking_ = false;
 
     FlightState state_;
 };

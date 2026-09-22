@@ -147,6 +147,14 @@ struct Options {
     // --run-empty: the run with no rivals and no towers, so the autopilot can
     // fly the corridor to the pass -- the soak for the banking path.
     bool run_empty = false;
+    // --walk F[,T]: once grounded, walk at F (-1..1) turning at T, for a
+    // capture of the walk in the game rather than on the bench.
+    // --hunters-after S: loose the run's first hunter after S seconds instead
+    // of the default two minutes, for a capture of one.
+    float hunters_after = 0.0f;
+    bool has_walk = false;
+    float walk = 0.0f;
+    float walk_turn = 0.0f;
 
     // --telemetry [N] logs one line of flight state every N frames (default
     // 60, so once a second at the headless fixed step). A screenshot shows a

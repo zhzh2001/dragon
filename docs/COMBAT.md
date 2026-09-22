@@ -429,6 +429,26 @@ playtest's. The Combat panel's run section has every dial, and target
 brackets now stop at `mark_range` (1400 m): seven hostiles down a
 five-kilometre valley put seven range labels on the opening frame.
 
+**After the first playtest (M24.1).** Three findings. *A landed dragon could
+not move*, so landing inside a 26 m cache ring was luck: the stick now walks
+on the ground (`FlightTuning::walk_*`, 7 m/s, turning in place; W and the pad
+pushed away are forward regardless of the pitch inversion) with a stride on
+the terrain IK (`ANIMATION.md`). *Towers died to a dragon that landed beside
+them and breathed*: a tower was the one target that could not answer a
+dragon standing still. Now stone takes `defence_breath_resist` (0.3) of the
+flame, bites and strikes land but neither stun nor shove a tower, inside
+`defence_close_range` (200 m) or against a grounded dragon it fires
+`defence_close_rate` (2.5x) as often at a quarter of the spread, and its bolt
+splashes `defence_splash` (10 m) where it hits the ground, so a near miss on
+a standing dragon still costs. Fireballs from range and a bite are the
+answer; sitting in the flame is not. *Rivals and hunters looked alike*: the
+bracket now says who -- HUNTER in the danger red (bracket, label and edge
+arrow), RIVAL or RIVAL (at post), TOWER -- and rivals no longer draw the
+rust hide from the palette, so red in the world means hunter too.
+`test_combat` pins the tower answers (a third of the breath, no stun or
+shove, more than twice the shots at a standing dragon 150 m out than at a
+cruising one 350 m out); `test_flight` pins the walk.
+
 `tests/test_hoard_run.cpp` pins the layout (determinism, caches dry and
 ordered and richer with depth, towers on the ground beside the spine, rivals
 over it facing back, the gate at the end), collection (needs the ground and

@@ -93,7 +93,11 @@ void FlightModel::step(const FlightInput& input, const Terrain* terrain, float d
     integrate_forces(input, dt);
 
     state_.position += state_.velocity * dt;
+    // While walking, the pace owns the horizontal velocity: friction and the
+    // static stop would zero each frame's small step before it built up.
+    walking_ = std::fabs(input.walk) > 0.02f;
     resolve_ground(terrain, dt);
+    if (state_.grounded) walk(input, dt);
 
     // Telemetry that only depends on the final state.
     state_.climb_rate = state_.velocity.y;
@@ -360,6 +364,29 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     state_.orientation = core::integrate(state_.orientation, world_omega, dt);
 }
 
+void FlightModel::walk(const FlightInput& input, float dt) {
+    const float forward_cmd = core::clampf(input.walk, -1.0f, 1.0f);
+    const float turn_cmd = core::clampf(input.walk_turn, -1.0f, 1.0f);
+    // Turn in place about world up: the resting code has already levelled the
+    // body onto the surface, and it keeps doing so each frame.
+    if (std::fabs(turn_cmd) > 0.02f) {
+        const core::Quat turn =
+            core::Quat::from_axis_angle(Vec3::up(), -turn_cmd * tuning.walk_turn_rate * dt);
+        state_.orientation = core::normalize(turn * state_.orientation);
+    }
+    if (std::fabs(forward_cmd) < 0.02f) return;  // friction brings it to a stop
+    // The pace, along the facing projected onto the ground. Only the
+    // horizontal velocity is steered; the ground contact owns the vertical.
+    const Vec3 facing = core::normalize_or(Vec3{state_.forward().x, 0.0f, state_.forward().z},
+                                           Vec3::forward());
+    const float pace = forward_cmd > 0.0f ? forward_cmd * tuning.walk_speed
+                                          : forward_cmd * tuning.walk_back_speed;
+    const Vec3 target = facing * pace;
+    const float blend = 1.0f - std::exp(-dt / core::maxf(tuning.walk_response, 0.02f));
+    state_.velocity.x += (target.x - state_.velocity.x) * blend;
+    state_.velocity.z += (target.z - state_.velocity.z) * blend;
+}
+
 void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
     if (!terrain) {
         state_.grounded = false;
@@ -398,6 +425,12 @@ void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
     // Remove the velocity going into the surface, keep what slides along it.
     const float into_surface = core::dot(state_.velocity, normal);
     if (into_surface < 0.0f) state_.velocity -= normal * into_surface;
+
+    if (walking_) {
+        state_.grounded = true;
+        state_.stalling = false;
+        return;
+    }
 
     // Ground friction, frame-rate independent.
     const float retained = std::exp(-tuning.ground_friction * dt);
@@ -495,6 +528,8 @@ const Field FIELDS[] = {
     FIELD(min_airspeed),         FIELD(min_airspeed_assist), FIELD(ground_offset),
     FIELD(heft),                 FIELD(takeoff_jump),        FIELD(takeoff_push),
     FIELD(ground_friction),      FIELD(ground_stop_speed),   FIELD(safe_landing_speed),
+    FIELD(walk_speed),           FIELD(walk_back_speed),     FIELD(walk_turn_rate),
+    FIELD(walk_response),
 };
 #undef FIELD
 

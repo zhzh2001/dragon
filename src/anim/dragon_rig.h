@@ -384,6 +384,16 @@ struct RigTuning {
     // bends a leg rather than rolling the animal.
     float ground_ik = 1.0f;
     float ground_ik_tilt_max_deg = 12.0f;
+    // The walk: while the planted animal moves over the ground, diagonal
+    // pairs of limbs (hind left with fore right) step together -- lifted and
+    // swung forward, then planted and dragged back under the moving body --
+    // on the same terrain IK that plants a standing foot. Metres, world.
+    float stride_length_m = 2.2f;
+    float stride_lift_m = 0.55f;
+    // Standing shape (stow, stance) holds fully up to this ground speed and
+    // is gone at twice it, so a walking dragon keeps its wings folded. It
+    // used to fade from rest, which unfolded the wings at a walking pace.
+    float standing_speed = 8.0f;
 
     // ---- neck and tail dynamics ----
     //
@@ -919,6 +929,9 @@ private:
     float plant_pitch_ = 0.0f;
     float plant_roll_ = 0.0f;
     float plant_dt_ = 1.0f / 60.0f;
+    float walk_phase_ = 0.0f;
+    float walk_amount_ = 0.0f;
+    float standing_share(float airspeed) const;
     float model_scale_ = 1.0f;
     const AnimationClip* base_clip_ = nullptr;
     float clip_hold_time_ = -1.0f;

@@ -151,6 +151,75 @@ void test_melee_reach_and_cooldown() {
     CHECK(near(combat.sentinels()[0].health, health, 1e-3f));
 }
 
+void test_towers_answer_a_standing_dragon() {
+    std::printf("towers: stone resists the breath, bites neither stun nor shove, and a\n"
+                "  grounded or close dragon draws faster fire\n");
+    // Breath: the same second of flame on a drone and on a tower.
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 5u);
+    for (auto& s : combat.sentinels()) retire(s);
+    combat.spawn_defence(Vec3{0.0f, 0.0f, -40.0f});
+    game::Sentinel& tower = combat.sentinels().back();
+    CHECK(tower.ground);
+    const FlightState player = player_at(Vec3::zero());
+    CombatInput hold;
+    hold.breath = true;
+    const float before = tower.health;
+    for (int i = 0; i < 30; ++i) combat.update(1.0f / 60.0f, player, hold);
+    const float tower_loss = before - combat.sentinels().back().health;
+    Combat drone_fight;
+    drone_fight.reset(nullptr, Vec3::zero(), 5u);
+    drone_fight.tuning.sentinel_health = 500.0f;
+    isolate_sentinel(drone_fight, Vec3{0.0f, 0.0f, -40.0f});
+    const float drone_before = drone_fight.sentinels()[0].health;
+    for (int i = 0; i < 30; ++i) drone_fight.update(1.0f / 60.0f, player, hold);
+    const float drone_loss = drone_before - drone_fight.sentinels()[0].health;
+    std::printf("  half a second of breath: tower -%.1f, drone -%.1f\n", tower_loss, drone_loss);
+    CHECK(tower_loss > 0.0f);
+    CHECK(near(tower_loss, drone_loss * combat.tuning.defence_breath_resist, 0.5f));
+
+    // A bite lands but does not stun or move it.
+    Combat bite_fight;
+    bite_fight.reset(nullptr, Vec3::zero(), 7u);
+    for (auto& s : bite_fight.sentinels()) retire(s);
+    bite_fight.spawn_defence(Vec3{0.0f, 0.0f, -18.0f});
+    CombatInput bite;
+    bite.melee = true;
+    const game::CombatEvents events = bite_fight.update(1.0f / 60.0f, player, bite);
+    const game::Sentinel& bitten = bite_fight.sentinels().back();
+    CHECK(events.melee_hit != game::MeleeKind::None);
+    CHECK(bitten.health < bitten.max_health);
+    CHECK(bitten.stun == 0.0f);
+    CHECK(near(bitten.centre.z, -18.0f, 1e-3f));
+
+    // Rate of fire: a dragon cruising 350 m out, then standing 150 m out.
+    auto shots_in = [](bool grounded, float distance) {
+        Combat c;
+        c.tuning.max_health = 1e6f;
+        c.reset(nullptr, Vec3::zero(), 9u);
+        for (auto& s : c.sentinels()) retire(s);
+        c.spawn_defence(Vec3::zero());
+        FlightState target = player_at(Vec3{distance, 20.0f, 0.0f});
+        target.grounded = grounded;
+        int shots = 0;
+        for (int i = 0; i < 600; ++i) {
+            c.update(1.0f / 60.0f, target, CombatInput{});
+            for (const game::Projectile& p : c.projectiles()) {
+                if (p.alive && p.team == game::Team::Hostile &&
+                    p.life > c.tuning.fireball_lifetime - 1.5f / 60.0f) {
+                    ++shots;
+                }
+            }
+        }
+        return shots;
+    };
+    const int cruising = shots_in(false, 350.0f);
+    const int standing = shots_in(true, 150.0f);
+    std::printf("  shots in 10 s: cruising at 350 m %d, standing at 150 m %d\n", cruising, standing);
+    CHECK(cruising >= 3);
+    CHECK(standing >= cruising * 2);
+}
+
 void test_melee_stuns_knocks_and_chains() {
     std::printf("a bite stuns and knocks its target, and hits chain inside the window\n");
     Combat combat;
@@ -820,6 +889,7 @@ int main() {
     test_closest_point_fraction();
     test_melee_reach_and_cooldown();
     test_melee_stuns_knocks_and_chains();
+    test_towers_answer_a_standing_dragon();
     test_training_room_is_passive();
     test_melee_gesture_follows_the_mark();
     test_hostile_melee_reaches_the_player();

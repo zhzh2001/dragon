@@ -106,6 +106,11 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--run") {
             options.run = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--hunters-after" && i + 1 < argc) {
+            options.hunters_after = float(SDL_atof(argv[++i]));
+        } else if (arg == "--walk" && i + 1 < argc) {
+            options.has_walk = true;
+            std::sscanf(argv[++i], "%f,%f", &options.walk, &options.walk_turn);
         } else if (arg == "--run-empty") {
             options.run = true;
             options.run_empty = true;
@@ -278,6 +283,7 @@ bool App::init(const Options& options) {
         }
     }
     if (options.run) {
+        if (options.hunters_after > 0.0f) hoard_run_.settings.pressure_after = options.hunters_after;
         if (options.run_empty) {
             hoard_run_.settings.rivals = 0;
             hoard_run_.settings.defences = 0;
@@ -663,6 +669,30 @@ game::FlightInput App::read_flight_input(float dt) {
                         1.0f, flight_.state(), maneuver_tuning_);
     }
     maneuver_.apply(in, flight_.state(), maneuver_tuning_, dt);
+
+    // Standing: the stick walks. W and the pad's stick pushed away both mean
+    // "that way" -- on the ground there is no nose to raise, so the flight
+    // inversion does not apply -- and A/D or the stick's x turns in place.
+    // Pitch and roll are dropped so the body does not tip on its feet; Space
+    // still leaps into the air.
+    if (flight_.state().grounded) {
+        if (options_.has_walk) {
+            in.walk = options_.walk;
+            in.walk_turn = options_.walk_turn;
+        } else if (scripted) {
+            in.walk = in.pitch;
+            in.walk_turn = in.roll;
+        } else if (!ui_.wants_keyboard()) {
+            in.walk = input_.axis(SDL_SCANCODE_S, SDL_SCANCODE_W);
+            in.walk_turn = input_.axis(SDL_SCANCODE_A, SDL_SCANCODE_D);
+            if (input_.has_gamepad()) {
+                in.walk -= input_.gamepad_axis(SDL_GAMEPAD_AXIS_LEFTY, controls_.gamepad_deadzone);
+                in.walk_turn += input_.gamepad_axis(SDL_GAMEPAD_AXIS_LEFTX, controls_.gamepad_deadzone);
+            }
+        }
+        in.pitch = 0.0f;
+        in.roll = 0.0f;
+    }
     return in;
 }
 
@@ -2197,6 +2227,9 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("tail up", &rig.ground_tail_pitch_deg, -90.0f, 60.0f, "%.0f deg");
             ImGui::SliderFloat("extra lift", &rig.ground_lift_m, -1.0f, 2.0f, "%.2f m");
             ImGui::SliderFloat("plant limbs on terrain", &rig.ground_ik, 0.0f, 1.0f);
+            ImGui::SliderFloat("stride length", &rig.stride_length_m, 0.5f, 6.0f, "%.1f m");
+            ImGui::SliderFloat("stride lift", &rig.stride_lift_m, 0.0f, 2.0f, "%.2f m");
+            ImGui::SliderFloat("standing speed", &rig.standing_speed, 1.0f, 20.0f, "%.0f m/s");
             ImGui::SliderFloat("terrain tilt limit", &rig.ground_ik_tilt_max_deg, 0.0f, 30.0f,
                                "%.0f deg");
             ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -45.0f, 60.0f, "%.0f deg");
@@ -2972,6 +3005,10 @@ void App::spawn_rival(int rival_index, bool hunter) {
         position = rival.position;
         facing = rival.facing;
         bot->dormant = true;
+        // Rivals never wear the hunters' red: bone, moss, violet, steel.
+        static const core::Vec3 rival_hides[] = {
+            {1.9f, 1.6f, 0.95f}, {0.75f, 1.7f, 0.6f}, {1.4f, 0.7f, 2.0f}, {0.8f, 1.2f, 1.9f}};
+        bot->hue = rival_hides[size_t(rival_index) % 4];
         bot->post = rival.position;
         bot->rival = rival_index;
         bot->loiter_phase = float(rival_index) * 2.1f;
@@ -3840,17 +3877,30 @@ void App::draw_combat_hud() {
         for (const auto& bot : bots_) {
             if (bot->slot == index && bot->breathing) flaming = true;
         }
+        // Who it is, in a run: a hunter is the danger red and says so, a
+        // rival says RIVAL (and whether it is still circling its post), a
+        // tower says TOWER. The playtest could not tell a rival from a
+        // hunter -- both were a bracket and a range.
+        const BotShip* who = nullptr;
+        for (const auto& bot : bots_) {
+            if (bot->slot == index) who = bot.get();
+        }
+        const bool hunter = who && who->hunter;
+        const char* tag = !run_mode_ ? ""
+                          : hunter ? "HUNTER  "
+                          : who ? (who->dormant ? "RIVAL (at post)  " : "RIVAL  ")
+                          : sentinel.ground ? "TOWER  " : "";
         // The locked target is unmistakable. Everything else is a faint mark:
         // if every target looks equally important, none of them read.
-        const ImU32 colour = flaming ? tk.flame : locked ? tk.lock : tk.mark;
+        const ImU32 colour = flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark;
         if (on_screen) {
             // Brackets rather than a box: they read as a target at any size and
             // do not obscure what they surround.
             const float half = core::clampf(2600.0f / core::maxf(range, 1.0f), hud_.px(10.0f), hud_.px(60.0f));
             hud_.bracket(screen, half, colour, hud_.px(1.8f));
-            std::snprintf(line, sizeof(line), flaming ? "%.0f m  FLAME" : "%.0f m", range);
+            std::snprintf(line, sizeof(line), flaming ? "%s%.0f m  FLAME" : "%s%.0f m", tag, range);
             hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
-                       flaming ? tk.flame : locked ? tk.lock : tk.mark, 12.0f);
+                       flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
             // A rival's health under the bracket: whether to press the attack.
             // (Its aggression was drawn there too for one build and told the
             // player nothing they acted on; the Combat panel still lists it.)
@@ -4320,6 +4370,8 @@ void App::build_flight_ui() {
         // Heft: one knob for "this one is heavier", composed on top of the
         // presets and sliders rather than baked into them.
         ImGui::SliderFloat("heft", &t.heft, 0.5f, 2.5f, "%.2fx");
+        ImGui::SliderFloat("walk speed", &t.walk_speed, 0.0f, 20.0f, "%.1f m/s");
+        ImGui::SliderFloat("walk turn", &t.walk_turn_rate, 0.2f, 4.0f, "%.1f rad/s");
         ImGui::TextDisabled("heft multiplies mass, and slows roll/pitch/yaw and control lag by its root");
         ImGui::SliderFloat("take-off jump", &t.takeoff_jump, 0.0f, 15.0f, "%.1f m/s");
     }

@@ -387,6 +387,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_tail_pitch_deg),
     RIG_FLOAT_FIELD(ground_lift_m),
     RIG_FLOAT_FIELD(ground_ik),
+    RIG_FLOAT_FIELD(stride_length_m),
+    RIG_FLOAT_FIELD(stride_lift_m),
+    RIG_FLOAT_FIELD(standing_speed),
     RIG_FLOAT_FIELD(ground_ik_tilt_max_deg),
     RIG_FLOAT_FIELD(chain_stiffness),
     RIG_FLOAT_FIELD(chain_damping),
@@ -879,7 +882,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
         core::smoothstep(tuning.sweep_speed_start, tuning.sweep_speed_full, state.airspeed);
     // Standing closes further than any tuck should: the stow is added here so
     // the flight angles stay free to be as open as a stoop needs.
-    const float stow = ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f);
+    const float stow = ground_contact_ * standing_share(state.airspeed);
     // On the ground a species may hand the wing from the tuck to the stow --
     // a wyvern plants its wrists, and the stoop fold is the wrong start.
     const float tuck = state.wing_tuck *
@@ -2073,6 +2076,11 @@ void DragonRig::rotate_joint_about(int joint, Vec3 axis_model, float angle) {
     compute_world_matrices(*skeleton_, pose_, world_);
 }
 
+float DragonRig::standing_share(float airspeed) const {
+    const float full = core::maxf(tuning.standing_speed, 0.5f);
+    return core::saturate(2.0f - airspeed / full);
+}
+
 void DragonRig::plant_limbs(float stance) {
     const float weight = stance * core::saturate(tuning.ground_ik);
     if (weight <= 1e-4f || !ground_height_ || !skeleton_ || joints_.root == NO_PARENT) return;
@@ -2083,6 +2091,7 @@ void DragonRig::plant_limbs(float stance) {
     struct Limb {
         int a, b, c;
         bool fore;
+        int side;
     };
     std::vector<Limb> limbs;
     auto foot_root_under = [&](int chain_end) {
@@ -2095,12 +2104,12 @@ void DragonRig::plant_limbs(float stance) {
     };
     for (int side = 0; side < 2; ++side) {
         const std::vector<int>& leg = joints_.leg[side];
-        if (leg.size() >= 2) limbs.push_back({leg[0], leg[1], foot_root_under(leg.back()), false});
+        if (leg.size() >= 2) limbs.push_back({leg[0], leg[1], foot_root_under(leg.back()), false, side});
         const std::vector<int>& arm = joints_.front_leg[side];
-        if (arm.size() >= 2) limbs.push_back({arm[0], arm[1], foot_root_under(arm.back()), true});
+        if (arm.size() >= 2) limbs.push_back({arm[0], arm[1], foot_root_under(arm.back()), true, side});
         const std::vector<int>& wing = joints_.wing_root[side];
         if (tuning.ground_wing_plant > 0.5f && wing.size() >= 3) {
-            limbs.push_back({wing[0], wing[1], wing.back(), true});
+            limbs.push_back({wing[0], wing[1], wing.back(), true, side});
         }
     }
     if (limbs.empty()) return;
@@ -2188,14 +2197,35 @@ void DragonRig::plant_limbs(float stance) {
     // Two-bone: bend the middle joint about the limb's own plane until the
     // chain's length matches the reach, then aim the chain at the target.
     // Twice, since each step disturbs the other a little.
+    //
+    // Walking, each limb also gets its step: diagonal pairs share a phase,
+    // lifted and swung forward in the first half of the cycle, planted and
+    // carried back in the second. The step is added to the per-limb target
+    // only, never to the body placement above, so the body rides level.
+    const float metre = core::length(up_model);
+    const Vec3 up_dir = up_model * (1.0f / metre);
+    const Vec3 forward_model =
+        core::normalize_or(core::rotate(body_to_model_, Vec3::forward()), Vec3::unit_z()) * metre;
+    const float walking = walk_amount_;
     for (const Limb& l : limbs) {
+        float lift_m = 0.0f;
+        Vec3 swing = Vec3::zero();
+        if (walking > 1e-3f) {
+            const bool first_pair = (l.side == 0) != l.fore;  // hind 0 with fore 1
+            const float phase = walk_phase_ + (first_pair ? 0.0f : core::PI);
+            lift_m = tuning.stride_lift_m * core::maxf(std::sin(phase), 0.0f) * walking;
+            swing = forward_model * (-std::cos(phase) * 0.5f * tuning.stride_length_m * walking);
+        }
+        const Vec3 goal = world_[size_t(l.c)].col[3].xyz() + swing;
         for (int iteration = 0; iteration < 2; ++iteration) {
-            const float e = contact_error(l);
-            if (std::fabs(e) < 0.005f) break;
+            const float e = contact_error(l) + lift_m;
+            const Vec3 c = world_[size_t(l.c)].col[3].xyz();
+            Vec3 across = goal - c;
+            across = across - up_dir * core::dot(across, up_dir);
+            if (std::fabs(e) < 0.005f && core::length_sq(across) < 1e-6f) break;
             const Vec3 a = world_[size_t(l.a)].col[3].xyz();
             const Vec3 b = world_[size_t(l.b)].col[3].xyz();
-            const Vec3 c = world_[size_t(l.c)].col[3].xyz();
-            const Vec3 target = c + up_model * e;
+            const Vec3 target = c + up_model * e + across;
             const float l1 = core::length(b - a), l2 = core::length(c - b);
             if (l1 < 1e-5f || l2 < 1e-5f) break;
             const float reach = core::clampf(core::length(target - a),
@@ -2549,7 +2579,17 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // The standing stance, on top of everything the flight pose left: the same
     // "on the ground and at rest" signal the wing stow fades in with.
     plant_dt_ = dt;
-    drive_stance(ground_contact_ * core::saturate(1.0f - state.airspeed / 12.0f));
+    {
+        // The walk clock: one full cycle carries each foot a stride forward
+        // and back, so it advances by pi per stride of ground covered.
+        const float ground_speed =
+            state.grounded ? core::length(Vec3{state.velocity.x, 0.0f, state.velocity.z}) : 0.0f;
+        walk_amount_ = core::damp(walk_amount_, core::saturate(ground_speed / 1.5f), 0.12f, dt);
+        walk_phase_ = std::fmod(walk_phase_ + core::PI * ground_speed /
+                                                  core::maxf(tuning.stride_length_m, 0.2f) * dt,
+                                core::TWO_PI);
+    }
+    drive_stance(ground_contact_ * standing_share(state.airspeed));
 
     // Feet: first anchor them to the posed legs (needs world matrices), then
     // the relaxed hang and claw curl compose on top.

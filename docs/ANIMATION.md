@@ -1010,6 +1010,25 @@ behind and below) and the brake (side, below) on all seven species,
 wrong pose even when every number is right; judge a pendulum from a
 sequence, never from a frame.**
 
+**The walk (M24.1).** A landed dragon could not move until the run needed it
+to walk onto a cache. The flight model walks it (`FlightModel::walk`: pace
+along the facing, turning about world up, the ground friction standing down
+while the stick is held); the rig gives it a stride on the terrain IK that
+already planted the standing limbs. `plant_limbs` adds, per limb and only to
+that limb's target -- never to the body placement, so the body rides level --
+a lift (`stride_lift_m` 0.55) and a fore-aft swing of half a
+`stride_length_m` (2.2), phased so diagonal pairs step together (hind left
+with fore right), the clock advancing pi per stride of ground covered. The
+standing shape used to fade from rest (`1 - speed/12`), which half-opened the
+wings at a walking pace; it now holds fully up to `standing_speed` (8 m/s)
+and is gone at twice that. Studio 13 is the walk on the spot; `--input
+-0.25,0,0,0,0,0 --walk 1,0` lands and walks in the game. Judged as
+three-frame sequences on dragon, ironroot, stormsail and blightmaw
+(`artifacts/walk/`); the hero asset's folded wings hide most of its legs,
+ironroot and blightmaw show the step plainly. A proper gait -- body sway,
+head bob, a trot at speed -- is not built; this is the least that makes
+moving on the ground read as walking.
+
 **The brake is a flare (M23).** The brake had only the finger flare and the
 buffet, and read as a glide with a shiver in it -- and in a braking turn the
 level body under a banked wing read as a skid. A landing bird rotates its

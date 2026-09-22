@@ -495,6 +495,11 @@ pressure more fun than the arena, and do altitude and route matter? If yes,
 row 6 (growth, prey); if no, the boss-duel probe from `RETRO.md`. The
 arena, the match and every earlier mode are unchanged.
 
+2026-09-22, first run playtest: "interesting concept", with three blockers
+-- no movement on the ground (caches were luck to land in), towers beaten by
+landing and breathing, rivals and hunters indistinguishable. All three
+answered (`STATUS.md` M24.1). The gate stands: fly it ten times.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

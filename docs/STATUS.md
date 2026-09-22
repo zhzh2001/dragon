@@ -142,6 +142,15 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M24.1** after the first run playtest ("cannot move when grounded, so
+  very hard to land in the caches; towers are easy by landing and breathing;
+  hard to tell rivals from hunters"): the dragon walks on the ground with a
+  stride on the terrain IK (studio 13, `--walk`); towers resist breath, shrug
+  off stun and shove, fire faster and tighter at a close or grounded dragon
+  and splash where their bolts land; the HUD tags HUNTER in red, RIVAL and
+  TOWER, and rivals no longer wear red. `COMBAT.md` "After the first
+  playtest", `ANIMATION.md` "The walk". Renders in `artifacts/walk/` and
+  `artifacts/run/`.
 - **M24** the run probe (row 3): `--run [seed]` and a "run" section at the
   top of the Combat panel. `game::HoardRun` lays a seeded valley out along
   the corridor's spine -- three caches on flat ground to land on, four

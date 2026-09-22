@@ -108,6 +108,7 @@ float speed_at(StudioScenario scenario, float t) {
         case StudioScenario::Claw:
         case StudioScenario::Tail: return 34.0f;
         case StudioScenario::Grounded: return 0.0f;
+        case StudioScenario::Walk: return 5.5f;
         default: return 26.0f;
     }
 }
@@ -129,6 +130,7 @@ const char* studio_scenario_name(StudioScenario scenario) {
         case StudioScenario::Melee: return "melee";
         case StudioScenario::Claw: return "claw";
         case StudioScenario::Tail: return "tail";
+        case StudioScenario::Walk: return "walk";
         default: return "?";
     }
 }
@@ -154,6 +156,8 @@ const char* studio_scenario_notes(StudioScenario scenario) {
             return "neck and head hold the mark; jaw gapes on the breath, rears back on the spit";
         case StudioScenario::Grounded:
             return "wings stowed, legs planted, idle clip at full strength";
+        case StudioScenario::Walk:
+            return "walking pace on the spot: diagonal pairs step, feet lift clear and plant, wings stay folded";
         case StudioScenario::Melee:
             return "bite, claw, tail in turn every 1.6 s at a mark close ahead; sides alternate";
         case StudioScenario::Claw:
@@ -330,10 +334,13 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             state.g_load = 1.0f + 0.35f * std::fabs(std::sin(phase));
             break;
         }
+        case StudioScenario::Walk:
         case StudioScenario::Grounded:
             state.position.y = ground_y + ground_offset;  // body centre above the surface
-            state.velocity = Vec3::zero();
-            state.airspeed = 0.0f;
+            if (scenario == StudioScenario::Grounded) {
+                state.velocity = Vec3::zero();
+                state.airspeed = 0.0f;
+            }
             state.grounded = true;
             state.ground_clearance = 0.0f;
             // Wings stow along the body on the ground -- the tuck fold is

@@ -164,6 +164,17 @@ struct CombatTuning {
     float defence_damage = 14.0f;
     float defence_spread = 14.0f;
     float defence_range = 420.0f;
+    // The playtest landed beside a tower and breathed on it until it fell:
+    // a tower was the one target that could not answer a dragon standing
+    // still. Stone takes a share of the flame; bites and strikes land but
+    // neither stun nor shove a building; inside the close range, or against
+    // a grounded dragon, it fires faster and tighter; and a bolt that strikes
+    // the ground splashes, so a near miss on a standing dragon still hurts.
+    float defence_breath_resist = 0.3f;   // share of breath damage that lands
+    float defence_close_range = 200.0f;
+    float defence_close_rate = 2.5f;      // fire-rate multiplier up close or grounded
+    float defence_close_spread = 0.25f;   // spread multiplier up close or grounded
+    float defence_splash = 10.0f;         // m
 };
 
 // What the player is asking combat to do this frame. Held vs edge is decided by

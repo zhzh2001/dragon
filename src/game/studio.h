@@ -27,6 +27,7 @@ enum class StudioScenario : int {
     Melee,  // appended, so the numbers in the docs and scripts stay
     Claw,
     Tail,
+    Walk,  // on the ground at a walking pace: the stride, on a treadmill
     Count,
 };
 

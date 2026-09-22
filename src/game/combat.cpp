@@ -404,12 +404,16 @@ void Combat::apply_melee(const FlightState& player, CombatEvents& events) {
                         events);
         // Stun and knock: away from whichever part of the dragon connected,
         // with a little lift so the rival is thrown up out of the line.
-        sentinel.stun = core::maxf(sentinel.stun, tuning.melee_stun * (bite ? 1.0f : 0.6f));
+        if (!sentinel.ground) {
+            sentinel.stun = core::maxf(sentinel.stun, tuning.melee_stun * (bite ? 1.0f : 0.6f));
+        }
         const Vec3 from = bite ? mouth : player.position;
         const Vec3 away = core::normalize_or(sentinel.position - from, forward);
         const Vec3 shove = core::normalize_or(away + Vec3{0.0f, 0.35f, 0.0f}, away) *
                            tuning.melee_knockback;
-        if (sentinel.external) {
+        if (sentinel.ground) {
+            // A tower does not move.
+        } else if (sentinel.external) {
             sentinel.knockback = sentinel.knockback + shove;
         } else {
             // A drone's position is rebuilt from its orbit each frame, so the
@@ -622,6 +626,23 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
                             terrain_->height_at(projectile.position.x, projectile.position.z)) {
             projectile.alive = false;
             impacts_.push_back({projectile.position, projectile.team, true});
+            // A hostile round with a blast splashes where it lands: a tower's
+            // bolt into the ground beside a standing dragon is not a miss.
+            if (projectile.team == Team::Hostile && projectile.blast_radius > 0.0f && health_ > 0.0f) {
+                const float d = core::length(player.position - projectile.position);
+                if (d < projectile.blast_radius) {
+                    const float amount = projectile.damage * (1.0f - d / projectile.blast_radius) * 0.7f;
+                    health_ -= amount;
+                    events.damage_taken += amount;
+                    events.damage_from = previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f;
+                    events.took_damage = true;
+                    time_since_damage_ = 0.0f;
+                    if (health_ <= 0.0f) {
+                        health_ = 0.0f;
+                        events.player_died = true;
+                    }
+                }
+            }
         }
     }
 }
@@ -679,10 +700,13 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         sentinel.fire_timer -= dt;
         if (sentinel.fire_timer > 0.0f) continue;
         const bool ground = sentinel.ground;
-        sentinel.fire_timer = ground ? tuning.defence_fire_interval : tuning.sentinel_fire_interval;
-
         const Vec3 to_player = player.position - sentinel.position;
         const float distance = core::length(to_player);
+        const bool pressed = ground && (player.grounded || distance < tuning.defence_close_range);
+        sentinel.fire_timer =
+            ground ? tuning.defence_fire_interval /
+                         (pressed ? core::maxf(tuning.defence_close_rate, 0.1f) : 1.0f)
+                   : tuning.sentinel_fire_interval;
         const float range = ground ? tuning.defence_range : tuning.sentinel_range;
         if (distance > range || distance < 1e-3f) continue;
 
@@ -695,12 +719,13 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         Vec3 aim = player.position + player.velocity * flight_time;
         aim.y += 0.5f * gravity * flight_time * flight_time;
         aim += Vec3{random_unit(), random_unit(), random_unit()} *
-               (ground ? tuning.defence_spread : tuning.sentinel_spread);
+               (ground ? tuning.defence_spread * (pressed ? tuning.defence_close_spread : 1.0f)
+                       : tuning.sentinel_spread);
 
         const Vec3 direction = core::normalize(aim - sentinel.position);
         fire_projectile(sentinel.position + direction * (tuning.sentinel_radius + 1.0f),
                         direction * speed, ground ? tuning.defence_damage : tuning.sentinel_damage,
-                        2.5f, 0.0f, Team::Hostile, gravity);
+                        2.5f, ground ? tuning.defence_splash : 0.0f, Team::Hostile, gravity);
     }
 }
 
@@ -728,8 +753,9 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
                            reach)) {
             continue;
         }
-        damage_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * dt,
-                        events);
+        const float resist = sentinel.ground ? core::saturate(tuning.defence_breath_resist) : 1.0f;
+        damage_sentinel(sentinel,
+                        tuning.breath_damage_per_second * player_breath.damage * dt * resist, events);
     }
 }
 

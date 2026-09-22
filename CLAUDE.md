@@ -67,7 +67,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Fly the selected course unattended. Doubles as a soak test. |
 | `--course N` | Select a generated course. |
-| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`). |
+| `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`), 13 walk (grounded at a walking pace on the spot; the stride). |
 | `--studio-speed N` | Studio playback speed, 0.05 to 2; scales both the scenario and the rig. |
 | `--combat` | Arm the dragon and spawn a wave of sentinels. |
 | `--training` | Arm the dragon and lay out the training room instead: six passive dummies ahead of the spawn, no return fire, back in 2.5 s. With `--attack`, the melee reach on a screenshot; `R` flies the line again. |
@@ -75,6 +75,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
 | `--run [seed]` | The hoard run (`DIRECTION.md` row 3): one generated valley flown head to pass, rivals at posts and towers on the slopes along it, three hoard caches to land on, the pass gate, death ending it, results text. No seed picks one from the clock; the seed is printed and on the results screen so a good valley can be flown again. `--seed N` also sets it. |
+| `--hunters-after S` | In a run, loose the first hunter after S seconds instead of two minutes, for a capture of one. |
+| `--walk F[,T]` | Once grounded, walk at F (-1..1) turning at T: with `--input -0.25,0,0,0,0,0` it lands and then walks, the in-game check of the stride. |
 | `--run-empty` | The run with no rivals and no towers: how the autopilot soaks the banking path (`--run-empty --autopilot --frames 8400` banks at the pass). |
 | `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
@@ -119,6 +121,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | Space | Flap -- the only way energy enters the system |
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
+| W/S, A/D on the ground | Walk forward and back, turn in place (the gamepad stick pushed away is forward). Space leaps back into the air |
 | R | Restart the run (in a hoard run: the same valley again, from the head) |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
