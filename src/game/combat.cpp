@@ -605,7 +605,7 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
             float distance = 0.0f;
             // The player's hit sphere is the dragon's body, not its wingspan --
             // being clipped through a wing membrane feels arbitrary.
-            if (sweep_hit(player.position, 6.5f, distance)) {
+            if (sweep_hit(player.position, tuning.player_radius * player_size, distance)) {
                 health_ -= projectile.damage;
                 events.damage_taken += projectile.damage;
                 // Where the round came from, not where it hit: the HUD has to
@@ -846,9 +846,14 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     // against the player exactly like the player's breath tests targets.
     for (const BreathCone& flame : hostile_breaths_pending_) {
         if (health_ <= 0.0f) break;
-        if (!point_in_cone(player.position, flame.origin, flame.direction,
-                           core::radians(tuning.hostile_breath_half_angle_deg * flame.scales.angle),
-                           tuning.hostile_breath_range * flame.scales.range)) {
+        // A bigger body reaches into the flame: its near side is tested too.
+        const float half = core::radians(tuning.hostile_breath_half_angle_deg * flame.scales.angle);
+        const float range = tuning.hostile_breath_range * flame.scales.range;
+        const Vec3 near_side = player.position +
+                               core::normalize_or(flame.origin - player.position, Vec3::zero()) *
+                                   (tuning.player_radius * core::maxf(player_size - 1.0f, 0.0f));
+        if (!point_in_cone(player.position, flame.origin, flame.direction, half, range) &&
+            !point_in_cone(near_side, flame.origin, flame.direction, half, range)) {
             continue;
         }
         const float damage = tuning.hostile_breath_dps * flame.scales.damage * dt;
@@ -870,7 +875,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     for (const MeleeSwing& swing : hostile_melee_pending_) {
         if (health_ <= 0.0f) break;
         const MeleeKind kind = melee_reach(swing.mouth, swing.forward, swing.body, player.position,
-                                           tuning.sentinel_radius, tuning);
+                                           tuning.sentinel_radius * player_size, tuning);
         if (kind == MeleeKind::None) continue;
         const float damage =
             tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f);

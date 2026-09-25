@@ -222,6 +222,24 @@ void test_towers_answer_a_standing_dragon() {
     CHECK(standing >= cruising);
 }
 
+void test_player_size_scales_the_body() {
+    std::printf("a grown player is a bigger target: a bolt 10 m wide misses at 1x, hits at 1.3x\n");
+    auto takes = [](float size) {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 3u, 0);
+        c.player_size = size;
+        const FlightState player = player_at(Vec3::zero());
+        // A hostile round passing 10 m to the side of the player's centre.
+        c.fire_hostile(Vec3{10.0f, 0.0f, 200.0f}, Vec3{0.0f, 0.0f, -300.0f}, 10.0f);
+        float taken = 0.0f;
+        for (int i = 0; i < 90; ++i) taken += c.update(1.0f / 60.0f, player, CombatInput{}).damage_taken;
+        return taken;
+    };
+    CHECK(takes(1.0f) == 0.0f);
+    CHECK(takes(1.3f) > 0.0f);
+    CHECK(takes(0.8f) == 0.0f);
+}
+
 void test_melee_stuns_knocks_and_chains() {
     std::printf("a bite stuns and knocks its target, and hits chain inside the window\n");
     Combat combat;
@@ -891,6 +909,7 @@ int main() {
     test_closest_point_fraction();
     test_melee_reach_and_cooldown();
     test_melee_stuns_knocks_and_chains();
+    test_player_size_scales_the_body();
     test_towers_answer_a_standing_dragon();
     test_training_room_is_passive();
     test_melee_gesture_follows_the_mark();

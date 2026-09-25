@@ -376,7 +376,8 @@ private:
         float ground_offset = 2.2f;
     } growth_base_;
     void capture_growth_base();
-    void apply_growth(game::GrowthStage stage);
+    // `level` 0..2: drake, young, adult, and everything between.
+    void apply_growth(float level);
     void restore_growth_base();
     // Which combat slots were alive last frame, for telling a kill apart.
     std::vector<char> run_alive_;

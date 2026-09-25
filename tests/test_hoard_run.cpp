@@ -346,6 +346,8 @@ void test_kinds_bounties_and_growth() {
     CHECK(run.hoard() == 60.0f);
     CHECK(!run.just_grew());
     CHECK(std::abs(run.growth_progress() - 0.6f) < 1e-3f);
+    // The continuous level: 0.6 of the way to young is 0.6.
+    CHECK(std::abs(run.growth_level() - 0.6f) < 1e-3f);
     run.award(60.0f);
     run.update(dt, idle, true, CombatEvents{});
     CHECK(run.stage() == game::GrowthStage::Young);
@@ -356,6 +358,7 @@ void test_kinds_bounties_and_growth() {
     run.update(dt, idle, true, CombatEvents{});
     CHECK(run.stage() == game::GrowthStage::Adult);
     CHECK(run.growth_progress() == 1.0f);
+    CHECK(run.growth_level() == 2.0f);  // capped
     CHECK(run.result().stage == game::GrowthStage::Adult);
 }
 

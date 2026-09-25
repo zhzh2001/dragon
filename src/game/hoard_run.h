@@ -207,6 +207,11 @@ public:
     // Growth: everything gathered so far, and the stage it buys.
     float growth() const { return growth_; }
     GrowthStage stage() const;
+    // Continuous growth: 0 a fresh drake, 1 at the young threshold, 2 at the
+    // adult one, linear in the hoard between. Tuning and size follow this,
+    // not the stage, so every coin shows; the stages remain as names and
+    // call-outs.
+    float growth_level() const;
     // 0..1 toward the next stage (1 at the top).
     float growth_progress() const;
     bool just_grew() const { return just_grew_; }

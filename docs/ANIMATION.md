@@ -1022,7 +1022,11 @@ chains keep their bind-scale metres (they are not rebuilt on growth: a rebuild
 resets the neck and tail sims, and the size change is small enough that the
 dynamics do not visibly change). Judged in flight from the front and chase at
 every stage, the head close, and standing on dragon, ironroot and stormsail
-(`artifacts/growth/`).
+(`artifacts/growth/`). First person follows: the head is placed through the
+scaled matrix and the eye's up and back offsets (solved from head
+measurements taken at bind size) scale with the body, so every stage frames
+alike -- horn tips on the bottom edge -- instead of a grown dragon's eye
+sitting inside its own head.
 
 **The walk (M24.1).** A landed dragon could not move until the run needed it
 to walk onto a cache. The flight model walks it (`FlightModel::walk`: pace

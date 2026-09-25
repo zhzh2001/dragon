@@ -494,6 +494,14 @@ passes 0), and the seed never reached the terrain. What changed:
   "YOU GREW", and the resting height scales with the body so a big dragon
   stands on its feet. `--stage N` starts a run already grown for captures;
   `artifacts/growth/`.
+  **Growth is continuous (M25.3):** `HoardRun::growth_level` runs 0..2 with
+  the hoard (1 at the young threshold, 2 at the adult), and every frame the
+  tuning and the size interpolate between the three rows, so each coin
+  shows; the stages stay as names, the "YOU GREW" call-outs and a 25-health
+  second wind. The hit body scales too (`Combat::player_size`, over
+  `player_radius` 6.5 m): bolts, bites and strikes, and a bigger body's near
+  side in a flame. The adult's fireball cooldown is 0.8x, not 0.6x -- the
+  playtest's "a bit overpowered".
 
 The unarmed autopilot now dies early in every kind -- it flies straight into
 each post and never shoots -- and with `--attack` holding fire it still

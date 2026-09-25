@@ -301,7 +301,7 @@ bool App::init(const Options& options) {
             // Grown on the first frame, and at full size at once.
             hoard_run_.award(options.stage >= 2 ? hoard_run_.settings.grow_adult
                                                 : hoard_run_.settings.grow_young);
-            apply_growth(options.stage >= 2 ? game::GrowthStage::Adult : game::GrowthStage::Young);
+            apply_growth(hoard_run_.growth_level());
             growth_scale_ = growth_scale_target_;
             wing_growth_ = wing_growth_target_;
             dragon_rig_.wing_growth = wing_growth_;
@@ -916,9 +916,10 @@ void App::feed_first_person_head(float dt) {
     }
     const game::FlightState& s = dragon_state();
     const LoadedModel& model = player_model();
-    const core::Vec3 head_world = core::transform_point(
-        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * model.asset.matrix(),
-        head_model);
+    // At the grown size: the head is where the scaled model puts it, and the
+    // eye is solved from head measurements scaled to match (they were taken
+    // at the bind size, so a grown dragon's eye sat inside its own head).
+    const core::Vec3 head_world = core::transform_point(player_to_world(s), head_model);
 
     // Composition, the same for every species: the eye sits a fraction of a
     // head length behind the head's rear, and exactly high enough that the
@@ -995,6 +996,8 @@ void App::feed_first_person_head(float dt) {
         up += 1.1f;
         back += 1.6f;
     }
+    up *= growth_scale_;
+    back *= growth_scale_;
     chase_.set_first_person_head(head_world, up, back);
 }
 
@@ -3182,7 +3185,7 @@ void App::start_run(uint32_t seed) {
     run_alive_.assign(combat_.sentinels().size(), 1);
     // Every run starts as a drake -- at a drake's size at once, not shrinking
     // into it.
-    apply_growth(game::GrowthStage::Drake);
+    apply_growth(0.0f);
     growth_scale_ = growth_scale_target_;
     wing_growth_ = wing_growth_target_;
     dragon_rig_.wing_growth = wing_growth_;
@@ -3249,7 +3252,7 @@ void App::capture_growth_base() {
 // A drake is light, fragile and short of breath; an adult is heavy, tough,
 // long-breathed and quick with fireballs. Heft changes the flying, which is
 // the point: the dragon you land at the pass is not the one you launched.
-void App::apply_growth(game::GrowthStage stage) {
+void App::apply_growth(float level) {
     struct Scale {
         float heft, flap, health, drain, fireball, melee, breath, size, wings;
     };
@@ -3259,9 +3262,20 @@ void App::apply_growth(game::GrowthStage stage) {
     static const Scale scales[] = {
         {0.8f, 0.9f, 0.85f, 1.4f, 1.4f, 0.8f, 0.8f, 0.8f, 0.85f},     // drake
         {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},       // young
-        {1.3f, 1.15f, 1.5f, 0.7f, 0.6f, 1.3f, 1.25f, 1.25f, 1.15f},   // adult
+        // Fireballs 0.6 -> 0.8 of the cooldown: at 0.6 the adult's fireball
+        // rate was the playtest's "a bit overpowered".
+        {1.3f, 1.15f, 1.5f, 0.7f, 0.8f, 1.3f, 1.25f, 1.25f, 1.15f},   // adult
     };
-    const Scale& k = scales[std::clamp(int(stage), 0, 2)];
+    // Between two rows by the fraction of the way from one to the next.
+    const float l = core::clampf(level, 0.0f, 2.0f);
+    const int lo = std::min(int(l), 1);
+    const float f = l - float(lo);
+    const Scale& a = scales[lo];
+    const Scale& b = scales[lo + 1];
+    auto mix = [f](float x, float y) { return x + (y - x) * f; };
+    const Scale k{mix(a.heft, b.heft),         mix(a.flap, b.flap),         mix(a.health, b.health),
+                  mix(a.drain, b.drain),       mix(a.fireball, b.fireball), mix(a.melee, b.melee),
+                  mix(a.breath, b.breath),     mix(a.size, b.size),         mix(a.wings, b.wings)};
     const float old_max = combat_.tuning.max_health;
     flight_.tuning.heft = growth_base_.heft * k.heft;
     flight_.tuning.flap_peak_force = growth_base_.flap * k.flap;
@@ -3276,8 +3290,8 @@ void App::apply_growth(game::GrowthStage stage) {
     t.bite_damage = growth_base_.bite * k.melee;
     t.strike_damage = growth_base_.strike * k.melee;
     t.breath_damage_per_second = growth_base_.breath_dps * k.breath;
-    // Growing is a second wind: the new health on top, and a little more.
-    if (t.max_health > old_max) combat_.heal(t.max_health - old_max + 25.0f);
+    // A bigger body keeps its wounds but gains the new health on top.
+    if (t.max_health > old_max) combat_.heal(t.max_health - old_max);
 }
 
 void App::restore_growth_base() {
@@ -3287,6 +3301,7 @@ void App::restore_growth_base() {
     growth_scale_target_ = growth_scale_ = 1.0f;
     wing_growth_target_ = wing_growth_ = 1.0f;
     dragon_rig_.wing_growth = 1.0f;
+    combat_.player_size = 1.0f;
     game::CombatTuning& t = combat_.tuning;
     t.max_health = growth_base_.max_health;
     t.breath_drain = growth_base_.breath_drain;
@@ -3351,7 +3366,9 @@ void App::spawn_rival(int rival_index, bool hunter) {
 
 void App::update_run(float dt, const game::CombatEvents& events) {
     hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
-    // Growth, eased: most of it in the first second, all of it in about two.
+    // Growth, continuous: the tuning follows the hoard every frame, and the
+    // size eases after it -- most of it in the first second.
+    if (hoard_run_.phase() == game::HoardPhase::Flying) apply_growth(hoard_run_.growth_level());
     growth_scale_ = core::damp(growth_scale_, growth_scale_target_, 0.5f, dt);
     wing_growth_ = core::damp(wing_growth_, wing_growth_target_, 0.5f, dt);
     dragon_rig_.wing_growth = wing_growth_;
@@ -3412,8 +3429,10 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         audio_.play(audio::Clip::BiteHit, 0.6f, 0.8f);
         collect_flash_ = 2.0f;
     }
+    combat_.player_size = growth_scale_;
     if (hoard_run_.just_grew()) {
-        apply_growth(hoard_run_.stage());
+        // Crossing a stage is a second wind on top of the steady growth.
+        combat_.heal(25.0f);
         audio_.play(audio::Clip::Boost, 1.0f, 0.75f);
         grew_flash_ = 3.5f;
         LOG_INFO("run: grew into a %s at %.0f s (growth %.0f)",

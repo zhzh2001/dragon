@@ -142,6 +142,9 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M25.3** growth continuous rather than three steps, the hit body scaling
+  with it, the adult fireball rate toned down (0.6x -> 0.8x cooldown), and
+  first person scaled to the grown head.
 - **M25.2** growth made visible: the body scales 0.8 / 1.0 / 1.25 with the
   stage and the wings 0.85 / 1.0 / 1.15 on top, eased in on "YOU GREW";
   `--stage N`. `ANIMATION.md` "Growth".

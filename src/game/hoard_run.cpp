@@ -445,6 +445,13 @@ GrowthStage HoardRun::stage() const {
     return GrowthStage::Drake;
 }
 
+float HoardRun::growth_level() const {
+    const float young = core::maxf(settings.grow_young, 1.0f);
+    if (growth_ < young) return growth_ / young;
+    const float span = core::maxf(settings.grow_adult - settings.grow_young, 1.0f);
+    return core::minf(1.0f + (growth_ - young) / span, 2.0f);
+}
+
 float HoardRun::growth_progress() const {
     switch (stage()) {
         case GrowthStage::Drake:

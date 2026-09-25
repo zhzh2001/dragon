@@ -176,6 +176,10 @@ struct CombatTuning {
     // the resist and the rate multiplier went back to neutral: five answers
     // to one exploit was an overcorrection. The tighter aim at a grounded
     // dragon and the splash stay, which is what closed the exploit.
+    // The player's body for incoming fire. A run's growth scales it through
+    // Combat::player_size, so an adult is a bigger target and a drake a
+    // smaller one -- a bigger dragon that was no easier to hit read as wrong.
+    float player_radius = 6.5f;
     float defence_breath_resist = 1.0f;   // share of breath damage that lands
     float defence_close_range = 150.0f;
     float defence_close_rate = 1.0f;      // fire-rate multiplier up close or grounded
@@ -444,6 +448,9 @@ public:
     // Public like `tuning` is: it is data the owner sets, not state combat
     // evolves.
     BreathScales player_breath;
+    // The player's size relative to normal (the run's growth; 1 elsewhere).
+    // Scales the body that bolts, bites and flames are tested against.
+    float player_size = 1.0f;
     // Last frame's hostile flames, for drawing.
     const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
     // Projectiles that ended this frame -- hits and terrain strikes -- for the
