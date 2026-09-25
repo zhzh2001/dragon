@@ -142,6 +142,16 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M24.2** the run's second pass, after "towers and hunters overpowered,
+  ignoring everything is best, seeds change nothing": guard towers at every
+  cache, bounties and health on kills, towers back to one answer, hunters
+  one at a time and later, four valley kinds from the seed that reshape the
+  terrain and the mix, and growth (drake, young, adult) that moves the
+  tuning. Also fixed: every run carried five stray drones, the seed never
+  reached the terrain, and -- after this machine's OS update -- ImGui took
+  its framebuffer scale from the window's pixel density instead of the
+  render target, drawing the whole HUD and every panel at double size.
+  `COMBAT.md` "Second pass".
 - **M24.1** after the first run playtest ("cannot move when grounded, so
   very hard to land in the caches; towers are easy by landing and breathing;
   hard to tell rivals from hunters"): the dragon walks on the ground with a

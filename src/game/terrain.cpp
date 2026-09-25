@@ -13,7 +13,7 @@ void Terrain::generate(const TerrainSettings& settings) {
 
 float Terrain::valley_center_x(float z) const {
     // Two out-of-phase sines so the corridor does not read as a pure sine wave.
-    const float t = z / core::maxf(settings_.valley_period, 1.0f);
+    const float t = z / core::maxf(settings_.valley_period, 1.0f) + settings_.valley_phase;
     return settings_.valley_meander * (std::sin(t * core::TWO_PI) * 0.7f +
                                        std::sin(t * core::TWO_PI * 0.37f + 1.3f) * 0.3f);
 }

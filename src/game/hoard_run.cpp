@@ -87,10 +87,81 @@ float RunLayout::fraction_at(Vec3 position) const {
     return along > 1e-4f ? best_along / along : 0.0f;
 }
 
+const char* valley_kind_name(ValleyKind kind) {
+    switch (kind) {
+        case ValleyKind::Vale: return "vale";
+        case ValleyKind::Canyon: return "canyon";
+        case ValleyKind::Gauntlet: return "gauntlet";
+        case ValleyKind::Nest: return "rival nest";
+        default: return "?";
+    }
+}
+
+const char* growth_stage_name(GrowthStage stage) {
+    switch (stage) {
+        case GrowthStage::Drake: return "drake";
+        case GrowthStage::Young: return "young dragon";
+        case GrowthStage::Adult: return "adult";
+        default: return "?";
+    }
+}
+
+ValleyKind valley_kind_for(uint32_t seed) {
+    // A full avalanche mix first: one xorshift step from neighbouring seeds
+    // stays correlated, and seeds 1..8 dealt five canyons.
+    uint32_t x = seed + 0x9e3779b9u;
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return ValleyKind(int(x % uint32_t(ValleyKind::Count)));
+}
+
+ValleyKind apply_valley_kind(uint32_t seed, TerrainSettings& terrain, HoardRunSettings& run) {
+    const ValleyKind kind = valley_kind_for(seed);
+    Rng rng(seed * 2246822519u + 3266489917u);
+    // Every kind gets its own mountains and its own bends.
+    terrain.seed = seed * 16807u + 1u;
+    terrain.valley_phase = rng.unit();
+    terrain.valley_period *= rng.range(0.85f, 1.2f);
+    switch (kind) {
+        case ValleyKind::Vale:
+            terrain.valley_width *= 1.25f;
+            terrain.valley_meander *= 0.7f;
+            break;
+        case ValleyKind::Canyon:
+            terrain.valley_width *= 0.55f;
+            terrain.valley_falloff *= 0.6f;
+            terrain.valley_meander *= 1.2f;
+            terrain.mountain_height *= 1.2f;
+            run.rivals = 2;
+            run.cache_value *= 1.25f;
+            run.cache_offset_max *= 0.6f;
+            run.defence_offset_min *= 0.6f;
+            run.defence_offset_max *= 0.6f;
+            break;
+        case ValleyKind::Gauntlet:
+            run.rivals = 1;
+            run.defences = run.defences + 2;
+            run.caches = run.caches + 1;
+            break;
+        case ValleyKind::Nest:
+            run.rivals = run.rivals + 2;
+            run.defences = 0;
+            run.bounty_rival *= 1.25f;
+            break;
+        default:
+            break;
+    }
+    return kind;
+}
+
 RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
                               const HoardRunSettings& settings) {
     RunLayout layout;
     layout.seed = settings.seed;
+    layout.kind = valley_kind_for(settings.seed);
     Rng rng(settings.seed * 2654435761u + 12345u);
     const TerrainSettings& ts = terrain.settings();
 
@@ -155,6 +226,32 @@ RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
         }
         best.value = settings.cache_value * (1.0f + 0.5f * f);
         layout.caches.push_back(best);
+    }
+
+    // Guards: one tower beside every cache, on dry ground within
+    // guard_min..guard_max of it. Taking the hoard safely means clearing the
+    // guard first, which is what makes a tower a target instead of scenery.
+    for (size_t c = 0; c < (settings.guards ? layout.caches.size() : 0); ++c) {
+        const Vec3 cache = layout.caches[c].position;
+        RunDefence guard;
+        guard.guards = int(c);
+        bool placed = false;
+        for (int attempt = 0; attempt < 16 && !placed; ++attempt) {
+            const float angle = rng.unit() * core::TWO_PI;
+            const float distance = rng.range(settings.guard_min, settings.guard_max);
+            const Vec3 candidate = cache + Vec3{std::cos(angle), 0.0f, std::sin(angle)} * distance;
+            const float ground = terrain.height_at(candidate.x, candidate.z);
+            if (ground < ts.water_level + 3.0f) continue;
+            if (std::fabs(ground - cache.y) > 60.0f) continue;
+            guard.position = Vec3{candidate.x, ground + 8.0f, candidate.z};
+            placed = true;
+        }
+        if (!placed) {
+            const Vec3 candidate = cache + Vec3{settings.guard_min, 0.0f, 0.0f};
+            guard.position = Vec3{candidate.x, terrain.height_at(candidate.x, candidate.z) + 8.0f,
+                                  candidate.z};
+        }
+        layout.defences.push_back(guard);
     }
 
     // Ground defences: on the slopes to either side of the corridor,
@@ -257,6 +354,15 @@ bool RunRecords::submit(const RunResult& result) {
 
 void HoardRun::start(const Terrain& terrain, float half_extent) {
     layout_ = generate_run_layout(terrain, half_extent, settings);
+    pressure_start_ = settings.pressure_after > 0.0f
+                          ? settings.pressure_after
+                          : layout_.length() / core::maxf(settings.cruise_speed, 1.0f) *
+                                settings.pressure_scale;
+    next_hunter_ = pressure_start_;
+    hunter_alive_ = false;
+    growth_ = 0.0f;
+    just_grew_ = false;
+    last_stage_ = GrowthStage::Drake;
     phase_ = HoardPhase::Flying;
     hoard_ = 0.0f;
     elapsed_ = 0.0f;
@@ -327,6 +433,35 @@ Vec3 HoardRun::next_waypoint(Vec3 from) const {
     return layout_.gate.position;
 }
 
+void HoardRun::award(float amount) {
+    if (phase_ != HoardPhase::Flying || amount <= 0.0f) return;
+    hoard_ += amount;
+    growth_ += amount;
+}
+
+GrowthStage HoardRun::stage() const {
+    if (growth_ >= settings.grow_adult) return GrowthStage::Adult;
+    if (growth_ >= settings.grow_young) return GrowthStage::Young;
+    return GrowthStage::Drake;
+}
+
+float HoardRun::growth_progress() const {
+    switch (stage()) {
+        case GrowthStage::Drake:
+            return core::saturate(growth_ / core::maxf(settings.grow_young, 1.0f));
+        case GrowthStage::Young:
+            return core::saturate((growth_ - settings.grow_young) /
+                                  core::maxf(settings.grow_adult - settings.grow_young, 1.0f));
+        default:
+            return 1.0f;
+    }
+}
+
+void HoardRun::set_hunter_alive(bool alive) {
+    if (hunter_alive_ && !alive) next_hunter_ = elapsed_ + settings.pressure_interval;
+    hunter_alive_ = alive;
+}
+
 bool HoardRun::take_hunter_request() {
     const bool pending = hunter_pending_;
     hunter_pending_ = false;
@@ -343,6 +478,8 @@ void HoardRun::finish(bool banked) {
 RunResult HoardRun::result() const {
     RunResult r;
     r.seed = layout_.seed;
+    r.kind = layout_.kind;
+    r.stage = stage();
     r.banked = phase_ == HoardPhase::Banked;
     r.carried = hoard_;
     r.hoard = r.banked ? hoard_ : 0.0f;
@@ -357,6 +494,7 @@ RunResult HoardRun::result() const {
 void HoardRun::update(float dt, const FlightState& player, bool player_alive,
                       const CombatEvents& events) {
     just_collected_ = just_banked_ = just_lost_ = false;
+    just_grew_ = false;
     if (phase_ != HoardPhase::Flying) return;
 
     elapsed_ += dt;
@@ -378,11 +516,13 @@ void HoardRun::update(float dt, const FlightState& player, bool player_alive,
         }
     }
 
-    // The dragonslayers.
-    if (elapsed_ > settings.pressure_after && hunters_ < settings.max_hunters &&
-        elapsed_ - settings.pressure_after >= float(hunters_) * settings.pressure_interval) {
+    // The dragonslayers, one at a time.
+    if (!hunter_alive_ && !hunter_pending_ && hunters_ < settings.max_hunters &&
+        elapsed_ >= next_hunter_) {
         ++hunters_;
         hunter_pending_ = true;
+        hunter_alive_ = true;  // until the app says otherwise
+        next_hunter_ = 1e30f;
     }
 
     // Collecting: grounded inside a cache's radius for the collect time.
@@ -399,6 +539,7 @@ void HoardRun::update(float dt, const FlightState& player, bool player_alive,
                 cache.progress = 1.0f;
                 cache.collected = true;
                 hoard_ += cache.value;
+                growth_ += cache.value;
                 just_collected_ = true;
                 collecting_ = -1;
             }
@@ -406,6 +547,11 @@ void HoardRun::update(float dt, const FlightState& player, bool player_alive,
             cache.progress = core::maxf(cache.progress - 2.0f * dt / core::maxf(settings.collect_time, 0.05f),
                                         0.0f);
         }
+    }
+
+    if (stage() != last_stage_) {
+        just_grew_ = int(stage()) > int(last_stage_);
+        last_stage_ = stage();
     }
 
     // The pass: a segment test like a checkpoint, so a fast crossing cannot

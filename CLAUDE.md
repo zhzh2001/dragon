@@ -168,7 +168,10 @@ flight controls.
   bracket, pip, edge arrow) and its two faces (a condensed display face for
   numerals, a humanist sans for labels, loaded from the system's TTFs with
   ImGui's default as the fallback). Layout is in frame units, 1/720 of the
-  height, so it survives any aspect. The panels wear the same theme and dock
+  height, so it survives any aspect -- laid out in ImGui's `DisplaySize`
+  (points), with `ImGuiLayer::begin_frame` setting the framebuffer scale from
+  the real render target: taken from the window's pixel density, it drew
+  every readout and panel at double size, cropped. The panels wear the same theme and dock
   along the right edge, never over the centre. Do not draw a readout with raw
   `AddText` and pixel constants again -- that is what read as debug output
   with gold paint.

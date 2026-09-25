@@ -217,7 +217,9 @@ void test_towers_answer_a_standing_dragon() {
     const int standing = shots_in(true, 150.0f);
     std::printf("  shots in 10 s: cruising at 350 m %d, standing at 150 m %d\n", cruising, standing);
     CHECK(cruising >= 3);
-    CHECK(standing >= cruising * 2);
+    // The rate is neutral now (defence_close_rate 1): what a standing dragon
+    // draws is tighter aim and the splash, not more bolts.
+    CHECK(standing >= cruising);
 }
 
 void test_melee_stuns_knocks_and_chains() {

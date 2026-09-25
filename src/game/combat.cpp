@@ -215,7 +215,7 @@ void Combat::update_lock(const FlightState& player) {
     }
 }
 
-void Combat::reset(const Terrain* terrain, Vec3 arena_centre, uint32_t seed) {
+void Combat::reset(const Terrain* terrain, Vec3 arena_centre, uint32_t seed, int wave) {
     terrain_ = terrain;
     arena_centre_ = arena_centre;
     rng_ = seed ? seed : 1u;
@@ -224,7 +224,12 @@ void Combat::reset(const Terrain* terrain, Vec3 arena_centre, uint32_t seed) {
     kills_ = 0;
     locked_ = -1;
     revive();
-    spawn_wave(5);
+    if (wave > 0) spawn_wave(wave);
+}
+
+void Combat::heal(float amount) {
+    if (health_ <= 0.0f || amount <= 0.0f) return;
+    health_ = core::minf(health_ + amount, tuning.max_health);
 }
 
 void Combat::revive() {

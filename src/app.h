@@ -322,6 +322,31 @@ private:
     // with --run or from the Combat panel, left with "leave run".
     game::HoardRun hoard_run_;
     game::RunRecords run_records_;
+    // The panel's dials. Each run derives its own settings from these through
+    // its valley kind, so the kinds never compound on each other.
+    game::HoardRunSettings run_dials_;
+    // The arena's valley, restored when a run ends; and which run seed the
+    // terrain currently belongs to (0 = the arena's).
+    game::TerrainSettings arena_terrain_;
+    uint32_t terrain_run_seed_ = 0;
+    // Growth: the player's tuning as it was before the run, which every stage
+    // scales from and which leaving the run restores.
+    struct GrowthBase {
+        float heft = 1.0f, flap = 9000.0f;
+        float max_health = 100.0f, breath_drain = 0.3f, fireball_cooldown = 0.85f;
+        float bite = 28.0f, strike = 18.0f, breath_dps = 60.0f;
+    } growth_base_;
+    void capture_growth_base();
+    void apply_growth(game::GrowthStage stage);
+    void restore_growth_base();
+    // Which combat slots were alive last frame, for telling a kill apart.
+    std::vector<char> run_alive_;
+    // Combat slot of each layout defence.
+    std::vector<int> run_defence_slots_;
+    std::string award_text_;
+    float award_flash_ = 0.0f;
+    float grew_flash_ = 0.0f;
+    bool cache_guarded(int cache) const;
     bool run_mode_ = false;
     uint32_t run_seed_ = 7;
     int run_seed_input_ = 7;

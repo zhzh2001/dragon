@@ -158,10 +158,16 @@ bool ImGuiLayer::process_event(const SDL_Event& event) {
     }
 }
 
-void ImGuiLayer::begin_frame() {
+void ImGuiLayer::begin_frame(float target_width, float target_height) {
     if (!initialized_) return;
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f &&
+        target_height > 0.0f) {
+        io.DisplayFramebufferScale =
+            ImVec2(target_width / io.DisplaySize.x, target_height / io.DisplaySize.y);
+    }
     ImGui::NewFrame();
     has_draw_data_ = false;
 }

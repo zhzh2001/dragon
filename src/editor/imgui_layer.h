@@ -27,7 +27,11 @@ public:
     // input can be suppressed while the user is dragging a slider.
     bool process_event(const SDL_Event& event);
 
-    void begin_frame();
+    // The render target ImGui draws into, in pixels: the framebuffer scale is
+    // taken from it rather than from the window, which on a display with a
+    // pixel density of 2 reported twice the target and drew every panel and
+    // readout at double size, cropped.
+    void begin_frame(float target_width, float target_height);
 
     // Must be called after all UI is built and before Device::begin_main_pass,
     // because the backend issues copy passes to upload vertex data.

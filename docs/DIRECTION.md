@@ -500,6 +500,14 @@ arena, the match and every earlier mode are unchanged.
 landing and breathing, rivals and hunters indistinguishable. All three
 answered (`STATUS.md` M24.1). The gate stands: fly it ten times.
 
+2026-09-25, second run playtest: towers and hunters overpowered, ignoring
+everything the best strategy, seeds not changing much -- "interesting, not
+as engaging as arena yet". The probe as built only tested avoidance: nothing
+paid for fighting. `STATUS.md` M24.2 makes fighting pay (guarded caches,
+bounties), deals four kinds of valley from the seed, and brings row 6's
+growth stages forward -- the reward that makes risk worth taking. Prey and
+persistence (the rest of row 6) are still to come. Gate unchanged.
+
 ## 7. Prototyping with concept art
 
 The loop from `.claude/skills/concept-art/SKILL.md`: generate a target, look

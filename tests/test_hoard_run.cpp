@@ -62,7 +62,19 @@ void test_layout() {
 
     CHECK(a.spine.size() >= 2);
     CHECK(a.caches.size() == 3);
-    CHECK(a.defences.size() == 4);
+    // A guard per cache plus the slope towers.
+    CHECK(a.defences.size() == a.caches.size() + size_t(settings.defences));
+    for (size_t c = 0; c < a.caches.size(); ++c) {
+        int guards = 0;
+        for (const game::RunDefence& d : a.defences) {
+            if (d.guards != int(c)) continue;
+            ++guards;
+            const float gap = core::length(Vec3{d.position.x - a.caches[c].position.x, 0.0f,
+                                                d.position.z - a.caches[c].position.z});
+            CHECK(gap >= settings.guard_min - 1.0f && gap <= settings.guard_max + 1.0f);
+        }
+        CHECK(guards == 1);
+    }
     CHECK(a.rivals.size() == 3);
     CHECK(a.length() > extent);
     // Same seed, same valley.
@@ -235,24 +247,116 @@ void test_engagement_and_hunters() {
     run.engage_rival(2);
     CHECK(run.layout().rivals[2].engaged);
 
-    // The clock: past pressure_after a hunter is requested, then another an
-    // interval later, then no more past the cap.
+    // The clock, one hunter at a time: past pressure_after one is requested;
+    // while it flies no other comes, however long; once it falls the next
+    // comes an interval later; none past the cap.
     while (run.elapsed() < 10.5f) run.update(dt, near, true, CombatEvents{});
     CHECK(run.hunters_loosed() == 1);
     CHECK(run.take_hunter_request());
     CHECK(!run.take_hunter_request());  // consumed
-    while (run.elapsed() < 15.5f) run.update(dt, near, true, CombatEvents{});
+    run.set_hunter_alive(true);
+    while (run.elapsed() < 25.0f) run.update(dt, near, true, CombatEvents{});
+    CHECK(run.hunters_loosed() == 1);  // the first is still flying
+    run.set_hunter_alive(false);        // it falls at 25 s
+    while (run.elapsed() < 29.5f) run.update(dt, near, true, CombatEvents{});
+    CHECK(run.hunters_loosed() == 1);   // not before the interval
+    while (run.elapsed() < 30.5f) run.update(dt, near, true, CombatEvents{});
     CHECK(run.hunters_loosed() == 2);
     CHECK(run.take_hunter_request());
-    while (run.elapsed() < 30.0f) run.update(dt, near, true, CombatEvents{});
-    CHECK(run.hunters_loosed() == 2);
+    run.set_hunter_alive(false);
+    while (run.elapsed() < 60.0f) run.update(dt, near, true, CombatEvents{});
+    CHECK(run.hunters_loosed() == 2);   // the cap
     CHECK(!run.take_hunter_request());
+
+    // Unset, the first hunter comes at pressure_scale x the corridor's
+    // straight flight time.
+    HoardRun relative;
+    relative.settings.seed = 7;
+    relative.start(terrain, extent);
+    CHECK(std::abs(relative.pressure_start() -
+                   relative.layout().length() / relative.settings.cruise_speed *
+                       relative.settings.pressure_scale) < 0.01f);
 
     // The waypoint walks the spine toward the gate.
     const Vec3 w0 = run.next_waypoint(run.layout().start);
     CHECK(w0.z > run.layout().start.z);
     const Vec3 w_end = run.next_waypoint(run.layout().spine.back());
     CHECK(core::distance(w_end, run.layout().gate.position) < 1e-3f);
+}
+
+void test_kinds_bounties_and_growth() {
+    std::printf("seeds deal different valleys; bounties feed the hoard; growth climbs by stage\n");
+    // Kinds: every kind turns up over a spread of seeds, and a kind reshapes
+    // the terrain and the mix from the same defaults.
+    int seen[int(game::ValleyKind::Count)] = {};
+    for (uint32_t seed = 1; seed < 200; ++seed) ++seen[int(game::valley_kind_for(seed))];
+    for (int k = 0; k < int(game::ValleyKind::Count); ++k) CHECK(seen[k] > 20);
+    uint32_t canyon = 0, nest = 0, gauntlet = 0;
+    for (uint32_t seed = 1; seed < 200 && (!canyon || !nest || !gauntlet); ++seed) {
+        const game::ValleyKind k = game::valley_kind_for(seed);
+        if (k == game::ValleyKind::Canyon && !canyon) canyon = seed;
+        if (k == game::ValleyKind::Nest && !nest) nest = seed;
+        if (k == game::ValleyKind::Gauntlet && !gauntlet) gauntlet = seed;
+    }
+    const game::TerrainSettings base_terrain;
+    const game::HoardRunSettings base_run;
+    {
+        game::TerrainSettings t = base_terrain;
+        game::HoardRunSettings r = base_run;
+        CHECK(game::apply_valley_kind(canyon, t, r) == game::ValleyKind::Canyon);
+        CHECK(t.valley_width < base_terrain.valley_width);
+        CHECK(t.seed != base_terrain.seed);
+        CHECK(r.cache_value > base_run.cache_value);
+    }
+    {
+        game::TerrainSettings t = base_terrain;
+        game::HoardRunSettings r = base_run;
+        game::apply_valley_kind(nest, t, r);
+        CHECK(r.rivals > base_run.rivals && r.defences == 0);
+    }
+    {
+        game::TerrainSettings t = base_terrain;
+        game::HoardRunSettings r = base_run;
+        game::apply_valley_kind(gauntlet, t, r);
+        CHECK(r.defences > base_run.defences && r.rivals < base_run.rivals);
+        CHECK(r.caches > base_run.caches);
+    }
+    // Two seeds of the same kind still bend differently.
+    {
+        game::TerrainSettings t1 = base_terrain, t2 = base_terrain;
+        game::HoardRunSettings r1 = base_run, r2 = base_run;
+        game::apply_valley_kind(1, t1, r1);
+        game::apply_valley_kind(2, t2, r2);
+        CHECK(t1.valley_phase != t2.valley_phase);
+    }
+
+    // Bounties and growth.
+    game::Terrain terrain;
+    terrain.generate(small_terrain());
+    HoardRun run;
+    run.settings.seed = 3;
+    run.settings.grow_young = 100.0f;
+    run.settings.grow_adult = 250.0f;
+    run.start(terrain, terrain.settings().half_extent);
+    const float dt = 1.0f / 60.0f;
+    const game::FlightState idle = flying_at(run.layout().start);
+    CHECK(run.stage() == game::GrowthStage::Drake);
+    run.award(60.0f);
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(run.hoard() == 60.0f);
+    CHECK(!run.just_grew());
+    CHECK(std::abs(run.growth_progress() - 0.6f) < 1e-3f);
+    run.award(60.0f);
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(run.stage() == game::GrowthStage::Young);
+    CHECK(run.just_grew());
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(!run.just_grew());  // one frame
+    run.award(200.0f);
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(run.stage() == game::GrowthStage::Adult);
+    CHECK(run.growth_progress() == 1.0f);
+    CHECK(run.result().stage == game::GrowthStage::Adult);
 }
 
 void test_records() {
@@ -295,6 +399,7 @@ int main() {
     test_layout();
     test_collect_bank_and_lose();
     test_engagement_and_hunters();
+    test_kinds_bounties_and_growth();
     test_records();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

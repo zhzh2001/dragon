@@ -449,6 +449,50 @@ rust hide from the palette, so red in the world means hunter too.
 shove, more than twice the shots at a standing dragon 150 m out than at a
 cruising one 350 m out); `test_flight` pins the walk.
 
+**Second pass (M24.2).** The second playtest: towers overpowered, the best
+strategy ignoring them and the drones; hunters overpowered, fleeing the only
+answer; seeds changing nothing; "interesting, not as engaging as the arena".
+The diagnosis was that fighting cost and earned nothing, so avoidance was the
+rational run -- and two bugs made it worse: every run also carried combat's
+default wave of five drones (`Combat::reset` now takes a wave count; a run
+passes 0), and the seed never reached the terrain. What changed:
+
+- **Fighting pays.** Every cache has a GUARD tower 70..120 m from it
+  (`RunDefence::guards`), and the HUD marks a cache "guarded" while it
+  stands. Kills the player makes pay a bounty into the hoard (tower 40,
+  rival 60, hunter 120) and 20 health back; a rival that flies into a
+  mountain pays nothing. The dead stay dead in a run.
+- **Towers rolled back** to one answer for the landing exploit: the tighter
+  aim at a grounded or close dragon and the ground splash stay, the breath
+  resist and the close fire-rate multiplier went back to neutral (both dials
+  on the panel now).
+- **Hunters one at a time,** veteran-tempered (aggression 0.7, flees at
+  0.2), the next `pressure_interval` (50 s) after the last one falls. The
+  first comes at `pressure_scale` (1.6) times the corridor's straight flight
+  time at 45 m/s -- about three minutes -- instead of a fixed two minutes
+  that was shorter than a straight flight.
+- **Seeds deal valleys.** `apply_valley_kind` draws a kind from the seed and
+  writes both the terrain (its own terrain seed, a meander phase and period,
+  and by kind the floor width, the walls and the peaks) and the mix: a
+  **vale** (wide, gentle), a **canyon** (narrow, tall, sharp bends, caches
+  worth 1.25x, everything closer to the spine), a **gauntlet** (two more
+  slope towers, one rival, a fourth cache), a **rival nest** (five rivals, no
+  slope towers, rivals pay 1.25x). The valley regenerates when the seed
+  changes (about 0.1 s) and the arena's comes back on "leave run". The panel
+  dials are the base every kind derives from, so they never compound.
+- **Growth.** Hoard taken and bounties feed a growth meter; a drake becomes a
+  young dragon at 140 and an adult at 380. Each stage scales the tuning from
+  the player's own: drake 0.8 heft, 0.85 health, 1.4x breath drain and
+  fireball cooldown, 0.8 bite and flame; young is 1; adult 1.3 heft, 1.5
+  health, 0.7 drain, 0.6 cooldown, 1.3 bite, 1.25 flame. Growing refills the
+  new health plus 25. The run strip shows the stage and a bar; "YOU GREW"
+  calls it out. Leaving the run restores the tuning.
+
+The unarmed autopilot now dies early in every kind -- it flies straight into
+each post and never shoots -- and with `--attack` holding fire it still
+kills nothing, so none of this is judged headless. The HUD is: every run
+strip, call-out and marker was captured (`artifacts/run/second_pass_*`).
+
 `tests/test_hoard_run.cpp` pins the layout (determinism, caches dry and
 ordered and richer with depth, towers on the ground beside the spine, rivals
 over it facing back, the gate at the end), collection (needs the ground and

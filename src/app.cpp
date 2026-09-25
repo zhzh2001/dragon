@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "core/log.h"
@@ -283,12 +284,7 @@ bool App::init(const Options& options) {
         }
     }
     if (options.run) {
-        if (options.hunters_after > 0.0f) hoard_run_.settings.pressure_after = options.hunters_after;
-        if (options.run_empty) {
-            hoard_run_.settings.rivals = 0;
-            hoard_run_.settings.defences = 0;
-            hoard_run_.settings.max_hunters = 0;
-        }
+        if (options.hunters_after > 0.0f) run_dials_.pressure_after = options.hunters_after;
         start_run(options.seed ? options.seed : fresh_seed());
     }
 
@@ -1567,12 +1563,12 @@ void App::build_ui(float dt) {
     // and useless while playing. One key clears the lot; the HUD stays.
     if (!show_panels_) {
         ImDrawList* draw = ImGui::GetForegroundDrawList();
-        draw->AddText(ImVec2(12.0f, float(device_.height()) - 22.0f),
+        draw->AddText(ImVec2(12.0f, ImGui::GetIO().DisplaySize.y - 22.0f),
                       IM_COL32(200, 210, 225, 130), "F1  panels");
         return;
     }
 
-    ImGui::GetForegroundDrawList()->AddText(ImVec2(12.0f, float(device_.height()) - 22.0f),
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(12.0f, ImGui::GetIO().DisplaySize.y - 22.0f),
                                             IM_COL32(200, 210, 225, 110), "F1  hide panels");
 
     build_flight_ui();
@@ -1583,7 +1579,7 @@ void App::build_ui(float dt) {
 
     // Every panel docks to the right edge, stacked: the tool layer never
     // sits over the centre of the frame where the game is.
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 12.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: it is the tallest panel and holds the settings
     // touched least often, so it is most of the clutter and none of the play.
@@ -1859,7 +1855,11 @@ bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float widt
 void App::draw_hud() {
     if (!show_hud_ || options_.hide_ui || studio_active_) return;
 
-    hud_.begin(float(device_.width()), float(device_.height()));
+    // ImGui's own display size, in its units (points). The render target is
+    // in pixels, and on a display with a pixel density of 2 handing the HUD
+    // the pixel size drew every readout at twice its place and size -- the
+    // strip off the right edge, the reticle off the screen.
+    hud_.begin(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     const ui::Tokens& tk = hud_.tokens();
     const float width = hud_.width();
     const float height = hud_.height();
@@ -2016,7 +2016,7 @@ void App::draw_hud() {
 }
 
 void App::build_rally_ui() {
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 52.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 52.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -2116,7 +2116,7 @@ void App::build_rally_ui() {
 // The studio panel: pick a manoeuvre, read what to look for, drag the rig
 // sliders in the Dragon panel while it loops.
 void App::build_studio_ui() {
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 92.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 92.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -2309,7 +2309,7 @@ void App::build_dragon_ui() {
     // Right of the Engine window and above Rally. Placement matters: the first
     // version of this panel opened underneath Engine and was invisible, which
     // is indistinguishable from not having built it at all.
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 132.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 132.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
     // the rest stay one click away.
@@ -2932,27 +2932,60 @@ uint32_t App::fresh_seed() const {
 }
 
 void App::start_run(uint32_t seed) {
+    if (!run_mode_) {
+        // Entering from the arena: remember what to restore.
+        arena_terrain_ = terrain_settings_;
+        capture_growth_base();
+    }
     run_mode_ = true;
     combat_enabled_ = true;
     match_.abandon();
     run_seed_ = seed;
     run_seed_input_ = int(seed & 0x7fffffffu);
     last_run_record_ = false;
-    collect_flash_ = hunter_flash_ = 0.0f;
-    hoard_run_.settings.seed = seed;
+    collect_flash_ = hunter_flash_ = award_flash_ = grew_flash_ = 0.0f;
+
+    // The seed's valley: its kind reshapes the terrain and the encounter mix,
+    // both derived from the arena valley and the panel's dials.
+    game::HoardRunSettings settings = run_dials_;
+    settings.seed = seed;
+    game::TerrainSettings terrain = arena_terrain_;
+    const game::ValleyKind kind = game::apply_valley_kind(seed, terrain, settings);
+    if (options_.run_empty) {
+        settings.rivals = 0;
+        settings.defences = 0;
+        settings.guards = false;
+        settings.max_hunters = 0;
+    }
+    if (terrain_run_seed_ != seed) {
+        terrain_settings_ = terrain;
+        regenerate_terrain();
+        terrain_run_seed_ = seed;
+    }
+    hoard_run_.settings = settings;
     hoard_run_.start(terrain_, terrain_settings_.half_extent);
     const game::RunLayout& layout = hoard_run_.layout();
 
-    // The arena is rebuilt around the corridor's middle: towers where the
-    // layout put them, rivals at their posts, no drones.
+    // The fight is rebuilt around the corridor's middle: towers where the
+    // layout put them, rivals at their posts, and no drones -- the first
+    // build left combat's default wave of five in every run.
     bots_.clear();
-    combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed);
-    for (const game::RunDefence& defence : layout.defences) combat_.spawn_defence(defence.position);
+    combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed, 0);
+    run_defence_slots_.clear();
+    for (const game::RunDefence& defence : layout.defences) {
+        run_defence_slots_.push_back(int(combat_.sentinels().size()));
+        combat_.spawn_defence(defence.position);
+    }
     for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
-    respawn_dragon();  // at the layout's start, facing down the corridor
-    LOG_INFO("run: seed %u, %.1f km of corridor, %zu caches, %zu towers, %zu rivals", seed,
-             double(layout.length() / 1000.0f), layout.caches.size(), layout.defences.size(),
-             layout.rivals.size());
+    run_alive_.assign(combat_.sentinels().size(), 1);
+    // Every run starts as a drake.
+    apply_growth(game::GrowthStage::Drake);
+    respawn_dragon();  // at the layout's start, facing down the corridor; full (drake) health
+    LOG_INFO("run: seed %u, a %s, %.1f km of corridor, %zu caches, %zu towers, %zu rivals, "
+             "first hunter at %.0f s",
+             seed, game::valley_kind_name(kind), double(layout.length() / 1000.0f),
+             layout.caches.size(), layout.defences.size(), layout.rivals.size(),
+             double(hoard_run_.pressure_start()));
     // Where everything stands, for placing a capture camera on it.
     for (size_t i = 0; i < layout.caches.size(); ++i) {
         const core::Vec3 p = layout.caches[i].position;
@@ -2961,7 +2994,8 @@ void App::start_run(uint32_t seed) {
     }
     for (size_t i = 0; i < layout.defences.size(); ++i) {
         const core::Vec3 p = layout.defences[i].position;
-        LOG_INFO("  tower %zu at %.0f,%.0f,%.0f", i, double(p.x), double(p.y), double(p.z));
+        LOG_INFO("  tower %zu at %.0f,%.0f,%.0f%s", i, double(p.x), double(p.y), double(p.z),
+                 layout.defences[i].guards >= 0 ? "  (guard)" : "");
     }
     for (size_t i = 0; i < layout.rivals.size(); ++i) {
         const core::Vec3 p = layout.rivals[i].position;
@@ -2978,17 +3012,95 @@ void App::end_run() {
     run_mode_ = false;
     hoard_run_.abandon();
     bots_.clear();
+    restore_growth_base();
+    // Back to the arena's valley.
+    if (terrain_run_seed_ != 0) {
+        terrain_settings_ = arena_terrain_;
+        regenerate_terrain();
+        rebuild_courses();
+        select_course(current_course_);
+        terrain_run_seed_ = 0;
+    }
     combat_.reset(&terrain_, flight_.state().position, 20260824u);
+    respawn_dragon();
+}
+
+// ---- growth ----
+
+void App::capture_growth_base() {
+    growth_base_.heft = flight_.tuning.heft;
+    growth_base_.flap = flight_.tuning.flap_peak_force;
+    const game::CombatTuning& t = combat_.tuning;
+    growth_base_.max_health = t.max_health;
+    growth_base_.breath_drain = t.breath_drain;
+    growth_base_.fireball_cooldown = t.fireball_cooldown;
+    growth_base_.bite = t.bite_damage;
+    growth_base_.strike = t.strike_damage;
+    growth_base_.breath_dps = t.breath_damage_per_second;
+}
+
+// A drake is light, fragile and short of breath; an adult is heavy, tough,
+// long-breathed and quick with fireballs. Heft changes the flying, which is
+// the point: the dragon you land at the pass is not the one you launched.
+void App::apply_growth(game::GrowthStage stage) {
+    struct Scale {
+        float heft, flap, health, drain, fireball, melee, breath;
+    };
+    static const Scale scales[] = {
+        {0.8f, 0.9f, 0.85f, 1.4f, 1.4f, 0.8f, 0.8f},   // drake
+        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},    // young
+        {1.3f, 1.15f, 1.5f, 0.7f, 0.6f, 1.3f, 1.25f},  // adult
+    };
+    const Scale& k = scales[std::clamp(int(stage), 0, 2)];
+    const float old_max = combat_.tuning.max_health;
+    flight_.tuning.heft = growth_base_.heft * k.heft;
+    flight_.tuning.flap_peak_force = growth_base_.flap * k.flap;
+    game::CombatTuning& t = combat_.tuning;
+    t.max_health = growth_base_.max_health * k.health;
+    t.breath_drain = growth_base_.breath_drain * k.drain;
+    t.fireball_cooldown = growth_base_.fireball_cooldown * k.fireball;
+    t.bite_damage = growth_base_.bite * k.melee;
+    t.strike_damage = growth_base_.strike * k.melee;
+    t.breath_damage_per_second = growth_base_.breath_dps * k.breath;
+    // Growing is a second wind: the new health on top, and a little more.
+    if (t.max_health > old_max) combat_.heal(t.max_health - old_max + 25.0f);
+}
+
+void App::restore_growth_base() {
+    flight_.tuning.heft = growth_base_.heft;
+    flight_.tuning.flap_peak_force = growth_base_.flap;
+    game::CombatTuning& t = combat_.tuning;
+    t.max_health = growth_base_.max_health;
+    t.breath_drain = growth_base_.breath_drain;
+    t.fireball_cooldown = growth_base_.fireball_cooldown;
+    t.bite_damage = growth_base_.bite;
+    t.strike_damage = growth_base_.strike;
+    t.breath_damage_per_second = growth_base_.breath_dps;
+}
+
+bool App::cache_guarded(int cache) const {
+    const auto& defences = hoard_run_.layout().defences;
+    for (size_t i = 0; i < defences.size() && i < run_defence_slots_.size(); ++i) {
+        if (defences[i].guards != cache) continue;
+        const int slot = run_defence_slots_[i];
+        if (slot >= 0 && size_t(slot) < combat_.sentinels().size() &&
+            combat_.sentinels()[size_t(slot)].alive) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void App::spawn_rival(int rival_index, bool hunter) {
     auto bot = make_bot(int(bots_.size()));
-    const uint32_t seed = hoard_run_.settings.seed * 7919u + uint32_t(bots_.size()) * 977u +
+    const uint32_t seed = run_seed_ * 7919u + uint32_t(bots_.size()) * 977u +
                           (hunter ? 31u : 0u);
     core::Vec3 position, facing;
     if (hunter) {
-        // Loosed behind the player, already coming: reckless, and it does not
-        // run when hurt. It wears red.
+        // Loosed behind the player, already coming, in red. Veteran-tempered:
+        // the first build's hunters never fled and pressed like aces, three
+        // at once, and the only answer was to run. Now one at a time, and
+        // one that can be beaten and pays for it.
         const game::FlightState& player = flight_.state();
         const core::Vec3 back = core::normalize_or(
             core::Vec3{-player.forward().x, 0.0f, -player.forward().z}, core::Vec3::forward());
@@ -2996,9 +3108,9 @@ void App::spawn_rival(int rival_index, bool hunter) {
         position.y = core::maxf(position.y, terrain_.height_at(position.x, position.z) + 150.0f);
         facing = back * -1.0f;
         bot->hunter = true;
-        bot->pilot.tuning.aggression = 0.95f;
-        bot->pilot.tuning.aggression_spread = 0.03f;
-        bot->pilot.tuning.flee_health = 0.0f;
+        bot->pilot.tuning.aggression = 0.7f;
+        bot->pilot.tuning.aggression_spread = 0.1f;
+        bot->pilot.tuning.flee_health = 0.2f;
         bot->hue = core::Vec3{2.1f, 0.4f, 0.3f};
     } else {
         const game::RunRival& rival = hoard_run_.layout().rivals[size_t(rival_index)];
@@ -3021,8 +3133,55 @@ void App::spawn_rival(int rival_index, bool hunter) {
 
 void App::update_run(float dt, const game::CombatEvents& events) {
     hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
+
+    // Kills, told apart: a tower, a rival or a hunter, each with its bounty
+    // and a little health back. Fighting used to earn nothing, which made
+    // avoiding everything the best way to play. The dead stay dead in a run.
+    auto& sentinels = combat_.sentinels();
+    if (run_alive_.size() < sentinels.size()) run_alive_.resize(sentinels.size(), 1);
+    bool hunter_flying = false;
+    // Only the player's kills pay: a rival that flies into a mountain is not
+    // a kill (the first pass paid for those too).
+    int kills_to_pay = events.kills;
+    for (size_t i = 0; i < sentinels.size(); ++i) {
+        game::Sentinel& s = sentinels[i];
+        const BotShip* who = nullptr;
+        for (const auto& bot : bots_) {
+            if (bot->slot == int(i)) who = bot.get();
+        }
+        if (who && who->hunter && s.alive) hunter_flying = true;
+        const bool was = run_alive_[i] != 0;
+        run_alive_[i] = s.alive ? 1 : 0;
+        if (!was || s.alive || hoard_run_.phase() != game::HoardPhase::Flying) continue;
+        const game::HoardRunSettings& r = hoard_run_.settings;
+        float bounty = 0.0f;
+        const char* what = "";
+        if (s.ground) {
+            bounty = r.bounty_tower;
+            what = "TOWER DOWN";
+        } else if (who && who->hunter) {
+            bounty = r.bounty_hunter;
+            what = "HUNTER SLAIN";
+        } else if (who) {
+            bounty = r.bounty_rival;
+            what = "RIVAL SLAIN";
+        }
+        if (s.external) s.respawn_timer = 1e9f;
+        if (bounty <= 0.0f || kills_to_pay <= 0) continue;
+        --kills_to_pay;
+        hoard_run_.award(bounty);
+        combat_.heal(r.heal_on_kill);
+        char text[64];
+        std::snprintf(text, sizeof(text), "+%.0f  %s", double(bounty), what);
+        award_text_ = text;
+        award_flash_ = 2.5f;
+        audio_.play(audio::Clip::BiteHit, 0.7f, 0.7f);
+    }
+    hoard_run_.set_hunter_alive(hunter_flying);
+
     if (hoard_run_.take_hunter_request()) {
         spawn_rival(-1, true);
+        run_alive_.resize(combat_.sentinels().size(), 1);
         // A distant cry, pitched down: something is coming.
         audio_.play(audio::Clip::Screech, 0.8f, 0.7f);
         hunter_flash_ = 4.0f;
@@ -3031,18 +3190,30 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         audio_.play(audio::Clip::BiteHit, 0.6f, 0.8f);
         collect_flash_ = 2.0f;
     }
+    if (hoard_run_.just_grew()) {
+        apply_growth(hoard_run_.stage());
+        audio_.play(audio::Clip::Boost, 1.0f, 0.75f);
+        grew_flash_ = 3.5f;
+        LOG_INFO("run: grew into a %s at %.0f s (growth %.0f)",
+                 game::growth_stage_name(hoard_run_.stage()), double(hoard_run_.elapsed()),
+                 double(hoard_run_.growth()));
+    }
     if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
         const game::RunResult result = hoard_run_.result();
         last_run_record_ = run_records_.submit(result);
         run_records_.save(ASSET_ROOT "/runs.txt");
         audio_.play(hoard_run_.just_banked() ? audio::Clip::Boost : audio::Clip::KnockOut, 1.0f);
-        LOG_INFO("run over: %s  hoard %.0f (carried %.0f)  caches %d  kills %d  hunters %d  %.0f s  %.0f m",
-                 result.banked ? "BANKED" : "LOST", double(result.hoard), double(result.carried),
-                 result.caches, result.kills, result.hunters, double(result.time),
+        LOG_INFO("run over: %s  a %s  hoard %.0f (carried %.0f)  caches %d  kills %d  hunters %d  "
+                 "%s  %.0f s  %.0f m",
+                 result.banked ? "BANKED" : "LOST", game::valley_kind_name(result.kind),
+                 double(result.hoard), double(result.carried), result.caches, result.kills,
+                 result.hunters, game::growth_stage_name(result.stage), double(result.time),
                  double(result.distance));
     }
     collect_flash_ = core::maxf(collect_flash_ - dt, 0.0f);
     hunter_flash_ = core::maxf(hunter_flash_ - dt, 0.0f);
+    award_flash_ = core::maxf(award_flash_ - dt, 0.0f);
+    grew_flash_ = core::maxf(grew_flash_ - dt, 0.0f);
 }
 
 // The run's things in the world: the pass gate as a ring, and each cache as a
@@ -3098,7 +3269,7 @@ void App::draw_run_hud() {
 
     // ---- the run strip, top centre: hoard, caches, the pass, the hunters ----
     {
-        const float strip_w = hud_.px(520.0f);
+        const float strip_w = hud_.px(680.0f);
         const float strip_h = hud_.px(46.0f);
         const ImVec2 min(width * 0.5f - strip_w * 0.5f, margin);
         hud_.plate(min, ImVec2(min.x + strip_w, min.y + strip_h));
@@ -3106,8 +3277,17 @@ void App::draw_run_hud() {
         hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "HOARD", tk.text_dim, 10.0f);
         std::snprintf(line, sizeof(line), "%.0f", hoard_run_.hoard());
         hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line,
-                     collect_flash_ > 0.0f ? tk.accent : tk.text, 28.0f);
+                     collect_flash_ > 0.0f || award_flash_ > 0.0f ? tk.accent : tk.text, 28.0f);
         x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(20.0f);
+        // Growth: the stage, and a bar toward the next.
+        {
+            const char* stage = game::growth_stage_name(hoard_run_.stage());
+            hud_.label(ImVec2(x, min.y + hud_.px(8.0f)), stage,
+                       grew_flash_ > 0.0f ? tk.accent : tk.text, 13.0f);
+            hud_.bar(ImVec2(x, min.y + hud_.px(28.0f)), hud_.px(96.0f), hud_.px(5.0f),
+                     hoard_run_.growth_progress(), tk.accent);
+            x += hud_.px(112.0f);
+        }
         // One pip per cache: filled when taken, filling while you sit on it.
         for (size_t i = 0; i < layout.caches.size(); ++i) {
             const float ready = layout.caches[i].collected ? 1.0f
@@ -3179,9 +3359,13 @@ void App::draw_run_hud() {
             if (hoard_run_.collecting() == nearest) {
                 std::snprintf(line, sizeof(line), "TAKING THE HOARD");
             } else if (range < 160.0f) {
-                std::snprintf(line, sizeof(line), "LAND HERE  %.0f", double(cache.value));
+                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "LAND HERE  %.0f  (GUARDED)"
+                                                                          : "LAND HERE  %.0f",
+                              double(cache.value));
             } else {
-                std::snprintf(line, sizeof(line), "HOARD  %.0f m", double(range));
+                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "HOARD  %.0f m  (guarded)"
+                                                                          : "HOARD  %.0f m",
+                              double(range));
             }
             marker(cache.position + core::Vec3{0.0f, 3.0f, 0.0f}, hoard_run_.settings.cache_radius, line,
                    tk.accent, hoard_run_.collecting() == nearest ? hoard_run_.collect_progress() : 0.0f);
@@ -3192,9 +3376,30 @@ void App::draw_run_hud() {
         marker(layout.gate.position, layout.gate.radius, line, all_taken ? tk.accent : tk.text_dim, 0.0f);
 
         if (hoard_run_.elapsed() < 9.0f) {
-            hud_.label(ImVec2(width * 0.5f, margin + hud_.px(56.0f)),
-                       "fly the corridor to the pass -- land on a hoard to take it -- the longer you stay, the more come",
-                       tk.text_dim, 13.0f, ui::Align::Centre);
+            std::snprintf(line, sizeof(line),
+                          "a %s -- fly to the pass -- land on a hoard to take it, its tower guards it -- "
+                          "kills pay, hoard grows you",
+                          game::valley_kind_name(layout.kind));
+            hud_.label(ImVec2(width * 0.5f, margin + hud_.px(56.0f)), line, tk.text_dim, 13.0f,
+                       ui::Align::Centre);
+        }
+        // The call-outs: a bounty, and growing.
+        if (award_flash_ > 0.0f) {
+            const float fade = core::saturate(award_flash_);
+            const ImU32 colour = (tk.accent & 0x00FFFFFF) | (ImU32(240.0f * fade) << 24);
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.30f), award_text_.c_str(), colour, 30.0f,
+                         ui::Align::Centre);
+        }
+        if (grew_flash_ > 0.0f) {
+            const float fade = core::saturate(grew_flash_);
+            const ImU32 colour = (tk.accent & 0x00FFFFFF) | (ImU32(245.0f * fade) << 24);
+            std::snprintf(line, sizeof(line), "YOU GREW: %s", game::growth_stage_name(hoard_run_.stage()));
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.20f), line, colour, 44.0f, ui::Align::Centre);
+            hud_.label(ImVec2(width * 0.5f, height * 0.20f + hud_.px(50.0f)),
+                       hoard_run_.stage() == game::GrowthStage::Adult
+                           ? "heavier, tougher, longer breath, quicker fireballs"
+                           : "more health and breath, harder bites",
+                       (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
         }
     }
 
@@ -3210,10 +3415,12 @@ void App::draw_run_hud() {
             hud_.label(ImVec2(width * 0.5f, y), "NEW RECORD", tk.ahead, 15.0f, ui::Align::Centre);
             y += hud_.px(22.0f);
         }
-        std::snprintf(line, sizeof(line), "%s %.0f   %d / %zu caches   %d kills   %d:%02d   %.1f km",
+        std::snprintf(line, sizeof(line), "%s %.0f   %d / %zu caches   %d kills   %s   %d:%02d   %.1f km   a %s",
                       banked ? "banked" : "lost", double(banked ? result.hoard : result.carried),
-                      result.caches, layout.caches.size(), result.kills, int(result.time) / 60,
-                      int(result.time) % 60, double(result.distance / 1000.0f));
+                      result.caches, layout.caches.size(), result.kills,
+                      game::growth_stage_name(result.stage), int(result.time) / 60,
+                      int(result.time) % 60, double(result.distance / 1000.0f),
+                      game::valley_kind_name(result.kind));
         hud_.label(ImVec2(width * 0.5f, y), line, tk.text, 16.0f, ui::Align::Centre);
         y += hud_.px(24.0f);
         std::snprintf(line, sizeof(line), "best hoard %.0f   fastest %d:%02d   %d runs, %d banked",
@@ -3981,7 +4188,7 @@ void App::draw_combat_hud() {
 void App::build_combat_ui() {
     game::CombatTuning& t = combat_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 212.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 212.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     ImGui::Begin("Combat");
 
@@ -4010,6 +4217,8 @@ void App::build_combat_ui() {
         ImGui::SameLine();
         if (ImGui::SmallButton("random")) start_run(fresh_seed());
     } else {
+        ImGui::Text("a %s, %s   growth %.0f", game::valley_kind_name(hoard_run_.layout().kind),
+                    game::growth_stage_name(hoard_run_.stage()), hoard_run_.growth());
         ImGui::Text("run %s   seed %u   hoard %.0f   caches %d/%zu   kills %d   hunters %d   %.0f s",
                     hoard_run_.phase_name(), hoard_run_.layout().seed, hoard_run_.hoard(),
                     hoard_run_.caches_collected(), hoard_run_.layout().caches.size(),
@@ -4024,21 +4233,32 @@ void App::build_combat_ui() {
                         run_records_.runs, run_records_.banked, run_records_.best_hoard,
                         run_records_.best_time);
     if (ImGui::TreeNode("run dials (apply at the next start)")) {
-        game::HoardRunSettings& r = hoard_run_.settings;
+        game::HoardRunSettings& r = run_dials_;
         ImGui::SliderInt("rivals", &r.rivals, 0, 6);
-        ImGui::SliderInt("defences", &r.defences, 0, 8);
+        ImGui::SliderInt("slope towers", &r.defences, 0, 8);
+        ImGui::Checkbox("a tower guards each cache", &r.guards);
         ImGui::SliderInt("caches", &r.caches, 1, 6);
         ImGui::SliderFloat("cache value", &r.cache_value, 10.0f, 500.0f, "%.0f");
         ImGui::SliderFloat("cache radius", &r.cache_radius, 8.0f, 60.0f, "%.0f m");
         ImGui::SliderFloat("collect time", &r.collect_time, 0.5f, 8.0f, "%.1f s");
         ImGui::SliderFloat("pass radius", &r.pass_radius, 30.0f, 150.0f, "%.0f m");
         ImGui::SliderFloat("engage range", &r.engage_range, 100.0f, 1200.0f, "%.0f m");
-        ImGui::SliderFloat("pressure after", &r.pressure_after, 10.0f, 400.0f, "%.0f s");
+        ImGui::SliderFloat("first hunter (0 = by corridor)", &r.pressure_after, 0.0f, 400.0f, "%.0f s");
+        ImGui::SliderFloat("hunter delay x flight time", &r.pressure_scale, 0.5f, 4.0f, "%.2f");
         ImGui::SliderFloat("pressure interval", &r.pressure_interval, 5.0f, 120.0f, "%.0f s");
         ImGui::SliderInt("max hunters", &r.max_hunters, 0, 6);
         ImGui::SliderFloat("cache offset", &r.cache_offset_max, 20.0f, 300.0f, "%.0f m");
         ImGui::SliderFloat("defence offset min", &r.defence_offset_min, 50.0f, 400.0f, "%.0f m");
         ImGui::SliderFloat("defence offset max", &r.defence_offset_max, 100.0f, 600.0f, "%.0f m");
+        ImGui::SeparatorText("bounties and growth");
+        ImGui::SliderFloat("tower bounty", &r.bounty_tower, 0.0f, 200.0f, "%.0f");
+        ImGui::SliderFloat("rival bounty", &r.bounty_rival, 0.0f, 300.0f, "%.0f");
+        ImGui::SliderFloat("hunter bounty", &r.bounty_hunter, 0.0f, 400.0f, "%.0f");
+        ImGui::SliderFloat("heal on kill", &r.heal_on_kill, 0.0f, 80.0f, "%.0f");
+        ImGui::SliderFloat("grow young at", &r.grow_young, 20.0f, 600.0f, "%.0f");
+        ImGui::SliderFloat("grow adult at", &r.grow_adult, 50.0f, 1200.0f, "%.0f");
+        ImGui::SliderFloat("guard distance min", &r.guard_min, 20.0f, 250.0f, "%.0f m");
+        ImGui::SliderFloat("guard distance max", &r.guard_max, 30.0f, 400.0f, "%.0f m");
         ImGui::SeparatorText("towers (live)");
         ImGui::SliderFloat("tower range", &t.defence_range, 100.0f, 900.0f, "%.0f m");
         ImGui::SliderFloat("tower damage", &t.defence_damage, 1.0f, 40.0f, "%.0f");
@@ -4047,6 +4267,11 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("bolt gravity", &t.defence_gravity, 0.0f, 40.0f, "%.0f m/s2");
         ImGui::SliderFloat("bolt spread", &t.defence_spread, 0.0f, 40.0f, "%.0f m");
         ImGui::SliderFloat("tower health", &t.defence_health, 20.0f, 300.0f, "%.0f");
+        ImGui::SliderFloat("breath that lands on stone", &t.defence_breath_resist, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("close / grounded fire rate", &t.defence_close_rate, 0.5f, 4.0f, "%.2fx");
+        ImGui::SliderFloat("close / grounded spread", &t.defence_close_spread, 0.05f, 1.0f, "%.2fx");
+        ImGui::SliderFloat("close range", &t.defence_close_range, 50.0f, 500.0f, "%.0f m");
+        ImGui::SliderFloat("bolt splash", &t.defence_splash, 0.0f, 30.0f, "%.0f m");
         ImGui::TreePop();
     }
     ImGui::Separator();
@@ -4257,7 +4482,7 @@ void App::build_flight_ui() {
     const game::FlightState& s = flight_.state();
     game::FlightTuning& t = flight_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(float(device_.width()) - 402.0f, 172.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 172.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -4671,7 +4896,7 @@ void App::run() {
         }
 
         if (device_.begin_frame()) {
-            ui_.begin_frame();
+            ui_.begin_frame(float(device_.width()), float(device_.height()));
             build_ui(dt);
             // The HUD goes on the foreground draw list, so it must be built
             // inside the ImGui frame but layers above every panel.

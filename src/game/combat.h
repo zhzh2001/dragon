@@ -170,9 +170,13 @@ struct CombatTuning {
     // neither stun nor shove a building; inside the close range, or against
     // a grounded dragon, it fires faster and tighter; and a bolt that strikes
     // the ground splashes, so a near miss on a standing dragon still hurts.
-    float defence_breath_resist = 0.3f;   // share of breath damage that lands
+    // After the second playtest ("towers overpowered, best to ignore them")
+    // the resist and the rate multiplier went back to neutral: five answers
+    // to one exploit was an overcorrection. The tighter aim at a grounded
+    // dragon and the splash stay, which is what closed the exploit.
+    float defence_breath_resist = 1.0f;   // share of breath damage that lands
     float defence_close_range = 200.0f;
-    float defence_close_rate = 2.5f;      // fire-rate multiplier up close or grounded
+    float defence_close_rate = 1.0f;      // fire-rate multiplier up close or grounded
     float defence_close_spread = 0.25f;   // spread multiplier up close or grounded
     float defence_splash = 10.0f;         // m
 };
@@ -339,7 +343,9 @@ public:
     CombatTuning tuning;
 
     // `terrain` may be null, in which case projectiles ignore the ground.
-    void reset(const Terrain* terrain, core::Vec3 arena_centre, uint32_t seed);
+    // `wave` drones are spawned around the centre; a run passes 0 -- the
+    // first run build left the default five in, and they were noise.
+    void reset(const Terrain* terrain, core::Vec3 arena_centre, uint32_t seed, int wave = 5);
 
     // `player` is read, never written: boost is reported back through
     // boost_active() and applied by the flight model, so thrust stays in one
@@ -349,6 +355,9 @@ public:
     // Called when the player respawns, to restore resources without rebuilding
     // the arena.
     void revive();
+    // Health back, capped at the maximum (a kill's reward in a run, and the
+    // top-up when growth raises the maximum).
+    void heal(float amount);
 
     // ---- player state ----
     float health() const { return health_; }

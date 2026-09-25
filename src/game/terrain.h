@@ -43,6 +43,9 @@ struct TerrainSettings {
     float valley_falloff = 950.0f;   // distance over which walls rise
     float valley_meander = 820.0f;   // how far the corridor wanders in X
     float valley_period = 3300.0f;   // metres per meander cycle
+    // Where along its cycle the meander starts. The arena keeps 0; a run
+    // draws one from its seed, so two seeds are two different corridors.
+    float valley_phase = 0.0f;
 
     float water_level = 34.0f;
     // The river: a channel carved along the corridor, wandering off the
