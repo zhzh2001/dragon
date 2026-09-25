@@ -112,13 +112,33 @@ struct DemoTuning {
     // A weave across the run-in so a tower's lead is always wrong.
     float siege_jink = 45.0f;       // m
     float siege_jink_rate = 1.4f;   // rad/s
-    // A grounded dragon walks only this far to a cache; further, it hops up
-    // and lands again.
-    float walk_limit = 70.0f;
+    // A grounded dragon walks this far to an unguarded cache (about 35 s);
+    // further, it climbs out and comes back in on a proper approach. A hop
+    // in between exited at 12 m, started the approach far too low, stalled
+    // short and hopped again -- the second cycle after a first hoard.
+    float walk_limit = 250.0f;
+    // The climb-out after a take-off: it stays the job until the dragon is
+    // this high and this fast. Handing over to the cruise straight after the
+    // leap pitched a 10 m/s dragon up at the corridor 150 m overhead; it
+    // stalled back onto the ground, leapt, stalled -- the cycle after the
+    // first hoard -- or skated along the floor at 40 m/s for half a minute.
+    //
+    // Measured on the flight model (a scratch probe, full flap from a
+    // standstill): below about 15 degrees a dragon never leaves ground
+    // effect; at 20 it climbs about 2 m/s at a steady 19 m/s, drake or young.
+    // So the climb-out is a HEIGHT, not a speed -- an exit at 28 m/s was
+    // never reached and the take-off never ended.
+    float climb_out_height = 35.0f;
+    float climb_attitude = 0.36f;        // rad
+    float climb_attitude_rising = 0.45f; // against rising ground
+
+    // A take-off that has not got up in this long hands over to the cruise
+    // and the stall guard rather than trying the same thing forever.
+    float takeoff_budget = 25.0f;
     float siege_extend = 14.0f;  // s, at most, out to the far side
     // Landing: the glide path, the brake, and the touchdown.
     float land_slope = 0.22f;   // height above the cache per metre out
-    float land_brake_range = 260.0f;
+    float land_brake_range = 450.0f;
     float land_speed = 20.0f;   // m/s over the cache
     float land_abort = 160.0f;  // m past the cache while airborne: go round
     float go_round_time = 6.0f;
@@ -137,8 +157,10 @@ struct DemoTuning {
     // landing) the nose goes down and the wings beat until `recover_speed`.
     // The dogfight climbed after its mark to a stall at 6 m/s, and a stalled
     // dragon is the easiest target in the valley.
-    float min_speed = 22.0f;
-    float recover_speed = 34.0f;
+    // Under a fresh climb-out's 19 m/s, so the guard does not dive a dragon
+    // that has just got up.
+    float min_speed = 16.0f;
+    float recover_speed = 28.0f;
 };
 
 class DemoPilot {

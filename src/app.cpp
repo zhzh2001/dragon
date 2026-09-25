@@ -3393,6 +3393,13 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         last_run_record_ = run_records_.submit(result);
         run_records_.save(ASSET_ROOT "/runs.txt");
         audio_.play(hoard_run_.just_banked() ? audio::Clip::Boost : audio::Clip::KnockOut, 1.0f);
+        if (autopilot_) {
+            LOG_INFO("run over, demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f "
+                     "collect %.0f takeoff %.0f flee %.0f",
+                     double(demo_.time_in[0]), double(demo_.time_in[1]), double(demo_.time_in[2]),
+                     double(demo_.time_in[3]), double(demo_.time_in[4]), double(demo_.time_in[5]),
+                     double(demo_.time_in[6]), double(demo_.time_in[7]));
+        }
         LOG_INFO("run over: %s  a %s  hoard %.0f (carried %.0f)  caches %d  kills %d  hunters %d  "
                  "%s  %.0f s  %.0f m",
                  result.banked ? "BANKED" : "LOST", game::valley_kind_name(result.kind),

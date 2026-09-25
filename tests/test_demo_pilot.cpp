@@ -82,8 +82,21 @@ void test_ground() {
     d = leaper.update(1.0f / 60.0f, s, w);
     CHECK(leaper.state() == DemoState::TakeOff);
     CHECK(d.flight.flap == 0.0f);
-    for (int i = 0; i < 6; ++i) d = leaper.update(1.0f / 60.0f, s, w);
-    CHECK(d.flight.flap == 1.0f);
+    // The flap beats on and off (a leap on every rising edge) within half a second.
+    bool beat = false;
+    for (int i = 0; i < 30; ++i) {
+        d = leaper.update(1.0f / 60.0f, s, w);
+        beat |= d.flight.flap == 1.0f;
+    }
+    CHECK(beat);
+
+    // Airborne but low, the climb-out holds -- until its budget runs out.
+    FlightState low = flying(Vec3{0.0f, 10.0f, -400.0f}, Vec3::forward(), 18.0f);
+    low.ground_clearance = 8.0f;
+    for (int i = 0; i < 120; ++i) leaper.update(1.0f / 60.0f, low, w);
+    CHECK(leaper.state() == DemoState::TakeOff);
+    for (int i = 0; i < int(leaper.tuning.takeoff_budget * 60.0f); ++i) leaper.update(1.0f / 60.0f, low, w);
+    CHECK(leaper.state() != DemoState::TakeOff);
 }
 
 void test_priorities() {

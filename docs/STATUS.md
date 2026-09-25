@@ -142,6 +142,11 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M25.1** the demo pilot's climb-out, after "stuck in cycles after the
+  first hoard": take-off holds until 35 m at the attitude a flight-model
+  probe measured (20 degrees; lower never leaves ground effect), a walk of
+  up to 250 m for a near miss, a 25 s budget; on the rush the fall-back
+  flies toward the pass. `COMBAT.md` "The climb-out".
 - **M25** hands-off: the demo pilot (`COMBAT.md` "The demo pilot") plays
   the run and the arena through the player's controls -- P, `--autopilot`,
   `--demo` -- sieging guard towers, fighting, landing, walking in,

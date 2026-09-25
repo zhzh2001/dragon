@@ -68,6 +68,15 @@ float DemoPilot::ground_ahead(const FlightState& self, const DemoWorld& world) c
 void DemoPilot::decide(const FlightState& self, const DemoWorld& world) {
     const DemoState previous = state_;
     const int previous_target = target_;
+    // A take-off is finished only when the dragon has climbed out.
+    if (previous == DemoState::TakeOff && state_time_ < tuning.takeoff_budget &&
+        (self.grounded || self.ground_clearance < tuning.climb_out_height)) {
+        // Still on the ground inside a cache's ring: that is a landing, not
+        // a take-off to finish.
+        const bool on_cache = self.grounded && world.has_cache &&
+                              horizontal_distance(self.position, world.cache) < world.cache_radius * 0.6f;
+        if (!on_cache) return;
+    }
     auto choose = [&](DemoState state, int slot) {
         state_ = state;
         target_ = slot;
@@ -200,8 +209,8 @@ DemoDecision DemoPilot::update(float dt, const FlightState& self, const DemoWorl
     // On the ground the job follows the ground at once: a landing becomes a
     // walk the frame the feet touch.
     const bool ground_changed =
-        self.grounded != (state_ == DemoState::Walk || state_ == DemoState::Collect ||
-                          state_ == DemoState::TakeOff);
+        state_ != DemoState::TakeOff &&
+        self.grounded != (state_ == DemoState::Walk || state_ == DemoState::Collect);
     if (decide_timer_ <= 0.0f || target_gone || ground_changed) {
         decide(self, world);
         decide_timer_ = tuning.decide_interval;
@@ -210,7 +219,7 @@ DemoDecision DemoPilot::update(float dt, const FlightState& self, const DemoWorl
     DemoDecision d = act(dt, self, world);
     const bool final_approach = state_ == DemoState::Land && world.has_cache &&
                                 horizontal_distance(self.position, world.cache) < 300.0f;
-    if (!self.grounded && !final_approach) {
+    if (!self.grounded && !final_approach && state_ != DemoState::TakeOff) {
         if (self.airspeed < tuning.min_speed) recovering_ = true;
         if (self.airspeed > tuning.recover_speed) recovering_ = false;
     } else {
@@ -236,11 +245,53 @@ DemoDecision DemoPilot::act(float dt, const FlightState& self, const DemoWorld& 
         case DemoState::Collect: return walk(self, world);
         case DemoState::TakeOff: {
             DemoDecision d;
-            // The leap is the flap's rising edge; held, it keeps beating.
-            d.flight.flap = state_time_ > 0.05f ? 1.0f : 0.0f;
+            // Which way to climb out: toward the corridor, unless the ground
+            // ahead rises -- then down the slope, into open air. Held level
+            // into a rising slope, a dragon that touched down on a valley
+            // wall skated 130 m up it, leaping all the way.
+            const float here = self.position.y - self.ground_clearance;
+            const float rise = ground_ahead(self, world) - here;
+            Vec3 heading = core::normalize_or(horizontal(world.waypoint - self.position),
+                                              horizontal(self.forward()));
+            if (world.terrain && rise > 20.0f) {
+                const Vec3 n = world.terrain->normal_at(self.position.x, self.position.z);
+                heading = core::normalize_or(horizontal(n), heading);  // downhill
+            }
+            if (self.grounded) {
+                // Turn to the heading on the ground, and leap on the flap's
+                // rising edge: beat on and off, so a dragon that touches down
+                // again leaps again.
+                const Vec3 forward = core::normalize_or(horizontal(self.forward()), Vec3::forward());
+                const Vec3 right = core::normalize_or(core::cross(forward, Vec3::up()), Vec3::right());
+                const float error = std::atan2(core::dot(heading, right), core::dot(heading, forward));
+                d.flight.walk_turn = core::clampf(error * 2.0f, -1.0f, 1.0f);
+                d.flight.flap = std::fabs(error) < 0.6f && std::fmod(state_time_, 0.5f) > 0.25f ? 1.0f : 0.0f;
+                return d;
+            }
+            // Airborne: wings beating; the steering's roll to the heading, and
+            // the nose level until there is speed to climb on, then a steady
+            // climb -- steeper if the ground ahead is rising.
+            const FlightInput steer =
+                steer_through(self, self.position + heading * 300.0f + Vec3{0.0f, 20.0f, 0.0f}, Vec3::zero(),
+                              steering, ground_ahead(self, world));
+            d.flight.flap = 1.0f;
+            // Nearly wings-level until clear of the floor: a bank spends the
+            // lift a climb from a standstill does not have.
+            const float bank = self.ground_clearance < 25.0f ? 0.15f : 0.5f;
+            d.flight.roll = core::clampf(steer.roll, -bank, bank);
+            d.flight.yaw = steer.yaw;
+            // A modest attitude from the start (level never left the floor:
+            // every touchdown bled the speed to friction), more once fast.
+            const float climb = rise > 20.0f ? tuning.climb_attitude_rising : tuning.climb_attitude;
+            const float pitch_now = std::asin(core::clampf(self.forward().y, -1.0f, 1.0f));
+            d.flight.pitch = core::clampf((climb - pitch_now) * 2.5f, -0.6f, 0.6f);
             return d;
         }
         case DemoState::Flee: {
+            // On the rush, falling back means forward: to the pass, boosting.
+            // Back up the corridor, a hunter followed, and the pilot fell
+            // back again, and again -- a 540 s run that never got there.
+            if (world.rush) return cruise(self, world, world.waypoint, true);
             // Back to the safe point, then a wide circle over it.
             const Vec3 to = world.safe_point - self.position;
             Vec3 aim = world.safe_point;

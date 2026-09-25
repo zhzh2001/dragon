@@ -545,6 +545,26 @@ What each headless run taught it, in order -- each was a trace, not a guess:
   or fleeing, whatever crosses its nose takes a fireball, the flame or a bite.
 - **Objective first.** Engaging rivals at 500 m and hunters at 1.1 km spent
   seven-minute runs in dogfights; the ranges came in to 250 and 350.
+- **The climb-out (M25.1, the playtest: "stuck in cycles after the first
+  hoard").** Handing over to the cruise the moment the feet left the ground
+  pitched a 10 m/s dragon at the corridor 150 m overhead: it stalled onto
+  the floor, leapt, stalled, or skated along the ground at 40 m/s. Take-off
+  is now a job that holds until the dragon has climbed out -- and the exit
+  is a HEIGHT (35 m), because a scratch probe on the flight model showed
+  why speed never came: from a standstill at full flap, below about 15
+  degrees a dragon never leaves ground effect, and at 20 degrees it climbs
+  2 m/s at a steady 19 m/s, drake or young. An exit at 28 m/s was never
+  reached. It holds that attitude (steeper against rising ground, and
+  steering down the slope, since level into a slope skated 130 m up a
+  valley wall), re-flaps on every touchdown, and gives up after 25 s to the
+  cruise and the stall guard (now 16 m/s, under a fresh climb-out's 19),
+  and it climbs nearly wings-level below 25 m -- a bank spends the lift it
+  does not have. A touchdown within 250 m of an unguarded cache WALKS the
+  rest (about 35 s); a hop tried first exited at 12 m, began the approach
+  far too low, stalled short and hopped again -- a second cycle. Braking
+  starts 450 m out so it lands nearer. After all of it, twenty minutes of
+  `--demo` played six valleys, each ending in 52..218 s, five of them with a
+  hoard taken and the dragon grown.
 
 Its fighter is ace-tempered (reaction 0.16 s, 1.2 degrees of spread): it
 carries a drake through fights a veteran bot would lose. `tests/test_demo_pilot.cpp`
