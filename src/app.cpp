@@ -112,6 +112,10 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--walk" && i + 1 < argc) {
             options.has_walk = true;
             std::sscanf(argv[++i], "%f,%f", &options.walk, &options.walk_turn);
+        } else if (arg == "--demo") {
+            options.demo = true;
+            options.autopilot = true;
+            options.run = true;
         } else if (arg == "--run-empty") {
             options.run = true;
             options.run_empty = true;
@@ -234,6 +238,8 @@ bool App::init(const Options& options) {
                       gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
                       "checkpoint_ring");
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
+    load_prop(ASSET_ROOT "/props/watchtower.glb", tower_prop_, "prop_tower");
+    load_prop(ASSET_ROOT "/props/hoard_pile.glb", hoard_prop_, "prop_hoard");
     sphere_mesh_.upload(device_.gpu(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
                         "unit_sphere");
     if (!particles_.init(&device_, &pipelines_)) return false;
@@ -247,6 +253,8 @@ bool App::init(const Options& options) {
     apply_assist_preset(0);
 
     autopilot_ = options.autopilot;
+    demo_.fight_tuning = bot_tuning_;
+    demo_.reset(20260925u);
     // Skeleton overlay is opt-in even when inspecting: for an imported rig it
     // obscures the very mesh being checked.
     apply_camera_preset(options.camera_mode);
@@ -505,6 +513,26 @@ void App::apply_camera_preset(int index) {
 
 game::FlightInput App::read_flight_input(float dt) {
     game::FlightInput in;
+
+    if (demo_active()) {
+        // The demo pilot: the run or the fight, through the player's controls.
+        game::DemoWorld world;
+        build_demo_world(world);
+        // The demo's dogfighter reacts and aims like an ace: it carries a
+        // drake through fights a veteran bot would lose.
+        demo_.fight_tuning = bot_tuning_;
+        demo_.fight_tuning.reaction_interval = 0.16f;
+        demo_.fight_tuning.aim_spread_deg = 1.2f;
+        demo_.fight_tuning.aggression = 0.7f;
+        demo_decision_ = demo_.update(dt, flight_.state(), world);
+        in = demo_decision_.flight;
+        if (demo_decision_.maneuver != game::ManeuverKind::None) {
+            maneuver_.start(demo_decision_.maneuver, demo_decision_.maneuver_direction,
+                            flight_.state(), maneuver_tuning_);
+        }
+        maneuver_.apply(in, flight_.state(), maneuver_tuning_, dt);
+        return in;
+    }
 
     if (autopilot_) {
         // Aim at the next checkpoint, or hold the last heading once the run is
@@ -774,6 +802,8 @@ void App::shutdown() {
         model->textures.clear();
     }
     ring_mesh_.release(device_.gpu());
+    release_prop(tower_prop_);
+    release_prop(hoard_prop_);
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
     foliage_.shutdown(device_);
     world_.shutdown(device_);
@@ -829,6 +859,8 @@ void App::pump_events() {
         else respawn_dragon();
     }
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
+    // Hands-off: the demo pilot takes (or gives back) the controls.
+    if (input_.pressed(SDL_SCANCODE_P)) set_autopilot(!autopilot_);
     // M cycles the roster. The point is comparing species with the scenario
     // held still, so this deliberately does not touch the studio state: the
     // manoeuvre keeps playing and only the creature under it changes.
@@ -1369,7 +1401,28 @@ void App::update(float dt) {
 
     // The autopilot laps the course, which is what lets a ghost exist in a
     // headless capture and doubles as a soak test.
-    if (autopilot_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
+    if (autopilot_ && !run_mode_ && rally_.phase() == game::RunPhase::Finished) respawn_dragon();
+
+    // Hands-off, the game keeps going: a run that has ended deals a new
+    // valley, a match on its results screen rematches, both after a few
+    // seconds on the results.
+    {
+        const bool run_over = run_mode_ && (hoard_run_.phase() == game::HoardPhase::Banked ||
+                                            hoard_run_.phase() == game::HoardPhase::Lost);
+        const bool match_over = match_.phase() == game::MatchPhase::Results;
+        if (autopilot_ && (run_over || match_over)) {
+            demo_restart_timer_ += dt;
+            if (demo_restart_timer_ > 6.0f) {
+                demo_restart_timer_ = 0.0f;
+                if (run_over) start_run(fresh_seed());
+                else start_match();
+                demo_.reset(uint32_t(frame_index_) * 2654435761u + 7u);
+                for (float& t : demo_.time_in) t = 0.0f;
+            }
+        } else {
+            demo_restart_timer_ = 0.0f;
+        }
+    }
 
     dragon_rig_.set_action(rig_action_);
     // Where the ground is under each foot: the rig plants the standing limbs
@@ -1868,6 +1921,14 @@ void App::draw_hud() {
 
     if (combat_enabled_) draw_combat_hud();
     if (run_mode_) draw_run_hud();
+    if (autopilot_) {
+        // Hands-off, and what the pilot is doing: a demo that explains itself.
+        char text[96];
+        std::snprintf(text, sizeof(text), demo_active() ? "AUTOPILOT  %s   P to take over"
+                                                        : "AUTOPILOT%s   P to take over",
+                      demo_active() ? game::demo_state_name(demo_.state()) : "");
+        hud_.label(ImVec2(margin, height - margin - hud_.px(16.0f)), text, tk.accent, 14.0f);
+    }
 
     // ---- airspeed, bottom centre ----
     // Diegetic first: speed is the wind and the FOV surge, so the numeral is
@@ -2045,7 +2106,10 @@ void App::build_rally_ui() {
                 rally_.rings_passed(), rally_.course().rings.size());
     if (ImGui::Button("restart run (R)")) respawn_dragon();
 
-    ImGui::Checkbox("autopilot", &autopilot_);
+    {
+        bool on = autopilot_;
+        if (ImGui::Checkbox("autopilot (P)", &on)) set_autopilot(on);
+    }
     ImGui::SameLine();
     ImGui::TextDisabled("(flies the course itself)");
 
@@ -2923,6 +2987,132 @@ void App::spawn_bots(int count) {
     }
 }
 
+// ---- props ----
+
+bool App::load_prop(const char* path, PropModel& out, const char* tag) {
+    anim::SkinnedMeshData data;
+    const anim::GltfLoadResult loaded = anim::load_skinned_gltf(path, out.skeleton, data);
+    if (!loaded.ok) {
+        LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
+        return false;
+    }
+    if (!out.mesh.upload(device_.gpu(), data, tag)) return false;
+    for (size_t i = 0; i < loaded.textures.size(); ++i) {
+        const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
+        const std::string name = std::string(tag) + "_" + std::to_string(i);
+        out.textures.push_back(
+            gfx::create_texture_from_image(device_.gpu(), loaded.textures[i], name.c_str(), srgb));
+    }
+    out.joints.assign(size_t(std::max(out.skeleton.count(), 1)), core::Mat4::identity());
+    out.ok = true;
+    LOG_INFO("prop %s: %zu triangles, %d joint(s), %zu texture(s), %.1f x %.1f x %.1f m", path,
+             loaded.triangle_count, loaded.joint_count, loaded.textures.size(),
+             double(loaded.bounds_max.x - loaded.bounds_min.x),
+             double(loaded.bounds_max.y - loaded.bounds_min.y),
+             double(loaded.bounds_max.z - loaded.bounds_min.z));
+    return true;
+}
+
+void App::release_prop(PropModel& prop) {
+    prop.mesh.release(device_.gpu());
+    for (SDL_GPUTexture* texture : prop.textures) {
+        if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
+    }
+    prop.textures.clear();
+    prop.ok = false;
+}
+
+// ---- the demo pilot ----
+
+void App::set_autopilot(bool on) {
+    autopilot_ = on;
+    demo_.reset(uint32_t(frame_index_) * 2654435761u + 11u);
+    demo_restart_timer_ = 0.0f;
+}
+
+// What the demo pilot can see: every live target, where to go, and in a run
+// the next cache worth landing on and the tower guarding it.
+void App::build_demo_world(game::DemoWorld& world) {
+    const game::FlightState& self = flight_.state();
+    world.terrain = &terrain_;
+    world.health_fraction = combat_.health_fraction();
+    world.locked_slot = combat_.locked_index();
+    world.targets.clear();
+    const auto& sentinels = combat_.sentinels();
+    for (size_t i = 0; i < sentinels.size(); ++i) {
+        const game::Sentinel& s = sentinels[i];
+        if (!s.alive) continue;
+        game::DemoTarget t;
+        t.position = s.position;
+        t.velocity = s.velocity;
+        t.slot = int(i);
+        t.health = s.max_health > 0.0f ? s.health / s.max_health : 1.0f;
+        t.kind = s.ground ? game::DemoTargetKind::Tower : game::DemoTargetKind::Drone;
+        if (s.external) {
+            t.kind = game::DemoTargetKind::Rival;
+            for (const auto& bot : bots_) {
+                if (bot->slot != int(i)) continue;
+                if (bot->hunter) t.kind = game::DemoTargetKind::Hunter;
+                t.dormant = run_mode_ && bot->dormant;
+            }
+        }
+        world.targets.push_back(t);
+    }
+
+    world.in_run = run_mode_ && hoard_run_.phase() == game::HoardPhase::Flying;
+    if (run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle) {
+        const game::RunLayout& layout = hoard_run_.layout();
+        world.waypoint = hoard_run_.next_waypoint(self.position);
+        world.cache_radius = hoard_run_.settings.cache_radius;
+        {
+            // Back up the corridor a stretch, high over the floor.
+            const float f = core::maxf(layout.fraction_at(self.position) - 0.12f, 0.0f);
+            const size_t n = layout.spine.size();
+            const size_t i = std::min(n - 1, size_t(f * float(n - 1)));
+            world.safe_point = layout.spine[i] + core::Vec3{0.0f, 220.0f, 0.0f};
+        }
+        // The next uncollected cache AHEAD down the corridor: the nearest one
+        // can be behind, and turning back for it is not how a run flows.
+        const float here = layout.fraction_at(self.position);
+        int best = -1;
+        float best_fraction = 1e9f;
+        for (size_t c = 0; c < layout.caches.size(); ++c) {
+            if (layout.caches[c].collected) continue;
+            const float f = layout.fraction_at(layout.caches[c].position);
+            if (f < here - 0.12f || f >= best_fraction) continue;
+            best = int(c);
+            best_fraction = f;
+        }
+        // The rush to the pass: every cache taken, or the hunters' time has
+        // come. A demo that could spend seven minutes on towers never showed
+        // the end of a run; with a clock, every run ends at the pass or in a
+        // death, and both are the game.
+        world.rush = world.in_run && (best < 0 || hoard_run_.elapsed() > hoard_run_.pressure_start());
+        if (world.rush) best = -1;
+        if (best >= 0) {
+            world.has_cache = true;
+            world.cache = layout.caches[size_t(best)].position;
+            for (size_t i = 0; i < layout.defences.size() && i < run_defence_slots_.size(); ++i) {
+                if (layout.defences[i].guards != best) continue;
+                for (size_t k = 0; k < world.targets.size(); ++k) {
+                    if (world.targets[k].slot == run_defence_slots_[i]) world.cache_guard = int(k);
+                }
+            }
+        }
+        return;
+    }
+
+    // The arena: patrol up and down the valley, turning back short of the
+    // ends, and let the fight find the targets.
+    const float extent = terrain_settings_.half_extent;
+    if (self.position.z * patrol_sign_ > extent * 0.55f) patrol_sign_ = -patrol_sign_;
+    const float z = core::clampf(self.position.z + patrol_sign_ * 600.0f, -extent * 0.7f, extent * 0.7f);
+    const float x = terrain_.valley_center_x(z);
+    world.waypoint = core::Vec3{x, terrain_.height_at(x, z) + 180.0f, z};
+    world.safe_point = core::Vec3{self.position.x, terrain_.height_at(self.position.x, self.position.z) + 300.0f,
+                                  self.position.z - patrol_sign_ * 400.0f};
+}
+
 // ---- the run ----
 
 uint32_t App::fresh_seed() const {
@@ -3241,7 +3431,16 @@ void App::draw_run_world(SDL_GPURenderPass* pass) {
         ring.tint = cache.collected ? core::Vec4{0.16f, 0.20f, 0.22f, 0.0f}
                                     : core::Vec4{1.0f, 0.72f, 0.22f, 0.3f + pulse * 0.6f};
         world_.draw_mesh(device_, pass, ring_mesh_, ring);
-        if (!cache.collected && sphere_mesh_.valid()) {
+        if (!cache.collected && hoard_prop_.ok) {
+            // The pile, flattening as it is taken.
+            const float left = 1.0f - 0.85f * cache.progress;
+            gfx::ModelUniforms pile;
+            pile.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
+                                         core::Quat::identity(), core::Vec3{1.0f, left, 1.0f});
+            pile.tint = core::Vec4{1.0f, 1.0f, 1.0f, 0.08f + 0.12f * pulse};
+            world_.draw_skinned(device_, pass, hoard_prop_.mesh, pile, hoard_prop_.joints,
+                                hoard_prop_.textures, model_sampler_);
+        } else if (!cache.collected && sphere_mesh_.valid()) {
             // The pile: it sinks as it is taken.
             const float left = 1.0f - 0.85f * cache.progress;
             gfx::ModelUniforms pile;
@@ -3764,6 +3963,13 @@ game::CombatInput App::read_combat_input() const {
         return in;
     }
 
+    if (demo_active()) {
+        in.fire = demo_decision_.fire;
+        in.breath = demo_decision_.breath;
+        in.melee = demo_decision_.melee;
+        in.boost = demo_decision_.boost;
+        return in;
+    }
     if (free_camera_ || autopilot_) return in;
 
     const bool ui_has_mouse = ui_.wants_mouse();
@@ -3815,10 +4021,23 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // A hit flashes HOT ORANGE, because the other bright thing a sentinel
         // does -- firing -- puts a blue-white bolt on top of it, and two white
         // flashes are indistinguishable at range.
+        if (sentinel.ground && tower_prop_.ok) {
+            // The watchtower prop: its base on the ground (a tower's slot sits
+            // 8 m up, at its middle), warmed when hit, and the brazier's fire
+            // on top shrinking as it dies.
+            gfx::ModelUniforms tower;
+            tower.model = core::Mat4::trs(sentinel.position - core::Vec3{0.0f, 8.0f, 0.0f},
+                                          core::Quat::identity(), core::Vec3::one());
+            tower.tint = core::Vec4{1.0f + 0.6f * flash, 1.0f + 0.3f * flash, 1.0f, flash * 0.4f};
+            world_.draw_skinned(device_, pass, tower_prop_.mesh, tower, tower_prop_.joints,
+                                tower_prop_.textures, model_sampler_);
+            draw_ball(sentinel.position + core::Vec3{0.0f, 8.6f, 0.0f}, 0.7f + 0.7f * health,
+                      core::lerp(core::Vec3{1.0f, 0.42f, 0.10f}, core::Vec3{1.0f, 0.8f, 0.3f}, flash),
+                      0.9f + flash, true);
+            continue;
+        }
         if (sentinel.ground) {
-            // A watchtower: a dark stone shaft with a brazier on top that
-            // flashes hot when hit and shrinks as it dies. A prop mesh is row
-            // 10; this is the readable target the probe needs today.
+            // Fallback when the prop is missing: a stone shaft and a brazier.
             gfx::ModelUniforms shaft;
             shaft.model = core::Mat4::trs(sentinel.position - core::Vec3{0.0f, 6.0f, 0.0f},
                                           core::Quat::identity(), core::Vec3{5.0f, 15.0f, 5.0f});
@@ -4724,6 +4943,31 @@ void App::render() {
                                       shadow_.light_view_proj(), bot_model,
                                       bot->rig.skinning_matrices());
         }
+        // The run's props cast shadows: a tower's shadow on the slope is how
+        // its height reads from the air.
+        if (run_mode_) {
+            if (tower_prop_.ok) {
+                for (const game::Sentinel& s : combat_.sentinels()) {
+                    if (!s.alive || !s.ground) continue;
+                    gfx::ModelUniforms m;
+                    m.model = core::Mat4::trs(s.position - core::Vec3{0.0f, 8.0f, 0.0f},
+                                              core::Quat::identity(), core::Vec3::one());
+                    world_.draw_skinned_depth(device_, shadow_pass, tower_prop_.mesh,
+                                              shadow_.light_view_proj(), m, tower_prop_.joints);
+                }
+            }
+            if (hoard_prop_.ok) {
+                for (const game::RunCache& cache : hoard_run_.layout().caches) {
+                    if (cache.collected) continue;
+                    gfx::ModelUniforms m;
+                    m.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
+                                              core::Quat::identity(),
+                                              core::Vec3{1.0f, 1.0f - 0.85f * cache.progress, 1.0f});
+                    world_.draw_skinned_depth(device_, shadow_pass, hoard_prop_.mesh,
+                                              shadow_.light_view_proj(), m, hoard_prop_.joints);
+                }
+            }
+        }
         // Only the live checkpoint casts a shadow. Shadowing all of them costs
         // little but reads as clutter, and the shadow's job here is to tell you
         // where the next ring is relative to the ground.
@@ -4844,6 +5088,27 @@ void App::log_telemetry() const {
         LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
                  bites_taken_);
+    }
+    if (demo_active()) {
+        LOG_INFO("   demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f collect %.0f "
+                 "takeoff %.0f flee %.0f",
+                 double(demo_.time_in[0]), double(demo_.time_in[1]), double(demo_.time_in[2]),
+                 double(demo_.time_in[3]), double(demo_.time_in[4]), double(demo_.time_in[5]),
+                 double(demo_.time_in[6]), double(demo_.time_in[7]));
+        LOG_INFO("   demo: %s  siege shots %d  best off-axis %.1f deg  range %.0f  lock %d",
+                 game::demo_state_name(demo_.state()), demo_.siege_shots,
+                 double(demo_.siege_best_off_axis_deg), double(demo_.siege_last_range),
+                 combat_.locked_index());
+        const_cast<game::DemoPilot&>(demo_).siege_best_off_axis_deg = 180.0f;
+        const int slot = demo_.target();
+        if (slot >= 0 && size_t(slot) < combat_.sentinels().size()) {
+            int shots = 0;
+            for (const game::Projectile& p : combat_.projectiles()) {
+                if (p.alive && p.team == game::Team::Player) ++shots;
+            }
+            LOG_INFO("   demo target: slot %d health %.0f  player rounds in flight %d", slot,
+                     double(combat_.sentinels()[size_t(slot)].health), shots);
+        }
     }
     if (run_mode_) {
         LOG_INFO("   run: %s  seed %u  hoard %.0f  caches %d/%zu  kills %d  hunters %d  %.0f s  %.0f m",

@@ -142,6 +142,18 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M25** hands-off: the demo pilot (`COMBAT.md` "The demo pilot") plays
+  the run and the arena through the player's controls -- P, `--autopilot`,
+  `--demo` -- sieging guard towers, fighting, landing, walking in,
+  collecting, falling back to heal, rushing the pass once the hunters are
+  due, and rolling into the next valley. The run's watchtower and hoard
+  pile are real props now (`assets/props/`, built by
+  `tools/build_props.py` -- the first task delegated to gpt-6-astra in
+  full-access mode, 62 k tokens, `tools/props.md`), drawn through the
+  skinned path with one identity bone and casting shadows. Tower bolts 14 ->
+  10 damage and their tight-aim range 200 -> 150 m, after the playtest's
+  "towers overpowered" and the demo dying inside every guard's reach.
+  Thirteenth suite.
 - **M24.2** the run's second pass, after "towers and hunters overpowered,
   ignoring everything is best, seeds change nothing": guard towers at every
   cache, bounties and health on kills, towers back to one answer, hunters

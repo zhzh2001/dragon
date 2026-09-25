@@ -390,7 +390,7 @@ question is the one that could still change the plan.
 | 7 | Terrain detail textures, instanced rocks, ridge octave; static glTF loader | 2 | visuals + assets |
 | 8 | Screens: title, pause, results, shop; gamepad focus model | 2 | UI |
 | 9 | Sky: sun disc, cloud layers, aerial perspective; thermals | 1-2 | visuals + gameplay |
-| 10 | Props: towers, ballistae, huts, hoard piles via Blender MCP | 1-2 | assets |
+| 10 | Props: towers, ballistae, huts, hoard piles via Blender MCP -- the watchtower and hoard pile done 2026-09-25 (`tools/build_props.py`, delegated); ballistae and huts to come | 1-2 | assets |
 | 11 | Weather along the valley; wingman as a run reward | 2 | gameplay |
 | -- | Then the RHI extraction (`RETRO.md` R1) | | port |
 

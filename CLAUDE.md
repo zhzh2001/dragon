@@ -37,7 +37,7 @@ they are records of what was already tried and why it is the way it is.
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twelve suites, plain executables, no framework
+ctest --test-dir build            # thirteen suites, plain executables, no framework
 ```
 
 ### Verifying without a human at the keyboard
@@ -65,7 +65,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--skeleton` | Draw the posed joints as lines, to tell a rig problem from a skinning one. |
 | `--bind-pose` | Freeze the rig, to check an imported asset against its own bind pose. |
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
-| `--autopilot` | Fly the selected course unattended. Doubles as a soak test. |
+| `--autopilot` | Hands-off. Without combat it flies the selected course; in a run or with combat on it is the demo pilot (`game::DemoPilot`), which plays through the player's own controls -- sieges guard towers, fights, lands on caches, walks in, collects, flees to heal, flies to the pass -- and rolls into the next valley or rematch after the results. Doubles as a soak test. |
+| `--demo` | The game playing itself: a hands-off run on a random valley, one after another. The same as P in play. |
 | `--course N` | Select a generated course. |
 | `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`), 13 walk (grounded at a walking pace on the spot; the stride). |
 | `--studio-speed N` | Studio playback speed, 0.05 to 2; scales both the scenario and the rig. |
@@ -136,6 +137,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad left/right, which is also the direction. A dodge: a sideways kick and a push through the first half of the roll, about ten metres |
 | B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
 | Enter | Rematch from the arena results; in a hoard run that has ended, a new valley |
+| P | Hands-off: the demo pilot takes (or gives back) the controls; the HUD says what it is doing |
 | Esc | Release the mouse if captured; again to quit |
 
 ImGui keyboard and gamepad navigation are deliberately disabled: with them on,
@@ -289,6 +291,7 @@ flight controls.
   | | tokens |
   |---|---|
   | fit a measured leg skeleton to one creature and rebuild | 93,011 |
+  | build two verified props in Blender (full access, medium), 2026-09-25 | 62,201 |
   | measure one creature's membrane field and rebuild | 75,737 |
   | a `codex exec` that replies "OK" | 7,292 |
 
@@ -317,11 +320,16 @@ flight controls.
   So: **Fable for work where the write-up and the in-file record matter and the
   budget is Claude's own; gpt-6-astra when the task is well-specified and
   numerically checkable, and only with usage headroom confirmed.**
-  Run `codex exec` with `-s workspace-write`, never
-  `--dangerously-bypass-approvals-and-sandbox`: given full access it
-  immediately reached outside its `-C` directory into the main checkout.
-  Give either one a **git worktree** (`git worktree add`) so two workers cannot
-  write the same file, and symlink the large gitignored input assets in.
+  Run `codex exec -m gpt-6-astra -c model_reasoning_effort=medium -s
+  danger-full-access` -- the user's call on 2026-09-25: the default
+  auto/workspace-write mode drained usage about twice as fast. Full access
+  once reached outside its `-C` directory into the main checkout, so contain
+  it: a **git worktree** (`git worktree add`) of its own, a brief that names
+  the only paths it may write, stdin from nowhere (it waits on stdin
+  otherwise), and a `git status` of the main checkout after it finishes.
+  Symlink the large gitignored input assets in. The props task
+  (`tools/props.md`) ran this way: 62 k tokens, stayed inside its worktree,
+  verified its own output, committed on its branch.
 
 ## Cross-cutting lessons
 
@@ -378,14 +386,14 @@ src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
 src/game/    flight model, chase + debug cameras, terrain, vegetation,
              course/rally, autopilot, combat, breath profiles, bots, match
-             loop, the hoard run, studio
+             loop, the hoard run, the demo pilot, studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration: context, the two HUD faces, the panel theme
 src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     MSL, hot-reloaded from the source tree
-tests/       twelve suites: math, camera, camera_rig, flight, rally, anim, hoard_run,
+tests/       thirteen suites: math, camera, camera_rig, flight, rally, anim, hoard_run, demo_pilot,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

@@ -498,3 +498,56 @@ ordered and richer with depth, towers on the ground beside the spine, rivals
 over it facing back, the gate at the end), collection (needs the ground and
 the time, drains on takeoff), banking, losing, engagement, the hunter clock,
 and the records. Renders in `artifacts/run/`.
+
+## The demo pilot (M25)
+
+`game::DemoPilot` (`src/game/demo_pilot.h`) plays the game through the
+player's own controls, for a demo, a soak and a hands-off mode: P in play,
+`--autopilot` with combat or a run, `--demo` for one random valley after
+another. It is a decision layer, not a new AI. The app describes the world
+each frame (`DemoWorld`: live targets by kind, the corridor waypoint, the next
+cache AHEAD down the corridor and its guard, a safe point up the valley, the
+health, the lock) and applies the decision; dogfights are flown by a
+`BotPilot` aimed at the chosen mark, cruising and landing by the rally
+autopilot's `steer_through`, walking by the ground walk. A finished run deals a
+new valley and a match rematches after six seconds of results. The HUD says
+AUTOPILOT and the job; the telemetry line carries the job and a per-job time
+total (`demo time:`), which is how every problem below was found.
+
+The jobs, re-decided every 0.4 s: **fight** a hunter inside 350 m or a rival
+inside 250 m (a dormant one inside 260 m); **flee** to the safe point and
+circle it when below 35% health, until 75%; **siege** a cache's guard tower;
+**land** on an unguarded cache; **walk** the last 70 m on foot; **collect**;
+**take off**; **cruise** otherwise. Once every cache is taken, or the first
+hunter is due, it **rushes** the pass and fights only what is within 300 m.
+
+What each headless run taught it, in order -- each was a trace, not a guess:
+
+- **Speed.** Its dogfights climbed after the mark to a 6 m/s stall. Below
+  22 m/s in the air (not on final approach) the nose goes down and the wings
+  beat until 34. Its fighter's flips became rolls: a half loop at a drake's
+  speed ended at 13 m/s with the mark behind it.
+- **The siege.** A tower cannot be dogfought: the bot pilot's terrain floor
+  holds it 130 m up. A siege is a strafing pass: climb to an ENTRY point
+  (600 m out, 170 m up, chosen from eight bearings over the lowest ground,
+  frozen once chosen), commit only when facing the tower, run in weaving
+  across the line with fireballs inside 480 m and the flame inside 170, pull
+  up at 70 m or on the clearance predicted 1.5 s ahead (25 m floor), extend
+  to the far side, which is the next entry. Every one of those clauses was a
+  failure first: an entry recomputed from the dragon's position moved with it
+  and was circled for a minute; committing while facing away made a
+  descending turn that tripped the pull-up forever; a 60 m floor pulled up at
+  224 m, before the flame was ever in reach. A siege that has not killed its
+  tower in 60 s gives the cache up.
+- **Fights that go nowhere.** A mark that regenerates between passes can be
+  traded with forever. No damage on it for 20 s and the pilot breaks off from
+  that one for 30 s -- a pursuer does not pull it back -- and, while cruising
+  or fleeing, whatever crosses its nose takes a fireball, the flame or a bite.
+- **Objective first.** Engaging rivals at 500 m and hunters at 1.1 km spent
+  seven-minute runs in dogfights; the ranges came in to 250 and 350.
+
+Its fighter is ace-tempered (reaction 0.16 s, 1.2 degrees of spread): it
+carries a drake through fights a veteran bot would lose. `tests/test_demo_pilot.cpp`
+pins the choices (ground, priorities, the fall-back hysteresis, the rush, the
+stalemate, the speed guard, a siege that commits only facing and fires on the
+run in).

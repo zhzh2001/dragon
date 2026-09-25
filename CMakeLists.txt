@@ -56,6 +56,7 @@ add_executable(dragon
   src/game/studio.cpp
   src/game/match.cpp
   src/game/hoard_run.cpp
+  src/game/demo_pilot.cpp
   src/editor/imgui_layer.cpp
   src/ui/hud.cpp
 )
@@ -235,6 +236,26 @@ target_include_directories(test_hoard_run PRIVATE src)
 target_link_libraries(test_hoard_run PRIVATE SDL3::SDL3)
 target_compile_options(test_hoard_run PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME hoard_run COMMAND test_hoard_run)
+
+add_executable(test_demo_pilot
+  tests/test_demo_pilot.cpp
+  src/game/demo_pilot.cpp
+  src/game/bot.cpp
+  src/game/autopilot.cpp
+  src/game/maneuver.cpp
+  src/game/combat.cpp
+  src/game/breath.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_demo_pilot PRIVATE src)
+target_link_libraries(test_demo_pilot PRIVATE SDL3::SDL3)
+target_compile_options(test_demo_pilot PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME demo_pilot COMMAND test_demo_pilot)
 
 add_executable(test_vegetation
   tests/test_vegetation.cpp

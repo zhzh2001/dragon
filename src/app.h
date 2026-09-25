@@ -22,6 +22,7 @@
 #include "game/autopilot.h"
 #include "game/course.h"
 #include "game/hoard_run.h"
+#include "game/demo_pilot.h"
 #include "game/flight.h"
 #include "game/rally.h"
 #include "game/terrain.h"
@@ -147,6 +148,9 @@ struct Options {
     // --run-empty: the run with no rivals and no towers, so the autopilot can
     // fly the corridor to the pass -- the soak for the banking path.
     bool run_empty = false;
+    // --demo: a hands-off run on a random valley, flown by the demo pilot,
+    // rolling into the next valley when it ends -- the game playing itself.
+    bool demo = false;
     // --walk F[,T]: once grounded, walk at F (-1..1) turning at T, for a
     // capture of the walk in the game rather than on the bench.
     // --hunters-after S: loose the run's first hunter after S seconds instead
@@ -321,6 +325,28 @@ private:
     // The arena (the match) is untouched: a run is a mode beside it, entered
     // with --run or from the Combat panel, left with "leave run".
     game::HoardRun hoard_run_;
+    // The run's props, built by tools/build_props.py: a watchtower and a hoard
+    // pile, each a mesh skinned to one `root` bone so the skinned loader and
+    // draw take them as they are (the engine has no static glTF path yet).
+    struct PropModel {
+        anim::Skeleton skeleton;
+        anim::SkinnedMesh mesh;
+        std::vector<SDL_GPUTexture*> textures;
+        std::vector<core::Mat4> joints;  // identity: the bind pose
+        bool ok = false;
+    };
+    PropModel tower_prop_, hoard_prop_;
+    bool load_prop(const char* path, PropModel& out, const char* tag);
+    void release_prop(PropModel& prop);
+    // The hands-off player (P, --autopilot in a run or a fight, --demo): it
+    // plays through the same controls, and a finished run or match rolls on.
+    game::DemoPilot demo_;
+    game::DemoDecision demo_decision_;
+    float demo_restart_timer_ = 0.0f;
+    float patrol_sign_ = 1.0f;
+    bool demo_active() const { return autopilot_ && (run_mode_ || combat_enabled_); }
+    void build_demo_world(game::DemoWorld& world);
+    void set_autopilot(bool on);
     game::RunRecords run_records_;
     // The panel's dials. Each run derives its own settings from these through
     // its valley kind, so the kinds never compound on each other.

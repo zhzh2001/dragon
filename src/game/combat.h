@@ -161,7 +161,9 @@ struct CombatTuning {
     float defence_fire_interval = 2.4f;
     float defence_projectile_speed = 170.0f;
     float defence_gravity = 14.0f;
-    float defence_damage = 14.0f;
+    // 14 until the second playtest ("towers overpowered"), with the demo
+    // pilot dying inside a guard tower's reach in every early run.
+    float defence_damage = 10.0f;
     float defence_spread = 14.0f;
     float defence_range = 420.0f;
     // The playtest landed beside a tower and breathed on it until it fell:
@@ -175,7 +177,7 @@ struct CombatTuning {
     // to one exploit was an overcorrection. The tighter aim at a grounded
     // dragon and the splash stay, which is what closed the exploit.
     float defence_breath_resist = 1.0f;   // share of breath damage that lands
-    float defence_close_range = 200.0f;
+    float defence_close_range = 150.0f;
     float defence_close_rate = 1.0f;      // fire-rate multiplier up close or grounded
     float defence_close_spread = 0.25f;   // spread multiplier up close or grounded
     float defence_splash = 10.0f;         // m
