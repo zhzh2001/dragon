@@ -1010,6 +1010,20 @@ behind and below) and the brake (side, below) on all seven species,
 wrong pose even when every number is right; judge a pendulum from a
 sequence, never from a frame.**
 
+**Growth (M25.2).** The hoard run grows the player through three sizes. The
+body is a uniform scale in the player's model matrix (`App::player_to_world`,
+the one place it is built -- draw, shadow, the rig's ground planting, the
+muzzle and the head focus all read it), so the terrain IK plants a bigger
+dragon's feet on the same ground. The wings grow on top of it through
+`DragonRig::wing_growth`, a scale on each shoulder's local transform set right
+after the pose resets and before the wing drive, so the whole chain and its
+membrane grow and every later rotation composes on the grown wing. The rig's
+chains keep their bind-scale metres (they are not rebuilt on growth: a rebuild
+resets the neck and tail sims, and the size change is small enough that the
+dynamics do not visibly change). Judged in flight from the front and chase at
+every stage, the head close, and standing on dragon, ironroot and stormsail
+(`artifacts/growth/`).
+
 **The walk (M24.1).** A landed dragon could not move until the run needed it
 to walk onto a cache. The flight model walks it (`FlightModel::walk`: pace
 along the facing, turning about world up, the ground friction standing down

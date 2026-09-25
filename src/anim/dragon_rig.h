@@ -740,6 +740,11 @@ public:
         ground_height_ = std::move(height);
     }
     const RigAction& action() const { return action_; }
+    // Growth: the wings' scale over the body's, applied at each shoulder so
+    // the whole wing -- bones, membrane, span -- grows with the dragon. Set
+    // by the run each frame; 1 everywhere else. Not a profile field: it is a
+    // state of this dragon, not of its species.
+    float wing_growth = 1.0f;
     // How open the jaw is, 0..1, after the last update. For probes and tests.
     float jaw_open() const { return jaw_open_; }
 

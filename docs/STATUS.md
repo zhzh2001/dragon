@@ -142,6 +142,9 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M25.2** growth made visible: the body scales 0.8 / 1.0 / 1.25 with the
+  stage and the wings 0.85 / 1.0 / 1.15 on top, eased in on "YOU GREW";
+  `--stage N`. `ANIMATION.md` "Growth".
 - **M25.1** the demo pilot's climb-out, after "stuck in cycles after the
   first hoard": take-off holds until 35 m at the attitude a flight-model
   probe measured (20 degrees; lower never leaves ground effect), a walk of

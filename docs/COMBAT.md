@@ -487,6 +487,13 @@ passes 0), and the seed never reached the terrain. What changed:
   health, 0.7 drain, 0.6 cooldown, 1.3 bite, 1.25 flame. Growing refills the
   new health plus 25. The run strip shows the stage and a bar; "YOU GREW"
   calls it out. Leaving the run restores the tuning.
+  **Growth is also seen (M25.2):** the player's whole body scales with the
+  stage (0.8, 1.0, 1.25) and the wings grow on top of it (0.85, 1.0, 1.15,
+  on the rig's shoulders: `DragonRig::wing_growth`), so an adult's span is
+  about 1.45x a young dragon's; both ease in over about two seconds on the
+  "YOU GREW", and the resting height scales with the body so a big dragon
+  stands on its feet. `--stage N` starts a run already grown for captures;
+  `artifacts/growth/`.
 
 The unarmed autopilot now dies early in every kind -- it flies straight into
 each post and never shoots -- and with `--attack` holding fire it still

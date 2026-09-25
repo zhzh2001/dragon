@@ -112,6 +112,9 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--walk" && i + 1 < argc) {
             options.has_walk = true;
             std::sscanf(argv[++i], "%f,%f", &options.walk, &options.walk_turn);
+        } else if (arg == "--stage" && i + 1 < argc) {
+            options.stage = SDL_atoi(argv[++i]);
+            options.run = true;
         } else if (arg == "--demo") {
             options.demo = true;
             options.autopilot = true;
@@ -294,6 +297,15 @@ bool App::init(const Options& options) {
     if (options.run) {
         if (options.hunters_after > 0.0f) run_dials_.pressure_after = options.hunters_after;
         start_run(options.seed ? options.seed : fresh_seed());
+        if (options.stage > 0) {
+            // Grown on the first frame, and at full size at once.
+            hoard_run_.award(options.stage >= 2 ? hoard_run_.settings.grow_adult
+                                                : hoard_run_.settings.grow_young);
+            apply_growth(options.stage >= 2 ? game::GrowthStage::Adult : game::GrowthStage::Young);
+            growth_scale_ = growth_scale_target_;
+            wing_growth_ = wing_growth_target_;
+            dragon_rig_.wing_growth = wing_growth_;
+        }
     }
 
     if (options.has_camera) {
@@ -725,7 +737,7 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     gfx::ModelUniforms model;
     // The asset correction is applied inside the dragon's own frame, so it
     // aligns the model to the engine without disturbing the flight transform.
-    model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
+    model.model = player_to_world(s);
     model.recolour = core::Vec4{player_hue_.x, player_hue_.y, player_hue_.z, player_recolour_};
     return model;
 }
@@ -1052,7 +1064,7 @@ void App::update(float dt) {
             const core::Vec3 head_model = dragon_rig_.head_position();
             if (core::length_sq(head_model) > 1e-6f) {
                 focus = core::transform_point(
-                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
+                    player_to_world(s),
                     head_model);
             }
         }
@@ -1067,7 +1079,7 @@ void App::update(float dt) {
         {
             const game::FlightState& s = flight_.state();
             const core::Mat4 to_world =
-                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
+                player_to_world(s);
             const core::Vec3 head_model = dragon_rig_.head_position();
             if (core::length_sq(head_model) > 1e-6f) {
                 combat_.set_muzzle(core::transform_point(to_world, head_model));
@@ -1283,7 +1295,7 @@ void App::update(float dt) {
         // and whole frames of threads landed on one wing.
         const game::FlightState& s = flight_.state();
         const core::Mat4 to_world =
-            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
+            player_to_world(s);
         const core::Vec3 pale{0.55f, 0.65f, 0.8f};
         static float boost_carry = 0.0f;
         boost_carry += dt * 90.0f;
@@ -1430,7 +1442,7 @@ void App::update(float dt) {
     {
         const game::FlightState& s = dragon_state();
         dragon_rig_.set_ground(
-            core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix(),
+            player_to_world(s),
             [this](float x, float z) { return terrain_.surface_at(x, z); });
     }
     // The scenario and rig must share a clock: otherwise slow motion spaces
@@ -1505,7 +1517,7 @@ void App::draw_skeleton_debug() {
     if (!show_skeleton_) return;
     const game::FlightState& s = dragon_state();
     const core::Mat4 to_world =
-        core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * player_model().asset.matrix();
+        player_to_world(s);
     const std::vector<core::Mat4>& skinning = dragon_rig_.skinning_matrices();
     if (skinning.empty()) return;
 
@@ -3168,8 +3180,12 @@ void App::start_run(uint32_t seed) {
     }
     for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
     run_alive_.assign(combat_.sentinels().size(), 1);
-    // Every run starts as a drake.
+    // Every run starts as a drake -- at a drake's size at once, not shrinking
+    // into it.
     apply_growth(game::GrowthStage::Drake);
+    growth_scale_ = growth_scale_target_;
+    wing_growth_ = wing_growth_target_;
+    dragon_rig_.wing_growth = wing_growth_;
     respawn_dragon();  // at the layout's start, facing down the corridor; full (drake) health
     LOG_INFO("run: seed %u, a %s, %.1f km of corridor, %zu caches, %zu towers, %zu rivals, "
              "first hunter at %.0f s",
@@ -3220,6 +3236,7 @@ void App::end_run() {
 void App::capture_growth_base() {
     growth_base_.heft = flight_.tuning.heft;
     growth_base_.flap = flight_.tuning.flap_peak_force;
+    growth_base_.ground_offset = flight_.tuning.ground_offset;
     const game::CombatTuning& t = combat_.tuning;
     growth_base_.max_health = t.max_health;
     growth_base_.breath_drain = t.breath_drain;
@@ -3234,17 +3251,24 @@ void App::capture_growth_base() {
 // the point: the dragon you land at the pass is not the one you launched.
 void App::apply_growth(game::GrowthStage stage) {
     struct Scale {
-        float heft, flap, health, drain, fireball, melee, breath;
+        float heft, flap, health, drain, fireball, melee, breath, size, wings;
     };
+    // Size is the body; wings multiply on top, so an adult's span is about
+    // 1.45x a young dragon's while its body is 1.25x -- the wings are what
+    // grows most, and what reads first from the chase camera.
     static const Scale scales[] = {
-        {0.8f, 0.9f, 0.85f, 1.4f, 1.4f, 0.8f, 0.8f},   // drake
-        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},    // young
-        {1.3f, 1.15f, 1.5f, 0.7f, 0.6f, 1.3f, 1.25f},  // adult
+        {0.8f, 0.9f, 0.85f, 1.4f, 1.4f, 0.8f, 0.8f, 0.8f, 0.85f},     // drake
+        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},       // young
+        {1.3f, 1.15f, 1.5f, 0.7f, 0.6f, 1.3f, 1.25f, 1.25f, 1.15f},   // adult
     };
     const Scale& k = scales[std::clamp(int(stage), 0, 2)];
     const float old_max = combat_.tuning.max_health;
     flight_.tuning.heft = growth_base_.heft * k.heft;
     flight_.tuning.flap_peak_force = growth_base_.flap * k.flap;
+    // The body rests higher off the ground when it is bigger.
+    flight_.tuning.ground_offset = growth_base_.ground_offset * k.size;
+    growth_scale_target_ = k.size;
+    wing_growth_target_ = k.wings;
     game::CombatTuning& t = combat_.tuning;
     t.max_health = growth_base_.max_health * k.health;
     t.breath_drain = growth_base_.breath_drain * k.drain;
@@ -3259,6 +3283,10 @@ void App::apply_growth(game::GrowthStage stage) {
 void App::restore_growth_base() {
     flight_.tuning.heft = growth_base_.heft;
     flight_.tuning.flap_peak_force = growth_base_.flap;
+    flight_.tuning.ground_offset = growth_base_.ground_offset;
+    growth_scale_target_ = growth_scale_ = 1.0f;
+    wing_growth_target_ = wing_growth_ = 1.0f;
+    dragon_rig_.wing_growth = 1.0f;
     game::CombatTuning& t = combat_.tuning;
     t.max_health = growth_base_.max_health;
     t.breath_drain = growth_base_.breath_drain;
@@ -3323,6 +3351,10 @@ void App::spawn_rival(int rival_index, bool hunter) {
 
 void App::update_run(float dt, const game::CombatEvents& events) {
     hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
+    // Growth, eased: most of it in the first second, all of it in about two.
+    growth_scale_ = core::damp(growth_scale_, growth_scale_target_, 0.5f, dt);
+    wing_growth_ = core::damp(wing_growth_, wing_growth_target_, 0.5f, dt);
+    dragon_rig_.wing_growth = wing_growth_;
 
     // Kills, told apart: a tower, a rival or a hunter, each with its bounty
     // and a little health back. Fighting used to earn nothing, which made

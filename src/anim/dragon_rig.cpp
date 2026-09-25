@@ -2451,6 +2451,14 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         }
     }
 
+    // Growth: the shoulder's scale carries the whole wing with it.
+    if (std::fabs(wing_growth - 1.0f) > 1e-4f) {
+        for (int side = 0; side < 2; ++side) {
+            if (joints_.wing_root[side].empty()) continue;
+            Transform& shoulder = pose_.local[size_t(joints_.wing_root[side][0])];
+            shoulder.scale = shoulder.scale * wing_growth;
+        }
+    }
     drive_gestures();
     drive_wings(state);
     drive_body_beat(state);

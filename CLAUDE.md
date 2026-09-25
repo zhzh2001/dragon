@@ -66,6 +66,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--bind-pose` | Freeze the rig, to check an imported asset against its own bind pose. |
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Hands-off. Without combat it flies the selected course; in a run or with combat on it is the demo pilot (`game::DemoPilot`), which plays through the player's own controls -- sieges guard towers, fights, lands on caches, walks in, collects, flees to heal, flies to the pass -- and rolls into the next valley or rematch after the results. Doubles as a soak test. |
+| `--stage N` | Start a run already grown (0 drake, 1 young, 2 adult) at full size: how each stage's size gets onto a capture. |
 | `--demo` | The game playing itself: a hands-off run on a random valley, one after another. The same as P in play. |
 | `--course N` | Select a generated course. |
 | `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`), 13 walk (grounded at a walking pace on the spot; the stride). |

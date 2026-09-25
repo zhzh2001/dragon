@@ -151,6 +151,9 @@ struct Options {
     // --demo: a hands-off run on a random valley, flown by the demo pilot,
     // rolling into the next valley when it ends -- the game playing itself.
     bool demo = false;
+    // --stage N (0 drake, 1 young, 2 adult): start a run already grown, for a
+    // capture of each size.
+    int stage = 0;
     // --walk F[,T]: once grounded, walk at F (-1..1) turning at T, for a
     // capture of the walk in the game rather than on the bench.
     // --hunters-after S: loose the run's first hunter after S seconds instead
@@ -357,10 +360,20 @@ private:
     uint32_t terrain_run_seed_ = 0;
     // Growth: the player's tuning as it was before the run, which every stage
     // scales from and which leaving the run restores.
+    // Growth made visible: the player's whole body scales toward the stage's
+    // size, and the wings grow on top of that, both eased over a couple of
+    // seconds so the change is watched rather than cut.
+    float growth_scale_ = 1.0f, growth_scale_target_ = 1.0f;
+    float wing_growth_ = 1.0f, wing_growth_target_ = 1.0f;
+    core::Mat4 player_to_world(const game::FlightState& s) const {
+        return core::Mat4::trs(s.position, s.orientation, core::Vec3(growth_scale_)) *
+               player_model().asset.matrix();
+    }
     struct GrowthBase {
         float heft = 1.0f, flap = 9000.0f;
         float max_health = 100.0f, breath_drain = 0.3f, fireball_cooldown = 0.85f;
         float bite = 28.0f, strike = 18.0f, breath_dps = 60.0f;
+        float ground_offset = 2.2f;
     } growth_base_;
     void capture_growth_base();
     void apply_growth(game::GrowthStage stage);
