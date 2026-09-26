@@ -45,7 +45,12 @@ struct PreyTuning {
     float herd_radius = 40.0f;
     float spacing = 6.0f;          // they keep this apart
     float health = 20.0f;
+    // The grazer drawn this much larger than the asset's 4.5 m: at that
+    // size a herd was, in the playtest's words, "too small to notice" from a
+    // dragon's height. The body for fire and bites scales with it.
+    float scale = 1.4f;
     float body_radius = 2.2f;
+    float body() const { return body_radius * scale; }
     // The swoop: the dragon's body within this of one, horizontally, and no
     // more than `grab_height` above it. Both scale with the dragon's growth.
     float grab_radius = 8.0f;

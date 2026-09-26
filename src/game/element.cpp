@@ -140,6 +140,10 @@ BreathProfile element_breath(Element element) {
     return b;
 }
 
+float Status::weaken(const ElementTuning& tuning) const {
+    return drench > 0.0f ? 1.0f - core::saturate(tuning.drench_weaken) : 1.0f;
+}
+
 float Status::slow(const ElementTuning& tuning) const {
     if (frozen > 0.0f) return 1.0f;
     return core::saturate(chill) * core::saturate(tuning.chill_slow);

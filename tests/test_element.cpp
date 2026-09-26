@@ -229,6 +229,43 @@ void test_frozen_tower_holds_fire() {
     CHECK(near(before - tower.health, combat.tuning.elements.burn_dps, 0.2f));
 }
 
+void test_rebalance() {
+    std::printf("tide weakens the drenched; burns do not stop healing; the descent scales damage\n");
+    const FlightState player = player_at(Vec3::zero());
+    // A drenched player's fireball lands softer.
+    Combat wet;
+    wet.reset(nullptr, Vec3::zero(), 13u, 0);
+    wet.player_element = Element::None;
+    const int slot = wet.spawn_external(500.0f, 6.0f);
+    wet.drive_external(slot, Vec3{0.0f, 0.0f, -60.0f}, Vec3::zero());
+    wet.fire_hostile(Vec3{0.0f, 0.0f, -20.0f}, Vec3{0.0f, 0.0f, 200.0f}, 1.0f, Element::Tide);
+    for (int f = 0; f < 10; ++f) wet.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(wet.player_status().drench > 0.0f);
+    wet.apply_hit(slot, 10.0f, Element::None);
+    CHECK(near(500.0f - wet.sentinels()[size_t(slot)].health, 10.0f * (1.0f - wet.tuning.elements.drench_weaken), 0.01f));
+
+    // Burning: the health still comes back once the hits stop.
+    Combat burnt;
+    burnt.reset(nullptr, Vec3::zero(), 13u, 0);
+    burnt.player_element = Element::Frost;
+    burnt.fire_hostile(Vec3{0.0f, 0.0f, -20.0f}, Vec3{0.0f, 0.0f, 200.0f}, 20.0f, Element::Fire);
+    for (int f = 0; f < 10; ++f) burnt.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(burnt.player_status().burn > 0.0f);
+    const float low = burnt.health();
+    for (int f = 0; f < 60 * 12; ++f) burnt.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(burnt.health() > low);  // the regen delay ran from the bolt, not the burn
+
+    // The descent's damage scale reaches every hostile hit.
+    Combat deep;
+    deep.reset(nullptr, Vec3::zero(), 13u, 0);
+    deep.player_element = Element::None;
+    deep.hostile_damage_scale = 1.8f;
+    const float before = deep.health();
+    deep.fire_hostile(Vec3{0.0f, 0.0f, -20.0f}, Vec3{0.0f, 0.0f, 200.0f}, 10.0f, Element::None);
+    for (int f = 0; f < 10; ++f) deep.update(1.0f / 60.0f, player, CombatInput{});
+    CHECK(near(before - deep.health(), 18.0f, 0.01f));
+}
+
 }  // namespace
 
 int main() {
@@ -240,6 +277,7 @@ int main() {
     test_storm_arcs_once();
     test_player_jammed_and_resists();
     test_frozen_tower_holds_fire();
+    test_rebalance();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

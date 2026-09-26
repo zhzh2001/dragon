@@ -69,10 +69,13 @@ struct ElementTuning {
 
     // ---- blight: corrode ----
     // Eats armour: the target takes more of EVERY element while it lasts,
-    // plus a weak burn of its own.
-    float corrode_time = 5.0f;
-    float corrode_vulnerability = 0.25f;  // extra share of damage taken
-    float corrode_dps = 3.0f;
+    // plus a weak burn of its own. At 5 s, +25% and 3 dps a blight tower's
+    // bolt every 2.4 s kept the player permanently corroded -- the
+    // playtest's "very tricky" -- so it is shorter and lighter, and must be
+    // kept up.
+    float corrode_time = 3.0f;
+    float corrode_vulnerability = 0.15f;  // extra share of damage taken
+    float corrode_dps = 2.0f;
 
     // ---- storm: shock ----
     // A hit arcs to the nearest other enemy within the chain range for a
@@ -82,10 +85,15 @@ struct ElementTuning {
     float shock_chain_share = 0.45f;
 
     // ---- tide: drench ----
-    // No regeneration while drenched, and a drenched target cannot burn. A
-    // fireball of tide shoves what it hits.
+    // Water in the fire: a drenched body's OWN attacks are weakened -- its
+    // damage down and its reload slower -- where blight makes it take more.
+    // It first stopped regeneration, which the playtest found did nothing:
+    // any hit already holds regeneration off. A drenched body cannot burn,
+    // and a tide hit shoves (a fireball at once, a held breath steadily).
     float drench_time = 4.0f;
-    float drench_push = 10.0f;  // m/s, a fireball's
+    float drench_weaken = 0.4f;  // share of its damage a drenched body loses
+    float drench_reload = 0.5f;  // its reload runs at this rate
+    float drench_push = 10.0f;   // m/s, a fireball's; a second of breath half that
 
     // ---- stone: stagger ----
     // Each hit builds stagger (0..1); full stagger stuns an enemy and
@@ -113,6 +121,8 @@ struct Status {
 
     // 0..1 slow on flight and fire rate: chill scales it, frozen is total.
     float slow(const ElementTuning& tuning) const;
+    // Multiplier on this body's OWN damage: drenched, it hits softer.
+    float weaken(const ElementTuning& tuning) const;
     // Weapons cold: frozen or shocked.
     bool jammed() const { return frozen > 0.0f || shock > 0.0f; }
     bool any() const;

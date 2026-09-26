@@ -227,6 +227,7 @@ struct MeleeSwing {
     core::Vec3 forward = core::Vec3::forward();
     core::Vec3 body = core::Vec3::zero();
     Element element = Element::None;
+    float scale = 1.0f;  // the biter's own damage multiplier (a drench weakens it)
 };
 
 struct Projectile {
@@ -489,7 +490,7 @@ public:
     // An external pilot biting or striking this frame: its mouth, the way it
     // faces, and its body centre. Resolved against the player in update().
     void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body,
-                       Element element = Element::None);
+                       Element element = Element::None, float scale = 1.0f);
 
     // The player's species scales, set by the app whenever the model changes.
     // Public like `tuning` is: it is data the owner sets, not state combat
@@ -507,6 +508,9 @@ public:
     // The player's size relative to normal (the run's growth; 1 elsewhere).
     // Scales the body that bolts, bites and flames are tested against.
     float player_size = 1.0f;
+    // Everything hostile hits this much harder: a run's descent sets it per
+    // valley deeper (1 elsewhere), so a grown dragon still meets its match.
+    float hostile_damage_scale = 1.0f;
     // Last frame's hostile flames, for drawing.
     const std::vector<BreathCone>& hostile_breaths() const { return hostile_breaths_drawn_; }
     // Projectiles that ended this frame -- hits and terrain strikes -- for the

@@ -359,9 +359,17 @@ void test_kinds_bounties_and_growth() {
     run.award(200.0f);
     run.update(dt, idle, true, CombatEvents{});
     CHECK(run.stage() == game::GrowthStage::Adult);
-    CHECK(run.growth_progress() == 1.0f);
-    CHECK(run.growth_level() == 2.0f);  // capped
+    CHECK(run.growth_level() > 2.0f && run.growth_level() < 3.0f);
     CHECK(run.result().stage == game::GrowthStage::Adult);
+    // And on past adult, the stages the descent grows into.
+    run.award(run.settings.grow_elder);
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(run.stage() == game::GrowthStage::Elder);
+    run.award(run.settings.grow_ancient);
+    run.update(dt, idle, true, CombatEvents{});
+    CHECK(run.stage() == game::GrowthStage::Ancient);
+    CHECK(run.growth_progress() == 1.0f);
+    CHECK(run.growth_level() == 4.0f);  // capped
 }
 
 void test_records() {

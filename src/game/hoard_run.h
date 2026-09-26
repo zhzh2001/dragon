@@ -53,7 +53,10 @@ ValleyKind valley_kind_for(uint32_t seed);
 // Growth: the dragon you land at the pass is not the one you launched.
 // Hoard taken and bounties earned feed a meter; each stage moves the tuning
 // (the app applies it -- this only decides the stage).
-enum class GrowthStage : int { Drake = 0, Young, Adult, Count };
+// Five stages since the descent: three valleys on three stages had the
+// dragon an adult by valley 2 with nothing left to grow into, and the last
+// two valleys were a victory lap. Each valley now roughly buys one stage.
+enum class GrowthStage : int { Drake = 0, Young, Adult, Elder, Ancient, Count };
 const char* growth_stage_name(GrowthStage stage);
 
 struct HoardRunSettings {
@@ -77,6 +80,10 @@ struct HoardRunSettings {
     // Growth thresholds, in hoard gathered (banked or not).
     float grow_young = 140.0f;
     float grow_adult = 380.0f;
+    float grow_elder = 750.0f;
+    float grow_ancient = 1250.0f;
+    // The growth needed for `stage` (0 for a drake).
+    float grow_threshold(int stage) const;
     // Hoard per cache, before the depth bonus (deeper caches pay up to 50%
     // more, so the far end of the corridor is worth the risk).
     float cache_value = 100.0f;
@@ -114,6 +121,12 @@ struct HoardRunSettings {
     int depth_rivals = 1;
     float depth_value = 0.35f;      // cache value, per valley deeper
     float depth_pressure = 0.8f;    // hunter clock multiplier, per valley deeper
+    // The enemies grow with the descent, against the growth a dragon is
+    // expected to have by then (about a stage a valley): after valley 1 the
+    // playtest found the rest "much easier", because only the player grew.
+    float depth_enemy_damage = 0.4f;  // +40% of everything hostile's damage per valley
+    float depth_enemy_health = 0.5f;  // +50% tower, rival and hunter health per valley
+    float depth_enemy_aggression = 0.12f;
     // Prey: herds of grazers on the valley floor, eaten for growth and health
     // (prey.h). Per valley.
     int herds = 2;
@@ -264,7 +277,7 @@ public:
     float growth() const { return growth_; }
     GrowthStage stage() const;
     // Continuous growth: 0 a fresh drake, 1 at the young threshold, 2 at the
-    // adult one, linear in the hoard between. Tuning and size follow this,
+    // adult one, and on to 4 at the ancient, linear in the hoard between. Tuning and size follow this,
     // not the stage, so every coin shows; the stages remain as names and
     // call-outs.
     float growth_level() const;

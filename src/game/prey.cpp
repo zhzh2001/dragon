@@ -231,8 +231,8 @@ void PreyHerds::breathe(Vec3 origin, Vec3 axis, float half_angle_rad, float rang
                         float dt, PreyEvents& events) {
     for (Prey& p : animals_) {
         if (!living(p)) continue;
-        const Vec3 body = p.position + Vec3{0.0f, 1.5f, 0.0f};
-        const Vec3 near = body + core::normalize_or(origin - body, Vec3::zero()) * tuning.body_radius;
+        const Vec3 body = p.position + Vec3{0.0f, 1.5f * tuning.scale, 0.0f};
+        const Vec3 near = body + core::normalize_or(origin - body, Vec3::zero()) * tuning.body();
         if (!point_in_cone(body, origin, axis, half_angle_rad, range) &&
             !point_in_cone(near, origin, axis, half_angle_rad, range)) {
             continue;
@@ -256,9 +256,9 @@ void PreyHerds::breathe(Vec3 origin, Vec3 axis, float half_angle_rad, float rang
 void PreyHerds::blast(Vec3 at, float radius, float damage, PreyEvents& events) {
     for (Prey& p : animals_) {
         if (!living(p)) continue;
-        const float d = core::distance(p.position + Vec3{0.0f, 1.5f, 0.0f}, at);
-        if (d > radius + tuning.body_radius) continue;
-        p.health -= damage * (1.0f - core::saturate(d / core::maxf(radius + tuning.body_radius, 0.1f)) * 0.5f);
+        const float d = core::distance(p.position + Vec3{0.0f, 1.5f * tuning.scale, 0.0f}, at);
+        if (d > radius + tuning.body()) continue;
+        p.health -= damage * (1.0f - core::saturate(d / core::maxf(radius + tuning.body(), 0.1f)) * 0.5f);
         p.burnt = core::minf(p.burnt + 0.5f, 1.0f);
         p.state = PreyState::Flee;
         p.timer = 0.0f;
@@ -279,8 +279,8 @@ void PreyHerds::bite(Vec3 mouth, Vec3 forward, float reach, float half_angle_rad
     float best_d = 1e30f;
     for (Prey& p : animals_) {
         if (!edible(p)) continue;
-        const Vec3 body = p.position + Vec3{0.0f, 1.5f, 0.0f};
-        const Vec3 near = body + core::normalize_or(mouth - body, Vec3::zero()) * tuning.body_radius;
+        const Vec3 body = p.position + Vec3{0.0f, 1.5f * tuning.scale, 0.0f};
+        const Vec3 near = body + core::normalize_or(mouth - body, Vec3::zero()) * tuning.body();
         if (!point_in_cone(body, mouth, forward, half_angle_rad, reach) &&
             !point_in_cone(near, mouth, forward, half_angle_rad, reach)) {
             continue;

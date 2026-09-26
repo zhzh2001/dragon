@@ -351,12 +351,13 @@ void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScale
     hostile_breaths_pending_.push_back(cone);
 }
 
-void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element) {
+void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element, float scale) {
     MeleeSwing swing;
     swing.mouth = mouth;
     swing.forward = core::normalize_or(forward, Vec3::forward());
     swing.body = body;
     swing.element = element;
+    swing.scale = scale;
     hostile_melee_pending_.push_back(swing);
 }
 
@@ -564,7 +565,9 @@ void Combat::hit_sentinel(Sentinel& sentinel, float amount, Element element, flo
                           CombatEvents& events, bool chain) {
     if (!sentinel.alive) return;
     const ElementTuning& et = tuning.elements;
-    const float dealt = amount * element_damage_scale(element, sentinel.element, sentinel.status, et);
+    // A drenched player hits softer.
+    const float dealt = amount * player_status_.weaken(et) *
+                        element_damage_scale(element, sentinel.element, sentinel.status, et);
     const StatusReport report =
         apply_element(sentinel.status, element, sentinel.element, weight, false, et);
     // A freeze and a full stagger are stuns: a frozen dragon's wings lock, a
@@ -619,7 +622,8 @@ void Combat::hurt_player(float amount, Element element, float weight, Vec3 from,
                          CombatEvents& events) {
     if (health_ <= 0.0f) return;
     const ElementTuning& et = tuning.elements;
-    const float dealt = amount * element_damage_scale(element, player_element, player_status_, et);
+    const float dealt = amount * hostile_damage_scale *
+                        element_damage_scale(element, player_element, player_status_, et);
     const StatusReport report =
         apply_element(player_status_, element, player_element, weight, true, et);
     if (report.froze) events.player_froze = true;
@@ -783,7 +787,7 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
 
         // External hostiles regenerate after a lull, exactly like the player:
         // pressing the attack matters, and half-dead bots do not accumulate.
-        if (sentinel.external && sentinel.alive && sentinel.status.drench <= 0.0f &&
+        if (sentinel.external && sentinel.alive &&
             sentinel.time_since_damage >= tuning.hostile_regen_delay) {
             sentinel.health =
                 core::minf(sentinel.health + tuning.hostile_regen * dt, sentinel.max_health);
@@ -826,7 +830,8 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         // Shocked or frozen: weapons cold. Chilled: the reload drags.
         if (sentinel.status.jammed()) continue;
 
-        sentinel.fire_timer -= dt * (1.0f - 0.6f * slow);
+        sentinel.fire_timer -= dt * (1.0f - 0.6f * slow) *
+                               (sentinel.status.drench > 0.0f ? tuning.elements.drench_reload : 1.0f);
         if (sentinel.fire_timer > 0.0f) continue;
         const bool ground = sentinel.ground;
         const Vec3 to_player = player.position - sentinel.position;
@@ -856,7 +861,9 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
                                  : sentinel.position;
         const Vec3 shot = core::normalize(aim - from);
         fire_projectile(from + shot * (ground ? 2.0f : tuning.sentinel_radius + 1.0f),
-                        shot * speed, ground ? tuning.defence_damage : tuning.sentinel_damage,
+                        shot * speed,
+                        (ground ? tuning.defence_damage : tuning.sentinel_damage) *
+                            sentinel.status.weaken(tuning.elements),
                         2.5f, ground ? tuning.defence_splash : 0.0f, Team::Hostile, gravity,
                         sentinel.element);
     }
@@ -889,6 +896,15 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
         const float resist = sentinel.ground ? core::saturate(tuning.defence_breath_resist) : 1.0f;
         hit_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * dt * resist,
                      player_element, tuning.elements.breath_weight * dt, events);
+        // A stream of water shoves steadily: half a fireball's push a second.
+        if (player_element == Element::Tide && !sentinel.ground && sentinel.element != Element::Tide) {
+            const Vec3 shove = breath_direction_ * (tuning.elements.drench_push * 0.5f * dt);
+            if (sentinel.external) {
+                sentinel.knockback = sentinel.knockback + shove;
+            } else {
+                sentinel.centre = sentinel.centre + shove;
+            }
+        }
     }
 }
 
@@ -908,7 +924,11 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     update_lock(player);
 
     // ---- cooldowns ----
-    fire_timer_ = core::maxf(fire_timer_ - dt, 0.0f);
+    // Drenched, the fireball reloads slower.
+    fire_timer_ = core::maxf(fire_timer_ - dt * (player_status_.drench > 0.0f
+                                                     ? tuning.elements.drench_reload
+                                                     : 1.0f),
+                             0.0f);
     melee_timer_ = core::maxf(melee_timer_ - dt, 0.0f);
     combo_timer_ = core::maxf(combo_timer_ - dt, 0.0f);
     boost_cooldown_timer_ = core::maxf(boost_cooldown_timer_ - dt, 0.0f);
@@ -1007,7 +1027,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
                                            tuning.sentinel_radius * player_size, tuning);
         if (kind == MeleeKind::None) continue;
         const float damage =
-            tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f);
+            tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f) * swing.scale;
         hurt_player(damage, swing.element, tuning.elements.melee_weight, swing.mouth, events);
         events.bitten = true;
         const Vec3 away = core::normalize_or(player.position - swing.mouth, swing.forward);
@@ -1019,14 +1039,15 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     update_projectiles(dt, player, events);
 
     // ---- the player's status ----
-    // Burn and corrosion tick down the health; they hold the regeneration
-    // off like any damage, and a drench stops it outright.
+    // Burn and corrosion tick down the health, but do NOT hold the
+    // regeneration off: they did, and a blight tower's bolt every couple of
+    // seconds meant the player never healed at all -- the afterlife of a hit
+    // is not a fresh hit.
     if (health_ > 0.0f) {
-        const float dot = tick_status(player_status_, dt, tuning.elements);
+        const float dot = tick_status(player_status_, dt, tuning.elements) * hostile_damage_scale;
         if (dot > 0.0f) {
             health_ -= dot;
             events.damage_taken += dot;
-            time_since_damage_ = 0.0f;
             if (health_ <= 0.0f) {
                 health_ = 0.0f;
                 events.player_died = true;
@@ -1037,8 +1058,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     // ---- regeneration ----
     // Delayed rather than continuous: it rewards disengaging, which is the
     // manoeuvre this flight model is best at.
-    if (health_ > 0.0f && player_status_.drench <= 0.0f &&
-        time_since_damage_ >= tuning.regen_delay) {
+    if (health_ > 0.0f && time_since_damage_ >= tuning.regen_delay) {
         health_ = core::minf(health_ + tuning.health_regen * dt, tuning.max_health);
     }
 

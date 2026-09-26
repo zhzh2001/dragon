@@ -102,6 +102,8 @@ const char* growth_stage_name(GrowthStage stage) {
         case GrowthStage::Drake: return "drake";
         case GrowthStage::Young: return "young dragon";
         case GrowthStage::Adult: return "adult";
+        case GrowthStage::Elder: return "elder";
+        case GrowthStage::Ancient: return "ancient";
         default: return "?";
     }
 }
@@ -536,29 +538,37 @@ void HoardRun::award(float amount) {
     growth_ += amount;
 }
 
+float HoardRunSettings::grow_threshold(int stage) const {
+    switch (stage) {
+        case 1: return grow_young;
+        case 2: return grow_adult;
+        case 3: return grow_elder;
+        case 4: return grow_ancient;
+        default: return 0.0f;
+    }
+}
+
 GrowthStage HoardRun::stage() const {
-    if (growth_ >= settings.grow_adult) return GrowthStage::Adult;
-    if (growth_ >= settings.grow_young) return GrowthStage::Young;
+    const int top = int(GrowthStage::Count) - 1;
+    for (int s = top; s > 0; --s) {
+        if (growth_ >= settings.grow_threshold(s)) return GrowthStage(s);
+    }
     return GrowthStage::Drake;
 }
 
 float HoardRun::growth_level() const {
-    const float young = core::maxf(settings.grow_young, 1.0f);
-    if (growth_ < young) return growth_ / young;
-    const float span = core::maxf(settings.grow_adult - settings.grow_young, 1.0f);
-    return core::minf(1.0f + (growth_ - young) / span, 2.0f);
+    const int s = int(stage());
+    const int top = int(GrowthStage::Count) - 1;
+    if (s >= top) return float(top);
+    const float from = settings.grow_threshold(s);
+    const float span = core::maxf(settings.grow_threshold(s + 1) - from, 1.0f);
+    return float(s) + core::saturate((growth_ - from) / span);
 }
 
 float HoardRun::growth_progress() const {
-    switch (stage()) {
-        case GrowthStage::Drake:
-            return core::saturate(growth_ / core::maxf(settings.grow_young, 1.0f));
-        case GrowthStage::Young:
-            return core::saturate((growth_ - settings.grow_young) /
-                                  core::maxf(settings.grow_adult - settings.grow_young, 1.0f));
-        default:
-            return 1.0f;
-    }
+    const int top = int(GrowthStage::Count) - 1;
+    const float level = growth_level();
+    return level >= float(top) ? 1.0f : level - std::floor(level);
 }
 
 void HoardRun::set_hunter_alive(bool alive) {

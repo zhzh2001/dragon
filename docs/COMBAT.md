@@ -381,10 +381,15 @@ all go through the same rules:
 |---|---|---|
 | fire | burn | 7 dps for 3 s after the hit, refreshed by every hit |
 | frost | chill, then frozen | chill (0..1) slows flight and fire rate (up to 45%); full chill freezes -- an enemy's wings lock and it drops (a stun), a tower stops firing; 1.6 s, the player's 0.8 s (flap locked, half the stick, never the controls) |
-| blight | corrode | +25% damage taken from everything, and 3 dps, for 5 s |
+| blight | corrode | +15% damage taken from everything, and 2 dps, for 3 s (was 25%, 3 dps, 5 s: a blight tower's bolt every 2.4 s kept the player corroded for good -- "very tricky") |
 | storm | shock | weapons jammed 0.5 s; the hit arcs to the nearest other enemy within 90 m for 45%, once -- it does not chain on |
-| tide | drench | no regeneration for 4 s (the player's breath refills at half); a tide fireball shoves what it hits |
+| tide | drench | for 4 s the drenched body's OWN attacks are weakened: 40% less damage, reload at half rate (the player's breath also refills at half); douses burns; a tide fireball shoves what it hits, a tide breath shoves steadily. It first stopped regeneration, which the playtest rightly called nothing: any hit already holds regeneration off. Blight makes a body take more; tide makes it deal less |
 | stone | stagger | builds 0.4 a hit; full stagger stuns an enemy 1 s, knocks the player off line |
+
+**Burn and corrosion no longer hold the player's regeneration off.** They
+did, and a stream of damage-over-time meant a player under a blight tower
+never healed at all -- that, more than the +25%, was what made blight
+"tricky". The regeneration delay runs from the last real hit.
 
 **There is no type chart.** The playtest's call: Pokemon-style
 effectiveness would be too much, and "frost beats fire" multipliers turn a
@@ -559,6 +564,12 @@ passes 0), and the seed never reached the terrain. What changed:
   side in a flame. The adult's fireball cooldown is 0.8x, not 0.6x -- the
   playtest's "a bit overpowered".
 
+**Five stages since the descent (M26.1):** elder at 750 and ancient at
+1250 after adult at 380, each a smaller step (elder 1.8x health, 1.38 size;
+ancient 2.1x, 1.5), so a valley buys about a stage and the curve flattens
+while the enemies' keeps climbing with the depth. Three stages had the dragon
+an adult early in valley 2 with nothing left to grow into.
+
 The unarmed autopilot now dies early in every kind -- it flies straight into
 each post and never shoots -- and with `--attack` holding fire it still
 kills nothing, so none of this is judged headless. The HUD is: every run
@@ -579,7 +590,12 @@ after it. Crossing a pass that is not the last **banks** what is carried
 `valley_seed(run, depth)`, stepped until its kind differs from the valley
 before; `apply_depth` makes it harder -- per valley deeper one more slope
 tower and rival, a cache more, hoards worth +35%, the hunters' clock x0.8,
-bounties +25%, towers +25% health. Growth, the bank, the clock and the kills
+bounties +25%. **The enemies grow too** (after the first playtest of the
+descent: "once valley 1 is finished, the remaining 2 become much easier" --
+only the player had grown): per valley deeper every hostile hit does +40%
+(`Combat::hostile_damage_scale`, bolts, flames, bites and damage over time),
+towers, rivals and hunters have +50% health, and rivals and hunters +0.12
+aggression. Growth, the bank, the clock and the kills
 carry; health comes back at each pass; the hunters restart. A death loses
 only what was carried; the result is what the passes banked, and the
 records keep the best hoard whether or not the run cleared. The strip shows
@@ -605,6 +621,10 @@ the body within 8 m and 9 m above one snatches it (both scale with growth);
 **bite** -- the jaws take the nearest in the cone; **fire** -- breath or a
 fireball kills, and the carcass stays a minute to be swooped or walked onto.
 A meal is 18 growth (no hoard) and 14 health. Dials under Combat > prey.
+They are drawn at 1.4x the asset (a 6.3 m bison) and marked -- "too small to
+notice" was the first playtest: a green diamond and "HERD x6 640 m" over
+each herd out to 1.8 km, on screen only, and inside 450 m a chevron over
+every animal, bright while it runs and gold over a carcass.
 `tests/test_prey.cpp` pins the calm herd staying home, ignoring a high
 dragon, scattering from a low one slower than a dragon flies, and the three
 ways to eat.

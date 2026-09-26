@@ -323,8 +323,7 @@ bool App::init(const Options& options) {
         }
         if (options.stage > 0) {
             // Grown on the first frame, and at full size at once.
-            hoard_run_.award(options.stage >= 2 ? hoard_run_.settings.grow_adult
-                                                : hoard_run_.settings.grow_young);
+            hoard_run_.award(hoard_run_.settings.grow_threshold(std::min(options.stage, 4)));
             apply_growth(hoard_run_.growth_level());
             growth_scale_ = growth_scale_target_;
             wing_growth_ = wing_growth_target_;
@@ -3356,6 +3355,7 @@ void App::populate_valley(uint32_t seed, int depth) {
     const game::RunLayout& layout = hoard_run_.layout();
     bots_.clear();
     combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed, 0);
+    combat_.hostile_damage_scale = 1.0f + hoard_run_.settings.depth_enemy_damage * float(depth);
     run_defence_slots_.clear();
     for (size_t i = 0; i < layout.defences.size(); ++i) {
         const game::RunDefence& defence = layout.defences[i];
@@ -3369,7 +3369,8 @@ void App::populate_valley(uint32_t seed, int depth) {
         const int slot = combat_.spawn_defence(base + core::Vec3{0.0f, middle, 0.0f},
                                                spire ? 7.0f : 9.0f, top - middle, element);
         game::Sentinel& tower = combat_.sentinels()[size_t(slot)];
-        tower.max_health = tower.health = combat_.tuning.defence_health * (1.0f + 0.25f * float(depth));
+        tower.max_health = tower.health =
+            combat_.tuning.defence_health * (1.0f + hoard_run_.settings.depth_enemy_health * float(depth));
         run_defence_slots_.push_back(slot);
     }
     for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
@@ -3690,6 +3691,7 @@ void App::emit_status_burst(const game::StatusBurst& burst) {
 
 void App::end_run() {
     run_mode_ = false;
+    combat_.hostile_damage_scale = 1.0f;
     hoard_run_.abandon();
     bots_.clear();
     restore_growth_base();
@@ -3736,10 +3738,15 @@ void App::apply_growth(float level) {
         // Fireballs 0.6 -> 0.8 of the cooldown: at 0.6 the adult's fireball
         // rate was the playtest's "a bit overpowered".
         {1.3f, 1.15f, 1.5f, 0.7f, 0.8f, 1.3f, 1.25f, 1.25f, 1.15f},   // adult
+        // The descent's stages: smaller steps each, so the power curve
+        // flattens while the enemies' (the valley depth) keeps climbing.
+        {1.45f, 1.25f, 1.8f, 0.62f, 0.76f, 1.5f, 1.4f, 1.38f, 1.22f}, // elder
+        {1.6f, 1.33f, 2.1f, 0.55f, 0.72f, 1.7f, 1.55f, 1.5f, 1.3f},   // ancient
     };
+    constexpr int ROWS = int(sizeof(scales) / sizeof(scales[0]));
     // Between two rows by the fraction of the way from one to the next.
-    const float l = core::clampf(level, 0.0f, 2.0f);
-    const int lo = std::min(int(l), 1);
+    const float l = core::clampf(level, 0.0f, float(ROWS - 1));
+    const int lo = std::min(int(l), ROWS - 2);
     const float f = l - float(lo);
     const Scale& a = scales[lo];
     const Scale& b = scales[lo + 1];
@@ -3824,6 +3831,16 @@ void App::spawn_rival(int rival_index, bool hunter) {
         bot->post = rival.position;
         bot->rival = rival_index;
         bot->loiter_phase = float(rival_index) * 2.1f;
+    }
+    // Deeper valleys breed tougher, keener dragons.
+    {
+        const float depth = float(hoard_run_.valley());
+        game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
+        slot.max_health = slot.health =
+            slot.max_health * (1.0f + hoard_run_.settings.depth_enemy_health * depth);
+        bot->last_health = slot.health;
+        bot->pilot.tuning.aggression = core::saturate(
+            bot->pilot.tuning.aggression + hoard_run_.settings.depth_enemy_aggression * depth);
     }
     // Every enemy in a run rolls its element; the hide wears it, and the HUD
     // tag names it (hunters and rivals are told apart by the tag).
@@ -3914,7 +3931,9 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         audio_.play(audio::Clip::Boost, 1.0f, 0.75f);
         grew_flash_ = 3.5f;
         LOG_INFO("run: grew into %s at %.0f s (growth %.0f)",
-                 hoard_run_.stage() == game::GrowthStage::Adult ? "an adult" : "a young dragon",
+                 hoard_run_.stage() == game::GrowthStage::Young ? "a young dragon"
+                 : hoard_run_.stage() == game::GrowthStage::Adult ? "an adult"
+                 : hoard_run_.stage() == game::GrowthStage::Elder ? "an elder" : "an ancient",
                  double(hoard_run_.elapsed()), double(hoard_run_.growth()));
     }
     if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
@@ -4003,8 +4022,9 @@ bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core:
     if (clip == game::PreyClip::Dead) {
         facing = facing * core::Quat::from_axis_angle(core::Vec3::unit_z(), core::HALF_PI);
     }
-    model = core::Mat4::trs(prey.position + core::Vec3{0.0f, clip == game::PreyClip::Dead ? 0.8f : 0.0f, 0.0f},
-                            facing, core::Vec3::one());
+    const float scale = prey_.tuning.scale;
+    model = core::Mat4::trs(prey.position + core::Vec3{0.0f, clip == game::PreyClip::Dead ? 0.8f * scale : 0.0f, 0.0f},
+                            facing, core::Vec3(scale));
     const anim::Skeleton& skeleton = grazer_prop_.skeleton;
     grazer_pose_.reset_to_bind(skeleton);
     const int which = clip == game::PreyClip::Run ? grazer_clip_[2]
@@ -4291,10 +4311,62 @@ void App::draw_run_hud() {
             std::snprintf(line, sizeof(line), "YOU GREW: %s", game::growth_stage_name(hoard_run_.stage()));
             hud_.numeral(ImVec2(width * 0.5f, height * 0.20f), line, colour, 44.0f, ui::Align::Centre);
             hud_.label(ImVec2(width * 0.5f, height * 0.20f + hud_.px(50.0f)),
-                       hoard_run_.stage() == game::GrowthStage::Adult
-                           ? "heavier, tougher, longer breath, quicker fireballs"
-                           : "more health and breath, harder bites",
+                       hoard_run_.stage() == game::GrowthStage::Young
+                           ? "more health and breath, harder bites"
+                           : "heavier, tougher, longer breath, quicker fireballs",
                        (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
+        }
+    }
+
+    // ---- prey: a marker per herd, and a mark over each animal close in ----
+    // A 6 m grazer is a few pixels from a dragon's height; the playtest could
+    // not find them. Herds are marked out to 1.8 km, on screen only (the edge
+    // is for threats), and inside 450 m every animal gets a chevron over it:
+    // bright while it runs, dim while it grazes, gold for a carcass to take.
+    if (phase == game::HoardPhase::Flying && !prey_.animals().empty()) {
+        const ImU32 green = tk.ahead;
+        const ImU32 green_dim = (tk.ahead & 0x00FFFFFF) | (ImU32(150) << 24);
+        const auto& animals = prey_.animals();
+        int herds = 0;
+        for (const game::Prey& p : animals) herds = std::max(herds, p.herd + 1);
+        for (int h = 0; h < herds; ++h) {
+            core::Vec3 sum = core::Vec3::zero();
+            int n = 0;
+            for (const game::Prey& p : animals) {
+                if (p.herd != h || p.state == game::PreyState::Eaten) continue;
+                sum += p.position;
+                ++n;
+            }
+            if (n == 0) continue;
+            const core::Vec3 centre = sum / float(n) + core::Vec3{0.0f, 12.0f, 0.0f};
+            const float range = core::distance(player.position, centre);
+            if (range > 1800.0f || range < 350.0f) continue;
+            ImVec2 screen;
+            if (!project_to_screen(view_proj, centre, width, height, screen) || screen.x < 0.0f ||
+                screen.x > width || screen.y < 0.0f || screen.y > height) {
+                continue;
+            }
+            const float r = hud_.px(7.0f);
+            draw->AddQuad(ImVec2(screen.x, screen.y - r), ImVec2(screen.x + r, screen.y),
+                          ImVec2(screen.x, screen.y + r), ImVec2(screen.x - r, screen.y), green, hud_.px(1.8f));
+            std::snprintf(line, sizeof(line), "HERD x%d  %.0f m", n, double(range));
+            hud_.label(ImVec2(screen.x + r + hud_.px(6.0f), screen.y - hud_.px(7.0f)), line, green, 12.0f);
+        }
+        for (const game::Prey& p : animals) {
+            if (p.state == game::PreyState::Eaten) continue;
+            const float range = core::distance(player.position, p.position);
+            if (range > 450.0f) continue;
+            ImVec2 screen;
+            const core::Vec3 above = p.position + core::Vec3{0.0f, 5.5f * prey_.tuning.scale, 0.0f};
+            if (!project_to_screen(view_proj, above, width, height, screen) || screen.x < 0.0f ||
+                screen.x > width || screen.y < 0.0f || screen.y > height) {
+                continue;
+            }
+            const bool carcass = p.state == game::PreyState::Carcass;
+            const ImU32 c = carcass ? tk.accent : p.state == game::PreyState::Flee ? green : green_dim;
+            const float w = hud_.px(5.0f);
+            draw->AddTriangleFilled(ImVec2(screen.x - w, screen.y - w), ImVec2(screen.x + w, screen.y - w),
+                                    ImVec2(screen.x, screen.y + w * 0.4f), c);
         }
     }
 
@@ -4528,17 +4600,20 @@ void App::update_bots(float dt) {
             }
         }
         if (decision.fire) {
-            combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage,
+            combat_.fire_hostile(muzzle, decision.fire_velocity,
+                                 bot->pilot.tuning.damage * slot.status.weaken(combat_.tuning.elements),
                                  bot->element);
         }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
-            combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model,
-                                   bot->breath.scales, bot->element);
+            game::BreathScales scales = bot->breath.scales;
+            scales.damage *= slot.status.weaken(combat_.tuning.elements);
+            combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model, scales,
+                                   bot->element);
         }
         if (decision.melee) {
             combat_.hostile_melee(muzzle, bot->flight.state().forward(), self.position,
-                                  bot->element);
+                                  bot->element, slot.status.weaken(combat_.tuning.elements));
             // The same lunge cost the player pays.
             game::FlightState& st = bot->flight.state();
             const float speed = core::length(st.velocity);
@@ -5368,6 +5443,9 @@ void App::build_combat_ui() {
         ImGui::SliderInt("rivals per valley deeper", &r.depth_rivals, 0, 3);
         ImGui::SliderFloat("hoard value per valley deeper", &r.depth_value, 0.0f, 1.0f, "+%.2f");
         ImGui::SliderFloat("hunter clock per valley deeper", &r.depth_pressure, 0.3f, 1.2f, "x%.2f");
+        ImGui::SliderFloat("enemy damage per valley deeper", &r.depth_enemy_damage, 0.0f, 1.5f, "+%.2f");
+        ImGui::SliderFloat("enemy health per valley deeper", &r.depth_enemy_health, 0.0f, 1.5f, "+%.2f");
+        ImGui::SliderFloat("enemy aggression per valley deeper", &r.depth_enemy_aggression, 0.0f, 0.4f, "+%.2f");
         ImGui::SeparatorText("prey");
         ImGui::SliderInt("herds", &r.herds, 0, 6);
         ImGui::SliderInt("herd size", &r.herd_size, 1, 16);
@@ -5395,6 +5473,8 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("heal on kill", &r.heal_on_kill, 0.0f, 80.0f, "%.0f");
         ImGui::SliderFloat("grow young at", &r.grow_young, 20.0f, 600.0f, "%.0f");
         ImGui::SliderFloat("grow adult at", &r.grow_adult, 50.0f, 1200.0f, "%.0f");
+        ImGui::SliderFloat("grow elder at", &r.grow_elder, 100.0f, 2000.0f, "%.0f");
+        ImGui::SliderFloat("grow ancient at", &r.grow_ancient, 150.0f, 3000.0f, "%.0f");
         ImGui::SliderFloat("guard distance min", &r.guard_min, 20.0f, 250.0f, "%.0f m");
         ImGui::SliderFloat("guard distance max", &r.guard_max, 30.0f, 400.0f, "%.0f m");
         ImGui::SeparatorText("towers (live)");
