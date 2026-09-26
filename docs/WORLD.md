@@ -126,3 +126,39 @@ placed and trees drawn. Six hundred headless frames took the same wall time
 before and after with half again as many trees. `artifacts/vegetation-v2/
 skirt_trees_behind_start.png` is the view back over the spawn.
 
+
+## Row 7: rocks, detail, the ridge octave, static glTF (2026-09-26)
+
+- **Static glTF** (`gfx::load_static_gltf`, `src/gfx/static_model.h`): every
+  mesh node of a file as world-space `MeshData` with its vertex colour. The
+  engine read only skinned files, so props had to be skinned to one identity
+  bone just to load; anything that does not animate comes through this now.
+  Pinned in `test_anim` on the watchtower.
+- **Rocks** ride the foliage instancing path (`Foliage::set_rock_mesh`,
+  `set_rocks`): the same cells, frustum culling, draw distance and shadow
+  pass as the trees, no sway, no card LOD. Six kinds from
+  `assets/props/rocks.glb` (`tools/rocks.md`: boulder, big boulder, slab,
+  crag, scree, outcrop; 5.4 K triangles in all, grey COLOR_0 with the
+  crevices baked dark), turned into the plant encoding (palette rock at the
+  grey's brightness, lifted 1.1) -- or generated (`make_rock_mesh`) when the
+  file is missing. `Vegetation::place_rocks` keeps one candidate per 42 m
+  cell by slope: outcrops, crags and big boulders on steep faces, scree and
+  boulders on the mid slopes, a sprinkle on the floor, gathered into fields
+  by a broad noise, sunk by the slope. About fourteen times as dense on the
+  steep faces as on the floor (`test_vegetation`). From altitude, boulders on
+  a face turned from the sun catch it on their tops and read as light dots:
+  plausible, and the first thing to look at if the slopes look speckled.
+- **Detail tile** (`assets/textures/terrain_detail.png`, 1024 RGBA, R rock,
+  G grass, B dirt, A snow, each averaging 0.5, seamless): the terrain shader
+  modulates each material by its channel, sampled at 16 m and 97 m and
+  mixed (the repeat vanishes from altitude), the rock channel projected
+  three ways by the normal so a cliff is not smeared, the contrast fading
+  out from 500 to 2600 m. A mid-grey stand-in keeps the old ground if the
+  file is missing.
+- **The ridge octave** (`ridge_height` 60 m at 700 m, two octaves) squared
+  onto the upper slopes, and **strata** (`strata_step` 22 m at 0.3): the
+  mountain term eased flat at each band edge, so faces are ledges and risers
+  as geometry. Both are dials in the Terrain panel. The sharper terrain ran
+  the bots' ten-minute soak into a spur: their ground recovery braked at any
+  speed, and at 36 m/s into a rising slope that bled the climb. It brakes
+  only when fast now.

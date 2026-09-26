@@ -894,7 +894,9 @@ MeshData encode_rock_mesh(const MeshData& source) {
         // The file's greys run about 0.35..0.75; the palette's rock entry is
         // the mean, so 0.55 maps to 1.
         const float grey = (v.color.x + v.color.y + v.color.z) / 3.0f;
-        v.color = palette_vertex(PaletteEntry::Rock, core::clampf(grey / 0.55f, 0.3f, 1.6f), FOLIAGE_MAT_PLAIN);
+        // A touch lifted (1.1): at 1.35 their sun-facing tops read as pale
+        // polka dots on a slope in its own shade; at 1 a shade dark on a sunlit face.
+        v.color = palette_vertex(PaletteEntry::Rock, core::clampf(1.1f * grey / 0.55f, 0.3f, 2.0f), FOLIAGE_MAT_PLAIN);
     }
     return out;
 }

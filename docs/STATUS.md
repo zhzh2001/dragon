@@ -142,6 +142,10 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M28** row 7: a static glTF loader, instanced rocks on the slopes
+  (rocks.glb and the detail tile built in Blender by a delegated agent), a
+  tiling detail texture per terrain material, a ridge octave and strata as
+  geometry. `WORLD.md` "Row 7".
 - **M27** abilities, one per growth stage (charged shot, second breath,
   ram, fury) instead of only bigger numbers; every ability's cooldown and
   power grows with the dragon; per-element sounds and breath voices.
