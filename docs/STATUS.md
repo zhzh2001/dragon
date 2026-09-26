@@ -142,6 +142,10 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M27** abilities, one per growth stage (charged shot, second breath,
+  ram, fury) instead of only bigger numbers; every ability's cooldown and
+  power grows with the dragon; per-element sounds and breath voices.
+  `COMBAT.md` "Abilities".
 - **M26.1** balance after the playtest: blight lighter and damage-over-time
   no longer blocks healing; tide now weakens the drenched body's own attacks
   (it only stopped regeneration, which any hit already does); enemies scale

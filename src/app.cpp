@@ -901,6 +901,20 @@ void App::pump_events() {
         else respawn_dragon();
     }
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
+    // U (gamepad Y): swap to the second breath and back, once learned.
+    {
+        const bool down = input_.has_gamepad() && input_.gamepad_button(SDL_GAMEPAD_BUTTON_NORTH);
+        if ((input_.pressed(SDL_SCANCODE_U) || (down && !swap_button_was_down_)) && second_unlocked_) {
+            using_second_ = !using_second_;
+            refresh_player_element();
+            audio_.play(audio::Clip::Boost, 0.5f, 1.5f);
+        }
+        swap_button_was_down_ = down;
+        // H (left-stick click): the fury.
+        const bool fury_down = input_.has_gamepad() && input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_STICK);
+        fury_requested_ = input_.pressed(SDL_SCANCODE_H) || (fury_down && !fury_button_was_down_);
+        fury_button_was_down_ = fury_down;
+    }
     // Hands-off: the demo pilot takes (or gives back) the controls.
     if (input_.pressed(SDL_SCANCODE_P)) set_autopilot(!autopilot_);
     // M cycles the roster. The point is comparing species with the scenario
@@ -1167,6 +1181,7 @@ void App::update(float dt) {
                 }
             }
         }
+        update_abilities();
         update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
         match_.update(dt, events);
@@ -1259,6 +1274,65 @@ void App::update(float dt) {
             emit_arc(arc.from, arc.to, game::element_colour(game::Element::Storm));
         }
         for (const game::StatusBurst& burst : combat_.status_bursts()) emit_status_burst(burst);
+        if (!combat_.arcs().empty()) {
+            play_status_sound(audio::Clip::Zap, 3, combat_.arcs().front().from, 0.9f);
+        }
+        for (float& c : status_sound_cooldown_) c = core::maxf(c - dt, 0.0f);
+        // The abilities, seen and heard.
+        if (events.charged_fired) {
+            audio_.play(audio::Clip::Shot, 1.0f, 0.65f);
+            audio_.play(audio::Clip::Ignite, 0.7f, 0.8f);
+            chase_.kick(0.5f);
+        }
+        if (combat_.charge() > 0.05f) {
+            // Gathering at the mouth: motes drawn in toward it, brighter as
+            // the charge fills.
+            const game::BreathProfile& b = player_breath_;
+            const core::Vec3 mouth = combat_.muzzle(flight_.state());
+            for (int i = 0; i < 3; ++i) {
+                gfx::Particle p;
+                const core::Vec3 off = core::normalize_or(
+                    core::Vec3{particle_unit(), particle_unit(), particle_unit()}, core::Vec3::up()) * 4.0f;
+                p.position = mouth + off;
+                p.velocity = flight_.state().velocity - off * 8.0f;
+                p.life = 0.12f;
+                p.size_start = 0.5f + 1.4f * combat_.charge();
+                p.size_end = 0.2f;
+                p.color_start = b.hot;
+                p.color_end = b.cool;
+                p.brightness = 0.6f + 0.8f * combat_.charge();
+                particles_.spawn(p);
+            }
+        }
+        if (combat_.abilities.ram && combat_.boost_active()) {
+            // The ram's aura: the body sheathed in its element while it boosts.
+            emit_status(flight_.state().position, 4.0f * growth_scale_, [&] {
+                game::Status s;
+                switch (combat_.player_element) {
+                    case game::Element::Frost: s.frozen = 0.1f; break;
+                    case game::Element::Blight: s.corrode = 0.1f; break;
+                    case game::Element::Storm: s.shock = 0.1f; break;
+                    case game::Element::Tide: s.drench = 0.1f; break;
+                    case game::Element::Stone: s.stagger = 1.0f; break;
+                    default: s.burn = 0.1f; break;
+                }
+                return s;
+            }(), dt);
+        }
+        if (events.rammed > 0) {
+            audio_.play(audio::Clip::BiteHit, 1.0f, 0.75f);
+            audio_.play(audio::Clip::Crack, 0.7f, 1.1f);
+            chase_.kick(1.0f);
+            emit_impact(events.ram_position, false, false, combat_.player_element);
+        }
+        if (events.fury_released) {
+            LOG_INFO("fury released at frame %d", frame_index_);
+            audio_.play(audio::Clip::Fury, 1.3f);
+            chase_.kick(2.0f);
+            emit_fury(flight_.state().position);
+            game::PreyEvents ignored;
+            prey_.blast(flight_.state().position, combat_.tuning.fury_radius, combat_.tuning.fury_damage, ignored);
+        }
         // A full stagger knocks the player off line like a bite does, without
         // the bite's bookkeeping.
         if (events.player_staggered && !events.bitten) {
@@ -1514,6 +1588,14 @@ void App::update(float dt) {
             flame = core::maxf(flame, 1.0f - core::saturate(d / 220.0f));
         }
         audio_.set_flame(flame * (combat_enabled_ ? 1.0f : 0.0f));
+        {
+            // The breath you hear is voiced by its element.
+            game::Element voiced = combat_.player_element;
+            if (!combat_.breathing() && !combat_.hostile_breaths().empty()) {
+                voiced = combat_.hostile_breaths().front().element;
+            }
+            audio_.set_flame_style(voiced == game::Element::None ? 0 : int(voiced));
+        }
 
         // The wingbeat: one whoosh at the start of each powered downstroke,
         // volume following how hard the wings are actually working.
@@ -3436,9 +3518,11 @@ void App::advance_valley() {
 void App::refresh_player_element() {
     const LoadedModel& model = player_model();
     const game::Element species = model.breath.element;
-    const game::Element element = player_element_choice_ >= 0 && player_element_choice_ < game::ELEMENT_COUNT
-                                      ? game::Element(player_element_choice_)
-                                      : species;
+    game::Element element = player_element_choice_ >= 0 && player_element_choice_ < game::ELEMENT_COUNT
+                                ? game::Element(player_element_choice_)
+                                : species;
+    // The second breath, learned as an adult: U swaps to it and back.
+    if (second_unlocked_ && using_second_) element = second_element_;
     player_breath_ = element == species ? model.breath : element_breaths_[int(element)];
     combat_.player_element = element;
     combat_.player_breath = player_breath_.scales;
@@ -3691,9 +3775,96 @@ void App::emit_status_burst(const game::StatusBurst& burst) {
     if (r.froze) {
         LOG_INFO("status: %s frozen at frame %d, %.0f m from the player", burst.on_player ? "player" : "target",
                  frame_index_, double(core::distance(at, flight_.state().position)));
-        const float d = core::distance(active_camera().position, at);
-        audio_.play(audio::Clip::BiteHit, 1.0f / (1.0f + d * d / (200.0f * 200.0f)), 1.7f);
     }
+    // Each element's landing has its own sound, so a status can be heard
+    // without looking: ice shattering, rock cracking, acid, a splash, a flare.
+    if (r.froze) play_status_sound(audio::Clip::Shatter, 0, at, 1.1f);
+    if (r.staggered) play_status_sound(audio::Clip::Crack, 1, at, 1.0f);
+    if (r.corroded) play_status_sound(audio::Clip::Hiss, 2, at, 0.9f);
+    if (r.shocked && burst.on_player) play_status_sound(audio::Clip::Zap, 3, at, 0.9f);
+    if (r.drenched) play_status_sound(audio::Clip::Splash, 4, at, 0.9f);
+    if (r.burned) play_status_sound(audio::Clip::Ignite, 5, at, 0.8f);
+    if (r.doused) play_status_sound(audio::Clip::Hiss, 6, at, 0.8f, 1.5f);
+}
+
+void App::play_status_sound(audio::Clip clip, int slot, core::Vec3 at, float gain, float rate) {
+    if (slot < 0 || slot >= 8 || status_sound_cooldown_[slot] > 0.0f) return;
+    status_sound_cooldown_[slot] = 0.18f;  // a held breath lands every frame
+    const float d = core::distance(active_camera().position, at);
+    audio_.play(clip, gain / (1.0f + d * d / (220.0f * 220.0f)), rate * (0.95f + 0.1f * particle_unit()));
+}
+
+const char* App::stage_unlock_text(game::GrowthStage stage) const {
+    switch (stage) {
+        case game::GrowthStage::Young: return "NEW: charged shot -- hold G, let go (or wait) for a heavy fireball";
+        case game::GrowthStage::Adult: return "NEW: a second breath -- U swaps element";
+        case game::GrowthStage::Elder: return "NEW: the ram -- boost (X) through them, stunning and hurling";
+        case game::GrowthStage::Ancient: return "NEW: fury -- damage fills it; H releases a nova of your element";
+        default: return "";
+    }
+}
+
+// What the player can do: a run grants one ability per stage (young the
+// charged shot, adult the second breath, elder the ram, ancient the fury);
+// the arena grants them all, so each can be tried without a run.
+void App::update_abilities() {
+    const bool run = run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle;
+    const int stage = run ? int(hoard_run_.stage()) : 99;
+    game::Abilities& a = combat_.abilities;
+    a.charged_shot = stage >= 1;
+    a.ram = stage >= 3;
+    a.fury = stage >= 4;
+    const bool second = stage >= 2;
+    if (second != second_unlocked_) {
+        second_unlocked_ = second;
+        if (!second) using_second_ = false;
+        // The second breath is a different element from the first: rolled
+        // per run, the next one round in the arena.
+        const game::Element first = player_element_choice_ >= 0
+                                        ? game::Element(player_element_choice_)
+                                        : player_model().breath.element;
+        second_element_ = run ? roll_element(run_seed_ * 131u + 17u) : game::Element((int(first) + 1) % game::ELEMENT_COUNT);
+        if (second_element_ == first) second_element_ = game::Element((int(first) + 3) % game::ELEMENT_COUNT);
+        refresh_player_element();
+    }
+}
+
+// The fury's nova: a ring of the element's fire rushing outward to the
+// fury's radius, a second slower ring, and a flash at the centre.
+void App::emit_fury(core::Vec3 centre) {
+    const game::BreathProfile& b = player_breath_;
+    const float radius = combat_.tuning.fury_radius;
+    for (int ring = 0; ring < 2; ++ring) {
+        const int n = ring == 0 ? 220 : 140;
+        const float life = ring == 0 ? 0.7f : 1.1f;
+        for (int i = 0; i < n; ++i) {
+            const float a = core::TWO_PI * float(i) / float(n) + particle_unit() * 0.03f;
+            const float tilt = particle_unit() * (ring == 0 ? 0.15f : 0.5f);
+            const core::Vec3 dir = core::normalize(core::Vec3{std::cos(a), tilt, std::sin(a)});
+            gfx::Particle p;
+            p.position = centre + dir * 3.0f;
+            // Solved against drag like the flame: it reaches the fury radius.
+            const float drag = 1.5f;
+            p.velocity = dir * (radius * drag / (1.0f - std::exp(-drag * life)));
+            p.drag = drag;
+            p.life = life;
+            p.size_start = ring == 0 ? 4.0f : 7.0f;
+            p.size_end = ring == 0 ? 7.0f : 14.0f;
+            p.color_start = b.hot;
+            p.color_end = b.cool;
+            p.brightness = ring == 0 ? 1.2f : 0.6f;
+            particles_.spawn(p);
+        }
+    }
+    gfx::Particle flash;
+    flash.position = centre;
+    flash.life = 0.4f;
+    flash.size_start = 20.0f;
+    flash.size_end = 60.0f;
+    flash.color_start = b.hot;
+    flash.color_end = b.cool;
+    flash.brightness = 1.4f;
+    particles_.spawn(flash);
 }
 
 void App::end_run() {
@@ -3717,83 +3888,155 @@ void App::end_run() {
 // ---- growth ----
 
 void App::capture_growth_base() {
-    growth_base_.heft = flight_.tuning.heft;
-    growth_base_.flap = flight_.tuning.flap_peak_force;
-    growth_base_.ground_offset = flight_.tuning.ground_offset;
     const game::CombatTuning& t = combat_.tuning;
-    growth_base_.max_health = t.max_health;
-    growth_base_.breath_drain = t.breath_drain;
-    growth_base_.fireball_cooldown = t.fireball_cooldown;
-    growth_base_.bite = t.bite_damage;
-    growth_base_.strike = t.strike_damage;
-    growth_base_.breath_dps = t.breath_damage_per_second;
+    GrowthBase& g = growth_base_;
+    g.heft = flight_.tuning.heft;
+    g.flap = flight_.tuning.flap_peak_force;
+    g.ground_offset = flight_.tuning.ground_offset;
+    g.boost_force = flight_.tuning.boost_force;
+    g.max_health = t.max_health;
+    g.breath_drain = t.breath_drain;
+    g.fireball_cooldown = t.fireball_cooldown;
+    g.fireball_damage = t.fireball_damage;
+    g.fireball_blast = t.fireball_blast_radius;
+    g.bite = t.bite_damage;
+    g.strike = t.strike_damage;
+    g.bite_range = t.bite_range;
+    g.strike_range = t.strike_range;
+    g.melee_cooldown = t.melee_cooldown;
+    g.melee_stun = t.melee_stun;
+    g.melee_knockback = t.melee_knockback;
+    g.breath_dps = t.breath_damage_per_second;
+    g.boost_cooldown = t.boost_cooldown;
+    g.boost_duration = t.boost_duration;
+    g.dodge_impulse = maneuver_tuning_.roll_dodge_impulse;
+    g.maneuver_cooldown = maneuver_tuning_.cooldown;
 }
+
+namespace {
+
+// What each stage multiplies, from the player's own tuning. Every ability
+// grows, not only the body: the playtest asked for the boost, the melee and
+// the cooldowns to follow the growth as well. A bigger dragon's bite reaches
+// further (the reach follows the body), hits and shoves harder, and swings
+// sooner; its boost pushes a heavier body harder and comes back sooner.
+struct GrowthScale {
+    float heft, flap, health, drain, fireball, melee, breath, size, wings;
+    float fireball_damage, fireball_blast;
+    float melee_cooldown, melee_power, reach;
+    float boost_force, boost_duration, boost_cooldown;
+    float dodge, maneuver_cooldown;
+};
+
+// Size is the body; wings multiply on top, so an adult's span is about
+// 1.45x a young dragon's while its body is 1.25x -- the wings are what
+// grows most, and what reads first from the chase camera. Boost force runs
+// ahead of heft, so a grown dragon's boost is a stronger boost, not the
+// same one dragging more mass.
+const GrowthScale GROWTH_ROWS[] = {
+    // drake
+    {.heft = 0.8f, .flap = 0.9f, .health = 0.85f, .drain = 1.4f, .fireball = 1.4f, .melee = 0.8f,
+     .breath = 0.8f, .size = 0.8f, .wings = 0.85f, .fireball_damage = 0.85f, .fireball_blast = 0.85f,
+     .melee_cooldown = 1.15f, .melee_power = 0.8f, .reach = 0.85f, .boost_force = 0.75f,
+     .boost_duration = 0.9f, .boost_cooldown = 1.2f, .dodge = 0.9f, .maneuver_cooldown = 1.1f},
+    // young
+    {.heft = 1.0f, .flap = 1.0f, .health = 1.0f, .drain = 1.0f, .fireball = 1.0f, .melee = 1.0f,
+     .breath = 1.0f, .size = 1.0f, .wings = 1.0f, .fireball_damage = 1.0f, .fireball_blast = 1.0f,
+     .melee_cooldown = 1.0f, .melee_power = 1.0f, .reach = 1.0f, .boost_force = 1.0f,
+     .boost_duration = 1.0f, .boost_cooldown = 1.0f, .dodge = 1.0f, .maneuver_cooldown = 1.0f},
+    // adult. Fireballs 0.6 -> 0.8 of the cooldown: at 0.6 the adult's
+    // fireball rate was the playtest's "a bit overpowered".
+    {.heft = 1.3f, .flap = 1.15f, .health = 1.5f, .drain = 0.7f, .fireball = 0.8f, .melee = 1.3f,
+     .breath = 1.25f, .size = 1.25f, .wings = 1.15f, .fireball_damage = 1.2f, .fireball_blast = 1.15f,
+     .melee_cooldown = 0.9f, .melee_power = 1.25f, .reach = 1.15f, .boost_force = 1.45f,
+     .boost_duration = 1.1f, .boost_cooldown = 0.88f, .dodge = 1.12f, .maneuver_cooldown = 0.92f},
+    // elder: the descent's stages are smaller steps, so the power curve
+    // flattens while the enemies' (the valley depth) keeps climbing.
+    {.heft = 1.45f, .flap = 1.25f, .health = 1.8f, .drain = 0.62f, .fireball = 0.76f, .melee = 1.5f,
+     .breath = 1.4f, .size = 1.38f, .wings = 1.22f, .fireball_damage = 1.35f, .fireball_blast = 1.25f,
+     .melee_cooldown = 0.84f, .melee_power = 1.4f, .reach = 1.25f, .boost_force = 1.75f,
+     .boost_duration = 1.18f, .boost_cooldown = 0.8f, .dodge = 1.2f, .maneuver_cooldown = 0.88f},
+    // ancient
+    {.heft = 1.6f, .flap = 1.33f, .health = 2.1f, .drain = 0.55f, .fireball = 0.72f, .melee = 1.7f,
+     .breath = 1.55f, .size = 1.5f, .wings = 1.3f, .fireball_damage = 1.5f, .fireball_blast = 1.35f,
+     .melee_cooldown = 0.78f, .melee_power = 1.55f, .reach = 1.35f, .boost_force = 2.0f,
+     .boost_duration = 1.25f, .boost_cooldown = 0.72f, .dodge = 1.28f, .maneuver_cooldown = 0.84f},
+};
+
+}  // namespace
 
 // A drake is light, fragile and short of breath; an adult is heavy, tough,
 // long-breathed and quick with fireballs. Heft changes the flying, which is
 // the point: the dragon you land at the pass is not the one you launched.
 void App::apply_growth(float level) {
-    struct Scale {
-        float heft, flap, health, drain, fireball, melee, breath, size, wings;
-    };
-    // Size is the body; wings multiply on top, so an adult's span is about
-    // 1.45x a young dragon's while its body is 1.25x -- the wings are what
-    // grows most, and what reads first from the chase camera.
-    static const Scale scales[] = {
-        {0.8f, 0.9f, 0.85f, 1.4f, 1.4f, 0.8f, 0.8f, 0.8f, 0.85f},     // drake
-        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},       // young
-        // Fireballs 0.6 -> 0.8 of the cooldown: at 0.6 the adult's fireball
-        // rate was the playtest's "a bit overpowered".
-        {1.3f, 1.15f, 1.5f, 0.7f, 0.8f, 1.3f, 1.25f, 1.25f, 1.15f},   // adult
-        // The descent's stages: smaller steps each, so the power curve
-        // flattens while the enemies' (the valley depth) keeps climbing.
-        {1.45f, 1.25f, 1.8f, 0.62f, 0.76f, 1.5f, 1.4f, 1.38f, 1.22f}, // elder
-        {1.6f, 1.33f, 2.1f, 0.55f, 0.72f, 1.7f, 1.55f, 1.5f, 1.3f},   // ancient
-    };
-    constexpr int ROWS = int(sizeof(scales) / sizeof(scales[0]));
+    constexpr int ROWS = int(sizeof(GROWTH_ROWS) / sizeof(GROWTH_ROWS[0]));
     // Between two rows by the fraction of the way from one to the next.
     const float l = core::clampf(level, 0.0f, float(ROWS - 1));
     const int lo = std::min(int(l), ROWS - 2);
     const float f = l - float(lo);
-    const Scale& a = scales[lo];
-    const Scale& b = scales[lo + 1];
+    const GrowthScale& a = GROWTH_ROWS[lo];
+    const GrowthScale& b = GROWTH_ROWS[lo + 1];
     auto mix = [f](float x, float y) { return x + (y - x) * f; };
-    const Scale k{mix(a.heft, b.heft),         mix(a.flap, b.flap),         mix(a.health, b.health),
-                  mix(a.drain, b.drain),       mix(a.fireball, b.fireball), mix(a.melee, b.melee),
-                  mix(a.breath, b.breath),     mix(a.size, b.size),         mix(a.wings, b.wings)};
+    const GrowthBase& g = growth_base_;
     const float old_max = combat_.tuning.max_health;
-    flight_.tuning.heft = growth_base_.heft * k.heft;
-    flight_.tuning.flap_peak_force = growth_base_.flap * k.flap;
+    flight_.tuning.heft = g.heft * mix(a.heft, b.heft);
+    flight_.tuning.flap_peak_force = g.flap * mix(a.flap, b.flap);
+    flight_.tuning.boost_force = g.boost_force * mix(a.boost_force, b.boost_force);
     // The body rests higher off the ground when it is bigger.
-    flight_.tuning.ground_offset = growth_base_.ground_offset * k.size;
-    growth_scale_target_ = k.size;
-    wing_growth_target_ = k.wings;
+    const float size = mix(a.size, b.size);
+    flight_.tuning.ground_offset = g.ground_offset * size;
+    growth_scale_target_ = size;
+    wing_growth_target_ = mix(a.wings, b.wings);
     game::CombatTuning& t = combat_.tuning;
-    t.max_health = growth_base_.max_health * k.health;
-    t.breath_drain = growth_base_.breath_drain * k.drain;
-    t.fireball_cooldown = growth_base_.fireball_cooldown * k.fireball;
-    t.bite_damage = growth_base_.bite * k.melee;
-    t.strike_damage = growth_base_.strike * k.melee;
-    t.breath_damage_per_second = growth_base_.breath_dps * k.breath;
+    t.max_health = g.max_health * mix(a.health, b.health);
+    t.breath_drain = g.breath_drain * mix(a.drain, b.drain);
+    t.fireball_cooldown = g.fireball_cooldown * mix(a.fireball, b.fireball);
+    t.fireball_damage = g.fireball_damage * mix(a.fireball_damage, b.fireball_damage);
+    t.fireball_blast_radius = g.fireball_blast * mix(a.fireball_blast, b.fireball_blast);
+    t.bite_damage = g.bite * mix(a.melee, b.melee);
+    t.strike_damage = g.strike * mix(a.melee, b.melee);
+    t.bite_range = g.bite_range * mix(a.reach, b.reach);
+    t.strike_range = g.strike_range * mix(a.reach, b.reach);
+    t.melee_cooldown = g.melee_cooldown * mix(a.melee_cooldown, b.melee_cooldown);
+    t.melee_stun = g.melee_stun * mix(a.melee_power, b.melee_power);
+    t.melee_knockback = g.melee_knockback * mix(a.melee_power, b.melee_power);
+    t.breath_damage_per_second = g.breath_dps * mix(a.breath, b.breath);
+    t.boost_duration = g.boost_duration * mix(a.boost_duration, b.boost_duration);
+    t.boost_cooldown = g.boost_cooldown * mix(a.boost_cooldown, b.boost_cooldown);
+    maneuver_tuning_.roll_dodge_impulse = g.dodge_impulse * mix(a.dodge, b.dodge);
+    maneuver_tuning_.cooldown = g.maneuver_cooldown * mix(a.maneuver_cooldown, b.maneuver_cooldown);
     // A bigger body keeps its wounds but gains the new health on top.
     if (t.max_health > old_max) combat_.heal(t.max_health - old_max);
 }
 
 void App::restore_growth_base() {
-    flight_.tuning.heft = growth_base_.heft;
-    flight_.tuning.flap_peak_force = growth_base_.flap;
-    flight_.tuning.ground_offset = growth_base_.ground_offset;
+    const GrowthBase& g = growth_base_;
+    flight_.tuning.heft = g.heft;
+    flight_.tuning.flap_peak_force = g.flap;
+    flight_.tuning.ground_offset = g.ground_offset;
+    flight_.tuning.boost_force = g.boost_force;
     growth_scale_target_ = growth_scale_ = 1.0f;
     wing_growth_target_ = wing_growth_ = 1.0f;
     dragon_rig_.wing_growth = 1.0f;
     combat_.player_size = 1.0f;
     game::CombatTuning& t = combat_.tuning;
-    t.max_health = growth_base_.max_health;
-    t.breath_drain = growth_base_.breath_drain;
-    t.fireball_cooldown = growth_base_.fireball_cooldown;
-    t.bite_damage = growth_base_.bite;
-    t.strike_damage = growth_base_.strike;
-    t.breath_damage_per_second = growth_base_.breath_dps;
+    t.max_health = g.max_health;
+    t.breath_drain = g.breath_drain;
+    t.fireball_cooldown = g.fireball_cooldown;
+    t.fireball_damage = g.fireball_damage;
+    t.fireball_blast_radius = g.fireball_blast;
+    t.bite_damage = g.bite;
+    t.strike_damage = g.strike;
+    t.bite_range = g.bite_range;
+    t.strike_range = g.strike_range;
+    t.melee_cooldown = g.melee_cooldown;
+    t.melee_stun = g.melee_stun;
+    t.melee_knockback = g.melee_knockback;
+    t.breath_damage_per_second = g.breath_dps;
+    t.boost_duration = g.boost_duration;
+    t.boost_cooldown = g.boost_cooldown;
+    maneuver_tuning_.roll_dodge_impulse = g.dodge_impulse;
+    maneuver_tuning_.cooldown = g.maneuver_cooldown;
 }
 
 bool App::cache_guarded(int cache) const {
@@ -4318,9 +4561,7 @@ void App::draw_run_hud() {
             std::snprintf(line, sizeof(line), "YOU GREW: %s", game::growth_stage_name(hoard_run_.stage()));
             hud_.numeral(ImVec2(width * 0.5f, height * 0.20f), line, colour, 44.0f, ui::Align::Centre);
             hud_.label(ImVec2(width * 0.5f, height * 0.20f + hud_.px(50.0f)),
-                       hoard_run_.stage() == game::GrowthStage::Young
-                           ? "more health and breath, harder bites"
-                           : "heavier, tougher, longer breath, quicker fireballs",
+                       stage_unlock_text(hoard_run_.stage()),
                        (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
         }
     }
@@ -4765,6 +5006,8 @@ game::CombatInput App::read_combat_input() const {
     if (options_.attack) {
         in.breath = true;
         in.fire = true;   // the cooldown decides the actual rate
+        in.fire_held = true;  // and a charged shot every charge, once unlocked
+        in.fury = true;       // released the moment it fills
         in.boost = true;  // likewise: a burn at t=0 and every cooldown after
         in.melee = true;  // and a bite every cooldown, for the lunge on a capture
         return in;
@@ -4773,6 +5016,18 @@ game::CombatInput App::read_combat_input() const {
     if (demo_active()) {
         in.cycle_target = demo_decision_.cycle_target;
         in.fire = demo_decision_.fire;
+        // Its fire is a held wish: with the charged shot it charges and
+        // lets go at full. The fury goes the moment it fills with a target
+        // inside two thirds of its reach.
+        in.fire_held = demo_decision_.fire;
+        if (combat_.fury() >= 1.0f) {
+            for (const game::Sentinel& s : combat_.sentinels()) {
+                if (s.alive && core::distance(s.position, flight_.state().position) <
+                                   combat_.tuning.fury_radius * 0.66f) {
+                    in.fury = true;
+                }
+            }
+        }
         in.breath = demo_decision_.breath;
         in.melee = demo_decision_.melee;
         in.boost = demo_decision_.boost;
@@ -4788,6 +5043,8 @@ game::CombatInput App::read_combat_input() const {
                 input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
     in.fire = input_.pressed(SDL_SCANCODE_G) ||
               input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    in.fire_held = input_.down(SDL_SCANCODE_G) || input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    in.fury = fury_requested_;
     in.boost = input_.pressed(SDL_SCANCODE_LSHIFT) && false;  // shift is tuck-dive
     in.boost = input_.pressed(SDL_SCANCODE_X) ||
                input_.gamepad_button(SDL_GAMEPAD_BUTTON_WEST);
@@ -5091,6 +5348,22 @@ void App::draw_combat_hud() {
                 ? 1.0f - core::saturate(maneuver_.cooldown / maneuver_tuning_.cooldown)
                 : 1.0f;
         hud_.pip(ImVec2(x0 + step * 3.0f, y), radius, maneuver_ready, "Z", tk.accent);
+        // The learned abilities: U the second breath (in the colour of the
+        // element it swaps to), H the fury filling.
+        if (second_unlocked_) {
+            const game::Element other = using_second_ ? (player_element_choice_ >= 0
+                                                             ? game::Element(player_element_choice_)
+                                                             : player_model().breath.element)
+                                                      : second_element_;
+            const core::Vec3 c = game::element_colour(other);
+            hud_.pip(ImVec2(x0 + step * 4.0f, y), radius, 1.0f, "U",
+                     IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235));
+        }
+        if (combat_.abilities.fury) {
+            const float fury = combat_.fury();
+            const bool ready = fury >= 1.0f && std::fmod(time_seconds_, 0.6f) < 0.4f;
+            hud_.pip(ImVec2(x0 + step * 5.0f, y), radius, fury, "H", ready ? tk.lock : tk.flame);
+        }
         if (combat_.melee_combo() > 1) {
             std::snprintf(line, sizeof(line), "x%d", combat_.melee_combo());
             hud_.numeral(ImVec2(x0, y - radius - hud_.px(20.0f)), line, tk.breath_hot, 20.0f,
@@ -5173,6 +5446,15 @@ void App::draw_combat_hud() {
             // cue, so it visibly changes state with the lock.
             if (combat_.has_lock() && !manual_aim_) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), arm * 0.75f, colour, 24, hud_.px(1.5f));
+            }
+            // The charge gathering: an arc round the marker, full at a
+            // charged shot, in the breath's element.
+            if (combat_.charge() > 0.0f) {
+                const core::Vec3 c = game::element_colour(combat_.player_element);
+                const ImU32 col = IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f),
+                                           combat_.charge() >= 1.0f ? 255 : 200);
+                hud_.arc(ImVec2(screen.x, screen.y), arm * 1.5f, -core::HALF_PI, core::HALF_PI * 3.0f,
+                         combat_.charge(), col, hud_.px(3.0f));
             }
         }
     }
@@ -6124,9 +6406,9 @@ void App::log_telemetry() const {
              double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
              s.stalling ? "STALL " : "", "");
     if (combat_enabled_) {
-        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d",
+        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d  fury %.2f  charge %.2f",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
-                 bites_taken_);
+                 bites_taken_, double(combat_.fury()), double(combat_.charge()));
     }
     if (demo_active()) {
         LOG_INFO("   demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f collect %.0f "

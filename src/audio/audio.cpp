@@ -167,6 +167,110 @@ void Audio::synthesize_clips() {
         }
     }
 
+    // ---- the elements ----
+    // Ignite: a quick rising whoosh into a soft roar -- something catching.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Ignite)];
+        clip.resize(seconds(0.5f));
+        float lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            const float u = t / 0.5f;
+            lp += (synth_noise() - lp) * (0.04f + 0.2f * u);
+            const float env = core::minf(t * 20.0f, 1.0f) * std::exp(-3.5f * t);
+            clip[i] = 1.1f * lp * env;
+        }
+    }
+    // Shatter: glassy -- a cluster of high, inharmonic partials struck and
+    // ringing out, over a crunch of white noise.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Shatter)];
+        clip.resize(seconds(0.7f));
+        const float partials[6] = {2350.0f, 3120.0f, 3890.0f, 4610.0f, 5570.0f, 6930.0f};
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            float ring = 0.0f;
+            for (int k = 0; k < 6; ++k) {
+                ring += std::sin(TWO_PI * partials[k] * t + float(k)) * std::exp(-(5.0f + 2.0f * float(k)) * t);
+            }
+            const float crunch = synth_noise() * std::exp(-30.0f * t);
+            clip[i] = 0.16f * ring + 0.6f * crunch;
+        }
+    }
+    // Hiss: acid on hide -- a long filtered hiss with bubbling pops.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Hiss)];
+        clip.resize(seconds(0.8f));
+        float hp = 0.0f, prev = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            const float n = synth_noise();
+            hp = 0.92f * (hp + n - prev);  // a high-pass: the hiss
+            prev = n;
+            const float bubble = std::sin(TWO_PI * (180.0f + 90.0f * std::sin(TWO_PI * 11.0f * t)) * t) *
+                                 (0.5f + 0.5f * std::sin(TWO_PI * 13.0f * t));
+            const float env = core::minf(t * 12.0f, 1.0f) * std::exp(-3.0f * t);
+            clip[i] = env * (0.35f * hp + 0.3f * bubble);
+        }
+    }
+    // Zap: a lightning crack -- a hard noise transient, then a buzzing
+    // sawtooth dropping in pitch.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Zap)];
+        clip.resize(seconds(0.45f));
+        float phase = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            const float f = 900.0f * std::exp(-5.0f * t) + 110.0f;
+            phase += f / SAMPLE_RATE;
+            const float saw = 2.0f * (phase - std::floor(phase)) - 1.0f;
+            const float crack = synth_noise() * std::exp(-60.0f * t);
+            clip[i] = 0.9f * crack + 0.35f * saw * std::exp(-6.0f * t);
+        }
+    }
+    // Splash: a low slap and a spray of mid noise that falls away.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Splash)];
+        clip.resize(seconds(0.6f));
+        float lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            lp += (synth_noise() - lp) * (0.25f - 0.2f * core::saturate(t / 0.6f));
+            const float slap = std::sin(TWO_PI * 140.0f * t) * std::exp(-25.0f * t);
+            clip[i] = 0.8f * slap + 0.9f * lp * std::exp(-5.0f * t) * core::minf(t * 60.0f, 1.0f);
+        }
+    }
+    // Crack: rock breaking -- a sharp split over a deep, gritty thud.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Crack)];
+        clip.resize(seconds(0.55f));
+        float brown = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            brown += synth_noise() * 0.3f;
+            brown *= 0.985f;
+            const float split = synth_noise() * std::exp(-80.0f * t) * 1.2f;
+            const float thud = std::sin(TWO_PI * 55.0f * t * (1.0f - 0.4f * t)) * std::exp(-6.0f * t);
+            const float grit = brown * std::exp(-8.0f * t) * (0.6f + 0.4f * (synth_noise() > 0.6f));
+            clip[i] = 0.9f * (split + thud + grit);
+        }
+    }
+    // Fury: a sub boom, then a roar rising as the nova spreads.
+    {
+        std::vector<float>& clip = clips_[int(Clip::Fury)];
+        clip.resize(seconds(1.6f));
+        float brown = 0.0f, lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            brown += synth_noise() * 0.2f;
+            brown *= 0.996f;
+            lp += (synth_noise() - lp) * (0.03f + 0.15f * core::saturate(t / 1.2f));
+            const float boom = std::sin(TWO_PI * 38.0f * t * (1.0f - 0.3f * t)) * std::exp(-2.5f * t);
+            const float roar = lp * std::sin(3.14159f * core::saturate(t / 1.6f)) * 1.3f;
+            clip[i] = 0.9f * (boom + 0.6f * brown * std::exp(-2.0f * t) + roar);
+        }
+    }
+
     // Wingbeat: a broad low whoosh, swelling then gone -- air moved, not tone.
     {
         std::vector<float>& clip = clips_[int(Clip::Flap)];
@@ -287,13 +391,58 @@ void Audio::mix(float* out, uint32_t frames) {
             float sample = wind_lp_[channel] * wind * wind * 1.5f +
                            wind_rumble_[channel] * wind * 2.2f;
 
-            // Flame: dark roaring noise with a slow wobble and crackle pops.
-            flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.05f;
-            float flame = flame_lp_[channel] * (0.7f + 0.3f * std::sin(flame_phase_));
-            if (channel == 0 && flame_level_ > 0.05f && (rng & 0x3ffu) == 0u) {
-                crackle_hold_ = 90.0f;  // ~2 ms pop
+            // The held breath, voiced by its element. Fire: dark roaring
+            // noise with a slow wobble and crackle pops.
+            const int style = flame_style_.load(std::memory_order_relaxed);
+            float flame = 0.0f;
+            switch (style) {
+                case 1: {  // frost: a bright hiss with glassy glints
+                    flame_hp_[channel] = 0.9f * (flame_hp_[channel] + noise - flame_lp_[channel]);
+                    flame_lp_[channel] = noise;
+                    flame = flame_hp_[channel] * 0.45f;
+                    if ((rng & 0x7ffu) == 0u) crackle_hold_ = 30.0f;
+                    if (crackle_hold_ > 0.0f) flame += std::sin(TWO_PI * 5200.0f * float(i) / SAMPLE_RATE) * 0.4f;
+                    break;
+                }
+                case 2: {  // blight: a bubbling gurgle
+                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.03f;
+                    slosh_phase_ += TWO_PI * 7.0f / SAMPLE_RATE / 2.0f;
+                    flame = flame_lp_[channel] * 1.3f * (0.5f + 0.5f * std::sin(slosh_phase_)) +
+                            0.15f * std::sin(TWO_PI * (160.0f + 60.0f * std::sin(slosh_phase_ * 1.7f)) *
+                                             float(i) / SAMPLE_RATE);
+                    break;
+                }
+                case 3: {  // storm: an electric buzz with crackle
+                    buzz_phase_ += 118.0f / SAMPLE_RATE / 2.0f;
+                    const float saw = 2.0f * (buzz_phase_ - std::floor(buzz_phase_)) - 1.0f;
+                    flame = 0.35f * saw * (0.7f + 0.3f * noise);
+                    if (channel == 0 && (rng & 0xffu) == 0u) crackle_hold_ = 60.0f;
+                    if (crackle_hold_ > 0.0f) flame += noise * 0.7f;
+                    break;
+                }
+                case 4: {  // tide: rushing water that sloshes
+                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.12f;
+                    slosh_phase_ += TWO_PI * 2.6f / SAMPLE_RATE / 2.0f;
+                    flame = flame_lp_[channel] * (0.55f + 0.45f * std::sin(slosh_phase_));
+                    break;
+                }
+                case 5: {  // stone: a gritty low rumble, thick with grit
+                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.015f;
+                    flame = flame_lp_[channel] * 2.0f;
+                    if ((rng & 0x7fu) == 0u) crackle_hold_ = 25.0f;
+                    if (crackle_hold_ > 0.0f) flame += noise * 0.35f;
+                    break;
+                }
+                default: {
+                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.05f;
+                    flame = flame_lp_[channel] * (0.7f + 0.3f * std::sin(flame_phase_));
+                    if (channel == 0 && flame_level_ > 0.05f && (rng & 0x3ffu) == 0u) {
+                        crackle_hold_ = 90.0f;  // ~2 ms pop
+                    }
+                    if (crackle_hold_ > 0.0f) flame += noise * 0.6f;
+                    break;
+                }
             }
-            if (crackle_hold_ > 0.0f) flame += noise * 0.6f;
             sample += flame * flame_level_ * 0.9f;
 
             out[i * 2 + channel] = std::tanh((sample + voices) * master);

@@ -395,9 +395,14 @@ private:
                player_model().asset.matrix();
     }
     struct GrowthBase {
-        float heft = 1.0f, flap = 9000.0f;
+        float heft = 1.0f, flap = 9000.0f, boost_force = 26000.0f;
         float max_health = 100.0f, breath_drain = 0.3f, fireball_cooldown = 0.85f;
+        float fireball_damage = 30.0f, fireball_blast = 12.0f;
         float bite = 28.0f, strike = 18.0f, breath_dps = 60.0f;
+        float bite_range = 30.0f, strike_range = 16.0f;
+        float melee_cooldown = 0.55f, melee_stun = 1.6f, melee_knockback = 14.0f;
+        float boost_cooldown = 5.0f, boost_duration = 1.1f;
+        float dodge_impulse = 14.0f, maneuver_cooldown = 1.0f;
         float ground_offset = 2.2f;
     } growth_base_;
     void capture_growth_base();
@@ -437,6 +442,22 @@ private:
     // the element's preset when the choice differs from the species.
     game::BreathProfile player_breath_;
     void refresh_player_element();
+    // ---- abilities (Combat::Abilities, plus the second breath here) ----
+    // A run unlocks one per growth stage -- young the charged shot, adult a
+    // second breath, elder the ram, ancient the fury; the arena has them all.
+    void update_abilities();
+    bool second_unlocked_ = false;
+    bool using_second_ = false;
+    game::Element second_element_ = game::Element::Frost;
+    bool swap_button_was_down_ = false;
+    bool fury_button_was_down_ = false;
+    bool fury_requested_ = false;
+    float status_sound_cooldown_[8] = {};
+    void play_status_sound(audio::Clip clip, int slot, core::Vec3 at, float gain = 1.0f,
+                           float rate = 1.0f);
+    void emit_fury(core::Vec3 centre);
+    // What each stage brings, for the "YOU GREW" call-out.
+    const char* stage_unlock_text(game::GrowthStage stage) const;
     // The breath profile for a flame of `element` from a creature wearing
     // `model`: the species' own when it breathes that element, else the
     // element's preset.

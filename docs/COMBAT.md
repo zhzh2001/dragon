@@ -428,6 +428,37 @@ chill and freeze, a breath freezing in about 1.5 s, the storm arc (once, for
 a share), a frozen player unable to fire, a frost player resisting frost, and
 a frozen tower holding its fire. Renders in `artifacts/elements/`.
 
+## Abilities (M27)
+
+Growth scaled numbers; the playtest asked for "non trivial upgrades like
+Legend of Spyro". A run now grants **one ability per stage**, announced in
+the "YOU GREW" call-out; the arena grants all of them. `Combat::Abilities`
+gates the three combat ones, and the second breath is the app's.
+
+| Stage | Ability | What it is |
+|---|---|---|
+| young | **Charged shot** | Hold G: the fireball gathers at the mouth (0.8 s to full, an arc round the aim marker); let go, or reach full, and it leaves 2.2x the damage, 2x the blast, 1.6x the body, 2.5x the status, 15% faster. A tap is still a plain shot, on the release. |
+| adult | **Second breath** | A second element (rolled per run; the next one round in the arena). U (gamepad Y) swaps; the U pip wears the colour it swaps to. The flame, the status, the resistances all follow. |
+| elder | **Ram** | The boost is a weapon: while boosting, anything the body passes within 10 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. The body is sheathed in its element while it boosts. |
+| ancient | **Fury** | Damage dealt fills a meter (1 per 500 damage, 0.08 a kill; the H pip). H (left-stick click) releases a nova of the element round the dragon: 170 m, 90 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. |
+
+**Every ability also grows with the dragon** (the same continuous growth as
+the body): the melee's reach, stun, knockback and cooldown, the boost's force
+(ahead of the heft), duration and cooldown, the fireball's damage and blast,
+the dodge's kick and the manoeuvre cooldown -- an ancient's bite reaches
+35% further and swings 22% sooner, its boost pushes twice as hard.
+`tests/test_combat.cpp` pins the tap, the charge, one ram per boost, and a
+fury that hits only inside its radius and needs unlocking.
+
+**Sound.** Each element's status landing has its own synthesized sound
+(`audio::Clip`): Ignite, Shatter (a frozen body -- inharmonic high partials
+over a crunch), Hiss (acid), Zap (a crack and a falling buzz, on every storm
+arc), Splash, Crack (rock), rate-limited per kind so a held breath does not
+machine-gun. The held breath is voiced by its element
+(`Audio::set_flame_style`): fire roars and crackles, frost hisses bright
+with glassy glints, blight gurgles, storm buzzes and crackles, tide rushes
+and sloshes, stone rumbles with grit. The fury has its own boom and roar.
+
 ## The hoard run (M24, row 3 of `DIRECTION.md`)
 
 The run probe: one generated valley flown from its head to the pass at the

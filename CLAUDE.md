@@ -140,6 +140,9 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | X | Boost -- gamepad X |
 | Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad left/right, which is also the direction. A dodge: a sideways kick and a push through the first half of the roll, about ten metres |
 | B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
+| Hold G | Charged shot (a run's young stage on; always in the arena): let go or wait for full |
+| U | Swap to the second breath and back (adult on) -- gamepad Y |
+| H | Release the fury when its pip is full (ancient on) -- gamepad left-stick click |
 | Enter | Rematch from the arena results; in a hoard run that has ended, a new valley |
 | P | Hands-off: the demo pilot takes (or gives back) the controls; the HUD says what it is doing |
 | Esc | Release the mouse if captured; again to quit |
@@ -259,10 +262,10 @@ flight controls.
   output.
 - Commit messages describe what changed and *why it was wrong before*.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
-  a one-liner.** Two workers have been measured on the same task; pick one and
-  say why. `Agent` with `model: "fable"` is the default. **`codex exec -m
-  gpt-6-astra` is the alternative, and it must not be started without checking
-  usage first -- see below.**
+  a one-liner -- to `codex exec -m gpt-6-astra`, and never start it without
+  checking usage first -- see below.** Do not delegate to Fable 5.1 any more
+  (the user's call, 2026-09-26); when Codex has no headroom, do the work in
+  the main session or wait for the reset.
 
   Work to delegate: fitting or refitting a deform skeleton to a generated mesh,
   diagnosing a bind pose or bone-axis problem inside a `.glb`, weight painting,
@@ -321,9 +324,10 @@ flight controls.
   Gameplay, AI and tuning stay in the main session.
 - **Keep headless soaks light**: at most two at a time; a `--demo` soak
   rolls through many runs on its own, so it usually replaces a seed sweep.
-- **Which worker.** Both produced a correct, verified fix to the same brief with
-  the bone-naming contract intact, so this is about cost and behaviour rather
-  than capability:
+- **Which worker (history).** gpt-6-astra is now the only delegate; this is
+  the comparison that was measured when Fable 5.1 was still used. Both
+  produced a correct, verified fix to the same brief with the bone-naming
+  contract intact:
   - **gpt-6-astra**: finished in ~12 minutes and one unattended pass at 93 k
     tokens; placement was tighter and more consistent (-0.007..-0.013 against a
     +-0.016 target); stayed inside the brief, and where it went beyond it, it
@@ -333,9 +337,9 @@ flight controls.
     Deeper measurement write-up and richer in-file documentation, closer to
     house style. It also changed a constant it was not asked about
     (`wing_bind_level_deg` 35 -> 40), which moved the wingspan 8%.
-  So: **Fable for work where the write-up and the in-file record matter and the
-  budget is Claude's own; gpt-6-astra when the task is well-specified and
-  numerically checkable, and only with usage headroom confirmed.**
+  So: **gpt-6-astra, for well-specified, numerically checkable 3D, asset and
+  animation work, only with usage headroom confirmed** -- and brief it to
+  write the in-file record it tends to skip.
   Run `codex exec -m gpt-6-astra -c model_reasoning_effort=medium -s
   danger-full-access` -- the user's call on 2026-09-25: the default
   auto/workspace-write mode drained usage about twice as fast. Full access

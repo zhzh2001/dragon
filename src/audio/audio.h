@@ -19,6 +19,18 @@ enum class Clip : int {
     Bite,      // the swing: a whoosh rising into the snap of jaws
     BiteHit,   // the swing connecting: a crunch and a heavy thud
     Flap,
+    // The elements, one each for a status landing hard: a flare catching,
+    // ice shattering, acid hissing, a lightning crack, a splash, rock
+    // breaking. Synthesized like everything else; a hit you can hear the
+    // element of is a hit you do not have to look at.
+    Ignite,
+    Shatter,
+    Hiss,
+    Zap,
+    Splash,
+    Crack,
+    // The fury: a deep boom with a rising roar behind it.
+    Fury,
     Count,
 };
 
@@ -32,6 +44,11 @@ public:
     // 0..1, smoothed inside the mixer so per-frame calls cannot zipper.
     void set_wind(float level) { wind_target_.store(level, std::memory_order_relaxed); }
     void set_flame(float level) { flame_target_.store(level, std::memory_order_relaxed); }
+    // What the held breath sounds like: 0 fire (a roar with crackle), 1
+    // frost (a bright hiss with glassy sparkle), 2 blight (a bubbling
+    // gurgle), 3 storm (an electric buzz), 4 tide (rushing, sloshing water),
+    // 5 stone (gritty rumble). The element enum's order.
+    void set_flame_style(int style) { flame_style_.store(style, std::memory_order_relaxed); }
     void set_master(float volume) { master_.store(volume, std::memory_order_relaxed); }
     float master() const { return master_.load(std::memory_order_relaxed); }
 
@@ -61,6 +78,10 @@ private:
 
     std::atomic<float> wind_target_{0.0f};
     std::atomic<float> flame_target_{0.0f};
+    std::atomic<int> flame_style_{0};
+    float buzz_phase_ = 0.0f;
+    float slosh_phase_ = 0.0f;
+    float flame_hp_[2] = {0.0f, 0.0f};
     std::atomic<float> master_{0.6f};
 
     // Mixer-thread state (only touched inside mix()). Wind and flame carry a

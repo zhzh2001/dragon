@@ -242,6 +242,8 @@ void Combat::revive() {
     boost_timer_ = 0.0f;
     boost_cooldown_timer_ = 0.0f;
     player_status_.clear();
+    charge_ = 0.0f;
+    charging_ = false;
     // Incoming shots die with the player, so a respawn is never instantly
     // undone by a projectile that was already in the air.
     for (Projectile& projectile : projectiles_) {
@@ -512,13 +514,13 @@ float Combat::boost_cooldown() const {
     return core::clampf(boost_cooldown_timer_ / tuning.boost_cooldown, 0.0f, 1.0f);
 }
 
-void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius, float blast,
-                             Team team) {
-    fire_projectile(position, velocity, damage, radius, blast, team, tuning.fireball_gravity);
+Projectile& Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius,
+                                    float blast, Team team) {
+    return fire_projectile(position, velocity, damage, radius, blast, team, tuning.fireball_gravity);
 }
 
-void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius, float blast,
-                             Team team, float gravity, Element element) {
+Projectile& Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius,
+                                    float blast, Team team, float gravity, Element element) {
     Projectile projectile;
     projectile.position = position;
     projectile.velocity = velocity;
@@ -536,10 +538,11 @@ void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float r
     for (Projectile& slot : projectiles_) {
         if (!slot.alive) {
             slot = projectile;
-            return;
+            return slot;
         }
     }
     projectiles_.push_back(projectile);
+    return projectiles_.back();
 }
 
 void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events) {
@@ -583,7 +586,12 @@ void Combat::hit_sentinel(Sentinel& sentinel, float amount, Element element, flo
         bursts_.push_back(burst);
     }
     const Vec3 at = sentinel.position;
+    const bool was_alive = sentinel.alive;
     damage_sentinel(sentinel, dealt, events);
+    if (abilities.fury) {
+        fury_ = core::saturate(fury_ + dealt * tuning.fury_per_damage +
+                               (was_alive && !sentinel.alive ? tuning.fury_per_kill : 0.0f));
+    }
     // Storm arcs to the nearest other target, once, for a share: it does not
     // chain on from there, or one bolt would clear a valley.
     if (chain && report.shocked && element == Element::Storm) {
@@ -616,6 +624,57 @@ CombatEvents Combat::apply_hit(int index, float amount, Element element, float w
         hit_sentinel(sentinels_[size_t(index)], amount, element, weight, events);
     }
     return events;
+}
+
+void Combat::apply_ram(const FlightState& player, CombatEvents& events) {
+    if (rammed_.size() < sentinels_.size()) rammed_.resize(sentinels_.size(), 0);
+    const float reach = tuning.ram_radius * player_size;
+    const Vec3 along = core::normalize_or(player.velocity, player.forward());
+    for (size_t i = 0; i < sentinels_.size(); ++i) {
+        Sentinel& target = sentinels_[i];
+        if (!target.alive || rammed_[i]) continue;
+        const float radius = target.radius > 0.0f ? target.radius : tuning.sentinel_radius;
+        if (core::distance(player.position, target.position) > reach + radius) continue;
+        rammed_[i] = 1;
+        hit_sentinel(target, tuning.ram_damage, player_element, 1.0f, events);
+        if (!target.ground) {
+            target.stun = core::maxf(target.stun, tuning.ram_stun);
+            const Vec3 shove = core::normalize_or(along + Vec3{0.0f, 0.3f, 0.0f}, along) * tuning.ram_knockback;
+            if (target.external) {
+                target.knockback = target.knockback + shove;
+            } else {
+                target.centre = target.centre + shove * 0.25f;
+            }
+        }
+        ++events.rammed;
+        events.ram_position = target.position;
+    }
+}
+
+void Combat::release_fury(const FlightState& player, CombatEvents& events) {
+    fury_ = 0.0f;
+    events.fury_released = true;
+    // Everything in the radius: full damage at the centre, half at the edge,
+    // the element's status heavy, stunned and blown outward.
+    for (Sentinel& target : sentinels_) {
+        if (!target.alive) continue;
+        const float d = core::distance(player.position, target.position);
+        if (d > tuning.fury_radius) continue;
+        const float falloff = 1.0f - 0.5f * d / core::maxf(tuning.fury_radius, 1.0f);
+        const bool was = target.alive;
+        hit_sentinel(target, tuning.fury_damage * falloff, player_element, tuning.fury_status, events, false);
+        (void)was;
+        if (!target.ground) {
+            target.stun = core::maxf(target.stun, tuning.fury_stun);
+            const Vec3 out = core::normalize_or(target.position - player.position, Vec3::up());
+            if (target.external) {
+                target.knockback = target.knockback + out * tuning.fury_knockback;
+            } else {
+                target.centre = target.centre + out * (tuning.fury_knockback * 0.25f);
+            }
+        }
+    }
+    fury_ = 0.0f;  // the hits above must not refill it
 }
 
 void Combat::hurt_player(float amount, Element element, float weight, Vec3 from,
@@ -685,7 +744,8 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
                 const float body = sentinel.radius > 0.0f ? sentinel.radius
                                                           : tuning.sentinel_radius;
                 if (!sweep_hit(sentinel.position, body, distance)) continue;
-                hit_sentinel(sentinel, projectile.damage, projectile.element, 1.0f, events);
+                hit_sentinel(sentinel, projectile.damage, projectile.element, projectile.status_weight,
+                             events);
                 // A tide round shoves what it hits; a tower does not move.
                 if (projectile.element == Element::Tide && !sentinel.ground &&
                     sentinel.element != Element::Tide) {
@@ -715,7 +775,7 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
                                                 core::maxf(reach - tuning.sentinel_radius, 1e-3f),
                                             0.0f, 1.0f);
                     hit_sentinel(sentinel, projectile.damage * falloff * 0.5f, projectile.element,
-                                 0.5f, events);
+                                 0.5f * projectile.status_weight, events);
                     consumed = true;
                     break;
                 }
@@ -968,17 +1028,46 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     }
 
     // ---- fireball ----
-    if (input.fire && player_alive && !jammed && fire_timer_ <= 0.0f) {
+    // Inherits the dragon's velocity, so a shot fired from a dive is
+    // genuinely faster. Aiming then means pointing the nose, which is what
+    // the player thinks they are doing. `power` 0 is a plain shot, 1 a full
+    // charge.
+    auto shoot = [&](float power) {
         fire_timer_ = tuning.fireball_cooldown;
-        // Inherits the dragon's velocity, so a shot fired from a dive is
-        // genuinely faster. Aiming then means pointing the nose, which is what
-        // the player thinks they are doing.
-        const Vec3 velocity =
-            player.velocity + fireball_direction(player) * tuning.fireball_speed;
-        fire_projectile(muzzle(player), velocity, tuning.fireball_damage,
-                        tuning.fireball_radius, tuning.fireball_blast_radius, Team::Player,
-                        tuning.fireball_gravity, player_element);
+        const float speed = tuning.fireball_speed * (1.0f + 0.15f * power);
+        const Vec3 velocity = player.velocity + fireball_direction(player) * speed;
+        Projectile& p = fire_projectile(
+            muzzle(player), velocity, tuning.fireball_damage * core::lerpf(1.0f, tuning.charged_damage, power),
+            tuning.fireball_radius * core::lerpf(1.0f, tuning.charged_radius, power),
+            tuning.fireball_blast_radius * core::lerpf(1.0f, tuning.charged_blast, power), Team::Player,
+            tuning.fireball_gravity, player_element);
+        p.charged = power > 0.0f;
+        p.status_weight = core::lerpf(1.0f, tuning.charged_status, power);
         events.fired = true;
+        events.charged_fired = power > 0.0f;
+    };
+    if (abilities.charged_shot) {
+        // Held, it gathers (once the reload is done); let go -- or reach full
+        // -- and it leaves. A tap is a plain shot on the release.
+        const bool can = player_alive && !jammed;
+        if ((input.fire_held || input.fire) && can) {
+            charging_ = true;
+            if (fire_timer_ <= 0.0f) charge_ = core::minf(charge_ + dt / core::maxf(tuning.charge_time, 0.05f), 1.0f);
+        }
+        const bool release = charging_ && (!(input.fire_held || input.fire) || charge_ >= 1.0f);
+        if (!can) {
+            charging_ = false;
+            charge_ = 0.0f;
+        } else if (release && fire_timer_ <= 0.0f) {
+            const float power = charge_ < tuning.charge_min
+                                    ? 0.0f
+                                    : (charge_ - tuning.charge_min) / core::maxf(1.0f - tuning.charge_min, 1e-3f);
+            shoot(power);
+            charging_ = false;
+            charge_ = 0.0f;
+        }
+    } else if (input.fire && player_alive && !jammed && fire_timer_ <= 0.0f) {
+        shoot(0.0f);
     }
 
     // ---- melee ----
@@ -996,6 +1085,12 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         boost_timer_ = tuning.boost_duration;
         boost_cooldown_timer_ = tuning.boost_cooldown;
     }
+    // The ram: a fresh boost forgets who it has hit.
+    if (boost_active() && !was_boosting_) rammed_.assign(sentinels_.size(), 0);
+    was_boosting_ = boost_active();
+    if (abilities.ram && boost_active() && player_alive) apply_ram(player, events);
+    // ---- fury ----
+    if (abilities.fury && input.fury && player_alive && fury_ >= 1.0f) release_fury(player, events);
 
     apply_breath(dt, player, events);
 

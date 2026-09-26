@@ -899,6 +899,86 @@ void test_hostile_breath_and_mouth_muzzle() {
     CHECK(near(combat.breath_origin().z, -9.0f, 1e-3f));
 }
 
+void test_abilities() {
+    std::printf("abilities: the charged shot, the ram, the fury\n");
+    const FlightState player = player_at(Vec3::zero());
+    const float dt = 1.0f / 60.0f;
+    // A tap is a plain shot, on the release.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 21u, 0);
+        c.abilities.charged_shot = true;
+        CombatInput press;
+        press.fire = press.fire_held = true;
+        c.update(dt, player, press);
+        const game::CombatEvents e = c.update(dt, player, CombatInput{});
+        CHECK(e.fired && !e.charged_fired);
+        bool big = false;
+        for (const auto& p : c.projectiles()) big |= p.alive && p.charged;
+        CHECK(!big);
+    }
+    // Held, it charges and leaves by itself at full: bigger, harder, heavier.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 21u, 0);
+        c.abilities.charged_shot = true;
+        CombatInput hold;
+        hold.fire_held = true;
+        bool charged = false;
+        for (int i = 0; i < 90 && !charged; ++i) charged = c.update(dt, player, hold).charged_fired;
+        CHECK(charged);
+        float damage = 0.0f;
+        for (const auto& p : c.projectiles()) {
+            if (p.alive && p.charged) damage = p.damage;
+        }
+        CHECK(std::fabs(damage - c.tuning.fireball_damage * c.tuning.charged_damage) < 0.01f);
+    }
+    // The ram: a boost through a drone damages and stuns it, once.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 21u, 0);
+        c.abilities.ram = true;
+        const int slot = c.spawn_external(500.0f, 6.0f);
+        c.drive_external(slot, Vec3{0.0f, 0.0f, -8.0f}, Vec3::zero());
+        CombatInput boost;
+        boost.boost = true;
+        int rams = 0;
+        for (int i = 0; i < 30; ++i) rams += c.update(dt, player, i == 0 ? boost : CombatInput{}).rammed;
+        CHECK(rams == 1);
+        CHECK(c.sentinels()[size_t(slot)].health < 500.0f - c.tuning.ram_damage + 0.1f);
+        CHECK(c.sentinels()[size_t(slot)].stun > 0.0f);
+    }
+    // The fury: fills from damage; released, it hits what is inside its
+    // radius and not what is outside, and empties.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 21u, 0);
+        c.abilities.fury = true;
+        c.player_element = game::Element::None;
+        const int near = c.spawn_external(1000.0f, 6.0f);
+        const int far = c.spawn_external(1000.0f, 6.0f);
+        c.drive_external(near, Vec3{0.0f, 0.0f, -60.0f}, Vec3::zero());
+        c.drive_external(far, Vec3{0.0f, 0.0f, -600.0f}, Vec3::zero());
+        CHECK(c.fury() == 0.0f);
+        c.apply_hit(near, 250.0f, game::Element::None);
+        CHECK(c.fury() > 0.45f && c.fury() < 0.55f);
+        c.add_fury(1.0f);
+        CombatInput go;
+        go.fury = true;
+        const float before_near = c.sentinels()[size_t(near)].health;
+        const game::CombatEvents e = c.update(dt, player, go);
+        CHECK(e.fury_released);
+        CHECK(c.sentinels()[size_t(near)].health < before_near - 50.0f);
+        CHECK(c.sentinels()[size_t(far)].health == 1000.0f);
+        CHECK(c.fury() == 0.0f);
+        // Not unlocked: nothing.
+        Combat locked;
+        locked.reset(nullptr, Vec3::zero(), 21u, 0);
+        locked.add_fury(1.0f);
+        CHECK(!locked.update(dt, player, go).fury_released);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -926,6 +1006,7 @@ int main() {
     test_boost_respects_its_cooldown();
     test_is_deterministic();
     test_no_nans_under_abuse();
+    test_abilities();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -191,6 +191,42 @@ struct CombatTuning {
     // What each breath does beyond damage: burn, chill and freeze, corrode,
     // shock, drench, stagger. See element.h.
     ElementTuning elements;
+
+    // ---- abilities (the run unlocks one per growth stage) ----
+    // Not bigger numbers: new things to do, in the Legend of Spyro manner.
+    // CHARGED SHOT (young): hold the fireball and it gathers; let go, or
+    // reach full, and it leaves bigger, harder and heavier with status.
+    float charge_time = 0.8f;       // s to full
+    float charge_min = 0.3f;        // a release below this is a plain shot
+    float charged_damage = 2.2f;    // at full, multipliers on the fireball
+    float charged_blast = 2.0f;
+    float charged_radius = 1.6f;
+    float charged_status = 2.5f;
+    // RAM (elder): the boost is a weapon -- the body ploughs through what it
+    // passes, once per target per boost, stunning and hurling it.
+    float ram_radius = 10.0f;       // m, scaled by the player's size
+    float ram_damage = 35.0f;
+    float ram_stun = 1.3f;
+    float ram_knockback = 24.0f;
+    // FURY (ancient): damage dealt fills a meter; full, it is released as a
+    // nova of the dragon's element round it -- Spyro's Fury.
+    float fury_per_damage = 1.0f / 500.0f;
+    float fury_per_kill = 0.08f;
+    float fury_radius = 170.0f;
+    float fury_damage = 90.0f;      // at the centre, half at the edge
+    float fury_status = 3.0f;
+    float fury_knockback = 30.0f;
+    float fury_stun = 1.6f;
+};
+
+// Which abilities the player has. None by default -- the plain combat core
+// -- and the app grants them: all of them in the arena, one more per growth
+// stage in a run (the second breath is the app's; combat only ever sees the
+// element in use).
+struct Abilities {
+    bool charged_shot = false;
+    bool ram = false;
+    bool fury = false;
 };
 
 // What the player is asking combat to do this frame. Held vs edge is decided by
@@ -198,6 +234,8 @@ struct CombatTuning {
 struct CombatInput {
     bool breath = false;        // held
     bool fire = false;          // edge: one fireball per press
+    bool fire_held = false;     // held: charges the shot when that is unlocked
+    bool fury = false;          // edge: release the fury when it is full
     bool boost = false;         // edge
     bool cycle_target = false;  // edge: relock onto the next candidate
     bool melee = false;         // edge: one bite or strike per press
@@ -240,6 +278,9 @@ struct Projectile {
     float damage = 0.0f;
     float radius = 0.0f;
     float blast_radius = 0.0f;
+    // A charged shot, drawn bigger, and the status weight its hit carries.
+    bool charged = false;
+    float status_weight = 1.0f;
     Team team = Team::Player;
     // What it is made of: the status it leaves, and the colour it burns.
     Element element = Element::None;
@@ -378,6 +419,11 @@ struct CombatEvents {
     // or staggered (the knock is in `knockback`).
     bool player_froze = false;
     bool player_staggered = false;
+    // The abilities, for the rig, the sound and the effects.
+    bool charged_fired = false;
+    int rammed = 0;
+    core::Vec3 ram_position = core::Vec3::zero();
+    bool fury_released = false;
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
@@ -496,6 +542,11 @@ public:
     // Public like `tuning` is: it is data the owner sets, not state combat
     // evolves.
     BreathScales player_breath;
+    Abilities abilities;
+    // 0..1 while the fireball is held (charged shot), and the fury meter.
+    float charge() const { return charge_; }
+    float fury() const { return fury_; }
+    void add_fury(float amount) { fury_ = core::saturate(fury_ + amount); }
     // What the player breathes (the species' breath file, or the panel's
     // override): the status its hits leave, and what it resists.
     Element player_element = Element::Fire;
@@ -526,10 +577,10 @@ public:
     }
 
 private:
-    void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
-                         float blast, Team team, float gravity, Element element = Element::None);
-    void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
-                         float blast, Team team);
+    Projectile& fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
+                                float blast, Team team, float gravity, Element element = Element::None);
+    Projectile& fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
+                                float blast, Team team);
     void update_projectiles(float dt, const FlightState& player, CombatEvents& events);
     void update_sentinels(float dt, const FlightState& player, CombatEvents& events);
     void apply_breath(float dt, const FlightState& player, CombatEvents& events);
@@ -574,6 +625,14 @@ private:
     std::vector<Arc> arcs_;
     float arc_timer_ = 0.0f;
     Status player_status_;
+    float charge_ = 0.0f;
+    bool charging_ = false;
+    float fury_ = 0.0f;
+    // Who this boost has already rammed, by slot.
+    std::vector<char> rammed_;
+    bool was_boosting_ = false;
+    void apply_ram(const FlightState& player, CombatEvents& events);
+    void release_fury(const FlightState& player, CombatEvents& events);
     std::vector<BreathCone> hostile_breaths_pending_;
     std::vector<BreathCone> hostile_breaths_drawn_;
     std::vector<MeleeSwing> hostile_melee_pending_;
