@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the two metre-scale Dragon Engine props with Blender, then verify GLBs.
+"""Build the four second-generation metre-scale Dragon Engine props with Blender, then verify GLBs.
 
 blender -b --factory-startup --python tools/build_props.py
 Optional script arguments after --: --verify-only, --render, --output-dir PATH.
@@ -18,6 +18,7 @@ import traceback
 import bpy
 import bmesh
 from mathutils import Matrix, Vector
+from mathutils.geometry import closest_point_on_tri
 
 ROOT = Path(__file__).resolve().parents[1]
 TAU = math.tau
@@ -39,9 +40,9 @@ def clear():
 def atlas(name):
     """16 padded atlas cells: masonry, iron, gold, timber and jewel colors."""
     palette = [(0.43,.38,.30), (.49,.43,.34), (.37,.34,.29), (.55,.48,.37),
-               (.13,.15,.17), (.09,.065,.035), (.82,.49,.09), (.98,.71,.20),
+               (.13,.15,.17), (.09,.065,.035), (.82,.49,.09), (.85,.55,.12),
                (.27,.105,.035), (.68,.025,.045), (.025,.46,.27), (.025,.24,.64),
-               (.63,.33,.045), (.96,.65,.13), (.68,.40,.07), (.23,.25,.24)]
+               (.85,.55,.12), (.85,.55,.12), (.68,.40,.07), (.23,.25,.24)]
     rng = random.Random(712)
     pixels = []
     # A regular jittered coin field with dark seams; no input images or baking.
@@ -65,14 +66,13 @@ def atlas(name):
                 elif .40 < radius < .46:
                     factor *= 1.12
             elif tile == 12:
-                row = int(v*8)
-                xx = (u*8 + .5*(row%2))%1-.5
-                yy = (v*8)%1-.5
-                radius=math.hypot(xx,yy)
-                factor = .35 if radius > .46 else 1.0 + .28*(yy+.5)
-                if .32 < radius < .39: factor *= .70
-                factor += noise
-            pixels.extend([max(0,min(1,c*factor)) for c in base]+[1])
+                # Broad gold surface: real coin discs carry the readable detail.
+                factor = .86 + noise
+            rgb=[max(0,min(1,c*factor)) for c in base]
+            if tile in (6,7,12,13,14):
+                # Gold palette is linear; glTF base-colour PNG is sRGB encoded.
+                rgb=[12.92*c if c<=.0031308 else 1.055*c**(1/2.4)-.055 for c in rgb]
+            pixels.extend(rgb+[1])
     image = bpy.data.images.new(name+'_basecolor', width=512, height=512, alpha=True)
     image.pixels.foreach_set(pixels)
     image.file_format = 'PNG'
@@ -80,8 +80,8 @@ def atlas(name):
     mat = bpy.data.materials.new(name+'_atlas')
     mat.use_nodes = True
     shader = mat.node_tree.nodes.get('Principled BSDF')
-    shader.inputs['Roughness'].default_value = .72 if name=='watchtower' else .40
-    shader.inputs['Metallic'].default_value = 0.0 if name=='watchtower' else .45
+    shader.inputs['Roughness'].default_value = .72 if name in ('watchtower','spire_tower') else .40
+    shader.inputs['Metallic'].default_value = 0.0 if name in ('watchtower','spire_tower') else .45
     tex=mat.node_tree.nodes.new('ShaderNodeTexImage'); tex.image=image
     mat.node_tree.links.new(tex.outputs['Color'],shader.inputs['Base Color'])
     return mat
@@ -143,113 +143,200 @@ class Geometry:
         return obj
 
 
+def beam(g, a, b, width, tile=4):
+    a,b=Vector(a),Vector(b)
+    transform=Matrix.Translation((a+b)/2) @ (b-a).to_track_quat('Z','Y').to_matrix().to_4x4()
+    h=(b-a).length/2
+    g.add([(-width/2,-width/2,-h),(width/2,-width/2,-h),(width/2,width/2,-h),(-width/2,width/2,-h),
+           (-width/2,-width/2,h),(width/2,-width/2,h),(width/2,width/2,h),(-width/2,width/2,h)],
+          [(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],tile,transform)
+
+
+def square(g, z0, z1, half0, half1, tile):
+    g.lathe((0,0,0),[(half0*math.sqrt(2),z0),(half1*math.sqrt(2),z1)],tile,4,
+            Matrix.Rotation(math.pi/4,4,'Z'))
+
+
 def watchtower():
-    g=Geometry(); rng=random.Random(204)
-    # Foundation deliberately reaches exactly x/y +/-2.5 and z=0.
-    g.box((0,0,.25),(5,5,.5),2,.07)
-    g.box((0,0,6.35),(4.1,4.1,11.7),2)
-    # Eight individually beveled ashlar blocks per course.
-    for course in range(10):
-        z=.5+(course+.5)*1.19
-        half=2.43-.31*(course+.5)/10
-        for side in range(4):
-            extent=half if side%2==0 else half-.60
-            split=.34 if course%2 else -.34
-            for start,end in ((-extent,split),(split,extent)):
-                along=(start+end)/2
-                p=Vector((along, -half+.30, z))
+    g=Geometry();rng=random.Random(204)
+    g.box((0,0,.4),(11,11,.8),2,.12)
+    g.box((0,0,1.1),(10,10,.6),1,.1)
+    # Three tapering sections with metre-scale masonry and pronounced courses.
+    for z0,z1,h0,h1 in ((1.4,12,4.5,4.1),(12,22,4.1,3.7),(22,30,3.7,3.4)):
+        square(g,z0,z1,h0,h1,0)
+        for z in range(math.ceil(z0),int(z1),2):
+            half=h0+(h1-h0)*(z-z0)/(z1-z0)
+            for side in range(4):
                 rot=Matrix.Rotation(side*math.pi/2,4,'Z')
-                p=rot@p
-                size=(end-start-.035,.60,1.15)
-                if side%2: size=(size[1],size[0],size[2])
-                g.box(p,size,rng.randrange(4),.055)
-    # Contrasting front doorway and recessed arrow-slit surfaces face -Y -> +Z.
-    g.box((0,-2.45,1.85),(1.1,.035,2.45),5)
-    for z in (5.1,8.5,11.2):
-        surface=-(2.43-.31*((z-.5)/11.9))-.045
-        g.box((0,surface,z),(.28,.05,1.35),5)
-    g.box((0,0,12.55),(4.7,4.7,.42),1,.06)
-    # Four-sided corbel support, parapet walkway, open central deck.
+                for x in (-half*.67,0,half*.67):
+                    g.box(rot@Vector((x,-half,z+.5)),(half*.64,.16,.95),rng.randrange(4),.04,side*math.pi/2)
+        g.box((0,0,z1),(h1*2+.8,h1*2+.8,.65),1,.08)
     for side in range(4):
         rot=Matrix.Rotation(side*math.pi/2,4,'Z')
-        for t in (-1.65,0,1.65):
-            g.box(rot@Vector((t,-2.38,12.92)),(.48,.62,.64),2,.05,side*math.pi/2)
-    g.box((0,0,13.25),(5.8,5.8,.5),1,.07)
+        for x in (-3.5,3.5):
+            beam(g,rot@Vector((x,-4.9,1)),rot@Vector((x,-3.9,10)),1.25,2)
+        for z,half in ((7,4.3),(17,3.9),(26,3.55)):
+            for x in (-1.9,1.9):
+                g.box(rot@Vector((x,-half-.12,z)),(.65,.12,2.0),5,0,side*math.pi/2)
+                # Side jambs stand proud of the dark inset, a broad sill below.
+                for dx in (-.48,.48):
+                    g.box(rot@Vector((x+dx,-half-.24,z)),(.22,.40,2.35),1,.03,side*math.pi/2)
+                g.box(rot@Vector((x,-half-.26,z-1.1)),(1.15,.48,.25),1,.03,side*math.pi/2)
+                if z==26:
+                    g.box(rot@Vector((x,-half-.20,z)),(.35,.06,1.35),14,0,side*math.pi/2)
+        for x in (-2.8,0,2.8):
+            beam(g,rot@Vector((x,-3.3,28.2)),rot@Vector((x,-4.65,30.8)),.65,8)
+        g.box(rot@Vector((0,-4.25,31.3)),(9,.65,1.6),8,.05,side*math.pi/2)
+        for x in (-3,0,3):
+            g.box(rot@Vector((x,-4.61,31.4)),(1.25,.10,.65),5,0,side*math.pi/2)
+    g.box((0,0,32.3),(9.8,9.8,.6),1,.10)
     for side in range(4):
         rot=Matrix.Rotation(side*math.pi/2,4,'Z')
-        length=5.8 if side%2==0 else 4.7
-        g.box(rot@Vector((0,-2.625,13.94)),(length,.55,.88),0,.05,side*math.pi/2)
-        g.box(rot@Vector((0,-2.61,14.79)),(.99,.64,.87),1,.05,side*math.pi/2)
-    for x in (-2.4,2.4):
-        for y in (-2.4,2.4):
-            g.box((x,y,14.79),(1.0,1.0,.87),1,.05)
-    g.box((0,0,14.19),(1.65,1.65,1.38),2,.10)
-    g.lathe((0,0,0),[(.60,14.88),(.65,15.12),(1.23,15.68),(1.38,15.88),
-                              (1.38,16.0),(1.18,16.0),(.98,15.66),(.48,15.30)],4,24)
+        g.box(rot@Vector((0,-4.5,33)),(9.6,.65,.85),2,.06,side*math.pi/2)
+        for x in (-4,-2,0,2,4):
+            g.box(rot@Vector((x,-4.5,33.9)),(1.1,.85,1.1),1,.07,side*math.pi/2)
+    # Roof on rear half; front half of platform is open to the sky.
+    g.box((0,1.6,34.2),(4.2,3.5,3.2),0,.08)
+    g.lathe((0,1.6,0),[(3.4,35.8),(.08,40)],15,4,Matrix.Rotation(math.pi/4,4,'Z'))
+    g.lathe((0,-2,0),[(1.3,32.6),(1.3,33.1),(.65,33.1),(.65,34.1)],2,12)
+    g.lathe((0,-2,0),[(.7,34),(1.45,34.7),(1.45,34.9),(1.2,34.9),(.55,34.2)],4,16)
+    for i in range(8):
+        a=i*TAU/8
+        beam(g,(.6*math.cos(a),-2+.6*math.sin(a),34.2),(1.5*math.cos(a),-2+1.5*math.sin(a),35.4),.16)
     return g
 
 
-def mound_height(radius):
-    return 2.80*max(0,1-(radius/5.5)**1.48)
+def spire_tower():
+    g=Geometry()
+    g.box((0,0,.4),(7,7,.8),2,.1)
+    g.lathe((0,0,0),[(3.4,.8),(3.2,2),(2.5,3),(1.7,25),(1.15,36),(.7,39)],0,8)
+    for i in range(8):
+        a=i*TAU/8
+        def p(r,z): return (r*math.cos(a),r*math.sin(a),z)
+        for r0,z0,r1,z1,w in ((3,1,2.2,12,.55),(2.2,12,1.5,28,.4),(1.5,28,.8,39,.3)):
+            beam(g,p(r0,z0),p(r1,z1),w,1)
+        # Attached flying buttress fins supporting the apparently hovering rings.
+        beam(g,p(1.3,29),p(3.3,32),.34,15)
+        beam(g,p(1.0,34),p(2.7,36),.30,15)
+    for z,r in ((32,3.5),(36,2.9)):
+        g.lathe((0,0,0),[(r-.4,z-.3),(r,z),(r,z+.4),(r-.4,z+.5),(r-.4,z-.3)],1,32,cap=False)
+    g.lathe((0,0,0),[(.8,38.5),(1.3,39.2),(1.1,39.7)],15,12)
+    # Four continuous curved polygonal prongs; empty orb volume at (0,42,0).
+    for i in range(4):
+        a=i*TAU/4+math.pi/4
+        profile=[(.85,39.3),(1.65,40.2),(2.15,41.7),(1.95,43),(1.35,44)]
+        for j,((r,z),(r2,z2)) in enumerate(zip(profile,profile[1:])):
+            beam(g,(r*math.cos(a),r*math.sin(a),z),(r2*math.cos(a),r2*math.sin(a),z2),.62-j*.075,15)
+    # Normalize tip height exactly, including prong cross sections.
+    top=max(v[2] for v in g.vertices)
+    g.vertices=[(x,y,z*44/top) for x,y,z in g.vertices]
+    return g
+
+
+def mound(g,radius,height,seed):
+    rng=random.Random(seed);n=48;rings=9
+    def h(r): return height*max(0,1-(r/radius)**1.5)
+    vs=[(0,0,height)];fs=[]
+    for k in range(1,rings+1):
+        r=radius*k/rings
+        for i in range(n):
+            a=i*TAU/n;vs.append((r*math.cos(a),r*math.sin(a),max(0,h(r)+(rng.uniform(-.16,.16) if k<rings else 0))))
+    for i in range(n):fs.append((0,1+i,1+(i+1)%n))
+    for k in range(rings-1):
+        for i in range(n):
+            a=1+k*n+i;b=1+k*n+(i+1)%n;fs.append((a,a+n,b+n,b))
+    fs.append(tuple(reversed(range(1+(rings-1)*n,1+rings*n))))
+    g.add(vs,fs,12)
+    for i in range(150):
+        a=rng.uniform(0,TAU);r=radius*.92*math.sqrt(rng.random());rr=rng.uniform(.22,.42)
+        g.lathe((r*math.cos(a),r*math.sin(a),h(r)+.09),[(rr,0),(rr,.10)],rng.choice((6,7,13)),8)
+    return h
+
+
+def chest(g,x,y,z,angle=0,s=1):
+    # Hollow box, visible gold fill, upright open lid with gold binding.
+    local=Geometry()
+    local.box((0,0,.12),(2.3,1.5,.24),8,.04)
+    for xx in (-1.05,1.05):local.box((xx,0,.55),(.2,1.5,1),8,.03)
+    for yy in (-.65,.65):local.box((0,yy,.55),(2.2,.2,1),8,.03)
+    local.box((0,0,.78),(1.9,1.1,.2),12,.03)
+    for ix in range(5):
+        for iy in range(3):
+            local.lathe((-.74+ix*.37,-.36+iy*.36,.89),[(.21,0),(.21,.09)],6,8)
+
+    local.box((0,.8,1.65),(2.3,.2,1.5),8,.06)
+    for xx in (-.78,.78):
+        local.box((xx,.66,1.65),(.17,.12,1.5),7,.02)
+        local.box((xx,-.77,.55),(.17,.08,1.05),7,.02)
+    local.box((0,-.8,.7),(.32,.15,.4),7,.02)
+    for i in range(8):
+        xx=(i%4-.5)*.35-.35;yy=-.8-(i//4)*.35
+        local.lathe((xx,yy,.32-(i//4)*.16),[(.25,0),(.25,.1)],6,8)
+    mat=Matrix.Translation(Vector((x,y,z)))@Matrix.Rotation(angle,4,'Z')@Matrix.Scale(s,4)
+    # Preserve per-face atlas assignments while merging components.
+    offset=len(g.vertices);g.vertices.extend(tuple(mat@Vector(v)) for v in local.vertices)
+    g.faces.extend(tuple(offset+i for i in f) for f in local.faces);g.tiles.extend(local.tiles)
+
+
+def treasures(g,h):
+    for x,y,s,tile in ((-3,-2,1.0,9),(3,-1,1.2,10),(.7,2.4,1.1,11),(-4,1,.85,11)):
+        g.lathe((x,y,h(math.hypot(x,y))),[(.45*s,0),(s,.35*s),(.55*s,1.25*s)],tile,6)
+    for x,y in ((-2,-4),(3,3)):
+        z=h(math.hypot(x,y))
+        for row in range(3):
+            for col in range(3-row):
+                g.box((x+col*.63,y,z+.23+row*.38),(.60,1.2,.36),7,.09,.1)
+    for x,y in ((-4,-.6),(2,-3.3)):
+        z=h(math.hypot(x,y))
+        g.lathe((x,y,z),[(.5,0),(.5,.12),(.15,.3),(.15,.75),(.55,.95),(.65,1.5),(.5,1.5),(.4,1.1)],7,12)
 
 
 def hoard_pile():
-    g=Geometry(); rng=random.Random(901)
-    n=48; rings=8
-    vs=[(0,0,2.8)]; fs=[]
-    for ring in range(1,rings+1):
-        r=5.5*ring/rings
-        for i in range(n):
-            a=i*TAU/n
-            # Outer ring perfectly centered; irregularity is inside silhouette.
-            z=mound_height(r)+(rng.uniform(-.11,.11) if ring<rings else 0)
-            vs.append((r*math.cos(a),r*math.sin(a),z))
-    for i in range(n): fs.append((0,1+i,1+(i+1)%n))
-    for ring in range(rings-1):
-        a=1+ring*n;b=a+n
-        for i in range(n):
-            j=(i+1)%n;fs.append((a+i,b+i,b+j,a+j))
-    fs.append(tuple(reversed(range(1+(rings-1)*n,1+rings*n))))
-    g.add(vs,fs,12)
-    # Coins span the whole mound and scatter onto the lower skirt.
-    for i in range(176):
-        a=rng.uniform(0,TAU); r=5.05*math.sqrt(rng.random())
-        x,y=r*math.cos(a),r*math.sin(a)
-        radius=rng.uniform(.16,.31)
-        z=max(.055,mound_height(r)+rng.uniform(.03,.12))
-        tilt=Matrix.Rotation(rng.uniform(-.22,.22),4,'X') @ Matrix.Rotation(rng.uniform(-.22,.22),4,'Y')
-        g.lathe((x,y,z),[(radius,0),(radius,.075)],rng.choice((6,7,13,14)),8,tilt)
-    # A raised, half-buried domed chest lid, pointing toward Blender -Y.
-    cx,cy=0,-.60;cz=2.72
-    g.box((cx,cy,cz+.12),(2.12,1.24,.33),8,.035,angle=.12)
-    # Eight staves follow the arched crown in cross section.
+    g=Geometry();h=mound(g,8,3.7,901)
+    for x,y,a,s in ((-3,1.8,-.35,1.1),(3.3,-3,.4,1.1),(1,4,2.8,.9)):
+        chest(g,x,y,h(math.hypot(x,y))-.15,a,s)
+    treasures(g,h)
+    # Crown is the summit, hollow and visibly serrated.
+    g.lathe((0,-.6,3.75),[(1,0),(1,.55),(.82,.55),(.82,0)],7,16,cap=False)
     for i in range(8):
-        theta=-math.pi/2+(i+.5)*math.pi/8
-        x=math.sin(theta)*1.02;z=math.cos(theta)*.67
-        transform=Matrix.Rotation(.12,4,'Z')
-        center=transform@Vector((x,0,0))+Vector((cx,cy,cz+.25+z))
-        # Separate timber panels with chunky gold binding hoops below.
-        g.box(center,(.39,1.18,.14),8,.018,.12)
-    for y in (-.46,.46):
-        points=[]
-        for i in range(13):
-            a=-math.pi/2+i*math.pi/12
-            for off in (-.085,.085):
-                points.append((math.sin(a)*1.065,y+off,.25+math.cos(a)*.73))
-        faces=[(i*2,i*2+1,i*2+3,i*2+2) for i in range(12)]
-        g.add(points,faces,7,Matrix.Translation(Vector((cx,cy,cz)))@Matrix.Rotation(.12,4,'Z'))
-    g.box((cx,cy-.655,cz+.2),(.28,.12,.33),7,.025)
-    # Oversized ceremonial cups: foot, stem, open bowl and thick lip.
-    for x,y,s in ((2.45,-1.05,1.0),(-2.15,-1.65,.85),(1.55,2.0,.72)):
-        z=mound_height(math.hypot(x,y))+.02
-        profile=[(.42,0),(.42,.09),(.15,.16),(.11,.48),(.31,.56),(.48,.98),
-                 (.49,1.10),(.40,1.10),(.33,.93),(.19,.65)]
-        g.lathe((x,y,z),[(r*s,h*s) for r,h in profile],7,12)
-    # Gems catch light with genuinely faceted crown geometry.
-    for x,y,scale,tile in ((-2.7,.4,.48,9),(2.7,1.3,.40,10),(-.9,-3.0,.48,11),
-                           (3.9,-1.7,.30,9),(-3.5,-2.2,.30,10),(.6,3.4,.32,11)):
-        z=mound_height(math.hypot(x,y))+.10
-        g.lathe((x,y,z),[(.4*scale,0),(scale,.16*scale),(.52*scale,.8*scale)],tile,6)
+        a=i*TAU/8
+        g.lathe((.91*math.cos(a),-.6+.91*math.sin(a),4.2),[(.25,0),(.06,.8)],7,4)
+        g.lathe((1.01*math.cos(a),-.6+1.01*math.sin(a),4.03),[(.18,0),(.08,.22)],9 if i%2 else 11,6)
+    # Shields lean out of the mound; sword stands against the crown.
+    for x,y,a in ((-4,-3,-.5),(4,1,.5)):
+        z=h(math.hypot(x,y))
+        tr=Matrix.Rotation(math.pi/3,4,'X')@Matrix.Rotation(a,4,'Z')
+        g.lathe((x,y,z+.4),[(1.05,0),(1.05,.15),(.78,.24),(.25,.38)],15,8,tr)
+        g.lathe((x,y,z+.4),[(.25,.38),(.12,.5)],7,8,tr)
+    g.add([(1.5,.4,2.9),(1.15,.4,4.6),(1.5,.28,4.6),(1.85,.4,4.6),(1.5,.52,4.6)],
+          [(0,2,1),(0,3,2),(0,4,3),(0,1,4),(1,2,3,4)],15)
+    beam(g,(1.5,.4,4.6),(1.5,.4,5.1),.22,15)
+    g.box((1.5,.4,4.7),(1.1,.22,.18),7,.04)
+    g.lathe((1.5,.4,5.05),[(.18,0),(.18,.45)],8,8)
+    return g
+
+
+def hoard_trove():
+    g=Geometry();h=mound(g,5.6,2.0,902)
+    # Broken altar ring, wide gaps and uneven large blocks.
+    for i in range(20):
+        a=i*TAU/20
+        if i in (3,4,12):continue
+        g.box((6.1*math.cos(a),6.1*math.sin(a),.4),(1.65,1.3,.8),2,.13,a+math.pi/2)
+        if i in (0,1,7,8,9,15,16):
+            g.box((6.1*math.cos(a),6.1*math.sin(a),1.1),(1.5,1.2,.65),0,.12,a+math.pi/2)
+    chest(g,-2,-1,h(math.sqrt(5))-.2,-.2,1.05)
+    chest(g,2.8,1,h(3)-.2,.5,.85)
+    treasures(g,h)
+    for x,y,a in ((-3.8,2,.8),(3.5,-2.7,-.7)):
+        g.lathe((x,y,1),[(.45,0),(.7,.3),(.85,1.1),(.5,1.7),(.4,2),(.3,2),(.3,1.65)],3,12,
+                Matrix.Rotation(math.pi/2,4,'Y')@Matrix.Rotation(a,4,'Z'))
+    beam(g,(-3,2,1),(-3,2,4),.15,8)
+    # Two-sided folded red banner, authored geometry rather than alpha cards.
+    g.add([(-3,2,3.85),(-1.8,2.2,3.8),(-.8,2,3.65),(-3,2,2.5),(-1.8,2.2,2.35),(-.8,2,2.7)],
+          [(0,1,4,3),(1,2,5,4),(3,4,1,0),(4,5,2,1)],9)
+    # Exactly centered 14 m altar foundation.
+    g.lathe((0,0,0),[(7,0),(7,.18),(6.7,.35)],2,40)
     return g
 
 
@@ -359,22 +446,22 @@ def verify(path,name):
     dimensions=[high[i]-low[i] for i in range(3)]
     assert abs(low[1])<=.02,'Base is not at Y=0'
     assert abs(low[0]+high[0])<=.2 and abs(low[2]+high[2])<=.2,'Footprint not centered'
-    if name=='watchtower':
-        assert 1500<=tris<=6000 and 15.5<=dimensions[1]<=16.5,'Tower size/triangle budget'
-        assert all(5.5<=dimensions[a]<=6.0 for a in (0,2)),'Parapet footprint'
-        shaft=[p for p in positions if .51<p[1]<12.35]
-        assert all(max(p[a] for p in shaft)-min(p[a] for p in shaft)<=5.1 for a in (0,2)),'Shaft footprint'
-        base=[p for p in positions if p[1]<.51]
-        assert all(4.8<=max(p[a] for p in base)-min(p[a] for p in base)<=5.2 for a in (0,2))
-        # The front door/slits use dark atlas tile5; inspect exported positions,
-        # not a comment claiming the object's forward direction. glTF flips V.
-        front=[p for p,uv in zip(positions,uvs) if .25<uv[0]<.5 and .5<uv[1]<.75]
-        assert front and all(p[2]>1.8 for p in front),'Front features must face glTF +Z'
-        # The iron bowl alone reaches the top; its flat lip must meet fireball.
-        assert 15.5<=high[1]<=16.2,'Brazier rim height'
-    else:
-        assert 2000<=tris<=9000 and 3<=dimensions[1]<=4,'Hoard height/triangle budget'
-        assert all(10<=dimensions[a]<=12 for a in (0,2)),'Hoard footprint'
+    assert 0 < tris <= 20000, 'Triangle budget exceeded'
+    expected={'watchtower':(11,40,11),'spire_tower':(7,44,7),
+              'hoard_pile':(16,5.5,16),'hoard_trove':(14,4,14)}[name]
+    assert all(abs(dimensions[a]-expected[a])<(.3 if a!=1 else .6) for a in range(3)), 'Incorrect dimensions'
+    assert not doc['meshes'][0].get('weights'), 'Morph weights forbidden'
+    if name in ('watchtower','spire_tower'):
+        center=(0,35.2,2) if name=='watchtower' else (0,42,0)
+        clearance=.65 if name=='watchtower' else 1.2
+        center_vec=Vector(center)
+        for k in range(0,len(idx),3):
+            triangle=[Vector(positions[idx[k+j][0]]) for j in range(3)]
+            assert (closest_point_on_tri(center_vec,*triangle)-center_vec).length>clearance, 'Effect socket obstructed'
+
+    assert len(accessor(doc,blob,skin_doc['inverseBindMatrices']))==1
+    assert all(all(jj==0 for jj in j) for j in joints), 'Extra joint indices'
+
     mats=doc.get('materials',[]);assert len(mats)==1 and prim.get('material')==0
     pbr=mats[0]['pbrMetallicRoughness']; assert pbr.get('baseColorFactor',[1,1,1,1])==[1,1,1,1]
     assert not mats[0].get('normalTexture')
@@ -408,6 +495,8 @@ def verify(path,name):
     assert all(abs(min(p[a] for p in ip)-low[a])<1e-4 and abs(max(p[a] for p in ip)-high[a])<1e-4 for a in range(3))
     formatted=lambda values:'('+', '.join(f'{v:.3f}' for v in values)+')'
     print(f'VERIFY {name}: PASS',flush=True)
+    if name in ('watchtower','spire_tower'):
+        print(f'  effect centre glTF metres: {formatted(center)}; empty sphere radius={clearance:.2f} m: PASS',flush=True)
     print(f'  glTF Y-up bbox metres: min={formatted(low)} max={formatted(high)}',flush=True)
     print(f'  dimensions X/Y/Z metres: {formatted(dimensions)}; triangles={tris}; bones=1 [root]',flush=True)
     print(f'  materials=[{mats[0]["name"]}]; textures=[{image.get("name",name+"_basecolor")}: embedded PNG {w}x{h}, baseColor]',flush=True)
@@ -418,25 +507,27 @@ def verify(path,name):
 
 def render(name,obj):
     scene=bpy.context.scene
-    scene.render.engine='CYCLES';scene.cycles.samples=40
-    scene.render.resolution_x=1000;scene.render.resolution_y=1100 if name=='watchtower' else 850
+    scene.render.engine='CYCLES';scene.cycles.samples=32;scene.cycles.seed=17
+    scene.render.resolution_x=1200;scene.render.resolution_y=1000
     scene.render.resolution_percentage=100
-    scene.world.color=(.23,.23,.23)
+    scene.world.color=(.32,.32,.32)
     scene.view_settings.view_transform='AgX'
-    bpy.ops.mesh.primitive_plane_add(size=200,location=(0,0,-.03))
+    bpy.ops.mesh.primitive_plane_add(size=2000,location=(0,0,-.04))
     floor=bpy.context.object
-    mat=bpy.data.materials.new('Inspection floor');mat.diffuse_color=(.10,.12,.14,1)
+    mat=bpy.data.materials.new('Inspection floor');mat.diffuse_color=(.075,.095,.10,1)
     floor.data.materials.append(mat)
-    target=Vector((0,0,7.8 if name=='watchtower' else 1.3))
-    bpy.ops.object.camera_add(location=(23,-29,24) if name=='watchtower' else (12,-16,13))
-    camera=bpy.context.object;camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
-    camera.data.type='ORTHO';camera.data.ortho_scale=20 if name=='watchtower' else 15
-    scene.camera=camera
-    for location,power,size in (((-10,-12,22),2400,9),((12,-2,14),1800,8),((0,12,19),2600,7)):
-        bpy.ops.object.light_add(type='AREA',location=location)
-        lamp=bpy.context.object;lamp.data.energy=power;lamp.data.shape='DISK';lamp.data.size=size
-        lamp.rotation_euler=(target-lamp.location).to_track_quat('-Z','Y').to_euler()
-    scene.render.filepath=f'/tmp/props-{name}.png';bpy.ops.render.render(write_still=True)
+    height=max(v.co.z for v in obj.data.vertices)
+    target=Vector((0,0,height*.46))
+    bpy.ops.object.camera_add();camera=bpy.context.object;scene.camera=camera
+    camera.data.type='PERSP';camera.data.lens=50;camera.data.clip_end=3000
+    bpy.ops.object.light_add(type='SUN',location=(0,0,80))
+    sun=bpy.context.object;sun.rotation_euler=(.45,-.5,-.4);sun.data.energy=2.5;sun.data.angle=.15
+    out=ROOT/'artifacts/props/v2';out.mkdir(parents=True,exist_ok=True)
+    for label,distance in (('near',height*2.25 if height>10 else 27),('far',250)):
+        camera.location=target+Vector((.55,-.67,.5)).normalized()*distance
+        camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
+        scene.render.filepath=str(out/(name+'_'+label+'.png'))
+        bpy.ops.render.render(write_still=True)
 
 
 def main():
@@ -445,7 +536,7 @@ def main():
     parser.add_argument('--output-dir',type=Path,default=ROOT/'assets'/'props')
     args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
     args.output_dir.mkdir(parents=True,exist_ok=True)
-    for name,builder in (('watchtower',watchtower),('hoard_pile',hoard_pile)):
+    for name,builder in (('watchtower',watchtower),('spire_tower',spire_tower),('hoard_pile',hoard_pile),('hoard_trove',hoard_trove)):
         path=args.output_dir/(name+'.glb')
         if not args.verify_only:
             clear(); obj=builder().mesh(name,atlas(name));skin(obj)
