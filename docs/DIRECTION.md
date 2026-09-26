@@ -386,7 +386,7 @@ question is the one that could still change the plan.
 | 3 | ~~Run probe: `--run`, seed, rivals and ground defences along the corridor, caches, pass gate, death, results text~~ built 2026-09-20, awaiting the playtest gate | 2-3 | gameplay |
 | 4 | ~~Grading LUT and bloom~~ done 2026-09-20 (a parametric grade rather than a LUT: every term is a slider) | 1 | visuals |
 | 5 | ~~Vegetation v2: leaf cards, bark, impostors~~ done 2026-09-20 (the impostor is the crown's own coarse cards, not a baked billboard) | 2 | visuals + assets |
-| 6 | Growth stages as tuning tables; prey herd; hoard persistence | 2-3 | gameplay |
+| 6 | Growth stages as tuning tables (done M25-M25.3); prey herd (done M26: grazers, swoop/bite/fire); hoard persistence | 2-3 | gameplay |
 | 7 | Terrain detail textures, instanced rocks, ridge octave; static glTF loader | 2 | visuals + assets |
 | 8 | Screens: title, pause, results, shop; gamepad focus model | 2 | UI |
 | 9 | Sky: sun disc, cloud layers, aerial perspective; thermals | 1-2 | visuals + gameplay |

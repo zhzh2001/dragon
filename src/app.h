@@ -22,6 +22,8 @@
 #include "game/autopilot.h"
 #include "game/course.h"
 #include "game/hoard_run.h"
+#include "game/element.h"
+#include "game/prey.h"
 #include "game/demo_pilot.h"
 #include "game/flight.h"
 #include "game/rally.h"
@@ -159,6 +161,15 @@ struct Options {
     // --hunters-after S: loose the run's first hunter after S seconds instead
     // of the default two minutes, for a capture of one.
     float hunters_after = 0.0f;
+    // --element NAME: the player breathes this instead of its species'
+    // element (fire, frost, blight, storm, tide, stone). -1 = the species'.
+    int element = -1;
+    // --valley N: start a run already N valleys down (0 = the first), for a
+    // capture of a deep valley.
+    int valley = 0;
+    // --status NAME: hold that element's status on every enemy (frost holds
+    // the freeze), for a capture of how each one looks.
+    int status = -1;
     bool has_walk = false;
     float walk = 0.0f;
     float walk_turn = 0.0f;
@@ -292,6 +303,11 @@ private:
         // a hue the hide is recoloured toward, at its own luminance.
         core::Vec3 hue{1.9f, 0.55f, 0.35f};
         float grounded_time = 0.0f;
+        // What it breathes (element.h): its species' element in the arena
+        // when the species has a breath file, rolled otherwise and always in
+        // a run. The breath is the look and the scales for that element.
+        game::Element element = game::Element::Fire;
+        game::BreathProfile breath;
         float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
         // The run's rivals hold a post until the run wakes them; hunters are
@@ -339,7 +355,16 @@ private:
         bool ok = false;
     };
     PropModel tower_prop_, hoard_prop_;
-    bool load_prop(const char* path, PropModel& out, const char* tag);
+    // The second generation (tools/props.md): a second tower silhouette and a
+    // second cache, so a valley is not one repeated shape; and the grazer, a
+    // skinned prey animal with three baked clips (tools/grazer.md).
+    PropModel spire_prop_, trove_prop_, grazer_prop_;
+    std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
+    int grazer_clip_[3] = {-1, -1, -1};
+    anim::Pose grazer_pose_;
+    std::vector<core::Mat4> grazer_world_, grazer_skin_;
+    bool load_prop(const char* path, PropModel& out, const char* tag,
+                   std::vector<anim::AnimationClip>* clips = nullptr);
     void release_prop(PropModel& prop);
     // The hands-off player (P, --autopilot in a run or a fight, --demo): it
     // plays through the same controls, and a finished run or match rolls on.
@@ -385,6 +410,46 @@ private:
     std::vector<int> run_defence_slots_;
     std::string award_text_;
     float award_flash_ = 0.0f;
+    // The descent: crossing a pass that is not the last lays out the next
+    // valley and says so.
+    void advance_valley();
+    void populate_valley(uint32_t seed, int depth);
+    // The tower models' measurements (tools/props.md), in metres above the
+    // base: where each is hit (its middle) and where it fires from.
+    static constexpr float KEEP_MIDDLE = 18.0f, KEEP_BRAZIER_Y = 35.2f;
+    static constexpr float SPIRE_MIDDLE = 20.0f, SPIRE_ORB_Y = 42.0f;
+    float valley_flash_ = 0.0f;
+    // The run's prey herds (prey.h), eaten for growth and health.
+    game::PreyHerds prey_;
+    float prey_flash_ = 0.0f;
+    bool snatch_pending_ = false;
+    void update_prey(float dt, const game::CombatEvents& events);
+    void draw_prey(SDL_GPURenderPass* pass);
+    void draw_prey_shadows(SDL_GPURenderPass* shadow_pass);
+    bool pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin);
+    // Which tower silhouette a defence wears: the keep guards caches, the
+    // spire stands on the slopes. Hit sphere and brazier follow the model.
+    bool defence_is_spire(int defence) const;
+    // ---- elements ----
+    // The player's element: the species' (-1) or the panel's choice.
+    int player_element_choice_ = -1;
+    // What the player breathes, after the choice: the species profile, or
+    // the element's preset when the choice differs from the species.
+    game::BreathProfile player_breath_;
+    void refresh_player_element();
+    // The breath profile for a flame of `element` from a creature wearing
+    // `model`: the species' own when it breathes that element, else the
+    // element's preset.
+    const game::BreathProfile& breath_for(game::Element element, int model) const;
+    game::BreathProfile element_breaths_[game::ELEMENT_COUNT];
+    game::Element roll_element(uint32_t seed) const;
+    // Status effects, drawn: per-body particles for each status, the storm
+    // arcs, and a burst where a status lands hard.
+    void emit_status(core::Vec3 centre, float radius, const game::Status& status, float dt);
+    void emit_arc(core::Vec3 from, core::Vec3 to, core::Vec3 colour);
+    void emit_status_burst(const game::StatusBurst& burst);
+    std::string status_text_;
+    float status_flash_ = 0.0f;
     float grew_flash_ = 0.0f;
     bool cache_guarded(int cache) const;
     bool run_mode_ = false;
@@ -422,7 +487,8 @@ private:
     // Deterministic jitter for the emitters.
     uint32_t particle_rng_ = 1u;
     float particle_unit();
-    void emit_impact(core::Vec3 position, bool hostile, bool on_terrain);
+    void emit_impact(core::Vec3 position, bool hostile, bool on_terrain,
+                     game::Element element = game::Element::None);
     float hit_marker_ = 0.0f;
     core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;
@@ -483,6 +549,10 @@ private:
         std::string flight_tuning_path;
         std::string breath_path;
         bool imported = false;
+        // Whether <model>.breath.cfg exists: a species with one breathes its
+        // own element; one without (dragon.glb) is unaligned, and its bots
+        // roll one.
+        bool breath_file = false;
         // What this species' breath does and looks like, from
         // <model>.breath.cfg. The breath is the clearest place a species reads
         // as elemental, so it is a property of the creature, not of combat.

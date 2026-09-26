@@ -50,6 +50,22 @@ scales and an opaque source tag, and only the renderer resolves that tag to a
 profile. A cone with no tag -- a sentinel drone -- keeps the cold hostile blue,
 which is what makes incoming fire readable as incoming at a glance.
 
+**Elements have effects past the flame (M26).** A breath names its element
+(`element frost` in the file), and a creature can breathe an element its
+species file does not: `game::element_breath` folds the six species profiles
+into one preset per element, so a run's rolled frost rival breathes
+frostvein's sinking mist whatever mesh it wears. What each element's hit
+leaves -- burn, chill and freeze, corrode, shock, drench, stagger -- is drawn
+as particles on the body in that element's motion, since the particles are
+additive and nothing dark (smoke) is possible without a second pass: flame
+licks rise, frost motes sink, an ice-glint shell hugs a frozen body (and its
+hide is recoloured to ice), blight drips and bubbles, sparks crawl with small
+arcs, water runs off, grit puffs. Storm arcs are jagged chains of points
+struck for 0.12 s and re-struck, which is what lightning looks like anyway.
+Bolts, their trails and their impacts take the element's hot and cool
+colours; a tower's brazier plumes in its element. `COMBAT.md` "Elements" has
+the rules; `--status NAME` holds one on every enemy for a capture.
+
 Colour choice was constrained by the tonemap, not by taste. Per-channel
 Reinhard plus a gamma encode sends **anything bright toward white**: a pale
 blue frost breath clipped to a white smear, and fire -- many additive puffs

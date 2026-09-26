@@ -8,6 +8,7 @@
 #include <string>
 
 #include "core/log.h"
+#include "game/element.h"
 
 namespace game {
 namespace {
@@ -66,6 +67,7 @@ bool save_breath_profile(const BreathProfile& profile, const char* path) {
     output << "# Scales multiply the Combat panel's master dials; colours are\n";
     output << "# additive and want to stay mid-value (the tonemap whitens bright).\n";
     output << std::setprecision(6);
+    output << "element " << element_name(profile.element) << '\n';
     for (const ScaleField& field : SCALE_FIELDS) {
         output << field.name << ' ' << profile.scales.*field.member << '\n';
     }
@@ -99,6 +101,14 @@ bool load_breath_profile(BreathProfile& profile, const char* path) {
         const size_t space = line.find(' ');
         if (space == std::string::npos) continue;
         const std::string key = line.substr(0, space);
+        if (key == "element") {
+            // The one word-valued key.
+            std::string word = line.substr(space + 1);
+            while (!word.empty() && (word.back() == '\r' || word.back() == ' ')) word.pop_back();
+            profile.element = element_from_name(word.c_str(), profile.element);
+            ++applied;
+            continue;
+        }
         const float value = float(SDL_atof(line.c_str() + space + 1));
 
         bool matched = false;

@@ -142,6 +142,14 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M26** elements, the descent, prey. Six elements, one status each (burn,
+  chill and freeze, corrode, shock and arc, drench, stagger), a body shrugs
+  off its own, no type chart; every run enemy rolls one, drawn on its body
+  and named on its tag. A run is three valleys, banked at each pass and
+  harder per valley. Taller towers (40 m keep, 44 m spire) and two caches,
+  built by gpt-6-astra; herds of grazers (Mossback, decimated and animated by
+  gpt-6-astra) eaten by swoop, bite or fire for growth; the demo pilot hunts.
+  `COMBAT.md` "Elements" and "The descent, the props, the prey".
 - **M25.3** growth continuous rather than three steps, the hit body scaling
   with it, the adult fireball rate toned down (0.6x -> 0.8x cooldown), and
   first person scaled to the grown head.

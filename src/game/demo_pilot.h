@@ -50,6 +50,10 @@ struct DemoWorld {
     bool rush = false;
     // Where to fall back to and heal: up the corridor, high, away from towers.
     core::Vec3 safe_point = core::Vec3::zero();
+    // The nearest meal (a grazer or a carcass), when there is one.
+    bool has_prey = false;
+    core::Vec3 prey = core::Vec3::zero();
+    core::Vec3 prey_velocity = core::Vec3::zero();
     float health_fraction = 1.0f;
     int locked_slot = -1;
 };
@@ -63,7 +67,9 @@ enum class DemoState : int {
     Collect,  // standing in the ring
     TakeOff,
     Flee,
+    Hunt,     // a low pass through a herd, snatching one
 };
+constexpr int DEMO_STATES = 9;
 const char* demo_state_name(DemoState state);
 
 struct DemoDecision {
@@ -161,6 +167,21 @@ struct DemoTuning {
     // that has just got up.
     float min_speed = 16.0f;
     float recover_speed = 28.0f;
+    // Prey: a herd this near, and nearer than the next cache, is worth a
+    // pass. The glide comes down to `hunt_height` over it (inside the swoop
+    // reach) and a pass that misses rests the hunt for `hunt_rest` -- a
+    // pilot that circled a herd for ever would never reach the pass.
+    float hunt_range = 650.0f;
+    float hunt_height = 6.5f;
+    float hunt_budget = 25.0f;
+    float hunt_rest = 20.0f;
+    // The pass never goes below this clearance and holds this speed: the
+    // first cut came down to 2 m, touched, and spent the run cycling from
+    // hunt to take-off and back (241 s of take-off in one demo run). A
+    // touchdown during a hunt rests it for `hunt_touchdown_rest`.
+    float hunt_floor = 5.0f;
+    float hunt_speed = 26.0f;
+    float hunt_touchdown_rest = 45.0f;
 };
 
 class DemoPilot {
@@ -180,7 +201,7 @@ public:
     // came to the nose on the last run in (degrees).
     int siege_shots = 0;
     // Seconds spent in each job, for the telemetry: where a run's time goes.
-    float time_in[8] = {};
+    float time_in[DEMO_STATES] = {};
     mutable float siege_best_off_axis_deg = 180.0f;
     float siege_last_range = 0.0f;
 
@@ -194,6 +215,8 @@ private:
     DemoDecision siege(float dt, const FlightState& self, const DemoWorld& world);
     DemoDecision land(const FlightState& self, const DemoWorld& world);
     DemoDecision walk(const FlightState& self, const DemoWorld& world);
+    DemoDecision hunt(const FlightState& self, const DemoWorld& world);
+    float hunt_rest_timer_ = 0.0f;
 
     DemoState state_ = DemoState::Cruise;
     int target_ = -1;

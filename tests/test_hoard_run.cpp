@@ -137,6 +137,7 @@ void test_collect_bank_and_lose() {
     HoardRun run;
     run.settings.seed = 42;
     run.settings.collect_time = 2.0f;
+    run.settings.valleys = 1;  // one valley: its pass is the last
     CHECK(run.phase() == HoardPhase::Idle);
     run.start(terrain, extent);
     CHECK(run.phase() == HoardPhase::Flying);
@@ -192,7 +193,8 @@ void test_collect_bank_and_lose() {
     CHECK(run.just_banked());
     const game::RunResult banked = run.result();
     CHECK(banked.banked);
-    CHECK(banked.hoard == run.hoard());
+    CHECK(banked.hoard == run.layout().caches[0].value);
+    CHECK(run.banked() == banked.hoard);
     CHECK(banked.kills == 2);
     CHECK(banked.caches == 1);
     // Nothing more happens after the end.
@@ -398,8 +400,82 @@ void test_records() {
 
 }  // namespace
 
+void test_descent() {
+    std::printf("a pass that is not the last banks and waits; the next valley carries growth\n");
+    game::Terrain terrain;
+    terrain.generate(small_terrain());
+    const float extent = terrain.settings().half_extent;
+    const float dt = 1.0f / 60.0f;
+
+    // Valley seeds: the run's own first, then each a different kind from
+    // the one before.
+    CHECK(game::valley_seed(42, 0) == 42u);
+    for (int d = 1; d < 4; ++d) {
+        CHECK(game::valley_kind_for(game::valley_seed(42, d)) !=
+              game::valley_kind_for(game::valley_seed(42, d - 1)));
+    }
+    // Deeper is harder.
+    game::HoardRunSettings shallow, deep;
+    game::apply_depth(2, deep);
+    CHECK(deep.defences > shallow.defences && deep.rivals > shallow.rivals);
+    CHECK(deep.caches > shallow.caches && deep.cache_value > shallow.cache_value);
+    CHECK(deep.pressure_scale < shallow.pressure_scale);
+
+    HoardRun run;
+    run.settings.seed = 42;
+    run.settings.collect_time = 1.0f;
+    run.settings.valleys = 3;
+    run.start(terrain, extent);
+    CHECK(!run.layout().herds.empty());
+    for (const game::RunHerd& herd : run.layout().herds) CHECK(herd.count > 0);
+    // Take the first cache, then cross the pass.
+    const Vec3 at = run.layout().caches[0].position + Vec3{0.0f, 2.0f, 0.0f};
+    game::FlightState landed = flying_at(at);
+    landed.grounded = true;
+    for (int i = 0; i < 90; ++i) run.update(dt, landed, true, CombatEvents{});
+    const float value = run.layout().caches[0].value;
+    CHECK(run.hoard() == value);
+    run.feed(30.0f);
+    CHECK(run.prey_eaten() == 1);
+    const float growth = run.growth();
+    CHECK(growth == value + 30.0f);
+    const game::Ring gate = run.layout().gate;
+    const Vec3 approach = gate.normal();
+    run.update(dt, flying_at(gate.position - approach * 20.0f, approach), true, CombatEvents{});
+    run.update(dt, flying_at(gate.position + approach * 20.0f, approach), true, CombatEvents{});
+    CHECK(run.just_crossed());
+    CHECK(run.awaiting_valley());
+    CHECK(run.phase() == HoardPhase::Flying);
+    CHECK(run.hoard() == 0.0f && run.banked() == value);
+    // Nothing happens while the next valley is being laid out.
+    CombatEvents kill;
+    kill.kills = 1;
+    run.update(dt, landed, true, kill);
+    CHECK(run.kills() == 0);
+    CHECK(!run.just_crossed());
+
+    run.next_valley(terrain, extent);
+    CHECK(run.valley() == 1 && !run.awaiting_valley());
+    CHECK(run.growth() == growth);
+    CHECK(run.pressure_start() > run.elapsed());
+    // Death down here keeps the bank and loses the carry.
+    for (int i = 0; i < 90; ++i) {
+        run.update(dt, flying_at(run.layout().caches[0].position + Vec3{0.0f, 2.0f, 0.0f}), true,
+                   CombatEvents{});
+    }
+    CombatEvents death;
+    death.player_died = true;
+    run.update(dt, landed, false, death);
+    const game::RunResult r = run.result();
+    CHECK(!r.banked);
+    CHECK(r.hoard == value);
+    CHECK(r.valley == 2 && r.valleys == 3);
+    CHECK(r.prey == 1);
+}
+
 int main() {
     test_layout();
+    test_descent();
     test_collect_bank_and_lose();
     test_engagement_and_hunters();
     test_kinds_bounties_and_growth();

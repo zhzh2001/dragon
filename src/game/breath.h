@@ -1,8 +1,18 @@
 #pragma once
 
+#include <cstdint>
+
 #include "core/math.h"
 
 namespace game {
+
+// What a breath is made of. The status effects, the resistances and the
+// presets are in element.h; the enum is here so a species' breath file can
+// name it.
+// `None` is a body of no element -- an arena drone -- which resists nothing
+// and whose hits leave no status.
+enum class Element : uint8_t { Fire, Frost, Blight, Storm, Tide, Stone, None };
+constexpr int ELEMENT_COUNT = int(Element::None);
 
 // How one species' breath differs from the master dials, as multipliers rather
 // than absolute numbers.
@@ -61,6 +71,10 @@ struct BreathProfile {
     // Brightness fed to the additive particle. A light source should not also
     // be lit, so this is the whole of how bright a breath is.
     float brightness = 0.85f;
+
+    // What it is made of, and so what it does beyond damage (element.h).
+    // In the file as `element frost`; absent is fire, like everything before.
+    Element element = Element::Fire;
 };
 
 // Flat `key value` text, one field per line, exactly like the flight and rig

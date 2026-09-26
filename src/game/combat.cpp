@@ -241,6 +241,7 @@ void Combat::revive() {
     fire_timer_ = 0.0f;
     boost_timer_ = 0.0f;
     boost_cooldown_timer_ = 0.0f;
+    player_status_.clear();
     // Incoming shots die with the player, so a respawn is never instantly
     // undone by a projectile that was already in the air.
     for (Projectile& projectile : projectiles_) {
@@ -275,9 +276,12 @@ void Combat::spawn_wave(int count) {
     }
 }
 
-void Combat::spawn_defence(Vec3 position) {
+int Combat::spawn_defence(Vec3 position, float radius, float muzzle_height, Element element) {
     Sentinel tower;
     tower.ground = true;
+    tower.radius = radius;
+    tower.muzzle_height = muzzle_height;
+    tower.element = element;
     tower.centre = position;
     tower.orbit_radius = 0.0f;
     tower.orbit_speed = 0.0f;
@@ -289,6 +293,7 @@ void Combat::spawn_defence(Vec3 position) {
     tower.fire_timer = tuning.defence_fire_interval * (0.4f + 0.6f * std::fabs(random_unit()));
     tower.position = orbit_position(tower);
     sentinels_.push_back(tower);
+    return int(sentinels_.size()) - 1;
 }
 
 int Combat::spawn_external(float health, float radius) {
@@ -311,8 +316,9 @@ void Combat::drive_external(int index, Vec3 position, Vec3 velocity) {
     sentinels_[size_t(index)].velocity = velocity;
 }
 
-void Combat::fire_hostile(Vec3 position, Vec3 velocity, float damage) {
-    fire_projectile(position, velocity, damage, 2.5f, 0.0f, Team::Hostile);
+void Combat::fire_hostile(Vec3 position, Vec3 velocity, float damage, Element element) {
+    fire_projectile(position, velocity, damage, 2.5f, 0.0f, Team::Hostile,
+                    tuning.fireball_gravity, element);
 }
 
 void Combat::kill_external(int index) {
@@ -334,16 +340,23 @@ void Combat::clear_hostiles() {
     locked_ = -1;
 }
 
-void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScales scales) {
-    hostile_breaths_pending_.push_back(
-        {origin, core::normalize_or(direction, Vec3::forward()), source, scales});
+void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScales scales,
+                            Element element) {
+    BreathCone cone;
+    cone.origin = origin;
+    cone.direction = core::normalize_or(direction, Vec3::forward());
+    cone.source = source;
+    cone.scales = scales;
+    cone.element = element;
+    hostile_breaths_pending_.push_back(cone);
 }
 
-void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body) {
+void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element) {
     MeleeSwing swing;
     swing.mouth = mouth;
     swing.forward = core::normalize_or(forward, Vec3::forward());
     swing.body = body;
+    swing.element = element;
     hostile_melee_pending_.push_back(swing);
 }
 
@@ -405,8 +418,8 @@ void Combat::apply_melee(const FlightState& player, CombatEvents& events) {
             melee_reach(mouth, forward, player.position, sentinel.position, radius, tuning);
         if (kind == MeleeKind::None) continue;
         const bool bite = kind == MeleeKind::Bite;
-        damage_sentinel(sentinel, (bite ? tuning.bite_damage : tuning.strike_damage) * multiplier,
-                        events);
+        hit_sentinel(sentinel, (bite ? tuning.bite_damage : tuning.strike_damage) * multiplier,
+                     player_element, tuning.elements.melee_weight, events);
         // Stun and knock: away from whichever part of the dragon connected,
         // with a little lift so the rival is thrown up out of the line.
         if (!sentinel.ground) {
@@ -504,7 +517,7 @@ void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float r
 }
 
 void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float radius, float blast,
-                             Team team, float gravity) {
+                             Team team, float gravity, Element element) {
     Projectile projectile;
     projectile.position = position;
     projectile.velocity = velocity;
@@ -514,6 +527,7 @@ void Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, float r
     projectile.radius = radius;
     projectile.blast_radius = blast;
     projectile.team = team;
+    projectile.element = element;
     projectile.alive = true;
 
     // Reuse a dead slot before growing: projectiles are spawned constantly and
@@ -543,6 +557,95 @@ void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& eve
         sentinel.respawn_timer = sentinel.ground ? 1e9f : sentinel.passive ? 2.5f : tuning.sentinel_respawn;
         ++kills_;
         ++events.kills;
+    }
+}
+
+void Combat::hit_sentinel(Sentinel& sentinel, float amount, Element element, float weight,
+                          CombatEvents& events, bool chain) {
+    if (!sentinel.alive) return;
+    const ElementTuning& et = tuning.elements;
+    const float dealt = amount * element_damage_scale(element, sentinel.element, sentinel.status, et);
+    const StatusReport report =
+        apply_element(sentinel.status, element, sentinel.element, weight, false, et);
+    // A freeze and a full stagger are stuns: a frozen dragon's wings lock, a
+    // frozen tower stops firing, a staggered drone hangs.
+    if (report.froze) sentinel.stun = core::maxf(sentinel.stun, sentinel.status.frozen);
+    if (report.staggered) sentinel.stun = core::maxf(sentinel.stun, et.stagger_stun);
+    if (report.froze || report.staggered || report.doused || report.burned || report.corroded ||
+        report.drenched) {
+        StatusBurst burst;
+        burst.position = sentinel.position;
+        burst.element = element;
+        burst.report = report;
+        bursts_.push_back(burst);
+    }
+    const Vec3 at = sentinel.position;
+    damage_sentinel(sentinel, dealt, events);
+    // Storm arcs to the nearest other target, once, for a share: it does not
+    // chain on from there, or one bolt would clear a valley.
+    if (chain && report.shocked && element == Element::Storm) {
+        Sentinel* next = nullptr;
+        float best = et.shock_chain_range;
+        for (Sentinel& other : sentinels_) {
+            if (&other == &sentinel || !other.alive) continue;
+            const float d = core::distance(other.position, at);
+            if (d < best) {
+                best = d;
+                next = &other;
+            }
+        }
+        if (next) {
+            const Vec3 to = next->position;
+            hit_sentinel(*next, dealt * et.shock_chain_share, element, weight, events, false);
+            // A held breath arcs every frame; the drawn bolt is re-struck a
+            // few times a second, which is what lightning looks like anyway.
+            if (arc_timer_ <= 0.0f) {
+                arcs_.push_back({at, to});
+                arc_timer_ = 0.09f;
+            }
+        }
+    }
+}
+
+CombatEvents Combat::apply_hit(int index, float amount, Element element, float weight) {
+    CombatEvents events;
+    if (index >= 0 && size_t(index) < sentinels_.size()) {
+        hit_sentinel(sentinels_[size_t(index)], amount, element, weight, events);
+    }
+    return events;
+}
+
+void Combat::hurt_player(float amount, Element element, float weight, Vec3 from,
+                         CombatEvents& events) {
+    if (health_ <= 0.0f) return;
+    const ElementTuning& et = tuning.elements;
+    const float dealt = amount * element_damage_scale(element, player_element, player_status_, et);
+    const StatusReport report =
+        apply_element(player_status_, element, player_element, weight, true, et);
+    if (report.froze) events.player_froze = true;
+    if (report.staggered) {
+        // Knocked off line rather than stunned: up and away from the blow.
+        const Vec3 away = core::normalize_or(Vec3{random_unit(), 0.0f, random_unit()}, Vec3::right());
+        events.knockback = events.knockback + core::normalize_or(away + Vec3{0.0f, 0.6f, 0.0f}, away) *
+                                                  et.stagger_knock;
+        events.player_staggered = true;
+    }
+    if (report.froze || report.staggered || report.doused || report.burned || report.corroded ||
+        report.drenched) {
+        StatusBurst burst;
+        burst.element = element;
+        burst.report = report;
+        burst.on_player = true;
+        bursts_.push_back(burst);
+    }
+    health_ -= dealt;
+    events.damage_taken += dealt;
+    events.damage_from = from;
+    events.took_damage = true;
+    time_since_damage_ = 0.0f;
+    if (health_ <= 0.0f) {
+        health_ = 0.0f;
+        events.player_died = true;
     }
 }
 
@@ -578,7 +681,18 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
                 const float body = sentinel.radius > 0.0f ? sentinel.radius
                                                           : tuning.sentinel_radius;
                 if (!sweep_hit(sentinel.position, body, distance)) continue;
-                damage_sentinel(sentinel, projectile.damage, events);
+                hit_sentinel(sentinel, projectile.damage, projectile.element, 1.0f, events);
+                // A tide round shoves what it hits; a tower does not move.
+                if (projectile.element == Element::Tide && !sentinel.ground &&
+                    sentinel.element != Element::Tide) {
+                    const Vec3 shove = core::normalize_or(projectile.velocity, Vec3::forward()) *
+                                       tuning.elements.drench_push;
+                    if (sentinel.external) {
+                        sentinel.knockback = sentinel.knockback + shove;
+                    } else {
+                        sentinel.centre = sentinel.centre + shove * 0.25f;
+                    }
+                }
                 consumed = true;
                 break;
             }
@@ -596,7 +710,8 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
                         1.0f - core::clampf((distance - tuning.sentinel_radius) /
                                                 core::maxf(reach - tuning.sentinel_radius, 1e-3f),
                                             0.0f, 1.0f);
-                    damage_sentinel(sentinel, projectile.damage * falloff * 0.5f, events);
+                    hit_sentinel(sentinel, projectile.damage * falloff * 0.5f, projectile.element,
+                                 0.5f, events);
                     consumed = true;
                     break;
                 }
@@ -606,46 +721,34 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
             // The player's hit sphere is the dragon's body, not its wingspan --
             // being clipped through a wing membrane feels arbitrary.
             if (sweep_hit(player.position, tuning.player_radius * player_size, distance)) {
-                health_ -= projectile.damage;
-                events.damage_taken += projectile.damage;
                 // Where the round came from, not where it hit: the HUD has to
                 // point the player at the shooter.
-                events.damage_from = previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f;
-                events.took_damage = true;
-                time_since_damage_ = 0.0f;
+                hurt_player(projectile.damage, projectile.element, 1.0f,
+                            previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f,
+                            events);
                 consumed = true;
-                if (health_ <= 0.0f) {
-                    health_ = 0.0f;
-                    events.player_died = true;
-                }
             }
         }
 
         if (consumed) {
             projectile.alive = false;
-            impacts_.push_back({projectile.position, projectile.team, false});
+            impacts_.push_back({projectile.position, projectile.team, false, projectile.element});
             continue;
         }
 
         if (terrain_ && projectile.position.y <=
                             terrain_->height_at(projectile.position.x, projectile.position.z)) {
             projectile.alive = false;
-            impacts_.push_back({projectile.position, projectile.team, true});
+            impacts_.push_back({projectile.position, projectile.team, true, projectile.element});
             // A hostile round with a blast splashes where it lands: a tower's
             // bolt into the ground beside a standing dragon is not a miss.
             if (projectile.team == Team::Hostile && projectile.blast_radius > 0.0f && health_ > 0.0f) {
                 const float d = core::length(player.position - projectile.position);
                 if (d < projectile.blast_radius) {
                     const float amount = projectile.damage * (1.0f - d / projectile.blast_radius) * 0.7f;
-                    health_ -= amount;
-                    events.damage_taken += amount;
-                    events.damage_from = previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f;
-                    events.took_damage = true;
-                    time_since_damage_ = 0.0f;
-                    if (health_ <= 0.0f) {
-                        health_ = 0.0f;
-                        events.player_died = true;
-                    }
+                    hurt_player(amount, projectile.element, 0.5f,
+                                previous - core::normalize_or(projectile.velocity, Vec3::zero()) * 400.0f,
+                                events);
                 }
             }
         }
@@ -653,18 +756,34 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
 }
 
 void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents& events) {
-    (void)events;
     for (Sentinel& sentinel : sentinels_) {
         sentinel.hit_flash = core::maxf(sentinel.hit_flash - dt * 4.0f, 0.0f);
+        // Burn and corrosion keep paying after the hit; a kill by them is the
+        // player's kill like any other. Kept from resetting the regen clock:
+        // a burn is the hit's afterlife, not a fresh hit.
+        if (sentinel.alive) {
+            const float since = sentinel.time_since_damage;
+            const float dot = tick_status(sentinel.status, dt, tuning.elements);
+            if (dot > 0.0f) {
+                const float flash = sentinel.hit_flash;
+                damage_sentinel(sentinel, dot, events);
+                --events.hits_dealt;
+                sentinel.hit_flash = flash;
+                sentinel.time_since_damage = since;
+            }
+        }
         sentinel.time_since_damage += dt;
         // Stunned: held bright for as long as it lasts, so the state reads at
         // range the way a hit does.
         sentinel.stun = core::maxf(sentinel.stun - dt, 0.0f);
-        if (sentinel.stun > 0.0f) sentinel.hit_flash = core::maxf(sentinel.hit_flash, 0.55f);
+        // A freeze is a stun that reads as ice, not as a hit (the renderer rimes it).
+        if (sentinel.stun > 0.0f && sentinel.status.frozen <= 0.0f) {
+            sentinel.hit_flash = core::maxf(sentinel.hit_flash, 0.55f);
+        }
 
         // External hostiles regenerate after a lull, exactly like the player:
         // pressing the attack matters, and half-dead bots do not accumulate.
-        if (sentinel.external && sentinel.alive &&
+        if (sentinel.external && sentinel.alive && sentinel.status.drench <= 0.0f &&
             sentinel.time_since_damage >= tuning.hostile_regen_delay) {
             sentinel.health =
                 core::minf(sentinel.health + tuning.hostile_regen * dt, sentinel.max_health);
@@ -676,6 +795,7 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
                 sentinel.alive = true;
                 sentinel.health = sentinel.max_health;
                 sentinel.stun = 0.0f;
+                sentinel.status.clear();
                 sentinel.knockback = Vec3::zero();
                 sentinel.fire_timer = sentinel.passive ? 1e9f : tuning.sentinel_fire_interval;
                 if (!sentinel.external) {
@@ -696,13 +816,17 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         // Fixed orbit, no steering. Motion exists to make the target lead a
         // shot, not to be clever. A stunned drone hangs where the bite left it.
         const Vec3 previous = sentinel.position;
-        if (sentinel.stun <= 0.0f) sentinel.phase += sentinel.orbit_speed * dt;
+        // Chill slows the orbit like it slows a wing.
+        const float slow = sentinel.status.slow(tuning.elements);
+        if (sentinel.stun <= 0.0f) sentinel.phase += sentinel.orbit_speed * dt * (1.0f - slow);
         sentinel.position = orbit_position(sentinel);
         sentinel.velocity = dt > 0.0f ? (sentinel.position - previous) / dt : Vec3::zero();
 
         if (health_ <= 0.0f || sentinel.passive || sentinel.stun > 0.0f) continue;
+        // Shocked or frozen: weapons cold. Chilled: the reload drags.
+        if (sentinel.status.jammed()) continue;
 
-        sentinel.fire_timer -= dt;
+        sentinel.fire_timer -= dt * (1.0f - 0.6f * slow);
         if (sentinel.fire_timer > 0.0f) continue;
         const bool ground = sentinel.ground;
         const Vec3 to_player = player.position - sentinel.position;
@@ -727,10 +851,14 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
                (ground ? tuning.defence_spread * (pressed ? tuning.defence_close_spread : 1.0f)
                        : tuning.sentinel_spread);
 
-        const Vec3 direction = core::normalize(aim - sentinel.position);
-        fire_projectile(sentinel.position + direction * (tuning.sentinel_radius + 1.0f),
-                        direction * speed, ground ? tuning.defence_damage : tuning.sentinel_damage,
-                        2.5f, ground ? tuning.defence_splash : 0.0f, Team::Hostile, gravity);
+        // A tower fires from its brazier, at the top, not from its middle.
+        const Vec3 from = ground ? sentinel.position + Vec3{0.0f, sentinel.muzzle_height, 0.0f}
+                                 : sentinel.position;
+        const Vec3 shot = core::normalize(aim - from);
+        fire_projectile(from + shot * (ground ? 2.0f : tuning.sentinel_radius + 1.0f),
+                        shot * speed, ground ? tuning.defence_damage : tuning.sentinel_damage,
+                        2.5f, ground ? tuning.defence_splash : 0.0f, Team::Hostile, gravity,
+                        sentinel.element);
     }
 }
 
@@ -759,8 +887,8 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
             continue;
         }
         const float resist = sentinel.ground ? core::saturate(tuning.defence_breath_resist) : 1.0f;
-        damage_sentinel(sentinel,
-                        tuning.breath_damage_per_second * player_breath.damage * dt * resist, events);
+        hit_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * dt * resist,
+                     player_element, tuning.elements.breath_weight * dt, events);
     }
 }
 
@@ -768,6 +896,9 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     CombatEvents events;
     if (dt <= 0.0f) return events;
     impacts_.clear();
+    bursts_.clear();
+    arcs_.clear();
+    arc_timer_ = core::maxf(arc_timer_ - dt, 0.0f);
 
     const bool player_alive = health_ > 0.0f;
 
@@ -788,7 +919,10 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     // Latched: once the meter empties the button must be released and the meter
     // partly refilled before it restarts, so holding it down at zero does not
     // produce a stutter of single-frame damage.
-    const bool wants_breath = input.breath && player_alive;
+    // Shocked or frozen: the breath will not light and the fireball will not
+    // leave, however hard the button is pressed.
+    const bool jammed = player_status_.jammed();
+    const bool wants_breath = input.breath && player_alive && !jammed;
     if (breathing_) {
         breathing_ = wants_breath && breath_ > 0.0f;
     } else {
@@ -807,12 +941,14 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     } else {
         time_since_breath_ += dt;
         if (time_since_breath_ >= tuning.breath_regen_delay) {
-            breath_ = core::minf(breath_ + tuning.breath_regen * dt, 1.0f);
+            // Drenched: the fire in the belly relights at half the rate.
+            const float drenched = player_status_.drench > 0.0f ? 0.5f : 1.0f;
+            breath_ = core::minf(breath_ + tuning.breath_regen * drenched * dt, 1.0f);
         }
     }
 
     // ---- fireball ----
-    if (input.fire && player_alive && fire_timer_ <= 0.0f) {
+    if (input.fire && player_alive && !jammed && fire_timer_ <= 0.0f) {
         fire_timer_ = tuning.fireball_cooldown;
         // Inherits the dragon's velocity, so a shot fired from a dive is
         // genuinely faster. Aiming then means pointing the nose, which is what
@@ -820,7 +956,8 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         const Vec3 velocity =
             player.velocity + fireball_direction(player) * tuning.fireball_speed;
         fire_projectile(muzzle(player), velocity, tuning.fireball_damage,
-                        tuning.fireball_radius, tuning.fireball_blast_radius, Team::Player);
+                        tuning.fireball_radius, tuning.fireball_blast_radius, Team::Player,
+                        tuning.fireball_gravity, player_element);
         events.fired = true;
     }
 
@@ -857,15 +994,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
             continue;
         }
         const float damage = tuning.hostile_breath_dps * flame.scales.damage * dt;
-        health_ -= damage;
-        events.damage_taken += damage;
-        events.damage_from = flame.origin;
-        events.took_damage = true;
-        time_since_damage_ = 0.0f;
-        if (health_ <= 0.0f) {
-            health_ = 0.0f;
-            events.player_died = true;
-        }
+        hurt_player(damage, flame.element, tuning.elements.breath_weight * dt, flame.origin, events);
     }
     hostile_breaths_drawn_ = std::move(hostile_breaths_pending_);
     hostile_breaths_pending_.clear();
@@ -879,28 +1008,37 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         if (kind == MeleeKind::None) continue;
         const float damage =
             tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f);
-        health_ -= damage;
-        events.damage_taken += damage;
-        events.damage_from = swing.mouth;
-        events.took_damage = true;
+        hurt_player(damage, swing.element, tuning.elements.melee_weight, swing.mouth, events);
         events.bitten = true;
         const Vec3 away = core::normalize_or(player.position - swing.mouth, swing.forward);
         events.knockback = events.knockback + away * tuning.hostile_melee_knockback;
-        time_since_damage_ = 0.0f;
-        if (health_ <= 0.0f) {
-            health_ = 0.0f;
-            events.player_died = true;
-        }
     }
     hostile_melee_pending_.clear();
 
     update_sentinels(dt, player, events);
     update_projectiles(dt, player, events);
 
+    // ---- the player's status ----
+    // Burn and corrosion tick down the health; they hold the regeneration
+    // off like any damage, and a drench stops it outright.
+    if (health_ > 0.0f) {
+        const float dot = tick_status(player_status_, dt, tuning.elements);
+        if (dot > 0.0f) {
+            health_ -= dot;
+            events.damage_taken += dot;
+            time_since_damage_ = 0.0f;
+            if (health_ <= 0.0f) {
+                health_ = 0.0f;
+                events.player_died = true;
+            }
+        }
+    }
+
     // ---- regeneration ----
     // Delayed rather than continuous: it rewards disengaging, which is the
     // manoeuvre this flight model is best at.
-    if (health_ > 0.0f && time_since_damage_ >= tuning.regen_delay) {
+    if (health_ > 0.0f && player_status_.drench <= 0.0f &&
+        time_since_damage_ >= tuning.regen_delay) {
         health_ = core::minf(health_ + tuning.health_regen * dt, tuning.max_health);
     }
 

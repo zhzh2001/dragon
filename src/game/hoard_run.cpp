@@ -157,6 +157,35 @@ ValleyKind apply_valley_kind(uint32_t seed, TerrainSettings& terrain, HoardRunSe
     return kind;
 }
 
+uint32_t valley_seed(uint32_t run_seed, int depth) {
+    if (depth <= 0) return run_seed;
+    uint32_t previous = valley_seed(run_seed, depth - 1);
+    const ValleyKind before = valley_kind_for(previous);
+    uint32_t seed = run_seed;
+    for (uint32_t step = 0; step < 32; ++step) {
+        uint32_t x = run_seed ^ (uint32_t(depth) * 0x9e3779b9u + step * 0x85ebca6bu);
+        x ^= x >> 16;
+        x *= 0x7feb352du;
+        x ^= x >> 15;
+        seed = x ? x : 1u;
+        if (valley_kind_for(seed) != before) break;
+    }
+    return seed;
+}
+
+void apply_depth(int depth, HoardRunSettings& run) {
+    if (depth <= 0) return;
+    // A nest keeps no slope towers however deep it is: that is its kind.
+    if (run.defences > 0) run.defences += run.depth_towers * depth;
+    run.rivals += run.depth_rivals * depth;
+    run.caches += 1;
+    run.cache_value *= 1.0f + run.depth_value * float(depth);
+    run.pressure_scale *= std::pow(core::clampf(run.depth_pressure, 0.2f, 1.5f), float(depth));
+    run.bounty_tower *= 1.0f + 0.25f * float(depth);
+    run.bounty_rival *= 1.0f + 0.25f * float(depth);
+    run.herds += depth > 1 ? 1 : 0;
+}
+
 RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
                               const HoardRunSettings& settings) {
     RunLayout layout;
@@ -301,6 +330,37 @@ RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
         layout.rivals.push_back(rival);
     }
 
+    // Herds: grazing grounds on the floor, the flattest dry spot of a few
+    // beside the spine, and not under a tower's guns -- a herd is a meal, the
+    // towers are what makes landing for a cache a fight.
+    for (int i = 0; i < settings.herds; ++i) {
+        const float f = core::clampf((float(i) + 0.6f + 0.25f * rng.signed_unit()) /
+                                         float(core::maxf(float(settings.herds), 1.0f)),
+                                     0.1f, 0.85f);
+        Vec3 spine_point, direction;
+        sample_spine(layout.spine, f, spine_point, direction);
+        const Vec3 side = core::normalize_or(core::cross(direction, Vec3::up()), Vec3::right());
+        RunHerd herd;
+        herd.count = settings.herd_size;
+        float best = -1.0f;
+        for (int attempt = 0; attempt < 16; ++attempt) {
+            const Vec3 candidate = spine_point + side * rng.range(-220.0f, 220.0f) +
+                                   direction * rng.range(-120.0f, 120.0f);
+            const float ground = terrain.height_at(candidate.x, candidate.z);
+            if (ground < ts.water_level + 3.0f) continue;
+            float score = terrain.normal_at(candidate.x, candidate.z).y;
+            for (const RunDefence& d : layout.defences) {
+                if (core::length(horizontal(d.position - candidate)) < 220.0f) score -= 0.5f;
+            }
+            if (score > best) {
+                best = score;
+                herd.position = Vec3{candidate.x, ground, candidate.z};
+            }
+        }
+        if (best < 0.0f) continue;
+        layout.herds.push_back(herd);
+    }
+
     return layout;
 }
 
@@ -339,12 +399,14 @@ bool RunRecords::submit(const RunResult& result) {
     ++runs;
     last_hoard = result.hoard;
     bool record = false;
+    // What a pass banked is kept even by a run that died further down, so
+    // the record is the hoard, cleared or not; the time is a full clear's.
+    if (result.hoard > best_hoard) {
+        best_hoard = result.hoard;
+        record = true;
+    }
     if (result.banked) {
         ++banked;
-        if (result.hoard > best_hoard) {
-            best_hoard = result.hoard;
-            record = true;
-        }
         if (best_time <= 0.0f || result.time < best_time) best_time = result.time;
     }
     return record;
@@ -352,14 +414,49 @@ bool RunRecords::submit(const RunResult& result) {
 
 // ---- the run ----
 
-void HoardRun::start(const Terrain& terrain, float half_extent) {
-    layout_ = generate_run_layout(terrain, half_extent, settings);
-    pressure_start_ = settings.pressure_after > 0.0f
-                          ? settings.pressure_after
-                          : layout_.length() / core::maxf(settings.cruise_speed, 1.0f) *
-                                settings.pressure_scale;
+void HoardRun::begin_valley() {
+    // The hunter clock restarts per valley, from now.
+    pressure_start_ = elapsed_ + (settings.pressure_after > 0.0f
+                                      ? settings.pressure_after
+                                      : layout_.length() / core::maxf(settings.cruise_speed, 1.0f) *
+                                            settings.pressure_scale);
     next_hunter_ = pressure_start_;
     hunter_alive_ = false;
+    hunter_pending_ = false;
+    valley_hunters_ = 0;
+    collecting_ = -1;
+    awaiting_valley_ = false;
+    have_previous_ = false;
+}
+
+void HoardRun::next_valley(const Terrain& terrain, float half_extent) {
+    if (!awaiting_valley_) return;
+    ++valley_;
+    layout_ = generate_run_layout(terrain, half_extent, settings);
+    begin_valley();
+}
+
+bool HoardRun::skip_valley() {
+    if (phase_ != HoardPhase::Flying || awaiting_valley_ || valley_ + 1 >= settings.valleys) return false;
+    banked_ += hoard_;
+    hoard_ = 0.0f;
+    awaiting_valley_ = true;
+    return true;
+}
+
+void HoardRun::feed(float amount) {
+    if (phase_ != HoardPhase::Flying || awaiting_valley_ || amount <= 0.0f) return;
+    growth_ += amount;
+    ++prey_;
+}
+
+void HoardRun::start(const Terrain& terrain, float half_extent) {
+    layout_ = generate_run_layout(terrain, half_extent, settings);
+    elapsed_ = 0.0f;
+    valley_ = 0;
+    banked_ = 0.0f;
+    prey_ = 0;
+    begin_valley();
     growth_ = 0.0f;
     just_grew_ = false;
     last_stage_ = GrowthStage::Drake;
@@ -371,7 +468,7 @@ void HoardRun::start(const Terrain& terrain, float half_extent) {
     hunters_ = 0;
     collecting_ = -1;
     hunter_pending_ = false;
-    just_collected_ = just_banked_ = just_lost_ = false;
+    just_collected_ = just_banked_ = just_lost_ = just_crossed_ = false;
     have_previous_ = false;
 }
 
@@ -434,7 +531,7 @@ Vec3 HoardRun::next_waypoint(Vec3 from) const {
 }
 
 void HoardRun::award(float amount) {
-    if (phase_ != HoardPhase::Flying || amount <= 0.0f) return;
+    if (phase_ != HoardPhase::Flying || awaiting_valley_ || amount <= 0.0f) return;
     hoard_ += amount;
     growth_ += amount;
 }
@@ -488,8 +585,12 @@ RunResult HoardRun::result() const {
     r.kind = layout_.kind;
     r.stage = stage();
     r.banked = phase_ == HoardPhase::Banked;
+    // Banked at the passes crossed; what was still carried at a death is lost.
     r.carried = hoard_;
-    r.hoard = r.banked ? hoard_ : 0.0f;
+    r.hoard = banked_;
+    r.valley = valley_ + 1;
+    r.valleys = settings.valleys > 0 ? settings.valleys : 1;
+    r.prey = prey_;
     r.caches = caches_collected();
     r.kills = kills_;
     r.hunters = hunters_;
@@ -500,9 +601,9 @@ RunResult HoardRun::result() const {
 
 void HoardRun::update(float dt, const FlightState& player, bool player_alive,
                       const CombatEvents& events) {
-    just_collected_ = just_banked_ = just_lost_ = false;
+    just_collected_ = just_banked_ = just_lost_ = just_crossed_ = false;
     just_grew_ = false;
-    if (phase_ != HoardPhase::Flying) return;
+    if (phase_ != HoardPhase::Flying || awaiting_valley_) return;
 
     elapsed_ += dt;
     kills_ += events.kills;
@@ -524,9 +625,10 @@ void HoardRun::update(float dt, const FlightState& player, bool player_alive,
     }
 
     // The dragonslayers, one at a time.
-    if (!hunter_alive_ && !hunter_pending_ && hunters_ < settings.max_hunters &&
+    if (!hunter_alive_ && !hunter_pending_ && valley_hunters_ < settings.max_hunters &&
         elapsed_ >= next_hunter_) {
         ++hunters_;
+        ++valley_hunters_;
         hunter_pending_ = true;
         hunter_alive_ = true;  // until the app says otherwise
         next_hunter_ = 1e30f;
@@ -565,7 +667,18 @@ void HoardRun::update(float dt, const FlightState& player, bool player_alive,
     // step over the plane between frames.
     if (have_previous_) {
         const RingCrossing crossing = test_ring(layout_.gate, previous_position_, player.position);
-        if (crossing.passed) finish(true);
+        if (crossing.passed) {
+            // Banked: safe from here on, whatever the next valley does.
+            banked_ += hoard_;
+            hoard_ = 0.0f;
+            collecting_ = -1;
+            if (valley_ + 1 < settings.valleys) {
+                just_crossed_ = true;
+                awaiting_valley_ = true;
+            } else {
+                finish(true);
+            }
+        }
     }
     previous_position_ = player.position;
     have_previous_ = true;

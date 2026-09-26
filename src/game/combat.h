@@ -5,6 +5,7 @@
 
 #include "core/math.h"
 #include "game/breath.h"
+#include "game/element.h"
 #include "game/flight.h"
 
 namespace game {
@@ -185,6 +186,11 @@ struct CombatTuning {
     float defence_close_rate = 1.0f;      // fire-rate multiplier up close or grounded
     float defence_close_spread = 0.25f;   // spread multiplier up close or grounded
     float defence_splash = 10.0f;         // m
+
+    // ---- elements ----
+    // What each breath does beyond damage: burn, chill and freeze, corrode,
+    // shock, drench, stagger. See element.h.
+    ElementTuning elements;
 };
 
 // What the player is asking combat to do this frame. Held vs edge is decided by
@@ -220,6 +226,7 @@ struct MeleeSwing {
     core::Vec3 mouth = core::Vec3::zero();
     core::Vec3 forward = core::Vec3::forward();
     core::Vec3 body = core::Vec3::zero();
+    Element element = Element::None;
 };
 
 struct Projectile {
@@ -233,6 +240,8 @@ struct Projectile {
     float radius = 0.0f;
     float blast_radius = 0.0f;
     Team team = Team::Player;
+    // What it is made of: the status it leaves, and the colour it burns.
+    Element element = Element::None;
     bool alive = false;
 };
 
@@ -266,6 +275,9 @@ struct Sentinel {
     // Hit-sphere radius. Drones use the tuned default; an external dragon's
     // body is its own size.
     float radius = 0.0f;
+    // A ground defence fires from its brazier, this far above `position`
+    // (which is where it is hit, at its middle).
+    float muzzle_height = 0.0f;
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
     float health = 0.0f;
@@ -284,6 +296,11 @@ struct Sentinel {
     float fire_timer = 0.0f;
     // For delayed regeneration, mirroring the player's.
     float time_since_damage = 1e9f;
+    // What it breathes and fires, and so what it shrugs off; and what it is
+    // suffering (element.h). A run rolls each enemy's element; a drone has
+    // none.
+    Element element = Element::None;
+    Status status;
 };
 
 // A projectile ending its life somewhere visible, for impact effects.
@@ -291,6 +308,22 @@ struct Impact {
     core::Vec3 position = core::Vec3::zero();
     Team team = Team::Player;
     bool on_terrain = false;
+    Element element = Element::None;
+};
+
+// A status landing hard enough to show: a freeze, a stagger, a douse, a
+// fresh burn -- where, and on what, for a burst and a call-out.
+struct StatusBurst {
+    core::Vec3 position = core::Vec3::zero();
+    Element element = Element::None;
+    StatusReport report;
+    bool on_player = false;
+};
+
+// A storm hit arcing from one body to the next, for the bolt drawn between.
+struct Arc {
+    core::Vec3 from = core::Vec3::zero();
+    core::Vec3 to = core::Vec3::zero();
 };
 
 // A flame active this frame, for rendering. The cone drawn is the cone that
@@ -305,6 +338,7 @@ struct BreathCone {
     // The breather's species scales. Carried on the cone rather than looked up,
     // because combat has no idea what a species is and should not acquire one.
     BreathScales scales;
+    Element element = Element::None;
 };
 
 // What happened this frame, for the HUD and, later, audio.
@@ -339,6 +373,10 @@ struct CombatEvents {
     // velocity it added to the player (the owner applies it).
     bool bitten = false;
     core::Vec3 knockback = core::Vec3::zero();
+    // A status on the player landed hard this frame: frozen (wings locked)
+    // or staggered (the knock is in `knockback`).
+    bool player_froze = false;
+    bool player_staggered = false;
 };
 
 // The combat core: player resources, projectiles, and the targets to use them
@@ -421,7 +459,14 @@ public:
     void spawn_training(core::Vec3 origin, core::Vec3 forward, core::Vec3 right);
     // A ground defence at `position` (already on the terrain), added to
     // whatever targets exist.
-    void spawn_defence(core::Vec3 position);
+    // `position` is the tower's middle, where it is hit; `radius` its body
+    // and `muzzle_height` its brazier above that. Returns the slot.
+    int spawn_defence(core::Vec3 position, float radius = 0.0f, float muzzle_height = 0.0f,
+                      Element element = Element::None);
+
+    // A hit by the player on slot `index` from outside the weapons (a status
+    // test, a scripted strike): the same element rules as a fireball.
+    CombatEvents apply_hit(int index, float amount, Element element, float weight = 1.0f);
 
     // ---- external hostiles (bots) ----
     // Claims a slot; returns its index into sentinels().
@@ -429,7 +474,8 @@ public:
     // Per-frame: where the bot's flight model actually put it.
     void drive_external(int index, core::Vec3 position, core::Vec3 velocity);
     // A hostile round fired by an external pilot.
-    void fire_hostile(core::Vec3 position, core::Vec3 velocity, float damage);
+    void fire_hostile(core::Vec3 position, core::Vec3 velocity, float damage,
+                      Element element = Element::None);
     // The bot flew into a mountain; combat records the kill the usual way.
     void kill_external(int index);
     // Lesser terrain scrapes cost health through the same accounting.
@@ -439,15 +485,25 @@ public:
     // against the player inside update(), so damage attribution and events go
     // through the one path that owns them.
     void hostile_breath(core::Vec3 origin, core::Vec3 direction, int source = -1,
-                        BreathScales scales = {});
+                        BreathScales scales = {}, Element element = Element::None);
     // An external pilot biting or striking this frame: its mouth, the way it
     // faces, and its body centre. Resolved against the player in update().
-    void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body);
+    void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body,
+                       Element element = Element::None);
 
     // The player's species scales, set by the app whenever the model changes.
     // Public like `tuning` is: it is data the owner sets, not state combat
     // evolves.
     BreathScales player_breath;
+    // What the player breathes (the species' breath file, or the panel's
+    // override): the status its hits leave, and what it resists.
+    Element player_element = Element::Fire;
+    const Status& player_status() const { return player_status_; }
+    // 0..1: how much the player's chill or freeze slows its flight.
+    float player_slow() const { return player_status_.slow(tuning.elements); }
+    // Statuses that landed hard this frame, and storm arcs, for effects.
+    const std::vector<StatusBurst>& status_bursts() const { return bursts_; }
+    const std::vector<Arc>& arcs() const { return arcs_; }
     // The player's size relative to normal (the run's growth; 1 elsewhere).
     // Scales the body that bolts, bites and flames are tested against.
     float player_size = 1.0f;
@@ -467,7 +523,7 @@ public:
 
 private:
     void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
-                         float blast, Team team, float gravity);
+                         float blast, Team team, float gravity, Element element = Element::None);
     void fire_projectile(core::Vec3 position, core::Vec3 velocity, float damage, float radius,
                          float blast, Team team);
     void update_projectiles(float dt, const FlightState& player, CombatEvents& events);
@@ -475,6 +531,13 @@ private:
     void apply_breath(float dt, const FlightState& player, CombatEvents& events);
     void apply_melee(const FlightState& player, CombatEvents& events);
     void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events);
+    // The player's hit on a target: the element's damage scale, its status,
+    // and a storm hit's arc to the next target. `weight` as in apply_element.
+    void hit_sentinel(Sentinel& sentinel, float amount, Element element, float weight,
+                      CombatEvents& events, bool chain = true);
+    // Something hostile's hit on the player, through the same element rules.
+    void hurt_player(float amount, Element element, float weight, core::Vec3 from,
+                     CombatEvents& events);
     float random_unit();
     void update_lock(const FlightState& player);
     core::Vec3 assisted_direction(const FlightState& player, core::Vec3 target,
@@ -503,6 +566,10 @@ private:
     core::Vec3 lock_intercept_ = core::Vec3::zero();
 
     std::vector<Impact> impacts_;
+    std::vector<StatusBurst> bursts_;
+    std::vector<Arc> arcs_;
+    float arc_timer_ = 0.0f;
+    Status player_status_;
     std::vector<BreathCone> hostile_breaths_pending_;
     std::vector<BreathCone> hostile_breaths_drawn_;
     std::vector<MeleeSwing> hostile_melee_pending_;

@@ -222,6 +222,32 @@ void test_siege_commits_facing() {
     CHECK(d.fire);
 }
 
+void test_hunt() {
+    std::printf("a herd near and nearer than the cache is hunted; a nearer cache comes first\n");
+    DemoWorld w = run_world();
+    w.has_prey = true;
+    w.prey = Vec3{0.0f, 0.0f, -300.0f};
+    const FlightState s = flying(Vec3{0.0f, 120.0f, 0.0f});
+    DemoPilot hunter;
+    hunter.reset(6);
+    game::DemoDecision d = hunter.update(1.0f / 60.0f, s, w);
+    CHECK(hunter.state() == DemoState::Hunt);
+    CHECK(d.flight.pitch < 0.0f);  // down toward it
+    w.has_cache = true;
+    w.cache = Vec3{0.0f, 0.0f, -200.0f};
+    DemoPilot lander;
+    lander.reset(6);
+    lander.update(1.0f / 60.0f, s, w);
+    CHECK(lander.state() == DemoState::Land);
+    // A hunt that runs out of time rests.
+    w.has_cache = false;
+    DemoPilot tired;
+    tired.reset(6);
+    tired.tuning.hunt_budget = 1.0f;
+    for (int i = 0; i < 120; ++i) tired.update(1.0f / 60.0f, s, w);
+    CHECK(tired.state() != DemoState::Hunt);
+}
+
 }  // namespace
 
 int main() {
@@ -230,6 +256,7 @@ int main() {
     test_stalemate_breaks_off();
     test_speed_guard();
     test_siege_commits_facing();
+    test_hunt();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

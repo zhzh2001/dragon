@@ -36,6 +36,7 @@ const char* demo_state_name(DemoState state) {
         case DemoState::Collect: return "collect";
         case DemoState::TakeOff: return "take off";
         case DemoState::Flee: return "flee";
+        case DemoState::Hunt: return "hunt";
     }
     return "?";
 }
@@ -83,6 +84,7 @@ void DemoPilot::decide(const FlightState& self, const DemoWorld& world) {
     };
 
     if (self.grounded) {
+        if (previous == DemoState::Hunt) hunt_rest_timer_ = tuning.hunt_touchdown_rest;
         const float d = world.has_cache ? horizontal_distance(self.position, world.cache) : 1e9f;
         if (world.has_cache && d < world.cache_radius * 0.6f) {
             choose(DemoState::Collect, -1);
@@ -141,6 +143,13 @@ void DemoPilot::decide(const FlightState& self, const DemoWorld& world) {
         choose(DemoState::Fight, world.targets[size_t(nearest_dragon)].slot);
     } else if (drone >= 0 && drone_range < tuning.fight_drone_range) {
         choose(DemoState::Fight, world.targets[size_t(drone)].slot);
+    } else if (world.in_run && world.has_prey && hunt_rest_timer_ <= 0.0f &&
+               horizontal_distance(self.position, world.prey) < tuning.hunt_range &&
+               (!world.has_cache || world.rush ||
+                horizontal_distance(self.position, world.prey) <
+                    horizontal_distance(self.position, world.cache)) &&
+               !(previous == DemoState::Hunt && state_time_ > tuning.hunt_budget)) {
+        choose(DemoState::Hunt, -1);
     } else if (world.in_run && world.has_cache && go_round_timer_ <= 0.0f &&
                horizontal_distance(world.cache, skipped_cache_) > 1.0f &&
                horizontal_distance(self.position, world.cache) < tuning.cache_range) {
@@ -164,6 +173,12 @@ DemoDecision DemoPilot::update(float dt, const FlightState& self, const DemoWorl
     state_time_ += dt;
     time_in[int(state_)] += dt;
     go_round_timer_ = core::maxf(go_round_timer_ - dt, 0.0f);
+    hunt_rest_timer_ = core::maxf(hunt_rest_timer_ - dt, 0.0f);
+    // A hunt that ran out of time rests before the next.
+    if (state_ == DemoState::Hunt && state_time_ > tuning.hunt_budget) {
+        hunt_rest_timer_ = tuning.hunt_rest;
+        decide_timer_ = 0.0f;
+    }
     disengage_timer_ = core::maxf(disengage_timer_ - dt, 0.0f);
     if (state_ == DemoState::Fight) {
         const int index = find_slot(world, target_);
@@ -243,6 +258,7 @@ DemoDecision DemoPilot::act(float dt, const FlightState& self, const DemoWorld& 
         case DemoState::Land: return land(self, world);
         case DemoState::Walk:
         case DemoState::Collect: return walk(self, world);
+        case DemoState::Hunt: return hunt(self, world);
         case DemoState::TakeOff: {
             DemoDecision d;
             // Which way to climb out: toward the corridor, unless the ground
@@ -508,6 +524,39 @@ DemoDecision DemoPilot::land(const FlightState& self, const DemoWorld& world) {
         d.flight.brake = 1.0f;
         d.flight.pitch = core::maxf(d.flight.pitch, 0.15f);
         d.flight.flap = 0.0f;
+    }
+    return d;
+}
+
+// A low pass through the herd: a landing's glide path that never brakes,
+// levelling at the swoop height over the lead of the animal, the flame on as
+// it comes into reach. Past it, the pass is over and the hunt rests.
+DemoDecision DemoPilot::hunt(const FlightState& self, const DemoWorld& world) {
+    if (!world.has_prey) return cruise(self, world, world.waypoint, false);
+    const float out = horizontal_distance(self.position, world.prey);
+    const float lead = core::clampf(out / core::maxf(self.airspeed, 10.0f), 0.0f, 3.0f);
+    const Vec3 mark = world.prey + world.prey_velocity * lead;
+    const Vec3 ahead = core::normalize_or(horizontal(self.forward()), Vec3::forward());
+    if (core::dot(ahead, horizontal(mark - self.position)) < 0.0f && out < 60.0f) {
+        hunt_rest_timer_ = tuning.hunt_rest * 0.25f;  // a quick look round, then again
+        decide_timer_ = 0.0f;
+    }
+    const float height = core::clampf(out * tuning.land_slope, tuning.hunt_height, 160.0f);
+    AutopilotTuning glide = steering;
+    glide.min_clearance = core::clampf(height * 0.5f, tuning.hunt_floor, steering.min_clearance);
+    glide.cruise_speed = core::minf(steering.cruise_speed, 38.0f);
+    DemoDecision d;
+    d.flight = steer_through(self, mark + Vec3{0.0f, height, 0.0f}, Vec3::zero(), glide,
+                             ground_ahead(self, world));
+    // Energy and the floor: beat to hold the pass's speed, and pull out if
+    // the ground is coming up -- a low pass is only worth it airborne.
+    if (self.airspeed < tuning.hunt_speed) d.flight.flap = 1.0f;
+    d.flight.brake = 0.0f;
+    d.flight.tuck = 0.0f;
+    if (self.ground_clearance < tuning.hunt_floor) d.flight.pitch = core::maxf(d.flight.pitch, 0.35f);
+    if (out < 140.0f) {
+        d.breath = true;
+        d.melee = out < 25.0f;
     }
     return d;
 }

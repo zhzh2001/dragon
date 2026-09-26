@@ -52,11 +52,13 @@ add_executable(dragon
   src/game/autopilot.cpp
   src/game/combat.cpp
   src/game/breath.cpp
+  src/game/element.cpp
   src/game/bot.cpp
   src/game/studio.cpp
   src/game/match.cpp
   src/game/hoard_run.cpp
   src/game/demo_pilot.cpp
+  src/game/prey.cpp
   src/editor/imgui_layer.cpp
   src/ui/hud.cpp
 )
@@ -75,7 +77,7 @@ target_compile_options(dragon PRIVATE -Wall -Wextra -Wno-missing-field-initializ
 
 # Tests are a plain executable rather than a framework: `ctest` or just run it.
 enable_testing()
-add_executable(test_breath tests/test_breath.cpp src/game/breath.cpp)
+add_executable(test_breath tests/test_breath.cpp src/game/breath.cpp src/game/element.cpp)
 target_include_directories(test_breath PRIVATE src)
 target_link_libraries(test_breath PRIVATE SDL3::SDL3)
 target_compile_options(test_breath PRIVATE -Wall -Wextra)
@@ -171,6 +173,7 @@ add_executable(test_combat
   tests/test_combat.cpp
   src/game/combat.cpp
   src/game/breath.cpp
+  src/game/element.cpp
   src/game/bot.cpp
   src/game/autopilot.cpp
   src/game/bot.cpp
@@ -186,12 +189,30 @@ target_link_libraries(test_combat PRIVATE SDL3::SDL3)
 target_compile_options(test_combat PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME combat COMMAND test_combat)
 
+add_executable(test_element
+  tests/test_element.cpp
+  src/game/combat.cpp
+  src/game/breath.cpp
+  src/game/element.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_element PRIVATE src)
+target_link_libraries(test_element PRIVATE SDL3::SDL3)
+target_compile_options(test_element PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME element COMMAND test_element)
+
 add_executable(test_bot
   tests/test_bot.cpp
   src/game/bot.cpp
   src/game/autopilot.cpp
   src/game/combat.cpp
   src/game/breath.cpp
+  src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp
@@ -209,6 +230,7 @@ add_executable(test_match
   src/game/match.cpp
   src/game/combat.cpp
   src/game/breath.cpp
+  src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp
@@ -237,6 +259,26 @@ target_link_libraries(test_hoard_run PRIVATE SDL3::SDL3)
 target_compile_options(test_hoard_run PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME hoard_run COMMAND test_hoard_run)
 
+add_executable(test_prey
+  tests/test_prey.cpp
+  src/game/prey.cpp
+  src/game/combat.cpp
+  src/game/breath.cpp
+  src/game/element.cpp
+  src/game/hoard_run.cpp
+  src/game/course.cpp
+  src/game/flight.cpp
+  src/game/terrain.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+  src/gfx/primitives.cpp
+  src/gfx/buffer.cpp
+)
+target_include_directories(test_prey PRIVATE src)
+target_link_libraries(test_prey PRIVATE SDL3::SDL3)
+target_compile_options(test_prey PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME prey COMMAND test_prey)
+
 add_executable(test_demo_pilot
   tests/test_demo_pilot.cpp
   src/game/demo_pilot.cpp
@@ -245,6 +287,7 @@ add_executable(test_demo_pilot
   src/game/maneuver.cpp
   src/game/combat.cpp
   src/game/breath.cpp
+  src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
   src/core/noise.cpp

@@ -37,7 +37,7 @@ they are records of what was already tried and why it is the way it is.
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # thirteen suites, plain executables, no framework
+ctest --test-dir build            # fifteen suites, plain executables, no framework
 ```
 
 ### Verifying without a human at the keyboard
@@ -67,6 +67,9 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--input p,r,y,flap,tuck,brake` | Hold a control input for the whole run. It goes through the assists, exactly as a player's stick does. |
 | `--autopilot` | Hands-off. Without combat it flies the selected course; in a run or with combat on it is the demo pilot (`game::DemoPilot`), which plays through the player's own controls -- sieges guard towers, fights, lands on caches, walks in, collects, flees to heal, flies to the pass -- and rolls into the next valley or rematch after the results. Doubles as a soak test. |
 | `--stage N` | Start a run already grown (0 drake, 1 young, 2 adult) at full size: how each stage's size gets onto a capture. |
+| `--element NAME` | The player breathes that element (fire, frost, blight, storm, tide, stone) instead of the species' -- its look, its scales and its status (`COMBAT.md` "Elements"). Also the Combat panel's "you breathe". |
+| `--status NAME` | Hold that element's status on every enemy (frost holds the freeze), for a capture of how each looks. |
+| `--valley N` | Start a run N valleys down the descent (a run is three valleys; each deeper is harder). |
 | `--demo` | The game playing itself: a hands-off run on a random valley, one after another. The same as P in play. |
 | `--course N` | Select a generated course. |
 | `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`), 13 walk (grounded at a walking pace on the spot; the stride). |
@@ -293,6 +296,8 @@ flight controls.
   |---|---|
   | fit a measured leg skeleton to one creature and rebuild | 93,011 |
   | build two verified props in Blender (full access, medium), 2026-09-25 | 62,201 |
+  | four second-generation props (two towers, two caches), 2026-09-25 | 85,773 |
+  | decimate and animate a prey creature (three baked clips), 2026-09-25 | 80,127 |
   | measure one creature's membrane field and rebuild | 75,737 |
   | a `codex exec` that replies "OK" | 7,292 |
 
@@ -386,15 +391,16 @@ src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
 src/game/    flight model, chase + debug cameras, terrain, vegetation,
-             course/rally, autopilot, combat, breath profiles, bots, match
-             loop, the hoard run, the demo pilot, studio
+             course/rally, autopilot, combat, breath profiles, elements and
+             status effects, bots, match loop, the hoard run, prey herds, the
+             demo pilot, studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration: context, the two HUD faces, the panel theme
 src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     MSL, hot-reloaded from the source tree
-tests/       thirteen suites: math, camera, camera_rig, flight, rally, anim, hoard_run, demo_pilot,
+tests/       fifteen suites: math, camera, camera_rig, flight, rally, anim, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

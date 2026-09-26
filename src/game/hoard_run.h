@@ -102,6 +102,22 @@ struct HoardRunSettings {
     float defence_offset_min = 160.0f;
     float defence_offset_max = 320.0f;
     float cache_offset_max = 110.0f;
+
+    // ---- the descent: a run is several valleys ----
+    // One valley was a four-minute run with nothing after it. Crossing a
+    // pass now banks what is carried (safe from then on) and drops the
+    // dragon into the next valley, a different kind, grown as it was, and
+    // harder: per valley deeper, this many more towers and rivals, a caches
+    // bonus, richer hoards, and the hunters sooner.
+    int valleys = 3;
+    int depth_towers = 1;
+    int depth_rivals = 1;
+    float depth_value = 0.35f;      // cache value, per valley deeper
+    float depth_pressure = 0.8f;    // hunter clock multiplier, per valley deeper
+    // Prey: herds of grazers on the valley floor, eaten for growth and health
+    // (prey.h). Per valley.
+    int herds = 2;
+    int herd_size = 6;
 };
 
 struct RunCache {
@@ -123,6 +139,12 @@ struct RunDefence {
     int guards = -1;
 };
 
+// A herd's grazing ground: on the valley floor, flat, dry.
+struct RunHerd {
+    core::Vec3 position = core::Vec3::zero();
+    int count = 0;
+};
+
 struct RunLayout {
     uint32_t seed = 0;
     ValleyKind kind = ValleyKind::Vale;
@@ -131,6 +153,7 @@ struct RunLayout {
     std::vector<RunCache> caches;
     std::vector<RunRival> rivals;
     std::vector<RunDefence> defences;
+    std::vector<RunHerd> herds;
     Ring gate;
     core::Vec3 start = core::Vec3::zero();
     core::Vec3 start_look = core::Vec3::forward();
@@ -150,6 +173,14 @@ RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
 // still move every kind together.
 ValleyKind apply_valley_kind(uint32_t seed, TerrainSettings& terrain, HoardRunSettings& run);
 
+// The seed of valley `depth` (0 = the first) of the run seeded `run_seed`:
+// the run seed itself first, then mixed, and stepped until its kind differs
+// from the valley before -- two canyons in a row read as one long canyon.
+uint32_t valley_seed(uint32_t run_seed, int depth);
+// The encounter mix `depth` valleys in: more towers and rivals, richer
+// caches, the hunters sooner. Applied after the kind.
+void apply_depth(int depth, HoardRunSettings& run);
+
 struct RunResult {
     uint32_t seed = 0;
     ValleyKind kind = ValleyKind::Vale;
@@ -162,6 +193,11 @@ struct RunResult {
     int hunters = 0;
     float time = 0.0f;
     float distance = 0.0f;
+    // How far down the descent: valleys reached (1 = died in the first) of
+    // how many.
+    int valley = 1;
+    int valleys = 1;
+    int prey = 0;
 };
 
 // The best previous run's numbers, beside the results. Flat `key value` text
@@ -204,6 +240,26 @@ public:
     int kills() const { return kills_; }
     // Bounty for a kill the app has identified; feeds the hoard and growth.
     void award(float amount);
+    // Growth without hoard: prey eaten.
+    void feed(float amount);
+    int prey_eaten() const { return prey_; }
+
+    // ---- the descent ----
+    // 0-based valley, of settings.valleys.
+    int valley() const { return valley_; }
+    // Banked over the passes crossed so far: kept whatever happens next.
+    float banked() const { return banked_; }
+    // A pass that is not the last was crossed this frame: the hoard is
+    // banked and the run is waiting for the app to lay the next valley out.
+    bool just_crossed() const { return just_crossed_; }
+    bool awaiting_valley() const { return awaiting_valley_; }
+    // Lays out valley `valley() + 1` on `terrain` (the app has already
+    // regenerated it and set `settings` for it) and flies on: growth, the
+    // bank, the clock and the kill count carry; the hunters restart.
+    void next_valley(const Terrain& terrain, float half_extent);
+    // As if the pass had just been crossed (for --valley and the panel):
+    // banks and waits for next_valley. False on the last valley.
+    bool skip_valley();
     // Growth: everything gathered so far, and the stage it buys.
     float growth() const { return growth_; }
     GrowthStage stage() const;
@@ -261,6 +317,13 @@ private:
     bool just_collected_ = false;
     bool just_banked_ = false;
     bool just_lost_ = false;
+    bool just_crossed_ = false;
+    bool awaiting_valley_ = false;
+    int valley_ = 0;
+    int valley_hunters_ = 0;
+    float banked_ = 0.0f;
+    int prey_ = 0;
+    void begin_valley();
     bool have_previous_ = false;
     core::Vec3 previous_position_ = core::Vec3::zero();
 };

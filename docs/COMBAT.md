@@ -367,6 +367,62 @@ by skill tier along with their health: a rookie never heals and loses wars of
 attrition; an ace refuses to stay wounded. Disengage-and-recover cuts both
 ways, which is the balance the player asked for.
 
+## Elements (M26)
+
+Every breath is made of something (`src/game/element.h`): **fire, frost,
+blight, storm, tide, stone** -- one per breath the roster already carried,
+named by `element` in `<model>.breath.cfg` (absent is fire). Each hit leaves
+one **status** on what it lands on, through one path (`Combat::hit_sentinel`
+for the player's hits, `Combat::hurt_player` for everything that hurts the
+player), so a fireball, a held breath, a bite, a bot's bolt and a tower's
+all go through the same rules:
+
+| Element | Status | What it does |
+|---|---|---|
+| fire | burn | 7 dps for 3 s after the hit, refreshed by every hit |
+| frost | chill, then frozen | chill (0..1) slows flight and fire rate (up to 45%); full chill freezes -- an enemy's wings lock and it drops (a stun), a tower stops firing; 1.6 s, the player's 0.8 s (flap locked, half the stick, never the controls) |
+| blight | corrode | +25% damage taken from everything, and 3 dps, for 5 s |
+| storm | shock | weapons jammed 0.5 s; the hit arcs to the nearest other enemy within 90 m for 45%, once -- it does not chain on |
+| tide | drench | no regeneration for 4 s (the player's breath refills at half); a tide fireball shoves what it hits |
+| stone | stagger | builds 0.4 a hit; full stagger stuns an enemy 1 s, knocks the player off line |
+
+**There is no type chart.** The playtest's call: Pokemon-style
+effectiveness would be too much, and "frost beats fire" multipliers turn a
+dogfight into a lookup table. The one relation between elements is that a
+creature **shrugs off its own**: half the damage (`same_resist`) and none of
+the status. The one interaction is physical, not a table: water puts fire
+out -- a drench douses a burn and a drenched body does not catch. A held
+breath builds status at `breath_weight` (2.0) per second against a
+fireball's 1 and a bite's 0.6: at 1.2 a frost breath needed 2.5 s unbroken
+to freeze, and in twenty seconds of fighting bots nothing ever froze.
+
+**Who is what.** The player breathes the species' element, or the Combat
+panel's "you breathe" (`--element NAME`), and the flame takes that element's
+look and species scales (`element_breath`, the six species profiles folded
+to one per element). In the arena a bot of a species with a breath file
+breathes its own; an unaligned one (`dragon.glb`) rolls one, and its hide
+leans toward it. In a run **every enemy rolls**: rivals, hunters and every
+tower. Arena drones are `None`: no element, no resistance, no status.
+
+**How it reads.** Everything suffering a status wears it as particles in the
+element's own motion (`App::emit_status`): flame licks rising, frost motes
+sinking and an ice-glint shell while frozen (and the hide ices over), blight
+drips and bubbles, sparks crawling with small arcs, water running off, grit.
+A storm arc is a jagged chain of points struck for a tenth of a second
+(`emit_arc`). A status landing hard bursts (`emit_status_burst`): ice
+shattering, rock, steam off a doused flame. Bolts and impacts wear their
+element's colours; a tower's brazier burns its element and plumes in its
+motion, so a frost tower reads as frost from a kilometre. The HUD tags every
+enemy with its element ("TOWER - FROST", "RIVAL - STORM") and what it is
+suffering under its health; the player's statuses are chips over the health
+plate, the breath bar is labelled with the player's element, and a freeze or
+a burn tints the screen edge. `--status NAME` holds a status on every enemy,
+for captures. Every dial is under Combat > element dials.
+`tests/test_element.cpp` pins the names, the no-chart rule, burn and douse,
+chill and freeze, a breath freezing in about 1.5 s, the storm arc (once, for
+a share), a frozen player unable to fire, a frost player resisting frost, and
+a frozen tower holding its fire. Renders in `artifacts/elements/`.
+
 ## The hoard run (M24, row 3 of `DIRECTION.md`)
 
 The run probe: one generated valley flown from its head to the pass at the
@@ -514,6 +570,45 @@ over it facing back, the gate at the end), collection (needs the ground and
 the time, drains on takeoff), banking, losing, engagement, the hunter clock,
 and the records. Renders in `artifacts/run/`.
 
+### The descent, the props, the prey (M26)
+
+**A run is three valleys.** One valley was a four-minute run with nothing
+after it. Crossing a pass that is not the last **banks** what is carried
+(safe from then on), and the next valley is laid out under the dragon
+(`HoardRun::just_crossed`, `App::advance_valley`): its seed is
+`valley_seed(run, depth)`, stepped until its kind differs from the valley
+before; `apply_depth` makes it harder -- per valley deeper one more slope
+tower and rival, a cache more, hoards worth +35%, the hunters' clock x0.8,
+bounties +25%, towers +25% health. Growth, the bank, the clock and the kills
+carry; health comes back at each pass; the hunters restart. A death loses
+only what was carried; the result is what the passes banked, and the
+records keep the best hoard whether or not the run cleared. The strip shows
+"VALLEY 2/3" and the bank; a call-out names the new valley. `--valley N`
+starts N valleys down; the panel has "skip to next valley" and the descent
+dials.
+
+**Taller towers, two silhouettes, two caches** (`tools/props.md`, built by
+gpt-6-astra): the keep is 40 m (it stood below the 15-25 m canopy at 16 m
+and read as a stump) and guards the caches; slope towers alternate it with
+a 44 m spire. A tower is hit round its middle (18 / 20 m up, radius 9 / 7)
+and fires from its brazier or orb (`Sentinel::muzzle_height`). Every other
+cache is the trove, a ruined ring round a smaller heap, beside the 16 m
+pile.
+
+**Prey** (`src/game/prey.h`, DIRECTION.md row 6): each valley has herds of
+grazers (`assets/props/grazer.glb`, Mossback decimated to 8.5 K triangles
+with baked graze, walk and run clips -- `tools/grazer.md`) on flat dry
+ground away from the towers. They graze and amble, lift their heads at a
+low dragon within 240 m, and bolt at 17 m/s inside 150 m; a dragon above
+80 m is a speck they ignore. Three ways to eat, one per verb: **swoop** --
+the body within 8 m and 9 m above one snatches it (both scale with growth);
+**bite** -- the jaws take the nearest in the cone; **fire** -- breath or a
+fireball kills, and the carcass stays a minute to be swooped or walked onto.
+A meal is 18 growth (no hoard) and 14 health. Dials under Combat > prey.
+`tests/test_prey.cpp` pins the calm herd staying home, ignoring a high
+dragon, scattering from a low one slower than a dragon flies, and the three
+ways to eat.
+
 ## The demo pilot (M25)
 
 `game::DemoPilot` (`src/game/demo_pilot.h`) plays the game through the
@@ -586,3 +681,10 @@ carries a drake through fights a veteran bot would lose. `tests/test_demo_pilot.
 pins the choices (ground, priorities, the fall-back hysteresis, the rush, the
 stalemate, the speed guard, a siege that commits only facing and fires on the
 run in).
+
+**It hunts (M26).** A herd within 650 m, nearer than the next cache and with
+nothing hostile close, is a `Hunt`: a landing's glide path that never
+brakes, levelling at 5 m over the animal's lead, the flame on inside 140 m.
+A pass that goes by rests the hunt; one that runs 25 s rests it for 20, so
+a herd is never circled for ever. It flies the descent too: a crossed pass
+resets it into the next valley.

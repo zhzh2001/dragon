@@ -111,6 +111,7 @@ void test_closest_point_fraction() {
 void test_melee_reach_and_cooldown() {
     std::printf("a bite lands ahead without aim, a strike lands alongside, and both cool down\n");
     Combat combat;
+    combat.player_element = game::Element::None;  // the bare numbers, no burn after
     combat.reset(nullptr, Vec3::zero(), 7u);
     const FlightState player = player_at(Vec3::zero());
     const float health = combat.tuning.sentinel_health;
@@ -243,6 +244,7 @@ void test_player_size_scales_the_body() {
 void test_melee_stuns_knocks_and_chains() {
     std::printf("a bite stuns and knocks its target, and hits chain inside the window\n");
     Combat combat;
+    combat.player_element = game::Element::None;  // the bare numbers, no burn after
     combat.reset(nullptr, Vec3::zero(), 7u);
     // Enough health to take the chain: at the default 60 the second, stepped
     // hit killed the target and the test measured the remainder.
@@ -369,6 +371,7 @@ void test_hostile_melee_reaches_the_player() {
 void test_fireball_hits_and_kills() {
     std::printf("fireballs damage and destroy a sentinel\n");
     Combat combat;
+    combat.player_element = game::Element::None;  // the bare numbers, no burn after
     combat.reset(nullptr, Vec3::zero(), 7u);
     // No blast assist: this test is about the direct hit.
     combat.tuning.fireball_blast_radius = 0.0f;

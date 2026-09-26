@@ -112,6 +112,13 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--walk" && i + 1 < argc) {
             options.has_walk = true;
             std::sscanf(argv[++i], "%f,%f", &options.walk, &options.walk_turn);
+        } else if (arg == "--element" && i + 1 < argc) {
+            options.element = int(game::element_from_name(argv[++i], game::Element::Fire));
+        } else if (arg == "--status" && i + 1 < argc) {
+            options.status = int(game::element_from_name(argv[++i], game::Element::Frost));
+        } else if (arg == "--valley" && i + 1 < argc) {
+            options.valley = SDL_atoi(argv[++i]);
+            options.run = true;
         } else if (arg == "--stage" && i + 1 < argc) {
             options.stage = SDL_atoi(argv[++i]);
             options.run = true;
@@ -223,7 +230,9 @@ bool App::init(const Options& options) {
     model_rig_tuning_path_ = player_model().rig_tuning_path;
     // Combat has no notion of species; it is told the player's scales here and
     // on every model switch, so a headless run gets them without a panel.
-    combat_.player_breath = player_model().breath.scales;
+    for (int e = 0; e < game::ELEMENT_COUNT; ++e) element_breaths_[e] = game::element_breath(game::Element(e));
+    player_element_choice_ = options.element;
+    refresh_player_element();
 
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
@@ -243,6 +252,18 @@ bool App::init(const Options& options) {
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
     load_prop(ASSET_ROOT "/props/watchtower.glb", tower_prop_, "prop_tower");
     load_prop(ASSET_ROOT "/props/hoard_pile.glb", hoard_prop_, "prop_hoard");
+    load_prop(ASSET_ROOT "/props/spire_tower.glb", spire_prop_, "prop_spire");
+    load_prop(ASSET_ROOT "/props/hoard_trove.glb", trove_prop_, "prop_trove");
+    if (load_prop(ASSET_ROOT "/props/grazer.glb", grazer_prop_, "prop_grazer", &grazer_clips_)) {
+        static const char* const names[3] = {"graze", "walk", "run"};
+        for (int c = 0; c < 3; ++c) {
+            for (size_t i = 0; i < grazer_clips_.size(); ++i) {
+                if (grazer_clips_[i].name == names[c]) grazer_clip_[c] = int(i);
+            }
+        }
+        LOG_INFO("grazer clips: graze %d, walk %d, run %d", grazer_clip_[0], grazer_clip_[1],
+                 grazer_clip_[2]);
+    }
     sphere_mesh_.upload(device_.gpu(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
                         "unit_sphere");
     if (!particles_.init(&device_, &pipelines_)) return false;
@@ -297,6 +318,9 @@ bool App::init(const Options& options) {
     if (options.run) {
         if (options.hunters_after > 0.0f) run_dials_.pressure_after = options.hunters_after;
         start_run(options.seed ? options.seed : fresh_seed());
+        for (int v = 0; v < options.valley; ++v) {
+            if (hoard_run_.skip_valley()) advance_valley();
+        }
         if (options.stage > 0) {
             // Grown on the first frame, and at full size at once.
             hoard_run_.award(options.stage >= 2 ? hoard_run_.settings.grow_adult
@@ -816,6 +840,9 @@ void App::shutdown() {
     ring_mesh_.release(device_.gpu());
     release_prop(tower_prop_);
     release_prop(hoard_prop_);
+    release_prop(spire_prop_);
+    release_prop(trove_prop_);
+    release_prop(grazer_prop_);
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
     foliage_.shutdown(device_);
     world_.shutdown(device_);
@@ -1021,7 +1048,25 @@ void App::update(float dt) {
 
     // The dragon always flies, even while the free camera is being used to look
     // at it -- otherwise you cannot inspect a manoeuvre from outside.
-    flight_.update(read_flight_input(dt), &terrain_, dt);
+    {
+        // The player's status on the wings: frozen, the flap is locked and
+        // the stick half there (never gone -- the player keeps the controls);
+        // chilled, a slack stick and thickening air.
+        game::FlightInput input = read_flight_input(dt);
+        const float slow = combat_enabled_ ? combat_.player_slow() : 0.0f;
+        if (slow > 0.0f) {
+            const bool frozen = combat_.player_status().frozen > 0.0f;
+            const float stick = frozen ? 0.5f : 1.0f - 0.5f * slow;
+            input.pitch *= stick;
+            input.roll *= stick;
+            input.yaw *= stick;
+            if (frozen) input.flap = 0.0f;
+        }
+        flight_.update(input, &terrain_, dt);
+        if (slow > 0.0f && !flight_.state().grounded) {
+            flight_.state().velocity = flight_.state().velocity * std::exp(-0.3f * slow * dt);
+        }
+    }
 
     rig_action_ = anim::RigAction{};
     if (studio_active_) {
@@ -1097,12 +1142,35 @@ void App::update(float dt) {
                            (cycle_down && !cycle_button_was_down_);
         cycle_button_was_down_ = cycle_down;
 
+        if (options_.status >= 0) {
+            // The capture hold: every enemy suffering the one status. Where
+            // each one is at frame 10, for placing a camera on it.
+            if (frame_index_ == 10) {
+                for (const game::Sentinel& target : combat_.sentinels()) {
+                    LOG_INFO("status hold: target at %.0f,%.0f,%.0f", double(target.position.x),
+                             double(target.position.y), double(target.position.z));
+                }
+            }
+            for (game::Sentinel& target : combat_.sentinels()) {
+                game::Status& st = target.status;
+                switch (game::Element(options_.status)) {
+                    case game::Element::Fire: st.burn = 1.0f; break;
+                    case game::Element::Frost: st.frozen = 1.0f; target.stun = 1.0f; break;
+                    case game::Element::Blight: st.corrode = 1.0f; break;
+                    case game::Element::Storm: st.shock = 1.0f; break;
+                    case game::Element::Tide: st.drench = 1.0f; break;
+                    case game::Element::Stone: st.stagger = 0.9f; st.since_stagger = 0.0f; break;
+                    default: break;
+                }
+            }
+        }
         update_bots(dt);
         const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
         match_.update(dt, events);
         if (run_mode_) update_run(dt, events);
         for (const game::Impact& impact : combat_.impacts()) {
-            emit_impact(impact.position, impact.team == game::Team::Hostile, impact.on_terrain);
+            emit_impact(impact.position, impact.team == game::Team::Hostile, impact.on_terrain,
+                        impact.element);
             // Loudness by proximity to the ear, not to the dragon: the chase
             // camera is where the player sits.
             const float d = core::distance(active_camera().position, impact.position);
@@ -1111,20 +1179,22 @@ void App::update(float dt) {
         if (combat_.breathing()) {
             emit_flame(combat_.breath_origin(), combat_.breath_direction(),
                        combat_.tuning.breath_range * combat_.player_breath.range, false, dt,
-                       &player_model().breath);
+                       &player_breath_);
         }
         for (const game::BreathCone& flame : combat_.hostile_breaths()) {
             // A bot tagged its cone with its model index; an untagged cone
             // (a sentinel) keeps the shared hostile blue.
             const game::BreathProfile* profile =
-                flame.source >= 0 && size_t(flame.source) < models_.size()
+                flame.element != game::Element::None ? &breath_for(flame.element, flame.source)
+                : flame.source >= 0 && size_t(flame.source) < models_.size()
                     ? &models_[size_t(flame.source)]->breath
                     : nullptr;
             emit_flame(flame.origin, flame.direction,
                        combat_.tuning.hostile_breath_range * flame.scales.range, true, dt,
                        profile);
         }
-        // A thin ember trail off every live round, so its path lingers a beat.
+        // A thin ember trail off every live round, so its path lingers a beat
+        // -- in its element's colours, so a frost bolt reads as frost coming.
         for (const game::Projectile& projectile : combat_.projectiles()) {
             if (!projectile.alive) continue;
             gfx::Particle p;
@@ -1137,8 +1207,60 @@ void App::update(float dt) {
             const bool mine = projectile.team == game::Team::Player;
             p.color_start = mine ? core::Vec3{1.8f, 1.0f, 0.35f} : core::Vec3{0.9f, 1.2f, 1.9f};
             p.color_end = mine ? core::Vec3{0.8f, 0.2f, 0.05f} : core::Vec3{0.15f, 0.3f, 0.8f};
+            if (projectile.element != game::Element::None) {
+                const game::BreathProfile& b = element_breaths_[int(projectile.element)];
+                p.color_start = b.hot * 0.8f;
+                p.color_end = b.cool;
+            }
             p.brightness = 0.9f;
             particles_.spawn(p);
+        }
+        // Each tower's fire is its element: a plume at the brazier in that
+        // element's own motion, so a frost tower is read as frost from a
+        // kilometre, before its first bolt. Jammed, it gutters.
+        for (size_t d = 0; d < run_defence_slots_.size(); ++d) {
+            const int slot = run_defence_slots_[d];
+            if (slot < 0 || size_t(slot) >= combat_.sentinels().size()) continue;
+            const game::Sentinel& tower = combat_.sentinels()[size_t(slot)];
+            if (!tower.alive || tower.element == game::Element::None) continue;
+            const game::BreathProfile& b = element_breaths_[int(tower.element)];
+            const float rate = tower.status.jammed() ? 6.0f : 28.0f;
+            if (0.5f + 0.5f * particle_unit() > rate * dt) continue;
+            gfx::Particle p;
+            p.position = tower.position + core::Vec3{particle_unit() * 0.8f, tower.muzzle_height + 0.6f,
+                                                     particle_unit() * 0.8f};
+            if (!defence_is_spire(int(d))) p.position.z += 2.0f;
+            const float rise = b.buoyancy >= 0.0f ? 1.0f : -0.4f;
+            p.velocity = core::Vec3{particle_unit() * 0.8f, 3.5f * rise + 1.0f, particle_unit() * 0.8f};
+            p.acceleration = core::Vec3{0.0f, b.buoyancy * 0.35f, 0.0f};
+            p.drag = 1.0f;
+            p.life = 0.9f;
+            p.size_start = 2.4f;
+            p.size_end = 0.8f;
+            p.color_start = b.hot;
+            p.color_end = b.cool;
+            p.brightness = 0.8f;
+            particles_.spawn(p);
+        }
+        // What everything is suffering, on its body; the storm's arcs; and
+        // the bursts where a status landed hard.
+        for (const game::Sentinel& sentinel : combat_.sentinels()) {
+            if (!sentinel.alive || !sentinel.status.any()) continue;
+            const float radius = sentinel.radius > 0.0f ? sentinel.radius : combat_.tuning.sentinel_radius;
+            emit_status(sentinel.position, radius, sentinel.status, dt);
+        }
+        if (combat_.player_status().any()) {
+            emit_status(flight_.state().position, 4.5f * growth_scale_, combat_.player_status(), dt);
+        }
+        for (const game::Arc& arc : combat_.arcs()) {
+            emit_arc(arc.from, arc.to, game::element_colour(game::Element::Storm));
+        }
+        for (const game::StatusBurst& burst : combat_.status_bursts()) emit_status_burst(burst);
+        // A full stagger knocks the player off line like a bite does, without
+        // the bite's bookkeeping.
+        if (events.player_staggered && !events.bitten) {
+            flight_.state().velocity = flight_.state().velocity + events.knockback;
+            chase_.kick(1.0f);
         }
         // Enter starts the rematch from the results screen; R already means
         // respawn and stays out of it.
@@ -1169,6 +1291,11 @@ void App::update(float dt) {
         rig_action_.bite = events.melee_swung && events.melee_gesture == game::MeleeGesture::Bite;
         rig_action_.claw = events.melee_swung && events.melee_gesture == game::MeleeGesture::Claw;
         rig_action_.tail = events.melee_swung && events.melee_gesture == game::MeleeGesture::Tail;
+        // A swooped meal is a snatch of the jaws.
+        if (snatch_pending_) {
+            rig_action_.bite = true;
+            snatch_pending_ = false;
+        }
         rig_action_.side = events.melee_side;
         rig_action_.boost = combat_.boost_active() ? 1.0f : 0.0f;
 
@@ -2464,7 +2591,7 @@ void App::build_dragon_ui() {
         if (ImGui::Button("reset breath")) b = game::BreathProfile{};
         // Combat reads the player's scales from here, so a slider drag takes
         // effect on the next frame's cone rather than on the next spawn.
-        combat_.player_breath = b.scales;
+        refresh_player_element();
     }
 
     if (ImGui::CollapsingHeader("Wings")) {
@@ -2931,7 +3058,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
     game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
-    game::load_breath_profile(out.breath, out.breath_path.c_str());
+    out.breath_file = game::load_breath_profile(out.breath, out.breath_path.c_str());
     return true;
 }
 
@@ -2953,7 +3080,7 @@ void App::set_player_model(int index) {
     apply_idle_clip(model, ghost_rig_);
     model_rig_tuning_path_ = model.rig_tuning_path;
     model_tuning_path_ = model.flight_tuning_path;
-    combat_.player_breath = model.breath.scales;
+    refresh_player_element();
     LOG_INFO("player model: [%d] %s", index, model.path.c_str());
 }
 
@@ -2987,6 +3114,13 @@ std::unique_ptr<App::BotShip> App::make_bot(int index) {
         {1.4f, 0.7f, 2.0f},    // violet
     };
     bot->hue = palette[size_t(index) % 4];
+    // Its element: the species' when the species has one, rolled otherwise,
+    // and then the hide leans toward it so "the frost one" is a thing to say.
+    bot->element = worn.breath_file ? worn.breath.element
+                                    : roll_element(uint32_t(index) * 2654435761u + 0x51u);
+    if (!worn.breath_file) bot->hue = game::element_hide(bot->element);
+    bot->breath = breath_for(bot->element, bot->model);
+    combat_.sentinels()[size_t(bot->slot)].element = bot->element;
     bot->last_health = bot_health_;
     LOG_INFO("bot %d: %s", index, worn.path.c_str());
     return bot;
@@ -3004,9 +3138,11 @@ void App::spawn_bots(int count) {
 
 // ---- props ----
 
-bool App::load_prop(const char* path, PropModel& out, const char* tag) {
+bool App::load_prop(const char* path, PropModel& out, const char* tag,
+                    std::vector<anim::AnimationClip>* clips) {
     anim::SkinnedMeshData data;
     const anim::GltfLoadResult loaded = anim::load_skinned_gltf(path, out.skeleton, data);
+    if (loaded.ok && clips) *clips = loaded.animations;
     if (!loaded.ok) {
         LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
         return false;
@@ -3085,6 +3221,13 @@ void App::build_demo_world(game::DemoWorld& world) {
             const size_t n = layout.spine.size();
             const size_t i = std::min(n - 1, size_t(f * float(n - 1)));
             world.safe_point = layout.spine[i] + core::Vec3{0.0f, 220.0f, 0.0f};
+        }
+        const int meal = prey_.nearest(self.position, 2000.0f);
+        if (meal >= 0) {
+            const game::Prey& p = prey_.animals()[size_t(meal)];
+            world.has_prey = true;
+            world.prey = p.position;
+            world.prey_velocity = p.heading * p.speed;
         }
         // The next uncollected cache AHEAD down the corridor: the nearest one
         // can be behind, and turning back for it is not how a run flows.
@@ -3171,25 +3314,13 @@ void App::start_run(uint32_t seed) {
     hoard_run_.start(terrain_, terrain_settings_.half_extent);
     const game::RunLayout& layout = hoard_run_.layout();
 
-    // The fight is rebuilt around the corridor's middle: towers where the
-    // layout put them, rivals at their posts, and no drones -- the first
-    // build left combat's default wave of five in every run.
-    bots_.clear();
-    combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed, 0);
-    run_defence_slots_.clear();
-    for (const game::RunDefence& defence : layout.defences) {
-        run_defence_slots_.push_back(int(combat_.sentinels().size()));
-        combat_.spawn_defence(defence.position);
-    }
-    for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
-    run_alive_.assign(combat_.sentinels().size(), 1);
     // Every run starts as a drake -- at a drake's size at once, not shrinking
     // into it.
     apply_growth(0.0f);
     growth_scale_ = growth_scale_target_;
     wing_growth_ = wing_growth_target_;
     dragon_rig_.wing_growth = wing_growth_;
-    respawn_dragon();  // at the layout's start, facing down the corridor; full (drake) health
+    populate_valley(seed, 0);
     LOG_INFO("run: seed %u, a %s, %.1f km of corridor, %zu caches, %zu towers, %zu rivals, "
              "first hunter at %.0f s",
              seed, game::valley_kind_name(kind), double(layout.length() / 1000.0f),
@@ -3214,6 +3345,346 @@ void App::start_run(uint32_t seed) {
         const core::Vec3 p = layout.gate.position;
         LOG_INFO("  gate at %.0f,%.0f,%.0f  start at %.0f,%.0f,%.0f", double(p.x), double(p.y),
                  double(p.z), double(layout.start.x), double(layout.start.y), double(layout.start.z));
+    }
+}
+
+// The valley's encounters, from its layout: towers (the keep beside each
+// cache, the spire on the slopes, each of a rolled element and tougher per
+// valley deeper), rivals at their posts, the herds, and the dragon at the
+// head. No drones -- the first build left combat's default wave of five in.
+void App::populate_valley(uint32_t seed, int depth) {
+    const game::RunLayout& layout = hoard_run_.layout();
+    bots_.clear();
+    combat_.reset(&terrain_, layout.spine[layout.spine.size() / 2], seed, 0);
+    run_defence_slots_.clear();
+    for (size_t i = 0; i < layout.defences.size(); ++i) {
+        const game::RunDefence& defence = layout.defences[i];
+        // The layout's point is 8 m up the old tower; the model stands on
+        // the ground under it, and is hit round its middle.
+        const core::Vec3 base = defence.position - core::Vec3{0.0f, 8.0f, 0.0f};
+        const bool spire = defence_is_spire(int(i));
+        const float middle = spire ? SPIRE_MIDDLE : KEEP_MIDDLE;
+        const float top = spire ? SPIRE_ORB_Y : KEEP_BRAZIER_Y;
+        const game::Element element = roll_element(seed * 40503u + uint32_t(i) * 2654435761u + 3u);
+        const int slot = combat_.spawn_defence(base + core::Vec3{0.0f, middle, 0.0f},
+                                               spire ? 7.0f : 9.0f, top - middle, element);
+        game::Sentinel& tower = combat_.sentinels()[size_t(slot)];
+        tower.max_health = tower.health = combat_.tuning.defence_health * (1.0f + 0.25f * float(depth));
+        run_defence_slots_.push_back(slot);
+    }
+    for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
+    run_alive_.assign(combat_.sentinels().size(), 1);
+    prey_.reset(layout.herds, terrain_, seed * 7u + 101u);
+    for (const game::RunHerd& herd : layout.herds) {
+        LOG_INFO("  herd of %d at %.0f,%.0f,%.0f", herd.count, double(herd.position.x),
+                 double(herd.position.y), double(herd.position.z));
+    }
+    respawn_dragon();  // at the layout's start, facing down the corridor; full health
+}
+
+bool App::defence_is_spire(int defence) const {
+    const auto& defences = hoard_run_.layout().defences;
+    if (defence < 0 || size_t(defence) >= defences.size()) return false;
+    // Guards are keeps; slope towers alternate, so a valley shows both.
+    return spire_prop_.ok && defences[size_t(defence)].guards < 0 && defence % 2 == 1;
+}
+
+// Across a pass that is not the last: the next valley of the descent, a
+// different kind, deeper and harder, the dragon as grown as it was.
+void App::advance_valley() {
+    if (!hoard_run_.awaiting_valley()) return;
+    const int depth = hoard_run_.valley() + 1;
+    const uint32_t seed = game::valley_seed(run_seed_, depth);
+    game::HoardRunSettings settings = run_dials_;
+    settings.seed = seed;
+    game::TerrainSettings terrain = arena_terrain_;
+    const game::ValleyKind kind = game::apply_valley_kind(seed, terrain, settings);
+    game::apply_depth(depth, settings);
+    if (options_.run_empty) {
+        settings.rivals = 0;
+        settings.defences = 0;
+        settings.guards = false;
+        settings.max_hunters = 0;
+    }
+    terrain_settings_ = terrain;
+    regenerate_terrain();
+    terrain_run_seed_ = seed;
+    hoard_run_.settings = settings;
+    hoard_run_.next_valley(terrain_, terrain_settings_.half_extent);
+    populate_valley(seed, depth);
+    if (autopilot_) demo_.reset(seed * 3u + 1u);
+    valley_flash_ = 5.0f;
+    audio_.play(audio::Clip::Boost, 1.0f, 0.6f);
+    const game::RunLayout& layout = hoard_run_.layout();
+    LOG_INFO("run: valley %d of %d, seed %u, a %s: %zu caches, %zu towers, %zu rivals, %zu herds; "
+             "banked %.0f so far",
+             depth + 1, settings.valleys, seed, game::valley_kind_name(kind), layout.caches.size(),
+             layout.defences.size(), layout.rivals.size(), layout.herds.size(),
+             double(hoard_run_.banked()));
+}
+
+// ---- elements ----
+
+void App::refresh_player_element() {
+    const LoadedModel& model = player_model();
+    const game::Element species = model.breath.element;
+    const game::Element element = player_element_choice_ >= 0 && player_element_choice_ < game::ELEMENT_COUNT
+                                      ? game::Element(player_element_choice_)
+                                      : species;
+    player_breath_ = element == species ? model.breath : element_breaths_[int(element)];
+    combat_.player_element = element;
+    combat_.player_breath = player_breath_.scales;
+}
+
+const game::BreathProfile& App::breath_for(game::Element element, int model) const {
+    if (model >= 0 && size_t(model) < models_.size() && models_[size_t(model)]->breath.element == element) {
+        return models_[size_t(model)]->breath;
+    }
+    const int e = int(element);
+    return element_breaths_[e >= 0 && e < game::ELEMENT_COUNT ? e : 0];
+}
+
+game::Element App::roll_element(uint32_t seed) const {
+    uint32_t x = seed + 0x632be5abu;
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return game::Element(int(x % uint32_t(game::ELEMENT_COUNT)));
+}
+
+// What a status looks like on a body: particles for each one it carries,
+// in the element's own motion -- flame licks rise, frost motes sink, blight
+// drips, sparks crawl, water runs off, grit puffs. All additive, so nothing
+// here is dark: smoke would need a second particle pass.
+void App::emit_status(core::Vec3 centre, float radius, const game::Status& status, float dt) {
+    auto count = [&](float rate) {
+        const float want = rate * dt;
+        int n = int(want);
+        if (0.5f + 0.5f * particle_unit() < want - float(n)) ++n;
+        return n;
+    };
+    auto in_body = [&](float scale) {
+        return centre + core::Vec3{particle_unit(), particle_unit() * 0.7f, particle_unit()} * (radius * scale);
+    };
+    auto on_body = [&]() {
+        const core::Vec3 d = core::normalize_or(
+            core::Vec3{particle_unit(), particle_unit(), particle_unit()}, core::Vec3::up());
+        return centre + d * radius;
+    };
+    const float size = core::clampf(radius / 6.0f, 0.5f, 3.0f);
+    if (status.burn > 0.0f) {
+        for (int i = count(70.0f * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = in_body(0.8f);
+            p.velocity = core::Vec3{particle_unit() * 1.5f, 6.0f + 3.0f * particle_unit(), particle_unit() * 1.5f};
+            p.acceleration = core::Vec3{0.0f, 5.0f, 0.0f};
+            p.drag = 1.5f;
+            p.life = 0.45f + 0.15f * particle_unit();
+            p.size_start = 1.5f * size;
+            p.size_end = 0.3f * size;
+            p.color_start = core::Vec3{2.2f, 0.95f, 0.25f};
+            p.color_end = core::Vec3{0.8f, 0.14f, 0.03f};
+            p.brightness = 0.95f;
+            particles_.spawn(p);
+        }
+    }
+    if (status.frozen > 0.0f) {
+        // The ice shell: short-lived glints hugging the body, so it follows
+        // a falling dragon without a mesh of its own.
+        for (int i = count(150.0f * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = on_body();
+            p.velocity = core::Vec3{particle_unit(), particle_unit(), particle_unit()} * 0.4f;
+            p.life = 0.3f;
+            p.size_start = 1.3f * size;
+            p.size_end = 0.9f * size;
+            p.color_start = core::Vec3{0.7f, 1.4f, 2.2f};
+            p.color_end = core::Vec3{0.25f, 0.6f, 1.5f};
+            p.brightness = 0.55f;
+            particles_.spawn(p);
+        }
+    }
+    if (status.chill > 0.05f || status.frozen > 0.0f) {
+        const float chill = status.frozen > 0.0f ? 1.0f : status.chill;
+        for (int i = count(55.0f * chill * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = in_body(1.0f);
+            p.velocity = core::Vec3{particle_unit(), -1.0f, particle_unit()} * 1.5f;
+            p.acceleration = core::Vec3{0.0f, -3.0f, 0.0f};
+            p.drag = 0.8f;
+            p.life = 1.0f;
+            p.size_start = 0.8f * size;
+            p.size_end = 0.2f * size;
+            p.color_start = core::Vec3{0.6f, 1.2f, 2.0f};
+            p.color_end = core::Vec3{0.1f, 0.3f, 0.9f};
+            p.brightness = 0.7f;
+            particles_.spawn(p);
+        }
+    }
+    if (status.corrode > 0.0f) {
+        for (int i = count(40.0f * size); i > 0; --i) {
+            gfx::Particle p;
+            const bool bubble = particle_unit() > 0.3f;
+            p.position = in_body(0.8f);
+            p.velocity = bubble ? core::Vec3{particle_unit(), 2.0f, particle_unit()}
+                                : core::Vec3{particle_unit(), -2.0f, particle_unit()};
+            p.acceleration = core::Vec3{0.0f, bubble ? 0.5f : -9.0f, 0.0f};
+            p.drag = 1.0f;
+            p.life = bubble ? 0.6f : 0.8f;
+            p.size_start = (bubble ? 0.5f : 0.9f) * size;
+            p.size_end = (bubble ? 1.5f : 0.4f) * size;
+            p.color_start = core::Vec3{1.2f, 1.8f, 0.3f};
+            p.color_end = core::Vec3{0.2f, 0.45f, 0.05f};
+            p.brightness = 0.75f;
+            particles_.spawn(p);
+        }
+    }
+    if (status.shock > 0.0f) {
+        for (int i = count(60.0f * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = on_body();
+            p.velocity = core::Vec3{particle_unit(), particle_unit(), particle_unit()} * 14.0f;
+            p.drag = 6.0f;
+            p.life = 0.15f;
+            p.size_start = 0.7f * size;
+            p.size_end = 0.1f;
+            p.color_start = core::Vec3{1.6f, 1.2f, 2.6f};
+            p.color_end = core::Vec3{0.5f, 0.2f, 1.4f};
+            p.brightness = 1.3f;
+            particles_.spawn(p);
+        }
+        // A crawling arc across the body now and then.
+        if (particle_unit() > 1.0f - 2.0f * 8.0f * dt) {
+            emit_arc(on_body(), on_body(), game::element_colour(game::Element::Storm));
+        }
+    }
+    if (status.drench > 0.0f) {
+        for (int i = count(45.0f * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = in_body(0.9f) + core::Vec3{0.0f, radius * 0.3f, 0.0f};
+            p.velocity = core::Vec3{particle_unit() * 1.5f, -1.0f, particle_unit() * 1.5f};
+            p.acceleration = core::Vec3{0.0f, -14.0f, 0.0f};
+            p.life = 0.6f;
+            p.size_start = 0.5f * size;
+            p.size_end = 0.3f * size;
+            p.color_start = core::Vec3{0.3f, 1.3f, 1.1f};
+            p.color_end = core::Vec3{0.05f, 0.4f, 0.35f};
+            p.brightness = 0.55f;
+            particles_.spawn(p);
+        }
+    }
+    if (status.stagger > 0.2f) {
+        for (int i = count(28.0f * status.stagger * size); i > 0; --i) {
+            gfx::Particle p;
+            p.position = in_body(0.9f);
+            p.velocity = core::Vec3{particle_unit() * 3.0f, 1.0f, particle_unit() * 3.0f};
+            p.drag = 2.0f;
+            p.life = 0.7f;
+            p.size_start = 1.2f * size;
+            p.size_end = 2.6f * size;
+            p.color_start = core::Vec3{1.0f, 0.7f, 0.4f};
+            p.color_end = core::Vec3{0.25f, 0.16f, 0.08f};
+            p.brightness = 0.35f;
+            particles_.spawn(p);
+        }
+    }
+}
+
+// A lightning bolt: a jagged chain of bright points between two bodies,
+// struck for a tenth of a second. Re-struck, it flickers the way lightning does.
+void App::emit_arc(core::Vec3 from, core::Vec3 to, core::Vec3 colour) {
+    const core::Vec3 span = to - from;
+    const float length = core::length(span);
+    if (length < 0.5f) return;
+    const core::Vec3 axis = span / length;
+    const core::Vec3 side = core::normalize_or(core::cross(axis, core::Vec3::up()), core::Vec3::right());
+    const core::Vec3 lift = core::cross(side, axis);
+    const int kinks = std::clamp(int(length / 7.0f), 4, 20);
+    core::Vec3 previous = from;
+    for (int k = 1; k <= kinks; ++k) {
+        const float t = float(k) / float(kinks);
+        const float amplitude = k == kinks ? 0.0f : length * 0.06f * std::sin(t * core::PI);
+        const core::Vec3 next = from + span * t + (side * particle_unit() + lift * particle_unit()) * amplitude;
+        const float piece = core::distance(previous, next);
+        const int dots = std::max(1, int(piece / 1.2f));
+        for (int d = 0; d < dots; ++d) {
+            gfx::Particle p;
+            p.position = core::lerp(previous, next, float(d) / float(dots));
+            p.life = 0.12f;
+            p.size_start = 1.2f;
+            p.size_end = 0.5f;
+            p.color_start = core::Vec3{1.5f, 1.3f, 2.6f};
+            p.color_end = colour;
+            p.brightness = 1.5f;
+            particles_.spawn(p);
+        }
+        previous = next;
+    }
+}
+
+// A status landing hard: ice shattering, rock bursting, steam off a doused
+// flame, a flare as something catches.
+void App::emit_status_burst(const game::StatusBurst& burst) {
+    const core::Vec3 at = burst.on_player ? flight_.state().position : burst.position;
+    const game::StatusReport& r = burst.report;
+    auto spray = [&](int n, float speed, float up, float gravity, float life, float s0, float s1,
+                     core::Vec3 hot, core::Vec3 cool, float brightness, float drag) {
+        for (int i = 0; i < n; ++i) {
+            gfx::Particle p;
+            p.position = at + core::Vec3{particle_unit(), particle_unit(), particle_unit()} * 2.0f;
+            p.velocity = core::normalize_or(core::Vec3{particle_unit(), particle_unit(), particle_unit()},
+                                            core::Vec3::up()) * (speed * (0.5f + 0.5f * std::fabs(particle_unit()))) +
+                         core::Vec3{0.0f, up, 0.0f};
+            p.acceleration = core::Vec3{0.0f, -gravity, 0.0f};
+            p.drag = drag;
+            p.life = life * (0.8f + 0.3f * particle_unit());
+            p.size_start = s0;
+            p.size_end = s1;
+            p.color_start = hot;
+            p.color_end = cool;
+            p.brightness = brightness;
+            particles_.spawn(p);
+        }
+    };
+    if (r.froze) {
+        spray(70, 20.0f, 2.0f, 16.0f, 0.9f, 1.1f, 0.3f, {0.7f, 1.4f, 2.3f}, {0.2f, 0.5f, 1.4f}, 0.9f, 1.0f);
+        spray(1, 0.0f, 0.0f, 0.0f, 0.3f, 6.0f, 16.0f, {0.6f, 1.1f, 2.0f}, {0.1f, 0.2f, 0.6f}, 0.8f, 0.0f);
+    }
+    if (r.staggered) {
+        spray(45, 15.0f, 6.0f, 22.0f, 0.9f, 1.3f, 0.6f, {1.2f, 0.8f, 0.4f}, {0.3f, 0.18f, 0.08f}, 0.5f, 1.2f);
+    }
+    if (r.doused) {
+        spray(40, 3.0f, 6.0f, -2.0f, 1.4f, 2.0f, 7.0f, {0.45f, 0.5f, 0.55f}, {0.1f, 0.12f, 0.14f}, 0.4f, 1.2f);
+    }
+    if (r.burned) {
+        spray(24, 9.0f, 4.0f, -3.0f, 0.5f, 1.6f, 0.4f, {2.3f, 1.0f, 0.3f}, {0.9f, 0.15f, 0.03f}, 1.0f, 2.0f);
+    }
+    if (r.corroded) {
+        spray(26, 8.0f, 1.0f, 14.0f, 0.8f, 1.0f, 0.4f, {1.2f, 1.8f, 0.3f}, {0.2f, 0.45f, 0.05f}, 0.8f, 1.2f);
+    }
+    if (r.drenched) {
+        spray(30, 10.0f, 2.0f, 18.0f, 0.7f, 0.8f, 0.4f, {0.3f, 1.3f, 1.1f}, {0.05f, 0.4f, 0.35f}, 0.6f, 1.0f);
+    }
+    if (burst.on_player) {
+        const char* text = r.froze       ? "FROZEN  --  wings locked"
+                           : r.staggered ? "STAGGERED"
+                           : r.corroded  ? "CORRODED  --  armour eaten"
+                           : r.doused    ? "DOUSED"
+                           : r.drenched  ? "DRENCHED  --  no healing"
+                           : r.burned    ? "BURNING"
+                                         : nullptr;
+        if (text) {
+            status_text_ = text;
+            status_flash_ = 2.0f;
+        }
+    }
+    if (r.froze) {
+        LOG_INFO("status: %s frozen at frame %d, %.0f m from the player", burst.on_player ? "player" : "target",
+                 frame_index_, double(core::distance(at, flight_.state().position)));
+        const float d = core::distance(active_camera().position, at);
+        audio_.play(audio::Clip::BiteHit, 1.0f / (1.0f + d * d / (200.0f * 200.0f)), 1.7f);
     }
 }
 
@@ -3344,20 +3815,22 @@ void App::spawn_rival(int rival_index, bool hunter) {
         bot->pilot.tuning.aggression = 0.7f;
         bot->pilot.tuning.aggression_spread = 0.1f;
         bot->pilot.tuning.flee_health = 0.2f;
-        bot->hue = core::Vec3{2.1f, 0.4f, 0.3f};
     } else {
         const game::RunRival& rival = hoard_run_.layout().rivals[size_t(rival_index)];
         position = rival.position;
         facing = rival.facing;
         bot->dormant = true;
         // Rivals never wear the hunters' red: bone, moss, violet, steel.
-        static const core::Vec3 rival_hides[] = {
-            {1.9f, 1.6f, 0.95f}, {0.75f, 1.7f, 0.6f}, {1.4f, 0.7f, 2.0f}, {0.8f, 1.2f, 1.9f}};
-        bot->hue = rival_hides[size_t(rival_index) % 4];
         bot->post = rival.position;
         bot->rival = rival_index;
         bot->loiter_phase = float(rival_index) * 2.1f;
     }
+    // Every enemy in a run rolls its element; the hide wears it, and the HUD
+    // tag names it (hunters and rivals are told apart by the tag).
+    bot->element = roll_element(seed * 2246822519u + 7u);
+    bot->hue = game::element_hide(bot->element);
+    bot->breath = breath_for(bot->element, bot->model);
+    combat_.sentinels()[size_t(bot->slot)].element = bot->element;
     bot->flight.reset(position, core::look_rotation(facing, core::Vec3::up()), 42.0f);
     bot->pilot.reset(seed);
     bot->was_alive = true;
@@ -3366,6 +3839,11 @@ void App::spawn_rival(int rival_index, bool hunter) {
 
 void App::update_run(float dt, const game::CombatEvents& events) {
     hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
+    if (hoard_run_.just_crossed()) {
+        // Banked at the pass; the next valley is laid out under the dragon.
+        advance_valley();
+    }
+    update_prey(dt, events);
     // Growth, continuous: the tuning follows the hoard every frame, and the
     // size eases after it -- most of it in the first second.
     if (hoard_run_.phase() == game::HoardPhase::Flying) apply_growth(hoard_run_.growth_level());
@@ -3435,9 +3913,9 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         combat_.heal(25.0f);
         audio_.play(audio::Clip::Boost, 1.0f, 0.75f);
         grew_flash_ = 3.5f;
-        LOG_INFO("run: grew into a %s at %.0f s (growth %.0f)",
-                 game::growth_stage_name(hoard_run_.stage()), double(hoard_run_.elapsed()),
-                 double(hoard_run_.growth()));
+        LOG_INFO("run: grew into %s at %.0f s (growth %.0f)",
+                 hoard_run_.stage() == game::GrowthStage::Adult ? "an adult" : "a young dragon",
+                 double(hoard_run_.elapsed()), double(hoard_run_.growth()));
     }
     if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
         const game::RunResult result = hoard_run_.result();
@@ -3446,22 +3924,139 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         audio_.play(hoard_run_.just_banked() ? audio::Clip::Boost : audio::Clip::KnockOut, 1.0f);
         if (autopilot_) {
             LOG_INFO("run over, demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f "
-                     "collect %.0f takeoff %.0f flee %.0f",
+                     "collect %.0f takeoff %.0f flee %.0f hunt %.0f",
                      double(demo_.time_in[0]), double(demo_.time_in[1]), double(demo_.time_in[2]),
                      double(demo_.time_in[3]), double(demo_.time_in[4]), double(demo_.time_in[5]),
-                     double(demo_.time_in[6]), double(demo_.time_in[7]));
+                     double(demo_.time_in[6]), double(demo_.time_in[7]), double(demo_.time_in[8]));
         }
-        LOG_INFO("run over: %s  a %s  hoard %.0f (carried %.0f)  caches %d  kills %d  hunters %d  "
-                 "%s  %.0f s  %.0f m",
-                 result.banked ? "BANKED" : "LOST", game::valley_kind_name(result.kind),
-                 double(result.hoard), double(result.carried), result.caches, result.kills,
-                 result.hunters, game::growth_stage_name(result.stage), double(result.time),
-                 double(result.distance));
+        LOG_INFO("run over: %s  valley %d/%d (a %s)  banked %.0f (lost %.0f)  caches %d  kills %d  "
+                 "hunters %d  prey %d  %s  %.0f s  %.0f m",
+                 result.banked ? "CLEARED" : "LOST", result.valley, result.valleys,
+                 game::valley_kind_name(result.kind), double(result.hoard), double(result.carried),
+                 result.caches, result.kills, result.hunters, result.prey,
+                 game::growth_stage_name(result.stage), double(result.time), double(result.distance));
     }
     collect_flash_ = core::maxf(collect_flash_ - dt, 0.0f);
     hunter_flash_ = core::maxf(hunter_flash_ - dt, 0.0f);
     award_flash_ = core::maxf(award_flash_ - dt, 0.0f);
     grew_flash_ = core::maxf(grew_flash_ - dt, 0.0f);
+    valley_flash_ = core::maxf(valley_flash_ - dt, 0.0f);
+    prey_flash_ = core::maxf(prey_flash_ - dt, 0.0f);
+    status_flash_ = core::maxf(status_flash_ - dt, 0.0f);
+}
+
+// The herds: behaviour and the swoop, then the player's weapons on them,
+// then what was eaten turned into growth and health.
+void App::update_prey(float dt, const game::CombatEvents& events) {
+    if (hoard_run_.phase() != game::HoardPhase::Flying || hoard_run_.awaiting_valley()) return;
+    const game::FlightState& s = flight_.state();
+    game::PreyEvents eaten = prey_.update(dt, s, growth_scale_, terrain_);
+    const game::CombatTuning& t = combat_.tuning;
+    if (combat_.breathing()) {
+        prey_.breathe(combat_.breath_origin(), combat_.breath_direction(),
+                      core::radians(t.breath_half_angle_deg * combat_.player_breath.angle),
+                      t.breath_range * combat_.player_breath.range,
+                      t.breath_damage_per_second * combat_.player_breath.damage, dt, eaten);
+    }
+    for (const game::Impact& impact : combat_.impacts()) {
+        if (impact.team == game::Team::Player) {
+            prey_.blast(impact.position, t.fireball_blast_radius, t.fireball_damage, eaten);
+        }
+    }
+    if (events.melee_swung) {
+        prey_.bite(combat_.muzzle(s), s.forward(), t.bite_range * growth_scale_,
+                   core::radians(t.bite_half_angle_deg), eaten);
+    }
+    if (eaten.eaten > 0) {
+        for (int i = 0; i < eaten.eaten; ++i) hoard_run_.feed(prey_.tuning.growth);
+        combat_.heal(prey_.tuning.heal * float(eaten.eaten));
+        prey_flash_ = 2.0f;
+        snatch_pending_ = snatch_pending_ || eaten.by_swoop;
+        audio_.play(audio::Clip::BiteHit, 0.8f, 1.1f);
+        for (int i = 0; i < 16; ++i) {
+            gfx::Particle p;
+            p.position = eaten.where + core::Vec3{0.0f, 1.5f, 0.0f};
+            p.velocity = core::Vec3{particle_unit(), 0.6f + std::fabs(particle_unit()), particle_unit()} * 6.0f;
+            p.acceleration = core::Vec3{0.0f, -12.0f, 0.0f};
+            p.drag = 1.5f;
+            p.life = 0.6f;
+            p.size_start = 1.0f;
+            p.size_end = 0.3f;
+            p.color_start = core::Vec3{1.6f, 1.2f, 0.5f};
+            p.color_end = core::Vec3{0.5f, 0.25f, 0.08f};
+            p.brightness = 0.8f;
+            particles_.spawn(p);
+        }
+    }
+}
+
+// ---- the herd, drawn ----
+
+// One grazer's pose: its gait's clip at its own phase, a carcass lying on its
+// side at the bind pose. Returns false for one that is not drawn.
+bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin) {
+    if (prey.state == game::PreyState::Eaten) return false;
+    const game::PreyClip clip = game::prey_clip(prey, prey_.tuning);
+    // The grazer faces +Z; the engine's forward is -Z.
+    core::Quat facing = core::look_rotation(core::normalize_or(prey.heading * -1.0f, core::Vec3{0.0f, 0.0f, 1.0f}),
+                                            core::Vec3::up());
+    if (clip == game::PreyClip::Dead) {
+        facing = facing * core::Quat::from_axis_angle(core::Vec3::unit_z(), core::HALF_PI);
+    }
+    model = core::Mat4::trs(prey.position + core::Vec3{0.0f, clip == game::PreyClip::Dead ? 0.8f : 0.0f, 0.0f},
+                            facing, core::Vec3::one());
+    const anim::Skeleton& skeleton = grazer_prop_.skeleton;
+    grazer_pose_.reset_to_bind(skeleton);
+    const int which = clip == game::PreyClip::Run ? grazer_clip_[2]
+                      : clip == game::PreyClip::Walk ? grazer_clip_[1]
+                      : clip == game::PreyClip::Graze ? grazer_clip_[0]
+                                                      : -1;
+    if (which >= 0) grazer_clips_[size_t(which)].sample(prey.clip_time, grazer_pose_);
+    anim::compute_world_matrices(skeleton, grazer_pose_, grazer_world_);
+    anim::compute_skinning_matrices(skeleton, grazer_world_, skin);
+    return true;
+}
+
+void App::draw_prey(SDL_GPURenderPass* pass) {
+    if (!run_mode_ || prey_.animals().empty()) return;
+    const core::Vec3 eye = active_camera().position;
+    for (const game::Prey& prey : prey_.animals()) {
+        if (core::distance(eye, prey.position) > 2200.0f) continue;
+        core::Mat4 model;
+        if (grazer_prop_.ok) {
+            if (!pose_prey(prey, model, grazer_skin_)) continue;
+            gfx::ModelUniforms m;
+            m.model = model;
+            // Lifted like the towers: the hide is dark, and a herd in a valley read as black.
+            const float char_ = 1.5f * (1.0f - 0.75f * prey.burnt);
+            m.tint = core::Vec4{char_, char_, char_, 0.0f};
+            world_.draw_skinned(device_, pass, grazer_prop_.mesh, m, grazer_skin_,
+                                grazer_prop_.textures, model_sampler_);
+        } else if (sphere_mesh_.valid() && prey.state != game::PreyState::Eaten) {
+            // No prop: a hide-brown body the size of one.
+            gfx::ModelUniforms m;
+            const core::Quat facing = core::look_rotation(core::normalize_or(prey.heading, core::Vec3::forward()),
+                                                          core::Vec3::up());
+            m.model = core::Mat4::trs(prey.position + core::Vec3{0.0f, 1.4f, 0.0f}, facing,
+                                      core::Vec3{1.1f, 1.0f, 2.2f});
+            m.tint = core::Vec4{0.42f, 0.33f, 0.22f, 0.0f};
+            world_.draw_mesh(device_, pass, sphere_mesh_, m);
+        }
+    }
+}
+
+void App::draw_prey_shadows(SDL_GPURenderPass* shadow_pass) {
+    if (!run_mode_ || !grazer_prop_.ok) return;
+    const core::Vec3 eye = active_camera().position;
+    for (const game::Prey& prey : prey_.animals()) {
+        if (core::distance(eye, prey.position) > 900.0f) continue;
+        core::Mat4 model;
+        if (!pose_prey(prey, model, grazer_skin_)) continue;
+        gfx::ModelUniforms m;
+        m.model = model;
+        world_.draw_skinned_depth(device_, shadow_pass, grazer_prop_.mesh, shadow_.light_view_proj(), m,
+                                  grazer_skin_);
+    }
 }
 
 // The run's things in the world: the pass gate as a ring, and each cache as a
@@ -3490,14 +4085,18 @@ void App::draw_run_world(SDL_GPURenderPass* pass) {
                                     : core::Vec4{1.0f, 0.72f, 0.22f, 0.3f + pulse * 0.6f};
         world_.draw_mesh(device_, pass, ring_mesh_, ring);
         if (!cache.collected && hoard_prop_.ok) {
-            // The pile, flattening as it is taken.
+            // The pile, flattening as it is taken. Every other cache is the
+            // trove -- a ruined ring round a smaller heap -- turned by its
+            // index, so two caches in one valley are not one shape.
+            const PropModel& prop = (i % 2 == 1 && trove_prop_.ok) ? trove_prop_ : hoard_prop_;
             const float left = 1.0f - 0.85f * cache.progress;
             gfx::ModelUniforms pile;
-            pile.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
-                                         core::Quat::identity(), core::Vec3{1.0f, left, 1.0f});
+            pile.model = core::Mat4::trs(
+                cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
+                core::Quat::from_axis_angle(core::Vec3::up(), float(i) * 2.3f), core::Vec3{1.0f, left, 1.0f});
             pile.tint = core::Vec4{1.0f, 1.0f, 1.0f, 0.08f + 0.12f * pulse};
-            world_.draw_skinned(device_, pass, hoard_prop_.mesh, pile, hoard_prop_.joints,
-                                hoard_prop_.textures, model_sampler_);
+            world_.draw_skinned(device_, pass, prop.mesh, pile, prop.joints, prop.textures,
+                                model_sampler_);
         } else if (!cache.collected && sphere_mesh_.valid()) {
             // The pile: it sinks as it is taken.
             const float left = 1.0f - 0.85f * cache.progress;
@@ -3526,15 +4125,27 @@ void App::draw_run_hud() {
 
     // ---- the run strip, top centre: hoard, caches, the pass, the hunters ----
     {
-        const float strip_w = hud_.px(680.0f);
+        const float strip_w = hud_.px(780.0f);
         const float strip_h = hud_.px(46.0f);
         const ImVec2 min(width * 0.5f - strip_w * 0.5f, margin);
         hud_.plate(min, ImVec2(min.x + strip_w, min.y + strip_h));
         float x = min.x + hud_.px(16.0f);
+        // How deep: the valley of the descent, and what the passes banked.
+        {
+            hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "VALLEY", tk.text_dim, 10.0f);
+            std::snprintf(line, sizeof(line), "%d/%d", hoard_run_.valley() + 1, hoard_run_.settings.valleys);
+            hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line, valley_flash_ > 0.0f ? tk.accent : tk.text,
+                         28.0f);
+            x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(18.0f);
+        }
         hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "HOARD", tk.text_dim, 10.0f);
         std::snprintf(line, sizeof(line), "%.0f", hoard_run_.hoard());
         hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line,
                      collect_flash_ > 0.0f || award_flash_ > 0.0f ? tk.accent : tk.text, 28.0f);
+        if (hoard_run_.banked() > 0.0f) {
+            std::snprintf(line, sizeof(line), "+%.0f banked", double(hoard_run_.banked()));
+            hud_.label(ImVec2(x, min.y + strip_h - hud_.px(13.0f)), line, tk.text_dim, 9.0f);
+        }
         x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(20.0f);
         // Growth: the stage, and a bar toward the next.
         {
@@ -3635,10 +4246,37 @@ void App::draw_run_hud() {
         if (hoard_run_.elapsed() < 9.0f) {
             std::snprintf(line, sizeof(line),
                           "a %s -- fly to the pass -- land on a hoard to take it, its tower guards it -- "
-                          "kills pay, hoard grows you",
+                          "kills pay, hoard and prey grow you",
                           game::valley_kind_name(layout.kind));
             hud_.label(ImVec2(width * 0.5f, margin + hud_.px(56.0f)), line, tk.text_dim, 13.0f,
                        ui::Align::Centre);
+            hud_.label(ImVec2(width * 0.5f, margin + hud_.px(74.0f)),
+                       "the herds are prey: swoop low through one, bite it, or burn it and pick it up",
+                       tk.text_dim, 12.0f, ui::Align::Centre);
+        }
+        // Into a new valley.
+        if (valley_flash_ > 0.0f) {
+            const float fade = core::saturate(valley_flash_ * 0.7f);
+            const ImU32 colour = (tk.accent & 0x00FFFFFF) | (ImU32(245.0f * fade) << 24);
+            std::snprintf(line, sizeof(line), "VALLEY %d OF %d", hoard_run_.valley() + 1,
+                          hoard_run_.settings.valleys);
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.18f), line, colour, 48.0f, ui::Align::Centre);
+            std::snprintf(line, sizeof(line),
+                          "a %s  --  %.0f banked  --  deeper: more towers, richer hoards, hunters sooner",
+                          game::valley_kind_name(layout.kind), double(hoard_run_.banked()));
+            hud_.label(ImVec2(width * 0.5f, height * 0.18f + hud_.px(54.0f)), line,
+                       (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
+        }
+        if (prey_flash_ > 0.0f) {
+            const float fade = core::saturate(prey_flash_);
+            const ImU32 colour = (tk.ahead & 0x00FFFFFF) | (ImU32(235.0f * fade) << 24);
+            std::snprintf(line, sizeof(line), "+%.0f  PREY", double(prey_.tuning.growth));
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.36f), line, colour, 26.0f, ui::Align::Centre);
+        }
+        if (status_flash_ > 0.0f) {
+            const float fade = core::saturate(status_flash_);
+            hud_.label(ImVec2(width * 0.5f, height * 0.62f), status_text_.c_str(),
+                       (tk.text & 0x00FFFFFF) | (ImU32(235.0f * fade) << 24), 18.0f, ui::Align::Centre);
         }
         // The call-outs: a bounty, and growing.
         if (award_flash_ > 0.0f) {
@@ -3665,22 +4303,27 @@ void App::draw_run_hud() {
         const bool banked = phase == game::HoardPhase::Banked;
         const game::RunResult result = hoard_run_.result();
         float y = height * 0.24f;
-        hud_.numeral(ImVec2(width * 0.5f, y), banked ? "HOARD BANKED" : "RUN LOST",
+        hud_.numeral(ImVec2(width * 0.5f, y), banked ? "THE DESCENT CLEARED" : "RUN LOST",
                      banked ? tk.accent : tk.danger, 64.0f, ui::Align::Centre);
         y += hud_.px(76.0f);
         if (last_run_record_) {
             hud_.label(ImVec2(width * 0.5f, y), "NEW RECORD", tk.ahead, 15.0f, ui::Align::Centre);
             y += hud_.px(22.0f);
         }
-        std::snprintf(line, sizeof(line), "%s %.0f   %d / %zu caches   %d kills   %s   %d:%02d   %.1f km   a %s",
-                      banked ? "banked" : "lost", double(banked ? result.hoard : result.carried),
-                      result.caches, layout.caches.size(), result.kills,
+        std::snprintf(line, sizeof(line),
+                      "banked %.0f   valley %d of %d   %d kills   %d prey   %s   %d:%02d   %.1f km",
+                      double(result.hoard),
+                      result.valley, result.valleys, result.kills, result.prey,
                       game::growth_stage_name(result.stage), int(result.time) / 60,
-                      int(result.time) % 60, double(result.distance / 1000.0f),
-                      game::valley_kind_name(result.kind));
+                      int(result.time) % 60, double(result.distance / 1000.0f));
+        if (!banked && result.carried > 0.0f) {
+            hud_.label(ImVec2(width * 0.5f, y + hud_.px(24.0f)),
+                       (std::string("lost with you: ") + std::to_string(int(result.carried))).c_str(),
+                       tk.danger, 14.0f, ui::Align::Centre);
+        }
         hud_.label(ImVec2(width * 0.5f, y), line, tk.text, 16.0f, ui::Align::Centre);
-        y += hud_.px(24.0f);
-        std::snprintf(line, sizeof(line), "best hoard %.0f   fastest %d:%02d   %d runs, %d banked",
+        y += hud_.px(!banked && result.carried > 0.0f ? 48.0f : 24.0f);
+        std::snprintf(line, sizeof(line), "best hoard %.0f   fastest clear %d:%02d   %d runs, %d cleared",
                       double(run_records_.best_hoard), int(run_records_.best_time) / 60,
                       int(run_records_.best_time) % 60, run_records_.runs, run_records_.banked);
         hud_.label(ImVec2(width * 0.5f, y), line, tk.text_dim, 14.0f, ui::Align::Centre);
@@ -3795,8 +4438,26 @@ void App::update_bots(float dt) {
             decision.breathe = false;
             decision.melee = false;
         }
+        // Shocked or frozen: weapons cold. Chilled: stiff wings, a slack
+        // stick and air that seems to thicken.
+        const float slow = slot.status.slow(combat_.tuning.elements);
+        if (slot.status.jammed()) {
+            decision.fire = false;
+            decision.breathe = false;
+            decision.melee = false;
+        }
+        if (slow > 0.0f) {
+            decision.flight.pitch *= 1.0f - 0.6f * slow;
+            decision.flight.roll *= 1.0f - 0.6f * slow;
+            decision.flight.yaw *= 1.0f - 0.6f * slow;
+            decision.flight.flap *= 1.0f - slow;
+        }
         const float sink_before = bot->flight.state().climb_rate;
         bot->flight.update(decision.flight, &terrain_, dt);
+        if (slow > 0.0f && !bot->flight.state().grounded) {
+            bot->flight.state().velocity =
+                bot->flight.state().velocity * std::exp(-0.35f * slow * dt);
+        }
 
         // Terrain contact scales with violence. A plummet is death; a scrape
         // costs health and the recovery reflex takes the bot back off the deck;
@@ -3867,15 +4528,17 @@ void App::update_bots(float dt) {
             }
         }
         if (decision.fire) {
-            combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage);
+            combat_.fire_hostile(muzzle, decision.fire_velocity, bot->pilot.tuning.damage,
+                                 bot->element);
         }
         bot->breathing = decision.breathe;
         if (decision.breathe) {
             combat_.hostile_breath(muzzle, bot->flight.state().forward(), bot->model,
-                                   model_at(bot->model).breath.scales);
+                                   bot->breath.scales, bot->element);
         }
         if (decision.melee) {
-            combat_.hostile_melee(muzzle, bot->flight.state().forward(), self.position);
+            combat_.hostile_melee(muzzle, bot->flight.state().forward(), self.position,
+                                  bot->element);
             // The same lunge cost the player pays.
             game::FlightState& st = bot->flight.state();
             const float speed = core::length(st.velocity);
@@ -3971,9 +4634,13 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
 }
 
 // A hit: a radial burst of embers plus a short-lived hot flash.
-void App::emit_impact(core::Vec3 position, bool hostile, bool on_terrain) {
-    const core::Vec3 hot = hostile ? core::Vec3{1.2f, 1.6f, 2.4f} : core::Vec3{2.4f, 1.4f, 0.5f};
-    const core::Vec3 cool = hostile ? core::Vec3{0.15f, 0.3f, 0.9f} : core::Vec3{0.9f, 0.2f, 0.04f};
+void App::emit_impact(core::Vec3 position, bool hostile, bool on_terrain, game::Element element) {
+    core::Vec3 hot = hostile ? core::Vec3{1.2f, 1.6f, 2.4f} : core::Vec3{2.4f, 1.4f, 0.5f};
+    core::Vec3 cool = hostile ? core::Vec3{0.15f, 0.3f, 0.9f} : core::Vec3{0.9f, 0.2f, 0.04f};
+    if (element != game::Element::None) {
+        hot = element_breaths_[int(element)].hot;
+        cool = element_breaths_[int(element)].cool;
+    }
     const int embers = on_terrain ? 26 : 18;
     for (int i = 0; i < embers; ++i) {
         gfx::Particle p;
@@ -4080,18 +4747,35 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // does -- firing -- puts a blue-white bolt on top of it, and two white
         // flashes are indistinguishable at range.
         if (sentinel.ground && tower_prop_.ok) {
-            // The watchtower prop: its base on the ground (a tower's slot sits
-            // 8 m up, at its middle), warmed when hit, and the brazier's fire
-            // on top shrinking as it dies.
+            // The keep or the spire: its base on the ground under the slot
+            // (which is the tower's middle), warmed when hit, rimed when
+            // frozen, and its fire -- the element's colour, in the keep's
+            // brazier or the spire's cradle -- shrinking as it dies.
+            const int index = int(&sentinel - combat_.sentinels().data());
+            int defence = -1;
+            for (size_t d = 0; d < run_defence_slots_.size(); ++d) {
+                if (run_defence_slots_[d] == index) defence = int(d);
+            }
+            const bool spire = defence_is_spire(defence);
+            const PropModel& prop = spire ? spire_prop_ : tower_prop_;
+            const float middle = spire ? SPIRE_MIDDLE : KEEP_MIDDLE;
+            const float top = spire ? SPIRE_ORB_Y : KEEP_BRAZIER_Y;
+            const core::Vec3 base = sentinel.position - core::Vec3{0.0f, middle, 0.0f};
             gfx::ModelUniforms tower;
-            tower.model = core::Mat4::trs(sentinel.position - core::Vec3{0.0f, 8.0f, 0.0f},
-                                          core::Quat::identity(), core::Vec3::one());
-            tower.tint = core::Vec4{1.0f + 0.6f * flash, 1.0f + 0.3f * flash, 1.0f, flash * 0.4f};
-            world_.draw_skinned(device_, pass, tower_prop_.mesh, tower, tower_prop_.joints,
-                                tower_prop_.textures, model_sampler_);
-            draw_ball(sentinel.position + core::Vec3{0.0f, 8.6f, 0.0f}, 0.7f + 0.7f * health,
-                      core::lerp(core::Vec3{1.0f, 0.42f, 0.10f}, core::Vec3{1.0f, 0.8f, 0.3f}, flash),
-                      0.9f + flash, true);
+            tower.model = core::Mat4::trs(base, core::Quat::identity(), core::Vec3::one());
+            // Lifted a little: the atlas is dark stone, and a tower in the
+            // shadow of a slope read as a black post at range.
+            tower.tint = core::Vec4{1.35f + 0.6f * flash, 1.3f + 0.3f * flash, 1.25f, flash * 0.4f};
+            if (sentinel.status.frozen > 0.0f) tower.tint = core::Vec4{0.8f, 1.0f, 1.4f, 0.15f};
+            world_.draw_skinned(device_, pass, prop.mesh, tower, prop.joints, prop.textures,
+                                model_sampler_);
+            const core::Vec3 fire = game::element_colour(sentinel.element);
+            const float jammed = sentinel.status.jammed() ? 0.4f : 1.0f;
+            draw_ball(base + core::Vec3{0.0f, top + (spire ? 0.0f : 0.9f), (spire ? 0.0f : 2.0f)},
+                      (spire ? 1.6f : 1.1f) * (0.6f + 0.6f * health) *
+                          (1.0f + 0.08f * std::sin(time_seconds_ * 7.0f + float(index))),
+                      core::lerp(fire, core::Vec3{1.0f, 0.8f, 0.3f}, flash),
+                      (1.1f + flash) * jammed, true);
             continue;
         }
         if (sentinel.ground) {
@@ -4107,10 +4791,11 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
                       0.9f + flash, true);
             continue;
         }
-        const core::Vec3 base{0.72f, 0.24f, 0.18f};
-        const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, flash);
+        const bool frozen = sentinel.status.frozen > 0.0f;
+        const core::Vec3 base = frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::Vec3{0.72f, 0.24f, 0.18f};
+        const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, frozen ? 0.0f : flash);
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
-                  colour, 0.18f + flash * 1.6f);
+                  colour, frozen ? 0.25f : 0.18f + flash * 1.6f);
         // A smaller inner sphere shrinks as it takes damage: a health readout
         // that needs no UI and works at any distance or angle.
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health,
@@ -4120,8 +4805,8 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
     for (const game::Projectile& projectile : combat_.projectiles()) {
         if (!projectile.alive) continue;
         const bool mine = projectile.team == game::Team::Player;
-        const core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f}
-                                       : core::Vec3{0.45f, 0.80f, 1.0f};
+        core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f} : core::Vec3{0.45f, 0.80f, 1.0f};
+        if (projectile.element != game::Element::None) colour = game::element_colour(projectile.element);
         // Incoming fire is drawn much larger than it is. Its hitbox is 2.5 m,
         // which at 400 m is a couple of pixels -- invisible, and being hit by
         // something invisible is the least readable thing in the game. Player
@@ -4140,8 +4825,10 @@ void App::draw_combat(SDL_GPURenderPass* pass) {
         // One opaque bolt -- a nested "glow" shell just occludes anything inside
         // it in a forward opaque pipeline, leaving a flat pale balloon. Heat is
         // carried by emissive brightness instead.
-        const core::Vec3 hot = mine ? core::Vec3{1.0f, 0.62f, 0.22f}
-                                    : core::Vec3{0.62f, 0.82f, 1.0f};
+        core::Vec3 hot = mine ? core::Vec3{1.0f, 0.62f, 0.22f} : core::Vec3{0.62f, 0.82f, 1.0f};
+        if (projectile.element != game::Element::None) {
+            hot = core::lerp(game::element_colour(projectile.element), core::Vec3::one(), 0.25f);
+        }
         gfx::ModelUniforms model;
         const float radius = projectile.radius * 0.8f * scale;
         model.model = core::Mat4::trs(projectile.position, heading,
@@ -4205,6 +4892,32 @@ void App::draw_combat_hud() {
                                       edge, edge);
     }
 
+    // The player's status at the screen's edge: rime creeping in while
+    // frozen or chilled, a flicker of heat while burning. Read without
+    // looking away from the fight, like the damage flash.
+    {
+        const game::Status& st = combat_.player_status();
+        auto edge_glow = [&](core::Vec3 rgb, float strength) {
+            if (strength <= 0.01f) return;
+            const ImU32 c = IM_COL32(int(rgb.x * 255.0f), int(rgb.y * 255.0f), int(rgb.z * 255.0f),
+                                     int(core::saturate(strength) * 110.0f));
+            const ImU32 clear = c & 0x00FFFFFF;
+            const float band = height * 0.18f;
+            draw->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(width, band), c, c, clear, clear);
+            draw->AddRectFilledMultiColor(ImVec2(0, height - band), ImVec2(width, height), clear, clear, c, c);
+            const float side = width * 0.12f;
+            draw->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(side, height), c, clear, clear, c);
+            draw->AddRectFilledMultiColor(ImVec2(width - side, 0), ImVec2(width, height), clear, c, c, clear);
+        };
+        edge_glow(game::element_colour(game::Element::Frost),
+                  st.frozen > 0.0f ? 0.9f : st.chill * 0.45f);
+        if (st.burn > 0.0f) {
+            edge_glow(game::element_colour(game::Element::Fire),
+                      0.35f + 0.2f * std::sin(time_seconds_ * 17.0f));
+        }
+        if (st.corrode > 0.0f) edge_glow(game::element_colour(game::Element::Blight), 0.16f);
+    }
+
     // ---- health and breath, bottom centre, above the airspeed ----
     // They spent one build in the top-left corner and came back: in a fight
     // the eye lives at the bottom centre -- the airspeed, the pips, the
@@ -4231,9 +4944,51 @@ void App::draw_combat_hud() {
         }
         hud_.label(ImVec2(label_x, min.y + hud_.px(10.0f)), "HEALTH", tk.text_dim, 12.0f);
         hud_.bar(ImVec2(bar_x, min.y + hud_.px(11.0f)), bar_w, bar_h, health, health_colour);
-        hud_.label(ImVec2(label_x, min.y + hud_.px(36.0f)), "BREATH", tk.text_dim, 12.0f);
+        // The breath is labelled with what it is made of, in its colour.
+        const core::Vec3 ec = game::element_colour(combat_.player_element);
+        const ImU32 element_colour = IM_COL32(int(ec.x * 255.0f), int(ec.y * 255.0f), int(ec.z * 255.0f), 235);
+        char element_label[16];
+        std::snprintf(element_label, sizeof(element_label), "%s", game::element_name(combat_.player_element));
+        for (char* c = element_label; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));
+        hud_.label(ImVec2(label_x, min.y + hud_.px(36.0f)), element_label, element_colour, 12.0f);
         hud_.bar(ImVec2(bar_x, min.y + hud_.px(37.0f)), bar_w, bar_h, combat_.breath(),
                  combat_.breathing() ? tk.breath_hot : tk.breath);
+
+        // What the player is suffering: one chip per status, over the plate.
+        const game::Status& st = combat_.player_status();
+        struct Chip {
+            const char* text;
+            game::Element element;
+            float amount;  // 0..1 for the fill
+        };
+        Chip chips[7];
+        int n = 0;
+        char chill_text[24];
+        if (st.frozen > 0.0f) {
+            chips[n++] = {"FROZEN", game::Element::Frost, 1.0f};
+        } else if (st.chill > 0.05f) {
+            std::snprintf(chill_text, sizeof(chill_text), "CHILLED %d%%", int(st.chill * 100.0f));
+            chips[n++] = {chill_text, game::Element::Frost, st.chill};
+        }
+        if (st.burn > 0.0f) chips[n++] = {"BURNING", game::Element::Fire, st.burn / combat_.tuning.elements.burn_time};
+        if (st.corrode > 0.0f) chips[n++] = {"CORRODED", game::Element::Blight, st.corrode / combat_.tuning.elements.corrode_time};
+        if (st.shock > 0.0f) chips[n++] = {"SHOCKED", game::Element::Storm, 1.0f};
+        if (st.drench > 0.0f) chips[n++] = {"DRENCHED", game::Element::Tide, st.drench / combat_.tuning.elements.drench_time};
+        if (st.stagger > 0.05f) chips[n++] = {"STAGGER", game::Element::Stone, st.stagger};
+        float cx = min.x;
+        const float chip_h = hud_.px(18.0f);
+        for (int i = 0; i < n; ++i) {
+            const float w = hud_.label_width(chips[i].text, 11.0f) + hud_.px(14.0f);
+            const ImVec2 a(cx, min.y - chip_h - hud_.px(5.0f));
+            const ImVec2 b(cx + w, min.y - hud_.px(5.0f));
+            hud_.plate(a, b);
+            const core::Vec3 c = game::element_colour(chips[i].element);
+            const ImU32 col = IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235);
+            draw->AddRectFilled(ImVec2(a.x, b.y - hud_.px(2.5f)),
+                                ImVec2(a.x + w * core::saturate(chips[i].amount), b.y), col);
+            hud_.label(ImVec2(a.x + hud_.px(7.0f), a.y + hud_.px(3.0f)), chips[i].text, col, 11.0f);
+            cx += w + hud_.px(6.0f);
+        }
     }
 
     // ---- ability readiness, beside the airspeed plate ----
@@ -4370,10 +5125,21 @@ void App::draw_combat_hud() {
             if (bot->slot == index) who = bot.get();
         }
         const bool hunter = who && who->hunter;
-        const char* tag = !run_mode_ ? ""
-                          : hunter ? "HUNTER  "
-                          : who ? (who->dormant ? "RIVAL (at post)  " : "RIVAL  ")
-                          : sentinel.ground ? "TOWER  " : "";
+        const char* role = !run_mode_ ? ""
+                           : hunter ? "HUNTER "
+                           : who ? (who->dormant ? "RIVAL (at post) " : "RIVAL ")
+                           : sentinel.ground ? "TOWER " : "";
+        // And what it is made of, so a frost tower is avoided by a player who
+        // cannot afford a freeze -- and shrugged off by one who breathes frost.
+        char tag[64];
+        if (sentinel.element != game::Element::None) {
+            char name[16];
+            std::snprintf(name, sizeof(name), "%s", game::element_name(sentinel.element));
+            for (char* c = name; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));
+            std::snprintf(tag, sizeof(tag), "%s%s%s  ", role, *role ? "- " : "", name);
+        } else {
+            std::snprintf(tag, sizeof(tag), "%s%s", role, *role ? " " : "");
+        }
         // The locked target is unmistakable. Everything else is a faint mark:
         // if every target looks equally important, none of them read.
         const ImU32 colour = flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark;
@@ -4400,8 +5166,29 @@ void App::draw_combat_hud() {
                 hud_.bar(ImVec2(screen.x - bar_w * 0.5f, below), bar_w, health_h, health, tk.health);
                 below += health_h + hud_.px(3.0f);
             }
-            if (sentinel.stun > 0.0f) {
-                hud_.label(ImVec2(screen.x, below), "STUNNED", tk.accent, 11.0f, ui::Align::Centre);
+            // Its status, in the element's colour: the payoff of an element
+            // made visible at any range.
+            const game::Status& st = sentinel.status;
+            const char* suffering = st.frozen > 0.0f   ? "FROZEN"
+                                    : st.shock > 0.0f  ? "SHOCKED"
+                                    : st.burn > 0.0f   ? "BURNING"
+                                    : st.corrode > 0.0f ? "CORRODED"
+                                    : st.drench > 0.0f ? "DRENCHED"
+                                    : st.chill > 0.3f  ? "CHILLED"
+                                    : sentinel.stun > 0.0f ? "STUNNED"
+                                                          : nullptr;
+            if (suffering) {
+                const game::Element e = st.frozen > 0.0f || st.chill > 0.3f ? game::Element::Frost
+                                        : st.shock > 0.0f  ? game::Element::Storm
+                                        : st.burn > 0.0f   ? game::Element::Fire
+                                        : st.corrode > 0.0f ? game::Element::Blight
+                                        : st.drench > 0.0f ? game::Element::Tide
+                                                           : game::Element::Stone;
+                const core::Vec3 c = sentinel.stun > 0.0f && !st.any() ? core::Vec3{0.89f, 0.67f, 0.24f}
+                                                                       : game::element_colour(e);
+                hud_.label(ImVec2(screen.x, below), suffering,
+                           IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235), 11.0f,
+                           ui::Align::Centre);
             }
             if (locked) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), half * 1.35f, colour, 28, hud_.px(1.4f));
@@ -4482,6 +5269,65 @@ void App::build_combat_ui() {
         return;
     }
 
+    // ---- the element ----
+    // At the top: what you breathe decides what you shrug off and what your
+    // hits leave behind, which is the first thing to try when playtesting.
+    ImGui::SeparatorText("element");
+    {
+        const LoadedModel& model = player_model();
+        char species[48];
+        std::snprintf(species, sizeof(species), "the species' (%s)", game::element_name(model.breath.element));
+        const char* current = player_element_choice_ < 0 ? species : game::element_name(game::Element(player_element_choice_));
+        if (ImGui::BeginCombo("you breathe", current)) {
+            if (ImGui::Selectable(species, player_element_choice_ < 0)) {
+                player_element_choice_ = -1;
+                refresh_player_element();
+            }
+            for (int e = 0; e < game::ELEMENT_COUNT; ++e) {
+                if (ImGui::Selectable(game::element_name(game::Element(e)), player_element_choice_ == e)) {
+                    player_element_choice_ = e;
+                    refresh_player_element();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        const game::Status& st = combat_.player_status();
+        ImGui::TextDisabled("you: burn %.1f  chill %.2f  frozen %.1f  corrode %.1f  shock %.1f  drench %.1f  stagger %.2f",
+                            st.burn, st.chill, st.frozen, st.corrode, st.shock, st.drench, st.stagger);
+        if (ImGui::TreeNode("element dials")) {
+            game::ElementTuning& et = combat_.tuning.elements;
+            ImGui::SliderFloat("own element lands", &et.same_resist, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("status per breath second", &et.breath_weight, 0.1f, 4.0f, "%.2f");
+            ImGui::SliderFloat("status per bite", &et.melee_weight, 0.0f, 2.0f, "%.2f");
+            ImGui::SeparatorText("fire: burn");
+            ImGui::SliderFloat("burn time", &et.burn_time, 0.0f, 10.0f, "%.1f s");
+            ImGui::SliderFloat("burn dps", &et.burn_dps, 0.0f, 30.0f, "%.1f");
+            ImGui::SeparatorText("frost: chill, freeze");
+            ImGui::SliderFloat("chill per hit", &et.chill_per_hit, 0.05f, 1.0f, "%.2f");
+            ImGui::SliderFloat("thaw per second", &et.chill_thaw, 0.0f, 2.0f, "%.2f");
+            ImGui::SliderFloat("slow at full chill", &et.chill_slow, 0.0f, 0.9f, "%.2f");
+            ImGui::SliderFloat("freeze (enemy)", &et.freeze_time, 0.0f, 5.0f, "%.1f s");
+            ImGui::SliderFloat("freeze (you)", &et.player_freeze_time, 0.0f, 3.0f, "%.1f s");
+            ImGui::SeparatorText("blight: corrode");
+            ImGui::SliderFloat("corrode time", &et.corrode_time, 0.0f, 12.0f, "%.1f s");
+            ImGui::SliderFloat("extra damage taken", &et.corrode_vulnerability, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("corrode dps", &et.corrode_dps, 0.0f, 15.0f, "%.1f");
+            ImGui::SeparatorText("storm: shock, arc");
+            ImGui::SliderFloat("jam", &et.shock_jam, 0.0f, 2.0f, "%.2f s");
+            ImGui::SliderFloat("arc range", &et.shock_chain_range, 0.0f, 250.0f, "%.0f m");
+            ImGui::SliderFloat("arc share", &et.shock_chain_share, 0.0f, 1.0f, "%.2f");
+            ImGui::SeparatorText("tide: drench");
+            ImGui::SliderFloat("drench time", &et.drench_time, 0.0f, 10.0f, "%.1f s");
+            ImGui::SliderFloat("fireball shove", &et.drench_push, 0.0f, 40.0f, "%.0f m/s");
+            ImGui::SeparatorText("stone: stagger");
+            ImGui::SliderFloat("stagger per hit", &et.stagger_per_hit, 0.05f, 1.0f, "%.2f");
+            ImGui::SliderFloat("stagger recovery", &et.stagger_recover, 0.0f, 2.0f, "%.2f /s");
+            ImGui::SliderFloat("stagger stun", &et.stagger_stun, 0.0f, 3.0f, "%.1f s");
+            ImGui::SliderFloat("stagger knock (you)", &et.stagger_knock, 0.0f, 40.0f, "%.0f m/s");
+            ImGui::TreePop();
+        }
+    }
+
     // ---- the run (DIRECTION.md row 3) ----
     // Above the match because it is the question the build is asking now: is
     // the corridor under pressure more fun than the arena?
@@ -4505,12 +5351,27 @@ void App::build_combat_ui() {
         if (ImGui::Button("new valley (enter)")) start_run(fresh_seed());
         ImGui::SameLine();
         if (ImGui::Button("leave run")) end_run();
+        ImGui::SameLine();
+        if (ImGui::Button("skip to next valley") && hoard_run_.skip_valley()) advance_valley();
+        ImGui::Text("valley %d of %d   banked %.0f   prey eaten %d, %d grazing",
+                    hoard_run_.valley() + 1, hoard_run_.settings.valleys, hoard_run_.banked(),
+                    hoard_run_.prey_eaten(), prey_.alive());
     }
     ImGui::TextDisabled("records: %d runs, %d banked, best hoard %.0f, fastest %.0f s",
                         run_records_.runs, run_records_.banked, run_records_.best_hoard,
                         run_records_.best_time);
     if (ImGui::TreeNode("run dials (apply at the next start)")) {
         game::HoardRunSettings& r = run_dials_;
+        ImGui::SeparatorText("the descent");
+        ImGui::SliderInt("valleys", &r.valleys, 1, 6);
+        ImGui::SliderInt("towers per valley deeper", &r.depth_towers, 0, 4);
+        ImGui::SliderInt("rivals per valley deeper", &r.depth_rivals, 0, 3);
+        ImGui::SliderFloat("hoard value per valley deeper", &r.depth_value, 0.0f, 1.0f, "+%.2f");
+        ImGui::SliderFloat("hunter clock per valley deeper", &r.depth_pressure, 0.3f, 1.2f, "x%.2f");
+        ImGui::SeparatorText("prey");
+        ImGui::SliderInt("herds", &r.herds, 0, 6);
+        ImGui::SliderInt("herd size", &r.herd_size, 1, 16);
+        ImGui::SeparatorText("the valley");
         ImGui::SliderInt("rivals", &r.rivals, 0, 6);
         ImGui::SliderInt("slope towers", &r.defences, 0, 8);
         ImGui::Checkbox("a tower guards each cache", &r.guards);
@@ -4549,6 +5410,21 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("close / grounded spread", &t.defence_close_spread, 0.05f, 1.0f, "%.2fx");
         ImGui::SliderFloat("close range", &t.defence_close_range, 50.0f, 500.0f, "%.0f m");
         ImGui::SliderFloat("bolt splash", &t.defence_splash, 0.0f, 30.0f, "%.0f m");
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("prey (live)")) {
+        game::PreyTuning& p = prey_.tuning;
+        ImGui::SliderFloat("gallop", &p.run_speed, 4.0f, 40.0f, "%.1f m/s");
+        ImGui::SliderFloat("notices within", &p.notice_range, 20.0f, 600.0f, "%.0f m");
+        ImGui::SliderFloat("ignores a dragon above", &p.notice_height, 10.0f, 300.0f, "%.0f m");
+        ImGui::SliderFloat("bolts within", &p.bolt_range, 10.0f, 400.0f, "%.0f m");
+        ImGui::SliderFloat("calm after", &p.calm_time, 0.5f, 30.0f, "%.1f s");
+        ImGui::SliderFloat("swoop reach", &p.grab_radius, 2.0f, 20.0f, "%.1f m");
+        ImGui::SliderFloat("swoop height", &p.grab_height, 2.0f, 25.0f, "%.1f m");
+        ImGui::SliderFloat("growth per meal", &p.growth, 0.0f, 80.0f, "%.0f");
+        ImGui::SliderFloat("health per meal", &p.heal, 0.0f, 60.0f, "%.0f");
+        ImGui::SliderFloat("prey health", &p.health, 1.0f, 100.0f, "%.0f");
+        ImGui::SliderFloat("carcass lasts", &p.carcass_time, 5.0f, 240.0f, "%.0f s");
         ImGui::TreePop();
     }
     ImGui::Separator();
@@ -5005,26 +5881,37 @@ void App::render() {
         // its height reads from the air.
         if (run_mode_) {
             if (tower_prop_.ok) {
-                for (const game::Sentinel& s : combat_.sentinels()) {
+                for (size_t d = 0; d < run_defence_slots_.size(); ++d) {
+                    const int slot = run_defence_slots_[d];
+                    if (slot < 0 || size_t(slot) >= combat_.sentinels().size()) continue;
+                    const game::Sentinel& s = combat_.sentinels()[size_t(slot)];
                     if (!s.alive || !s.ground) continue;
+                    const bool spire = defence_is_spire(int(d));
+                    const PropModel& prop = spire ? spire_prop_ : tower_prop_;
                     gfx::ModelUniforms m;
-                    m.model = core::Mat4::trs(s.position - core::Vec3{0.0f, 8.0f, 0.0f},
-                                              core::Quat::identity(), core::Vec3::one());
-                    world_.draw_skinned_depth(device_, shadow_pass, tower_prop_.mesh,
-                                              shadow_.light_view_proj(), m, tower_prop_.joints);
+                    m.model = core::Mat4::trs(
+                        s.position - core::Vec3{0.0f, spire ? SPIRE_MIDDLE : KEEP_MIDDLE, 0.0f},
+                        core::Quat::identity(), core::Vec3::one());
+                    world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
+                                              shadow_.light_view_proj(), m, prop.joints);
                 }
             }
             if (hoard_prop_.ok) {
-                for (const game::RunCache& cache : hoard_run_.layout().caches) {
+                const auto& caches = hoard_run_.layout().caches;
+                for (size_t i = 0; i < caches.size(); ++i) {
+                    const game::RunCache& cache = caches[i];
                     if (cache.collected) continue;
+                    const PropModel& prop = (i % 2 == 1 && trove_prop_.ok) ? trove_prop_ : hoard_prop_;
                     gfx::ModelUniforms m;
-                    m.model = core::Mat4::trs(cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
-                                              core::Quat::identity(),
-                                              core::Vec3{1.0f, 1.0f - 0.85f * cache.progress, 1.0f});
-                    world_.draw_skinned_depth(device_, shadow_pass, hoard_prop_.mesh,
-                                              shadow_.light_view_proj(), m, hoard_prop_.joints);
+                    m.model = core::Mat4::trs(
+                        cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
+                        core::Quat::from_axis_angle(core::Vec3::up(), float(i) * 2.3f),
+                        core::Vec3{1.0f, 1.0f - 0.85f * cache.progress, 1.0f});
+                    world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
+                                              shadow_.light_view_proj(), m, prop.joints);
                 }
             }
+            draw_prey_shadows(shadow_pass);
         }
         // Only the live checkpoint casts a shadow. Shadowing all of them costs
         // little but reads as clutter, and the shadow's job here is to tell you
@@ -5079,6 +5966,7 @@ void App::render() {
         world_.draw_mesh(device_, pass, ring_mesh_, model);
     }
     draw_run_world(pass);
+    draw_prey(pass);
 
     // Bot dragons: the real model, warmed slightly red so a target reads as a
     // target at a glance without a hint of UI.
@@ -5099,6 +5987,11 @@ void App::render() {
                                     core::lerpf(1.0f, 0.2f, slot.hit_flash),
                                     0.10f + slot.hit_flash * 0.45f};
         bot_model.recolour = core::Vec4{bot->hue.x, bot->hue.y, bot->hue.z, bot_recolour_};
+        // Frozen: the hide ices over, whatever colour it was.
+        if (slot.status.frozen > 0.0f) {
+            bot_model.recolour = core::Vec4{0.8f, 1.35f, 2.1f, 0.95f};
+            bot_model.tint = core::Vec4{1.15f, 1.35f, 1.75f, 0.28f};
+        }
         world_.draw_skinned(device_, pass, worn.mesh, bot_model, bot->rig.skinning_matrices(),
                             worn.textures, model_sampler_);
     }
@@ -5149,10 +6042,10 @@ void App::log_telemetry() const {
     }
     if (demo_active()) {
         LOG_INFO("   demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f collect %.0f "
-                 "takeoff %.0f flee %.0f",
+                 "takeoff %.0f flee %.0f hunt %.0f",
                  double(demo_.time_in[0]), double(demo_.time_in[1]), double(demo_.time_in[2]),
                  double(demo_.time_in[3]), double(demo_.time_in[4]), double(demo_.time_in[5]),
-                 double(demo_.time_in[6]), double(demo_.time_in[7]));
+                 double(demo_.time_in[6]), double(demo_.time_in[7]), double(demo_.time_in[8]));
         LOG_INFO("   demo: %s  siege shots %d  best off-axis %.1f deg  range %.0f  lock %d",
                  game::demo_state_name(demo_.state()), demo_.siege_shots,
                  double(demo_.siege_best_off_axis_deg), double(demo_.siege_last_range),
