@@ -28,6 +28,18 @@ struct TerrainSettings {
     // into a field of small bumps instead of a mountain range.
     float mountain_scale = 2300.0f;  // metres per noise unit; larger = broader
     int mountain_octaves = 6;
+    // The ridge octave (DIRECTION.md row 7): a second, finer ridged layer
+    // squared onto the upper slopes, so peaks come to crests and flanks break
+    // into spurs instead of reading as clay; and strata -- the mountain
+    // stepped into ledges every `strata_step` metres, blended in by
+    // `strata_strength` -- so rock faces carry horizontal banding as
+    // geometry, not tint. Both only where the mountain term is well up, so
+    // the valley floor is untouched.
+    float ridge_height = 60.0f;
+    float ridge_scale = 700.0f;
+    int ridge_octaves = 2;
+    float strata_step = 22.0f;
+    float strata_strength = 0.3f;
 
     // Rolling detail laid over everything.
     float hill_height = 34.0f;

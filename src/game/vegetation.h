@@ -45,6 +45,15 @@ struct VegetationSettings {
     float grass_above_floor = 450.0f;
     float grass_max_slope = 0.7f;
     uint32_t max_grass = 16000;
+    // Rocks (DIRECTION.md row 7): one candidate per `rock_spacing` cell,
+    // kept by slope -- outcrops and crags on the steep faces past the rock
+    // threshold, scree and boulders on the mid slopes, a sprinkle of boulders
+    // on the floor. What turns clay mountains into mountains.
+    bool rocks = true;
+    float rock_spacing = 42.0f;
+    float rock_slope_cover = 0.6f;   // keep chance on the steepest faces
+    float rock_floor_cover = 0.035f; // on the flat floor
+    float rock_extent = 1.15f;       // x the playable half extent
 
     float wind = 1.0f;
     uint32_t seed = 7;
@@ -64,6 +73,8 @@ public:
     const std::vector<PlantInstance>& trees(gfx::TreeKind kind) const {
         return trees_[int(kind)];
     }
+    const std::vector<PlantInstance>& rocks(int kind) const { return rocks_[kind]; }
+    size_t rock_count() const;
     size_t tree_count() const;
 
     // Fills `out[kind]` with the grass around `centre`. Cheap enough per frame
@@ -73,6 +84,8 @@ public:
 
 private:
     std::vector<PlantInstance> trees_[gfx::TREE_KINDS];
+    std::vector<PlantInstance> rocks_[gfx::ROCK_KINDS];
+    void place_rocks(const Terrain& terrain, const VegetationSettings& settings);
     core::Noise forest_{7};
 };
 

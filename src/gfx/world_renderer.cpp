@@ -30,7 +30,7 @@ PipelineDesc make_terrain_desc(bool wireframe) {
     desc.fs_uniform_buffers = 1;
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
-    desc.fs_samplers = 1;  // the shadow map
+    desc.fs_samplers = 2;  // the shadow map, the detail tile
     desc.fill = wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
     // Terrain is a heightfield: we can see the underside from below when
     // flying through a canyon, so nothing is culled.
@@ -121,6 +121,10 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     white.width = white.height = 1;
     white.rgba = {255, 255, 255, 255};
     white_ = create_texture_from_image(device->gpu(), white, "white");
+    ImageData grey;
+    grey.width = grey.height = 1;
+    grey.rgba = {128, 128, 128, 128};
+    neutral_ = create_texture_from_image(device->gpu(), grey, "neutral", false);
     white_sampler_ = create_model_sampler(device->gpu());
     sky_ = pipelines_->create(make_sky_desc());
     terrain_ = pipelines_->create(make_terrain_desc(false));
@@ -134,6 +138,8 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
 
 void WorldRenderer::shutdown(Device& device) {
     if (white_) SDL_ReleaseGPUTexture(device.gpu(), white_);
+    if (neutral_) SDL_ReleaseGPUTexture(device.gpu(), neutral_);
+    neutral_ = nullptr;
     if (white_sampler_) SDL_ReleaseGPUSampler(device.gpu(), white_sampler_);
     white_ = nullptr;
     white_sampler_ = nullptr;
@@ -162,6 +168,12 @@ void WorldRenderer::draw_terrain(Device& device, SDL_GPURenderPass* pass, const 
         binding.texture = shadow_map_->texture();
         binding.sampler = shadow_map_->sampler();
         SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+    }
+    {
+        SDL_GPUTextureSamplerBinding detail = {};
+        detail.texture = terrain_detail_ ? terrain_detail_ : neutral_;
+        detail.sampler = white_sampler_;
+        if (detail.texture && detail.sampler) SDL_BindGPUFragmentSamplers(pass, 1, &detail, 1);
     }
 
     mesh.bind(pass);

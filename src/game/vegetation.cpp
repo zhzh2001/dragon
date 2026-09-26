@@ -48,9 +48,61 @@ size_t Vegetation::tree_count() const {
     return total;
 }
 
+size_t Vegetation::rock_count() const {
+    size_t n = 0;
+    for (const auto& list : rocks_) n += list.size();
+    return n;
+}
+
+// Rock kinds, as rocks.glb names them: 0 boulder, 1 big boulder, 2 slab,
+// 3 crag, 4 scree cluster, 5 outcrop.
+void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& settings) {
+    for (auto& list : rocks_) list.clear();
+    if (!settings.rocks) return;
+    const TerrainSettings& t = terrain.settings();
+    const float extent = t.half_extent * core::maxf(settings.rock_extent, 0.1f);
+    const float spacing = core::maxf(settings.rock_spacing, 8.0f);
+    const int cells = int((2.0f * extent) / spacing);
+    for (int iz = 0; iz < cells; ++iz) {
+        for (int ix = 0; ix < cells; ++ix) {
+            CellHash hash(ix, iz, settings.seed * 7u + 3u);
+            const float x = -extent + (float(ix) + hash.next()) * spacing;
+            const float z = -extent + (float(iz) + hash.next()) * spacing;
+            const float height = terrain.height_at(x, z);
+            if (height < t.water_level + 1.5f) continue;
+            const Vec3 normal = terrain.normal_at(x, z);
+            const float slope = 1.0f - normal.y;
+            // Steep faces carry the most, the floor a sprinkle; a broad noise
+            // gathers them into fields and bare stretches.
+            const float field = core::saturate(0.6f + forest_.fbm(x / 300.0f - 40.0f, z / 300.0f + 11.0f, 2));
+            const float keep = core::lerpf(settings.rock_floor_cover, settings.rock_slope_cover,
+                                           core::smoothstep(0.06f, 0.4f, slope)) * (0.4f + field);
+            if (hash.next() > keep) continue;
+            const float pick = hash.next();
+            int kind = 0;
+            float scale = 0.7f + 0.9f * hash.next();
+            if (slope > 0.35f) {
+                kind = pick < 0.25f ? 5 : pick < 0.5f ? 3 : pick < 0.8f ? 1 : 2;
+                if (kind == 5) scale = 0.8f + 1.4f * hash.next();
+            } else if (slope > 0.12f) {
+                kind = pick < 0.4f ? 4 : pick < 0.7f ? 0 : 1;
+            } else {
+                kind = pick < 0.6f ? 0 : pick < 0.8f ? 2 : 4;
+            }
+            PlantInstance rock;
+            // Sunk by the slope, so the downhill edge does not float.
+            rock.position_scale = core::Vec4{x, height - (0.25f + 3.0f * slope) * scale, z, scale};
+            rock.params = core::Vec4{hash.next() * core::TWO_PI, 0.8f + 0.35f * hash.next(),
+                                     hash.next() * core::TWO_PI, 0.0f};
+            rocks_[kind].push_back(rock);
+        }
+    }
+}
+
 void Vegetation::plant(const Terrain& terrain, const VegetationSettings& settings) {
     for (auto& list : trees_) list.clear();
     forest_ = core::Noise(settings.seed * 31u + 11u);
+    place_rocks(terrain, settings);
     if (!settings.trees) return;
 
     const TerrainSettings& t = terrain.settings();

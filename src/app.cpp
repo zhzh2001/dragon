@@ -1,4 +1,8 @@
 #include "app.h"
+#include "gfx/static_model.h"
+
+#include <fstream>
+#include <iterator>
 
 #include <SDL3/SDL.h>
 
@@ -187,6 +191,43 @@ bool App::init(const Options& options) {
     if (!shadow_.init(&device_, &pipelines_)) return false;
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
+    // The terrain's detail tile (tools/rocks.md): linear data, not colour.
+    {
+        std::ifstream file(ASSET_ROOT "/textures/terrain_detail.png", std::ios::binary);
+        if (file) {
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            const gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
+            terrain_detail_texture_ = gfx::create_texture_from_image(device_.gpu(), image, "terrain_detail", false);
+            world_.set_terrain_detail(terrain_detail_texture_);
+            LOG_INFO("terrain detail: %dx%d", image.width, image.height);
+        } else {
+            LOG_WARN("terrain detail: no terrain_detail.png; the ground stays untextured");
+        }
+    }
+    // The rocks: six meshes from rocks.glb through the static loader, each
+    // matched to its kind by name, generated for any the file does not have.
+    {
+        std::vector<gfx::StaticMesh> meshes;
+        std::string error;
+        const bool loaded = gfx::load_static_gltf(ASSET_ROOT "/props/rocks.glb", meshes, &error);
+        int from_file = 0;
+        for (int k = 0; k < gfx::ROCK_KINDS; ++k) {
+            const std::string name = "rock_" + std::to_string(k);
+            const gfx::StaticMesh* found = nullptr;
+            for (const gfx::StaticMesh& m : meshes) {
+                if (m.name == name) found = &m;
+            }
+            if (found) {
+                foliage_.set_rock_mesh(device_, k, gfx::encode_rock_mesh(found->data),
+                                       found->bounds_max.y);
+                ++from_file;
+            } else {
+                foliage_.set_rock_mesh(device_, k, gfx::make_rock_mesh(k), gfx::rock_size(k).y);
+            }
+        }
+        LOG_INFO("rocks: %d kind(s) from rocks.glb%s, %d generated", from_file,
+                 loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
+    }
 
     regenerate_terrain();
 
@@ -774,6 +815,7 @@ void App::replant() {
     for (int k = 0; k < gfx::TREE_KINDS; ++k) {
         foliage_.set_trees(device_, gfx::TreeKind(k), vegetation_.trees(gfx::TreeKind(k)));
     }
+    for (int k = 0; k < gfx::ROCK_KINDS; ++k) foliage_.set_rocks(device_, k, vegetation_.rocks(k));
     foliage_.wind = vegetation_settings_.wind;
 }
 
@@ -846,6 +888,8 @@ void App::shutdown() {
     release_prop(spire_prop_);
     release_prop(trove_prop_);
     release_prop(grazer_prop_);
+    if (terrain_detail_texture_) SDL_ReleaseGPUTexture(device_.gpu(), terrain_detail_texture_);
+    terrain_detail_texture_ = nullptr;
     if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
     foliage_.shutdown(device_);
     world_.shutdown(device_);
@@ -1969,6 +2013,10 @@ void App::build_ui(float dt) {
                                     900.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("mountain scale", &terrain_settings_.mountain_scale, 300.0f,
                                     3000.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("ridge octave height", &terrain_settings_.ridge_height, 0.0f, 300.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("ridge octave scale", &terrain_settings_.ridge_scale, 100.0f, 2000.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("strata step", &terrain_settings_.strata_step, 0.0f, 80.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("strata strength", &terrain_settings_.strata_strength, 0.0f, 1.0f, "%.2f");
         dirty |= ImGui::SliderFloat("hill height", &terrain_settings_.hill_height, 0.0f, 90.0f,
                                     "%.0f m");
         dirty |= ImGui::SliderFloat("valley width", &terrain_settings_.valley_width, 60.0f, 1400.0f,

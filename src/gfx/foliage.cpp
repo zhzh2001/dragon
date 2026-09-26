@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "core/log.h"
+#include "core/noise.h"
 #include "gfx/texture.h"
 
 #include "gfx/buffer.h"
@@ -492,6 +493,11 @@ void Foliage::shutdown(Device& device) {
         if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
         set.instances = nullptr;
     }
+    for (StaticSet& set : rocks_) {
+        set.mesh.release(gpu);
+        if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
+        set.instances = nullptr;
+    }
     for (StreamSet& set : grass_) {
         set.mesh.release(gpu);
         if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
@@ -502,12 +508,34 @@ void Foliage::shutdown(Device& device) {
 }
 
 void Foliage::set_trees(Device& device, TreeKind kind, const std::vector<FoliageInstance>& trees) {
-    StaticSet& set = trees_[int(kind)];
+    fill_static(device, trees_[int(kind)], trees, tree_height(kind), "trees");
+}
+
+void Foliage::set_rock_mesh(Device& device, int kind, const MeshData& mesh, float height) {
+    if (kind < 0 || kind >= ROCK_KINDS) return;
+    rocks_[kind].mesh.release(device.gpu());
+    rocks_[kind].mesh.upload(device.gpu(), mesh, "rock");
+    rock_height_[kind] = height;
+}
+
+void Foliage::set_rocks(Device& device, int kind, const std::vector<FoliageInstance>& rocks) {
+    if (kind < 0 || kind >= ROCK_KINDS) return;
+    fill_static(device, rocks_[kind], rocks, core::maxf(rock_height_[kind], 1.0f), "rocks");
+}
+
+uint32_t Foliage::rock_count() const {
+    uint32_t total = 0;
+    for (const StaticSet& set : rocks_) total += set.count;
+    return total;
+}
+
+void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<FoliageInstance>& items,
+                          float height, const char* name) {
     if (set.instances) SDL_ReleaseGPUBuffer(device.gpu(), set.instances);
     set.instances = nullptr;
     set.count = 0;
     set.cells.clear();
-    if (trees.empty()) return;
+    if (items.empty()) return;
 
     // Sort into ground cells so each cell is one contiguous instance range.
     auto cell_key = [](const FoliageInstance& t) {
@@ -515,27 +543,28 @@ void Foliage::set_trees(Device& device, TreeKind kind, const std::vector<Foliage
         const int cz = int(std::floor(t.position_scale.z / CELL_SIZE));
         return (int64_t(cz) << 32) ^ int64_t(uint32_t(cx));
     };
-    std::vector<FoliageInstance> sorted = trees;
+    std::vector<FoliageInstance> sorted = items;
     std::stable_sort(sorted.begin(), sorted.end(), [&](const FoliageInstance& a,
                                                         const FoliageInstance& b) {
         return cell_key(a) < cell_key(b);
     });
-    const float height = tree_height(kind);
     size_t begin = 0;
     while (begin < sorted.size()) {
         size_t end = begin + 1;
         while (end < sorted.size() && cell_key(sorted[end]) == cell_key(sorted[begin])) ++end;
         Cell cell;
         core::Vec3 lo = sorted[begin].position_scale.xyz(), hi = lo;
+        float biggest = 1.0f;
         for (size_t i = begin; i < end; ++i) {
             const core::Vec3 p = sorted[i].position_scale.xyz();
             lo = core::Vec3{core::minf(lo.x, p.x), core::minf(lo.y, p.y), core::minf(lo.z, p.z)};
             hi = core::Vec3{core::maxf(hi.x, p.x), core::maxf(hi.y, p.y), core::maxf(hi.z, p.z)};
+            biggest = core::maxf(biggest, sorted[i].position_scale.w);
         }
-        // The sphere covers the bases plus the tallest tree's crown and sway.
-        hi.y += height * 1.8f;
+        // The sphere covers the bases plus the tallest one's crown and sway.
+        hi.y += height * 1.8f * biggest;
         cell.centre = (lo + hi) * 0.5f;
-        cell.radius = core::length(hi - lo) * 0.5f + height * 0.5f;
+        cell.radius = core::length(hi - lo) * 0.5f + height * 0.5f * biggest;
         cell.first = uint32_t(begin);
         cell.count = uint32_t(end - begin);
         set.cells.push_back(cell);
@@ -544,7 +573,7 @@ void Foliage::set_trees(Device& device, TreeKind kind, const std::vector<Foliage
 
     set.instances = create_buffer_with_data(device.gpu(), sorted.data(),
                                             uint32_t(sorted.size() * sizeof(FoliageInstance)),
-                                            SDL_GPU_BUFFERUSAGE_VERTEX, "trees");
+                                            SDL_GPU_BUFFERUSAGE_VERTEX, name);
     if (set.instances) set.count = uint32_t(sorted.size());
 }
 
@@ -706,6 +735,26 @@ void Foliage::draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUni
             trees_drawn_ += cell.count;
         }
     }
+    // The rocks: the same shader, no sway (a nominal height no rock reaches
+    // makes the sway's height fraction nothing), no card LOD.
+    for (int k = 0; k < ROCK_KINDS; ++k) {
+        const StaticSet& set = rocks_[k];
+        if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
+        Params params;
+        params.wind_time_fade = core::Vec4{0.0f, scene.view_params.z, 1e8f, 2e8f};
+        params.extra = core::Vec4{1e6f, 1e8f, 0.0f, 0.0f};
+        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
+        SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
+        set.mesh.bind(pass);
+        SDL_GPUBufferBinding instance_binding = {};
+        instance_binding.buffer = set.instances;
+        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        for (const Cell& cell : set.cells) {
+            if (core::distance(eye, cell.centre) - cell.radius > tree_draw_distance) continue;
+            if (!frustum.sees(cell.centre, cell.radius)) continue;
+            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
+        }
+    }
 }
 
 void Foliage::draw_grass(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene) {
@@ -743,6 +792,23 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
                                          cell.first);
         }
     }
+    for (int k = 0; k < ROCK_KINDS; ++k) {
+        const StaticSet& set = rocks_[k];
+        if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
+        Params params;
+        params.wind_time_fade = core::Vec4{0.0f, time, 1e8f, 2e8f};
+        params.extra = core::Vec4{1e6f, 0.0f, 0.0f, 0.0f};
+        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
+        set.mesh.bind(pass);
+        SDL_GPUBufferBinding instance_binding = {};
+        instance_binding.buffer = set.instances;
+        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        const Frustum light(light_view_proj);
+        for (const Cell& cell : set.cells) {
+            if (!light.sees(cell.centre, cell.radius)) continue;
+            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
+        }
+    }
 }
 
 void Foliage::bind_cards(SDL_GPURenderPass* pass, uint32_t first) const {
@@ -770,6 +836,67 @@ uint32_t Foliage::grass_count() const {
     uint32_t total = 0;
     for (const StreamSet& set : grass_) total += set.uploaded;
     return total;
+}
+
+core::Vec3 rock_size(int kind) {
+    static const core::Vec3 sizes[ROCK_KINDS] = {
+        {4.0f, 3.0f, 4.0f}, {8.0f, 5.0f, 7.0f}, {9.0f, 1.8f, 6.0f},
+        {4.0f, 10.0f, 4.0f}, {7.0f, 2.5f, 7.0f}, {16.0f, 8.0f, 12.0f}};
+    return sizes[kind >= 0 && kind < ROCK_KINDS ? kind : 0];
+}
+
+MeshData make_rock_mesh(int kind) {
+    // An octahedron subdivided three times onto the unit sphere, then pushed
+    // about by noise: lumpy, faceted, and cheap (512 triangles).
+    std::vector<core::Vec3> points = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    std::vector<uint32_t> tris = {0, 2, 4, 4, 2, 1, 1, 2, 5, 5, 2, 0, 4, 3, 0, 1, 3, 4, 5, 3, 1, 0, 3, 5};
+    for (int level = 0; level < 3; ++level) {
+        std::vector<uint32_t> next;
+        auto mid = [&](uint32_t a, uint32_t b) {
+            points.push_back(core::normalize((points[a] + points[b]) * 0.5f));
+            return uint32_t(points.size() - 1);
+        };
+        for (size_t i = 0; i < tris.size(); i += 3) {
+            const uint32_t a = tris[i], b = tris[i + 1], c = tris[i + 2];
+            const uint32_t ab = mid(a, b), bc = mid(b, c), ca = mid(c, a);
+            next.insert(next.end(), {a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca});
+        }
+        tris = std::move(next);
+    }
+    const core::Noise noise(uint32_t(kind) * 7919u + 13u);
+    const core::Vec3 size = rock_size(kind);
+    MeshData mesh;
+    for (const core::Vec3& p : points) {
+        const float bump = noise.fbm(p.x * 1.7f + 3.0f, p.z * 1.7f + p.y * 1.3f, 4);
+        const float r = 1.0f + 0.35f * bump;
+        core::Vec3 q = p * r;
+        // Flatten the base, and squash to the kind's proportions.
+        if (q.y < -0.3f) q.y = -0.3f + (q.y + 0.3f) * 0.25f;
+        MeshVertex v;
+        v.position = core::Vec3{q.x * size.x * 0.5f, (q.y + 0.35f) * size.y * 0.75f - 0.6f, q.z * size.z * 0.5f};
+        const float brightness = 0.75f + 0.5f * bump + 0.2f * core::saturate(p.y);
+        v.color = palette_vertex(PaletteEntry::Rock, core::clampf(brightness, 0.4f, 1.4f), FOLIAGE_MAT_PLAIN);
+        mesh.vertices.push_back(v);
+    }
+    // Faceted: every triangle its own vertices, so the lighting reads edges.
+    MeshData faceted;
+    for (size_t i = 0; i < tris.size(); ++i) {
+        faceted.vertices.push_back(mesh.vertices[tris[i]]);
+        faceted.indices.push_back(uint32_t(i));
+    }
+    faceted.recompute_normals();
+    return faceted;
+}
+
+MeshData encode_rock_mesh(const MeshData& source) {
+    MeshData out = source;
+    for (MeshVertex& v : out.vertices) {
+        // The file's greys run about 0.35..0.75; the palette's rock entry is
+        // the mean, so 0.55 maps to 1.
+        const float grey = (v.color.x + v.color.y + v.color.z) / 3.0f;
+        v.color = palette_vertex(PaletteEntry::Rock, core::clampf(grey / 0.55f, 0.3f, 1.6f), FOLIAGE_MAT_PLAIN);
+    }
+    return out;
 }
 
 }  // namespace gfx

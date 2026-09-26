@@ -38,6 +38,7 @@ add_executable(dragon
   src/anim/gltf_loader.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
+  src/gfx/static_model.cpp
   src/gfx/post.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
@@ -150,6 +151,7 @@ add_test(NAME rally COMMAND test_rally)
 
 add_executable(test_anim
   tests/test_anim.cpp
+  src/gfx/static_model.cpp
   src/game/studio.cpp
   src/game/match.cpp
   src/anim/animation.cpp

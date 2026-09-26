@@ -75,9 +75,27 @@ float Terrain::height_at(float x, float z) const {
 float Terrain::analytic_height_at(float x, float z) const {
     const float mask = valley_mask(x, z);
 
-    const float mountains = noise_.ridged(x / settings_.mountain_scale, z / settings_.mountain_scale,
-                                          settings_.mountain_octaves) *
-                            settings_.mountain_height;
+    float mountains = noise_.ridged(x / settings_.mountain_scale, z / settings_.mountain_scale,
+                                    settings_.mountain_octaves) *
+                      settings_.mountain_height;
+    const float up = settings_.mountain_height > 1e-3f ? mountains / settings_.mountain_height : 0.0f;
+    if (settings_.ridge_height > 0.0f) {
+        // Offset so the finer ridges do not line up with the broad ones.
+        const float crest = noise_.ridged(x / settings_.ridge_scale + 17.3f, z / settings_.ridge_scale - 5.1f,
+                                          settings_.ridge_octaves);
+        mountains += crest * crest * settings_.ridge_height * core::smoothstep(0.2f, 0.65f, up);
+    }
+    if (settings_.strata_step > 1.0f && settings_.strata_strength > 0.0f) {
+        // Ledges: within each band the height eases flat at both ends, so a
+        // slope becomes a run of steps with steeper risers between.
+        const float t = mountains / settings_.strata_step;
+        const float band = std::floor(t);
+        const float f = t - band;
+        const float eased = f * f * f * (f * (f * 6.0f - 15.0f) + 10.0f);
+        const float terraced = (band + eased) * settings_.strata_step;
+        mountains = core::lerpf(mountains, terraced,
+                                settings_.strata_strength * core::smoothstep(0.15f, 0.45f, up));
+    }
 
     const float hills =
         noise_.fbm(x / settings_.hill_scale, z / settings_.hill_scale, settings_.hill_octaves) *

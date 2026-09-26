@@ -22,6 +22,10 @@ enum class TreeKind : int { Spruce = 0, Pine, Broadleaf, Dead, Count };
 enum class GrassKind : int { Tuft = 0, Reed, Bush, Count };
 
 constexpr int TREE_KINDS = int(TreeKind::Count);
+// Rocks ride the same instanced static path as trees (DIRECTION.md row 7):
+// boulders, slabs, crags, scree and outcrops, meshes from
+// assets/props/rocks.glb (tools/rocks.md) or generated when it is absent.
+constexpr int ROCK_KINDS = 6;
 constexpr int GRASS_KINDS = int(GrassKind::Count);
 
 // Instanced plants: a few generated meshes, each drawn thousands of times from
@@ -35,6 +39,11 @@ public:
 
     // Load-time upload of one tree kind; replaces that kind's previous forest.
     void set_trees(Device& device, TreeKind kind, const std::vector<FoliageInstance>& trees);
+    // A rock kind's mesh (vertex colour already in the plant encoding), and
+    // where they lie. Drawn with the trees, in the main and shadow passes.
+    void set_rock_mesh(Device& device, int kind, const MeshData& mesh, float height);
+    void set_rocks(Device& device, int kind, const std::vector<FoliageInstance>& rocks);
+    uint32_t rock_count() const;
     // Per-frame staging of one grass kind, before any render pass opens.
     void upload_grass(Device& device, GrassKind kind, const std::vector<FoliageInstance>& grass);
 
@@ -112,11 +121,25 @@ private:
     PipelineHandle depth_pipeline_ = INVALID_PIPELINE;
 
     StaticSet trees_[TREE_KINDS];
+    StaticSet rocks_[ROCK_KINDS];
+    float rock_height_[ROCK_KINDS] = {};
+    void fill_static(Device& device, StaticSet& set, const std::vector<FoliageInstance>& items,
+                     float height, const char* name);
+
     StreamSet grass_[GRASS_KINDS];
 };
 
 // The plant meshes, generated. Vertex colour carries the material.
 MeshData make_tree_mesh(TreeKind kind);
 MeshData make_grass_mesh(GrassKind kind);
+// A generated rock of `kind` (the rocks.glb order: boulder, big boulder,
+// slab, crag, scree, outcrop), for when the file is missing: a displaced
+// sphere at the kind's size, grey with dark crevices, base 0.6 m under y 0.
+MeshData make_rock_mesh(int kind);
+// A rock mesh from the file into the plant encoding: its grey vertex
+// colour becomes the brightness of the palette's rock entry.
+MeshData encode_rock_mesh(const MeshData& source);
+// Each kind's nominal size, x height z, metres (tools/rocks.md).
+core::Vec3 rock_size(int kind);
 
 }  // namespace gfx

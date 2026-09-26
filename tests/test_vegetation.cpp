@@ -195,8 +195,50 @@ void test_grass_follows_the_camera() {
 
 }  // namespace
 
+void test_rocks_lie_on_the_slopes() {
+    std::printf("rocks: on dry ground, sunk into it, and densest on the steep faces\n");
+    game::Terrain terrain;
+    terrain.generate(small_terrain());
+    game::Vegetation vegetation;
+    game::VegetationSettings settings;
+    vegetation.plant(terrain, settings);
+    CHECK(vegetation.rock_count() > 100);
+    int steep = 0, flat = 0, steep_rocks = 0, flat_rocks = 0;
+    for (int k = 0; k < gfx::ROCK_KINDS; ++k) {
+        for (const auto& r : vegetation.rocks(k)) {
+            const core::Vec3 p = r.position_scale.xyz();
+            const float ground = terrain.height_at(p.x, p.z);
+            CHECK(std::isfinite(p.y) && p.y <= ground && p.y > ground - 40.0f);
+            CHECK(ground > terrain.settings().water_level);
+            const float slope = 1.0f - terrain.normal_at(p.x, p.z).y;
+            if (slope > 0.3f) ++steep_rocks;
+            if (slope < 0.05f) ++flat_rocks;
+        }
+    }
+    // Sample the terrain for how much of it is steep and flat, to compare
+    // densities rather than counts.
+    const float e = terrain.settings().half_extent;
+    for (float z = -e; z < e; z += 40.0f) {
+        for (float x = -e; x < e; x += 40.0f) {
+            const float slope = 1.0f - terrain.normal_at(x, z).y;
+            if (slope > 0.3f) ++steep;
+            if (slope < 0.05f) ++flat;
+        }
+    }
+    const float steep_density = float(steep_rocks) / float(steep > 0 ? steep : 1);
+    const float flat_density = float(flat_rocks) / float(flat > 0 ? flat : 1);
+    std::printf("  %zu rocks; per sample: steep %.3f, flat %.3f\n", vegetation.rock_count(),
+                double(steep_density), double(flat_density));
+    CHECK(steep_density > 3.0f * flat_density);
+    // And off.
+    settings.rocks = false;
+    vegetation.plant(terrain, settings);
+    CHECK(vegetation.rock_count() == 0);
+}
+
 int main() {
     test_surface_query_matches_mesh();
+    test_rocks_lie_on_the_slopes();
     test_trees_stand_where_trees_can();
     test_grass_follows_the_camera();
     std::printf("\n%d checks, %d failures\n", checks, failures);

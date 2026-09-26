@@ -352,11 +352,17 @@ void test_long_sim_stays_finite() {
         const float t = float(i) * dt;
         const Vec3 target{600.0f * std::sin(0.11f * t), 500.0f + 150.0f * std::sin(0.23f * t),
                           -600.0f * std::cos(0.07f * t)};
+        // The ground the app hands a bot: the highest of below and one, two
+        // and three seconds along the flight path (App::update_bots). One
+        // sample at two seconds passed only by luck, and a sharper ridge
+        // octave in the terrain ran it into a spur.
         const Vec3 self = flight.state().position;
-        const Vec3 ahead = self + flight.state().velocity * 2.0f;
-        const BotDecision d = pilot.update(
-            dt, flight.state(), target_at(target), true,
-            maxf(terrain.height_at(self.x, self.z), terrain.height_at(ahead.x, ahead.z)));
+        float ground = terrain.height_at(self.x, self.z);
+        for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
+            const Vec3 ahead = self + flight.state().velocity * look;
+            ground = maxf(ground, terrain.height_at(ahead.x, ahead.z));
+        }
+        const BotDecision d = pilot.update(dt, flight.state(), target_at(target), true, ground);
         const float speed_before = flight.state().airspeed;
         const float clearance_before = flight.state().ground_clearance;
         flight.update(d.flight, &terrain, dt);

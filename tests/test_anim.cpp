@@ -14,6 +14,7 @@
 #include "anim/animation.h"
 #include "anim/dragon_rig.h"
 #include "anim/gltf_loader.h"
+#include "gfx/static_model.h"
 #include "game/studio.h"
 #include "anim/skeleton.h"
 #include "anim/skinned_mesh.h"
@@ -2361,6 +2362,27 @@ void test_optional_embercrest_asset() {
     }
 }
 
+// The static loader reads a prop as plain world-space meshes: the tracked
+// watchtower is one mesh node, 40 m tall, base at y 0, with normals.
+void test_static_gltf_loads_a_prop() {
+    std::printf("the static glTF loader reads a tracked prop\n");
+    namespace fs = std::filesystem;
+    const fs::path path = fs::path(__FILE__).parent_path().parent_path() / "assets/props/watchtower.glb";
+    std::vector<gfx::StaticMesh> meshes;
+    std::string error;
+    CHECK(gfx::load_static_gltf(path.string().c_str(), meshes, &error));
+    CHECK(meshes.size() == 1);
+    if (meshes.empty()) return;
+    const gfx::StaticMesh& m = meshes[0];
+    CHECK(!m.data.indices.empty() && m.data.indices.size() % 3 == 0);
+    CHECK(std::fabs(m.bounds_max.y - 40.0f) < 1.0f && std::fabs(m.bounds_min.y) < 0.1f);
+    bool unit_normals = true;
+    for (const auto& v : m.data.vertices) unit_normals &= std::fabs(core::length(v.normal) - 1.0f) < 0.02f;
+    CHECK(unit_normals);
+    // A missing file is an error, not a crash.
+    CHECK(!gfx::load_static_gltf("/nonexistent.glb", meshes, &error));
+}
+
 }  // namespace
 
 // The melee gestures move the whole animal, and each direction is a sign
@@ -2511,6 +2533,7 @@ void test_melee_load_recovery_and_switch() {
 }
 
 int main() {
+    test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();
     test_melee_gestures_move_the_body();
     test_hierarchy();

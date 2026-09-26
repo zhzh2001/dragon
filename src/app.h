@@ -359,6 +359,7 @@ private:
     // second cache, so a valley is not one repeated shape; and the grazer, a
     // skinned prey animal with three baked clips (tools/grazer.md).
     PropModel spire_prop_, trove_prop_, grazer_prop_;
+    SDL_GPUTexture* terrain_detail_texture_ = nullptr;
     std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
     int grazer_clip_[3] = {-1, -1, -1};
     anim::Pose grazer_pose_;

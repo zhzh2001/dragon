@@ -81,6 +81,14 @@ private:
     // be filled, and the shadow map cannot serve: it is a depth texture and the
     // shader declares a colour one.
     SDL_GPUTexture* white_ = nullptr;
+    // The terrain's tiling detail (assets/textures/terrain_detail.png: R rock,
+    // G grass, B dirt, A snow), and a mid-grey stand-in that leaves the
+    // ground as it was when the file is missing.
+    SDL_GPUTexture* terrain_detail_ = nullptr;
+    SDL_GPUTexture* neutral_ = nullptr;
+public:
+    void set_terrain_detail(SDL_GPUTexture* texture) { terrain_detail_ = texture; }
+private:
     SDL_GPUSampler* white_sampler_ = nullptr;
     SceneUniforms scene_ = {};
 };

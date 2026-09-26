@@ -311,7 +311,9 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
         decision.flight.flap = 1.0f;
         // Braking in a dive adds drag AND lift: it tightens the pull-out the
         // way flaring for a landing does.
-        decision.flight.brake = core::saturate(sink / 30.0f);
+        // Only when fast: at 36 m/s into a rising spur (the ridge octave's)
+        // the brake bled the speed the climb needed and the soak hit it.
+        decision.flight.brake = self.airspeed > 45.0f ? core::saturate(sink / 30.0f) : 0.0f;
         decision.flight.tuck = 0.0f;
     }
 

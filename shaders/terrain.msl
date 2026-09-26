@@ -25,8 +25,32 @@ vertex VertexOut vs_main(VertexIn in [[stage_in]],
 
 // Terrain material from height and slope. Kept in the shader so it can be
 // retuned by saving the file while flying.
+// The detail tile (DIRECTION.md row 7): one RGBA greyscale set -- R rock,
+// G grass, B dirt and gravel, A snow -- tiling every 16 m, each channel
+// averaging 0.5 so it modulates its material around its palette colour.
+// Sampled at two scales (16 m and 97 m, offset) and mixed, which hides the
+// repeat from altitude; the rock channel is projected three ways by the
+// normal so a cliff is not a smear of the ground's projection. Its contrast
+// fades out over distance, where it would only shimmer.
+struct TerrainDetail {
+    float4 ground;  // the xz projection, both scales mixed
+    float rock;     // the rock channel, triplanar
+};
+
+static TerrainDetail sample_detail(float3 p, float3 normal, texture2d<float> tile, sampler s) {
+    TerrainDetail d;
+    const float fine = 1.0 / 16.0, broad = 1.0 / 97.0;
+    d.ground = mix(tile.sample(s, p.xz * fine), tile.sample(s, p.xz * broad + 0.37), 0.35);
+    float3 w = pow(abs(normal), float3(4.0));
+    w /= max(w.x + w.y + w.z, 1e-4);
+    d.rock = d.ground.r * w.y + tile.sample(s, p.zy * fine).r * w.x + tile.sample(s, p.xy * fine).r * w.z;
+    return d;
+}
+
+static float modulate(float d, float strength) { return 1.0 + (d - 0.5) * 2.0 * strength; }
+
 static float3 terrain_albedo(float3 world_position, float3 normal,
-                             constant SceneUniforms& scene) {
+                             constant SceneUniforms& scene, TerrainDetail detail, float strength) {
     // Colours come from the shared palette, so the ground is graded together
     // with the plants standing on it.
     const float3 SAND       = scene.palette[PALETTE_SAND].rgb;
@@ -49,8 +73,9 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
     float patches = fbm(world_position.xz * 0.0055);
     float grain = value_noise(world_position.xz * 0.09);
 
-    float3 grass = mix(GRASS, GRASS_DRY, smoothstep(0.35, 0.75, patches));
-    float3 rock = mix(ROCK_DARK, ROCK, smoothstep(0.25, 0.8, patches));
+    // Each material wears its channel: 1 + (d - 0.5) * 2 * strength.
+    float3 grass = mix(GRASS, GRASS_DRY, smoothstep(0.35, 0.75, patches)) * modulate(detail.ground.g, strength);
+    float3 rock = mix(ROCK_DARK, ROCK, smoothstep(0.25, 0.8, patches)) * modulate(detail.rock, strength);
 
     // Strata: near-horizontal bands on steep faces, the single strongest cue
     // that a cliff is rock and not grey clay. Height-keyed noise, squeezed by
@@ -65,7 +90,7 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
     // turned the whole floor pale beige; the bar is 3 m now, ragged with the
     // patch noise so it reads as bars rather than a contour.
     float bar_top = water_level + 1.0 + 3.0 * patches;
-    float3 albedo = mix(SAND, grass, smoothstep(water_level + 0.3, bar_top, height));
+    float3 albedo = mix(SAND * modulate(detail.ground.b, strength), grass, smoothstep(water_level + 0.3, bar_top, height));
 
     // Rock takes over on anything steep, and earlier at altitude where there is
     // less soil to hold on.
@@ -78,7 +103,7 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
     float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
     float snow_amount = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, height) *
                         smoothstep(0.52, 0.78, flatness);
-    albedo = mix(albedo, SNOW, snow_amount);
+    albedo = mix(albedo, SNOW * modulate(detail.ground.a, strength), snow_amount);
 
     // Fine grain last, so it varies every material rather than only the grass.
     return albedo * (0.88 + 0.24 * grain);
@@ -87,7 +112,9 @@ static float3 terrain_albedo(float3 world_position, float3 normal,
 fragment float4 fs_main(VertexOut in [[stage_in]],
                         constant SceneUniforms& scene [[buffer(0)]],
                         depth2d<float> shadow_map [[texture(0)]],
-                        sampler shadow_sampler [[sampler(0)]]) {
+                        sampler shadow_sampler [[sampler(0)]],
+                        texture2d<float> detail_tile [[texture(1)]],
+                        sampler detail_sampler [[sampler(1)]]) {
     float3 normal = normalize(in.normal);
     float3 to_sun = normalize(scene.sun.xyz);
 
@@ -105,7 +132,9 @@ fragment float4 fs_main(VertexOut in [[stage_in]],
         normal = normalize(normal + float3(-gx, 0.0, -gz) * (0.55 * detail_fade));
     }
 
-    float3 albedo = terrain_albedo(in.world_position, normal, scene) * in.tint;
+    const TerrainDetail detail = sample_detail(in.world_position, normal, detail_tile, detail_sampler);
+    const float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
+    float3 albedo = terrain_albedo(in.world_position, normal, scene, detail, detail_strength) * in.tint;
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(in.world_position, normal, scene, shadow_map,
