@@ -49,6 +49,8 @@ DemoTarget target(Vec3 position, DemoTargetKind kind, int slot) {
 DemoWorld run_world() {
     DemoWorld w;
     w.in_run = true;
+    w.lock_cone_deg = 30.0f;
+    w.lock_range = 1600.0f;
     w.waypoint = Vec3{0.0f, 200.0f, -2000.0f};
     w.safe_point = Vec3{0.0f, 300.0f, 1000.0f};
     return w;
@@ -220,6 +222,7 @@ void test_siege_commits_facing() {
     facing.update(1.0f / 60.0f, flying(Vec3{0.0f, 180.0f, 100.0f}), w);  // enters the siege far out
     d = facing.update(1.0f / 60.0f, flying(at, dir), w);
     CHECK(d.fire);
+    CHECK(!d.boost);  // keep time to aim during the siege approach
 }
 
 void test_hunt() {
@@ -248,6 +251,85 @@ void test_hunt() {
     CHECK(tired.state() != DemoState::Hunt);
 }
 
+void test_exit_and_boost() {
+    std::printf("rush flies on past prey and pursuers, shooting through; climb-out boosts\n");
+    DemoWorld w = run_world();
+    w.rush = true;
+    w.has_prey = true;
+    w.prey = Vec3{0, 0, -100};
+    w.targets.push_back(target(Vec3{0, 200, -100}, DemoTargetKind::Hunter, 1));
+    FlightState s = flying(Vec3{0, 200, 0});
+    DemoPilot runner;
+    runner.reset(7);
+    auto d = runner.update(1.0f / 60.0f, s, w);
+    CHECK(runner.state() == DemoState::Cruise);
+    CHECK(d.fire && d.breath && d.boost);
+    s.orientation = core::look_rotation(Vec3{0, 0, 1}, Vec3::up());
+    d = runner.update(1.0f / 60.0f, s, w);
+    CHECK(!d.boost);  // do not accelerate away from the route during a turn
+
+    DemoPilot leaper;
+    leaper.reset(7);
+    s = flying(Vec3{0, 2, 0}, Vec3::forward(), 0);
+    s.grounded = true;
+    d = leaper.update(1.0f / 60.0f, s, w);
+    CHECK(leaper.state() == DemoState::TakeOff && !d.boost);
+    s = flying(Vec3{0, 15, 0}, Vec3::forward(), 19);
+    d = leaper.update(1.0f / 60.0f, s, w);
+    CHECK(leaper.state() == DemoState::TakeOff && d.boost);
+    s.airspeed = 50;
+    d = leaper.update(1.0f / 60.0f, s, w);
+    CHECK(!d.boost);
+}
+
+void test_relock() {
+    std::printf("a wrong sticky lock is cycled before spending a shot\n");
+    DemoWorld w = run_world();
+    w.has_cache = true;
+    w.cache = Vec3{0, 0, -700};
+    w.targets.push_back(target(Vec3{0, 18, -700}, DemoTargetKind::Tower, 2));
+    w.cache_guard = 0;
+    DemoPilot p;
+    p.reset(10);
+    w.locked_slot = 2;
+    p.update(1.0f / 60.0f, flying(Vec3{0, 180, 100}), w);
+    const Vec3 at{0, 110, -300};
+    const auto s = flying(at, core::normalize(w.targets[0].position - at));
+    w.locked_slot = 3;
+    auto d = p.update(1.0f / 60.0f, s, w);
+    CHECK(d.cycle_target && !d.fire && !d.breath);
+    d = p.update(1.0f / 60.0f, s, w);
+    CHECK(!d.cycle_target);  // a tap, not a cycle every frame
+    bool tapped_again = false;
+    for (int i = 0; i < 15; ++i) {
+        d = p.update(1.0f / 60.0f, s, w);
+        tapped_again |= d.cycle_target;
+    }
+    CHECK(tapped_again);  // more than two candidates may need several taps
+    w.locked_slot = 2;
+    d = p.update(1.0f / 60.0f, s, w);
+    CHECK(!d.cycle_target && d.fire);
+}
+
+void test_reset_clears_abandoned_siege() {
+    std::printf("a new valley forgets the previous guard and skipped cache\n");
+    DemoWorld w = run_world();
+    w.has_cache = true;
+    w.cache = Vec3{0, 0, -700};
+    w.targets.push_back(target(Vec3{0, 18, -700}, DemoTargetKind::Tower, 2));
+    w.cache_guard = 0;
+    DemoPilot p;
+    p.reset(8);
+    p.tuning.siege_budget = 1;
+    const auto s = flying(Vec3{0, 180, 0});
+    for (int i = 0; i < 120; ++i) p.update(1.0f / 60.0f, s, w);
+    CHECK(p.state() != DemoState::Siege);
+    p.reset(8);
+    p.update(1.0f / 60.0f, s, w);
+    CHECK(p.state() == DemoState::Siege);
+    CHECK(p.tuning.siege_budget == 1);  // reset preserves configured controls
+}
+
 }  // namespace
 
 int main() {
@@ -257,6 +339,9 @@ int main() {
     test_speed_guard();
     test_siege_commits_facing();
     test_hunt();
+    test_exit_and_boost();
+    test_relock();
+    test_reset_clears_abandoned_siege();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

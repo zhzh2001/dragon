@@ -648,8 +648,9 @@ The jobs, re-decided every 0.4 s: **fight** a hunter inside 350 m or a rival
 inside 250 m (a dormant one inside 260 m); **flee** to the safe point and
 circle it when below 35% health, until 75%; **siege** a cache's guard tower;
 **land** on an unguarded cache; **walk** the last 70 m on foot; **collect**;
-**take off**; **cruise** otherwise. Once every cache is taken, or the first
-hunter is due, it **rushes** the pass and fights only what is within 300 m.
+**take off**; **cruise** otherwise. After one cache, or when the first hunter
+is due, it **rushes** the pass: opportunistic weapons stay live, but hunts and
+pursuit fights cannot turn it back. `DemoTuning::caches_before_rush` sets the cache objective.
 
 What each headless run taught it, in order -- each was a trace, not a guess:
 
@@ -706,5 +707,43 @@ run in).
 nothing hostile close, is a `Hunt`: a landing's glide path that never
 brakes, levelling at 5 m over the animal's lead, the flame on inside 140 m.
 A pass that goes by rests the hunt; one that runs 25 s rests it for 20, so
-a herd is never circled for ever. It flies the descent too: a crossed pass
-resets it into the next valley.
+a herd is never circled for ever. Hunting stops once the pilot commits to the
+pass. It flies the descent too: a crossed pass resets it into the next valley.
+
+**Getting through a valley (M26.1).** The eight-seed headless measurement
+before this pass lost all eight runs in valley 1, at 39..394 s. Five took a
+cache, but six spent **zero seconds cruising**. Seed 2553442477 spent 237 s
+in take-off and 110 s fighting; 3448181167 spent 106 s sieging and took no
+cache. The problem was both controls that did not reach the flight model
+and a pilot that kept finding another job instead of banking what it had.
+
+- **Boost reaches the wings.** The demo returned from `read_flight_input`
+  before the human input's `combat_.boost_active()` mapping. Its boost button
+  consumed the ordinary cooldown and played the effect, but supplied no
+  thrust. The demo input now carries that same active ability state. Take-off
+  asks for a boost above 8 m while below 45 m/s; transit boosts only within
+  30 degrees of the waypoint. The old siege boost request was removed:
+  enabling its previously missing thrust sent seed 2391549467 past the guard
+  at 81 m/s, 38 degrees off target, without firing. A siege keeps its approach
+  speed and the original entry geometry.
+- **A cache, then the pass.** After one cache the pilot banks it instead of
+  starting another siege, hunt and climb-out. A rush cannot hunt or pursue a
+  passing rival or hunter; the opportunistic weapons still fire down the
+  route, and a hurt dragon flees forward. The hunter deadline still ends
+  unsuccessful cache attempts. All policy dials live in `DemoTuning`.
+- **Relock before shooting.** Seed 844455625 aimed at guard slot 0 while its
+  sticky lock stayed on rival slot 3; the guard was still at full health at
+  20 s. The pilot now taps the player's cycle-target button at 0.2 s intervals
+  while its mark is inside the player's actual acquisition limits, and holds
+  fire and breath while a different lock would redirect them. It cannot set
+  the lock directly or widen aim assist.
+- **A fresh valley is fresh.** Reset clears the skipped cache, siege budget,
+  entry/run-in flags, hunt rest and disengagement timers. Their old values
+  survived into another valley even though its combat slots were reused.
+  Job-time totals remain cumulative for the run telemetry.
+
+`test_demo_pilot` also checks transit past prey and pursuers with weapons
+live, boost requested only after climbing clear and withheld on a turn,
+cycling a sticky lock with paced taps, an unboosted siege approach, and
+retrying a previously abandoned cache after reset. Combat, flight, enemy,
+prey and run tuning are unchanged.

@@ -298,12 +298,16 @@ flight controls.
   | build two verified props in Blender (full access, medium), 2026-09-25 | 62,201 |
   | four second-generation props (two towers, two caches), 2026-09-25 | 85,773 |
   | decimate and animate a prey creature (three baked clips), 2026-09-25 | 80,127 |
+  | improve the demo pilot, measured on eight 12-minute headless runs per pass, 2026-09-26 | 325,999 -- the whole 5-hour window from 100%; it hit the limit before committing |
   | measure one creature's membrane field and rebuild | 75,737 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**
   and the weekly at **85%**, read off the page afterwards. So a task is about
-  **45% of the 5-hour window -- two per window** -- and about **7% of the
+  **45% of the 5-hour window -- two per window** (for an asset task; a
+  gameplay task that measures itself with long headless runs and iterates
+  cost three to four times that -- give it a pass budget in the brief and
+  have it commit after each pass) -- and about **7% of the
   weekly**, i.e. the 5-hour window is the binding constraint by a wide margin
   and the week is not worth worrying about. Plan around the 5-hour reset.
 
@@ -311,6 +315,12 @@ flight controls.
   October) that restores a window early. Do not spend one without being asked
   to: it is a scarce manual lever, not a way around pacing.
 
+- **Codex is for 3D, asset and animation work only** (the user's call,
+  2026-09-26): its cache time and usage limits are tight, and a gameplay
+  task that iterates on long headless measurements ate a whole window.
+  Gameplay, AI and tuning stay in the main session.
+- **Keep headless soaks light**: at most two at a time; a `--demo` soak
+  rolls through many runs on its own, so it usually replaces a seed sweep.
 - **Which worker.** Both produced a correct, verified fix to the same brief with
   the bone-naming contract intact, so this is about cost and behaviour rather
   than capability:

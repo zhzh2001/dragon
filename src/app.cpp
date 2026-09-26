@@ -561,6 +561,10 @@ game::FlightInput App::read_flight_input(float dt) {
         demo_.fight_tuning.aggression = 0.7f;
         demo_decision_ = demo_.update(dt, flight_.state(), world);
         in = demo_decision_.flight;
+        // This branch returns before the human input's boost mapping below.
+        // Read the ability's active state, including its ordinary cooldown;
+        // a requested boost alone must not inject thrust into FlightInput.
+        in.boost = combat_.boost_active() ? 1.0f : 0.0f;
         if (demo_decision_.maneuver != game::ManeuverKind::None) {
             maneuver_.start(demo_decision_.maneuver, demo_decision_.maneuver_direction,
                             flight_.state(), maneuver_tuning_);
@@ -3187,6 +3191,8 @@ void App::build_demo_world(game::DemoWorld& world) {
     world.terrain = &terrain_;
     world.health_fraction = combat_.health_fraction();
     world.locked_slot = combat_.locked_index();
+    world.lock_cone_deg = combat_.tuning.lock_cone_deg;
+    world.lock_range = combat_.tuning.lock_range;
     world.targets.clear();
     const auto& sentinels = combat_.sentinels();
     for (size_t i = 0; i < sentinels.size(); ++i) {
@@ -3240,11 +3246,12 @@ void App::build_demo_world(game::DemoWorld& world) {
             best = int(c);
             best_fraction = f;
         }
-        // The rush to the pass: every cache taken, or the hunters' time has
-        // come. A demo that could spend seven minutes on towers never showed
-        // the end of a run; with a clock, every run ends at the pass or in a
-        // death, and both are the game.
-        world.rush = world.in_run && (best < 0 || hoard_run_.elapsed() > hoard_run_.pressure_start());
+        // Take a cache, then bank it. Repeated sieges, hunts and climb-outs
+        // spent the whole first valley's hunter budget without any transit.
+        // The pressure deadline still bounds unsuccessful cache attempts.
+        world.rush = world.in_run &&
+                     (hoard_run_.caches_collected() >= demo_.tuning.caches_before_rush ||
+                      best < 0 || hoard_run_.elapsed() > hoard_run_.pressure_start());
         if (world.rush) best = -1;
         if (best >= 0) {
             world.has_cache = true;
@@ -4764,6 +4771,7 @@ game::CombatInput App::read_combat_input() const {
     }
 
     if (demo_active()) {
+        in.cycle_target = demo_decision_.cycle_target;
         in.fire = demo_decision_.fire;
         in.breath = demo_decision_.breath;
         in.melee = demo_decision_.melee;

@@ -46,7 +46,7 @@ struct DemoWorld {
     // Index into `targets` of the tower guarding it, or -1.
     int cache_guard = -1;
     bool in_run = false;
-    // Every cache is taken: head for the pass, fighting only what is on you.
+    // Bank what was taken: head for the pass without taking side objectives.
     bool rush = false;
     // Where to fall back to and heal: up the corridor, high, away from towers.
     core::Vec3 safe_point = core::Vec3::zero();
@@ -56,6 +56,9 @@ struct DemoWorld {
     core::Vec3 prey_velocity = core::Vec3::zero();
     float health_fraction = 1.0f;
     int locked_slot = -1;
+    // The player's actual lock acquisition limits, not a stronger pilot assist.
+    float lock_cone_deg = 0.0f;
+    float lock_range = 0.0f;
 };
 
 enum class DemoState : int {
@@ -74,6 +77,7 @@ const char* demo_state_name(DemoState state);
 
 struct DemoDecision {
     FlightInput flight;
+    bool cycle_target = false;  // tap the same relock button as the player
     bool fire = false;
     bool breath = false;
     bool melee = false;
@@ -84,6 +88,17 @@ struct DemoDecision {
 };
 
 struct DemoTuning {
+    // Bank a representative cache each valley before further stops let the
+    // hunters catch up. This is a pilot objective, not a collection rule.
+    int caches_before_rush = 1;
+    // Pace relock taps; keep a margin inside the player's acquisition cone.
+    float relock_interval = 0.2f;
+    float relock_cone_fraction = 0.8f;
+    // Spend the player's boost once airborne to leave the slow climb-out.
+    float takeoff_boost_height = 8.0f;
+    float takeoff_boost_speed = 45.0f;
+    // Keep boost for straight flight: boosting across a turn overshoots it.
+    float cruise_boost_cone_deg = 30.0f;
     // Who is worth turning for. Objective first: a fight is taken when the
     // dragon is on you, not hunted down from a kilometre -- the pilot that
     // engaged at 500 and 1100 m spent seven minutes in dogfights with marks
@@ -158,7 +173,8 @@ struct DemoTuning {
     float stalemate_time = 20.0f;
     float disengage_time = 30.0f;
     float disengaged_close = 130.0f;  // unless it comes this close
-    float rush_fight_range = 300.0f;
+    // A rush shoots on the way through; it never turns back to pursue.
+    float rush_fight_range = 0.0f;
     // Energy: below `min_speed` in the air (and not on the last stretch of a
     // landing) the nose goes down and the wings beat until `recover_speed`.
     // The dogfight climbed after its mark to a stall at 6 m/s, and a stalled
@@ -194,8 +210,7 @@ public:
     DemoDecision update(float dt, const FlightState& self, const DemoWorld& world);
 
     DemoState state() const { return state_; }
-    // The target being fought or besieged, as an index into the last world's
-    // targets, or -1.
+    // The combat slot being fought or besieged, or -1.
     int target() const { return target_; }
     // For the telemetry: siege shots asked for, and the closest the tower
     // came to the nose on the last run in (degrees).
@@ -217,6 +232,7 @@ private:
     DemoDecision walk(const FlightState& self, const DemoWorld& world);
     DemoDecision hunt(const FlightState& self, const DemoWorld& world);
     float hunt_rest_timer_ = 0.0f;
+    float relock_timer_ = 0.0f;
 
     DemoState state_ = DemoState::Cruise;
     int target_ = -1;

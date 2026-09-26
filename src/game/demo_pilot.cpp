@@ -49,6 +49,15 @@ void DemoPilot::reset(uint32_t seed) {
     go_round_timer_ = 0.0f;
     state_time_ = 0.0f;
     recovering_ = false;
+    fight_slot_ = disengaged_slot_ = siege_slot_ = -1;
+    relock_timer_ = 0.0f;
+    fight_best_health_ = 1.0f;
+    fight_since_progress_ = disengage_timer_ = siege_elapsed_ = hunt_rest_timer_ = 0.0f;
+    run_in_ = entry_set_ = false;
+    skipped_cache_ = Vec3{1e9f, 1e9f, 1e9f};
+    siege_shots = 0;
+    siege_best_off_axis_deg = 180.0f;
+    siege_last_range = 0.0f;
     fighter_.tuning = fight_tuning;
     fighter_.reset(seed);
 }
@@ -143,14 +152,14 @@ void DemoPilot::decide(const FlightState& self, const DemoWorld& world) {
         choose(DemoState::Fight, world.targets[size_t(nearest_dragon)].slot);
     } else if (drone >= 0 && drone_range < tuning.fight_drone_range) {
         choose(DemoState::Fight, world.targets[size_t(drone)].slot);
-    } else if (world.in_run && world.has_prey && hunt_rest_timer_ <= 0.0f &&
+    } else if (world.in_run && !world.rush && world.has_prey && hunt_rest_timer_ <= 0.0f &&
                horizontal_distance(self.position, world.prey) < tuning.hunt_range &&
-               (!world.has_cache || world.rush ||
+               (!world.has_cache ||
                 horizontal_distance(self.position, world.prey) <
                     horizontal_distance(self.position, world.cache)) &&
                !(previous == DemoState::Hunt && state_time_ > tuning.hunt_budget)) {
         choose(DemoState::Hunt, -1);
-    } else if (world.in_run && world.has_cache && go_round_timer_ <= 0.0f &&
+    } else if (world.in_run && !world.rush && world.has_cache && go_round_timer_ <= 0.0f &&
                horizontal_distance(world.cache, skipped_cache_) > 1.0f &&
                horizontal_distance(self.position, world.cache) < tuning.cache_range) {
         if (world.cache_guard >= 0 && size_t(world.cache_guard) < world.targets.size()) {
@@ -232,6 +241,20 @@ DemoDecision DemoPilot::update(float dt, const FlightState& self, const DemoWorl
     }
 
     DemoDecision d = act(dt, self, world);
+    relock_timer_ = core::maxf(relock_timer_ - dt, 0.0f);
+    const int mark = find_slot(world, target_);
+    if (mark >= 0 && world.locked_slot != target_) {
+        const Vec3 to = world.targets[size_t(mark)].position - self.position;
+        if (relock_timer_ <= 0.0f && core::length(to) < world.lock_range &&
+            core::dot(self.forward(), core::normalize_or(to, self.forward())) >
+                std::cos(core::radians(world.lock_cone_deg * tuning.relock_cone_fraction))) {
+            d.cycle_target = true;
+            relock_timer_ = tuning.relock_interval;
+        }
+        // Do not spend a fireball on a different sticky lock. On the next
+        // frame the observed lock confirms whether the tap found our mark.
+        if (world.locked_slot >= 0) d.fire = d.breath = false;
+    }
     const bool final_approach = state_ == DemoState::Land && world.has_cache &&
                                 horizontal_distance(self.position, world.cache) < 300.0f;
     if (!self.grounded && !final_approach && state_ != DemoState::TakeOff) {
@@ -291,6 +314,8 @@ DemoDecision DemoPilot::act(float dt, const FlightState& self, const DemoWorld& 
                 steer_through(self, self.position + heading * 300.0f + Vec3{0.0f, 20.0f, 0.0f}, Vec3::zero(),
                               steering, ground_ahead(self, world));
             d.flight.flap = 1.0f;
+            d.boost = self.ground_clearance > tuning.takeoff_boost_height &&
+                      self.airspeed < tuning.takeoff_boost_speed;
             // Nearly wings-level until clear of the floor: a bank spends the
             // lift a climb from a standstill does not have.
             const float bank = self.ground_clearance < 25.0f ? 0.15f : 0.5f;
@@ -318,7 +343,7 @@ DemoDecision DemoPilot::act(float dt, const FlightState& self, const DemoWorld& 
             return cruise(self, world, aim, core::length(to) > 600.0f);
         }
         case DemoState::Cruise:
-        default: return cruise(self, world, world.waypoint, false);
+        default: return cruise(self, world, world.waypoint, world.rush);
     }
 }
 
@@ -326,7 +351,9 @@ DemoDecision DemoPilot::cruise(const FlightState& self, const DemoWorld& world, 
                                bool boost) {
     DemoDecision d;
     d.flight = steer_through(self, aim, Vec3::zero(), steering, ground_ahead(self, world));
-    d.boost = boost && self.ground_clearance > 120.0f;
+    d.boost = boost && self.ground_clearance > tuning.takeoff_boost_height &&
+              core::dot(self.forward(), core::normalize_or(aim - self.position, self.forward())) >
+                  std::cos(core::radians(tuning.cruise_boost_cone_deg));
     // Opportunistic weapons: whatever crosses the nose on the way takes a
     // fireball, the flame close in, and a bite inside reach. Flying on is not
     // flying unarmed.
@@ -479,7 +506,8 @@ DemoDecision DemoPilot::siege(float dt, const FlightState& self, const DemoWorld
     d.flight.flap = self.airspeed < 40.0f ? 1.0f : 0.0f;
     // Slow the last stretch a little: more time inside the flame.
     d.flight.brake = range < tuning.siege_breath_range && self.airspeed > 40.0f ? 0.5f : 0.0f;
-    d.boost = range > 380.0f && self.ground_clearance > 90.0f;
+    // Keep approach speed while lining up. With boost actually mapped to
+    // thrust, boosting here rushed past the guard before the nose settled.
     const float off_axis = std::acos(core::clampf(
         core::dot(self.forward(), core::normalize_or(to, self.forward())), -1.0f, 1.0f));
     const bool locked = world.locked_slot == target_;
