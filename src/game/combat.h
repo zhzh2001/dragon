@@ -196,23 +196,42 @@ struct CombatTuning {
     // Not bigger numbers: new things to do, in the Legend of Spyro manner.
     // CHARGED SHOT (young): hold the fireball and it gathers; let go, or
     // reach full, and it leaves bigger, harder and heavier with status.
-    float charge_time = 0.8f;       // s to full
+    // It SEEKS the lock (the playtest: aiming is the hard part of this game,
+    // so a heavier shot that still has to be aimed lost to spamming plain
+    // ones): turning up to `charged_seek` rad/s toward the target locked
+    // when it left.
+    float charge_time = 0.65f;      // s to full
     float charge_min = 0.3f;        // a release below this is a plain shot
     float charged_damage = 2.2f;    // at full, multipliers on the fireball
-    float charged_blast = 2.0f;
+    float charged_blast = 2.2f;
+    float charged_seek = 2.6f;      // rad/s
     float charged_radius = 1.6f;
     float charged_status = 2.5f;
     // RAM (elder): the boost is a weapon -- the body ploughs through what it
-    // passes, once per target per boost, stunning and hurling it.
-    float ram_radius = 10.0f;       // m, scaled by the player's size
+    // passes, once per target per boost, stunning and hurling it. And it
+    // POUNCES: a boost with a target within `pounce_range` and `pounce_cone`
+    // of the nose (the lock first) steers the dragon onto it -- boosting
+    // INTO a manoeuvring dragon by hand was the playtest's "very hard".
+    float ram_radius = 14.0f;       // m, scaled by the player's size
+    float pounce_range = 320.0f;
+    float pounce_cone_deg = 70.0f;
+    float pounce_turn = 2.8f;       // rad/s the flight is turned toward it
+    float pounce_speed = 75.0f;     // m/s at least, while it lasts
+    // A pounce holds the boost on until it lands or this runs out: a plain
+    // boost (1.1 s) ran out 30 m short of a mark 130 m away.
+    float pounce_time = 1.8f;
     float ram_damage = 35.0f;
     float ram_stun = 1.3f;
     float ram_knockback = 24.0f;
     // FURY (ancient): damage dealt fills a meter; full, it is released as a
     // nova of the dragon's element round it -- Spyro's Fury.
-    float fury_per_damage = 1.0f / 500.0f;
-    float fury_per_kill = 0.08f;
-    float fury_radius = 170.0f;
+    // Filled by dealing damage and by taking it. At 1/500, 0.08 a kill and a
+    // 170 m reach it filled once a valley and caught one enemy: "builds up
+    // slow, and 170 m is unlikely to contain multiple enemies".
+    float fury_per_damage = 1.0f / 220.0f;
+    float fury_per_kill = 0.15f;
+    float fury_per_damage_taken = 1.0f / 250.0f;
+    float fury_radius = 340.0f;
     float fury_damage = 90.0f;      // at the centre, half at the edge
     float fury_status = 3.0f;
     float fury_knockback = 30.0f;
@@ -281,6 +300,9 @@ struct Projectile {
     // A charged shot, drawn bigger, and the status weight its hit carries.
     bool charged = false;
     float status_weight = 1.0f;
+    // The slot a charged shot seeks, or -1.
+    int seek = -1;
+    float seek_rate = 0.0f;
     Team team = Team::Player;
     // What it is made of: the status it leaves, and the colour it burns.
     Element element = Element::None;
@@ -546,6 +568,8 @@ public:
     // 0..1 while the fireball is held (charged shot), and the fury meter.
     float charge() const { return charge_; }
     float fury() const { return fury_; }
+    // The slot a pounce is steering onto, or -1: the app turns the flight.
+    int pounce_target() const { return boost_active() && pounce_ >= 0 ? pounce_ : -1; }
     void add_fury(float amount) { fury_ = core::saturate(fury_ + amount); }
     // What the player breathes (the species' breath file, or the panel's
     // override): the status its hits leave, and what it resists.
@@ -585,7 +609,10 @@ private:
     void update_sentinels(float dt, const FlightState& player, CombatEvents& events);
     void apply_breath(float dt, const FlightState& player, CombatEvents& events);
     void apply_melee(const FlightState& player, CombatEvents& events);
-    void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events);
+    // `direct` false for damage over time: it wounds and can kill, but it is
+    // not a hit -- no marker, no hit count -- so a hit the player lands on a
+    // burning target is still told apart from the burn.
+    void damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events, bool direct = true);
     // The player's hit on a target: the element's damage scale, its status,
     // and a storm hit's arc to the next target. `weight` as in apply_element.
     void hit_sentinel(Sentinel& sentinel, float amount, Element element, float weight,
@@ -628,6 +655,8 @@ private:
     float charge_ = 0.0f;
     bool charging_ = false;
     float fury_ = 0.0f;
+    int pounce_ = -1;
+    bool was_boosting_pounce_ = false;
     // Who this boost has already rammed, by slot.
     std::vector<char> rammed_;
     bool was_boosting_ = false;

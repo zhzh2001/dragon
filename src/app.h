@@ -478,6 +478,14 @@ private:
     void emit_status_burst(const game::StatusBurst& burst);
     std::string status_text_;
     float status_flash_ = 0.0f;
+    // A direct hit, marked at the crosshair (an X; a kill a bigger red one),
+    // so a hit on a burning target is not lost in its burn.
+    float hitmarker_ = 0.0f;
+    bool fury_was_full_ = false;
+    int rams_landed_ = 0, furies_released_ = 0;
+    float fury_ready_flash_ = 0.0f;
+    float killmarker_ = 0.0f;
+    float hit_tick_cooldown_ = 0.0f;
     float grew_flash_ = 0.0f;
     bool cache_guarded(int cache) const;
     bool run_mode_ = false;

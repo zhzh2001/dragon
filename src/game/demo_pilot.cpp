@@ -390,7 +390,17 @@ DemoDecision DemoPilot::fight(float dt, const FlightState& self, const DemoWorld
     d.fire = b.fire;
     d.breath = b.breathe;
     d.melee = b.melee;
-    d.boost = b.flight.boost > 0.5f;
+    // A pounce when one is on: the mark in reach and near the nose.
+    if (world.can_pounce) {
+        const Vec3 to = t.position - self.position;
+        const float r = core::length(to);
+        if (r < world.pounce_range * 0.85f && r > 40.0f &&
+            core::dot(self.forward(), to / core::maxf(r, 1e-3f)) >
+                std::cos(core::radians(world.pounce_cone_deg * 0.7f))) {
+            d.boost = true;
+        }
+    }
+    d.boost = d.boost || b.flight.boost > 0.5f;
     d.flight.boost = 0.0f;  // boost is a combat button for the player
     // Rolls only: a flip is a half loop, and at a drake's speed it ended in a
     // stall at 13 m/s with the mark sitting behind it.

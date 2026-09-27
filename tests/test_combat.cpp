@@ -933,6 +933,48 @@ void test_abilities() {
         }
         CHECK(std::fabs(damage - c.tuning.fireball_damage * c.tuning.charged_damage) < 0.01f);
     }
+    // A charged shot seeks: a target 25 degrees off the nose, beyond what
+    // the aim assist bends, is still struck by a full charge.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 23u, 0);
+        c.abilities.charged_shot = true;
+        c.tuning.aim_assist = 0.0f;  // no help from the lock's bend: only the seek
+        c.tuning.fireball_gravity = 0.0f;
+        c.tuning.fireball_blast_radius = 0.0f;
+        const int slot = c.spawn_external(1000.0f, 6.0f);
+        const Vec3 off = Vec3{std::sin(core::radians(25.0f)), 0.0f, -std::cos(core::radians(25.0f))} * 300.0f;
+        c.drive_external(slot, off, Vec3::zero());
+        c.tuning.lock_cone_deg = 30.0f;
+        CombatInput hold;
+        hold.fire_held = true;
+        bool fired = false;
+        for (int i = 0; i < 300; ++i) {
+            const game::CombatEvents e = c.update(dt, player, fired ? CombatInput{} : hold);
+            fired = fired || e.charged_fired;
+        }
+        CHECK(fired);
+        CHECK(c.sentinels()[size_t(slot)].health < 1000.0f - c.tuning.fireball_damage);
+    }
+    // The pounce: a boost with a target ahead picks it; one behind does not.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 29u, 0);
+        c.abilities.ram = true;
+        const int ahead = c.spawn_external(500.0f, 6.0f);
+        c.drive_external(ahead, Vec3{20.0f, 0.0f, -200.0f}, Vec3::zero());
+        CombatInput boost;
+        boost.boost = true;
+        c.update(dt, player, boost);
+        CHECK(c.pounce_target() == ahead);
+        Combat behind;
+        behind.reset(nullptr, Vec3::zero(), 29u, 0);
+        behind.abilities.ram = true;
+        const int back = behind.spawn_external(500.0f, 6.0f);
+        behind.drive_external(back, Vec3{0.0f, 0.0f, 200.0f}, Vec3::zero());
+        behind.update(dt, player, boost);
+        CHECK(behind.pounce_target() == -1);
+    }
     // The ram: a boost through a drone damages and stuns it, once.
     {
         Combat c;
@@ -960,7 +1002,7 @@ void test_abilities() {
         c.drive_external(near, Vec3{0.0f, 0.0f, -60.0f}, Vec3::zero());
         c.drive_external(far, Vec3{0.0f, 0.0f, -600.0f}, Vec3::zero());
         CHECK(c.fury() == 0.0f);
-        c.apply_hit(near, 250.0f, game::Element::None);
+        c.apply_hit(near, 0.5f / c.tuning.fury_per_damage, game::Element::None);
         CHECK(c.fury() > 0.45f && c.fury() < 0.55f);
         c.add_fury(1.0f);
         CombatInput go;

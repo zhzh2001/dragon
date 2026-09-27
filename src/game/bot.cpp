@@ -12,6 +12,7 @@ void BotPilot::reset(uint32_t seed) {
     rng_ = seed ? seed : 1u;
     state_ = BotState::Attack;
     state_time_ = 0.0f;
+    orbit_timer_ = 0.0f;
     fire_timer_ = 0.0f;
     melee_timer_ = 0.0f;
     boost_hold_ = 0.0f;
@@ -148,6 +149,36 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     const bool charging = state_ == BotState::Attack && lined_up &&
                           range < tuning.charge_range * (0.6f + 0.8f * nerve);
     charging_ = charging;
+
+    // ---- the circle ----
+    // Close, and neither dragon's nose on the other: a turning circle where
+    // nothing lands. Held long enough, the bot breaks it.
+    {
+        const Vec3 to_self = core::normalize_or(self.position - player.position, player.forward());
+        const bool player_on_me =
+            core::dot(to_self, player.forward()) > std::cos(core::radians(tuning.orbit_cone_deg));
+        const bool me_on_player =
+            core::dot(to_live, self.forward()) > std::cos(core::radians(tuning.orbit_cone_deg));
+        const float live = core::distance(self.position, player.position);
+        if (player_alive && live < tuning.orbit_range && !player_on_me && !me_on_player) {
+            orbit_timer_ += dt;
+        } else {
+            orbit_timer_ = core::maxf(orbit_timer_ - dt * 2.0f, 0.0f);
+        }
+        if (orbit_timer_ > tuning.orbit_break_time && decision.maneuver == ManeuverKind::None) {
+            orbit_timer_ = 0.0f;
+            if (nerve > 0.5f && !fleeing && self.airspeed > 28.0f) {
+                decision.maneuver = ManeuverKind::Flip;  // round to meet it head-on
+                state_ = BotState::Attack;
+                state_time_ = 0.0f;
+            } else {
+                state_ = BotState::Extend;
+                state_time_ = 0.0f;
+                const Vec3 away = core::normalize_or(self.position - player.position, self.forward());
+                extend_point_ = self.position + away * tuning.extend_distance + Vec3{0.0f, 60.0f, 0.0f};
+            }
+        }
+    }
 
     // ---- state transitions ----
     switch (state_) {

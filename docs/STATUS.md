@@ -142,6 +142,12 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M28.1** playtest fixes: the charged shot seeks its lock, the ram
+  pounces onto a mark, the fury fills faster and reaches 340 m with a bar
+  and a call-out, hits and damage over time are told apart (a crosshair X,
+  a burn segment on the health bar), bots break a turning circle, growth
+  thresholds raised (ancient at 2200), and a restarted run no longer keeps
+  the last run's second breath.
 - **M28** row 7: a static glTF loader, instanced rocks on the slopes
   (rocks.glb and the detail tile built in Blender by a delegated agent), a
   tiling detail texture per terrain material, a ridge octave and strata as

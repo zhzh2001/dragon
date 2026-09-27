@@ -1137,6 +1137,23 @@ void App::update(float dt) {
             if (frozen) input.flap = 0.0f;
         }
         flight_.update(input, &terrain_, dt);
+        // The pounce: while an elder's boost is locked onto a target, the
+        // flight is turned onto it -- velocity and nose together, at the
+        // pounce's turn rate, and kept fast -- so a boost meets its mark.
+        if (const int mark = combat_.pounce_target(); mark >= 0 && size_t(mark) < combat_.sentinels().size()) {
+            game::FlightState& st = flight_.state();
+            const core::Vec3 to = combat_.sentinels()[size_t(mark)].position - st.position;
+            const core::Vec3 want = core::normalize_or(to, st.forward());
+            const float speed = core::maxf(core::length(st.velocity), combat_.tuning.pounce_speed);
+            const core::Vec3 heading = core::normalize_or(st.velocity, st.forward());
+            const float angle = std::acos(core::clampf(core::dot(heading, want), -1.0f, 1.0f));
+            const float step = combat_.tuning.pounce_turn * dt;
+            const core::Vec3 turned =
+                angle <= step ? want : core::normalize_or(core::lerp(heading, want, step / angle), want);
+            st.velocity = turned * speed;
+            st.orientation = core::slerp(st.orientation, core::look_rotation(turned, core::Vec3::up()),
+                                         core::saturate(6.0f * dt));
+        }
         if (slow > 0.0f && !flight_.state().grounded) {
             flight_.state().velocity = flight_.state().velocity * std::exp(-0.3f * slow * dt);
         }
@@ -1376,11 +1393,23 @@ void App::update(float dt) {
                 return s;
             }(), dt);
         }
+        rams_landed_ += events.rammed;
+        furies_released_ += events.fury_released ? 1 : 0;
         if (events.rammed > 0) {
             audio_.play(audio::Clip::BiteHit, 1.0f, 0.75f);
             audio_.play(audio::Clip::Crack, 0.7f, 1.1f);
             chase_.kick(1.0f);
             emit_impact(events.ram_position, false, false, combat_.player_element);
+        }
+        // The fury filling up is an event: said once, heard once.
+        {
+            const bool full = combat_.abilities.fury && combat_.fury() >= 1.0f;
+            if (full && !fury_was_full_) {
+                fury_ready_flash_ = 2.5f;
+                audio_.play(audio::Clip::Boost, 0.8f, 0.6f);
+            }
+            fury_was_full_ = full;
+            fury_ready_flash_ = core::maxf(fury_ready_flash_ - dt, 0.0f);
         }
         if (events.fury_released) {
             LOG_INFO("fury released at frame %d", frame_index_);
@@ -1456,6 +1485,19 @@ void App::update(float dt) {
             if (speed > cost + 1.0f) st.velocity = st.velocity * ((speed - cost) / speed);
         }
 
+        if (events.had_hit) {
+            hitmarker_ = 0.18f;
+            // A tick for a shot or a bite landing -- not for a held breath,
+            // which lands every frame and would buzz.
+            if (!combat_.breathing() && hit_tick_cooldown_ <= 0.0f) {
+                audio_.play(audio::Clip::BiteHit, 0.35f, 1.9f);
+                hit_tick_cooldown_ = 0.1f;
+            }
+        }
+        if (events.kills > 0) killmarker_ = 0.45f;
+        hit_tick_cooldown_ = core::maxf(hit_tick_cooldown_ - dt, 0.0f);
+        hitmarker_ = core::maxf(hitmarker_ - dt, 0.0f);
+        killmarker_ = core::maxf(killmarker_ - dt, 0.0f);
         if (events.had_hit) {
             hit_marker_ = 0.35f;
             hit_marker_position_ = events.last_hit;
@@ -3336,6 +3378,9 @@ void App::build_demo_world(game::DemoWorld& world) {
     world.locked_slot = combat_.locked_index();
     world.lock_cone_deg = combat_.tuning.lock_cone_deg;
     world.lock_range = combat_.tuning.lock_range;
+    world.can_pounce = combat_.abilities.ram && combat_.boost_cooldown() <= 0.0f;
+    world.pounce_range = combat_.tuning.pounce_range;
+    world.pounce_cone_deg = combat_.tuning.pounce_cone_deg;
     world.targets.clear();
     const auto& sentinels = combat_.sentinels();
     for (size_t i = 0; i < sentinels.size(); ++i) {
@@ -3440,6 +3485,10 @@ void App::start_run(uint32_t seed) {
     last_kill_element_ = game::Element::None;
     using_second_ = false;
     second_unlocked_ = false;
+    arena_breath_index_ = 0;
+    // Back to the dragon's own breath: clearing the flags alone left the
+    // last run's second element in combat -- a fire dragon restarted as frost.
+    refresh_player_element();
     run_seed_ = seed;
     run_seed_input_ = int(seed & 0x7fffffffu);
     last_run_record_ = false;
@@ -4655,6 +4704,14 @@ void App::draw_run_hud() {
             std::snprintf(line, sizeof(line), "+%.0f  PREY", double(prey_.tuning.growth));
             hud_.numeral(ImVec2(width * 0.5f, height * 0.36f), line, colour, 26.0f, ui::Align::Centre);
         }
+        if (fury_ready_flash_ > 0.0f) {
+            const float fade = core::saturate(fury_ready_flash_);
+            const core::Vec3 c = game::element_colour(combat_.player_element);
+            std::snprintf(line, sizeof(line), "FURY READY  --  %s", button_name('H'));
+            hud_.numeral(ImVec2(width * 0.5f, height * 0.42f), line,
+                         IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), int(240.0f * fade)), 30.0f,
+                         ui::Align::Centre);
+        }
         if (status_flash_ > 0.0f) {
             const float fade = core::saturate(status_flash_);
             hud_.label(ImVec2(width * 0.5f, height * 0.62f), status_text_.c_str(),
@@ -5405,6 +5462,19 @@ void App::draw_combat_hud() {
         hud_.label(ImVec2(label_x, min.y + hud_.px(36.0f)), element_label, element_colour, 12.0f);
         hud_.bar(ImVec2(bar_x, min.y + hud_.px(37.0f)), bar_w, bar_h, combat_.breath(),
                  combat_.breathing() ? tk.breath_hot : tk.breath);
+        // The fury: a bar along the plate's foot, in the element's colour,
+        // pulsing when full. The H pip alone was, in the playtest, "hard to
+        // notice".
+        if (combat_.abilities.fury) {
+            const float fury = combat_.fury();
+            const core::Vec3 c = game::element_colour(combat_.player_element);
+            const bool full = fury >= 1.0f;
+            const float pulse = full ? 0.6f + 0.4f * std::sin(time_seconds_ * 8.0f) : 0.85f;
+            const ImU32 col = IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), int(255.0f * pulse));
+            const float y = min.y + plate_h - hud_.px(7.0f);
+            hud_.label(ImVec2(label_x, y - hud_.px(5.0f)), full ? "FURY!" : "FURY", full ? col : tk.text_dim, 9.0f);
+            hud_.bar(ImVec2(bar_x, y), bar_w, hud_.px(4.0f), fury, col);
+        }
 
         // What the player is suffering: one chip per status, over the plate.
         const game::Status& st = combat_.player_status();
@@ -5566,6 +5636,17 @@ void App::draw_combat_hud() {
             if (combat_.has_lock() && !manual_aim_) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), arm * 0.75f, colour, 24, hud_.px(1.5f));
             }
+            // A direct hit: an X round the marker; a kill, a bigger red one.
+            if (hitmarker_ > 0.0f || killmarker_ > 0.0f) {
+                const bool kill = killmarker_ > 0.0f;
+                const float r0 = hud_.px(kill ? 10.0f : 7.0f), r1 = hud_.px(kill ? 20.0f : 14.0f);
+                const ImU32 c = kill ? tk.danger : IM_COL32(255, 255, 255, 230);
+                for (int q = 0; q < 4; ++q) {
+                    const float sx = (q & 1) ? 1.0f : -1.0f, sy = (q & 2) ? 1.0f : -1.0f;
+                    draw->AddLine(ImVec2(screen.x + sx * r0, screen.y + sy * r0),
+                                  ImVec2(screen.x + sx * r1, screen.y + sy * r1), c, hud_.px(kill ? 3.0f : 2.2f));
+                }
+            }
             // The charge gathering: an arc round the marker, full at a
             // charged shot, in the breath's element.
             if (combat_.charge() > 0.0f) {
@@ -5643,11 +5724,29 @@ void App::draw_combat_hud() {
                 if (bot->slot == index) ship = bot.get();
             }
             float below = screen.y + half + hud_.px(4.0f);
-            if (ship) {
+            if (ship || sentinel.ground) {
                 const float bar_w = core::maxf(half * 2.0f, hud_.px(40.0f));
                 const float health_h = hud_.px(4.5f);
                 const float health = sentinel.max_health > 0.0f ? sentinel.health / sentinel.max_health : 0.0f;
                 hud_.bar(ImVec2(screen.x - bar_w * 0.5f, below), bar_w, health_h, health, tk.health);
+                // What its burn or corrosion will still take, pulsing in the
+                // element's colour at the end of the bar: the damage over
+                // time, told apart from the hits that land.
+                {
+                    const game::Status& st = sentinel.status;
+                    const game::ElementTuning& et = combat_.tuning.elements;
+                    const float pending = st.burn * et.burn_dps + st.corrode * et.corrode_dps;
+                    if (pending > 0.0f && sentinel.max_health > 0.0f) {
+                        const float share = core::minf(pending / sentinel.max_health, health);
+                        const game::Element e = st.burn > 0.0f ? game::Element::Fire : game::Element::Blight;
+                        const core::Vec3 ec = game::element_colour(e);
+                        const float pulse = 0.55f + 0.45f * std::sin(time_seconds_ * 9.0f);
+                        const ImU32 col = IM_COL32(int(ec.x * 255.0f), int(ec.y * 255.0f), int(ec.z * 255.0f),
+                                                   int(255.0f * pulse));
+                        const float x1 = screen.x - bar_w * 0.5f + bar_w * health;
+                        draw->AddRectFilled(ImVec2(x1 - bar_w * share, below), ImVec2(x1, below + health_h), col);
+                    }
+                }
                 below += health_h + hud_.px(3.0f);
             }
             // Its status, in the element's colour: the payoff of an element
@@ -6525,9 +6624,10 @@ void App::log_telemetry() const {
              double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
              s.stalling ? "STALL " : "", "");
     if (combat_enabled_) {
-        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d  fury %.2f  charge %.2f",
+        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d  fury %.2f  charge %.2f  rams %d  furies %d",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
-                 bites_taken_, double(combat_.fury()), double(combat_.charge()));
+                 bites_taken_, double(combat_.fury()), double(combat_.charge()),
+                 rams_landed_, furies_released_);
     }
     if (demo_active()) {
         LOG_INFO("   demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f collect %.0f "

@@ -545,14 +545,16 @@ Projectile& Combat::fire_projectile(Vec3 position, Vec3 velocity, float damage, 
     return projectiles_.back();
 }
 
-void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events) {
+void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& events, bool direct) {
     if (!sentinel.alive || amount <= 0.0f) return;
     sentinel.health -= amount;
-    sentinel.hit_flash = 1.0f;
-    sentinel.time_since_damage = 0.0f;
-    ++events.hits_dealt;
-    events.last_hit = sentinel.position;
-    events.had_hit = true;
+    if (direct) {
+        sentinel.hit_flash = 1.0f;
+        sentinel.time_since_damage = 0.0f;
+        ++events.hits_dealt;
+        events.last_hit = sentinel.position;
+        events.had_hit = true;
+    }
     if (sentinel.health <= 0.0f) {
         sentinel.alive = false;
         sentinel.health = 0.0f;
@@ -702,6 +704,7 @@ void Combat::hurt_player(float amount, Element element, float weight, Vec3 from,
         bursts_.push_back(burst);
     }
     health_ -= dealt;
+    if (abilities.fury) fury_ = core::saturate(fury_ + dealt * tuning.fury_per_damage_taken);
     events.damage_taken += dealt;
     events.damage_from = from;
     events.took_damage = true;
@@ -723,7 +726,23 @@ void Combat::update_projectiles(float dt, const FlightState& player, CombatEvent
         }
 
         const Vec3 previous = projectile.position;
-        projectile.velocity.y -= projectile.gravity * dt;
+        // A charged shot seeks its target: the velocity turned toward it at
+        // the seek rate, speed kept, gravity off while it has one.
+        if (projectile.seek >= 0 && size_t(projectile.seek) < sentinels_.size() &&
+            sentinels_[size_t(projectile.seek)].alive) {
+            const Vec3 to = sentinels_[size_t(projectile.seek)].position - projectile.position;
+            const float speed = core::length(projectile.velocity);
+            const Vec3 heading = core::normalize_or(projectile.velocity, Vec3::forward());
+            const Vec3 want = core::normalize_or(to, heading);
+            const float angle = std::acos(core::clampf(core::dot(heading, want), -1.0f, 1.0f));
+            const float step = projectile.seek_rate * dt;
+            const Vec3 turned = angle <= step || angle < 1e-4f
+                                    ? want
+                                    : core::normalize_or(core::lerp(heading, want, step / angle), want);
+            projectile.velocity = turned * speed;
+        } else {
+            projectile.velocity.y -= projectile.gravity * dt;
+        }
         projectile.position += projectile.velocity * dt;
 
         // Swept against each candidate rather than point-tested: at 210 m/s a
@@ -829,10 +848,7 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
             const float since = sentinel.time_since_damage;
             const float dot = tick_status(sentinel.status, dt, tuning.elements);
             if (dot > 0.0f) {
-                const float flash = sentinel.hit_flash;
-                damage_sentinel(sentinel, dot, events);
-                --events.hits_dealt;
-                sentinel.hit_flash = flash;
+                damage_sentinel(sentinel, dot, events, false);
                 sentinel.time_since_damage = since;
             }
         }
@@ -1043,6 +1059,8 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
             tuning.fireball_gravity, player_element);
         p.charged = power > 0.0f;
         p.status_weight = core::lerpf(1.0f, tuning.charged_status, power);
+        p.seek = power > 0.0f ? locked_ : -1;
+        p.seek_rate = tuning.charged_seek * power;
         events.fired = true;
         events.charged_fired = power > 0.0f;
     };
@@ -1085,8 +1103,44 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         boost_timer_ = tuning.boost_duration;
         boost_cooldown_timer_ = tuning.boost_cooldown;
     }
-    // The ram: a fresh boost forgets who it has hit.
-    if (boost_active() && !was_boosting_) rammed_.assign(sentinels_.size(), 0);
+    // The ram: a fresh boost forgets who it has hit, and picks what to
+    // pounce on -- the lock if it is in reach, else the nearest in the cone.
+    if (boost_active() && !was_boosting_) {
+        rammed_.assign(sentinels_.size(), 0);
+        pounce_ = -1;
+        if (abilities.ram) {
+            const float cone = std::cos(core::radians(tuning.pounce_cone_deg));
+            auto in_reach = [&](int i) {
+                const Sentinel& s = sentinels_[size_t(i)];
+                const Vec3 to = s.position - player.position;
+                const float d = core::length(to);
+                return s.alive && d < tuning.pounce_range && d > 1e-3f &&
+                       core::dot(to / d, player.forward()) > cone;
+            };
+            if (locked_ >= 0 && in_reach(locked_)) {
+                pounce_ = locked_;
+            } else {
+                float best = 1e9f;
+                for (size_t i = 0; i < sentinels_.size(); ++i) {
+                    const float d = core::distance(sentinels_[i].position, player.position);
+                    if (in_reach(int(i)) && d < best) {
+                        best = d;
+                        pounce_ = int(i);
+                    }
+                }
+            }
+        }
+    }
+    // A pounce holds the boost until contact or its time; it ends on contact.
+    if (pounce_ >= 0 && boost_active() && !was_boosting_pounce_) {
+        boost_timer_ = core::maxf(boost_timer_, tuning.pounce_time);
+    }
+    was_boosting_pounce_ = pounce_ >= 0 && boost_active();
+    if (pounce_ >= 0 && (size_t(pounce_) >= rammed_.size() || rammed_[size_t(pounce_)] ||
+                         !sentinels_[size_t(pounce_)].alive)) {
+        pounce_ = -1;
+        boost_timer_ = core::minf(boost_timer_, 0.15f);  // landed: the burst is spent
+    }
     was_boosting_ = boost_active();
     if (abilities.ram && boost_active() && player_alive) apply_ram(player, events);
     // ---- fury ----

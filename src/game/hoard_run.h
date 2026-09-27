@@ -78,10 +78,12 @@ struct HoardRunSettings {
     float bounty_hunter = 120.0f;
     float heal_on_kill = 20.0f;
     // Growth thresholds, in hoard gathered (banked or not).
-    float grow_young = 140.0f;
-    float grow_adult = 380.0f;
-    float grow_elder = 750.0f;
-    float grow_ancient = 1250.0f;
+    // Raised after the playtest reached ancient half way through valley 2
+    // "fighting everything": the top stage is now a third-valley goal.
+    float grow_young = 150.0f;
+    float grow_adult = 450.0f;
+    float grow_elder = 1100.0f;
+    float grow_ancient = 2200.0f;
     // The growth needed for `stage` (0 for a drake).
     float grow_threshold(int stage) const;
     // Hoard per cache, before the depth bonus (deeper caches pay up to 50%

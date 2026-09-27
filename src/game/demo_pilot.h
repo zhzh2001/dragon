@@ -59,6 +59,11 @@ struct DemoWorld {
     // The player's actual lock acquisition limits, not a stronger pilot assist.
     float lock_cone_deg = 0.0f;
     float lock_range = 0.0f;
+    // The elder's pounce is unlocked and the boost is ready: a boost at a
+    // mark in reach flies onto it.
+    bool can_pounce = false;
+    float pounce_range = 0.0f;
+    float pounce_cone_deg = 0.0f;
 };
 
 enum class DemoState : int {

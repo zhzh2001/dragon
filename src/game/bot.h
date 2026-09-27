@@ -102,6 +102,14 @@ struct BotTuning {
     // A hit from behind within this range, with the nerve for it, is answered
     // with a flip; a hit from any side with a roll rather than a jink.
     float flip_range = 320.0f;
+    // The circle: close, and neither nose on the other, for this long, and
+    // the bot breaks it -- a pilot with nerve flips round to meet the player
+    // head-on, a cautious one extends and comes back. Two dragons turning
+    // round each other with nothing landing was a playtest complaint about
+    // the hunters.
+    float orbit_range = 260.0f;
+    float orbit_cone_deg = 40.0f;
+    float orbit_break_time = 5.0f;
 
     // Never chase anything below this height over the terrain. The player may
     // fly into the weeds; following them there is how bots die of enthusiasm.
@@ -171,6 +179,7 @@ private:
     float boost_hold_ = 0.0f;   // seconds of charge boost left
     float boost_timer_ = 0.0f;  // cooldown until the next
     float jink_phase_ = 0.0f;
+    float orbit_timer_ = 0.0f;
 
     // Stale-by-design perception, including the measured acceleration between
     // the last two samples.

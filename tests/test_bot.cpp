@@ -496,9 +496,41 @@ void test_breath_discipline_and_recovery() {
     CHECK(!d.breathe);
 }
 
+void test_breaks_the_circle() {
+    std::printf("a turning circle where neither nose is on the other is broken\n");
+    // Both flying round a common centre, 150 m apart, each broadside to the
+    // other: nothing lands. Within the break time plus a margin the bot must
+    // flip or extend.
+    BotPilot pilot;
+    pilot.reset(77u);
+    pilot.tuning.aggression = 0.9f;
+    pilot.tuning.aggression_spread = 0.0f;
+    pilot.reset(77u);
+    bool broke = false;
+    const float dt = 1.0f / 60.0f;
+    for (int i = 0; i < int((pilot.tuning.orbit_break_time + 1.0f) / dt) && !broke; ++i) {
+        const float a = 0.3f * float(i) * dt;
+        const Vec3 centre{0.0f, 500.0f, 0.0f};
+        const Vec3 me = centre + Vec3{std::cos(a), 0.0f, std::sin(a)} * 75.0f;
+        const Vec3 them = centre - Vec3{std::cos(a), 0.0f, std::sin(a)} * 75.0f;
+        const Vec3 my_heading{-std::sin(a), 0.0f, std::cos(a)};
+        FlightState self;
+        self.position = me;
+        self.orientation = look_rotation(my_heading, Vec3::up());
+        self.velocity = my_heading * 40.0f;
+        self.airspeed = 40.0f;
+        FlightState player = target_at(them, my_heading * -40.0f);
+        player.orientation = look_rotation(my_heading * -1.0f, Vec3::up());
+        const BotDecision d = pilot.update(dt, self, player, true, -1e9f);
+        broke = d.maneuver == game::ManeuverKind::Flip || pilot.state() == game::BotState::Extend;
+    }
+    CHECK(broke);
+}
+
 }  // namespace
 
 int main() {
+    test_breaks_the_circle();
     test_pursuit_converges();
     test_terrain_is_avoided();
     test_fire_discipline();

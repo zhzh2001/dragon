@@ -298,6 +298,16 @@ a gamma encode, so anything bright desaturates toward white; adding two units of
 sunlight on top of a flame turns it into a white balloon. A light source should
 not also be lit.
 
+### Breaking the circle (M28.1)
+
+Two dragons turning round each other at 150 m, neither nose on the other,
+land nothing -- the playtest found hunters doing it for as long as the
+player did. A bot close in (under 260 m) with neither dragon's nose within
+40 degrees of the other for 5 s breaks it: with nerve and speed it flips
+round to meet the player head-on, otherwise it extends and comes back. The
+attack timer did break it eventually, but a keen hunter's ran long.
+`test_bot` pins it.
+
 ### Personality, nerve and aerobatics
 
 The playtest after melee: "bots feel conservative -- they flee when chased
@@ -437,10 +447,18 @@ gates the three combat ones, and the second breath is the app's.
 
 | Stage | Ability | What it is |
 |---|---|---|
-| young | **Charged shot** | Hold G: the fireball gathers at the mouth (0.8 s to full, an arc round the aim marker); let go, or reach full, and it leaves 2.2x the damage, 2x the blast, 1.6x the body, 2.5x the status, 15% faster. A tap is still a plain shot, on the release. |
+| young | **Charged shot** | Hold G: the fireball gathers at the mouth (0.65 s to full, an arc round the aim marker); let go, or reach full, and it leaves 2.2x the damage and blast, 1.6x the body, 2.5x the status, 15% faster -- and it **seeks** the target locked when it left, turning up to 2.6 rad/s. The first cut did not seek, and the playtest found it not worth it: aiming is the hard part of this game, and a heavier shot that still had to be aimed lost to spamming plain ones. A tap is still a plain shot, on the release. |
 | adult | **Second breath** | The breath of the last enemy killed -- what you hunt is what you learn (rolled if nothing of another element has fallen). U (gamepad Y) swaps between the two; in the arena, the sandbox, U walks all six in turn. The pip wears the colour it swaps to. The first cut rolled per run and gave the arena the element after the player's -- fire's is frost, so it was "always frost". |
-| elder | **Ram** | The boost is a weapon: while boosting, anything the body passes within 10 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. The body is sheathed in its element while it boosts. |
-| ancient | **Fury** | Damage dealt fills a meter (1 per 500 damage, 0.08 a kill; the H pip). H (left-stick click) releases a nova of the element round the dragon: 170 m, 90 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. |
+| elder | **Ram and pounce** | The boost is a weapon: while boosting, anything the body passes within 14 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. And a boost with a target within 320 m and 70 degrees of the nose (the lock first, else the nearest) is a **pounce**: the flight is steered onto it at 2.8 rad/s and kept above 75 m/s for up to 1.8 s, until contact. Boosting into a manoeuvring dragon by hand was "very hard"; the plain boost also ran out 30 m short of a mark 130 m away. In a two-minute arena fight the demo pilot, pouncing, rammed five times and doubled its kills. |
+| ancient | **Fury** | Damage dealt and taken fills a meter (1 per 220 dealt, 1 per 250 taken, 0.15 a kill) -- a bar along the foot of the health plate, pulsing and a "FURY READY" call-out when full. H (left-stick click) releases a nova of the element round the dragon: 340 m, 90 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. It first filled at 1/500 and reached 170 m: "builds up slow, the meter is hard to notice, and 170 m is unlikely to contain multiple enemies". |
+
+**Hits and damage over time are told apart.** A burn or corrosion tick went
+through the same path as a hit, so the hit marker and flash fired every
+frame on a burning target and a real hit could not be seen. Damage over time
+now wounds and kills but is not a hit; a direct hit puts an X round the aim
+marker (a bigger red one on a kill) with a tick sound for shots and bites,
+and what a burn or corrosion will still take pulses in its colour at the end
+of the target's health bar (towers now show one too).
 
 The pips and the unlock call-outs name the pad's buttons when a controller
 is connected (RB, B, X, DP, Y, LS): "hold G" on a controller was a key
@@ -599,8 +617,9 @@ passes 0), and the seed never reached the terrain. What changed:
   side in a flame. The adult's fireball cooldown is 0.8x, not 0.6x -- the
   playtest's "a bit overpowered".
 
-**Five stages since the descent (M26.1):** elder at 750 and ancient at
-1250 after adult at 380, each a smaller step (elder 1.8x health, 1.38 size;
+**Five stages since the descent (M26.1):** elder at 1100 and ancient at
+2200 after adult at 450 (first 750 and 1250 after 380: a player who fought
+everything was ancient half way through valley 2), each a smaller step (elder 1.8x health, 1.38 size;
 ancient 2.1x, 1.5), so a valley buys about a stage and the curve flattens
 while the enemies' keeps climbing with the depth. Three stages had the dragon
 an adult early in valley 2 with nothing left to grow into.
