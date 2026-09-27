@@ -450,6 +450,12 @@ private:
     bool second_unlocked_ = false;
     bool using_second_ = false;
     game::Element second_element_ = game::Element::Frost;
+    // The element of the last enemy the player killed in this run: the
+    // breath an adult learns (a rolled one if it has killed none).
+    game::Element last_kill_element_ = game::Element::None;
+    int arena_breath_index_ = 0;
+    // The pad's names for the buttons when one is connected, else the keys.
+    const char* button_name(char key) const;
     bool swap_button_was_down_ = false;
     bool fury_button_was_down_ = false;
     bool fury_requested_ = false;

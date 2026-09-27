@@ -141,7 +141,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | Z | Aileron roll, the way the stick is held (right by default) -- gamepad d-pad left/right, which is also the direction. A dodge: a sideways kick and a push through the first half of the roll, about ten metres |
 | B | Flip: a half loop and a roll-out that reverses the heading, to face a chaser -- gamepad d-pad up. Refused below 26 m/s |
 | Hold G | Charged shot (a run's young stage on; always in the arena): let go or wait for full |
-| U | Swap to the second breath and back (adult on) -- gamepad Y |
+| U | Swap to the second breath and back (adult on; in the arena it walks all six elements) -- gamepad Y |
 | H | Release the fury when its pip is full (ancient on) -- gamepad left-stick click |
 | Enter | Rematch from the arena results; in a hoard run that has ended, a new valley |
 | P | Hands-off: the demo pilot takes (or gives back) the controls; the HUD says what it is doing |

@@ -148,6 +148,12 @@ skirt_trees_behind_start.png` is the view back over the spawn.
   steep faces as on the floor (`test_vegetation`). From altitude, boulders on
   a face turned from the sun catch it on their tops and read as light dots:
   plausible, and the first thing to look at if the slopes look speckled.
+  **They cost frame time**: 4,200 rocks drawn to the tree distance and into
+  the shadow map made the arena about a third slower (a 1,800-frame
+  headless fight: 14 s before row 7, 20 s after). Small kinds now stop at
+  1.4 km, the big ones at 2.6 km, their shadows are cast within 600 m, and
+  the spacing is 48 m (3,250 rocks): about 16.5 s. The detail tile's five
+  samples a pixel measured as nothing.
 - **Detail tile** (`assets/textures/terrain_detail.png`, 1024 RGBA, R rock,
   G grass, B dirt, A snow, each averaging 0.5, seamless): the terrain shader
   modulates each material by its channel, sampled at 16 m and 97 m and

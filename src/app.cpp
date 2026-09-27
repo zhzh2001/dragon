@@ -816,6 +816,7 @@ void App::replant() {
         foliage_.set_trees(device_, gfx::TreeKind(k), vegetation_.trees(gfx::TreeKind(k)));
     }
     for (int k = 0; k < gfx::ROCK_KINDS; ++k) foliage_.set_rocks(device_, k, vegetation_.rocks(k));
+    LOG_INFO("rocks: %zu placed", vegetation_.rock_count());
     foliage_.wind = vegetation_settings_.wind;
 }
 
@@ -949,7 +950,19 @@ void App::pump_events() {
     {
         const bool down = input_.has_gamepad() && input_.gamepad_button(SDL_GAMEPAD_BUTTON_NORTH);
         if ((input_.pressed(SDL_SCANCODE_U) || (down && !swap_button_was_down_)) && second_unlocked_) {
-            using_second_ = !using_second_;
+            const bool run = run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle;
+            if (run) {
+                using_second_ = !using_second_;
+            } else {
+                // The arena is the sandbox: U walks every element in turn,
+                // the player's own, then each of the other five.
+                const game::Element first = player_element_choice_ >= 0
+                                                ? game::Element(player_element_choice_)
+                                                : player_model().breath.element;
+                arena_breath_index_ = (arena_breath_index_ + 1) % game::ELEMENT_COUNT;
+                using_second_ = arena_breath_index_ != 0;
+                second_element_ = game::Element((int(first) + arena_breath_index_) % game::ELEMENT_COUNT);
+            }
             refresh_player_element();
             audio_.play(audio::Clip::Boost, 0.5f, 1.5f);
         }
@@ -3424,6 +3437,9 @@ void App::start_run(uint32_t seed) {
     run_mode_ = true;
     combat_enabled_ = true;
     match_.abandon();
+    last_kill_element_ = game::Element::None;
+    using_second_ = false;
+    second_unlocked_ = false;
     run_seed_ = seed;
     run_seed_input_ = int(seed & 0x7fffffffu);
     last_run_record_ = false;
@@ -3842,14 +3858,53 @@ void App::play_status_sound(audio::Clip clip, int slot, core::Vec3 at, float gai
     audio_.play(clip, gain / (1.0f + d * d / (220.0f * 220.0f)), rate * (0.95f + 0.1f * particle_unit()));
 }
 
-const char* App::stage_unlock_text(game::GrowthStage stage) const {
-    switch (stage) {
-        case game::GrowthStage::Young: return "NEW: charged shot -- hold G, let go (or wait) for a heavy fireball";
-        case game::GrowthStage::Adult: return "NEW: a second breath -- U swaps element";
-        case game::GrowthStage::Elder: return "NEW: the ram -- boost (X) through them, stunning and hurling";
-        case game::GrowthStage::Ancient: return "NEW: fury -- damage fills it; H releases a nova of your element";
-        default: return "";
+const char* App::button_name(char key) const {
+    if (!input_.has_gamepad()) {
+        switch (key) {
+            case 'C': return "C";
+            case 'G': return "G";
+            case 'X': return "X";
+            case 'Z': return "Z";
+            case 'U': return "U";
+            case 'H': return "H";
+            default: return "?";
+        }
     }
+    switch (key) {
+        case 'C': return "B";
+        case 'G': return "RB";
+        case 'X': return "X";
+        case 'Z': return "DP";   // the d-pad's left and right
+        case 'U': return "Y";
+        case 'H': return "LS";   // the left stick, clicked
+        default: return "?";
+    }
+}
+
+const char* App::stage_unlock_text(game::GrowthStage stage) const {
+    static std::string text;
+    char line[160];
+    switch (stage) {
+        case game::GrowthStage::Young:
+            std::snprintf(line, sizeof(line), "NEW: charged shot -- hold %s, let go (or wait) for a heavy fireball",
+                          button_name('G'));
+            break;
+        case game::GrowthStage::Adult:
+            std::snprintf(line, sizeof(line), "NEW: the breath of your last kill (%s) -- %s swaps element",
+                          game::element_name(second_element_), button_name('U'));
+            break;
+        case game::GrowthStage::Elder:
+            std::snprintf(line, sizeof(line), "NEW: the ram -- boost (%s) through them, stunning and hurling",
+                          button_name('X'));
+            break;
+        case game::GrowthStage::Ancient:
+            std::snprintf(line, sizeof(line), "NEW: fury -- damage fills it; %s releases a nova of your element",
+                          button_name('H'));
+            break;
+        default: line[0] = '\0'; break;
+    }
+    text = line;
+    return text.c_str();
 }
 
 // What the player can do: a run grants one ability per stage (young the
@@ -3866,13 +3921,21 @@ void App::update_abilities() {
     if (second != second_unlocked_) {
         second_unlocked_ = second;
         if (!second) using_second_ = false;
-        // The second breath is a different element from the first: rolled
-        // per run, the next one round in the arena.
+        // The second breath: in a run, the breath of the last enemy killed
+        // -- what you hunt is what you learn -- or a rolled one if nothing
+        // of another element has fallen yet. (The first cut rolled per run
+        // and dealt the arena the element after the player's: fire's is
+        // frost, so it was "always frost".) The arena's U cycles them all.
         const game::Element first = player_element_choice_ >= 0
                                         ? game::Element(player_element_choice_)
                                         : player_model().breath.element;
-        second_element_ = run ? roll_element(run_seed_ * 131u + 17u) : game::Element((int(first) + 1) % game::ELEMENT_COUNT);
+        if (run && last_kill_element_ != game::Element::None && last_kill_element_ != first) {
+            second_element_ = last_kill_element_;
+        } else {
+            second_element_ = run ? roll_element(run_seed_ * 131u + 17u) : game::Element((int(first) + 1) % game::ELEMENT_COUNT);
+        }
         if (second_element_ == first) second_element_ = game::Element((int(first) + 3) % game::ELEMENT_COUNT);
+        if (second) LOG_INFO("second breath: %s", game::element_name(second_element_));
         refresh_player_element();
     }
 }
@@ -4199,6 +4262,7 @@ void App::update_run(float dt, const game::CombatEvents& events) {
             what = "RIVAL SLAIN";
         }
         if (s.external) s.respawn_timer = 1e9f;
+        if (bounty > 0.0f && kills_to_pay > 0 && s.element != game::Element::None) last_kill_element_ = s.element;
         if (bounty <= 0.0f || kills_to_pay <= 0) continue;
         --kills_to_pay;
         hoard_run_.award(bounty);
@@ -5387,30 +5451,37 @@ void App::draw_combat_hud() {
         const float step = hud_.px(34.0f);
         const float y = height - margin - hud_.px(28.0f);
         const float x0 = width * 0.5f + hud_.px(75.0f) + hud_.px(24.0f);
-        hud_.pip(ImVec2(x0, y), radius, 1.0f - combat_.melee_cooldown(), "C", tk.danger);
-        hud_.pip(ImVec2(x0 + step, y), radius, 1.0f - combat_.fire_cooldown(), "G", tk.breath_hot);
-        hud_.pip(ImVec2(x0 + step * 2.0f, y), radius, 1.0f - combat_.boost_cooldown(), "X", tk.cool);
+        // Labelled with the pad's buttons when one is connected: "G" on a
+        // controller was a key nobody could find.
+        hud_.pip(ImVec2(x0, y), radius, 1.0f - combat_.melee_cooldown(), button_name('C'), tk.danger);
+        hud_.pip(ImVec2(x0 + step, y), radius, 1.0f - combat_.fire_cooldown(), button_name('G'), tk.breath_hot);
+        hud_.pip(ImVec2(x0 + step * 2.0f, y), radius, 1.0f - combat_.boost_cooldown(), button_name('X'), tk.cool);
         const float maneuver_ready =
             maneuver_.active() ? 0.0f
             : maneuver_tuning_.cooldown > 0.0f
                 ? 1.0f - core::saturate(maneuver_.cooldown / maneuver_tuning_.cooldown)
                 : 1.0f;
-        hud_.pip(ImVec2(x0 + step * 3.0f, y), radius, maneuver_ready, "Z", tk.accent);
+        hud_.pip(ImVec2(x0 + step * 3.0f, y), radius, maneuver_ready, button_name('Z'), tk.accent);
         // The learned abilities: U the second breath (in the colour of the
         // element it swaps to), H the fury filling.
         if (second_unlocked_) {
-            const game::Element other = using_second_ ? (player_element_choice_ >= 0
-                                                             ? game::Element(player_element_choice_)
-                                                             : player_model().breath.element)
-                                                      : second_element_;
+            const game::Element first = player_element_choice_ >= 0 ? game::Element(player_element_choice_)
+                                                                    : player_model().breath.element;
+            const bool run = run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle;
+            // What U turns to next: in a run the other of the two, in the
+            // arena the next round the cycle.
+            const game::Element other =
+                run ? (using_second_ ? first : second_element_)
+                    : game::Element((int(first) + (arena_breath_index_ + 1) % game::ELEMENT_COUNT) %
+                                    game::ELEMENT_COUNT);
             const core::Vec3 c = game::element_colour(other);
-            hud_.pip(ImVec2(x0 + step * 4.0f, y), radius, 1.0f, "U",
+            hud_.pip(ImVec2(x0 + step * 4.0f, y), radius, 1.0f, button_name('U'),
                      IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235));
         }
         if (combat_.abilities.fury) {
             const float fury = combat_.fury();
             const bool ready = fury >= 1.0f && std::fmod(time_seconds_, 0.6f) < 0.4f;
-            hud_.pip(ImVec2(x0 + step * 5.0f, y), radius, fury, "H", ready ? tk.lock : tk.flame);
+            hud_.pip(ImVec2(x0 + step * 5.0f, y), radius, fury, button_name('H'), ready ? tk.lock : tk.flame);
         }
         if (combat_.melee_combo() > 1) {
             std::snprintf(line, sizeof(line), "x%d", combat_.melee_combo());
@@ -6279,7 +6350,7 @@ void App::render() {
     if (shadow_.enabled) {
         SDL_GPURenderPass* shadow_pass = shadow_.begin_pass(device_);
         foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
-                                  world_.scene().view_params.z);
+                                  world_.scene().view_params.z, active_camera().position);
         world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                gfx::ModelUniforms());
         world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),

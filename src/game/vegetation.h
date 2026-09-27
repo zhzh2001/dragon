@@ -50,7 +50,7 @@ struct VegetationSettings {
     // threshold, scree and boulders on the mid slopes, a sprinkle of boulders
     // on the floor. What turns clay mountains into mountains.
     bool rocks = true;
-    float rock_spacing = 42.0f;
+    float rock_spacing = 48.0f;
     float rock_slope_cover = 0.6f;   // keep chance on the steepest faces
     float rock_floor_cover = 0.035f; // on the flat floor
     float rock_extent = 1.15f;       // x the playable half extent

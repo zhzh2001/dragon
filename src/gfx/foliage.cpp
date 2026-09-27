@@ -749,8 +749,10 @@ void Foliage::draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUni
         SDL_GPUBufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
         SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        const bool big = k == 1 || k == 3 || k == 5;
+        const float reach = big ? big_rock_draw_distance : rock_draw_distance;
         for (const Cell& cell : set.cells) {
-            if (core::distance(eye, cell.centre) - cell.radius > tree_draw_distance) continue;
+            if (core::distance(eye, cell.centre) - cell.radius > reach) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
             SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
         }
@@ -765,7 +767,7 @@ void Foliage::draw_grass(Device& device, SDL_GPURenderPass* pass, const SceneUni
 }
 
 void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
-                               const core::Mat4& light_view_proj, float time) {
+                               const core::Mat4& light_view_proj, float time, core::Vec3 eye) {
     if (!pass) return;
     SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(depth_pipeline_);
     if (!pipeline) return;
@@ -805,6 +807,7 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
         SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
         const Frustum light(light_view_proj);
         for (const Cell& cell : set.cells) {
+            if (core::distance(eye, cell.centre) - cell.radius > rock_shadow_distance) continue;
             if (!light.sees(cell.centre, cell.radius)) continue;
             SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
         }

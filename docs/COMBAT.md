@@ -438,9 +438,13 @@ gates the three combat ones, and the second breath is the app's.
 | Stage | Ability | What it is |
 |---|---|---|
 | young | **Charged shot** | Hold G: the fireball gathers at the mouth (0.8 s to full, an arc round the aim marker); let go, or reach full, and it leaves 2.2x the damage, 2x the blast, 1.6x the body, 2.5x the status, 15% faster. A tap is still a plain shot, on the release. |
-| adult | **Second breath** | A second element (rolled per run; the next one round in the arena). U (gamepad Y) swaps; the U pip wears the colour it swaps to. The flame, the status, the resistances all follow. |
+| adult | **Second breath** | The breath of the last enemy killed -- what you hunt is what you learn (rolled if nothing of another element has fallen). U (gamepad Y) swaps between the two; in the arena, the sandbox, U walks all six in turn. The pip wears the colour it swaps to. The first cut rolled per run and gave the arena the element after the player's -- fire's is frost, so it was "always frost". |
 | elder | **Ram** | The boost is a weapon: while boosting, anything the body passes within 10 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. The body is sheathed in its element while it boosts. |
 | ancient | **Fury** | Damage dealt fills a meter (1 per 500 damage, 0.08 a kill; the H pip). H (left-stick click) releases a nova of the element round the dragon: 170 m, 90 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. |
+
+The pips and the unlock call-outs name the pad's buttons when a controller
+is connected (RB, B, X, DP, Y, LS): "hold G" on a controller was a key
+nobody could find.
 
 **Every ability also grows with the dragon** (the same continuous growth as
 the body): the melee's reach, stun, knockback and cooldown, the boost's force

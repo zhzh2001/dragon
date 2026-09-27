@@ -50,7 +50,8 @@ public:
     void draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene);
     void draw_grass(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene);
     void draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
-                          const core::Mat4& light_view_proj, float time);
+                          const core::Mat4& light_view_proj, float time,
+                          core::Vec3 eye = core::Vec3::zero());
 
     uint32_t tree_count() const;
     // Trees drawn in the last main pass, after the cell culling.
@@ -58,6 +59,14 @@ public:
     // Trees past this distance from the camera are not drawn at all. Beyond
     // it a tree is under a pixel; the LOD dither has already taken its crowns.
     float tree_draw_distance = 4200.0f;
+    // Rocks stop sooner: 4,200 of them at ~900 triangles, drawn to the tree
+    // distance and into the shadow map, cost the arena a third of its frame
+    // time. Past these a boulder is a pixel or two; the big kinds (big
+    // boulder, crag, outcrop) carry further. Their shadows are only cast
+    // near the camera, where a rock's shadow is bigger than a texel.
+    float rock_draw_distance = 1400.0f;
+    float big_rock_draw_distance = 2600.0f;
+    float rock_shadow_distance = 600.0f;
     uint32_t grass_count() const;
 
     // Sway amplitude in metres at the top of a plant.
