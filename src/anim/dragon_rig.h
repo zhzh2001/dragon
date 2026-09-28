@@ -676,6 +676,11 @@ struct RigTuning {
     // to brake with its legs still tucked.
     float leg_brake_extend = 0.6f;
     float leg_brake_forward_deg = 30.0f;
+    // Active manoeuvres hold the limbs against gravity/inertial swing. Glide
+    // retains the full pendulum; 1 restores freely hanging brake/dive legs.
+    float leg_posture_sway = 0.2f;
+    // Extra hip trail in a tuck, for species with a relaxed hanging glide.
+    float leg_dive_trail_deg = 0.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
     // bird's relaxed foot, not a planted one. This asset parents its feet to the
     // body, so nothing else would ever move them once the ground idle fades.

@@ -1067,3 +1067,15 @@ braking turn is a lean, not a sit-up. Verified from the side, rear, quarter
 and above in `--studio 7`, in a braking turn (`--input 0.3,0.7,0,0,0,1`),
 at the head, and on stormsail, blightmaw, rimefang and tidewrack:
 `artifacts/brake/`.
+
+
+**Braced brake/dive legs (2026-09-27).** The passive hip pendulum could add
+another 40 degrees to a deliberate brake reach, and pulled dive legs back
+toward a vertical hang. `leg_posture_sway` (0.2) scales its spring target during
+brake/tuck; filtering the target preserves momentum through release. Normal
+glide keeps full passive sway. `leg_dive_trail_deg` adds tuck-only hip trail
+(default 0; Frostvein 25 degrees for its relaxed hanging glide). Both are in
+Dragon / Flight response and the rig profile serializer. Studio 7 now applies
+brake on the decreasing-speed half of its cycle, correcting an inverted sine.
+All fifteen suites pass; full-size roster inspection and playtest instructions
+are recorded in [the evidence report](../artifacts/flight-leg-refinement/README.md).

@@ -476,6 +476,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(front_leg_trail_deg),
     RIG_FLOAT_FIELD(leg_brake_extend),
     RIG_FLOAT_FIELD(leg_brake_forward_deg),
+    RIG_FLOAT_FIELD(leg_posture_sway),
+    RIG_FLOAT_FIELD(leg_dive_trail_deg),
     RIG_FLOAT_FIELD(foot_hang_deg),
     RIG_FLOAT_FIELD(toe_curl_deg),
     RIG_FLOAT_FIELD(foot_follow),
@@ -1801,6 +1803,9 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
     // an imported quadruped can stay clear of its torso without changing the
     // generated dragon's established pose.
     const float brake = core::saturate(state.wing_brake);
+    const float dive = core::saturate(state.wing_tuck);
+    const float posture_sway = core::lerpf(1.0f, core::saturate(tuning.leg_posture_sway),
+                                           core::maxf(brake, dive));
     const float brake_extend = core::saturate(tuning.leg_brake_extend) * brake;
     const float flight_fold = airborne * (1.0f - brake_extend);
     const float tuck_angle = core::radians(tuning.leg_tuck_deg) * flight_fold;
@@ -1822,7 +1827,12 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         core::Vec2 desired{core::clampf(std::atan2(-effective.z, down), -max_swing, max_swing),
                            core::clampf(std::atan2(effective.x, down), -max_swing, max_swing)};
         // Planted feet do not swing.
-        desired = desired * (1.0f - leg_extend_);
+        // A deliberate reach/stow braces the hip. Previously a full passive
+        // swing added up to 40 degrees on top of the brake's forward reach,
+        // while gravity pulled tucked dive legs back toward a vertical hang.
+        // Filter the target, not the resulting pose, so releasing tuck/brake
+        // keeps the spring's momentum instead of snapping the limb.
+        desired = desired * (airborne * posture_sway);
 
         core::Vec2& swing = leg_swing_[side];
         core::Vec2& velocity = leg_swing_velocity_[side];
@@ -1843,7 +1853,8 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // anchored feet above the wings. A stoop stows the legs under the
         // body, not rotated past it.
         const float trail = core::radians(tuning.leg_trail_deg) * flight_fold *
-                            (1.0f - 0.7f * state.wing_tuck);
+                            (1.0f - 0.7f * dive) +
+                            core::radians(tuning.leg_dive_trail_deg) * dive * flight_fold;
         // Trail and fold were settled by eye on the +Z-facing asset; the aft
         // factor keeps them aft on a model facing the other way. The pendulum
         // swing is already in model space and needs no help.
@@ -1868,7 +1879,8 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         };
         drive_limb(joints_.leg[side], trail);
         drive_limb(joints_.front_leg[side],
-                   core::radians(tuning.front_leg_trail_deg) * flight_fold);
+                   (core::radians(tuning.front_leg_trail_deg) +
+                    core::radians(tuning.leg_dive_trail_deg) * dive) * flight_fold);
 
         // The claw: the near limb rakes forward and down and returns. The
         // foreleg where there is one, the hind leg on a wyvern. Side 0 is

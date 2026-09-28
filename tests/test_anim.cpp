@@ -260,6 +260,8 @@ void test_rig_tuning_profile_round_trip() {
     written.wing_recovery_extend_phase = 0.68f;
     written.leg_brake_extend = 0.7f;
     written.leg_brake_forward_deg = 28.0f;
+    written.leg_posture_sway = 0.35f;
+    written.leg_dive_trail_deg = 22.0f;
     written.chain_iterations = 9;
     written.ground_wing_arm_sweep_deg = 71.0f;
     written.ground_hip_deg = -8.0f;
@@ -278,6 +280,8 @@ void test_rig_tuning_profile_round_trip() {
     CHECK(near(loaded.wing_recovery_extend_phase, written.wing_recovery_extend_phase));
     CHECK(near(loaded.leg_brake_extend, written.leg_brake_extend));
     CHECK(near(loaded.leg_brake_forward_deg, written.leg_brake_forward_deg));
+    CHECK(near(loaded.leg_posture_sway, written.leg_posture_sway));
+    CHECK(near(loaded.leg_dive_trail_deg, written.leg_dive_trail_deg));
     CHECK(loaded.chain_iterations == written.chain_iterations);
     CHECK(near(loaded.ground_wing_arm_sweep_deg, written.ground_wing_arm_sweep_deg));
     CHECK(near(loaded.ground_hip_deg, written.ground_hip_deg));
@@ -1611,6 +1615,14 @@ void test_studio_states_are_consistent() {
     CHECK(pull.angular_velocity.x > 0.2f);  // nose-up rate
     CHECK(pull.g_load > 2.0f);
 
+    // Flare only while losing speed; the old sign played it while accelerating.
+    for (float t : {0.5f, 1.0f, 1.5f, 2.5f, 3.0f, 3.5f}) {
+        const auto before = game::studio_state(game::StudioScenario::Brake, t - 0.01f, centre, 0.0f);
+        const auto at = game::studio_state(game::StudioScenario::Brake, t, centre, 0.0f);
+        const auto after = game::studio_state(game::StudioScenario::Brake, t + 0.01f, centre, 0.0f);
+        CHECK((at.wing_brake > 0.5f) == (after.airspeed < before.airspeed));
+    }
+
     // Every scenario stays finite over a full loop.
     for (int scenario = 0; scenario < int(game::StudioScenario::Count); ++scenario) {
         for (float t = 0.0f; t < 12.0f; t += 0.37f) {
@@ -1848,6 +1860,71 @@ void test_legs_swing_with_the_frame() {
         return rig.world_matrices()[size_t(joints.leg[0].back())].col[3].xyz();
     };
     CHECK(length(foot_with_trail(38.0f) - foot_with_trail(0.0f)) > 0.3f);
+}
+
+// Compare braced limbs to the same pose with zero passive sway. Local thigh
+// directions isolate the leg response from the root's brake flare and neck.
+void test_legs_brace_during_active_postures() {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(__FILE__).parent_path().parent_path();
+    for (const char* name : {"generated", "dragon", "embercrest", "rimefang", "frostvein",
+                             "blightmaw", "ironroot", "stormsail", "tidewrack", "alt/prowler"}) {
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        anim::DragonJoints joints;
+        const fs::path path = root / (std::string("assets/") + name + ".glb");
+        if (std::string(name) == "generated") {
+            anim::build_dragon(anim::DragonShape{}, skeleton, joints, mesh);
+        } else {
+            if (!fs::exists(path)) continue;
+            CHECK(anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok);
+            joints = anim::map_dragon_joints(skeleton);
+        }
+        for (bool dive : {false, true}) {
+            anim::DragonRig fixed, braced, loose;
+            for (auto* rig : {&fixed, &braced, &loose}) {
+                rig->init(skeleton, joints);
+                if (fs::exists(path)) anim::load_rig_tuning(rig->tuning, (path.string()+".rig.cfg").c_str());
+            }
+            fixed.tuning.leg_posture_sway = 0.0f;
+            braced.tuning.leg_posture_sway = 0.2f;
+            loose.tuning.leg_posture_sway = 1.0f;
+            game::FlightState state;
+            state.ground_clearance = 300.0f;
+            state.wing_tuck = dive ? 1.0f : 0.0f;
+            state.wing_brake = dive ? 0.0f : 1.0f;
+            state.orientation = Quat::from_axis_angle(Vec3::unit_x(), radians(dive ? -55.0f : 0.0f));
+            for (int i = 0; i < 240; ++i) {
+                state.airspeed = dive ? 95.0f : 65.0f - float(i) / 6.0f;
+                state.velocity = rotate(state.orientation, Vec3::forward()) * state.airspeed;
+                for (auto* rig : {&fixed, &braced, &loose}) rig->update(state, 1.0f/60.0f);
+            }
+            for (int side = 0; side < 2; ++side) {
+                CHECK(!joints.leg[side].empty());
+                if (joints.leg[side].empty()) continue;
+                const size_t hip = size_t(joints.leg[side].front());
+                auto direction = [&](const anim::DragonRig& rig) {
+                    return rotate(rig.pose().local[hip].rotation, Vec3::unit_y());
+                };
+                const float free_swing = length(direction(loose) - direction(fixed));
+                CHECK(free_swing > 0.05f);
+                CHECK(length(direction(braced) - direction(fixed)) < free_swing * 0.3f);
+            }
+            // Removing the active posture must let the spring settle back to
+            // exactly the same glide, without a persistent pose offset.
+            state.wing_tuck = state.wing_brake = 0.0f;
+            state.orientation = Quat::identity();
+            state.velocity = Vec3{0,0,-30}; state.airspeed = 30;
+            for (int i = 0; i < 600; ++i)
+                for (auto* rig : {&fixed, &braced, &loose}) rig->update(state, 1.0f/60.0f);
+            for (int side = 0; side < 2; ++side) {
+                if (joints.leg[side].empty()) continue;
+                const size_t hip = size_t(joints.leg[side].front());
+                CHECK(length(rotate(braced.pose().local[hip].rotation, Vec3::unit_y()) -
+                             rotate(loose.pose().local[hip].rotation, Vec3::unit_y())) < 0.001f);
+            }
+        }
+    }
 }
 
 bool finite_palette(const anim::DragonRig& rig) {
@@ -2566,6 +2643,7 @@ int main() {
     test_wingtip_reaches_the_commanded_flap();
     test_wingbeat_is_not_a_wave();
     test_legs_swing_with_the_frame();
+    test_legs_brace_during_active_postures();
     test_aimed_fold_points_the_bones();
     test_stance_keeps_the_feet_on_the_floor();
     test_reinit_drops_the_previous_clip();

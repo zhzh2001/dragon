@@ -2869,6 +2869,8 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("brake leg extend", &rig.leg_brake_extend, 0.0f, 1.0f);
+        ImGui::SliderFloat("brake/dive leg sway", &rig.leg_posture_sway, 0.0f, 1.0f);
+        ImGui::SliderFloat("dive leg trail", &rig.leg_dive_trail_deg, -30.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("brake leg forward", &rig.leg_brake_forward_deg, 0.0f, 60.0f,
                            "%.0f deg");
         ImGui::SliderFloat("foot hang", &rig.foot_hang_deg, -60.0f, 60.0f, "%.0f deg");

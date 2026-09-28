@@ -322,7 +322,7 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
         }
         case StudioScenario::Brake: {
             // Braking during the decelerating half of the ping-pong.
-            const float decelerating = -std::sin(core::TWO_PI * t / 4.0f);
+            const float decelerating = std::sin(core::TWO_PI * t / 4.0f);
             state.wing_brake = core::saturate(decelerating * 1.4f);
             state.control = Vec3{0.35f * state.wing_brake, 0.0f, 0.0f};
             break;
