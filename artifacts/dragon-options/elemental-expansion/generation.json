@@ -1,0 +1,24 @@
+[
+  {
+    "species": "rimeplume",
+    "job": "ecf9227e-6649-4634-9ec9-7ac6165b89a8",
+    "status": "success",
+    "field": "textureGlb",
+    "file": "assets/rimeplume-cand-oneshot.glb",
+    "sha256": "161aebb1a6c105c87fa8273c8444230affd8e6fd97fadcb2ad757e8816fd4969",
+    "bytes": 87778044,
+    "images": 3,
+    "triangles": 1499848
+  },
+  {
+    "species": "sunspear",
+    "job": "70d70143-ef26-48b5-bc13-41a53b678c9e",
+    "status": "success",
+    "field": "textureGlb",
+    "file": "assets/sunspear-cand-oneshot.glb",
+    "sha256": "f66b84687142e19a956667cc87a10a84d4609d4309d066cc161e6a3cc9985469",
+    "bytes": 84068628,
+    "images": 3,
+    "triangles": 1500000
+  }
+]

@@ -1,0 +1,70 @@
+the static glTF loader reads a tracked prop
+melee gestures: the body answers the swing in the right directions
+  tail tip x 0.00 -> 6.78, head x 0.00 -> -6.94
+  head -0.16,-10.26 -> -2.87,-11.38  root z 0.00 -> -1.62
+world bind accumulates down the hierarchy
+the bind pose produces identity skinning matrices
+  worst deviation from identity: 0.000000
+rotating a joint carries its children
+  tip 0.00 0.00 -2.00 -> -2.00 0.00 -0.00
+vertex weights are normalized
+  3:1 becomes 0.75:0.25 (sum 1.000)
+blended skinning does not shrink a bone
+  radius retained across a 40 deg joint: 0.940
+the dragon rig builds coherently
+  27 joints, 218 verts, 360 tris
+  worst weight-sum error 0.000000, highest joint index 26 of 26
+  wing tips at x +7.94 and -7.94
+rig tuning profiles round-trip through flat config
+wing fold controls separate elbow, wrist and fingers
+wingbeat phase delay leads the elbow and lets the fingers recover
+  low points shoulder 0.400, elbow 0.460, wrist 0.520
+  recovery fold deltas elbow 0.6086, tip 1.7252, late 0.0000
+brake leg profile unfolds and floats limbs forward
+the rig responds to flight state
+  wrist rises 4.27 m when the wing angle goes to 50 deg
+  tail tip whips 1.43 m at the onset of a 1 rad/s yaw
+  settles back to 0.0001 m of deflection
+rotation tracks sample and hold correctly
+clips loop and only touch the joints they track
+a clip at rest reproduces the bind pose exactly
+an authored clip animates what the rig does not own
+the head turns toward an aim target
+tail and neck deflect with control input
+wings flex up under g and lean with roll input
+the ground idle fades as flight gets violent
+the neck carries a share of the aim
+jaw opens on breath and spit, spit recoils the neck
+open sculpt jaw closes at rest and never exceeds authored gape
+every roster jaw opens downward on the breath
+  assets/embercrest.glb: jaw 'jaw' tip 'jaw_tip' -- rest +16.0 deg from bind, breath +0.0 deg (negative = lower)
+  assets/rimefang.glb: jaw 'jaw' tip 'jaw_tip' -- rest +13.0 deg from bind, breath -7.0 deg (negative = lower)
+  assets/blightmaw.glb: jaw 'jaw' tip 'jaw_tip' -- rest +20.0 deg from bind, breath -0.0 deg (negative = lower)
+  assets/ironroot.glb: jaw 'jaw' tip 'jaw_tip' -- rest +12.0 deg from bind, breath -10.0 deg (negative = lower)
+  assets/stormsail.glb: jaw 'jaw' tip 'jaw_tip' -- rest +12.0 deg from bind, breath -2.0 deg (negative = lower)
+  assets/tidewrack.glb: jaw 'jaw' tip 'jaw_tip' -- rest +22.0 deg from bind, breath +0.0 deg (negative = lower)
+wings sweep with speed and the tips flutter in a dive
+the authored stance takes the body on the ground
+studio scenarios are dynamically consistent
+studio grounded pose uses the supplied ground offset
+the wingtip sweeps the angle the flight model commanded
+  generated rig: tip travels 106% of the commanded stroke
+  assets/stormsail.glb: tip travels 87% of the commanded stroke
+  assets/embercrest.glb: tip travels 82% of the commanded stroke
+a wingbeat flexes, sweeps, feathers and lifts the body; a wave does none
+  reach from shoulder: downstroke 9.79, upstroke 9.36
+  hand z at the bottom -2.30 (flat -0.17), at the top 3.50 (flat 1.56)
+  leading edge y: downstroke -0.116 (untwisted -0.016), upstroke 0.023 (untwisted -0.039)
+  root y: still 0.000, top of downstroke -0.260, after it 0.300
+legs are pendulums: outward in a turn, forward under braking
+the aimed standing fold points each wing segment where the profile says
+the standing stance keeps every foot on the bind floor
+re-initialising the rig on another skeleton drops the previous clip
+each standing limb plants on the terrain under it
+  worst foot off its ground: 0.50 m without planting, 0.00 m with
+optional Embercrest asset validates when present
+  using EMBERCREST_TEST_MODEL=assets/sunspear.glb
+  loaded 68 joints, 61573 verts, 80000 tris, bind error 0.000000
+  response deltas wing flap 0.39934, wing tuck 0.64760, tail yaw 0.19615, attack 0.77491, ground 0.70175, jaw 1.000
+
+1225 checks, 0 failures

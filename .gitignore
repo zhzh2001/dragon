@@ -35,6 +35,8 @@ assets/blightmaw/
 assets/ironroot/
 assets/tidewrack/
 assets/frostvein/
+assets/sunspear/
+assets/rimeplume/
 tools/__pycache__/
 artifacts/**/*.bmp
 artifacts/**/*.log

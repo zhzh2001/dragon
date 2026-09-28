@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-28",
+  "build": "passed",
+  "ctest": {
+    "passed": 15,
+    "failed": 0,
+    "seconds": 18.08
+  },
+  "animation_checks_per_candidate": 1225,
+  "animation_failures": 0,
+  "native_captures_per_candidate": 26,
+  "visual_review": "Native side/front/rear/top glide, flap, dive and ground; jaw, feet, game flight/landing, model switch",
+  "human_playtest": "pending"
+}

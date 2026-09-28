@@ -526,3 +526,10 @@ at it, implement toward it, capture the engine, compare. Three targets live in
 - Always capture the engine from the same viewpoint as the target
   (`--cam`, `--inspect`) and look at both. The comparison, not the target,
   is the deliverable.
+
+## User-requested silhouette exploration — 2026-09-28
+
+The earlier no-new-species sequencing was explicitly expanded for original
+elemental dragon designs. Six concepts and two playable candidates (Sunspear
+and Rimeplume) are recorded in `artifacts/elemental-expansion/README.md`. These
+are optional candidates pending human playtest, not default-roster replacements.

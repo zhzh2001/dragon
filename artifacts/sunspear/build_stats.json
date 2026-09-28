@@ -1,0 +1,56 @@
+{
+  "source": "sunspear-cand-oneshot.glb",
+  "source_sha256": "f66b84687142e19a956667cc87a10a84d4609d4309d066cc161e6a3cc9985469",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 39998,
+  "bones": 68,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; plane jaw mask with hinge blend, 4-point line, snout reclaimed; level wing bind 0 deg",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 43757776,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 3.4772869936271253,
+  "repaired_zero_tangents": 3,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    5.972133898524135e-11
+  ]
+}

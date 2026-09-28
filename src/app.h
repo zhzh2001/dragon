@@ -68,6 +68,8 @@ struct Options {
     bool hide_ui = false;
     // Hide the tool panels but keep the HUD: a capture of what the player sees.
     bool hide_panels = false;
+    // Keep foliage and its shadows out of close asset-inspection captures.
+    bool hide_vegetation = false;
     // Skip the grade and the bloom: the picture as it was before the post
     // stack, for a before/after of the same frame.
     bool no_post = false;

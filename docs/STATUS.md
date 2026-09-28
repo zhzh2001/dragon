@@ -3,6 +3,15 @@
 What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `RETRO.md`.
 
+## Latest asset candidates — 2026-09-28
+
+Sunspear (fire, triangular sails) and Rimeplume (frost, feather fans) now have
+independently measured rigs, repaired materials and selectable game profiles.
+Six original elemental concepts were explored; four remain concepts. Both
+80k-triangle candidates passed native multi-axis/landing/switch inspection and
+1,225 animation checks each; all 15 CTest suites pass. Human motion/playtest
+judgment remains. See [evidence and launch commands](../artifacts/elemental-expansion/README.md).
+
 ## Status
 
 - **M1** window, GPU device, reversed-Z depth, offscreen render + blit,

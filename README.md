@@ -137,3 +137,10 @@ conventions, and the cross-cutting lessons. The detail lives in `docs/`:
 
 Code: no licence chosen yet -- ask before reusing. The dragon model is
 CC BY-NC (see `ATTRIBUTION.md`), which makes the assembled game non-commercial.
+
+## New dragon candidates
+
+Try the triangular-winged fire dragon Sunspear and feathered frost dragon
+Rimeplume with `./build/dragon --models assets/sunspear.glb,assets/rimeplume.glb`
+(`M` switches). Local generated assets are required. See the
+[concepts, validation and playtest notes](artifacts/elemental-expansion/README.md).

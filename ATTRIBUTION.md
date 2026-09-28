@@ -38,6 +38,13 @@ hash are in `artifacts/frostvein/generation.json`. Use the dedicated
 `tools/skeletons/frostvein.json` when rebuilding. The local final model is
 `assets/frostvein.glb`; the existing generated-asset exclusion applies to it.
 
+The 2026-09-28 silhouette expansion adds original concept designs for six
+elements. Sunspear (triangular fire sails) and Rimeplume (feathered frost wings)
+were generated through the same Hunyuan one-shot workflow. Their prompts,
+four cardinal plates, job IDs and textured source hashes are recorded in
+`artifacts/dragon-options/elemental-expansion/`. The same generated-asset
+exclusion and unresolved hosted-terms status below apply to these candidates.
+
 - **Licence: UNRESOLVED.** The hosted Studio's terms of service were never
   fetched or read. This is tracked as the first open question in
   `docs/MODEL_GENERATION.md` and it is the item that blocks shipping, not the

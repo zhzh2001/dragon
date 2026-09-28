@@ -157,6 +157,8 @@ Options parse_options(int argc, char** argv) {
             options.autopilot = true;
         } else if (arg == "--hide-ui") {
             options.hide_ui = true;
+        } else if (arg == "--hide-vegetation") {
+            options.hide_vegetation = true;
         } else if (arg == "--telemetry") {
             options.telemetry_interval = 60;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -6518,8 +6520,10 @@ void App::render() {
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled) {
         SDL_GPURenderPass* shadow_pass = shadow_.begin_pass(device_);
-        foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
-                                  world_.scene().view_params.z, active_camera().position);
+        if (!options_.hide_vegetation) {
+            foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
+                                      world_.scene().view_params.z, active_camera().position);
+        }
         world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                gfx::ModelUniforms());
         world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
@@ -6593,8 +6597,10 @@ void App::render() {
     world_.draw_terrain(device_, pass, terrain_mesh_);
     if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_);
     if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
-    foliage_.draw_trees(device_, pass, world_.scene());
-    foliage_.draw_grass(device_, pass, world_.scene());
+    if (!options_.hide_vegetation) {
+        foliage_.draw_trees(device_, pass, world_.scene());
+        foliage_.draw_grass(device_, pass, world_.scene());
+    }
     world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
                         dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
 

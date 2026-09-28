@@ -1079,3 +1079,13 @@ Dragon / Flight response and the rig profile serializer. Studio 7 now applies
 brake on the decreasing-speed half of its cycle, correcting an inverted sine.
 All fifteen suites pass; full-size roster inspection and playtest instructions
 are recorded in [the evidence report](../artifacts/flight-leg-refinement/README.md).
+
+## Optional Sunspear and Rimeplume candidates (2026-09-28)
+
+Two additional user-requested silhouette explorations are selectable with
+`--models assets/sunspear.glb,assets/rimeplume.glb`. Sunspear uses a measured
+68-joint membrane rig; Rimeplume uses an 82-joint feather rig with eight angular
+rays per wing. Each has its own skeleton, jaw mask, skinning and sidecars.
+Both preserve raised source wings and use a relaxed whole-wing ground sweep;
+tight fan convergence damages their generated surfaces. The existing roster
+is unchanged. [Evidence, limitations and rebuild commands](../artifacts/elemental-expansion/README.md).
