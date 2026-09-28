@@ -308,6 +308,11 @@ private:
         // a run. The breath is the look and the scales for that element.
         game::Element element = game::Element::Fire;
         game::BreathProfile breath;
+        // The pounce, for the dragons that have it (hunters; aces in the
+        // arena): a charging boost that steers onto the player and rams.
+        bool can_pounce = false;
+        float pounce_timer = 0.0f;
+        float pounce_cooldown = 0.0f;
         float hit_cry_cooldown = 0.0f;
         float last_health = 0.0f;
         // The run's rivals hold a post until the run wakes them; hunters are
@@ -427,6 +432,8 @@ private:
     float valley_flash_ = 0.0f;
     // The run's prey herds (prey.h), eaten for growth and health.
     game::PreyHerds prey_;
+    // Each animal's combat slot (Sentinel::prey), parallel to the herd.
+    std::vector<int> prey_slots_;
     float prey_flash_ = 0.0f;
     bool snatch_pending_ = false;
     void update_prey(float dt, const game::CombatEvents& events);

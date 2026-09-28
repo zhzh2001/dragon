@@ -158,7 +158,9 @@ void Combat::update_lock(const FlightState& player) {
         float range = 0.0f;
         const float angle = angle_to(sentinel, range);
         if (angle > tuning.lock_cone_deg || range > tuning.lock_range) return 1e9f;
-        return angle + range * tuning.lock_distance_weight;
+        // Prey: only within 700 m, and behind anything that fights back.
+        if (sentinel.prey && range > 700.0f) return 1e9f;
+        return angle + range * tuning.lock_distance_weight + (sentinel.prey ? 25.0f : 0.0f);
     };
 
     // Manual relock: jump to the next candidate by score, wrapping, so tapping
@@ -351,6 +353,10 @@ void Combat::hostile_breath(Vec3 origin, Vec3 direction, int source, BreathScale
     cone.scales = scales;
     cone.element = element;
     hostile_breaths_pending_.push_back(cone);
+}
+
+void Combat::hostile_ram(Vec3 from, Vec3 direction, Element element, float scale) {
+    hostile_rams_pending_.push_back({from, core::normalize_or(direction, Vec3::forward()), element, scale});
 }
 
 void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element, float scale) {
@@ -560,9 +566,15 @@ void Combat::damage_sentinel(Sentinel& sentinel, float amount, CombatEvents& eve
         sentinel.health = 0.0f;
         // A destroyed tower stays destroyed: the run's ground fire is a
         // resource the player can spend fire on clearing.
-        sentinel.respawn_timer = sentinel.ground ? 1e9f : sentinel.passive ? 2.5f : tuning.sentinel_respawn;
-        ++kills_;
-        ++events.kills;
+        sentinel.respawn_timer = sentinel.ground || sentinel.prey ? 1e9f
+                                 : sentinel.passive       ? 2.5f
+                                                          : tuning.sentinel_respawn;
+        if (sentinel.prey) {
+            ++events.prey_killed;
+        } else {
+            ++kills_;
+            ++events.kills;
+        }
     }
 }
 
@@ -590,7 +602,7 @@ void Combat::hit_sentinel(Sentinel& sentinel, float amount, Element element, flo
     const Vec3 at = sentinel.position;
     const bool was_alive = sentinel.alive;
     damage_sentinel(sentinel, dealt, events);
-    if (abilities.fury) {
+    if (abilities.fury && !sentinel.prey) {
         fury_ = core::saturate(fury_ + dealt * tuning.fury_per_damage +
                                (was_alive && !sentinel.alive ? tuning.fury_per_kill : 0.0f));
     }
@@ -1117,18 +1129,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
                 return s.alive && d < tuning.pounce_range && d > 1e-3f &&
                        core::dot(to / d, player.forward()) > cone;
             };
-            if (locked_ >= 0 && in_reach(locked_)) {
-                pounce_ = locked_;
-            } else {
-                float best = 1e9f;
-                for (size_t i = 0; i < sentinels_.size(); ++i) {
-                    const float d = core::distance(sentinels_[i].position, player.position);
-                    if (in_reach(int(i)) && d < best) {
-                        best = d;
-                        pounce_ = int(i);
-                    }
-                }
-            }
+            if (locked_ >= 0 && in_reach(locked_)) pounce_ = locked_;
         }
     }
     // A pounce holds the boost until contact or its time; it ends on contact.
@@ -1183,6 +1184,14 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         events.knockback = events.knockback + away * tuning.hostile_melee_knockback;
     }
     hostile_melee_pending_.clear();
+    for (const RamHit& ram : hostile_rams_pending_) {
+        if (health_ <= 0.0f) break;
+        hurt_player(tuning.hostile_ram_damage * ram.scale, ram.element, 1.0f, ram.from, events);
+        events.bitten = true;
+        events.knockback = events.knockback + core::normalize_or(ram.direction + Vec3{0.0f, 0.25f, 0.0f}, ram.direction) *
+                                                  tuning.hostile_ram_knockback;
+    }
+    hostile_rams_pending_.clear();
 
     update_sentinels(dt, player, events);
     update_projectiles(dt, player, events);

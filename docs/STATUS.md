@@ -142,6 +142,9 @@ What is built, in the order it was built. The plan these came from is
   to the bottom centre, bots got a health bar under the bracket, and the
   grade was retuned in perceptual space after reading a stop dark.
   Renders in `artifacts/post/`, `artifacts/brake/`, `artifacts/vegetation-v2/`.
+- **M28.2** hunting with the lock and the assist (prey get combat slots),
+  the pounce and the fury toned down, hunters and arena aces pounce too, and
+  the player's cries a roar of its own.
 - **M28.1** playtest fixes: the charged shot seeks its lock, the ram
   pounces onto a mark, the fury fills faster and reaches 340 m with a bar
   and a call-out, hits and damage over time are told apart (a crosshair X,

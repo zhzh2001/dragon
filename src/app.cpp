@@ -19,6 +19,24 @@ using core::Vec3;
 
 namespace app {
 
+namespace {
+
+// A pounce's steering: velocity and nose turned onto `target` at `turn`
+// rad/s, and held at `speed` at least. The player's and the bots' alike.
+void steer_pounce(game::FlightState& st, core::Vec3 target, float turn, float speed, float dt) {
+    const core::Vec3 want = core::normalize_or(target - st.position, st.forward());
+    const float v = core::maxf(core::length(st.velocity), speed);
+    const core::Vec3 heading = core::normalize_or(st.velocity, st.forward());
+    const float angle = std::acos(core::clampf(core::dot(heading, want), -1.0f, 1.0f));
+    const float step = turn * dt;
+    const core::Vec3 turned = angle <= step ? want : core::normalize_or(core::lerp(heading, want, step / angle), want);
+    st.velocity = turned * v;
+    st.orientation = core::slerp(st.orientation, core::look_rotation(turned, core::Vec3::up()), core::saturate(6.0f * dt));
+}
+
+}  // namespace
+
+
 Options parse_options(int argc, char** argv) {
     Options options;
     for (int i = 1; i < argc; ++i) {
@@ -1141,18 +1159,8 @@ void App::update(float dt) {
         // flight is turned onto it -- velocity and nose together, at the
         // pounce's turn rate, and kept fast -- so a boost meets its mark.
         if (const int mark = combat_.pounce_target(); mark >= 0 && size_t(mark) < combat_.sentinels().size()) {
-            game::FlightState& st = flight_.state();
-            const core::Vec3 to = combat_.sentinels()[size_t(mark)].position - st.position;
-            const core::Vec3 want = core::normalize_or(to, st.forward());
-            const float speed = core::maxf(core::length(st.velocity), combat_.tuning.pounce_speed);
-            const core::Vec3 heading = core::normalize_or(st.velocity, st.forward());
-            const float angle = std::acos(core::clampf(core::dot(heading, want), -1.0f, 1.0f));
-            const float step = combat_.tuning.pounce_turn * dt;
-            const core::Vec3 turned =
-                angle <= step ? want : core::normalize_or(core::lerp(heading, want, step / angle), want);
-            st.velocity = turned * speed;
-            st.orientation = core::slerp(st.orientation, core::look_rotation(turned, core::Vec3::up()),
-                                         core::saturate(6.0f * dt));
+            steer_pounce(flight_.state(), combat_.sentinels()[size_t(mark)].position,
+                         combat_.tuning.pounce_turn, combat_.tuning.pounce_speed, dt);
         }
         if (slow > 0.0f && !flight_.state().grounded) {
             flight_.state().velocity = flight_.state().velocity * std::exp(-0.3f * slow * dt);
@@ -1416,8 +1424,6 @@ void App::update(float dt) {
             audio_.play(audio::Clip::Fury, 1.3f);
             chase_.kick(2.0f);
             emit_fury(flight_.state().position);
-            game::PreyEvents ignored;
-            prey_.blast(flight_.state().position, combat_.tuning.fury_radius, combat_.tuning.fury_damage, ignored);
         }
         // A full stagger knocks the player off line like a bite does, without
         // the bite's bookkeeping.
@@ -1567,7 +1573,7 @@ void App::update(float dt) {
             // overlapping cries per second was the "strange loud flame" of the
             // playtest. One screech, then a beat before the next.
             if (hit_sound_cooldown_ <= 0.0f) {
-                audio_.play(audio::Clip::Screech, 0.85f);
+                audio_.play(audio::Clip::Roar, 1.0f, 0.95f + 0.1f * particle_unit());
                 hit_sound_cooldown_ = 0.45f;
             }
             damage_flash_ = 1.0f;
@@ -1577,7 +1583,7 @@ void App::update(float dt) {
             damage_marker_ = 3.0f;
         }
         if (events.player_died) {
-            audio_.play(audio::Clip::KnockOut, 1.0f);
+            audio_.play(audio::Clip::RoarDown, 1.1f);
             respawn_dragon();
         }
     }
@@ -3311,6 +3317,9 @@ std::unique_ptr<App::BotShip> App::make_bot(int index) {
     if (!worn.breath_file) bot->hue = game::element_hide(bot->element);
     bot->breath = breath_for(bot->element, bot->model);
     combat_.sentinels()[size_t(bot->slot)].element = bot->element;
+    // An ace pounces, in the arena as in the run: the player's pounce is
+    // strong enough there that the best rivals should answer it.
+    bot->can_pounce = bot_skill_ >= 2;
     bot->last_health = bot_health_;
     LOG_INFO("bot %d: %s", index, worn.path.c_str());
     return bot;
@@ -3387,7 +3396,7 @@ void App::build_demo_world(game::DemoWorld& world) {
     const auto& sentinels = combat_.sentinels();
     for (size_t i = 0; i < sentinels.size(); ++i) {
         const game::Sentinel& s = sentinels[i];
-        if (!s.alive) continue;
+        if (!s.alive || s.prey) continue;  // the herd is the hunt's, not a fight
         game::DemoTarget t;
         t.position = s.position;
         t.velocity = s.velocity;
@@ -3580,6 +3589,18 @@ void App::populate_valley(uint32_t seed, int depth) {
     for (size_t i = 0; i < layout.rivals.size(); ++i) spawn_rival(int(i), false);
     run_alive_.assign(combat_.sentinels().size(), 1);
     prey_.reset(layout.herds, terrain_, seed * 7u + 101u);
+    prey_slots_.clear();
+    for (const game::Prey& p : prey_.animals()) {
+        const int slot = combat_.spawn_external(prey_.tuning.health, prey_.tuning.body());
+        game::Sentinel& s = combat_.sentinels()[size_t(slot)];
+        s.prey = true;
+        s.passive = true;
+        s.element = game::Element::None;
+        combat_.drive_external(slot, p.position + core::Vec3{0.0f, 1.5f * prey_.tuning.scale, 0.0f},
+                               core::Vec3::zero());
+        prey_slots_.push_back(slot);
+    }
+    run_alive_.assign(combat_.sentinels().size(), 1);
     for (const game::RunHerd& herd : layout.herds) {
         LOG_INFO("  herd of %d at %.0f,%.0f,%.0f", herd.count, double(herd.position.x),
                  double(herd.position.y), double(herd.position.z));
@@ -4234,6 +4255,7 @@ void App::spawn_rival(int rival_index, bool hunter) {
         bot->pilot.tuning.aggression = 0.7f;
         bot->pilot.tuning.aggression_spread = 0.1f;
         bot->pilot.tuning.flee_health = 0.2f;
+        bot->can_pounce = true;  // the dragonslayers have the elder's trick
     } else {
         const game::RunRival& rival = hoard_run_.layout().rivals[size_t(rival_index)];
         position = rival.position;
@@ -4383,21 +4405,32 @@ void App::update_prey(float dt, const game::CombatEvents& events) {
     if (hoard_run_.phase() != game::HoardPhase::Flying || hoard_run_.awaiting_valley()) return;
     const game::FlightState& s = flight_.state();
     game::PreyEvents eaten = prey_.update(dt, s, growth_scale_, terrain_);
-    const game::CombatTuning& t = combat_.tuning;
-    if (combat_.breathing()) {
-        prey_.breathe(combat_.breath_origin(), combat_.breath_direction(),
-                      core::radians(t.breath_half_angle_deg * combat_.player_breath.angle),
-                      t.breath_range * combat_.player_breath.range,
-                      t.breath_damage_per_second * combat_.player_breath.damage, dt, eaten);
-    }
-    for (const game::Impact& impact : combat_.impacts()) {
-        if (impact.team == game::Team::Player) {
-            prey_.blast(impact.position, t.fireball_blast_radius, t.fireball_damage, eaten);
+    // The weapons reach the herd through combat: each animal is a slot, so
+    // the lock, the assist and the seeking shot help the hunt. A slot that
+    // died leaves a carcass -- or, killed by the jaws, a meal at once.
+    auto& sentinels = combat_.sentinels();
+    const auto& animals = prey_.animals();
+    for (size_t i = 0; i < animals.size() && i < prey_slots_.size(); ++i) {
+        const int slot = prey_slots_[i];
+        if (slot < 0 || size_t(slot) >= sentinels.size()) continue;
+        game::Sentinel& body = sentinels[size_t(slot)];
+        const game::Prey& p = animals[i];
+        const bool living = p.state != game::PreyState::Eaten && p.state != game::PreyState::Carcass;
+        if (living && !body.alive) {
+            const bool bitten = events.melee_hit != game::MeleeKind::None &&
+                                core::distance(events.melee_hit_position, body.position) < 1.0f;
+            if (bitten) {
+                prey_.eat_now(int(i), eaten);
+            } else {
+                prey_.kill(int(i));
+            }
+        } else if (!living && body.alive) {
+            body.alive = false;
+            body.respawn_timer = 1e9f;
+        } else if (living) {
+            combat_.drive_external(slot, p.position + core::Vec3{0.0f, 1.5f * prey_.tuning.scale, 0.0f},
+                                   p.heading * p.speed);
         }
-    }
-    if (events.melee_swung) {
-        prey_.bite(combat_.muzzle(s), s.forward(), t.bite_range * growth_scale_,
-                   core::radians(t.bite_half_angle_deg), eaten);
     }
     if (eaten.eaten > 0) {
         for (int i = 0; i < eaten.eaten; ++i) hoard_run_.feed(prey_.tuning.growth);
@@ -4862,8 +4895,10 @@ void App::update_bots(float dt) {
             bot->pilot.notify_hit();
             if (bot->hit_cry_cooldown <= 0.0f) {
                 const float d = core::distance(active_camera().position, slot.position);
+                // Bots screech -- high, reedy, falling -- where the player
+                // roars; each a little different so a flight never chorus.
                 audio_.play(audio::Clip::Screech, 0.9f / (1.0f + d * d / (240.0f * 240.0f)),
-                            0.8f + 0.1f * particle_unit());
+                            1.05f + 0.15f * particle_unit());
                 bot->hit_cry_cooldown = 0.5f;
             }
         }
@@ -4948,6 +4983,36 @@ void App::update_bots(float dt) {
         if (slow > 0.0f && !bot->flight.state().grounded) {
             bot->flight.state().velocity =
                 bot->flight.state().velocity * std::exp(-0.35f * slow * dt);
+        }
+        // The bot's pounce: a charging boost with the player in reach and near
+        // its nose steers onto the player and rams on contact -- the answer
+        // in kind to the player's, for the dragons that carry it.
+        bot->pounce_cooldown = core::maxf(bot->pounce_cooldown - dt, 0.0f);
+        if (bot->can_pounce && combat_.alive() && slot.stun <= 0.0f && !slot.status.jammed()) {
+            const game::FlightState& me = bot->flight.state();
+            const core::Vec3 to = flight_.state().position - me.position;
+            const float r = core::length(to);
+            const game::CombatTuning& ct = combat_.tuning;
+            // On the charge, not the boost: a bot does not boost within
+            // 160 m of the ground, which in a valley is nearly always.
+            if (bot->pounce_timer <= 0.0f && bot->pounce_cooldown <= 0.0f && bot->pilot.charging() &&
+                r < ct.pounce_range * 0.8f && r > 30.0f &&
+                core::dot(me.forward(), to / core::maxf(r, 1e-3f)) > std::cos(core::radians(ct.pounce_cone_deg))) {
+                bot->pounce_timer = ct.pounce_time;
+            }
+            if (bot->pounce_timer > 0.0f) {
+                bot->pounce_timer -= dt;
+                steer_pounce(bot->flight.state(), flight_.state().position, ct.pounce_turn, ct.pounce_speed, dt);
+                const float contact = ct.ram_radius + ct.player_radius * growth_scale_;
+                if (r < contact) {
+                    combat_.hostile_ram(me.position, me.velocity, bot->element,
+                                        slot.status.weaken(ct.elements));
+                    bot->pounce_timer = 0.0f;
+                    audio_.play(audio::Clip::Crack, 0.9f, 0.9f);
+                    LOG_INFO("bot pounce landed (%s)", bot->hunter ? "hunter" : "ace");
+                }
+                if (bot->pounce_timer <= 0.0f) bot->pounce_cooldown = 6.0f;
+            }
         }
 
         // Terrain contact scales with violence. A plummet is death; a scrape
@@ -5193,7 +5258,7 @@ game::CombatInput App::read_combat_input() const {
         in.fire_held = demo_decision_.fire;
         if (combat_.fury() >= 1.0f) {
             for (const game::Sentinel& s : combat_.sentinels()) {
-                if (s.alive && core::distance(s.position, flight_.state().position) <
+                if (s.alive && !s.prey && core::distance(s.position, flight_.state().position) <
                                    combat_.tuning.fury_radius * 0.66f) {
                     in.fury = true;
                 }
@@ -5678,6 +5743,8 @@ void App::draw_combat_hud() {
         const int index = int(&sentinel - combat_.sentinels().data());
         const bool locked = combat_.locked_index() == index;
         if (!locked && range > combat_.tuning.mark_range) continue;
+        // Prey carry their own chevrons; a bracket only on the one locked.
+        if (sentinel.prey && !locked) continue;
         // A bot holding its flame is the most urgent thing on screen.
         bool flaming = false;
         for (const auto& bot : bots_) {
@@ -5692,7 +5759,8 @@ void App::draw_combat_hud() {
             if (bot->slot == index) who = bot.get();
         }
         const bool hunter = who && who->hunter;
-        const char* role = !run_mode_ ? ""
+        const char* role = sentinel.prey ? "PREY "
+                           : !run_mode_ ? ""
                            : hunter ? "HUNTER "
                            : who ? (who->dormant ? "RIVAL (at post) " : "RIVAL ")
                            : sentinel.ground ? "TOWER " : "";

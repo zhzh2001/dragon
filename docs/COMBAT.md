@@ -449,8 +449,8 @@ gates the three combat ones, and the second breath is the app's.
 |---|---|---|
 | young | **Charged shot** | Hold G: the fireball gathers at the mouth (0.65 s to full, an arc round the aim marker); let go, or reach full, and it leaves 2.2x the damage and blast, 1.6x the body, 2.5x the status, 15% faster -- and it **seeks** the target locked when it left, turning up to 2.6 rad/s. The first cut did not seek, and the playtest found it not worth it: aiming is the hard part of this game, and a heavier shot that still had to be aimed lost to spamming plain ones. A tap is still a plain shot, on the release. |
 | adult | **Second breath** | The breath of the last enemy killed -- what you hunt is what you learn (rolled if nothing of another element has fallen). U (gamepad Y) swaps between the two; in the arena, the sandbox, U walks all six in turn. The pip wears the colour it swaps to. The first cut rolled per run and gave the arena the element after the player's -- fire's is frost, so it was "always frost". |
-| elder | **Ram and pounce** | The boost is a weapon: while boosting, anything the body passes within 14 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. And a boost with a target within 320 m and 70 degrees of the nose (the lock first, else the nearest) is a **pounce**: the flight is steered onto it at 2.8 rad/s and kept above 75 m/s for up to 1.8 s, until contact. Boosting into a manoeuvring dragon by hand was "very hard"; the plain boost also ran out 30 m short of a mark 130 m away. In a two-minute arena fight the demo pilot, pouncing, rammed five times and doubled its kills. |
-| ancient | **Fury** | Damage dealt and taken fills a meter (1 per 220 dealt, 1 per 250 taken, 0.15 a kill) -- a bar along the foot of the health plate, pulsing and a "FURY READY" call-out when full. H (left-stick click) releases a nova of the element round the dragon: 340 m, 90 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. It first filled at 1/500 and reached 170 m: "builds up slow, the meter is hard to notice, and 170 m is unlikely to contain multiple enemies". |
+| elder | **Ram and pounce** | The boost is a weapon: while boosting, anything the body passes within 14 m (x size) takes 35 of the player's element, a 1.3 s stun and a 24 m/s shove, once per target per boost. And a boost with the LOCKED target within 170 m and 45 degrees of the nose is a **pounce**: the flight is steered onto it at 2.2 rad/s and kept above 70 m/s for up to 1.7 s, until contact; the ram does 28. (First 320 m, 70 degrees, any target, 35: "a bit too overpowered, especially in the arena".) Hunters, and aces in the arena, pounce too: on the charge, within 136 m, a 20-damage ram and a knock, once per 6 s. Boosting into a manoeuvring dragon by hand was "very hard"; the plain boost also ran out 30 m short of a mark 130 m away. In a two-minute arena fight the demo pilot, pouncing, rammed five times and doubled its kills. |
+| ancient | **Fury** | Damage dealt and taken fills a meter (1 per 320 dealt, 1 per 400 taken, 0.1 a kill; prey do not count) -- a bar along the foot of the health plate, pulsing and a "FURY READY" call-out when full. H (left-stick click) releases a nova of the element round the dragon: 260 m, 75 damage at the centre and half at the edge, 3x status, a 1.6 s stun, a 30 m/s blast outward; prey inside it die. Spyro's Fury. It first filled at 1/500 and reached 170 m: "builds up slow, the meter is hard to notice, and 170 m is unlikely to contain multiple enemies". |
 
 **Hits and damage over time are told apart.** A burn or corrosion tick went
 through the same path as a hit, so the hit marker and flash fired every
@@ -675,6 +675,14 @@ the body within 8 m and 9 m above one snatches it (both scale with growth);
 **bite** -- the jaws take the nearest in the cone; **fire** -- breath or a
 fireball kills, and the carcass stays a minute to be swooped or walked onto.
 A meal is 18 growth (no hoard) and 14 health. Dials under Combat > prey.
+**Each animal has a combat slot** (`Sentinel::prey`): the lock, the aim
+assist, the seeking charged shot, the breath and the jaws all reach it the
+way they reach a rival -- with none of that the playtest "struggled to even
+hit any prey". It ranks 25 degrees behind anything that fights back and only
+inside 700 m, is never a kill (no bounty, no fury, not in the demo's
+targets), and only gets a bracket when locked ("PREY"). A kill by fire or a
+fireball leaves a carcass; a kill by the jaws is eaten on the spot. The
+swoop reach is 11 m, 12 m above (was 8 and 9).
 They are drawn at 1.4x the asset (a 6.3 m bison) and marked -- "too small to
 notice" was the first playtest: a green diamond and "HERD x6 640 m" over
 each herd out to 1.8 km, on screen only, and inside 450 m a chevron over

@@ -53,8 +53,9 @@ struct PreyTuning {
     float body() const { return body_radius * scale; }
     // The swoop: the dragon's body within this of one, horizontally, and no
     // more than `grab_height` above it. Both scale with the dragon's growth.
-    float grab_radius = 8.0f;
-    float grab_height = 9.0f;
+    // Widened after the playtest (8 and 9) could not hit prey at all.
+    float grab_radius = 11.0f;
+    float grab_height = 12.0f;
     // What a meal is worth. Growth without hoard; health back.
     float growth = 18.0f;
     float heal = 14.0f;
@@ -110,6 +111,10 @@ public:
               PreyEvents& events);
 
     const std::vector<Prey>& animals() const { return animals_; }
+    // Weapons now land through combat (each animal has a slot): a kill there
+    // leaves a carcass, and a kill by the jaws eats it where it stands.
+    void kill(int index);
+    void eat_now(int index, PreyEvents& events);
     int alive() const;
     // The nearest animal still worth eating (alive or a carcass), or -1.
     int nearest(core::Vec3 from, float max_range = 1e9f) const;

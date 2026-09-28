@@ -212,15 +212,23 @@ struct CombatTuning {
     // POUNCES: a boost with a target within `pounce_range` and `pounce_cone`
     // of the nose (the lock first) steers the dragon onto it -- boosting
     // INTO a manoeuvring dragon by hand was the playtest's "very hard".
+    // Toned down after "pounce and fury are a bit too overpowered,
+    // especially in the arena": the lock is required (no nearest pick),
+    // the reach and cone are narrower and the ram hits softer.
     float ram_radius = 14.0f;       // m, scaled by the player's size
-    float pounce_range = 320.0f;
-    float pounce_cone_deg = 70.0f;
-    float pounce_turn = 2.8f;       // rad/s the flight is turned toward it
-    float pounce_speed = 75.0f;     // m/s at least, while it lasts
+    // Reach and time are a pair: 1.4 s at 70 m/s ran out 120 m short of a
+    // mark 240 m away that was flying off.
+    float pounce_range = 170.0f;
+    float pounce_cone_deg = 45.0f;
+    float pounce_turn = 2.2f;       // rad/s the flight is turned toward it
+    float pounce_speed = 70.0f;     // m/s at least, while it lasts
     // A pounce holds the boost on until it lands or this runs out: a plain
     // boost (1.1 s) ran out 30 m short of a mark 130 m away.
-    float pounce_time = 1.8f;
-    float ram_damage = 35.0f;
+    float pounce_time = 1.7f;
+    // A bot's pounce (hunters, and aces in the arena): its ram on the player.
+    float hostile_ram_damage = 20.0f;
+    float hostile_ram_knockback = 18.0f;
+    float ram_damage = 28.0f;
     float ram_stun = 1.3f;
     float ram_knockback = 24.0f;
     // FURY (ancient): damage dealt fills a meter; full, it is released as a
@@ -228,11 +236,13 @@ struct CombatTuning {
     // Filled by dealing damage and by taking it. At 1/500, 0.08 a kill and a
     // 170 m reach it filled once a valley and caught one enemy: "builds up
     // slow, and 170 m is unlikely to contain multiple enemies".
-    float fury_per_damage = 1.0f / 220.0f;
-    float fury_per_kill = 0.15f;
-    float fury_per_damage_taken = 1.0f / 250.0f;
-    float fury_radius = 340.0f;
-    float fury_damage = 90.0f;      // at the centre, half at the edge
+    // Eased back after the second pass ("a bit too overpowered"): 1/220 and
+    // 340 m filled twice a two-minute fight and cleared an arena.
+    float fury_per_damage = 1.0f / 320.0f;
+    float fury_per_kill = 0.1f;
+    float fury_per_damage_taken = 1.0f / 400.0f;
+    float fury_radius = 260.0f;
+    float fury_damage = 75.0f;      // at the centre, half at the edge
     float fury_status = 3.0f;
     float fury_knockback = 30.0f;
     float fury_stun = 1.6f;
@@ -325,6 +335,12 @@ struct Sentinel {
     // A training dummy: never fires, holds still, and comes back quickly.
     // The room to learn the reach of a bite in, without being shot at.
     bool passive = false;
+    // A prey animal (prey.h), given a slot so the lock, the aim assist, the
+    // seeking shot, the breath and the jaws all reach it the way they reach
+    // a rival -- hunting with none of it was the playtest's "I struggle to
+    // even hit any prey". It never fires, is not a kill, and ranks below any
+    // real enemy for the lock.
+    bool prey = false;
     // A ground defence: pinned to the terrain, fires the heavy bolt, and
     // does not come back once destroyed.
     bool ground = false;
@@ -439,6 +455,7 @@ struct CombatEvents {
     core::Vec3 knockback = core::Vec3::zero();
     // A status on the player landed hard this frame: frozen (wings locked)
     // or staggered (the knock is in `knockback`).
+    int prey_killed = 0;
     bool player_froze = false;
     bool player_staggered = false;
     // The abilities, for the rig, the sound and the effects.
@@ -559,6 +576,9 @@ public:
     // faces, and its body centre. Resolved against the player in update().
     void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body,
                        Element element = Element::None, float scale = 1.0f);
+    // A bot's pounce landing on the player: damage of its element, a knock
+    // along `direction` (reported as a bite, so the app applies it).
+    void hostile_ram(core::Vec3 from, core::Vec3 direction, Element element, float scale = 1.0f);
 
     // The player's species scales, set by the app whenever the model changes.
     // Public like `tuning` is: it is data the owner sets, not state combat
@@ -665,6 +685,12 @@ private:
     std::vector<BreathCone> hostile_breaths_pending_;
     std::vector<BreathCone> hostile_breaths_drawn_;
     std::vector<MeleeSwing> hostile_melee_pending_;
+    struct RamHit {
+        core::Vec3 from, direction;
+        Element element;
+        float scale;
+    };
+    std::vector<RamHit> hostile_rams_pending_;
     core::Vec3 muzzle_override_ = core::Vec3::zero();
     bool has_muzzle_override_ = false;
 

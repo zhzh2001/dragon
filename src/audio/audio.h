@@ -31,6 +31,11 @@ enum class Clip : int {
     Crack,
     // The fury: a deep boom with a rising roar behind it.
     Fury,
+    // The PLAYER's own voice, told apart from the bots' screech: a short
+    // chesty growl-roar when hit, and a long falling roar when downed. The
+    // playtest could not tell its own cry from a rival's.
+    Roar,
+    RoarDown,
     Count,
 };
 

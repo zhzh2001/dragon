@@ -90,6 +90,22 @@ int PreyHerds::nearest(Vec3 from, float max_range) const {
     return best;
 }
 
+void PreyHerds::kill(int index) {
+    if (index < 0 || size_t(index) >= animals_.size()) return;
+    Prey& p = animals_[size_t(index)];
+    if (!living(p)) return;
+    p.state = PreyState::Carcass;
+    p.timer = tuning.carcass_time;
+    p.speed = 0.0f;
+    p.burnt = core::maxf(p.burnt, 0.6f);
+}
+
+void PreyHerds::eat_now(int index, PreyEvents& events) {
+    if (index < 0 || size_t(index) >= animals_.size()) return;
+    if (animals_[size_t(index)].state == PreyState::Eaten) return;
+    eat(animals_[size_t(index)], events, false);
+}
+
 void PreyHerds::eat(Prey& prey, PreyEvents& events, bool swoop) {
     prey.state = PreyState::Eaten;
     prey.speed = 0.0f;

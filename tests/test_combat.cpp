@@ -962,7 +962,7 @@ void test_abilities() {
         c.reset(nullptr, Vec3::zero(), 29u, 0);
         c.abilities.ram = true;
         const int ahead = c.spawn_external(500.0f, 6.0f);
-        c.drive_external(ahead, Vec3{20.0f, 0.0f, -200.0f}, Vec3::zero());
+        c.drive_external(ahead, Vec3{15.0f, 0.0f, -140.0f}, Vec3::zero());
         CombatInput boost;
         boost.boost = true;
         c.update(dt, player, boost);
@@ -974,6 +974,31 @@ void test_abilities() {
         behind.drive_external(back, Vec3{0.0f, 0.0f, 200.0f}, Vec3::zero());
         behind.update(dt, player, boost);
         CHECK(behind.pounce_target() == -1);
+    }
+    // Prey: lockable, but behind a real enemy, and never a kill.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 31u, 0);
+        const int grazer = c.spawn_external(20.0f, 3.0f);
+        c.sentinels()[size_t(grazer)].prey = true;
+        c.sentinels()[size_t(grazer)].passive = true;
+        c.drive_external(grazer, Vec3{0.0f, 0.0f, -150.0f}, Vec3::zero());
+        c.update(dt, player, CombatInput{});
+        CHECK(c.locked_index() == grazer);  // alone, it is the lock: the hunt gets the assist
+        const int rival = c.spawn_external(80.0f, 6.0f);
+        c.drive_external(rival, Vec3{40.0f, 0.0f, -300.0f}, Vec3::zero());
+        Combat fresh;
+        fresh.reset(nullptr, Vec3::zero(), 31u, 0);
+        const int g2 = fresh.spawn_external(20.0f, 3.0f);
+        fresh.sentinels()[size_t(g2)].prey = true;
+        fresh.drive_external(g2, Vec3{0.0f, 0.0f, -150.0f}, Vec3::zero());
+        const int r2 = fresh.spawn_external(80.0f, 6.0f);
+        fresh.drive_external(r2, Vec3{40.0f, 0.0f, -300.0f}, Vec3::zero());
+        fresh.update(dt, player, CombatInput{});
+        CHECK(fresh.locked_index() == r2);  // the one that fights back first
+        const game::CombatEvents e = c.apply_hit(grazer, 50.0f, game::Element::None);
+        CHECK(!c.sentinels()[size_t(grazer)].alive);
+        CHECK(e.kills == 0 && e.prey_killed == 1 && c.kills() == 0);
     }
     // The ram: a boost through a drone damages and stuns it, once.
     {

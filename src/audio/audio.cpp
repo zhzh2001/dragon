@@ -271,6 +271,28 @@ void Audio::synthesize_clips() {
         }
     }
 
+    // The player's roar: a low sawtooth growl (a big chest, not a throat)
+    // with a rough amplitude flutter and breath, through a gentle low-pass --
+    // everything the bots' reedy, falling screech is not.
+    auto roar = [&](std::vector<float>& clip, float duration, float f_start, float f_end, float loudness) {
+        clip.resize(seconds(duration));
+        float phase = 0.0f, lp = 0.0f;
+        for (uint32_t i = 0; i < clip.size(); ++i) {
+            const float t = float(i) / SAMPLE_RATE;
+            const float u = t / duration;
+            const float f = f_start + (f_end - f_start) * u;
+            phase += f / SAMPLE_RATE;
+            const float saw = 2.0f * (phase - std::floor(phase)) - 1.0f;
+            const float flutter = 0.65f + 0.35f * std::sin(TWO_PI * 31.0f * t) * std::sin(TWO_PI * 7.0f * t + 1.1f);
+            const float raw = saw * flutter + synth_noise() * 0.35f;
+            lp += (raw - lp) * 0.12f;
+            const float envelope = core::minf(t * 25.0f, 1.0f) * std::pow(1.0f - u, 1.5f);
+            clip[i] = loudness * 0.75f * lp * envelope;
+        }
+    };
+    roar(clips_[int(Clip::Roar)], 0.34f, 150.0f, 105.0f, 1.0f);
+    roar(clips_[int(Clip::RoarDown)], 1.6f, 140.0f, 60.0f, 1.2f);
+
     // Wingbeat: a broad low whoosh, swelling then gone -- air moved, not tone.
     {
         std::vector<float>& clip = clips_[int(Clip::Flap)];
