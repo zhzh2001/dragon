@@ -979,9 +979,11 @@ void App::pump_events() {
                 const game::Element first = player_element_choice_ >= 0
                                                 ? game::Element(player_element_choice_)
                                                 : player_model().breath.element;
+                // From the random start, round all five others, then home.
                 arena_breath_index_ = (arena_breath_index_ + 1) % game::ELEMENT_COUNT;
                 using_second_ = arena_breath_index_ != 0;
-                second_element_ = game::Element((int(first) + arena_breath_index_) % game::ELEMENT_COUNT);
+                (void)first;
+                second_element_ = arena_breath(arena_breath_index_);
             }
             refresh_player_element();
             audio_.play(audio::Clip::Boost, 0.5f, 1.5f);
@@ -1575,7 +1577,7 @@ void App::update(float dt) {
             // overlapping cries per second was the "strange loud flame" of the
             // playtest. One screech, then a beat before the next.
             if (hit_sound_cooldown_ <= 0.0f) {
-                audio_.play(audio::Clip::Roar, 1.0f, 0.95f + 0.1f * particle_unit());
+                audio_.play(audio::Clip::Screech, 0.85f);
                 hit_sound_cooldown_ = 0.45f;
             }
             damage_flash_ = 1.0f;
@@ -1585,7 +1587,7 @@ void App::update(float dt) {
             damage_marker_ = 3.0f;
         }
         if (events.player_died) {
-            audio_.play(audio::Clip::RoarDown, 1.1f);
+            audio_.play(audio::Clip::KnockOut, 1.0f);
             respawn_dragon();
         }
     }
@@ -3496,6 +3498,7 @@ void App::start_run(uint32_t seed) {
     combat_enabled_ = true;
     match_.abandon();
     last_kill_element_ = game::Element::None;
+    for (int& k : kill_elements_) k = 0;
     using_second_ = false;
     second_unlocked_ = false;
     arena_breath_index_ = 0;
@@ -3932,6 +3935,19 @@ void App::play_status_sound(audio::Clip clip, int slot, core::Vec3 at, float gai
     audio_.play(clip, gain / (1.0f + d * d / (220.0f * 220.0f)), rate * (0.95f + 0.1f * particle_unit()));
 }
 
+game::Element App::arena_breath(int index) const {
+    const game::Element first = player_element_choice_ >= 0 ? game::Element(player_element_choice_)
+                                                            : player_model().breath.element;
+    if (index <= 0) return first;
+    int e = arena_breath_start_;
+    if (game::Element(e) == first) e = (e + 1) % game::ELEMENT_COUNT;
+    for (int step = 1; step < index; ++step) {
+        e = (e + 1) % game::ELEMENT_COUNT;
+        if (game::Element(e) == first) e = (e + 1) % game::ELEMENT_COUNT;
+    }
+    return game::Element(e);
+}
+
 const char* App::button_name(char key) const {
     if (!input_.has_gamepad()) {
         switch (key) {
@@ -3964,7 +3980,7 @@ const char* App::stage_unlock_text(game::GrowthStage stage) const {
                           button_name('G'));
             break;
         case game::GrowthStage::Adult:
-            std::snprintf(line, sizeof(line), "NEW: the breath of your last kill (%s) -- %s swaps element",
+            std::snprintf(line, sizeof(line), "NEW: the breath of what you hunted most (%s) -- %s swaps element",
                           game::element_name(second_element_), button_name('U'));
             break;
         case game::GrowthStage::Elder:
@@ -4003,13 +4019,34 @@ void App::update_abilities() {
         const game::Element first = player_element_choice_ >= 0
                                         ? game::Element(player_element_choice_)
                                         : player_model().breath.element;
-        if (run && last_kill_element_ != game::Element::None && last_kill_element_ != first) {
-            second_element_ = last_kill_element_;
+        // Most killed wins, the latest kill breaking a tie. (The last kill
+        // alone, on a replayed valley, was the same rival every time.)
+        int best = -1;
+        for (int e = 0; e < game::ELEMENT_COUNT; ++e) {
+            if (game::Element(e) == first || kill_elements_[e] == 0) continue;
+            if (best < 0 || kill_elements_[e] > kill_elements_[best] ||
+                (kill_elements_[e] == kill_elements_[best] && game::Element(e) == last_kill_element_)) {
+                best = e;
+            }
+        }
+        if (run && best >= 0) {
+            second_element_ = game::Element(best);
+        } else if (run) {
+            second_element_ = roll_element(run_seed_ * 131u + 17u);
         } else {
-            second_element_ = run ? roll_element(run_seed_ * 131u + 17u) : game::Element((int(first) + 1) % game::ELEMENT_COUNT);
+            // The arena starts its cycle somewhere different every time:
+            // "the element after the player's" was a fixed pick -- frost for
+            // fire, tide for storm, every time.
+            arena_breath_index_ = 1 + int(roll_element(uint32_t(SDL_GetTicksNS() & 0xffffffffu)) ) % (game::ELEMENT_COUNT - 1);
+            second_element_ = game::Element((int(first) + arena_breath_index_) % game::ELEMENT_COUNT);
+            arena_breath_index_ = 0;  // still on the first until U is pressed
+            arena_breath_start_ = int(second_element_);
         }
         if (second_element_ == first) second_element_ = game::Element((int(first) + 3) % game::ELEMENT_COUNT);
-        if (second) LOG_INFO("second breath: %s", game::element_name(second_element_));
+        if (second) {
+            LOG_INFO("second breath: %s (last kill %s)", game::element_name(second_element_),
+                     game::element_name(last_kill_element_));
+        }
         refresh_player_element();
     }
 }
@@ -4337,7 +4374,10 @@ void App::update_run(float dt, const game::CombatEvents& events) {
             what = "RIVAL SLAIN";
         }
         if (s.external) s.respawn_timer = 1e9f;
-        if (bounty > 0.0f && kills_to_pay > 0 && s.element != game::Element::None) last_kill_element_ = s.element;
+        if (bounty > 0.0f && kills_to_pay > 0 && s.element != game::Element::None) {
+            last_kill_element_ = s.element;
+            ++kill_elements_[int(s.element)];
+        }
         if (bounty <= 0.0f || kills_to_pay <= 0) continue;
         --kills_to_pay;
         hoard_run_.award(bounty);
@@ -4897,10 +4937,8 @@ void App::update_bots(float dt) {
             bot->pilot.notify_hit();
             if (bot->hit_cry_cooldown <= 0.0f) {
                 const float d = core::distance(active_camera().position, slot.position);
-                // Bots screech -- high, reedy, falling -- where the player
-                // roars; each a little different so a flight never chorus.
                 audio_.play(audio::Clip::Screech, 0.9f / (1.0f + d * d / (240.0f * 240.0f)),
-                            1.05f + 0.15f * particle_unit());
+                            0.8f + 0.1f * particle_unit());
                 bot->hit_cry_cooldown = 0.5f;
             }
         }
@@ -5611,8 +5649,7 @@ void App::draw_combat_hud() {
             // arena the next round the cycle.
             const game::Element other =
                 run ? (using_second_ ? first : second_element_)
-                    : game::Element((int(first) + (arena_breath_index_ + 1) % game::ELEMENT_COUNT) %
-                                    game::ELEMENT_COUNT);
+                    : arena_breath((arena_breath_index_ + 1) % game::ELEMENT_COUNT);
             const core::Vec3 c = game::element_colour(other);
             hud_.pip(ImVec2(x0 + step * 4.0f, y), radius, 1.0f, button_name('U'),
                      IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235));

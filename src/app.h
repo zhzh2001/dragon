@@ -463,6 +463,12 @@ private:
     // breath an adult learns (a rolled one if it has killed none).
     game::Element last_kill_element_ = game::Element::None;
     int arena_breath_index_ = 0;
+    int arena_breath_start_ = 1;
+    // The arena's U cycle: 0 the player's own element, then five others from
+    // the random start, skipping the player's.
+    game::Element arena_breath(int index) const;
+    // Kills this run by element: the adult learns the one it killed most.
+    int kill_elements_[game::ELEMENT_COUNT] = {};
     // The pad's names for the buttons when one is connected, else the keys.
     const char* button_name(char key) const;
     bool swap_button_was_down_ = false;

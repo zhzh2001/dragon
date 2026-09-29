@@ -62,12 +62,6 @@ licks rise, frost motes sink, an ice-glint shell hugs a frozen body (and its
 hide is recoloured to ice), blight drips and bubbles, sparks crawl with small
 arcs, water runs off, grit puffs. Storm arcs are jagged chains of points
 struck for 0.12 s and re-struck, which is what lightning looks like anyway.
-The player's own cries are its own (M28.2): a short chesty growl-roar when
-hit (`Clip::Roar`, a low sawtooth with a rough flutter) and a long falling
-roar when downed (`RoarDown`); the bots screech, high and reedy, pitched
-1.05-1.2. Both had been the one screech a little apart in pitch, and the
-playtest could not tell its own cry from a rival's.
-
 Bolts, their trails and their impacts take the element's hot and cool
 colours; a tower's brazier plumes in its element. `COMBAT.md` "Elements" has
 the rules; `--status NAME` holds one on every enemy for a capture.
