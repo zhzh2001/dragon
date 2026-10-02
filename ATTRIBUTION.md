@@ -93,6 +93,17 @@ under CC BY 4.0. Nothing derived from either mesh is in the repository; the
 public mirror's history is rewritten without the old re-exports
 (`tools/release/public_excludes.txt`).
 
+## Gold ribbon-wing test (2026-10-02, not integrated)
+
+`assets/gold-ribbon-cand-oneshot.glb` and
+`assets/gold-ribbon-top-cand-oneshot.glb` are unrigged Tencent Hunyuan hosted
+one-shot outputs, generated from the AI-made gold reference and modelling plates
+in `artifacts/dragon-options/gold-ribbon-test/`. The concept uses D&D 2024 gold
+dragon anatomy as a reference, credited to Wizards of the Coast and designer
+Alexander Ostrowski (`https://www.alexanderostrowski.com/2024metallicdragons`).
+The local GLB is excluded from Git under the existing generated-model size
+policy. No game or release roster includes it; model approval is pending.
+
 ## Embercrest-scripted (experiment, not tracked)
 
 An original model built for this project by `tools/build_embercrest.py`. The

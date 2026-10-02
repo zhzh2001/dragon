@@ -40,9 +40,17 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Comparison renders of meshes that were evaluated and **not** used (`artifacts/dragon-options/embercrest-model-field.png` and siblings) | **TRELLIS.2** (Microsoft, local and on its Hugging Face Space), **Pixal3D**, **Hunyuan3D-2mv** (open weights, run locally), and one **Tripo** v2.5 mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 
-No prompt asks for the style of a named artist, studio or franchise. The
-creature prompts explicitly forbid imitating existing franchise designs. The
-prompts are in `artifacts/dragon-options/` beside the images they made.
+Earlier creature prompts explicitly avoided existing franchise designs. On
+2026-10-02 the user requested a more faithful D&D metallic-dragon concept pass.
+The gold, silver and bronze review sheets in
+`docs/concept/metallic-dragons-2026-10-02/` were generated with Codex's built-in
+image tool using the official D&D 2024 anatomy sheets from Alexander Ostrowski's
+portfolio as visual references. Their prompts and reference attribution are
+recorded beside the images. The user subsequently selected gold and authorized
+a corrected strip-wing concept and Hunyuan test generation. Its inputs,
+provenance and model inspection are in `artifacts/dragon-options/gold-ribbon-test/`.
+The test remains outside the game pending human model confirmation; silver
+and bronze remain concept-only.
 
 ## Obligations this file meets
 
