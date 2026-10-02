@@ -1,8 +1,9 @@
 # Third-party notices
 
-The libraries the game is built on, fetched by CMake (SDL3 from the system
-package manager on macOS for now). Each keeps its own licence. Every binary
-package of the game carries this file.
+The libraries the game is built on, fetched by CMake, and the two fonts it
+ships. A development build links the system SDL3; a release package builds
+SDL3 from source and links it statically. Each keeps its own licence, and
+every binary package of the game carries this file.
 
 | Library | Version | Licence | Source |
 |---|---|---|---|
@@ -12,9 +13,13 @@ package of the game carries this file.
 | stb (stb_image and friends) | `f0569113` | MIT or public domain, at your choice | https://github.com/nothings/stb |
 | miniaudio | 0.11.21 | public domain (Unlicense) or MIT No Attribution, at your choice | https://github.com/mackron/miniaudio |
 
+| Font | File | Licence | Source |
+|---|---|---|---|
+| Barlow Condensed SemiBold (the HUD's numerals) | `assets/fonts/BarlowCondensed-SemiBold.ttf` | SIL Open Font License 1.1 (`assets/fonts/OFL-barlowcondensed.txt`) | https://github.com/jpt/barlow |
+| Fira Sans Medium (the HUD's labels) | `assets/fonts/FiraSans-Medium.ttf` | SIL Open Font License 1.1 (`assets/fonts/OFL-firasans.txt`) | https://github.com/mozilla/Fira |
+
 Dear ImGui embeds the ProggyClean font (MIT-compatible, by Tristan Grimmer),
-which is the HUD's fallback face. On macOS the HUD's two faces are read from
-the system's own fonts at runtime; none are bundled.
+the last fallback face.
 
 Models, textures and their renders are not libraries; see `ATTRIBUTION.md`.
 

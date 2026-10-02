@@ -11,6 +11,7 @@
 
 #include "core/log.h"
 #include "core/math.h"
+#include "core/paths.h"
 #include "gfx/primitives.h"
 #include "imgui.h"
 
@@ -39,6 +40,13 @@ void steer_pounce(game::FlightState& st, core::Vec3 target, float turn, float sp
 
 Options parse_options(int argc, char** argv) {
     Options options;
+#ifndef ASSET_ROOT
+    // A package (built without the source-tree roots) launched with nothing
+    // on its command line was double-clicked: open on the game itself, a hoard
+    // run on a fresh valley, not on the rally course a development build
+    // starts in for its headless recipes.
+    if (argc <= 1) options.run = true;
+#endif
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--headless") {
@@ -204,7 +212,7 @@ bool App::init(const Options& options) {
     if (options.hide_panels) show_panels_ = false;
     if (options.no_post) post_settings_.enabled = false;
 
-    pipelines_.init(&device_, SHADER_ROOT);
+    pipelines_.init(&device_, core::paths::shader_root());
     if (!debug_.init(&device_, &pipelines_)) return false;
     if (!world_.init(&device_, &pipelines_)) return false;
     if (!post_.init(&device_, &pipelines_)) return false;
@@ -213,7 +221,7 @@ bool App::init(const Options& options) {
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
     // The terrain's detail tile (tools/rocks.md): linear data, not colour.
     {
-        std::ifstream file(ASSET_ROOT "/textures/terrain_detail.png", std::ios::binary);
+        std::ifstream file(core::paths::asset("textures/terrain_detail.png"), std::ios::binary);
         if (file) {
             std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             const gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
@@ -229,7 +237,7 @@ bool App::init(const Options& options) {
     {
         std::vector<gfx::StaticMesh> meshes;
         std::string error;
-        const bool loaded = gfx::load_static_gltf(ASSET_ROOT "/props/rocks.glb", meshes, &error);
+        const bool loaded = gfx::load_static_gltf(core::paths::asset("props/rocks.glb").c_str(), meshes, &error);
         int from_file = 0;
         for (int k = 0; k < gfx::ROCK_KINDS; ++k) {
             const std::string name = "rock_" + std::to_string(k);
@@ -262,14 +270,16 @@ bool App::init(const Options& options) {
     // out while they are still being tuned; --models reaches them.
     {
         model_sampler_ = gfx::create_model_sampler(device_.gpu());
-        std::vector<std::string> roster = options_.models;
-        if (roster.empty() && !options_.model.empty()) roster.push_back(options_.model);
+        std::vector<std::string> roster;
+        for (const std::string& path : options_.models) roster.push_back(core::paths::resolve_cli(path));
+        if (roster.empty() && !options_.model.empty())
+            roster.push_back(core::paths::resolve_cli(options_.model));
         if (roster.empty()) {
             static const char* const kDefaultRoster[] = {
                 "embercrest", "rimefang", "frostvein", "blightmaw",
                 "ironroot",   "stormsail", "tidewrack"};
             for (const char* name : kDefaultRoster) {
-                const std::string path = std::string(ASSET_ROOT "/") + name + ".glb";
+                const std::string path = core::paths::asset(std::string(name) + ".glb");
                 if (std::ifstream(path).good()) roster.push_back(path);
             }
             if (roster.empty()) roster.push_back(std::string());
@@ -309,7 +319,7 @@ bool App::init(const Options& options) {
 
     // A tuning file next to the assets overrides the built-in defaults, so a
     // good session's numbers survive a rebuild.
-    game::load_tuning(flight_.tuning, ASSET_ROOT "/flight_tuning.cfg");
+    game::load_tuning(flight_.tuning, core::paths::user_or_asset("flight_tuning.cfg").c_str());
     // A model may carry its own handling on top: <model>.flight.cfg next to
     // the glTF. The heavy-looking dragon and the quick-looking wyvern fly the
     // same numbers otherwise, and the eye disagrees.
@@ -323,11 +333,11 @@ bool App::init(const Options& options) {
                       gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
                       "checkpoint_ring");
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
-    load_prop(ASSET_ROOT "/props/watchtower.glb", tower_prop_, "prop_tower");
-    load_prop(ASSET_ROOT "/props/hoard_pile.glb", hoard_prop_, "prop_hoard");
-    load_prop(ASSET_ROOT "/props/spire_tower.glb", spire_prop_, "prop_spire");
-    load_prop(ASSET_ROOT "/props/hoard_trove.glb", trove_prop_, "prop_trove");
-    if (load_prop(ASSET_ROOT "/props/grazer.glb", grazer_prop_, "prop_grazer", &grazer_clips_)) {
+    load_prop(core::paths::asset("props/watchtower.glb").c_str(), tower_prop_, "prop_tower");
+    load_prop(core::paths::asset("props/hoard_pile.glb").c_str(), hoard_prop_, "prop_hoard");
+    load_prop(core::paths::asset("props/spire_tower.glb").c_str(), spire_prop_, "prop_spire");
+    load_prop(core::paths::asset("props/hoard_trove.glb").c_str(), trove_prop_, "prop_trove");
+    if (load_prop(core::paths::asset("props/grazer.glb").c_str(), grazer_prop_, "prop_grazer", &grazer_clips_)) {
         static const char* const names[3] = {"graze", "walk", "run"};
         for (int c = 0; c < 3; ++c) {
             for (size_t i = 0; i < grazer_clips_.size(); ++i) {
@@ -344,8 +354,8 @@ bool App::init(const Options& options) {
     // silently rather than failing.
     if (!options.headless) audio_.init();
     rebuild_courses();
-    best_times_.load(ASSET_ROOT "/best_times.txt");
-    run_records_.load(ASSET_ROOT "/runs.txt");
+    best_times_.load(core::paths::user_or_asset("best_times.txt").c_str());
+    run_records_.load(core::paths::user_or_asset("runs.txt").c_str());
     current_course_ = options.course_index;
     apply_assist_preset(0);
 
@@ -426,7 +436,7 @@ void App::rebuild_courses() {
 
     // A hand-authored course on disk takes precedence over the generated set.
     game::Course custom;
-    if (game::load_course(custom, ASSET_ROOT "/course.txt")) courses_.push_back(custom);
+    if (game::load_course(custom, core::paths::user_or_asset("course.txt").c_str())) courses_.push_back(custom);
 }
 
 void App::apply_assist_preset(int index) {
@@ -1744,7 +1754,7 @@ void App::update(float dt) {
     // every record the autopilot set.
     if (rally_.just_finished() && rally_.last_run_was_record()) {
         best_times_.submit(rally_.course().name, rally_.last_run_time());
-        best_times_.save(ASSET_ROOT "/best_times.txt");
+        best_times_.save(core::paths::user("best_times.txt").c_str());
     }
 
     // The autopilot laps the course, which is what lets a ghost exist in a
@@ -2518,7 +2528,7 @@ void App::build_rally_ui() {
             rally_.set_course(edited);
         }
         if (ImGui::Button("save as assets/course.txt")) {
-            game::save_course(rally_.course(), ASSET_ROOT "/course.txt");
+            game::save_course(rally_.course(), core::paths::user("course.txt").c_str());
         }
         ImGui::TextDisabled("saved courses load on next start");
     }
@@ -3114,7 +3124,7 @@ void App::find_wingtips(LoadedModel& model) {
 bool App::load_model(const std::string& path, LoadedModel& out) {
     anim::SkinnedMeshData mesh_data;
     const std::string model_path =
-        path.empty() ? std::string(ASSET_ROOT "/dragon.glb") : path;
+        path.empty() ? core::paths::asset("dragon.glb") : path;
 
     // Prefer an imported model, fall back to the generated one. The rig is
     // driven the same way either way -- it only needs to know which joints
@@ -3263,7 +3273,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     // without either behaves exactly as one did before the roster existed.
     // The generated fallback borrows the default dragon's profiles, which is
     // where they lived when there was only ever one model.
-    const std::string cfg_stem = out.imported ? out.path : std::string(ASSET_ROOT "/dragon.glb");
+    const std::string cfg_stem = out.imported ? out.path : core::paths::asset("dragon.glb");
     out.rig_tuning_path = cfg_stem + ".rig.cfg";
     out.flight_tuning_path = cfg_stem + ".flight.cfg";
     out.breath_path = cfg_stem + ".breath.cfg";
@@ -4429,7 +4439,7 @@ void App::update_run(float dt, const game::CombatEvents& events) {
     if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
         const game::RunResult result = hoard_run_.result();
         last_run_record_ = run_records_.submit(result);
-        run_records_.save(ASSET_ROOT "/runs.txt");
+        run_records_.save(core::paths::user("runs.txt").c_str());
         audio_.play(hoard_run_.just_banked() ? audio::Clip::Boost : audio::Clip::KnockOut, 1.0f);
         if (autopilot_) {
             LOG_INFO("run over, demo time: cruise %.0f fight %.0f siege %.0f land %.0f walk %.0f "
@@ -6445,11 +6455,11 @@ void App::build_flight_ui() {
         ImGui::SameLine();
         if (ImGui::Button("default")) t = game::FlightTuning();
         if (ImGui::Button("save to assets/flight_tuning.cfg")) {
-            game::save_tuning(t, ASSET_ROOT "/flight_tuning.cfg");
+            game::save_tuning(t, core::paths::user("flight_tuning.cfg").c_str());
         }
         ImGui::SameLine();
         if (ImGui::Button("load")) {
-            game::load_tuning(t, ASSET_ROOT "/flight_tuning.cfg");
+            game::load_tuning(t, core::paths::user_or_asset("flight_tuning.cfg").c_str());
         }
         // Per-model handling: what this dragon feels like to fly.
         if (ImGui::Button("save for this model")) game::save_tuning(t, model_tuning_path_.c_str());

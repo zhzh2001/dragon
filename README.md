@@ -83,8 +83,13 @@ gitignored. The game loads whichever species are present, Embercrest
 first, and falls back to a greybox dragon when there are none. The roster
 comes with the release packages. Any rigged glTF can be tried with
 `--model PATH`; [`ATTRIBUTION.md`](ATTRIBUTION.md) lists the two Sketchfab
-dragons the engine was first built around. A build currently runs only from its own source tree;
-making a copyable package is the first step of the porting roadmap.
+dragons the engine was first built around.
+
+**Packages.** `tools/release/package_macos.sh` builds a universal macOS 11+
+app with the roster inside. The ready-made one is on the
+[releases page](https://github.com/zhzh2001/dragon/releases), and its
+`README.txt` explains how to open an unsigned app. Records and saved tuning go to
+`~/Library/Application Support/Paleshell/Dragon`.
 
 ## Playing
 

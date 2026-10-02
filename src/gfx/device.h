@@ -101,6 +101,7 @@ private:
     SDL_Window* window_ = nullptr;
     SDL_GPUDevice* gpu_ = nullptr;
     bool headless_ = false;
+    bool claimed_ = false;  // the window is the swapchain's (never when headless)
 
     SDL_GPUCommandBuffer* cmd_ = nullptr;
     SDL_GPUTexture* swapchain_ = nullptr;

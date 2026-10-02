@@ -53,3 +53,7 @@ assets/embercrest-textures/
 # validation/build JSON beside them are kept -- those are the acceptance record.
 artifacts/**/runtime/
 assets/*.bak
+
+# Release packaging (tools/release/package_macos.sh).
+build-release/
+dist/

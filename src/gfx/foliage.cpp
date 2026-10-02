@@ -9,6 +9,7 @@
 
 #include "core/log.h"
 #include "core/noise.h"
+#include "core/paths.h"
 #include "gfx/texture.h"
 
 #include "gfx/buffer.h"
@@ -463,8 +464,8 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         const ImageData image = decode_image(bytes.data(), bytes.size());
         return create_texture_from_image(device->gpu(), image, name, false);
     };
-    leaf_texture_ = load(ASSET_ROOT "/textures/leaf_cluster.png", "leaf_cluster");
-    needle_texture_ = load(ASSET_ROOT "/textures/needle_spray.png", "needle_spray");
+    leaf_texture_ = load(core::paths::asset("textures/leaf_cluster.png").c_str(), "leaf_cluster");
+    needle_texture_ = load(core::paths::asset("textures/needle_spray.png").c_str(), "needle_spray");
     card_sampler_ = create_model_sampler(device->gpu());
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
     static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};

@@ -33,39 +33,51 @@ Measured on 2026-10-01, at `32ac0b0`:
 | Simulation | Flight, rig, AI, terrain queries, particles, audio synthesis: plain C++20, renderer-free, and the 15 test suites already prove it | None |
 | Dev tools (`sips`, `chrome-use`, Blender scripts, `tools/*.py`) | Not shipped | None; the docs should say they are macOS-side |
 
-## Phase P0 — a build that runs on someone else's machine
+## Phase P0 — a build that runs on someone else's machine (done, 2026-10-01)
 
-This comes first because the release needs it, before any port.
+Done for macOS. `tools/release/package_macos.sh` makes
+`dist/Dragon-<version>-macos.zip` (144 MB at 0.1.0). Unpacked anywhere, it
+runs, renders and saves.
 
-1. **Find data relative to the executable.** Use `SDL_GetBasePath()`, with
-   `ASSET_ROOT`/`SHADER_ROOT` kept only as a development override, so that a
-   build in `build/` still hot-reloads from the source tree. The CMake
-   `install` target copies `assets/` and `shaders/`, or the compiled shader
-   blobs after P1, next to the binary.
-2. **Write records and tuning to `SDL_GetPrefPath("dragon", "dragon")`.**
-   Shipped tuning stays read-only in `assets/`, and a saved file in the pref
-   directory overrides it.
-3. **Bundle fonts.** Ship two OFL faces, a condensed display face for the
-   numerals and a humanist sans for the labels, in `assets/fonts/`, so the
-   HUD looks the same on every OS. The macOS system faces stay as a dev
-   fallback only. The HUD kit's tokens do not change.
-4. **Package.**
-   - **macOS:** a `.app` bundle with `SDL3.framework` inside. A downloaded,
-     unsigned app gets a Gatekeeper warning. Ad-hoc signing plus "right-click,
-     Open" is fine for friends; notarisation needs a paid Apple Developer ID,
-     which is the user's decision.
-   - **Windows:** a zip with `SDL3.dll`.
-   - **Linux:** a tarball. An AppImage is optional.
+1. **Data beside the executable** (`src/core/paths.h`). Assets and shaders
+   are looked up in `SDL_GetBasePath()` first, which in a bundle is
+   `Contents/Resources`, then in the source tree. That fallback is
+   compiled in only when `DRAGON_DEV_ROOTS` is on, which it is by default.
+   A package is built with it off, so the binary holds no build-machine
+   path; the script fails if `strings` finds `$HOME` in it. Hot reload
+   works on whichever shader root was found.
+2. **Writes go to `SDL_GetPrefPath("Paleshell", "Dragon")`**: the records,
+   the saved flight tuning, the saved course. A shipped file is read until
+   a user copy exists (`user_or_asset`). A development build's old
+   `assets/best_times.txt` and `runs.txt` are therefore still read until
+   the first save.
+3. **Two OFL faces ship** in `assets/fonts/`: Barlow Condensed SemiBold for
+   numerals, Fira Sans Medium for labels. The macOS system faces are the
+   fallback. Rendered side by side with the old faces, the numerals sit
+   slightly lower in their plate and the hint line is about 10% wider.
+4. **Package.** `DRAGON_FETCH_SDL` builds SDL3 3.4.16 from source and links
+   it statically. Homebrew's SDL is built for the machine's own macOS, 26
+   here, and the binary defaulted to 27. The package targets **macOS 11,
+   universal (arm64 + x86_64)**. The bundle is ad-hoc signed, not notarised,
+   so Gatekeeper rejects it on first launch. Its `README.txt` gives the
+   "Open Anyway" and `xattr` routes. The roster's textures are shrunk to
+   2048² by `tools/release/shrink_glb.py`, which copies every non-image
+   byte through and keeps each PNG's text chunks. That takes each species
+   from about 52 MB to 21 MB, and a packaged frame differs from the
+   development build's only in texture filtering on the dragon (no pixel
+   off by more than 16 of 255). A package launched with no arguments
+   starts a hoard run: a double-click passes none.
+5. **Headless no longer claims the swapchain**; the frame is read from the
+   offscreen targets. It still creates a hidden window, though. SDL's
+   `offscreen` video driver fails creating a window without OpenGL, and
+   `dummy` leaves SDL GPU with no backend. A Linux render over SSH still
+   needs a display, and which driver to use there moves to P2.
 
-   Each package carries `LICENSE`, `THIRD_PARTY_NOTICES.md` and
-   `AI_DISCLOSURE.md`.
-5. **Headless without a window.** Do not create or claim a window when
-   `--headless` is set; the offscreen targets already carry the frame. This
-   makes headless renders work over SSH on Linux and keeps the
-   verification workflow intact everywhere.
-
-Exit test: a release zip unpacked into `/tmp` on a second Mac account runs,
-saves a best time, and `--headless --frames 40 --screenshot` works from it.
+Exit test, as run: the zip unpacked into a temporary directory, with no
+source-tree fallback compiled in, rendered a headless frame. A three-valley
+autopilot run from it banked and wrote `runs.txt` to the user directory.
+Still to do by hand: double-click it, which needs a human at the keyboard;
+the Windows and Linux packages (P2).
 
 ## Phase P1 — one shader source for every backend
 
@@ -98,6 +110,9 @@ tolerance, and the MSL sources are deleted.
 
 After P1 this is mostly build plumbing:
 
+- Headless over SSH on Linux: try the `offscreen` video driver with a
+  `SDL_WINDOW_VULKAN` window (P0 found it needs a graphics flag), else run
+  under a headless compositor.
 - Request `SPIRV | DXIL | MSL` and let SDL pick: Direct3D 12 on Windows,
   Vulkan on Linux, Metal on the Mac. `--gpu-driver vulkan` forces a backend,
   so D3D12 and Vulkan can both be checked on one Windows machine.

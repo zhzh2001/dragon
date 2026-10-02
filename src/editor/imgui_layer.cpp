@@ -1,6 +1,10 @@
 #include "editor/imgui_layer.h"
 
+#include <fstream>
+#include <string>
+
 #include "core/log.h"
+#include "core/paths.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
@@ -22,29 +26,32 @@ bool ImGuiLayer::init(gfx::Device& device) {
     io.IniFilename = nullptr;
 
     // The two faces of the HUD kit (ui/hud.h): a condensed display face for
-    // numerals and a humanist sans for labels. Loaded from the system's TTFs
-    // where they exist -- this is a hobby build on one machine, and shipping
-    // fonts is an asset-policy question for later -- with ImGui's default as
-    // the fallback so nothing depends on them being there. ImGui 1.92's
-    // dynamic atlas lets one loaded face be drawn at any size, so each is
-    // loaded once.
+    // numerals and a humanist sans for labels. The game ships its own, two
+    // OFL faces in assets/fonts (Barlow Condensed SemiBold, Fira Sans Medium),
+    // so the HUD reads the same on every OS; the macOS system faces it was
+    // first drawn in are the fallback, and ImGui's default after that, so
+    // nothing depends on any of them being there. ImGui 1.92's dynamic atlas
+    // lets one loaded face be drawn at any size, so each is loaded once.
     {
         struct Candidate {
-            const char* path;
+            std::string path;
             unsigned face;  // index within a .ttc
         };
-        const Candidate numerals[] = {{"/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf", 0},
-                                      {"/System/Library/Fonts/Supplemental/Impact.ttf", 0},
-                                      {"/System/Library/Fonts/Supplemental/Futura.ttc", 0}};
-        const Candidate labels[] = {{"/System/Library/Fonts/Avenir Next.ttc", 0},
-                                    {"/System/Library/Fonts/Supplemental/GillSans.ttc", 0},
+        const Candidate numerals[] = {{core::paths::asset("fonts/BarlowCondensed-SemiBold.ttf"), 0},
+                                      {"/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf", 0},
+                                      {"/System/Library/Fonts/Supplemental/Impact.ttf", 0}};
+        const Candidate labels[] = {{core::paths::asset("fonts/FiraSans-Medium.ttf"), 0},
+                                    {"/System/Library/Fonts/Avenir Next.ttc", 0},
                                     {"/System/Library/Fonts/Helvetica.ttc", 0}};
         auto load = [&](const Candidate* list, size_t count) -> ImFont* {
             for (size_t i = 0; i < count; ++i) {
+                // AddFontFromFileTTF asserts on a missing file in a debug
+                // ImGui, so look before asking it.
+                if (!std::ifstream(list[i].path).good()) continue;
                 ImFontConfig config;
                 config.FontNo = list[i].face;
-                if (ImFont* font = io.Fonts->AddFontFromFileTTF(list[i].path, 0.0f, &config)) {
-                    LOG_INFO("ui font: %s", list[i].path);
+                if (ImFont* font = io.Fonts->AddFontFromFileTTF(list[i].path.c_str(), 0.0f, &config)) {
+                    LOG_INFO("ui font: %s", list[i].path.c_str());
                     return font;
                 }
             }

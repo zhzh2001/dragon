@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
 endif()
 
-find_package(SDL3 REQUIRED CONFIG)
+include(cmake/sdl3.cmake)
 
 include(cmake/imgui.cmake)
 include(cmake/cgltf.cmake)
@@ -20,6 +20,7 @@ add_executable(dragon
   src/main.cpp
   src/app.cpp
   src/core/input.cpp
+  src/core/paths.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp
   src/gfx/buffer.cpp
@@ -67,12 +68,18 @@ add_executable(dragon
 target_include_directories(dragon PRIVATE src)
 target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio)
 
-# Shaders are read from the source tree at runtime so hot reload edits the same
-# files we author. A shipping build would copy them next to the binary instead.
-target_compile_definitions(dragon PRIVATE
-  SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
-  ASSET_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets"
-)
+# Data is found beside the executable first (core/paths.h). A development
+# build has none there, so it falls back to the source tree, and hot reload
+# edits the same shader files we author. A package is configured with
+# DRAGON_DEV_ROOTS=OFF: it carries its own data, and no source path from the
+# build machine is baked into the binary.
+option(DRAGON_DEV_ROOTS "Fall back to the source tree for assets and shaders" ON)
+if(DRAGON_DEV_ROOTS)
+  target_compile_definitions(dragon PRIVATE
+    SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+    ASSET_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+  )
+endif()
 
 target_compile_options(dragon PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 

@@ -179,8 +179,9 @@ flight controls.
   (`src/ui/hud.h`): its tokens (one gold accent, red for threat and damage
   only, off-white on charcoal plates), its primitives (plate, bar, arc,
   bracket, pip, edge arrow) and its two faces (a condensed display face for
-  numerals, a humanist sans for labels, loaded from the system's TTFs with
-  ImGui's default as the fallback). Layout is in frame units, 1/720 of the
+  numerals, a humanist sans for labels: Barlow Condensed and Fira Sans, OFL,
+  shipped in `assets/fonts/`, with the macOS system faces and then ImGui's
+  default as the fallbacks). Layout is in frame units, 1/720 of the
   height, so it survives any aspect -- laid out in ImGui's `DisplaySize`
   (points), with `ImGuiLayer::begin_frame` setting the framebuffer scale from
   the real render target: taken from the window's pixel density, it drew
@@ -188,6 +189,14 @@ flight controls.
   along the right edge, never over the centre. Do not draw a readout with raw
   `AddText` and pixel constants again -- that is what read as debug output
   with gold paint.
+- **Paths go through `core/paths.h`**, never a literal root. Shipped data is
+  `paths::asset("props/x.glb")`, found beside the executable first (a
+  package) and in the source tree second (a dev build, `DRAGON_DEV_ROOTS`).
+  Anything the game writes goes to `paths::user(...)`, the per-user
+  directory (`~/Library/Application Support/Paleshell/Dragon`), and is read
+  back with `paths::user_or_asset(...)`. So best times, run records and
+  saved tuning are no longer in `assets/`. A path written into the source
+  tree works on this machine only; it is what P0 removed (`PORTING.md`).
 - **Shaders**: MSL source in `shaders/`, read from the source tree at runtime and
   hot-reloaded on save (polled every 0.25s). A failed compile logs an error and
   keeps the last working pipeline, so a bad save never blanks the screen.
@@ -405,7 +414,7 @@ blending and procedural animation, flight model, camera, AI, gameplay. Out
 ## Layout
 
 ```
-src/core/    math, input, noise, logging
+src/core/    math, input, noise, logging, paths (where data and user files live)
 src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig

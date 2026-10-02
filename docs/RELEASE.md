@@ -64,26 +64,33 @@ anything is forced: a forced push breaks every clone.
 
 ## A copy of the game
 
-A copy needs Phase P0 of `docs/PORTING.md` first. Today's binary finds its
-shaders and assets through absolute source-tree paths compiled into it, and
-writes its records into `assets/`, so a copied build runs only on the
-machine that built it.
+```sh
+tools/release/package_macos.sh 0.1.0     # -> dist/Dragon-0.1.0-macos.zip
+```
 
-After P0, a release package holds:
+The script, and what P0 changed to make a copy work, are in
+`docs/PORTING.md`. The zip holds `Dragon/`:
 
-- the binary and SDL3 (as `SDL3.framework` in the `.app` on macOS, `SDL3.dll`
-  on Windows);
-- `shaders/`, or compiled blobs after P1;
-- `assets/`: the cfg files, `props/`, `textures/`, `fonts/`, and the
-  generated roster;
-- `LICENSE`, `THIRD_PARTY_NOTICES.md`, `ATTRIBUTION.md`, `AI_DISCLOSURE.md`,
-  and a short `README.txt` with the controls.
+- `Dragon.app`. Its `Contents/Resources` carries `shaders/`, `assets/`
+  (props, textures, fonts, and the seven species' `.glb` at 2048² with
+  their `.cfg` files) and the four licence files.
+- `README.txt` (`tools/release/README-package.txt`): how to get past
+  Gatekeeper, the controls, the AI notice.
+- `LICENSE`, `THIRD_PARTY_NOTICES.md`, `ATTRIBUTION.md`, `AI_DISCLOSURE.md`.
 
-**The roster, downsampled.** Twelve species at about 50 MB each, at 4096² PBR,
-is too much to hand out. The release step resizes their textures to 2048²,
-about a quarter of the size, which is indistinguishable at chase-camera
-distance; this step is to be written. It must keep the files' metadata,
-because the Hunyuan agreement forbids removing its AI marks (3.6(1)).
+The script ends by unpacking the zip and rendering a frame from it, and
+leaves that frame in `dist/` beside the zip. Look at it before uploading.
+
+Upload it as a GitHub release asset, as a draft first, then publish once
+the download has been tried on another Mac:
+
+```sh
+gh release create v0.1.0 dist/Dragon-0.1.0-macos.zip --repo zhzh2001/dragon \
+  --draft --title "Dragon 0.1.0" --notes-file <notes>
+```
+
+The notes say the game is AI-assisted and link `AI_DISCLOSURE.md`. The
+release tag points at the public mirror's `main`, not this repository.
 
 **The default model** is the generated roster, Embercrest first
 (`kDefaultRoster` in `src/app.cpp`); a package that lacks some of them

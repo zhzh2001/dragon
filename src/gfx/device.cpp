@@ -9,6 +9,13 @@ namespace gfx {
 bool Device::init(const Config& config) {
     headless_ = config.headless;
 
+    // Headless keeps a hidden window for the UI layer to attach to, but the
+    // GPU device never claims it: the frame lives in the offscreen targets and
+    // is read back from there, so no swapchain is created. A display server
+    // is still needed for the window itself. SDL's "offscreen" video driver
+    // would remove that, but on macOS it fails creating the window (it wants
+    // OpenGL), and "dummy" leaves SDL GPU with no backend. Which driver
+    // Linux-over-SSH needs is a P2 question (docs/PORTING.md), settled on x99.
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) return SDL_FAIL("SDL_Init");
 
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
@@ -22,11 +29,14 @@ bool Device::init(const Config& config) {
     gpu_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, /*debug_mode=*/true, nullptr);
     if (!gpu_) return SDL_FAIL("SDL_CreateGPUDevice");
 
-    if (!SDL_ClaimWindowForGPUDevice(gpu_, window_)) return SDL_FAIL("SDL_ClaimWindowForGPUDevice");
+    if (!headless_) {
+        if (!SDL_ClaimWindowForGPUDevice(gpu_, window_)) return SDL_FAIL("SDL_ClaimWindowForGPUDevice");
+        claimed_ = true;
+    }
 
     // Mailbox where available (lowest latency), else vsync. Input latency has a
     // direct effect on how responsive flight controls feel.
-    if (SDL_WindowSupportsGPUPresentMode(gpu_, window_, SDL_GPU_PRESENTMODE_MAILBOX)) {
+    if (claimed_ && SDL_WindowSupportsGPUPresentMode(gpu_, window_, SDL_GPU_PRESENTMODE_MAILBOX)) {
         SDL_SetGPUSwapchainParameters(gpu_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                                       SDL_GPU_PRESENTMODE_MAILBOX);
     }
@@ -56,7 +66,7 @@ void Device::shutdown() {
         if (depth_) SDL_ReleaseGPUTexture(gpu_, depth_);
         scene_color_ = nullptr;
         depth_ = nullptr;
-        if (window_) SDL_ReleaseWindowFromGPUDevice(gpu_, window_);
+        if (window_ && claimed_) SDL_ReleaseWindowFromGPUDevice(gpu_, window_);
         SDL_DestroyGPUDevice(gpu_);
         gpu_ = nullptr;
     }
