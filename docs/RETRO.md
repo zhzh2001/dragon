@@ -1,5 +1,13 @@
 # Dragon on old GPUs — a D3D9-era port study
 
+> **Superseded for the port by [`PORTING.md`](PORTING.md) (2026-10-01).** This
+> study predates the post stack (there is now an RGBA16F scene target, bloom
+> and a composite pass), and it chose GL 2.1 first because nothing else
+> debugged on the Mac. CrossOver now runs a D3D9 build on the Mac, so the plan
+> is one D3D9 backend with SM3, SM2 and fixed-function tiers. The analysis
+> below is kept for its reasoning: reversed-Z, the skinning palette, VRAM.
+> The ranked feature list at the end is still current.
+
 A new game for old hardware. This document works out what it would actually
 take to run Dragon on a 2005-class GPU, what breaks, what gets *better*, and
 how the work phases so the modern Metal build never stops being the daily

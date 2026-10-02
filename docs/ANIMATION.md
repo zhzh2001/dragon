@@ -86,7 +86,8 @@ leaf bones plus vertices flung far from the body. The glTF download needs no
 Blender step at all: no pose bake, no bone reduction, no export options to get
 wrong.
 
-`artifacts/dragon_broken_fbx_import.glb` is kept as the counter-example.
+The broken FBX re-export was kept here as a counter-example until 2026-10-01;
+it was a derivative of a CC BY-NC mesh and is no longer in the repository.
 
 ### How the loader reads a skin
 

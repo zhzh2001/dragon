@@ -1,7 +1,8 @@
 # Status and milestone history
 
 What is built, in the order it was built. The plan these came from is
-`ROADMAP.md`; where the project goes next is `RETRO.md`.
+`ROADMAP.md`; where the project goes next is `DIRECTION.md`, and the ports are
+`PORTING.md`.
 
 ## Latest asset candidates — 2026-09-28
 

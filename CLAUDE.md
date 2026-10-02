@@ -25,8 +25,12 @@ they are records of what was already tried and why it is the way it is.
 | `tools/hunyuan_oneshot.md` | Driving the Hunyuan one-shot headlessly through chrome-use -- the generation step of that pipeline, and the traps that cost a run each |
 | `tools/skeletons/*.json` | The deform skeletons the rigger fits, one per anatomy *and per set of measurements* -- a shared file shares its author's leg positions, `wing_field` gates and `jaw_mask`, and those do not transfer. Bone names are a contract with `src/anim/dragon_rig.cpp` |
 | `docs/ROADMAP.md` | The original plan and its phases |
-| `docs/RETRO.md` | The D3D9-era port study, and the ranked list of what to build next |
-| `ATTRIBUTION.md` | The models, their licences, and how to obtain them |
+| `docs/PORTING.md` | Windows, Linux and Direct3D 9: what the code depends on today, the phases (a copyable build, one HLSL shader source, D3D12/Vulkan, then one D3D9 backend with SM3, SM2 and fixed-function tiers), and which machine tests what (Mac + CrossOver, x99, x99-windows, the G41 under XP) |
+| `docs/RELEASE.md` | How the public GitHub mirror is exported (`tools/release/export_public.sh`, never a push of this repo) and what a release package carries |
+| `docs/RETRO.md` | The ranked list of what to build next; its D3D9 port study is superseded by `PORTING.md` |
+| `ATTRIBUTION.md` | The models, their licences, how to obtain them, and **what may ship where** (public repo, public release, personal copy) |
+| `AI_DISCLOSURE.md` | Every AI tool used and what it made. The Hunyuan agreement requires generated output to be labelled when published, so a new AI-made asset gets a line here |
+| `LICENSE`, `THIRD_PARTY_NOTICES.md` | MIT for our material; the libraries' licences |
 | `.claude/skills/concept-art/SKILL.md` | Generating concept art, HUD mockups and creature reference sheets from a ChatGPT/Gemini subscription -- which backend suits which job, and which quota each one burns |
 | `tools/codex_usage.py` | How much of the Codex 5-hour and weekly windows is left, read out of the logged-in browser. Run it before starting a `codex` task |
 | `tools/rig_probes/` | Renderer-free probes that run the rig on a species and print numbers -- foot heights, sink below the floor, leg angles in the glide, leg swing through a manoeuvre, jaw direction -- and a candidate renderer. Ten milliseconds a candidate against two seconds a render: they decide what to render, they do not replace looking |

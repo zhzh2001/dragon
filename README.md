@@ -1,146 +1,141 @@
 # Dragon
 
 A single-player 3D dragon game on a custom C++20 engine, rendering through
-SDL3's GPU API (Metal on macOS). You fly a dragon whose flight is a real energy
-model -- diving buys speed, climbing spends it, banking curves the flight path
-because the lift vector tilts -- through a 5 km procedural valley, racing
-checkpoint courses against your own ghost and dogfighting bot dragons that fly
-the exact same flight model you do.
+SDL3's GPU API (Metal on macOS). You fly a dragon whose flight is a real
+energy model: diving buys speed, climbing spends it, and banking curves the
+flight path because the lift vector tilts. The main mode is a **hoard run**
+down a generated valley. You fight rival dragons and guard towers, land on
+hoard caches, grow from drake to adult, and fly out through the pass. There
+is also an arena deathmatch against bot dragons that fly the same flight
+model you do.
+
+> **Made with AI.** Most of the code and the docs were written by AI coding
+> agents (Claude through Claude Code, and OpenAI Codex). Every dragon model
+> was generated with Tencent Hunyuan 3D, and the concept art with GPT
+> Image 2 and Nano Banana 2. One person directed it, playtested it, and
+> chose what to keep. The details, tool by tool, are in
+> [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md). The sound is synthesized in
+> code; no AI audio model was used.
 
 Everything above the vendored foundations (SDL3, Dear ImGui, cgltf, stb_image,
-miniaudio) is written from scratch as a learning project: renderer, animation
-system, flight model, camera, AI, gameplay, audio synthesis.
+miniaudio) is written for this project: the renderer, animation, flight
+model, camera, AI, gameplay and audio synthesis.
 
 ## Highlights
 
-- **Energy flight model** -- thrust, lift, drag and gravity integrated honestly;
-  specific energy is the quantity you manage. Landing and taking off are real
-  states: set down and the body settles level on the ground, and the first flap
-  is a leap. Assists (auto-flap that knows a dive from a sink, bank limit,
-  stall recovery) make it approachable without faking the physics, and one
-  `heft` knob gives each model its own weight.
-- **A valley you can trust** -- procedural terrain whose gameplay queries read
-  the exact rendered triangle, a river carved through the floor with a
-  reflective surface you can land on, ground that continues past the playable
-  extent instead of ending in an invisible wall, and mixed forests of four tree
-  and three grass kinds placed by slope, altitude and water.
-- **Physically based animation** -- an imported rigged dragon driven entirely by
-  procedural animation: inertial neck and tail chains with muscle tone that
-  tenses under load, pendulum legs that trail in flight, wings that bow under
-  g, sweep back and flutter with speed, a jaw that gapes on the flame and a
-  neck that rears on the spit. Two very different rigs (a quadruped dragon and
-  a wyvern) are driven by the same code. An in-game **animation studio** plays
-  scripted, dynamically consistent manoeuvres on a pinned dragon for inspection.
-- **Combat** -- fire breath, fireballs with sticky lock-on and honest aim assist
-  (intercept lead, gravity drop, inherited-velocity drift), boost, and bot
-  dragons with an attack / extend / evade doctrine. Bot difficulty is honest
-  imperfection: stale perception and scattered firing solutions, never a
-  different flight model.
-- **Dragon Rally** -- three generated checkpoint courses with timing, splits,
-  ghost replays of your best run, and an autopilot that both verifies the
-  courses headlessly and seeded the bot AI.
-- **Hot-reloaded Metal shaders**, reversed-Z depth, directional shadows, PBR
-  texturing with normal and ORM maps, additive particle fire, instanced
-  swaying foliage.
-- **Synthesized audio** -- wind that brightens with speed, flame roar, wingbeat
-  whooshes, creature cries, shots and explosions, all generated at startup from
-  noise and sines: the game ships no sound files.
+- **Energy flight.** Thrust, lift, drag and gravity are integrated
+  honestly. Landing, walking and taking off are real states. The assists
+  (auto-flap, bank limit, stall recovery) make it approachable without
+  faking the physics. Aerobatics include a dodge roll and a reversing
+  flip.
+- **The hoard run.** A roguelite valley: rivals at posts, towers on the
+  slopes, hunters loosed when you linger, three caches to land on, and
+  growth that moves the same tuning dials the panels expose. A run is three
+  valleys, each harder than the last, and the seed is printed so a good
+  valley can be flown again.
+- **Combat.**
+  - Breath and fireballs with sticky lock-on and honest aim assist.
+  - Melee bites, claws and tail strikes.
+  - Six elements (fire, frost, blight, storm, tide, stone), each with its
+    own status effect.
+  - Bot dragons with an attack / extend / evade doctrine. Their
+    difficulty is imperfect perception, never a different flight model.
+- **Seven playable dragon species**, with two more as candidates, and each
+  one a species rather than just a mesh: how it
+  moves (`.rig.cfg`), handles (`.flight.cfg`) and breathes (`.breath.cfg`).
+  All of them are driven by one procedural rig: inertial neck and tail
+  chains, wings that bow, sweep and fold, legs that trail in flight and
+  plant on the terrain, and a jaw that gapes on the flame. There are no
+  animation clips.
+- **A valley you can trust.** The gameplay queries read the exact rendered
+  terrain triangle. A river is carved through the floor, the ground goes on
+  past the map edge, and mixed forests are placed by slope, altitude and
+  water.
+- **A modern renderer.**
+  - Hot-reloaded Metal shaders and reversed-Z depth.
+  - One lighting path for the terrain, plants and creatures.
+  - Directional shadows and PBR creatures.
+  - An HDR target with bloom and a hue-preserving tonemap.
+  - Additive particle breath.
+- **Synthesized audio.** Wind, flame, wingbeats, cries and impacts are all
+  generated at start-up from noise and sines. The game ships no sound
+  files.
+- **Verifiable without a human.** `--headless --frames N --screenshot` plus
+  scripted cameras, a self-playing demo pilot, and fifteen renderer-free
+  test suites.
 
 ## Building
 
-Requires macOS with Metal, CMake ≥ 3.24, Ninja, and SDL3 (`brew install sdl3`).
-Everything else is fetched by CMake.
+Requires macOS with Metal, CMake 3.24 or later, Ninja, and SDL3
+(`brew install sdl3`). Everything else is fetched by CMake. Windows and Linux
+are planned: see [`docs/PORTING.md`](docs/PORTING.md).
 
 ```sh
 cmake -S . -B build -G Ninja
 cmake --build build
-./build/dragon
-ctest --test-dir build     # ten suites, plain executables, no framework
+./build/dragon --run          # a hoard run
+./build/dragon --demo         # the game playing itself
+ctest --test-dir build        # fifteen suites, plain executables
 ```
 
-The dragon model is downloaded separately -- see `ATTRIBUTION.md` for the
-source and licence (CC BY-NC: this project is strictly non-commercial). Without
-it the game falls back to a generated greybox dragon. Any rigged glTF can be
-tried with `--model PATH`; a second, CC-BY wyvern is documented there too.
-
-An original, script-built dragon (Embercrest) was also tried. It is not as good
-as either imported model and is kept only for reference; the generator, what
-it produced and why it fell short are in [`docs/EMBERCREST.md`](docs/EMBERCREST.md).
+**The models are not in the repository.** They are large, so they are
+gitignored. Without them the game falls back to a greybox dragon. The
+generated roster comes with the release packages. The original default
+model is a CC BY-NC Sketchfab download for personal use; see
+[`ATTRIBUTION.md`](ATTRIBUTION.md). Any rigged glTF can be tried with
+`--model PATH`. A build currently runs only from its own source tree;
+making a copyable package is the first step of the porting roadmap.
 
 ## Playing
 
 | Input | Action |
 |---|---|
-| Left stick / WASD | Pitch and roll |
-| A (pad) / Space | Flap -- the only way energy enters the system |
-| RT / Shift | Tuck-dive (noses over, folds the wings) |
-| LT / Ctrl | Brake and flare -- hold it low to land |
-| D-pad ⇄ / Q, E | Rudder |
-| LB / F or LMB | Fire breath (hold) |
-| RB / G | Fireball |
+| Left stick / W, S, A, D | Pitch and roll (on the ground: walk and turn) |
+| A (pad) / Space | Flap, the only way energy enters the system. On the ground: leap |
+| RT / Shift | Tuck the wings and dive |
+| LT / Ctrl | Flare and brake; hold it low to land |
+| LB / F or left mouse | Breath (hold) |
+| RB / G | Fireball; hold for a charged shot once grown |
+| B (pad) / C | Bite; claw and tail strikes when close |
 | X (pad) / X | Boost |
-| R-stick click / T | Relock onto the next target |
+| D-pad left/right / Z | Dodge roll |
+| D-pad up / B | Flip, to face a chaser |
+| Y (pad) / U | Second breath, once adult |
+| Right-stick click / T | Relock onto the next target |
 | Right stick / right-drag | Free look |
-| 1 / 2 / 3, V | Camera presets, first person |
-| Tab | Free-fly camera |
+| 1, 2, 3 / V | Camera presets / first person |
+| P | Hand the controls to the demo pilot, and take them back |
+| R / Enter | Restart the valley / next valley after the results |
 | F1 | Hide the tuning panels |
-| R | Restart |
 
-Start in the Rally panel to pick a course, or tick **combat enabled** in the
-Combat panel and press **spawn bots**. Every gameplay constant sits behind an
-ImGui slider -- the tuning panels are the game's editor. The Dragon panel has
-the rig and hide colour, Flight has the presets and `heft`, and
-Terrain > Vegetation has the trees and grass.
-
-Headless verification, no human at the keyboard:
-
-```sh
-./build/dragon --headless --frames 300 --screenshot /tmp/shot.bmp
-./build/dragon --headless --autopilot --course 1 --frames 4000   # fly a course
-./build/dragon --headless --bots 2 --match --frames 7200         # match soak
-./build/dragon --studio 5                                        # studio: dive
-./build/dragon --studio 8 --inspect 90 4.5 --inspect-head        # attack, on the head
-```
-
-## Layout
-
-```
-src/core/    math, input, noise, logging
-src/gfx/     GPU device, pipeline cache + shader hot reload, renderer,
-             shadows, additive particles, instanced foliage
-src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
-src/game/    flight model, cameras, terrain, vegetation, rally, combat,
-             bots, match loop, animation studio
-src/audio/   synthesized audio -- every sound generated at startup
-src/editor/  ImGui integration
-shaders/     MSL, hot-reloaded from source
-tests/       ten suites
-```
+Every gameplay constant sits behind an ImGui slider; the panels are the
+game's editor. `CLAUDE.md` has the full flag and control reference.
 
 ## Documentation
 
 `CLAUDE.md` is the engineering map: build and verification recipes, the
-conventions, and the cross-cutting lessons. The detail lives in `docs/`:
+conventions, the cross-cutting lessons, and how the AI agents that build
+the project are directed. The detail lives in `docs/`:
 
 | Doc | What is in it |
 |---|---|
-| `docs/ANIMATION.md` | The rig, glTF import, and the frame/scale traps |
-| `docs/COMBAT.md` | Fire, targeting, bot doctrine, the match loop |
+| `docs/ANIMATION.md` | The procedural rig, glTF import, the roster, and the frame/scale traps |
+| `docs/COMBAT.md` | Fire, targeting, melee, elements, bot doctrine, the match loop, the hoard run |
 | `docs/WORLD.md` | Terrain, the river, the skirt, vegetation |
-| `docs/EFFECTS.md` | Particles and synthesized audio |
+| `docs/EFFECTS.md` | Particles, breath profiles, synthesized audio |
+| `docs/MODEL_GENERATION.md` | How a creature is generated, rigged and repaired |
+| `docs/DIRECTION.md` | Where the modern build goes: genre, art direction, HUD, assets |
+| `docs/PORTING.md` | Windows, Linux, and Direct3D 9 (SM3, SM2, fixed function) |
+| `docs/RELEASE.md` | How the public repository and the release packages are made |
 | `docs/STATUS.md` | Milestone history and open questions |
-| `docs/DIRECTION.md` | Where it goes next: genre, art direction, UI, assets, and the plan |
-| `docs/ROADMAP.md` | The original plan |
-| `docs/RETRO.md` | The D3D9-era port study and what to build next |
 
 ## Licence
 
-Code: no licence chosen yet -- ask before reusing. The dragon model is
-CC BY-NC (see `ATTRIBUTION.md`), which makes the assembled game non-commercial.
+The code, shaders, tools, docs and original assets are under the
+[MIT licence](LICENSE). Third-party material keeps its own licence:
+- libraries: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+- models and their renders: [`ATTRIBUTION.md`](ATTRIBUTION.md)
 
-## New dragon candidates
-
-Try the triangular-winged fire dragon Sunspear and feathered frost dragon
-Rimeplume with `./build/dragon --models assets/sunspear.glb,assets/rimeplume.glb`
-(`M` switches). Local generated assets are required. See the
-[concepts, validation and playtest notes](artifacts/elemental-expansion/README.md).
+The renders in `artifacts/` that show the "Black Dragon" by 3DHaupt
+(dennish2010) are CC BY-NC 4.0 material. The AI-generated material is
+labelled as such in [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md).

@@ -15,7 +15,7 @@ from pathlib import Path
 from mathutils import Vector, Quaternion
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1] if '__file__' in globals() else Path('~/src/game-claude')
+ROOT = Path(__file__).resolve().parents[1] if '__file__' in globals() else Path.cwd()
 sys.path.insert(0,str(ROOT/'tools'))
 from embercrest_materials import generate_maps
 OUT = ROOT / 'assets/embercrest'

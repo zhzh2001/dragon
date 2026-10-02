@@ -1,0 +1,8 @@
+# Paths removed from the whole history of the public mirror
+# (tools/release/export_public.sh). See ATTRIBUTION.md for why.
+
+# Blender re-exports of the CC BY-NC, NoAI-tagged "Black Dragon" mesh.
+assets/dragon.glb
+artifacts/dragon_broken_fbx_import.glb
+# A screenshot of Sketchfab's own viewer showing that model.
+artifacts/model_sketchfab.png

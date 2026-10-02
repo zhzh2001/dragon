@@ -1,5 +1,11 @@
 # Automating the Hunyuan one-shot (图/文生3D)
 
+> **Terms (read 2026-10-01, `ATTRIBUTION.md`):** the service agreement of
+> `3d.hunyuan.tencent.com` forbids automated or programmatic extraction
+> (clause 3.6(3)) and serves mainland-China users only (1.1). This record is
+> kept for what it measured; new generations should be made by hand on
+> `3d.hunyuanglobal.com` instead of by this script.
+
 The one-shot is the good path: it emits 1.5 M geometry **with** UVs and a PBR
 set in a single generation, never touching the retopo or UV stages that the
 staged chain forces on you (`语义UV` refuses anything over 30 K faces). It
