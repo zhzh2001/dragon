@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "test_paths.h"
 #include "game/autopilot.h"
 #include "game/course.h"
 #include "game/rally.h"
@@ -221,7 +222,8 @@ void test_best_times_round_trip() {
     CHECK(std::fabs(times.best("Valley Run") - 58.25f) < 1e-3f);
     CHECK(times.best("Nonexistent") == 0.0f);
 
-    const char* path = "/tmp/dragon_best_times_test.txt";
+    const std::string path_store = test_temp_path("best_times.txt");
+    const char* path = path_store.c_str();
     CHECK(times.save(path));
     game::BestTimes loaded;
     CHECK(loaded.load(path));
@@ -305,7 +307,8 @@ void test_course_round_trip() {
     terrain.generate(settings);
 
     const game::Course original = game::make_canyon_weave(terrain, settings.half_extent);
-    const char* path = "/tmp/dragon_course_test.txt";
+    const std::string path_store = test_temp_path("course.txt");
+    const char* path = path_store.c_str();
     CHECK(game::save_course(original, path));
 
     game::Course loaded;

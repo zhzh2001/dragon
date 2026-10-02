@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <memory>
 
+#include "test_paths.h"
 #include "anim/animation.h"
 #include "anim/dragon_rig.h"
 #include "anim/gltf_loader.h"
@@ -1292,7 +1293,7 @@ void test_roster_jaws_open_downward() {
     for (const char* name : {"assets/embercrest.glb", "assets/rimefang.glb",
                              "assets/blightmaw.glb", "assets/ironroot.glb",
                              "assets/stormsail.glb", "assets/tidewrack.glb"}) {
-        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        const fs::path source_root = test_source_root();
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
         if (!fs::is_regular_file(path)) {
@@ -1756,7 +1757,7 @@ void test_wingtip_reaches_the_commanded_flap() {
     // in the same band. Chain length is the variable this pins.
     namespace fs = std::filesystem;
     for (const char* name : {"assets/stormsail.glb", "assets/embercrest.glb"}) {
-        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        const fs::path source_root = test_source_root();
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
         if (!fs::is_regular_file(path)) {
@@ -1866,7 +1867,7 @@ void test_legs_swing_with_the_frame() {
 // directions isolate the leg response from the root's brake flare and neck.
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
-    const fs::path root = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path root = test_source_root();
     for (const char* name : {"generated", "dragon", "embercrest", "rimefang", "frostvein",
                              "blightmaw", "ironroot", "stormsail", "tidewrack", "alt/prowler"}) {
         Skeleton skeleton;
@@ -2051,7 +2052,7 @@ void test_aimed_fold_points_the_bones() {
 void test_stance_keeps_the_feet_on_the_floor() {
     std::printf("the standing stance keeps every foot on the bind floor\n");
     namespace fs = std::filesystem;
-    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path source_root = test_source_root();
     int with_stance = 0;
     for (const char* name : {"assets/rimefang.glb", "assets/blightmaw.glb", "assets/ironroot.glb",
                              "assets/stormsail.glb", "assets/tidewrack.glb"}) {
@@ -2156,7 +2157,7 @@ void test_stance_keeps_the_feet_on_the_floor() {
 void test_limbs_plant_on_the_terrain() {
     std::printf("each standing limb plants on the terrain under it\n");
     namespace fs = std::filesystem;
-    const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path source_root = test_source_root();
     fs::path path = source_root / "assets/rimefang.glb";
     if (!fs::is_regular_file(path)) path = fs::path("assets/rimefang.glb");
     if (!fs::is_regular_file(path)) {
@@ -2262,7 +2263,7 @@ void test_optional_embercrest_asset() {
         CHECK(fs::is_regular_file(asset_path));
         if (!fs::is_regular_file(asset_path)) return;
     } else {
-        const fs::path source_root = fs::path(__FILE__).parent_path().parent_path();
+        const fs::path source_root = test_source_root();
         const fs::path candidates[] = {
             fs::path("assets/embercrest-scripted.glb"),
             fs::path("../assets/embercrest-scripted.glb"),
@@ -2444,7 +2445,7 @@ void test_optional_embercrest_asset() {
 void test_static_gltf_loads_a_prop() {
     std::printf("the static glTF loader reads a tracked prop\n");
     namespace fs = std::filesystem;
-    const fs::path path = fs::path(__FILE__).parent_path().parent_path() / "assets/props/watchtower.glb";
+    const fs::path path = test_source_root() / "assets/props/watchtower.glb";
     std::vector<gfx::StaticMesh> meshes;
     std::string error;
     CHECK(gfx::load_static_gltf(path.string().c_str(), meshes, &error));
@@ -2559,7 +2560,7 @@ void test_melee_gestures_move_the_body() {
 // models exercise the opposite facing convention and their actual root scale.
 void test_melee_load_recovery_and_switch() {
     namespace fs = std::filesystem;
-    const fs::path root = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path root = test_source_root();
     for (const char* name : {"dragon", "embercrest", "rimefang", "frostvein", "blightmaw",
                              "ironroot", "stormsail", "tidewrack", "alt/prowler"}) {
         const fs::path path = root / (std::string("assets/") + name + ".glb");

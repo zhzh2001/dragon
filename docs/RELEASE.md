@@ -69,7 +69,13 @@ tools/release/package_macos.sh 0.1.0     # -> dist/Dragon-0.1.0-macos.zip
 ```
 
 The script, and what P0 changed to make a copy work, are in
-`docs/PORTING.md`. The zip holds `Dragon/`:
+`docs/PORTING.md`. Windows is `tools/release/package_windows.sh`, which
+cross-builds on the Mac: `Dragon/` holds `dragon.exe`, the shaders baked to
+DXIL and SPIR-V, the same `assets/`, a `README.txt`
+(`tools/release/README-windows.txt`) and the licence files. Nothing on the
+Mac can run the result, so unpack it on x99-windows and run the goldens
+with `--binary` before uploading it (`docs/PORTING.md`, P2). There is no Linux
+package yet; the same section says why. The zip holds `Dragon/`:
 
 - `Dragon.app`. Its `Contents/Resources` carries `shaders/`, `assets/`
   (props, textures, fonts, and the seven species' `.glb` at 2048² with

@@ -1,0 +1,51 @@
+# Build and run the fifteen test suites on macOS, Linux and Windows on every
+# push (docs/PORTING.md, P2). The suites are renderer-free, so the runners
+# need no GPU. Rendering is checked on real machines by tools/golden, not
+# here. The game itself is built too, without the runtime shader compiler
+# (DRAGON_SHADERCROSS=OFF), with SDL3 built from source as packages do.
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update -q && sudo apt-get install -qy ninja-build; fi
+          if [ "$RUNNER_OS" = macOS ]; then brew install ninja; fi
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            git
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

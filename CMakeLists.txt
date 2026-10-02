@@ -74,6 +74,11 @@ target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio)
 # DRAGON_DEV_ROOTS=OFF: it carries its own data, and no source path from the
 # build machine is baked into the binary.
 option(DRAGON_DEV_ROOTS "Fall back to the source tree for assets and shaders" ON)
+if(WIN32 AND NOT DRAGON_DEV_ROOTS)
+  # A Windows package opens no console window (main.cpp attaches to the
+  # parent terminal when there is one).
+  set_target_properties(dragon PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
 if(DRAGON_DEV_ROOTS)
   target_compile_definitions(dragon PRIVATE
     SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/shaders"

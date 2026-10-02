@@ -4,6 +4,12 @@
     tools/golden/golden.py capture [--set NAME] [--out DIR] [--only NAME,...]
     tools/golden/golden.py compare [--set NAME] [--out DIR] [--only NAME,...]
     tools/golden/golden.py compare --set metal --loose     # on another backend
+    tools/golden/golden.py commands [--exe PATH] [--extra ARGS]  # a script for a remote box
+    tools/golden/golden.py compare --set d3d12 --renders DIR      # renders made elsewhere
+
+A machine without Python -- the Windows box -- runs the lines `commands`
+prints, each writing <name>.bmp, and `--renders` compares the BMPs once
+they are copied back.
 
 `capture` renders each scene below headless with build/dragon and writes
 tests/golden/<set>/<name>.png. `compare` renders the same scenes into --out
@@ -72,10 +78,13 @@ LOOSE = {'mean': 6.0, 'over8': 0.25}
 DEFAULT_SET = {'darwin': 'metal', 'linux': 'vulkan', 'win32': 'd3d12'}.get(sys.platform, 'metal')
 
 
+EXTRA = []  # --extra: appended to every scene, e.g. --gpu-driver vulkan
+
+
 def render(name, out_dir):
     frames, args = SCENES[name]
     bmp = os.path.join(out_dir, name + '.bmp')
-    cmd = [BINARY, '--headless', '--frames', str(frames), '--screenshot', bmp] + MODEL + args
+    cmd = [BINARY, '--headless', '--frames', str(frames), '--screenshot', bmp] + MODEL + args + EXTRA
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if result.returncode != 0 or not os.path.exists(bmp):
         sys.exit(f'{name}: render failed\n{result.stderr[-2000:]}')
@@ -112,18 +121,39 @@ def diff(golden_png, test_png, diff_png):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('mode', choices=['capture', 'compare'])
+    parser.add_argument('mode', choices=['capture', 'compare', 'commands'])
     parser.add_argument('--set', default=DEFAULT_SET)
     parser.add_argument('--loose', action='store_true')
+    parser.add_argument('--renders', help='compare (or capture) these <name>.bmp/.png instead of rendering')
+    parser.add_argument('--exe', default='dragon.exe', help='the executable `commands` names')
+    parser.add_argument('--extra', default='', help='arguments appended to every scene, e.g. "--gpu-driver vulkan"')
     parser.add_argument('--out')
     parser.add_argument('--only')
     parser.add_argument('--binary', help='render with this executable instead of build/dragon, '
                         'e.g. a package\'s Dragon.app/Contents/MacOS/dragon to check its baked shaders')
     args = parser.parse_args()
-    global BINARY
+    global BINARY, EXTRA
+    EXTRA = args.extra.split()
     if args.binary:
         BINARY = os.path.abspath(args.binary)
     names = args.only.split(',') if args.only else list(SCENES)
+
+    if args.mode == 'commands':
+        for name in names:
+            frames, extra = SCENES[name]
+            line = [args.exe, '--headless', '--frames', str(frames), '--screenshot', name + '.bmp'] + MODEL + extra
+            print(' '.join(line + ([args.extra] if args.extra else [])))
+        return
+
+    def provided(name, out_dir):
+        for ext in ('.png', '.bmp'):
+            path = os.path.join(args.renders, name + ext)
+            if os.path.exists(path):
+                png = os.path.join(out_dir, name + '.png')
+                Image.open(path).convert('RGB').save(png, optimize=True)
+                return png
+        sys.exit(f'{name}: no render in {args.renders}')
+    obtain = provided if args.renders else render
 
     golden = os.path.join(ROOT, 'tests', 'golden', args.set)
     tolerance = LOOSE if args.loose else TOLERANCE
@@ -131,14 +161,14 @@ def main():
         out = args.out or golden
         os.makedirs(out, exist_ok=True)
         for name in names:
-            print(f'{name}: {render(name, out)}')
+            print(f'{name}: {obtain(name, out)}')
         return
 
     out = args.out or tempfile.mkdtemp(prefix='golden-')
     os.makedirs(out, exist_ok=True)
     failed = []
     for name in names:
-        test = render(name, out)
+        test = obtain(name, out)
         r = diff(os.path.join(golden, name + '.png'), test, os.path.join(out, name + '-diff.png'))
         ok = r['mean'] <= tolerance['mean'] and r['over8'] <= tolerance['over8']
         tx, ty, tm = r['tile']

@@ -11,6 +11,11 @@ if(DRAGON_FETCH_SDL)
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
   set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
   set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+  # Cross-compiling, SDL's HIDAPI check would find the build machine's own
+  # libusb (Homebrew's, on the Mac) for a Windows target. Windows needs none.
+  if(CMAKE_CROSSCOMPILING)
+    set(SDL_HIDAPI_LIBUSB OFF CACHE BOOL "" FORCE)
+  endif()
   FetchContent_Declare(SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
     GIT_TAG        release-3.4.16

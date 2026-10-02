@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "test_paths.h"
 #include "game/breath.h"
 
 static int failures = 0;
@@ -25,9 +26,7 @@ static bool near(float a, float b, float tolerance = 1e-4f) {
     return (d < 0 ? -d : d) <= tolerance;
 }
 
-static std::string temp_path(const char* name) {
-    return std::string("/tmp/dragon_test_") + name;
-}
+static std::string temp_path(const char* name) { return test_temp_path(name); }
 
 int main() {
     // Defaults are fire: a species that ships no profile breathes exactly what
@@ -47,7 +46,7 @@ int main() {
     {
         game::BreathProfile profile;
         profile.scales.range = 2.5f;
-        const bool loaded = game::load_breath_profile(profile, "/tmp/dragon_test_absent.cfg");
+        const bool loaded = game::load_breath_profile(profile, temp_path("absent.cfg").c_str());
         CHECK(!loaded);
         CHECK(near(profile.scales.range, 2.5f));
     }

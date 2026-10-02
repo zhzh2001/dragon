@@ -45,6 +45,17 @@ cmake --build build
 ctest --test-dir build            # fifteen suites, plain executables, no framework
 ```
 
+Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
+P2, "Using x99 for this"). A cross-compiled suite finds the source tree
+through `DRAGON_SOURCE_ROOT`:
+
+```sh
+cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+  -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF -DDRAGON_DEV_ROOTS=OFF
+tools/release/package_macos.sh 0.2.0      # dist/Dragon-0.2.0-macos.zip
+tools/release/package_windows.sh 0.2.0    # dist/Dragon-0.2.0-windows.zip
+```
+
 ### Verifying without a human at the keyboard
 
 This is the workhorse. Render the thing and look at it:
@@ -214,7 +225,9 @@ flight controls.
   development build needs shadercross installed (`tools/build_shadercross.sh`);
   a package bakes the MSL ahead of time (`tools/release/bake_shaders.sh`).
   `tools/golden/golden.py compare` is the gate for any shader or backend
-  change: eight scenes, deterministic in headless, against `tests/golden/`.
+  change: eight scenes, deterministic in headless, against the backend's
+  own set in `tests/golden/{metal,vulkan,d3d12}`, plus `--set metal --loose`
+  across backends (GPUs filter differently; a wrong frame still fails it).
 - **Lighting is one path.** Every world shader lights through `direct_sun`,
   `ambient_light` and `apply_fog` in `scene_common.hlsl` (plants add
   `translucent_sun`). Do not add a per-shader wrap or ambient: the seam
@@ -440,7 +453,7 @@ src/editor/  ImGui integration: context, the two HUD faces, the panel theme
 src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
-shaders/     MSL, hot-reloaded from the source tree
+shaders/     HLSL, hot-reloaded from the source tree
 tests/       fifteen suites: math, camera, camera_rig, flight, rally, anim, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above

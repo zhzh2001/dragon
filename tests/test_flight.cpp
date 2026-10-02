@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "test_paths.h"
 #include "game/flight.h"
 #include "game/maneuver.h"
 #include "game/terrain.h"
@@ -468,7 +469,8 @@ void test_tuning_round_trip() {
     original.mass = 777.5f;
     original.roll_rate = 3.75f;
 
-    const char* path = "/tmp/dragon_tuning_test.cfg";
+    const std::string path_store = test_temp_path("tuning.cfg");
+    const char* path = path_store.c_str();
     CHECK(game::save_tuning(original, path));
 
     FlightTuning loaded;  // starts at defaults

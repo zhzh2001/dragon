@@ -16,7 +16,11 @@ What is built, in the order it was built. The plan these came from is
   shipped OFL fonts, `tools/release/package_macos.sh`.
 - **P1**: the shaders are HLSL through SDL_shadercross, matching the MSL
   goldens to within 1/255 in all but a handful of pixels (`docs/PORTING.md`).
-- **Next**: P2, Windows and Linux on D3D12 and Vulkan. Then the retro track.
+- **P2** (2026-10-02): Linux on Vulkan, and Windows on D3D12 and Vulkan,
+  checked on x99, with per-backend goldens and CI on all three. There is a
+  Windows package, but no Linux package yet: it needs a build in an older
+  container for glibc.
+- **Next**: the retro track, starting with R0 (`docs/PORTING.md`).
 
 ## Latest asset candidates — 2026-09-28
 

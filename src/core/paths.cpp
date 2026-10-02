@@ -24,7 +24,7 @@ bool is_file(const std::string& path) {
 
 std::string join(const std::string& root, std::string_view rel) {
     std::string out = root;
-    if (!out.empty() && out.back() != '/') out += '/';
+    if (!out.empty() && out.back() != '/' && out.back() != '\\') out += '/';
     out.append(rel);
     return out;
 }

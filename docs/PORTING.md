@@ -148,28 +148,101 @@ contributions written with generative AI (their `CLAUDE.md` and PR template
 say so). Use them freely; never open an issue or a PR against them from an
 agent session.
 
-## Phase P2 — Windows 10/11 and Linux on modern GPUs
+## Phase P2 — Windows 10/11 and Linux on modern GPUs (done, 2026-10-02)
 
-After P1 this is mostly build plumbing:
+Done, apart from a Linux package. On x99 (RTX 5060 Ti), the game runs on
+Vulkan under CachyOS, and on D3D12 and Vulkan under Windows 10 22H2. All
+15 suites pass on every platform, and so do the goldens, each backend
+against its own set and every set against Metal's under `--loose`.
 
-- Headless over SSH on Linux: try the `offscreen` video driver with a
-  `SDL_WINDOW_VULKAN` window (P0 found it needs a graphics flag), else run
-  under a headless compositor.
-- Request `SPIRV | DXIL | MSL` and let SDL pick: Direct3D 12 on Windows,
-  Vulkan on Linux, Metal on the Mac. `--gpu-driver vulkan` forces a backend,
-  so D3D12 and Vulkan can both be checked on one Windows machine.
-- Build Windows with MSVC or clang-cl, or with the MinGW-w64 cross-compiler
-  already installed on the Mac (see R6). Build Linux with GCC or Clang. Fetch
-  SDL3 with CMake on all three.
-- **CI on GitHub Actions:** build and `ctest` on macOS, Windows and Ubuntu on
-  every push. The test suites are renderer-free, so they run on CI runners
-  with no GPU. Rendering checks stay on the real machines below.
-- Gamepad, mouse capture and HiDPI go through SDL already. Check the
-  framebuffer-scale logic in `ImGuiLayer::begin_frame` on a Windows 150%
-  display, the same bug class that once drew every panel at double size.
+**What it took**
+- **Shader formats.** The device asks for the platform's formats: MSL on
+  Apple, DXIL|SPIRV on Windows, SPIRV on Linux. `--gpu-driver` picks the
+  backend. Baked packages choose `.msl`/`.dxil`/`.spv` by what the device
+  accepts, so a Windows package carries DXIL and SPIR-V and runs either.
+- **Linux builds unchanged.** GCC 16 on CachyOS compiled it with no source
+  changes. Shadercross builds there in seconds against the Vulkan SDK's DXC
+  and SPIRV-Cross (non-vendored). The SDK ships no `libdxil`, which
+  shadercross's finder demands but only uses in an install step that is off,
+  so the variable is pointed at `libdxcompiler.so`.
+- **Linux headless over SSH**, with nobody logged in: SDL's `offscreen`
+  video driver with a Vulkan window (`VK_EXT_headless_surface`). Without
+  the Vulkan flag the driver tries to load OpenGL.
+- **Windows is cross-built on the Mac.** `cmake/mingw-w64-x86_64.cmake`
+  uses MinGW-w64 GCC 16 (UCRT). The result is one static `dragon.exe` that
+  imports only Windows system DLLs. DXIL is baked on the Mac too:
+  shadercross's vendored DXC includes the `libdxil` that signs it. A package
+  is a GUI-subsystem program; it attaches to the parent console only when
+  it was given no stdout, so a pipe still gets the log.
+- **Windows headless works from the SSH session itself** (session 0):
+  D3D12 creates a device and renders offscreen there. A windowed run needs
+  the console session, so it goes through a one-off scheduled task
+  (`-LogonType Interactive`). That is how the swapchain, the HUD scale and
+  the double-click start (a hoard run) were checked.
+- **Tests had POSIX assumptions.** They wrote to `/tmp`, and found the source
+  tree through `__FILE__`, which a cross-compiled binary carries as the
+  Mac's path. `tests/test_paths.h` now gives the OS temp directory and
+  `DRAGON_SOURCE_ROOT`. Five suites failed on Windows before that. And
+  `test_anim` had been passing there by skipping: with the models found, it
+  runs 1092 checks instead of 744.
+- **A cross-platform float difference exposed a test scenario a player
+  cannot reach.** `test_bot` chased a target through the mountains, and on
+  Linux the bot hovered over a rising slope and touched down; on macOS
+  rounding luck kept it up. The target now stays above the terrain.
+- **Headless reads no gamepad.** A controller left on by the desk changed
+  the HUD's labels in captures and would have steered the run.
 
-Exit test: the goldens match on D3D12 and Vulkan; a hoard run and a
-`--demo` soak complete on both Windows and Linux.
+**How far the backends differ**
+
+| Against | Valley mean | Pixels off by more than 8/255 | Where |
+|---|---|---|---|
+| Metal (M5) → Vulkan (5060 Ti, Linux) | 1.7 | 4.5% | anisotropic terrain, alpha-tested cards, the dragon's maps; the analytic sky is exact |
+| Vulkan Linux → Vulkan Windows (same GPU) | 0.001 | 0.001% | nothing |
+| Vulkan → D3D12 (same GPU) | 0.37 | 0.3% | one-LSB noise on textured ground, and shadow edges |
+
+So the gate is **one golden set per backend**: `tests/golden/{metal,vulkan,d3d12}`,
+each captured on its own backend after being reviewed beside Metal's. Then
+`compare --set metal --loose` (mean at most 6, at most 25% of pixels off by more than 8)
+is the cross-check, which every backend passes. `ground` is the loosest
+scene, at 5.5: it is mostly large cards near the camera. A 900-frame landing
+ends in the same flight state on both platforms, so that difference is not the
+simulation.
+
+**Packages.** `tools/release/package_windows.sh` builds a 144 MB zip on the
+Mac. Unpacked on Windows, it matches the D3D12 goldens exactly and passes
+them all on Vulkan. A 9000-frame `--demo` soak ran into valley 2 in 50 s
+with no errors. **A Linux package is not done.** A CachyOS build requires
+glibc 2.43, which only rolling distros have, so it must be built in an
+older container (Ubuntu 24.04: glibc 2.39). x99's Docker keeps its images
+on a root disk with 3.7 GB free, so it waits for Docker to move to
+`/mnt/Data`, or for a build on another box.
+
+**CI.** `.github/workflows/ci.yml` builds and runs the suites on macOS,
+Ubuntu and Windows (MSYS2 UCRT64) on every push to the public repository,
+with SDL from source and no runtime shader compiler.
+
+**Display scale:** x99's Windows desktop is at 125% (DPI 120), and the
+windowed check ran there. SDL3 declares per-monitor-v2 DPI awareness by
+default, and Windows window sizes are physical pixels, so the frame is a sharp
+1280x720 with the HUD at the right proportions -- the window just looks smaller
+than on a 100% display. Sizing the first window by the display scale is a
+polish item. The D3D12 log also warns about
+texture rows not aligned to 256 bytes and about the Agility SDK's
+UnrestrictedBufferTextureCopyPitch. Both are performance notes, and the
+first is the 1x1 and odd-width textures.
+
+### Using x99 for this
+
+- CachyOS is the GRUB default. `sudo grub-reboot 'Windows Boot Manager (on
+  /dev/nvme0n1p1)' && sudo reboot` boots Windows once, and Windows' next
+  reboot is back in CachyOS.
+- Windows answers as `x99-windows` (LAN) or `x99-windows-ts` (Tailscale).
+  Its SSH shell is PowerShell 7, so join commands with `;`, not `&`.
+- `D:` under Windows is `/mnt/Data` under Linux: the source tree is at
+  `D:\dragon` and `/mnt/Data/dragon`. Builds stay off the Linux root disk,
+  which is nearly full. Windows has Python 3.11 with Pillow, so
+  `tools/golden` runs there with `--binary`. On Linux, Pillow is in a venv
+  at `/mnt/Data/scratch/venv`.
 
 ## The retro track: one D3D9 backend, three tiers
 

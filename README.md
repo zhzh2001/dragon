@@ -67,7 +67,7 @@ model, camera, AI, gameplay and audio synthesis.
 
 ## Building
 
-Requires macOS with Metal, CMake 3.24 or later, Ninja, SDL3
+On macOS this requires Metal, CMake 3.24 or later, Ninja, SDL3
 (`brew install sdl3`), and SDL_shadercross with DXC, which the development
 build uses to compile its HLSL shaders at runtime. Build it once with
 `tools/build_shadercross.sh`: it takes about half an hour, since it
@@ -91,7 +91,9 @@ comes with the release packages. Any rigged glTF can be tried with
 dragons the engine was first built around.
 
 **Packages.** `tools/release/package_macos.sh` builds a universal macOS 11+
-app with the roster inside. The ready-made one is on the
+app with the roster inside, and `tools/release/package_windows.sh` a
+Windows 10+ build (D3D12, or Vulkan with `--gpu-driver vulkan`),
+cross-compiled on the Mac. Linux builds and runs on Vulkan from source. The ready-made one is on the
 [releases page](https://github.com/zhzh2001/dragon/releases), and its
 `README.txt` explains how to open an unsigned app. Records and saved tuning go to
 `~/Library/Application Support/Paleshell/Dragon`.

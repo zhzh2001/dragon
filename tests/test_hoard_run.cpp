@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "test_paths.h"
 #include "game/combat.h"
 #include "game/hoard_run.h"
 #include "game/terrain.h"
@@ -397,7 +398,8 @@ void test_records() {
     CHECK(records.best_hoard == 300.0f && records.best_time == 150.0f);
     CHECK(records.runs == 3 && records.banked == 2);
 
-    const char* path = "/tmp/dragon_test_runs.txt";
+    const std::string path_store = test_temp_path("runs.txt");
+    const char* path = path_store.c_str();
     CHECK(records.save(path));
     game::RunRecords loaded;
     CHECK(loaded.load(path));
