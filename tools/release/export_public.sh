@@ -11,8 +11,8 @@
 #   - replaces the local home path with `~` in files and commit messages;
 #   - with --email, rewrites the author/committer address of the human
 #     commits (Paleshell) to ADDRESS, e.g. a GitHub noreply address;
-#   - drops every image version that is not in the current tree: renders
-#     that were replaced or deleted (docs/RELEASE.md);
+#   - drops the superseded render versions in stripped_images.txt, a list
+#     frozen at the first publishes so history stays append-only;
 #   - with --squash, replaces the history with one commit.
 # It prints the resulting size and pushes nothing: pushing is a separate,
 # deliberate step (docs/RELEASE.md).
@@ -67,20 +67,16 @@ elif b"\\0" not in data[:8000]:
     blob.data = data.replace(home, b"~")
 PY
 
-# Screenshots: history keeps only the image versions the current tree still
-# has. A render that was replaced or deleted was superseded, and those are
-# most of the history's weight. Ids are the original ones, so this runs
-# before anything is rewritten.
+# Screenshots: the superseded render versions listed in
+# tools/release/stripped_images.txt, a frozen list (it says why). Ids are the
+# original ones, so this runs before anything is rewritten.
 stale=$(mktemp)
-git ls-tree -r HEAD | awk '{print $3}' | sort -u > "$stale.head"
-git rev-list --objects --all \
-  | grep -i -E ' .*\.(png|gif|jpe?g|bmp)$' | awk '{print $1}' | sort -u \
-  | comm -23 - "$stale.head" > "$stale"
+grep -v -E '^(#|$)' "$src/tools/release/stripped_images.txt" > "$stale"
 echo "stripping $(wc -l < "$stale" | tr -d ' ') superseded image versions"
 
 # shellcheck disable=SC2086
 git filter-repo --force --invert-paths $paths --strip-blobs-with-ids "$stale"
-rm -f "$stale" "$stale.head"
+rm -f "$stale"
 git filter-repo --force \
   --blob-callback "$(cat "$callback")" --replace-message "$replace"
 rm -f "$callback"

@@ -37,8 +37,15 @@ stripped and the 72 unreferenced renders deleted from `main`, the published
 mirror is **167 commits and 574 MB**. Keep the history. Its commit messages
 are the project's record of why things are the way they are, and they carry
 the `Co-Authored-By` trailers that `AI_DISCLOSURE.md` points to. A render that
-no doc cites does not belong in `artifacts/`: cite it or delete it, or it
-leaves the public history on the next export anyway.
+no doc cites does not belong in `artifacts/`: cite it or delete it.
+
+The superseded renders are stripped by a **frozen** list,
+`tools/release/stripped_images.txt` (167 ids, fixed at the P1 publish). The
+first version recomputed the list from each export's tree. That rewrote old
+commits whenever a render was superseded later, and the P2 push was refused
+as a non-fast-forward. So the public history is append-only now. A render
+replaced after P1 stays in it, and pruning more means a forced push, which is
+the user's decision.
 
 `AGENTS.md`, `CLAUDE.md` and `.claude/skills/` go public too. They are
 honest evidence of how the project was made, and they hold no secrets: the
