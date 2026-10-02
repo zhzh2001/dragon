@@ -30,36 +30,37 @@ The script clones `main` alone into a new directory and rewrites the clone:
 It then checks that the excluded paths and the home path are gone, and
 prints the size. It pushes nothing.
 
-Measured on 2026-10-01:
-
-| Variant | Commits | `.git` |
-|---|---|---|
-| history kept | 164 | 756 MB |
-| `--squash` | 1 | 664 MB |
-
-Squashing buys little, because the tree itself is most of it: `artifacts/` is
-646 MB of renders. **Keep the history.** Its commit messages are the
-project's record of why things are the way they are, and they carry the
-`Co-Authored-By` trailers that `AI_DISCLOSURE.md` points to.
+Measured on 2026-10-01: the full history, before the screenshot rules, was
+164 commits and 756 MB, and 664 MB squashed. Squashing buys little, because
+the tree itself is most of the weight. With superseded image versions
+stripped and the 72 unreferenced renders deleted from `main`, the published
+mirror is **167 commits and 574 MB**. Keep the history. Its commit messages
+are the project's record of why things are the way they are, and they carry
+the `Co-Authored-By` trailers that `AI_DISCLOSURE.md` points to. A render that
+no doc cites does not belong in `artifacts/`: cite it or delete it, or it
+leaves the public history on the next export anyway.
 
 `AGENTS.md`, `CLAUDE.md` and `.claude/skills/` go public too. They are
 honest evidence of how the project was made, and they hold no secrets: the
 2026-10-01 sweep found no keys or tokens. The machine names (x99, t5810) are
 hostnames on a private network, not addresses.
 
-Publishing, once the mirror is built:
+**Published** on 2026-10-01 as https://github.com/zhzh2001/dragon (public,
+MIT detected, `main` only). The mirror checkout is `~/src/dragon-public`, with
+`origin` pointing there. To update it:
 
-1. Create an empty GitHub repository (no README or licence, so the push
-   is a fast-forward).
-2. In the mirror: `git remote add origin git@github.com:<user>/dragon.git`,
-   then `git push -u origin main`. Push `main` only, never `--all`.
-3. Topics and description: say "AI-assisted" in the description. The label
-   is a term of the Hunyuan agreement (`AI_DISCLOSURE.md`).
+```sh
+cd ~/src && rm -rf dragon-public-next
+game-claude/tools/release/export_public.sh dragon-public-next
+cd dragon-public-next && git remote add origin https://github.com/zhzh2001/dragon.git
+git fetch origin && git merge-base --is-ancestor origin/main main && git push origin main
+cd .. && rm -rf dragon-public && mv dragon-public-next dragon-public
+```
 
-Later updates: re-run the export into a fresh directory and push. The
-rewrite is deterministic, so unchanged history keeps its hashes. Check that
-the push is a fast-forward before pushing; if it is not, find out why
-before anything is forced.
+The rewrite is deterministic, so unchanged history keeps its hashes and the
+push is a fast-forward. If `merge-base` fails, something in the excludes or
+the screenshot rule changed what old commits contain. Find out what before
+anything is forced: a forced push breaks every clone.
 
 ## A copy of the game
 
