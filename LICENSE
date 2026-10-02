@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
--------------------------------------------------------------------------------
-Scope. This licence covers the source code, shaders, tools, tests, docs and
-the original assets in this repository. It does NOT cover third-party
-material, which keeps its own licence: the libraries in
-THIRD_PARTY_NOTICES.md, and the Sketchfab models and every render of them in
-ATTRIBUTION.md. Much of this repository was written or generated with AI
-tools (AI_DISCLOSURE.md); to the extent a part of it is not protected by
-copyright, it is offered on the same terms with no claim made over it.

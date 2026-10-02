@@ -65,6 +65,6 @@ prompts are in `artifacts/dragon-options/` beside the images they made.
 US copyright does not extend to purely AI-generated material (US Copyright
 Office, *Copyright and Artificial Intelligence, Part 2*, January 2025).
 Human selection, arrangement and modification can still be protected. So the
-project's licence (`LICENSE`, MIT) is a grant on whatever is protectable and
+project's licence (`LICENSE`, MIT; its scope is in `ATTRIBUTION.md`) is a grant on whatever is protectable and
 an open offer on the rest. Third-party material keeps its own licence
 (`ATTRIBUTION.md`, `THIRD_PARTY_NOTICES.md`).

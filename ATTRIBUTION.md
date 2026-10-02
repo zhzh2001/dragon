@@ -20,8 +20,13 @@ hobby project's reading, not legal advice.
 | `dragon.glb` and `alt/prowler.glb`, the two Sketchfab dragons | no | no | no | Early attempts, superseded by the roster; anyone can download them (below) |
 | Renders of those two in `artifacts/` | yes, credited | -- | -- | Screenshots are adapted material: CC BY-NC for the Black Dragon, CC BY for the Prowler |
 
-Everything not ours is kept out of the MIT grant: the `LICENSE` scope
-paragraph says so, and this table is the list.
+**Scope of `LICENSE`.** The MIT licence covers the source code, shaders,
+tools, tests, docs and the original assets. It does not cover third-party
+material, which keeps its own licence: the libraries in
+`THIRD_PARTY_NOTICES.md`, and the Sketchfab models and every render of them
+listed here. Much of the repository was written or generated with AI tools
+(`AI_DISCLOSURE.md`); where a part of it is not protected by copyright, it is
+offered on the same terms, with no claim made over it.
 
 ## Hunyuan 3D: the generated roster
 
