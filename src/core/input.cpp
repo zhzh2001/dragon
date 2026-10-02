@@ -79,7 +79,7 @@ void Input::handle_event(const SDL_Event& event, bool consumed) {
             break;
 
         case SDL_EVENT_GAMEPAD_ADDED:
-            if (!gamepad_) {
+            if (!gamepad_ && gamepads_enabled_) {
                 gamepad_ = SDL_OpenGamepad(event.gdevice.which);
                 if (gamepad_) {
                     gamepad_id_ = event.gdevice.which;

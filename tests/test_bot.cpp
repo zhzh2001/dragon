@@ -350,8 +350,15 @@ void test_long_sim_stays_finite() {
     for (int i = 0; i < 600 * 60; ++i) {
         const float dt = 1.0f / 60.0f;
         const float t = float(i) * dt;
-        const Vec3 target{600.0f * std::sin(0.11f * t), 500.0f + 150.0f * std::sin(0.23f * t),
-                          -600.0f * std::cos(0.07f * t)};
+        Vec3 target{600.0f * std::sin(0.11f * t), 500.0f + 150.0f * std::sin(0.23f * t),
+                    -600.0f * std::cos(0.07f * t)};
+        // A player is never underground, and the loop above passes through
+        // the ridges: the terrain under it reaches 990 m. Chasing a target
+        // inside a mountain, the bot slowed to a 12 m/s hover over the rising
+        // slope and touched down at 515 s on Linux; on macOS the same
+        // trajectory missed by luck, its float rounding putting it elsewhere.
+        // So the target flies at least 60 m over the ground under it.
+        target.y = maxf(target.y, terrain.height_at(target.x, target.z) + 60.0f);
         // The ground the app hands a bot: the highest of below and one, two
         // and three seconds along the flight path (App::update_bots). One
         // sample at two seconds passed only by luck, and a sharper ridge

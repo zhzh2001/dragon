@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """Golden screenshots: the regression gate for every shader backend.
 
-    tools/golden/golden.py capture [--out DIR] [--only NAME,...]
-    tools/golden/golden.py compare [--golden DIR] [--out DIR] [--only NAME,...]
+    tools/golden/golden.py capture [--set NAME] [--out DIR] [--only NAME,...]
+    tools/golden/golden.py compare [--set NAME] [--out DIR] [--only NAME,...]
+    tools/golden/golden.py compare --set metal --loose     # on another backend
 
 `capture` renders each scene below headless with build/dragon and writes
-DIR/<name>.png (default tests/golden/, the tracked set). `compare` renders
-the same scenes into --out (default a scratch directory) and diffs each one
-against the golden. It prints the mean and maximum channel error, the share
+tests/golden/<set>/<name>.png. `compare` renders the same scenes into --out
+(default a scratch directory) and diffs each one against the set.
+
+There is one set per backend, named for it (metal, vulkan, d3d12) and chosen
+by platform when --set is omitted. Different GPUs do not filter alike: on
+Vulkan on an RTX 5060 Ti against Metal on an M5, every frame of the valley
+differed by a mean of 1.7/255 from the first frame on. The differences sat
+on the anisotropically filtered terrain, the alpha-tested cards and the
+dragon's maps, and the analytic sky was exact. So a backend's set is
+captured on it once, after looking at it beside Metal's. `--loose` against
+metal is the cross-backend sanity check: it passes filtering differences
+and fails a frame that is wrong. It prints the mean and maximum channel error, the share
 of pixels off by more than 8/255, and the worst 32x32 tile, writes an
 amplified difference image beside each render, and exits 1 when a scene is
 over its tolerance.
@@ -55,6 +65,11 @@ SCENES = {
 # A translation through SPIR-V reorders float maths, so a pixel may move by
 # a unit or two; a wrong shader moves thousands by much more.
 TOLERANCE = {'mean': 0.6, 'over8': 0.002}
+# Against another backend's set: filtering differs, so only a frame that is
+# wrong fails -- a missing fog, a black pass, a flipped matrix all move the
+# mean by tens. `ground` is the loosest scene, being mostly near cards.
+LOOSE = {'mean': 6.0, 'over8': 0.25}
+DEFAULT_SET = {'darwin': 'metal', 'linux': 'vulkan', 'win32': 'd3d12'}.get(sys.platform, 'metal')
 
 
 def render(name, out_dir):
@@ -98,7 +113,8 @@ def diff(golden_png, test_png, diff_png):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('mode', choices=['capture', 'compare'])
-    parser.add_argument('--golden', default=os.path.join(ROOT, 'tests', 'golden'))
+    parser.add_argument('--set', default=DEFAULT_SET)
+    parser.add_argument('--loose', action='store_true')
     parser.add_argument('--out')
     parser.add_argument('--only')
     parser.add_argument('--binary', help='render with this executable instead of build/dragon, '
@@ -109,8 +125,10 @@ def main():
         BINARY = os.path.abspath(args.binary)
     names = args.only.split(',') if args.only else list(SCENES)
 
+    golden = os.path.join(ROOT, 'tests', 'golden', args.set)
+    tolerance = LOOSE if args.loose else TOLERANCE
     if args.mode == 'capture':
-        out = args.out or args.golden
+        out = args.out or golden
         os.makedirs(out, exist_ok=True)
         for name in names:
             print(f'{name}: {render(name, out)}')
@@ -121,8 +139,8 @@ def main():
     failed = []
     for name in names:
         test = render(name, out)
-        r = diff(os.path.join(args.golden, name + '.png'), test, os.path.join(out, name + '-diff.png'))
-        ok = r['mean'] <= TOLERANCE['mean'] and r['over8'] <= TOLERANCE['over8']
+        r = diff(os.path.join(golden, name + '.png'), test, os.path.join(out, name + '-diff.png'))
+        ok = r['mean'] <= tolerance['mean'] and r['over8'] <= tolerance['over8']
         tx, ty, tm = r['tile']
         print(f"{'ok  ' if ok else 'FAIL'} {name:14s} mean {r['mean']:.3f}  max {r['max']:3d}  "
               f">8 {100 * r['over8']:.3f}%  worst tile ({tx},{ty}) {tm:.1f}")

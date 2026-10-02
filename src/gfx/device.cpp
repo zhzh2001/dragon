@@ -16,17 +16,38 @@ bool Device::init(const Config& config) {
     // would remove that, but on macOS it fails creating the window (it wants
     // OpenGL), and "dummy" leaves SDL GPU with no backend. Which driver
     // Linux-over-SSH needs is a P2 question (docs/PORTING.md), settled on x99.
+#if !defined(__APPLE__) && !defined(_WIN32)
+    // On Linux a headless run needs no display server at all: SDL's
+    // offscreen video driver makes the window, and it creates Vulkan
+    // surfaces through VK_EXT_headless_surface. That is what lets a render
+    // run over SSH with nobody logged in. The window must say it is a
+    // Vulkan one, or the driver tries to load OpenGL for it.
+    const bool offscreen = headless_ && !SDL_getenv("DISPLAY") && !SDL_getenv("WAYLAND_DISPLAY");
+    if (offscreen) SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) return SDL_FAIL("SDL_Init");
 
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (headless_) flags |= SDL_WINDOW_HIDDEN;
+#if !defined(__APPLE__) && !defined(_WIN32)
+    if (offscreen) flags |= SDL_WINDOW_VULKAN;
+#endif
 
     window_ = SDL_CreateWindow(config.title, config.width, config.height, flags);
     if (!window_) return SDL_FAIL("SDL_CreateWindow");
 
-    // MSL source is what we author, so it is the only format we request. A
-    // cross-platform port would add SPIRV/DXIL here.
-    gpu_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, /*debug_mode=*/true, nullptr);
+    // The shader formats this build can hand the device (gfx/pipeline.cpp):
+    // shadercross translates the HLSL into any of them at runtime, and a
+    // package carries the one its platform's baked set is in.
+#if defined(__APPLE__)
+    const SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_MSL;
+#elif defined(_WIN32)
+    const SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_SPIRV;
+#else
+    const SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_SPIRV;
+#endif
+    gpu_ = SDL_CreateGPUDevice(formats, /*debug_mode=*/true,
+                               config.gpu_driver.empty() ? nullptr : config.gpu_driver.c_str());
     if (!gpu_) return SDL_FAIL("SDL_CreateGPUDevice");
 
     if (!headless_) {

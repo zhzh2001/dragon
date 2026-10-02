@@ -34,6 +34,11 @@ public:
     // Polled rather than event-driven: for continuous axes the current value is
     // all anyone wants, and polling avoids tracking per-axis state.
     bool has_gamepad() const { return gamepad_ != nullptr; }
+    // Off for headless runs: a controller left switched on by the desk would
+    // otherwise steer a verification run, and change the HUD's button labels
+    // from keys to pad glyphs -- which is how it was found, a golden that
+    // matched or not depending on whether the pad was awake.
+    void set_gamepads_enabled(bool enabled) { gamepads_enabled_ = enabled; }
     const char* gamepad_name() const;
 
     // Axis in [-1, 1] with the deadzone removed and rescaled, so the usable
@@ -64,6 +69,7 @@ private:
     // First connected pad wins. Multiple pads would only matter for local
     // multiplayer, which this game will never have.
     SDL_Gamepad* gamepad_ = nullptr;
+    bool gamepads_enabled_ = true;
     SDL_JoystickID gamepad_id_ = 0;
 };
 

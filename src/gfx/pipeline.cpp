@@ -98,10 +98,6 @@ bool preprocess_shader(const std::string& root, const std::string& relative_path
     return true;
 }
 
-const char* stage_name(SDL_GPUShaderStage stage) {
-    return stage == SDL_GPU_SHADERSTAGE_VERTEX ? "vertex" : "fragment";
-}
-
 #ifdef DRAGON_SHADERCROSS
 // Development builds compile the HLSL at runtime: DXC to SPIR-V, reflection
 // for the resource counts SDL needs, then SPIR-V to whatever the device takes
@@ -140,9 +136,27 @@ SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const std::string& source,
     return shader;
 }
 #else
+const char* stage_name(SDL_GPUShaderStage stage) {
+    return stage == SDL_GPU_SHADERSTAGE_VERTEX ? "vertex" : "fragment";
+}
+
 // A package carries the shaders already translated (tools/release/
-// bake_shaders.sh): <stem>.<stage>.msl beside <stem>.<stage>.json, the
+// bake_shaders.sh) as <stem>.<stage>.<ext> beside <stem>.<stage>.json, the
 // reflection shadercross wrote, which holds the resource counts SDL needs.
+// The format is whichever the device takes: MSL on Metal, DXIL on D3D12,
+// SPIR-V on Vulkan, so a Windows package that carries both runs either.
+struct BakedFormat {
+    SDL_GPUShaderFormat format;
+    const char* ext;
+};
+
+BakedFormat baked_format(SDL_GPUDevice* gpu) {
+    const SDL_GPUShaderFormat accepted = SDL_GetGPUShaderFormats(gpu);
+    if (accepted & SDL_GPU_SHADERFORMAT_MSL) return {SDL_GPU_SHADERFORMAT_MSL, ".msl"};
+    if (accepted & SDL_GPU_SHADERFORMAT_DXIL) return {SDL_GPU_SHADERFORMAT_DXIL, ".dxil"};
+    return {SDL_GPU_SHADERFORMAT_SPIRV, ".spv"};
+}
+
 uint32_t json_count(const std::string& json, const char* key) {
     const std::string needle = std::string("\"") + key + "\":";
     const size_t at = json.find(needle);
@@ -152,17 +166,18 @@ uint32_t json_count(const std::string& json, const char* key) {
 SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const std::string& root, const std::string& stem,
                               const char* entrypoint, SDL_GPUShaderStage stage) {
     const std::string base = root + stem + "." + stage_name(stage);
-    const std::string msl = read_file(base + ".msl");
+    const BakedFormat baked = baked_format(gpu);
+    const std::string code = read_file(base + baked.ext);
     const std::string json = read_file(base + ".json");
-    if (msl.empty() || json.empty()) {
-        SDL_SetError("no baked shader at %s.msl/.json", base.c_str());
+    if (code.empty() || json.empty()) {
+        SDL_SetError("no baked shader at %s%s/.json", base.c_str(), baked.ext);
         return nullptr;
     }
     SDL_GPUShaderCreateInfo info = {};
-    info.code = reinterpret_cast<const Uint8*>(msl.data());
-    info.code_size = msl.size();
+    info.code = reinterpret_cast<const Uint8*>(code.data());
+    info.code_size = code.size();
     info.entrypoint = entrypoint;
-    info.format = SDL_GPU_SHADERFORMAT_MSL;
+    info.format = baked.format;
     info.stage = stage;
     info.num_samplers = json_count(json, "samplers");
     info.num_storage_textures = json_count(json, "storage_textures");
@@ -228,7 +243,7 @@ bool PipelineCache::build(Entry& entry) {
     const std::string& source = shader_root_;
     entry.sources.clear();
     for (const char* stage : {"vertex", "fragment"}) {
-        const std::string path = shader_root_ + d.shader + "." + stage + ".msl";
+        const std::string path = shader_root_ + d.shader + "." + stage + baked_format(gpu).ext;
         entry.sources.push_back({path, file_mtime(path)});
     }
 #endif

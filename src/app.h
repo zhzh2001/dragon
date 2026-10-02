@@ -47,6 +47,9 @@ struct Options {
     int frames = 0;  // 0 = run until quit
     bool headless = false;
     std::string screenshot;  // empty = none
+    // --gpu-driver vulkan|direct3d12|metal: pick SDL's GPU backend instead of
+    // the platform default (D3D12 and Vulkan can both be checked on Windows).
+    std::string gpu_driver;
     // --model PATH loads one rigged glTF in place of the default roster, for
     // working on one creature without the others loaded.
     std::string model;

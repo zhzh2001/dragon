@@ -70,6 +70,8 @@ Options parse_options(int argc, char** argv) {
             options.cycle_models = SDL_atoi(argv[++i]);
         } else if (arg == "--hide-panels") {
             options.hide_panels = true;
+        } else if (arg == "--gpu-driver" && i + 1 < argc) {
+            options.gpu_driver = argv[++i];
         } else if (arg == "--no-post") {
             options.no_post = true;
         } else if (arg == "--maneuver" && i + 1 < argc) {
@@ -205,7 +207,10 @@ bool App::init(const Options& options) {
     config.width = 1280;
     config.height = 720;
     config.headless = options.headless;
+    config.gpu_driver = options.gpu_driver;
     if (!device_.init(config)) return false;
+    // Headless never reads a controller (core/input.h says why).
+    input_.set_gamepads_enabled(!options.headless);
 
     if (!ui_.init(device_)) return false;
     hud_.set_fonts(ui_.numeral_font(), ui_.label_font());

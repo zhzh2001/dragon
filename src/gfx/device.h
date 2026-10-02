@@ -31,6 +31,10 @@ public:
         // still happens into the offscreen target, so screenshots work. Used by
         // automated smoke tests.
         bool headless = false;
+        // An SDL GPU driver name ("vulkan", "direct3d12", "metal"), or empty
+        // to let SDL pick the platform's first: D3D12 on Windows, Vulkan on
+        // Linux, Metal on macOS.
+        std::string gpu_driver;
     };
 
     bool init(const Config& config);
