@@ -78,8 +78,9 @@ would have saved several playtest rounds. **The roster is done for now** (seven,
 after gpt-6 added Frostvein on 2026-09-14 as a second ice dragon built on its
 own measured skeleton). No new species until an encounter kind needs a
 silhouette these do not have;
-the one open asset item is the default `dragon.glb`, whose wings still drape
-on the ground because its rig has no wrist.
+`dragon.glb`, whose wings drape on the ground because its rig has no wrist,
+stopped being the default on 2026-10-01: the game now loads the generated
+roster, Embercrest first.
 
 One playtest finding from flying the roster belongs in the plan rather than
 in an animation doc: **close-range combat has no answer.** The breath cone

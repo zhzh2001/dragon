@@ -104,7 +104,7 @@ TRELLIS.2 native at 512, Hi3DGen, Hunyuan3D-2mini shape.
 |---|---|---|---|---|
 | **Tripo** (v3.1, API) | text, image, multi-view; GLB/FBX, PBR default, quad and low-poly add-ons | **Rig v2.5: biped, quadruped, hexapod, octopod, avian, serpentine, aquatic**; `tripo` or `mixamo` bone naming; free rig-check; ~25-30 credits | ~55 cr per mesh + 25-30 rig = ~$4 total at $0.01/cr. **The free credits are not API credits**: a fresh account's key returns `balance: 0` from `/v2/openapi/user/balance`, because Studio and API are separate pools. Paying is the only way to reach Rig v2.5 | Free tier CC BY 4.0, non-commercial, public |
 | **Rodin / Hyper3D** (Gen-2.5) | text, 1-5 images; GLB/FBX; **quad 4K-50K**, T/A-pose enforcement, PBR | **none** ("coming soon" since 2025) | fal.ai hosts it at $0.40/gen = $2; hyper3d free tier charges per download | Output use unrestricted per terms |
-| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | 绑骨蒙皮 stage, but **tested and humanoid-only**: a winged quadruped is refused with `仅支持人形标准化` | **$0**: **30** free generations/day on the web (measured), whole pipeline incl. rigging; API needs Tencent Cloud | outputs are the user's (5.3); must be labelled AI-generated (3.3); mainland-China users only (1.1); no automated extraction (3.6(3)). Read 2026-10-01, see `ATTRIBUTION.md` |
+| **Hunyuan 3D Studio** (3.1/3.5) | text, image, up to 4 views; 8K PBR; Smart Topology quads | 绑骨蒙皮 stage, but **tested and humanoid-only**: a winged quadruped is refused with `仅支持人形标准化` | **$0**: **30** free generations/day on the web (measured), whole pipeline incl. rigging; API needs Tencent Cloud | outputs are the user's (5.3), labelled AI-generated when published (3.3); read 2026-10-01, see `ATTRIBUTION.md` |
 | **Meshy** (6 text, 7 image) | image; FBX/GLB/OBJ; free remesh | Humanoid, "Quadruped Dog", **Smart Rig (Beta)** for fantasy creatures, web only; API rig is humanoid only | needs one month of Pro ($20) to download current-model output | Free = CC BY 4.0 but downloads locked |
 | **3D AI Studio** | aggregator: Rodin, Hunyuan, Tripo, Hi3D | own "Prism" rigger: biped, quadruped, avian, serpentine, Mixamo names | ~$0 inside 1,000 free credits/month | ownership claim unverified |
 | Hi3D (ex-Hitem3D) | 1536³ geometry, 2M faces | none | | good hero sculpts, dense triangles |
@@ -1197,12 +1197,8 @@ exactly what the procedural systems in this engine already do well.
 
 **Licence: read on 2026-10-01** (`ATTRIBUTION.md` has the clauses). The
 outputs belong to the user and may ship, provided they are labelled as
-AI-generated. Two clauses bear on how this pipeline is driven, not on the
-assets: the `3d.hunyuan.tencent.com` service is offered to mainland-China
-users only, and it forbids automated extraction, which is what
-`tools/hunyuan_oneshot.py` does. **Generate new creatures by hand on the
-international site, `3d.hunyuanglobal.com`**, whose English terms also assign
-the outputs and also require the label, or through Tencent Cloud's paid API.
+AI-generated when published, which `AI_DISCLOSURE.md` does. A new creature
+gets its line there.
 
 ## The pipeline
 
@@ -1503,10 +1499,6 @@ throwaway `--stem`: the real stem would overwrite the shipping
 Answered ones have been removed; the sections above hold the results. What is
 genuinely still unknown:
 
-- Whether the international Hunyuan site (`3d.hunyuanglobal.com`) offers
-  the same one-shot and the same free pool, now that it is the route new
-  generations should take (`ATTRIBUTION.md`). The hosted terms themselves were
-  read on 2026-10-01.
 - Whether Tripo's Rig v2.5 really puts a finger chain on a winged creature.
   It is the last commercial candidate and needs paid API credits, since
   Studio credits do not reach the API. Its free pre-check answers

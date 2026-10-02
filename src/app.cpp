@@ -251,16 +251,28 @@ bool App::init(const Options& options) {
 
     regenerate_terrain();
 
-    // The model roster. --models gives the whole list, --model sets just the
-    // player's, and neither leaves the single built-in dragon. Everything past
-    // the first entry exists so one match can field more than one species
-    // rather than four hue-pushed copies of the same mesh.
+    // The model roster. --models gives the whole list and --model a roster of
+    // one; neither loads the generated species that are finished (each with
+    // its own rig, flight and breath profile), Embercrest first as the
+    // player. Everything past the first entry exists so one match can field
+    // more than one species rather than four hue-pushed copies of the same
+    // mesh. The meshes are gitignored, so a checkout or a package may lack
+    // some: the missing ones are skipped, and with none at all the empty path
+    // falls through to the generated greybox. Sunspear and Rimeplume are left
+    // out while they are still being tuned; --models reaches them.
     {
         model_sampler_ = gfx::create_model_sampler(device_.gpu());
         std::vector<std::string> roster = options_.models;
+        if (roster.empty() && !options_.model.empty()) roster.push_back(options_.model);
         if (roster.empty()) {
-            roster.push_back(options_.model.empty() ? std::string(ASSET_ROOT "/dragon.glb")
-                                                    : options_.model);
+            static const char* const kDefaultRoster[] = {
+                "embercrest", "rimefang", "frostvein", "blightmaw",
+                "ironroot",   "stormsail", "tidewrack"};
+            for (const char* name : kDefaultRoster) {
+                const std::string path = std::string(ASSET_ROOT "/") + name + ".glb";
+                if (std::ifstream(path).good()) roster.push_back(path);
+            }
+            if (roster.empty()) roster.push_back(std::string());
         }
         for (const std::string& path : roster) {
             auto model = std::make_unique<LoadedModel>();
@@ -3095,9 +3107,10 @@ void App::find_wingtips(LoadedModel& model) {
 
 // Loads one creature: mesh, textures, skeleton, the joint map the procedural
 // rig drives, the alignment that puts an arbitrary author's units into ours,
-// and the two tuning files that may sit beside the glTF. An empty path, or one
-// that fails to load, falls back to the generated rig rather than failing --
-// the app must always have a dragon.
+// and the two tuning files that may sit beside the glTF. An empty path tries
+// assets/dragon.glb (the first imported dragon, a separate download, see
+// ATTRIBUTION.md); that or any path that fails to load falls back to the
+// generated rig rather than failing -- the app must always have a dragon.
 bool App::load_model(const std::string& path, LoadedModel& out) {
     anim::SkinnedMeshData mesh_data;
     const std::string model_path =

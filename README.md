@@ -79,11 +79,11 @@ ctest --test-dir build        # fifteen suites, plain executables
 ```
 
 **The models are not in the repository.** They are large, so they are
-gitignored. Without them the game falls back to a greybox dragon. The
-generated roster comes with the release packages. The original default
-model is a CC BY-NC Sketchfab download for personal use; see
-[`ATTRIBUTION.md`](ATTRIBUTION.md). Any rigged glTF can be tried with
-`--model PATH`. A build currently runs only from its own source tree;
+gitignored. The game loads whichever species are present, Embercrest
+first, and falls back to a greybox dragon when there are none. The roster
+comes with the release packages. Any rigged glTF can be tried with
+`--model PATH`; [`ATTRIBUTION.md`](ATTRIBUTION.md) lists the two Sketchfab
+dragons the engine was first built around. A build currently runs only from its own source tree;
 making a copyable package is the first step of the porting roadmap.
 
 ## Playing

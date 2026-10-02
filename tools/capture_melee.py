@@ -6,7 +6,7 @@ import subprocess
 import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = ['dragon', 'embercrest', 'rimefang', 'frostvein', 'blightmaw', 'ironroot', 'stormsail', 'tidewrack', 'alt/prowler']
+MODELS = ['embercrest', 'rimefang', 'frostvein', 'blightmaw', 'ironroot', 'stormsail', 'tidewrack']
 VIEWS = [('side',90,6), ('front',180,6), ('rear',0,6), ('top',90,85)]
 
 def main():
@@ -33,7 +33,7 @@ def main():
                 (model,'ground-feet',180,['--studio','9','--inspect','60','14','3']),
                 (model,'game-flight-attack',48,['--attack','--training','--inspect','90','24','6']),
                 (model,'game-landed',900,['--input','-0.25,0,0,0,0,0','--inspect','60','14','3']),
-                (model,'switch-claw',116,['--models',f'assets/dragon.glb,assets/{model}.glb','--cycle-models','60','--studio','11','--inspect','0','24','6'])])
+                (model,'switch-claw',116,['--models',f"assets/{'rimefang' if model == 'embercrest' else 'embercrest'}.glb,assets/{model}.glb",'--cycle-models','60','--studio','11','--inspect','0','24','6'])])
     def render(case):
         model,label,frame,flags=case
         stem=args.output/(model.replace('/','-')+'-'+label)

@@ -30,7 +30,7 @@ def main():
         ('ground-feet', 180, ['--studio', '9', '--inspect', '60', '11', '3']),
         ('game-flight', 180, ['--input', '0,0,0,1,0,0', '--inspect', '150', '18', '6']),
         ('game-landed', 900, ['--input', '-0.25,0,0,0,0,0', '--inspect', '60', '11', '3']),
-        ('switch-flight', 180, ['--models', 'assets/dragon.glb,assets/frostvein.glb',
+        ('switch-flight', 180, ['--models', 'assets/embercrest.glb,assets/frostvein.glb',
                                 '--cycle-models', '120', '--studio', '1', '--inspect', '150', '18', '6']),
         ('turn-soak', 7200, ['--studio', '4', '--inspect', '0', '20', '88']),
         ('frost-breath', 180, ['--combat', '--attack', '--inspect', '90', '24', '10']),

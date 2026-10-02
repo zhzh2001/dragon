@@ -88,8 +88,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--hunters-after S` | In a run, loose the first hunter after S seconds instead of two minutes, for a capture of one. |
 | `--walk F[,T]` | Once grounded, walk at F (-1..1) turning at T: with `--input -0.25,0,0,0,0,0` it lands and then walks, the in-game check of the stride. |
 | `--run-empty` | The run with no rivals and no towers: how the autopilot soaks the banking path (`--run-empty --autopilot --frames 8400` banks at the pass). |
-| `--model PATH` | Load a different rigged glTF in place of `assets/dragon.glb` (e.g. `assets/alt/prowler.glb`, see ATTRIBUTION.md). |
-| `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. |
+| `--model PATH` | Load one rigged glTF instead of the default roster. Bench work on one creature should use it: the default roster loads seven meshes, about 3 s more per headless render (4.7 s against 1.9 s for 40 frames). |
+| `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. With neither flag the roster is the seven finished species, Embercrest first (`kDefaultRoster` in `app.cpp`); Sunspear and Rimeplume are reached only through `--models` while they are in progress. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
 | `--cycle-models N` | Swap the player onto the next roster entry every N frames. Sweeps one scenario across every species in one command, and soaks the swap path (it re-initialises both rigs). |
 | `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
@@ -103,13 +103,12 @@ Soaks that have caught real bugs:
 ./build/dragon --headless --bots 3 --match --frames 7200         # 2-minute fight
 ```
 
-The elemental roster, and the two flags that make a multi-species capture
-possible at all -- at the default 650 m spawn the rivals are specks:
+The elemental roster is the default, so a multi-species capture needs only
+the two flags that make it possible at all -- at the default 650 m spawn the
+rivals are specks:
 
 ```sh
-./build/dragon --models assets/embercrest.glb,assets/rimefang.glb,assets/frostvein.glb,\
-assets/blightmaw.glb,assets/ironroot.glb,assets/stormsail.glb,assets/tidewrack.glb \
-  --bots 6 --bot-range 95 --combat
+./build/dragon --bots 6 --bot-range 95 --combat
 ```
 
 Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
@@ -244,7 +243,8 @@ flight controls.
   4. **The same thing in the game, not just the bench**: land it
      (`--input -0.25,0,0,0,0,0 --frames 900`) or fly it, and look again.
   5. If the change can be reached by switching models (`M`, `--models`,
-     `--cycle-models`), switch onto it from `dragon.glb` and look once more.
+     `--cycle-models`), switch onto it from the default player (Embercrest; from
+     Rimefang when the change is Embercrest's) and look once more.
   Put the renders that matter beside the report in `artifacts/`, tracked.
 - **Every gameplay constant belongs behind an ImGui slider.** Feel is found by
   dragging sliders while playing, not by planning. A dial that decides whether

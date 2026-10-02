@@ -26,7 +26,7 @@ def main():
             ('ground-feet',180,['--studio','9','--inspect','60','11','3']),
             ('game-flight',180,['--input','0,0,0,1,0,0','--inspect','150','18','6']),
             ('game-landed',900,['--input','-0.25,0,0,0,0,0','--inspect','60','11','3']),
-            ('switch-flight',180,['--models',f'assets/dragon.glb,assets/{model}.glb','--cycle-models','120','--studio','1','--inspect','0','18','6']),
+            ('switch-flight',180,['--models',f"assets/{'rimefang' if model == 'embercrest' else 'embercrest'}.glb,assets/{model}.glb",'--cycle-models','120','--studio','1','--inspect','0','18','6']),
         ]
         for label, frames, flags in cases:
             stem = args.output/f'{model}-{label}'

@@ -155,24 +155,28 @@ backends.
 | **R5** fixed function | Materials as texture-stage state, CPU skinning, blob shadows, vertex fog | The M6 (in the G41 today) and the GeForce4 MX PCI fly a valley |
 | **R6** XP platform layer | SDL3 does not support XP. Either a thin Win32 layer (window, raw input, XInput 9.1.0, timers) behind the existing input abstraction, or an XP-capable SDL2. R0 decides which; whatever is chosen, verify that the CRT and winpthreads in the build import nothing newer than XP | It installs and runs on a clean XP SP3 |
 | **R7** retro presets | 4:3, 640×480 to 1024×768, particle caps, fewer bots and less grass, a "2005 mode" look on the modern build too | 30 fps on the SM3 floor card at 1024×768 |
-| R8 stretch: Windows 98 SE | The D3D9.0c runtime supports 98 SE, but no maintained C++20 toolchain targets 9x. It needs a dedicated CRT/import audit, or a C++ subset for the retro executable. Decide only after R6 | It boots into a valley on 98 SE |
+| **R8** Windows 98 SE | The D3D9.0c runtime supports 98 SE. The toolchain is [gcc-for-Windows98](https://github.com/fsb4000/gcc-for-Windows98): GCC 11.1 for i686 with the win32 thread model, so no `std::thread`, `std::mutex` or `std::filesystem`. `src/` uses none of the three (checked 2026-10-01), so the work is keeping it that way plus the platform layer: R6's Win32 layer limited to 98's APIs, and miniaudio on DirectSound or WinMM. GCC 11 lacks some C++20 library pieces the code may lean on; the first 98 build will list them. MSVC 6 is the alternative, but it means C++98, a rewrite of the language level. It is worth it only if the GCC route fails | It boots into a valley on 98 SE |
 
 R0 is cheap and is the right first move: in one session it settles
-whether the Mac-hosted MinGW toolchain produces XP binaries, and that
-question decides how R6 is built. R1 is the load-bearing refactor and is
+whether the Mac-hosted MinGW toolchain produces XP binaries, and whether
+gcc-for-Windows98 produces 98 ones. Those answers decide how R6 and R8 are
+built. R1 is the load-bearing refactor and is
 worth doing even if the retro track stalls, because it is also what makes
 the golden-screenshot gate backend-agnostic.
 
 ### Budgets to design to
 
-From the cards on hand (`~/src/gpu-hist/data/cards.csv`) that fit the G41's
-PCIe x16 and PCI slots. The G41 has no AGP.
+From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run
+only in the period benches.** The G41 takes PCIe x16 and PCI and has no AGP.
+The AGP cards need one of the AGP benches in `systems.csv`: the 865G
+Pentium 4 board (AGP 8x, XP) or the SiS universal-AGP board (98 SE and XP).
+x99 under Windows 10 cannot drive any pre-DX9 card.
 
-| Tier | Floor card on hand | Also on hand | Notes |
-|---|---|---|---|
-| SM3 | GeForce 6200 TC (NV44, PCIe, works) | Radeon X1300 (RV515, untested), Quadro FX 3500 (G71, works) as the fast SM3 reference | TurboCache: little real VRAM, so the texture budget is the binding one |
-| SM2 | Radeon X550 (RV370, PCIe, works) | FireMV 2200 PCI (RV380 unconfirmed, untested); GeForce FX 5200s, if any is the PCI variant | The FX's FP32 is slow; prefer `half` where precision allows |
-| Fixed function | Mobility Radeon M6 on PCI, in the G41 now | GeForce4 MX PCI (NV18, in x99 for qemu-gpu); Radeon 7000; Riva TNT2 Vanta (DX6, no T&L) | The TNT2 is below the floor: no hardware T&L. Treat it as a "does it start" check only |
+| Tier | Floor card on hand | Also on hand | Bench | Notes |
+|---|---|---|---|---|
+| SM3 | GeForce 6200 TC (NV44, PCIe, works) | Radeon X1300 (RV515, untested); Quadro FX 3500 (G71, works) as the fast SM3 reference; GeForce 7600 GT (AGP/PCIe, shows artifacts) | G41 | TurboCache: little real VRAM, so the texture budget is the binding one |
+| SM2 | Radeon X550 (RV370, PCIe, works) | FireMV 2200 PCI (RV380 unconfirmed, untested); GeForce FX 5200 (four, AGP or PCI per board) | G41; the AGP benches for AGP FX boards | The FX's FP32 is slow; prefer `half` where precision allows |
+| Fixed function | Mobility Radeon M6 on PCI, in the G41 now | GeForce4 MX PCI (NV18; in x99 for qemu-gpu's Linux work, it moves to the G41 for this); Radeon 7000; Radeon 9200 LE (AGP, DX8.1: no SM2, so it gets this tier); Riva TNT2 Vanta (DX6, no T&L) | G41 for PCI; the AGP benches for the rest | The TNT2 is below the floor: no hardware T&L. Treat it as a "does it start" check only |
 
 The verified specs are in gpu-hist, not here; the shader-model column is the
 working assumption for planning. The G41's Celeron E3300 (two cores,
@@ -190,9 +194,10 @@ slow-to-reach machines are only used for what nothing else can show.
 | **Mac, Metal** | Daily development; the reference goldens | Hot reload, the whole headless workflow, Blender and the tools |
 | **Mac, MinGW-w64 + CrossOver** | Build every Windows binary (modern and XP) on the Mac; smoke-run D3D9 builds in a CrossOver bottle | No machine to power on. **Not a correctness oracle:** Wine's wined3d translates D3D9 to OpenGL and implements fixed function itself, so it can only answer "does it build, start and roughly draw". Its caps are generic, so `--tier` must be forced |
 | **x99, CachyOS** | Vulkan; the Linux release; Linux headless soaks over SSH once P0 removes the window | The only Linux box with a real modern GPU. Power it off after each session |
-| **x99-windows, Windows 10** | D3D12 and Vulkan on Windows; **the D3D9 debugging platform for all three tiers** (`--tier` forced on a modern driver); apitrace for D3D9 call traces and replays | A real D3D9 driver and runtime, a debugger, and fast iteration. Modern drivers still run D3D9 fixed function. Not period hardware, so it proves the code, not the budget |
-| **G41, Windows XP, driven by `agent.ahk`** | **Acceptance for each retro tier**, on period cards: SM3, SM2 and FF from the table above | The only place budgets, driver quirks and the XP platform layer are real. The qemu-gpu harness already copies files over SMB, runs jobs and takes OBS captures |
-| G41, Windows 98 SE | R8 only | |
+| **x99-windows, Windows 10** | D3D12 and Vulkan on Windows; **the D3D9 debugging platform for all three tiers**, with `--tier` forced on its modern card's driver; apitrace for D3D9 call traces and replays | A real D3D9 driver and runtime, a debugger, and fast iteration. A modern driver still runs D3D9 fixed function. But Windows 10 cannot drive a pre-DX9 card, so this proves the code, not the hardware or the budget |
+| **G41, Windows XP, driven by `agent.ahk`** | **Acceptance for each retro tier**, on the PCIe and PCI cards from the table above | The only place budgets, driver quirks and the XP platform layer are real. The qemu-gpu harness already copies files over SMB, runs jobs and takes OBS captures |
+| The AGP benches (865G P4; the SiS universal-AGP board) | The AGP cards: the FX 5200 boards, the Radeon 7000 and 9200 LE, the TNT2 | Not yet driven remotely: they need the same agent and share setup as the G41, or the HID-and-capture rig in gpu-hist's `docs/bench-automation.md` |
+| G41 or the SiS bench, Windows 98 SE | R8 | |
 | qemu-gpu's emulated M6 and NV18 | Later, and in both directions: the FF tier as a workload for the emulator, and the emulator as a way to replay a failing FF frame | Not a dependency of this roadmap. Worth doing once R5 runs on the real M6 |
 
 ### The G41 loop
@@ -219,7 +224,9 @@ The agent itself stays in qemu-gpu, where it is maintained.
 - **Does the Mac's MinGW toolchain produce XP-clean binaries?** GCC 16 with
   posix threads pulls in winpthreads, and recent CRT and winpthreads
   builds may import Vista-only functions. R0 answers this by running on XP,
-  not by reading.
+  not by reading. If it fails, gcc-for-Windows98 is the fallback for XP
+  too, and then one toolchain covers both: building R0 with it as well
+  answers the question for 98 at the same time.
 - **Is the CPU the wall on the E3300?** The rig on 232-joint skeletons, seven
   bots and per-frame grass placement were all sized on an M-series Mac.
 - **The 32-bit address space** on XP: a full roster at 4096² does not fit,

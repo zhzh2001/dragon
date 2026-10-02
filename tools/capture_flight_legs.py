@@ -6,7 +6,7 @@ import subprocess
 import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = ['dragon', 'embercrest', 'rimefang', 'frostvein', 'blightmaw', 'ironroot', 'stormsail', 'tidewrack', 'alt/prowler']
+MODELS = ['embercrest', 'rimefang', 'frostvein', 'blightmaw', 'ironroot', 'stormsail', 'tidewrack']
 VIEWS = [('side',90,6), ('front',180,6), ('rear',0,6), ('top',90,85)]
 
 def main():
@@ -33,7 +33,7 @@ def main():
                 (model,'game-brake',60,['--input','0,0,0,0,0,1','--inspect','90','18','6']),
                 (model,'game-dive',120,['--input','-0.25,0,0,0,1,0','--inspect','90','18','6']),
                 (model,'game-landed',900,['--input','-0.25,0,0,0,0,0','--inspect','270','14','3']),
-                (model,'switch-brake',90,['--models',f'assets/dragon.glb,assets/{model}.glb','--cycle-models','60','--studio','7','--inspect','0','18','6'])])
+                (model,'switch-brake',90,['--models',f"assets/{'rimefang' if model == 'embercrest' else 'embercrest'}.glb,assets/{model}.glb",'--cycle-models','60','--studio','7','--inspect','0','18','6'])])
     if args.labels:
         cases = [case for case in cases if case[1] in args.labels]
     def render(case):

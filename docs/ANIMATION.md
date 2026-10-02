@@ -13,8 +13,10 @@ stance, terrain planting and flight-leg work, in the order it happened.
 
 `anim::load_skinned_gltf` reads any rigged glTF; `anim::map_dragon_joints`
 identifies the neck, tail, wing and leg chains in an arbitrary skeleton so the
-same procedural animation drives it. Drop a file at `assets/dragon.glb` and it is
-used automatically, falling back to the generated rig if anything is wrong.
+same procedural animation drives it. With no `--model`/`--models` the game
+loads the finished generated species, Embercrest first; any one that is missing
+is skipped, and with none at all it falls back to `assets/dragon.glb` and then
+to the generated rig.
 
 Three things learned the hard way, all now handled:
 
@@ -73,9 +75,10 @@ rounds of probing a chain that was, numerically, bending exactly as designed.
 
 ### Getting a usable asset: download glTF, never route it through Blender
 
-Drop a rigged `.glb` at `assets/dragon.glb` and it is used automatically, falling
-back to the generated rig if anything is wrong. See ATTRIBUTION.md for the model
-currently in use and how to obtain it.
+This section is about `assets/dragon.glb`, the first imported dragon and the
+default model until 2026-10-01, when the generated roster replaced it. It is a
+separate download (ATTRIBUTION.md); the lessons below apply to any imported
+asset.
 
 **Download the glTF variant from the model's Sketchfab page. Do not use the
 original FBX.** Blender's FBX importer mangles this rig, which was established by

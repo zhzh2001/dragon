@@ -47,8 +47,8 @@ struct Options {
     int frames = 0;  // 0 = run until quit
     bool headless = false;
     std::string screenshot;  // empty = none
-    // --model PATH loads a different rigged glTF in place of assets/dragon.glb,
-    // for trying alternative dragons without touching the tree.
+    // --model PATH loads one rigged glTF in place of the default roster, for
+    // working on one creature without the others loaded.
     std::string model;
     // --models A.glb,B.glb,... loads a whole roster. The player flies the
     // first and the bots are dealt the rest in turn, so one match can field

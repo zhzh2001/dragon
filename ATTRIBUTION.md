@@ -17,9 +17,8 @@ hobby project's reading, not legal advice.
 | Hunyuan-generated roster (`assets/<species>.glb`, about 50 MB each) | **no**, gitignored for size | **yes, labelled AI-generated** | yes | Outputs are ours (clause 5.3); the label is required (3.3); see below |
 | `assets/props/grazer.glb` (Hunyuan-derived, 3.5 MB) | yes, labelled | yes | yes | As above, and small enough to track |
 | AI concept art and renders in `artifacts/`, `docs/concept/` | yes, labelled | no (not game content) | -- | Outputs are ours under the OpenAI, Google and Tencent terms |
-| `dragon.glb`, "Black Dragon" by 3DHaupt (dennish2010), CC BY-NC 4.0, tagged NoAI | **no** | **no** | yes, with credit, never sold | Non-commercial, and its Sketchfab tag forbids AI use (below) |
-| Renders of `dragon.glb` in `artifacts/` | yes, as CC BY-NC material, credited | -- | -- | Screenshots are adapted material: non-commercial, credited |
-| `alt/prowler.glb`, "Prowler Dragon Variant Rig" by DM-913 (SuperKapoo913), CC BY 4.0 | no (not ours to host) | optional, with credit | yes | Permissive, credit required |
+| `dragon.glb` and `alt/prowler.glb`, the two Sketchfab dragons | no | no | no | Early attempts, superseded by the roster; anyone can download them (below) |
+| Renders of those two in `artifacts/` | yes, credited | -- | -- | Screenshots are adapted material: CC BY-NC for the Black Dragon, CC BY for the Prowler |
 
 Everything not ours is kept out of the MIT grant: the `LICENSE` scope
 paragraph says so, and this table is the list.
@@ -53,18 +52,6 @@ Shenzhen Tencent Computer Systems under Chinese law.
   metadata marks must not be removed. `AI_DISCLOSURE.md`, the README and
   every release carry the mark. Do not add a step that strips metadata
   from these files.
-- **1.1, eligibility.** The service is currently offered to users in
-  mainland China only. The international site, `3d.hunyuanglobal.com`, is a
-  separate service under English terms (OriGen Tech, Singapore). Those
-  terms also assign outputs to the user (6.3) and also require an AI label
-  (6.6). **New generations should go through the international site.**
-  This clause concerns the account, not who owns what was already
-  generated.
-- **3.6(3), automated extraction.** Extracting by automated or programmatic
-  means is prohibited. `tools/hunyuan_oneshot.py` drives the site through a
-  browser, so that tool is a risk to the account. The terms do not
-  restrict outputs on this ground. Prefer driving generations by hand, or
-  through Tencent Cloud's paid API, from here on.
 - **3.6(4)**: do not use the outputs to train a competing model.
 
 The open-weight **Hunyuan3D-2 / 2.1 community licence** is a different
@@ -76,56 +63,29 @@ The meshes stay **gitignored** (`assets/*.glb`, `assets/embercrest-textures/`)
 because of their size (about 50 MB each with 4096² PBR sets), not because of
 their licence. A release carries them, downsampled (`docs/RELEASE.md`).
 
-## dragon.glb -- the original default model
+## The two Sketchfab dragons (early attempts, not shipped)
 
-**"Black Dragon with Idle Animation"** by **3DHaupt (dennish2010)**, via
-Sketchfab.
+The engine was first built around two downloaded models. The generated roster
+replaced them, and neither ships or is hosted here. Both still load with
+`--model` for anyone who downloads them. Use the **glTF** download and the
+`.glb`; Blender's FBX importer mangles the first one's rig (`docs/ANIMATION.md`).
 
-- Licence: **CC Attribution-NonCommercial 4.0**
-  (https://creativecommons.org/licenses/by-nc/4.0/)
-- Source: https://sketchfab.com/3d-models/fb0053a2e59b43868e934c239bf4eb36
-- Credit, wherever it appears: *"Black Dragon with Idle Animation" by
-  3DHaupt (dennish2010), CC BY-NC 4.0, re-rigged and driven procedurally.*
+- `assets/dragon.glb`: **"Black Dragon with Idle Animation"** by **3DHaupt
+  (dennish2010)**, https://sketchfab.com/3d-models/fb0053a2e59b43868e934c239bf4eb36,
+  **CC BY-NC 4.0**. It was the default model until 2026-10-01. It is tagged
+  `noai` on Sketchfab, whose terms (sections 5 and 15(a)) forbid using NoAI
+  content as input to generative AI, so it is no longer rendered for the AI
+  tools that build this project.
+- `assets/alt/prowler.glb`: **"Prowler Dragon Variant Rig"** by **DM-913
+  (SuperKapoo913)**, https://sketchfab.com/3d-models/7ee71aaf323d426bbbdf28d73d55bbd9,
+  **CC BY 4.0**. A 126-bone wyvern whose wings are the forelimbs.
 
-**The model is tagged `noai` on Sketchfab.** Sketchfab's Terms of Use
-(effective 2026-08-12, sections 5 and 15(a)) forbid using NoAI content
-"as inputs to Generative AI Programs". This project's verification loop
-renders the default model and shows the frames to AI coding agents, which is
-exactly that use. From 2026-10-01:
-
-- the model is not to be rendered for, or handed to, an AI tool;
-- the public release does not bundle it, and the default player model is
-  being moved to one of ours (`docs/RELEASE.md`).
-
-Nothing derived from its mesh remains in the repository. The FBX re-export
-that once sat in `artifacts/` is removed, and the public export's history is
-rewritten without it. The existing renders in `artifacts/` are
-non-commercial adapted material, credited here.
-
-### Getting it (personal copies)
-
-Not committed: 65 MB with textures embedded. From the Sketchfab page choose
-**Download -> glTF** and use the **.glb**, renamed to `assets/dragon.glb`.
-Use the glTF download, **not** the original FBX: Blender's FBX importer mangles
-this rig (see `docs/ANIMATION.md`). A personal copy that includes it must
-credit it as above and must never be sold, put behind a donation, or used to
-earn ad revenue.
-
-## alt/prowler.glb (optional second dragon)
-
-**"Prowler Dragon Variant Rig"** by **DM-913 (SuperKapoo913)**, via Sketchfab.
-
-- Licence: **CC Attribution 4.0** (https://creativecommons.org/licenses/by/4.0/)
-- Source: https://sketchfab.com/3d-models/7ee71aaf323d426bbbdf28d73d55bbd9
-- Credit: *"Prowler Dragon Variant Rig" by DM-913 (SuperKapoo913), CC BY
-  4.0; re-exported as a single .glb and retargeted onto the procedural
-  rig.*
-
-A 126-bone wyvern (the wings are the forelimbs) with base colour, normal and
-metallic-roughness maps and two clips (Landing, Walk). Load it with
-`--model assets/alt/prowler.glb`. Download -> glTF from Sketchfab; use the
-.glb directly, or import the glTF into Blender and export the armature
-plus its two skinned meshes as one .glb with tangents.
+Renders of both remain in `artifacts/`, where they record the work they
+were used for. They are credited here: the Black Dragon's renders are
+non-commercial adapted material under CC BY-NC 4.0, and the Prowler's are
+under CC BY 4.0. Nothing derived from either mesh is in the repository; the
+public mirror's history is rewritten without the old re-exports
+(`tools/release/public_excludes.txt`).
 
 ## Embercrest-scripted (experiment, not tracked)
 

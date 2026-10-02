@@ -84,22 +84,16 @@ about a quarter of the size, which is indistinguishable at chase-camera
 distance; this step is to be written. It must keep the files' metadata,
 because the Hunyuan agreement forbids removing its AI marks (3.6(1)).
 
-**The default model.** The game defaults to `assets/dragon.glb`, the CC BY-NC
-model, and falls back to a greybox when that file is absent. A public package
-does not carry it (`ATTRIBUTION.md`), so before the first public package the
-default has to become one of the generated species. Embercrest is the obvious
-candidate, since it was designed as the hero. That change is a playtest
-question as much as a licence one, because the feel of the default dragon
-is what every playtest so far was judged on.
-
-**Personal copies** may add `dragon.glb` for a friend who wants the original
-default, credited as `ATTRIBUTION.md` shows. A personal copy is never sold.
+**The default model** is the generated roster, Embercrest first
+(`kDefaultRoster` in `src/app.cpp`); a package that lacks some of them
+simply loads the rest. The two Sketchfab dragons are not shipped
+(`ATTRIBUTION.md`).
 
 ## Checklist before a public push or package
 
 - [ ] `tools/release/export_public.sh` passed its own checks.
 - [ ] `git -C <mirror> log --all --format='%an <%ae>' | sort -u` shows only
       the addresses you mean to publish.
-- [ ] No file in the package is listed as "no" in `ATTRIBUTION.md`.
+- [ ] No file in the package is listed as "no" in `ATTRIBUTION.md`; no `dragon.glb` or `alt/`.
 - [ ] The release notes say the game is AI-assisted and link `AI_DISCLOSURE.md`.
 - [ ] On itch.io, the AI-generated tags are set (*Graphics*, *Code*).
