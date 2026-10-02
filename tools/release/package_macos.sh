@@ -23,6 +23,17 @@ set -eu
 version=${1:-0.1.0}
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
+# Package only what is committed: the sources compiled and the files shipped
+# come from this working tree, and the repository is shared with other
+# sessions whose edits in progress must not ride along into a release.
+dirty=$(git status --porcelain --untracked-files=no -- src shaders cmake CMakeLists.txt \
+  assets tools/release LICENSE THIRD_PARTY_NOTICES.md ATTRIBUTION.md AI_DISCLOSURE.md)
+if [ -n "$dirty" ]; then
+  echo "refusing to package uncommitted changes (commit them, or package from a" >&2
+  echo "clean worktree with the .glb roster linked in):" >&2
+  echo "$dirty" >&2
+  exit 1
+fi
 species="embercrest rimefang frostvein blightmaw ironroot stormsail tidewrack"
 for s in $species; do
   [ -f "assets/$s.glb" ] || { echo "missing assets/$s.glb" >&2; exit 1; }
