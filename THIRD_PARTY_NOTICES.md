@@ -18,6 +18,11 @@ every binary package of the game carries this file.
 | Barlow Condensed SemiBold (the HUD's numerals) | `assets/fonts/BarlowCondensed-SemiBold.ttf` | SIL Open Font License 1.1 (`assets/fonts/OFL-barlowcondensed.txt`) | https://github.com/jpt/barlow |
 | Fira Sans Medium (the HUD's labels) | `assets/fonts/FiraSans-Medium.ttf` | SIL Open Font License 1.1 (`assets/fonts/OFL-firasans.txt`) | https://github.com/mozilla/Fira |
 
+Development builds also link **SDL_shadercross** (zlib) with its vendored
+SPIRV-Cross (Apache 2.0) and DirectXShaderCompiler (University of Illinois/NCSA
+Open Source License), to compile the HLSL shaders at runtime. None of them
+is in a release package, which carries the shaders already translated.
+
 Dear ImGui embeds the ProggyClean font (MIT-compatible, by Tristan Grimmer),
 the last fallback face.
 

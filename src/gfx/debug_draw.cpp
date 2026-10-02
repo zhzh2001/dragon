@@ -14,8 +14,7 @@ namespace {
 PipelineDesc make_line_pipeline_desc(bool overlay) {
     PipelineDesc desc;
     desc.name = overlay ? "debug_line_overlay" : "debug_line";
-    desc.shader_path = "debug_line.msl";
-    desc.vs_uniform_buffers = 1;
+    desc.shader = "debug_line";
     desc.primitive = SDL_GPU_PRIMITIVETYPE_LINELIST;
     desc.cull = SDL_GPU_CULLMODE_NONE;
     desc.depth_test = !overlay;

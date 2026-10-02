@@ -9,7 +9,7 @@ namespace gfx {
 
 class Device;
 
-// Must match PostUniforms in shaders/post_common.msl.
+// Must match PostUniforms in shaders/post_common.hlsl.
 struct PostUniforms {
     core::Vec4 grade;       // exposure, contrast, saturation, bloom strength
     core::Vec4 bloom;       // threshold, knee, vignette, unused

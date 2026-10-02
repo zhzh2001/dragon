@@ -79,32 +79,74 @@ autopilot run from it banked and wrote `runs.txt` to the user directory.
 Still to do by hand: double-click it, which needs a human at the keyboard;
 the Windows and Linux packages (P2).
 
-## Phase P1 — one shader source for every backend
+## Phase P1 — one shader source for every backend (done, 2026-10-01)
 
-**Author in HLSL** and compile it with
-[SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross) to SPIR-V
-(Vulkan), DXIL (D3D12) and MSL (Metal). HLSL wins over GLSL or Slang here for
-one reason: **it is also the D3D9 shader language**. The SM3 and SM2 twins in
-R3 and R4 are then edits of the same files under `#if` tiers, not a fourth
-dialect.
+**The shaders are HLSL**, compiled by
+[SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross): DXC to
+SPIR-V, then SPIRV-Cross to whatever the device takes. HLSL won over GLSL or
+Slang for one reason: **it is also the D3D9 shader language**, so the SM3
+and SM2 twins in R3 and R4 are edits of the same files under `#if` tiers,
+not a fourth dialect.
 
-- **Translate by hand, file by file**, starting with `scene_common`. The
-  shaders are small, and the lighting-is-one-path rule (`direct_sun`,
-  `ambient_light`, `apply_fog`) means one shared file carries most of the
-  meaning.
-- **Hot reload survives.** Development builds link shadercross and compile at
-  runtime, as `PipelineCache` does with MSL today, include inlining and all.
-  Release builds load precompiled blobs per backend.
-- **The gate is golden screenshots.** Before the first translation, capture
-  a fixed set on Metal: the valley, a skinned dragon close up, foliage,
-  water, bloom on fire, the HUD. Write the frames through the existing
-  `--screenshot` with `--cam`, then diff each one against Metal-from-HLSL.
-  This set becomes the regression suite for every later backend, so it is
-  worth building carefully once (`tests/golden/`, a small diff tool that
-  prints the worst tile).
+- **The translation is 1:1**: 18 MSL files became 19 HLSL ones, the extra
+  one being `common.hlsl`. The uniform blocks were already float4 and
+  float4x4 only, so `SceneUniforms`, `ModelUniforms` and the rest keep their
+  C++ layout byte for byte under HLSL packing. Matrix `*` became `mul()`.
+  Column-major storage with `mul(M, v)` means the same as Metal's `M * v`.
+- **One file, two compiles.** Each shader is compiled with `VERTEX_STAGE`
+  and then `FRAGMENT_STAGE` defined. `common.hlsl` maps `UNIFORM_SLOT(n)`,
+  `TEXTURE2D(name, n)` and `DEPTH2D` onto the register spaces SDL assigns
+  each stage (space0/1 for vertex, space2/3 for fragment). Stage-only
+  resources sit under their guard rather than relying on shadercross's
+  binding culling, which its own help warns can shift slots.
+- **Resource counts come from reflection.** `PipelineDesc` lost its
+  hand-kept `vs_uniform_buffers`, `fs_samplers` and the rest, along with
+  the entry-point names; it names a stem now. Every count the descriptors
+  carried matched what reflection reports.
+- **The shadow map** is a `Texture2D<float>` read with `SampleLevel` and
+  compared in the shader, as before. SPIRV-Cross emits it as
+  `texture2d<float>`, not `depth2d`, and Metal samples a D32F texture
+  through it with identical results.
+- **Hot reload survives.** `PipelineCache` still inlines includes itself,
+  so it can watch every file, and now writes `#line` markers, so a broken
+  save reports `scene_common.hlsl:212`, not a line of the flattened whole.
+  Tested: a junk line in `scene_common.hlsl` failed all ten pipelines that
+  include it, kept the last working ones on screen, and the fix reloaded
+  them.
+- **Development builds compile at runtime**: `DRAGON_SHADERCROSS`, on by
+  default, links the shadercross dylib, which loads DXC.
+  `tools/build_shadercross.sh` builds it, DXC included, pinned to the
+  commit this was verified on (`1ff05be`), into `~/.local/opt/shadercross`.
+  Homebrew has no DXC. **A package bakes instead**:
+  `tools/release/bake_shaders.sh` runs the shadercross CLI to write
+  `<stem>.<stage>.msl` plus its reflection `.json`, the package is built
+  with `DRAGON_SHADERCROSS=OFF`, and the binary links only system
+  frameworks.
+- **The gate**, `tools/golden/golden.py`, is eight headless scenes captured
+  from the MSL before translation (`tests/golden/`, 7.3 MB). Each one
+  stresses one family: the valley with and without post, the skinned
+  dragon side-on and close on the head, debug lines, landed in the
+  foliage, breath with bloom, and the run HUD.
+  - From the HLSL, every scene's mean error is 0.000 and no pixel is off by
+    more than 8/255. Most scenes peak at 1/255; `ground` has 3 pixels that
+    differ, and `run-hud` has 3, the largest 17/255.
+  - The packaged binary, with its baked MSL, gives the same numbers.
+  - Making the gate reproducible found one thing that was not the shaders:
+    the training room rolled its second-breath start from the wall clock,
+    which changed the Y pip from launch to launch. Headless now uses a
+    fixed seed.
+  - The `fire` golden was then recaptured from the HLSL, after the first
+    comparison had shown its shaders within 1/255 of the MSL.
 
-Exit test: Metal from HLSL matches the MSL goldens within a tonemapped
-tolerance, and the MSL sources are deleted.
+**Not done here, and why.** The PORTING plan before P1 had release builds
+load precompiled blobs for every backend. Only MSL is baked so far,
+because only Metal runs here. DXIL and SPIR-V blobs belong to P2, built on
+the machines that run them.
+
+**Note for anyone filing upstream:** SDL and SDL_shadercross refuse
+contributions written with generative AI (their `CLAUDE.md` and PR template
+say so). Use them freely; never open an issue or a PR against them from an
+agent session.
 
 ## Phase P2 — Windows 10/11 and Linux on modern GPUs
 

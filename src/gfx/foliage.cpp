@@ -51,10 +51,7 @@ std::vector<SDL_GPUVertexAttribute> foliage_attributes() {
 PipelineDesc make_foliage_desc() {
     PipelineDesc desc;
     desc.name = "foliage";
-    desc.shader_path = "foliage.msl";
-    desc.vs_uniform_buffers = 2;  // 0 scene, 1 params
-    desc.fs_uniform_buffers = 2;  // 0 scene, 1 params (the LOD distance)
-    desc.fs_samplers = 3;  // the shadow map, the leaf card, the needle card
+    desc.shader = "foliage";
     desc.vertex_buffers = foliage_buffers();
     desc.vertex_attributes = foliage_attributes();
     // Blades and cone skirts are seen from both sides.
@@ -65,9 +62,7 @@ PipelineDesc make_foliage_desc() {
 PipelineDesc make_foliage_depth_desc(SDL_GPUTextureFormat depth_format) {
     PipelineDesc desc;
     desc.name = "shadow_foliage";
-    desc.shader_path = "foliage_depth.msl";
-    desc.vs_uniform_buffers = 2;  // 0 light view-proj, 1 params
-    desc.fs_samplers = 2;  // the leaf and needle cards, for alpha-tested shadows
+    desc.shader = "foliage_depth";
     desc.vertex_buffers = foliage_buffers();
     desc.vertex_attributes = foliage_attributes();
     desc.no_color_target = true;

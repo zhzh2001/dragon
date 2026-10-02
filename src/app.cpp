@@ -2235,7 +2235,7 @@ void App::build_ui(float dt) {
             ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "%d pipeline(s) broken",
                                pipelines_.broken_count());
         }
-        ImGui::TextDisabled("edit shaders/*.msl and save");
+        ImGui::TextDisabled("edit shaders/*.hlsl and save");
     }
 
     ImGui::Separator();
@@ -4060,7 +4060,11 @@ void App::update_abilities() {
             // The arena starts its cycle somewhere different every time:
             // "the element after the player's" was a fixed pick -- frost for
             // fire, tide for storm, every time.
-            arena_breath_index_ = 1 + int(roll_element(uint32_t(SDL_GetTicksNS() & 0xffffffffu)) ) % (game::ELEMENT_COUNT - 1);
+            // Headless is the exception: a capture must be the same frame
+            // every time (tools/golden), so it rolls from a fixed seed.
+            const uint32_t arena_seed =
+                options_.headless ? 0x5eedu : uint32_t(SDL_GetTicksNS() & 0xffffffffu);
+            arena_breath_index_ = 1 + int(roll_element(arena_seed)) % (game::ELEMENT_COUNT - 1);
             second_element_ = game::Element((int(first) + arena_breath_index_) % game::ELEMENT_COUNT);
             arena_breath_index_ = 0;  // still on the first until U is pressed
             arena_breath_start_ = int(second_element_);

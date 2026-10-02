@@ -405,7 +405,7 @@ roster (section 1, "What happened instead"). The next session starts at row 1
 or row 2b, and the roster is not a reason to reorder anything above.
 
 Status on 2026-09-17: **row 1 is done** (`STATUS.md` M17 part; before/after in
-`artifacts/visual-row1/`). Lighting is one path in `scene_common.msl`, the sun
+`artifacts/visual-row1/`). Lighting is one path in `scene_common.hlsl`, the sun
 is at 14 degrees from the south-west, the palette is `gfx/palette.h` with a
 Palette panel, and plants index it instead of carrying colours. Two things
 learned doing it, for rows 4-9: the comparison capture found a bug no target

@@ -16,19 +16,12 @@ constexpr PipelineHandle INVALID_PIPELINE = 0xFFFFFFFFu;
 // Everything needed to (re)build a graphics pipeline. Kept as data so hot
 // reload can rebuild from the original description after the shader changes.
 struct PipelineDesc {
-    std::string name;         // for logs and GPU debugger labels
-    std::string shader_path;  // relative to the shader root, e.g. "triangle.msl"
-    std::string vs_entry = "vs_main";
-    std::string fs_entry = "fs_main";
-
-    // Resource counts must match what the shader actually declares, or the
-    // Metal backend will bind to the wrong slots.
-    uint32_t vs_uniform_buffers = 0;
-    uint32_t fs_uniform_buffers = 0;
-    uint32_t vs_samplers = 0;
-    uint32_t fs_samplers = 0;
-    uint32_t vs_storage_buffers = 0;
-    uint32_t fs_storage_buffers = 0;
+    std::string name;    // for logs and GPU debugger labels
+    // The shader's stem under the shader root: "terrain" is terrain.hlsl,
+    // whose entry points are always vs_main and fs_main. The resource counts
+    // SDL needs come from reflection, not from here, so they cannot drift
+    // from what the shader declares.
+    std::string shader;
 
     std::vector<SDL_GPUVertexBufferDescription> vertex_buffers;
     std::vector<SDL_GPUVertexAttribute> vertex_attributes;

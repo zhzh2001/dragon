@@ -101,7 +101,12 @@ def main():
     parser.add_argument('--golden', default=os.path.join(ROOT, 'tests', 'golden'))
     parser.add_argument('--out')
     parser.add_argument('--only')
+    parser.add_argument('--binary', help='render with this executable instead of build/dragon, '
+                        'e.g. a package\'s Dragon.app/Contents/MacOS/dragon to check its baked shaders')
     args = parser.parse_args()
+    global BINARY
+    if args.binary:
+        BINARY = os.path.abspath(args.binary)
     names = args.only.split(',') if args.only else list(SCENES)
 
     if args.mode == 'capture':

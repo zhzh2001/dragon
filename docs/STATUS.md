@@ -4,6 +4,20 @@ What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `DIRECTION.md`, and the ports are
 `PORTING.md`.
 
+## Latest — 2026-10-01: public, packaged, one shader source
+
+- **Public** at https://github.com/zhzh2001/dragon. The repo there is a
+  filtered mirror of this one (`docs/RELEASE.md`), MIT, with
+  `AI_DISCLOSURE.md`. Release v0.1.0 is a universal macOS 11+ app.
+- **The default roster** is the seven finished generated species,
+  Embercrest first. The two Sketchfab dragons are early attempts, not
+  shipped (`ATTRIBUTION.md`).
+- **P0**: data beside the executable, saves in the per-user directory, two
+  shipped OFL fonts, `tools/release/package_macos.sh`.
+- **P1**: the shaders are HLSL through SDL_shadercross, matching the MSL
+  goldens to within 1/255 in all but a handful of pixels (`docs/PORTING.md`).
+- **Next**: P2, Windows and Linux on D3D12 and Vulkan. Then the retro track.
+
 ## Latest asset candidates — 2026-09-28
 
 Sunspear (fire, triangular sails) and Rimeplume (frost, feather fans) now have

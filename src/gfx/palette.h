@@ -19,7 +19,7 @@ namespace gfx {
 // colour is (entry index, brightness, 0), resolved against this table in the
 // foliage shader, so a plant recolours with the table.
 //
-// Must match PALETTE_* in shaders/palette.msl exactly, in order.
+// Must match PALETTE_* in shaders/palette.hlsl exactly, in order.
 enum class PaletteEntry : int {
     // Terrain materials, by height and slope.
     Sand = 0,
@@ -80,7 +80,7 @@ struct Palette {
 };
 
 // The third channel of a plant vertex's colour names its MATERIAL: how the
-// foliage shader reads the vertex. Must match FOLIAGE_MAT_* in foliage.msl.
+// foliage shader reads the vertex. Must match FOLIAGE_MAT_* in foliage.hlsl.
 // Adding FOLIAGE_DETAIL marks a card the distance LOD may drop: the coarse
 // cards that are left are the crown's impostor.
 enum FoliageMaterial : int {

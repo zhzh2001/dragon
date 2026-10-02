@@ -41,7 +41,7 @@ public:
     void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
 
     void draw_terrain(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
-    // The water surface quad (see water.msl).
+    // The water surface quad (see water.hlsl).
     void draw_water(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
 
     // Lit opaque geometry with per-vertex albedo and procedural deformation.

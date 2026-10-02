@@ -3,7 +3,12 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
 
+#include <cstdlib>
 #include <unordered_set>
+
+#ifdef DRAGON_SHADERCROSS
+#include <SDL3_shadercross/SDL_shadercross.h>
+#endif
 
 #include "core/log.h"
 
@@ -26,11 +31,10 @@ int64_t file_mtime(const std::string& path) {
     return info.modify_time;
 }
 
-// Metal's runtime compiler resolves <system> headers but not local ones, since
-// a source string has no directory to resolve against. So we inline
-// `#include "file"` ourselves, which is what lets shaders share a common
-// header. `#pragma once` is honoured, and every file visited is appended to
-// `out_files` so hot reload can watch the whole dependency set.
+// We inline `#include "file"` ourselves rather than handing DXC an include
+// directory, for one reason: every file visited is appended to `out_files`,
+// so hot reload watches the whole dependency set and an edit to a shared
+// header rebuilds every pipeline that uses it. `#pragma once` is honoured.
 //
 // Returns false if any included file is missing.
 bool preprocess_shader(const std::string& root, const std::string& relative_path,
@@ -47,12 +51,18 @@ bool preprocess_shader(const std::string& root, const std::string& relative_path
     }
     out_files.push_back(full_path);
 
+    // `#line` markers around every inlined file, so a compile error names the
+    // file and line it is really on rather than a line of the flattened whole.
+    out_source += "#line 1 \"" + relative_path + "\"\n";
+
     // Line-by-line so we can rewrite includes and drop `#pragma once`.
     size_t line_start = 0;
+    int line_number = 0;
     while (line_start <= source.size()) {
         size_t line_end = source.find('\n', line_start);
         if (line_end == std::string::npos) line_end = source.size();
         std::string line = source.substr(line_start, line_end - line_start);
+        ++line_number;
 
         size_t first = line.find_first_not_of(" \t");
         bool handled = false;
@@ -70,6 +80,8 @@ bool preprocess_shader(const std::string& root, const std::string& relative_path
                                            out_source)) {
                         return false;
                     }
+                    // Back in this file: the blanked directive is this line.
+                    out_source += "#line " + std::to_string(line_number) + " \"" + relative_path + "\"\n";
                     handled = true;
                 }
             }
@@ -86,29 +98,87 @@ bool preprocess_shader(const std::string& root, const std::string& relative_path
     return true;
 }
 
+const char* stage_name(SDL_GPUShaderStage stage) {
+    return stage == SDL_GPU_SHADERSTAGE_VERTEX ? "vertex" : "fragment";
+}
+
+#ifdef DRAGON_SHADERCROSS
+// Development builds compile the HLSL at runtime: DXC to SPIR-V, reflection
+// for the resource counts SDL needs, then SPIR-V to whatever the device takes
+// (MSL on Metal). The source is compiled once per stage, with VERTEX_STAGE or
+// FRAGMENT_STAGE defined (shaders/common.hlsl says why).
 SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const std::string& source,
-                              const char* entrypoint, SDL_GPUShaderStage stage,
-                              const PipelineDesc& desc) {
+                              const std::string& /*stem*/, const char* entrypoint,
+                              SDL_GPUShaderStage stage) {
+    const bool vertex = stage == SDL_GPU_SHADERSTAGE_VERTEX;
+    SDL_ShaderCross_HLSL_Define defines[2] = {};
+    defines[0].name = const_cast<char*>(vertex ? "VERTEX_STAGE" : "FRAGMENT_STAGE");
+
+    SDL_ShaderCross_HLSL_Info hlsl = {};
+    hlsl.source = source.c_str();
+    hlsl.entrypoint = entrypoint;
+    hlsl.defines = defines;
+    hlsl.shader_stage = vertex ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+
+    size_t size = 0;
+    void* spirv = SDL_ShaderCross_CompileSPIRVFromHLSL(&hlsl, &size);
+    if (!spirv) return nullptr;  // DXC's diagnostics are in SDL_GetError()
+
+    SDL_ShaderCross_GraphicsShaderMetadata* metadata =
+        SDL_ShaderCross_ReflectGraphicsSPIRV(static_cast<const Uint8*>(spirv), size, 0);
+    SDL_GPUShader* shader = nullptr;
+    if (metadata) {
+        SDL_ShaderCross_SPIRV_Info info = {};
+        info.bytecode = static_cast<const Uint8*>(spirv);
+        info.bytecode_size = size;
+        info.entrypoint = entrypoint;
+        info.shader_stage = hlsl.shader_stage;
+        shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(gpu, &info, &metadata->resource_info, 0);
+        SDL_free(metadata);
+    }
+    SDL_free(spirv);
+    return shader;
+}
+#else
+// A package carries the shaders already translated (tools/release/
+// bake_shaders.sh): <stem>.<stage>.msl beside <stem>.<stage>.json, the
+// reflection shadercross wrote, which holds the resource counts SDL needs.
+uint32_t json_count(const std::string& json, const char* key) {
+    const std::string needle = std::string("\"") + key + "\":";
+    const size_t at = json.find(needle);
+    return at == std::string::npos ? 0 : uint32_t(std::strtoul(json.c_str() + at + needle.size(), nullptr, 10));
+}
+
+SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const std::string& root, const std::string& stem,
+                              const char* entrypoint, SDL_GPUShaderStage stage) {
+    const std::string base = root + stem + "." + stage_name(stage);
+    const std::string msl = read_file(base + ".msl");
+    const std::string json = read_file(base + ".json");
+    if (msl.empty() || json.empty()) {
+        SDL_SetError("no baked shader at %s.msl/.json", base.c_str());
+        return nullptr;
+    }
     SDL_GPUShaderCreateInfo info = {};
-    info.code = reinterpret_cast<const Uint8*>(source.data());
-    info.code_size = source.size();
+    info.code = reinterpret_cast<const Uint8*>(msl.data());
+    info.code_size = msl.size();
     info.entrypoint = entrypoint;
     info.format = SDL_GPU_SHADERFORMAT_MSL;
     info.stage = stage;
-
-    bool vertex = (stage == SDL_GPU_SHADERSTAGE_VERTEX);
-    info.num_uniform_buffers = vertex ? desc.vs_uniform_buffers : desc.fs_uniform_buffers;
-    info.num_samplers = vertex ? desc.vs_samplers : desc.fs_samplers;
-    info.num_storage_buffers = vertex ? desc.vs_storage_buffers : desc.fs_storage_buffers;
-    info.num_storage_textures = 0;
-
+    info.num_samplers = json_count(json, "samplers");
+    info.num_storage_textures = json_count(json, "storage_textures");
+    info.num_storage_buffers = json_count(json, "storage_buffers");
+    info.num_uniform_buffers = json_count(json, "uniform_buffers");
     return SDL_CreateGPUShader(gpu, &info);
 }
+#endif
 
 }  // namespace
 
 void PipelineCache::init(Device* device, std::string shader_root) {
     device_ = device;
+#ifdef DRAGON_SHADERCROSS
+    if (!SDL_ShaderCross_Init()) LOG_ERROR("SDL_ShaderCross_Init failed: %s", SDL_GetError());
+#endif
     shader_root_ = std::move(shader_root);
     if (!shader_root_.empty() && shader_root_.back() != '/') shader_root_ += '/';
     LOG_INFO("shader root: %s", shader_root_.c_str());
@@ -121,25 +191,30 @@ void PipelineCache::shutdown() {
         e.pipeline = nullptr;
     }
     entries_.clear();
+#ifdef DRAGON_SHADERCROSS
+    SDL_ShaderCross_Quit();
+#endif
 }
 
 bool PipelineCache::build(Entry& entry) {
     SDL_GPUDevice* gpu = device_->gpu();
     const PipelineDesc& d = entry.desc;
 
+#ifdef DRAGON_SHADERCROSS
     // Seed the watch list with the primary shader before doing anything else,
     // so a pipeline whose file is missing still has something to watch and gets
     // repaired when that file appears -- without re-reporting the error every
     // poll in the meantime.
-    const std::string primary_path = shader_root_ + d.shader_path;
+    const std::string file = d.shader + ".hlsl";
+    const std::string primary_path = shader_root_ + file;
     entry.sources.clear();
     entry.sources.push_back({primary_path, file_mtime(primary_path)});
 
     std::string source;
     std::vector<std::string> files;
     std::unordered_set<std::string> visited;
-    if (!preprocess_shader(shader_root_, d.shader_path, visited, files, source)) {
-        LOG_ERROR("[%s] could not read shader '%s'", d.name.c_str(), d.shader_path.c_str());
+    if (!preprocess_shader(shader_root_, file, visited, files, source)) {
+        LOG_ERROR("[%s] could not read shader '%s'", d.name.c_str(), file.c_str());
         return false;
     }
 
@@ -147,19 +222,25 @@ bool PipelineCache::build(Entry& entry) {
     // every pipeline that includes it.
     entry.sources.clear();
     for (const std::string& path : files) entry.sources.push_back({path, file_mtime(path)});
+#else
+    // Baked shaders are read as they are; watching them still lets a package
+    // pick up a re-bake without a restart.
+    const std::string& source = shader_root_;
+    entry.sources.clear();
+    for (const char* stage : {"vertex", "fragment"}) {
+        const std::string path = shader_root_ + d.shader + "." + stage + ".msl";
+        entry.sources.push_back({path, file_mtime(path)});
+    }
+#endif
 
-    SDL_GPUShader* vs = compile_shader(gpu, source, d.vs_entry.c_str(),
-                                       SDL_GPU_SHADERSTAGE_VERTEX, d);
+    SDL_GPUShader* vs = compile_shader(gpu, source, d.shader, "vs_main", SDL_GPU_SHADERSTAGE_VERTEX);
     if (!vs) {
-        LOG_ERROR("[%s] vertex shader '%s' failed: %s", d.name.c_str(), d.vs_entry.c_str(),
-                  SDL_GetError());
+        LOG_ERROR("[%s] vertex shader '%s' failed: %s", d.name.c_str(), d.shader.c_str(), SDL_GetError());
         return false;
     }
-    SDL_GPUShader* fs = compile_shader(gpu, source, d.fs_entry.c_str(),
-                                       SDL_GPU_SHADERSTAGE_FRAGMENT, d);
+    SDL_GPUShader* fs = compile_shader(gpu, source, d.shader, "fs_main", SDL_GPU_SHADERSTAGE_FRAGMENT);
     if (!fs) {
-        LOG_ERROR("[%s] fragment shader '%s' failed: %s", d.name.c_str(), d.fs_entry.c_str(),
-                  SDL_GetError());
+        LOG_ERROR("[%s] fragment shader '%s' failed: %s", d.name.c_str(), d.shader.c_str(), SDL_GetError());
         SDL_ReleaseGPUShader(gpu, vs);
         return false;
     }

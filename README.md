@@ -52,7 +52,8 @@ model, camera, AI, gameplay and audio synthesis.
   past the map edge, and mixed forests are placed by slope, altitude and
   water.
 - **A modern renderer.**
-  - Hot-reloaded Metal shaders and reversed-Z depth.
+  - HLSL shaders, hot-reloaded and translated to Metal through
+    SDL_shadercross; reversed-Z depth.
   - One lighting path for the terrain, plants and creatures.
   - Directional shadows and PBR creatures.
   - An HDR target with bloom and a hue-preserving tonemap.
@@ -66,11 +67,15 @@ model, camera, AI, gameplay and audio synthesis.
 
 ## Building
 
-Requires macOS with Metal, CMake 3.24 or later, Ninja, and SDL3
-(`brew install sdl3`). Everything else is fetched by CMake. Windows and Linux
+Requires macOS with Metal, CMake 3.24 or later, Ninja, SDL3
+(`brew install sdl3`), and SDL_shadercross with DXC, which the development
+build uses to compile its HLSL shaders at runtime. Build it once with
+`tools/build_shadercross.sh`: it takes about half an hour, since it
+compiles DXC. Everything else is fetched by CMake. Windows and Linux
 are planned: see [`docs/PORTING.md`](docs/PORTING.md).
 
 ```sh
+tools/build_shadercross.sh     # once: ~/.local/opt/shadercross
 cmake -S . -B build -G Ninja
 cmake --build build
 ./build/dragon --run          # a hoard run

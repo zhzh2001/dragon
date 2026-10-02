@@ -16,8 +16,7 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
 
     PipelineDesc desc;
     desc.name = "particles";
-    desc.shader_path = "particles.msl";
-    desc.vs_uniform_buffers = 1;
+    desc.shader = "particles";
     desc.additive_blend = true;
     desc.depth_test = true;
     // Light does not write depth: particles never occlude anything, including

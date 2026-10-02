@@ -37,7 +37,7 @@ sand band and nothing else. `analytic_height_at` carves a channel along
 curves differ) down to a flat bed below the water line; `surface_at` is the
 ground or the water, whichever is higher, and everything that lands, hovers
 or measures clearance uses it. The water is one quad at the water line over
-the whole world (`water.msl`: fresnel between a deep colour and the reflected
+the whole world (`water.hlsl`: fresnel between a deep colour and the reflected
 sky, a small ripple, a sun glint), hidden by the terrain wherever the ground
 is above the line -- which is everywhere but the river. Reeds crowd its banks.
 
@@ -88,7 +88,7 @@ generates.
   (`FoliageMaterial`): plain, leaf card, needle card, bark; plus 10 for a
   DETAIL card. `MeshVertex` grew a UV for it, which every mesh now carries
   and only the foliage shaders read. Bark is streaked in the shader from the
-  same value noise the terrain patches with (moved to `scene_common.msl`),
+  same value noise the terrain patches with (moved to `scene_common.hlsl`),
   in u around the trunk and stretched along v, so a trunk is not a flat
   brown pole.
 - **Dark undersides and translucency.** A card facing the ground is darkened

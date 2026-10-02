@@ -12,8 +12,7 @@ namespace {
 PipelineDesc make_shadow_mesh_desc(SDL_GPUTextureFormat depth_format) {
     PipelineDesc desc;
     desc.name = "shadow_mesh";
-    desc.shader_path = "shadow_depth.msl";
-    desc.vs_uniform_buffers = 2;  // 0 light matrix, 1 model + deformation
+    desc.shader = "shadow_depth";
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
     desc.no_color_target = true;

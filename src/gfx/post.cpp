@@ -7,14 +7,10 @@ namespace gfx {
 
 namespace {
 
-PipelineDesc fullscreen_desc(const char* name, const char* shader, uint32_t samplers,
-                             SDL_GPUTextureFormat format) {
+PipelineDesc fullscreen_desc(const char* name, const char* shader, SDL_GPUTextureFormat format) {
     PipelineDesc desc;
     desc.name = name;
-    desc.shader_path = shader;
-    desc.vs_entry = "vs_fullscreen";
-    desc.fs_uniform_buffers = 1;
-    desc.fs_samplers = samplers;
+    desc.shader = shader;
     desc.cull = SDL_GPU_CULLMODE_NONE;
     desc.depth_test = false;
     desc.depth_write = false;
@@ -30,11 +26,11 @@ bool PostProcess::init(Device* device, PipelineCache* pipelines) {
     device_ = device;
     pipelines_ = pipelines;
     bright_ = pipelines_->create(
-        fullscreen_desc("post_bright", "post_bright.msl", 1, device->scene_hdr_format()));
+        fullscreen_desc("post_bright", "post_bright", device->scene_hdr_format()));
     blur_ = pipelines_->create(
-        fullscreen_desc("post_blur", "post_blur.msl", 1, device->scene_hdr_format()));
+        fullscreen_desc("post_blur", "post_blur", device->scene_hdr_format()));
     composite_ = pipelines_->create(
-        fullscreen_desc("post_composite", "post_composite.msl", 2, device->scene_color_format()));
+        fullscreen_desc("post_composite", "post_composite", device->scene_color_format()));
 
     SDL_GPUSamplerCreateInfo info = {};
     info.min_filter = SDL_GPU_FILTER_LINEAR;

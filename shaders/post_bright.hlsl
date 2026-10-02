@@ -1,18 +1,18 @@
-#include "post_common.msl"
+#include "post_common.hlsl"
 
 // Bloom, step one: the bright part of the linear scene, at half resolution.
 // A soft knee below the threshold so a surface just under it contributes a
 // little instead of popping in as it crosses. Four taps, which is the
 // downsample.
-fragment float4 fs_main(PostVertex in [[stage_in]],
-                        constant PostUniforms& post [[buffer(0)]],
-                        texture2d<float> scene [[texture(0)]],
-                        sampler linear [[sampler(0)]]) {
+#ifdef FRAGMENT_STAGE
+TEXTURE2D(scene_color, 0);
+
+float4 fs_main(PostVertex input) : SV_Target {
     float2 t = post.texel.xy;
-    float3 c = scene.sample(linear, in.uv + float2(-t.x, -t.y)).rgb +
-               scene.sample(linear, in.uv + float2( t.x, -t.y)).rgb +
-               scene.sample(linear, in.uv + float2(-t.x,  t.y)).rgb +
-               scene.sample(linear, in.uv + float2( t.x,  t.y)).rgb;
+    float3 c = scene_color.Sample(scene_color_sampler, input.uv + float2(-t.x, -t.y)).rgb +
+               scene_color.Sample(scene_color_sampler, input.uv + float2( t.x, -t.y)).rgb +
+               scene_color.Sample(scene_color_sampler, input.uv + float2(-t.x,  t.y)).rgb +
+               scene_color.Sample(scene_color_sampler, input.uv + float2( t.x,  t.y)).rgb;
     c *= 0.25;
     float brightness = max(c.r, max(c.g, c.b));
     float threshold = post.bloom.x;
@@ -23,3 +23,4 @@ fragment float4 fs_main(PostVertex in [[stage_in]],
     float contribution = max(soft, brightness - threshold) / max(brightness, 1e-4);
     return float4(c * contribution, 1.0);
 }
+#endif

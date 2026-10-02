@@ -81,6 +81,23 @@ if(DRAGON_DEV_ROOTS)
   )
 endif()
 
+# Shaders are HLSL (shaders/common.hlsl). A development build compiles them
+# at runtime through SDL_shadercross, DXC included, which is what keeps hot
+# reload working; build it once and install it under ~/.local/opt/shadercross
+# (docs/PORTING.md, P1). A package is built with DRAGON_SHADERCROSS=OFF and
+# loads the shaders tools/release/bake_shaders.sh translated ahead of time, so
+# it carries neither DXC nor a second SDL.
+option(DRAGON_SHADERCROSS "Compile the HLSL shaders at runtime through SDL_shadercross" ON)
+if(DRAGON_SHADERCROSS)
+  find_package(SDL3_shadercross CONFIG REQUIRED
+    HINTS "$ENV{HOME}/.local/opt/shadercross" "${DRAGON_SHADERCROSS_ROOT}")
+  target_link_libraries(dragon PRIVATE SDL3_shadercross::SDL3_shadercross-shared)
+  target_compile_definitions(dragon PRIVATE DRAGON_SHADERCROSS)
+  get_target_property(_shadercross_lib SDL3_shadercross::SDL3_shadercross-shared IMPORTED_LOCATION_RELEASE)
+  get_filename_component(_shadercross_lib_dir "${_shadercross_lib}" DIRECTORY)
+  set_target_properties(dragon PROPERTIES BUILD_RPATH "${_shadercross_lib_dir}")
+endif()
+
 target_compile_options(dragon PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 
 # Tests are a plain executable rather than a framework: `ctest` or just run it.

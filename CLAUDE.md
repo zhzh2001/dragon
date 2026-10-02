@@ -38,6 +38,7 @@ they are records of what was already tried and why it is the way it is.
 ## Build & run
 
 ```sh
+tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
@@ -169,7 +170,7 @@ flight controls.
   it at half resolution, tonemaps and grades it into the 8-bit `scene_color`
   target, the UI draws onto that, and it blits to the swapchain. World shaders
   end in `scene_out()` and never tonemap themselves -- the tonemap and the
-  gamma live in `post_composite.msl`, after the bloom. Only the composite and
+  gamma live in `post_composite.hlsl`, after the bloom. Only the composite and
   Dear ImGui declare `scene_color_format()`. The dials are under Grade &
   bloom in the Engine panel.
 - **UI**: Dear ImGui draws in its own pass (`begin_ui_pass`) because its
@@ -197,15 +198,25 @@ flight controls.
   back with `paths::user_or_asset(...)`. So best times, run records and
   saved tuning are no longer in `assets/`. A path written into the source
   tree works on this machine only; it is what P0 removed (`PORTING.md`).
-- **Shaders**: MSL source in `shaders/`, read from the source tree at runtime and
-  hot-reloaded on save (polled every 0.25s). A failed compile logs an error and
-  keeps the last working pipeline, so a bad save never blanks the screen.
-  Metal's runtime compiler does not resolve local `#include`, so
-  `gfx::PipelineCache` inlines them itself and watches every included file.
-  Include `scene_common.msl` first -- it pulls in `<metal_stdlib>` and opens the
-  `metal` namespace.
+- **Shaders are HLSL** in `shaders/`, one file per pipeline with `vs_main` and
+  `fs_main`, compiled at runtime through SDL_shadercross (DXC to SPIR-V, then
+  to MSL on Metal) and hot-reloaded on save (polled every 0.25s). A failed
+  compile logs `file:line` and keeps the last working pipeline, so a bad save
+  never blanks the screen. `gfx::PipelineCache` inlines `#include`s itself,
+  with `#line` markers, and watches every included file. Each file is
+  compiled twice, with `VERTEX_STAGE` and then `FRAGMENT_STAGE` defined;
+  declare a stage-only resource under its guard. Bindings go through the
+  macros in `common.hlsl` (`UNIFORM_SLOT(n)`, `TEXTURE2D(name, n)`), which
+  put each resource in the register space SDL expects for that stage, and
+  the resource counts come from reflection, so `PipelineDesc` carries only
+  the stem. Uniform blocks are float4 and float4x4 only, which is what keeps
+  the C++ structs and HLSL's constant-buffer packing byte-identical. A
+  development build needs shadercross installed (`tools/build_shadercross.sh`);
+  a package bakes the MSL ahead of time (`tools/release/bake_shaders.sh`).
+  `tools/golden/golden.py compare` is the gate for any shader or backend
+  change: eight scenes, deterministic in headless, against `tests/golden/`.
 - **Lighting is one path.** Every world shader lights through `direct_sun`,
-  `ambient_light` and `apply_fog` in `scene_common.msl` (plants add
+  `ambient_light` and `apply_fog` in `scene_common.hlsl` (plants add
   `translucent_sun`). Do not add a per-shader wrap or ambient: the seam
   between the trees and the ground was exactly that. World colours live in
   `gfx/palette.h` and reach shaders as uniforms; plant meshes store a palette
@@ -408,8 +419,10 @@ These are not about one system, and every one of them cost real time.
 
 Write what we want to learn; vendor the rest. In: renderer, scene, animation
 blending and procedural animation, flight model, camera, AI, gameplay. Out
-(never hand-rolled): SDL3 (window/input/GPU), Dear ImGui, Jolt (physics), cgltf
-(glTF), stb_image, miniaudio.
+(never hand-rolled): SDL3 (window/input/GPU), SDL_shadercross (the shader
+compiler; dev builds only), Dear ImGui, Jolt (physics), cgltf (glTF),
+stb_image, miniaudio. SDL and SDL_shadercross refuse AI-written
+contributions: never file an issue or a PR against them from a session.
 
 ## Layout
 

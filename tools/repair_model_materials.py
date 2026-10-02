@@ -9,7 +9,7 @@ Why this exists. The Hunyuan one-shot ships a base colour that is fine and two
 data maps that are not: the packed occlusion-roughness-metallic has a
 constant 1.0 in R (no ambient occlusion at all) and a near-constant G (one
 gloss for horn, scale, membrane and claw alike), and the normal map is almost
-flat. Lit by the engine's single GGX lobe (shaders/skinned.msl) that reads as
+flat. Lit by the engine's single GGX lobe (shaders/skinned.hlsl) that reads as
 injection-moulded plastic. Nothing in the shader is wrong; the maps carry no
 information for it to show.
 

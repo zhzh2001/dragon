@@ -8,10 +8,10 @@ namespace gfx {
 
 // Per-frame scene constants, shared by every world shader.
 //
-// Must match `SceneUniforms` in shaders/scene_common.msl exactly. Every vec3 is
-// stored as a Vec4 because MSL aligns float3 to 16 bytes -- using float4
-// throughout removes any doubt about where a field lands, at the cost of a few
-// wasted floats.
+// Must match `SceneUniforms` in shaders/scene_common.hlsl exactly. Every vec3 is
+// stored as a Vec4: HLSL's constant-buffer packing, MSL's float3 alignment and
+// std140 all agree on a float4, so using float4 throughout removes any doubt
+// about where a field lands on any backend, at the cost of a few wasted floats.
 struct SceneUniforms {
     core::Mat4 view_proj;
     core::Mat4 light_view_proj;
@@ -36,7 +36,7 @@ struct SceneUniforms {
 
 // Per-object transform plus procedural deformation parameters.
 //
-// Must match `ModelUniforms` in shaders/model_common.msl exactly.
+// Must match `ModelUniforms` in shaders/model_common.hlsl exactly.
 struct ModelUniforms {
     core::Mat4 model = core::Mat4::identity();
     // rgb multiplies vertex colour, a is an unlit emissive add. Lets one mesh

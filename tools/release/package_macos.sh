@@ -7,7 +7,8 @@
 # linked statically (DRAGON_FETCH_SDL), for macOS 11 and later, arm64 and
 # x86_64. It carries no source-tree fallback (DRAGON_DEV_ROOTS=OFF), so the
 # binary holds no build-machine path and runs from the bundle's own
-# Resources. The bundle is staged in dist/, the roster's textures are shrunk
+# Resources, and no shader compiler (DRAGON_SHADERCROSS=OFF): the HLSL is
+# baked to MSL by bake_shaders.sh. The bundle is staged in dist/, the roster's textures are shrunk
 # to 2048² (shrink_glb.py), it is ad-hoc signed, and it is zipped together
 # with the licence files. Then it checks itself: a home-directory path in
 # the binary fails the build, and a headless frame is rendered from the
@@ -29,7 +30,7 @@ done
 
 cmake -S . -B build-release -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DDRAGON_DEV_ROOTS=OFF -DDRAGON_FETCH_SDL=ON \
+  -DDRAGON_DEV_ROOTS=OFF -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" >/dev/null
 cmake --build build-release --target dragon
@@ -60,7 +61,7 @@ cat > "$app/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-cp -R shaders "$res/shaders"
+tools/release/bake_shaders.sh "$res/shaders"
 cp -R assets/props assets/textures assets/fonts "$res/assets/"
 for s in $species; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$res/assets/$s.glb" --max 2048

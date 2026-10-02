@@ -1,13 +1,17 @@
 // Shared scene uniforms. Must match gfx::SceneUniforms in scene_uniforms.h.
 //
-// Every vec3 is stored as a float4 because MSL aligns float3 to 16 bytes; using
-// float4 throughout removes any doubt about where a field actually lands.
+// Every vec3 is stored as a float4. It removes any doubt about where a field
+// lands, and it is what lets the same C++ struct feed the old MSL and HLSL's
+// constant-buffer packing without a byte of padding to argue about.
+//
+// The block is the uniform in slot 0 of both stages, as `scene`. A shader
+// whose slot 0 is something else (the shadow passes, particles) defines
+// NO_SCENE before including this; it still gets the struct-free helpers
+// (scene_out, the noise), but not the lighting path, which reads `scene`.
 #pragma once
 
-#include <metal_stdlib>
-using namespace metal;
-
-#include "palette.msl"
+#include "common.hlsl"
+#include "palette.hlsl"
 
 struct SceneUniforms {
     float4x4 view_proj;
@@ -36,25 +40,61 @@ struct SceneUniforms {
     // x = sun wrap (how far past the terminator direct light reaches),
     // y = foliage translucency, z = ground bounce strength, w unused
     float4 light_params;
-    // The world's named colours; see palette.msl for the indices.
+    // The world's named colours; see palette.hlsl for the indices.
     float4 palette[PALETTE_COUNT];
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
-// tonemap and the gamma live in post_composite.msl now, after the bloom, so
+// tonemap and the gamma live in post_composite.hlsl, after the bloom, so
 // bright things glow before they clip instead of desaturating toward white.
 // Every world shader goes through this one function for the same reason the
 // old tonemap was shared: the sky was once written differently from the
 // terrain fogging toward it, and the seam showed along the horizon.
-static inline float3 scene_out(float3 color) { return max(color, 0.0); }
+float3 scene_out(float3 color) { return max(color, 0.0); }
+
+// Cheap value noise for breaking up flat material bands -- terrain patches,
+// bark streaks. Not for shaping geometry: purely a surface tint, so it can be
+// crude and fast. Shared, so the ground and the trunks standing on it grain
+// the same way.
+float hash21(float2 p) {
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float value_noise(float2 p) {
+    float2 cell = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);  // smooth the interpolation
+    float a = hash21(cell);
+    float b = hash21(cell + float2(1.0, 0.0));
+    float c = hash21(cell + float2(0.0, 1.0));
+    float d = hash21(cell + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+// Three octaves: single-octave value noise reads as soft blobs, fbm reads as
+// ground. Still cheap enough to call several times per fragment.
+float fbm(float2 p) {
+    float total = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 3; ++i) {
+        total += amplitude * value_noise(p);
+        p = p * 2.17 + float2(31.7, 17.3);
+        amplitude *= 0.5;
+    }
+    return total;
+}
+
+#ifndef NO_SCENE
+ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
 
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //
 // The shadow map uses a conventional [0, 1] depth range, unlike the reversed-Z
 // main pass, so nearer-to-light means a smaller depth value.
-static inline float sun_visibility(float3 world_position, float3 normal,
-                                   constant SceneUniforms& scene,
-                                   depth2d<float> shadow_map, sampler shadow_sampler) {
+float sun_visibility(float3 world_position, float3 normal,
+                     Texture2D<float> shadow_map, SamplerState shadow_sampler) {
     float strength = scene.shadow_params.z;
     if (strength <= 0.0) return 1.0;
 
@@ -63,7 +103,7 @@ static inline float sun_visibility(float3 world_position, float3 normal,
     float texel_world = scene.shadow_params.x;
     float3 offset_position = world_position + normal * texel_world * 1.5;
 
-    float4 light_clip = scene.light_view_proj * float4(offset_position, 1.0);
+    float4 light_clip = mul(scene.light_view_proj, float4(offset_position, 1.0));
     float3 light_ndc = light_clip.xyz / light_clip.w;
 
     // Outside the shadow volume there is no information, so treat it as lit
@@ -80,32 +120,32 @@ static inline float sun_visibility(float3 world_position, float3 normal,
 
     // 3x3 PCF: enough to hide the texel grid without smearing contact shadows.
     float step_uv = scene.shadow_params.w;
-    float lit = 0.0;
+    float lit_taps = 0.0;
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
             float2 sample_uv = uv + float2(float(x), float(y)) * step_uv;
-            float stored = shadow_map.sample(shadow_sampler, sample_uv);
-            lit += (own_depth - bias <= stored) ? 1.0 : 0.0;
+            float stored = shadow_map.SampleLevel(shadow_sampler, sample_uv, 0.0);
+            lit_taps += (own_depth - bias <= stored) ? 1.0 : 0.0;
         }
     }
-    lit /= 9.0;
+    lit_taps /= 9.0;
 
     // strength controls how dark full shadow gets. Never fully black, or
     // terrain in shadow loses all its shape.
-    return mix(1.0, lit, strength);
+    return lerp(1.0, lit_taps, strength);
 }
 
 // Analytic sky. Also used by the fog in the terrain shader, so distant terrain
 // dissolves into exactly the colour of the sky behind it instead of into a flat
 // grey band.
-static inline float3 sky_color(float3 ray, constant SceneUniforms& scene) {
+float3 sky_color(float3 ray) {
     float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
-    float3 base = mix(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
+    float3 base = lerp(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
 
     // Below the horizon, fade toward the fog colour so terrain edges and the
     // ground plane meet without a hard seam.
     float below = saturate(-ray.y * 6.0);
-    base = mix(base, scene.fog_color.rgb, below * 0.7);
+    base = lerp(base, scene.fog_color.rgb, below * 0.7);
 
     // Sun disc plus a wide forward-scattering glow.
     float sun_dot = saturate(dot(ray, normalize(scene.sun.xyz)));
@@ -114,41 +154,6 @@ static inline float3 sky_color(float3 ray, constant SceneUniforms& scene) {
 
     return base;
 }
-
-// Cheap value noise for breaking up flat material bands -- terrain patches,
-// bark streaks. Not for shaping geometry: purely a surface tint, so it can be
-// crude and fast. Shared, so the ground and the trunks standing on it grain
-// the same way.
-static inline float hash21(float2 p) {
-    p = fract(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-
-static inline float value_noise(float2 p) {
-    float2 cell = floor(p);
-    float2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);  // smooth the interpolation
-    float a = hash21(cell);
-    float b = hash21(cell + float2(1.0, 0.0));
-    float c = hash21(cell + float2(0.0, 1.0));
-    float d = hash21(cell + float2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-// Three octaves: single-octave value noise reads as soft blobs, fbm reads as
-// ground. Still cheap enough to call several times per fragment.
-static inline float fbm(float2 p) {
-    float total = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < 3; ++i) {
-        total += amplitude * value_noise(p);
-        p = p * 2.17 + float2(31.7, 17.3);
-        amplitude *= 0.5;
-    }
-    return total;
-}
-
 
 // ---- the one lighting path.
 //
@@ -162,7 +167,7 @@ static inline float fbm(float2 p) {
 // Direct sun on a surface, wrapped a little past the terminator so a slope
 // turning away keeps its shape instead of going flat black. `visibility` is
 // the shadow-map term from sun_visibility().
-static inline float3 direct_sun(float3 normal, float visibility, constant SceneUniforms& scene) {
+float3 direct_sun(float3 normal, float visibility) {
     float wrap = scene.light_params.x;
     float3 to_sun = normalize(scene.sun.xyz);
     float wrapped = saturate((dot(normal, to_sun) + wrap) / (1.0 + wrap));
@@ -173,20 +178,19 @@ static inline float3 direct_sun(float3 normal, float visibility, constant SceneU
 // from below. The split is what a low sun gives a real landscape -- shadow
 // sides go cool and dark, undersides pick up warmth -- and it is the same on
 // a rock, a crown and a wing membrane.
-static inline float3 ambient_light(float3 normal, constant SceneUniforms& scene) {
+float3 ambient_light(float3 normal) {
     float sky_amount = saturate(normal.y * 0.5 + 0.5);
-    float3 sky = mix(scene.sky_horizon.rgb, scene.sky_zenith.rgb, 0.6);
+    float3 sky = lerp(scene.sky_horizon.rgb, scene.sky_zenith.rgb, 0.6);
     float3 bounce = scene.palette[PALETTE_GROUND_BOUNCE].rgb * scene.light_params.z *
-                    scene.sun_color.rgb * saturate(scene.sun.xyz.y * 4.0);
-    return mix(bounce, sky, sky_amount) * scene.terrain_params.w;
+                    scene.sun_color.rgb * saturate(scene.sun.y * 4.0);
+    return lerp(bounce, sky, sky_amount) * scene.terrain_params.w;
 }
 
 // Sunlight leaking through a thin thing lit from behind: a crown, a blade, a
 // wing. Zero for solid surfaces. Reads as the glow of foliage against a low
 // sun, which the wrap alone cannot give because the wrap never exceeds the
 // front-lit value.
-static inline float3 translucent_sun(float3 normal, float visibility, float translucency,
-                                     constant SceneUniforms& scene) {
+float3 translucent_sun(float3 normal, float visibility, float translucency) {
     float3 to_sun = normalize(scene.sun.xyz);
     float behind = saturate(-dot(normal, to_sun));
     return scene.sun_color.rgb * scene.sun.w * behind * translucency * visibility;
@@ -195,11 +199,12 @@ static inline float3 translucent_sun(float3 normal, float visibility, float tran
 // Exponential-squared height fog toward the sky colour along the view ray, so
 // distance dissolves into exactly what is behind it and thins with altitude
 // so peaks stay legible while the valley floor still reads as far.
-static inline float3 apply_fog(float3 lit, float3 world_position, constant SceneUniforms& scene) {
+float3 apply_fog(float3 lit_color, float3 world_position) {
     float3 to_point = world_position - scene.camera_position.xyz;
-    float distance = length(to_point);
+    float dist = length(to_point);
     float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(distance * density, 2.0));
-    float3 ray = to_point / max(distance, 1e-3);
-    return mix(lit, sky_color(ray, scene), saturate(fog));
+    float fog = 1.0 - exp(-pow(dist * density, 2.0));
+    float3 ray = to_point / max(dist, 1e-3);
+    return lerp(lit_color, sky_color(ray), saturate(fog));
 }
+#endif  // NO_SCENE

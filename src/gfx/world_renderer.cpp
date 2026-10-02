@@ -11,9 +11,7 @@ namespace {
 PipelineDesc make_sky_desc() {
     PipelineDesc desc;
     desc.name = "sky";
-    desc.shader_path = "sky.msl";
-    desc.vs_uniform_buffers = 0;
-    desc.fs_uniform_buffers = 1;
+    desc.shader = "sky";
     desc.cull = SDL_GPU_CULLMODE_NONE;
     // No vertex buffer: the triangle is generated from vertex_id.
     // No depth interaction at all -- the sky is a background, not geometry.
@@ -25,12 +23,9 @@ PipelineDesc make_sky_desc() {
 PipelineDesc make_terrain_desc(bool wireframe) {
     PipelineDesc desc;
     desc.name = wireframe ? "terrain_wireframe" : "terrain";
-    desc.shader_path = "terrain.msl";
-    desc.vs_uniform_buffers = 1;
-    desc.fs_uniform_buffers = 1;
+    desc.shader = "terrain";
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
-    desc.fs_samplers = 2;  // the shadow map, the detail tile
     desc.fill = wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
     // Terrain is a heightfield: we can see the underside from below when
     // flying through a canyon, so nothing is culled.
@@ -41,9 +36,7 @@ PipelineDesc make_terrain_desc(bool wireframe) {
 PipelineDesc make_water_desc() {
     PipelineDesc desc;
     desc.name = "water";
-    desc.shader_path = "water.msl";
-    desc.vs_uniform_buffers = 1;
-    desc.fs_uniform_buffers = 1;
+    desc.shader = "water";
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
     desc.cull = SDL_GPU_CULLMODE_NONE;
@@ -53,10 +46,7 @@ PipelineDesc make_water_desc() {
 PipelineDesc make_mesh_desc() {
     PipelineDesc desc;
     desc.name = "mesh";
-    desc.shader_path = "mesh.msl";
-    desc.vs_uniform_buffers = 2;  // 0 scene, 1 model
-    desc.fs_uniform_buffers = 1;
-    desc.fs_samplers = 1;  // the shadow map
+    desc.shader = "mesh";
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
     // Wings are thin two-sided plates, and the fragment shader flips normals
@@ -68,10 +58,7 @@ PipelineDesc make_mesh_desc() {
 PipelineDesc make_skinned_desc() {
     PipelineDesc desc;
     desc.name = "skinned";
-    desc.shader_path = "skinned.msl";
-    desc.vs_uniform_buffers = 3;  // 0 scene, 1 model, 2 skinning matrices
-    desc.fs_uniform_buffers = 2;  // 0 scene, 1 model
-    desc.fs_samplers = 4;  // 0 shadow map, 1 base colour, 2 normal, 3 ORM
+    desc.shader = "skinned";
     desc.vertex_buffers = anim::SkinnedMesh::buffer_descriptions();
     desc.vertex_attributes = anim::SkinnedMesh::attributes();
     // Membranes are thin and two-sided, and the fragment shader flips normals
@@ -83,8 +70,7 @@ PipelineDesc make_skinned_desc() {
 PipelineDesc make_skinned_depth_desc(SDL_GPUTextureFormat depth_format) {
     PipelineDesc desc;
     desc.name = "shadow_skinned";
-    desc.shader_path = "shadow_skinned.msl";
-    desc.vs_uniform_buffers = 3;
+    desc.shader = "shadow_skinned";
     desc.vertex_buffers = anim::SkinnedMesh::buffer_descriptions();
     desc.vertex_attributes = anim::SkinnedMesh::attributes();
     desc.no_color_target = true;

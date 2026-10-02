@@ -1,4 +1,4 @@
-#include "scene_common.msl"
+#include "scene_common.hlsl"
 
 // A still water surface: one quad at the water line, fresnel between a deep
 // colour and the reflected sky, a little animated ripple in the normal, and a
@@ -6,46 +6,48 @@
 // line everywhere else, so the terrain simply hides it there.
 
 struct VertexIn {
-    float3 position [[attribute(0)]];
-    float3 normal   [[attribute(1)]];
-    float3 color    [[attribute(2)]];
+    float3 position : TEXCOORD0;
+    float3 normal   : TEXCOORD1;
+    float3 color    : TEXCOORD2;
 };
 
 struct VertexOut {
-    float4 clip_position [[position]];
-    float3 world_position;
+    float4 clip_position : SV_Position;
+    float3 world_position : TEXCOORD0;
 };
 
-vertex VertexOut vs_main(VertexIn in [[stage_in]],
-                         constant SceneUniforms& scene [[buffer(0)]]) {
-    VertexOut out;
-    out.world_position = in.position;
-    out.clip_position = scene.view_proj * float4(in.position, 1.0);
-    return out;
+#ifdef VERTEX_STAGE
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    o.world_position = input.position;
+    o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
+    return o;
 }
+#endif
 
-fragment float4 fs_main(VertexOut in [[stage_in]],
-                        constant SceneUniforms& scene [[buffer(0)]]) {
+#ifdef FRAGMENT_STAGE
+float4 fs_main(VertexOut input) : SV_Target {
     float t = scene.view_params.z;
-    float2 p = in.world_position.xz;
+    float2 p = input.world_position.xz;
     // Two crossed ripple trains; small, so the reflection stays readable.
     float3 normal = normalize(float3(sin(p.x * 0.09 + t * 1.1) * 0.04 + sin(p.y * 0.13 - t * 0.8) * 0.03,
                                      1.0,
                                      cos(p.y * 0.07 + t * 0.7) * 0.04 + cos(p.x * 0.05 + t * 0.5) * 0.03));
-    float3 to_camera = scene.camera_position.xyz - in.world_position;
-    float distance = length(to_camera);
-    float3 ray = -to_camera / max(distance, 1e-3);
+    float3 to_camera = scene.camera_position.xyz - input.world_position;
+    float dist = length(to_camera);
+    float3 ray = -to_camera / max(dist, 1e-3);
     float3 reflected = reflect(ray, normal);
     reflected.y = abs(reflected.y);  // never reflect what is under the water
-    float3 reflection = sky_color(reflected, scene);
+    float3 reflection = sky_color(reflected);
 
     const float3 DEEP = scene.palette[PALETTE_WATER_DEEP].rgb;
     float cosine = saturate(dot(-ray, normal));
     float fresnel = 0.04 + 0.96 * pow(1.0 - cosine, 5.0);
-    float3 color = mix(DEEP, reflection, fresnel);
+    float3 color = lerp(DEEP, reflection, fresnel);
     // Sun glint on the ripples.
     float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 180.0);
     color += scene.sun_color.rgb * scene.sun.w * glint * 0.6;
 
-    return float4(scene_out(apply_fog(color, in.world_position, scene)), 1.0);
+    return float4(scene_out(apply_fog(color, input.world_position)), 1.0);
 }
+#endif
