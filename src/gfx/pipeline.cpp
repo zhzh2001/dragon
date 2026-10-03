@@ -121,6 +121,7 @@ bool PipelineCache::build(Entry& entry) {
     shaders.root = shader_root_;
     if (!active_tier().hdr) shaders.defines.push_back("LDR_OUTPUT");
     if (active_tier().baked_noise) shaders.defines.push_back("BAKED_NOISE");
+    if (active_tier().compress_textures) shaders.defines.push_back("SWIZZLED_NORMALS");
     entry.sources.clear();
     if (rhi.compiles_hlsl()) {
         // Seed the watch list with the primary shader before doing anything

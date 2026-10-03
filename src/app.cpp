@@ -3223,8 +3223,8 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name =
             tag + "_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
-        out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i],
-                                                              name.c_str(), srgb));
+        out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(),
+                                                              texture_kind(mesh_data, loaded, i)));
     }
     // Measure the head and the neck for the first-person eye, in body metres
     // relative to the head joint, bind pose. A vertex belongs to a part when
@@ -3398,6 +3398,18 @@ void App::spawn_bots(int count) {
 
 // The tier's skinning budget (gfx/render_tier.h): a mesh whose joints do not
 // fit one draw is split into palettes here, at load, once.
+// What a model's texture `index` holds, from the materials that use it: a
+// retro tier compresses each kind its own way (gfx/texture.h).
+gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
+                                   size_t index) {
+    for (const anim::SkinnedSubmesh& sub : mesh.submeshes) {
+        if (sub.normal_texture == int(index)) return gfx::TextureKind::NormalMap;
+        if (sub.orm_texture == int(index)) return gfx::TextureKind::Orm;
+    }
+    const bool srgb = index < loaded.texture_srgb.size() && loaded.texture_srgb[index] != 0;
+    return srgb ? gfx::TextureKind::Colour : gfx::TextureKind::Data;
+}
+
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const {
     if (tier_.max_skin_bones >= uint32_t(anim::MAX_JOINTS)) return mesh;
     anim::SkinnedMeshData split = anim::partition_palettes(mesh, tier_.max_skin_bones);
@@ -3420,10 +3432,9 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
     }
     if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag), tag)) return false;
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
-        const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name = std::string(tag) + "_" + std::to_string(i);
-        out.textures.push_back(
-            gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(), srgb));
+        out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(),
+                                                              texture_kind(data, loaded, i)));
     }
     out.joints.assign(size_t(std::max(out.skeleton.count(), 1)), core::Mat4::identity());
     out.ok = true;

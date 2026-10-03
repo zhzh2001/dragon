@@ -98,7 +98,15 @@ float4 fs_main(VertexOut input) : SV_Target {
         if (dot(orthogonal, orthogonal) > 1e-8) {
             float3 tangent = normalize(orthogonal);
             float3 bitangent = cross(normal, tangent) * input.tangent_sign * side;
+#ifdef SWIZZLED_NORMALS
+            // DXT5nm (gfx/texture.h): x in alpha, y in green, z rebuilt.
+            float4 packed = normal_map.Sample(normal_map_sampler, input.uv);
+            float3 sampled;
+            sampled.xy = packed.ag * 2.0 - 1.0;
+            sampled.z = sqrt(saturate(1.0 - dot(sampled.xy, sampled.xy)));
+#else
             float3 sampled = normal_map.Sample(normal_map_sampler, input.uv).xyz * 2.0 - 1.0;
+#endif
             normal = normalize(tangent * sampled.x + bitangent * sampled.y + normal * sampled.z);
         }
     }

@@ -380,6 +380,8 @@ private:
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const;
+    static gfx::TextureKind texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
+                                         size_t index);
     // The content tier (--tier); set before anything loads.
     gfx::RenderTier tier_;
     bool load_prop(const char* path, PropModel& out, const char* tag,

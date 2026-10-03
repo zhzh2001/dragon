@@ -46,6 +46,12 @@ enum class Format : uint8_t {
     RGBA8,       // 8-bit unorm colour: the scene colour target, data textures
     RGBA8_SRGB,  // 8-bit sRGB colour: base-colour textures, sampled to linear
     RGBA16F,     // the linear HDR scene and the bloom chain
+    // Block-compressed colour, 4x4 texels a block (DXT1 and DXT5 on D3D9):
+    // BC1 is 8 bytes a block, opaque; BC3 adds a separate alpha block, 16.
+    BC1,
+    BC1_SRGB,
+    BC3,
+    BC3_SRGB,
     D16,
     D24,
     D32F,
@@ -213,6 +219,12 @@ public:
     // and with `generate_mips` the rest of the chain from it.
     virtual bool upload_texture(Texture* texture, const void* pixels, uint32_t width,
                                 uint32_t height, bool generate_mips) = 0;
+    // Fills one mip level from data already in the texture's format: tightly
+    // packed texels, or for a block format tightly packed 4x4 blocks
+    // (`bytes` of them). For a chain built on the CPU, or one that cannot be
+    // generated on the GPU (block formats cannot be rendered to).
+    virtual bool upload_texture_level(Texture* texture, uint32_t level, const void* data,
+                                      uint32_t bytes, uint32_t width, uint32_t height) = 0;
     virtual void destroy(Texture* texture) = 0;
 
     virtual Sampler* create_sampler(const SamplerDesc& desc) = 0;

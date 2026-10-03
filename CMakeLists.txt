@@ -219,6 +219,16 @@ target_link_libraries(test_noise_lattice PRIVATE SDL3::SDL3)
 target_compile_options(test_noise_lattice PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME noise_lattice COMMAND test_noise_lattice)
 
+# The texture budget: capping, CPU mips and block compression keep content.
+add_executable(test_texture_budget
+  tests/test_texture_budget.cpp
+  src/gfx/texture.cpp
+)
+target_include_directories(test_texture_budget PRIVATE src)
+target_link_libraries(test_texture_budget PRIVATE SDL3::SDL3 stb)
+target_compile_options(test_texture_budget PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME texture_budget COMMAND test_texture_budget)
+
 add_executable(test_combat
   tests/test_combat.cpp
   src/game/combat.cpp

@@ -431,7 +431,30 @@ render before a D3D9 device exists.
   - A trap found on the way (`common.hlsl`): the count of textures SDL binds
     comes from reflection, which counts only those the shader uses. A debug
     edit that returns before reading slots 0 and 1 makes slot 2 read zero.
-- Next: texture caps and DXT, creature LODs.
+- **Texture caps and DXT, done (2026-10-03).** `create_texture_from_image`
+  applies the tier's budget (`gfx::TextureBudget`) at upload, so no call
+  site knows about it. Every texture is halved to the cap: 1024 for sm3,
+  512 for sm2 and ff. Its mips are built on the CPU, averaged in linear
+  light for colour. Each kind then compresses its own way (the model
+  loader tells normal and ORM maps apart from the materials that use them):
+  - Colour: BC1, or BC3 when any texel has alpha. Mean error 2.3 code
+    values on Embercrest's base colour.
+  - Normal maps: DXT5nm. X goes to alpha and Y stays in green, the shaders
+    rebuild Z (`SWIZZLED_NORMALS`). Mean error 1.0 degree, worst 20.6.
+  - ORM: BC1, accepting crosstalk between occlusion, roughness and
+    metallic. Mean error 1.8 to 3.0 code values per channel, worst about
+    100 on hard edges.
+  - The terrain detail and the card masks: RGBA8. They are four
+    independent channels and small.
+  - The roster's textures: about 2 GB modern, 29 MB at sm3, 8.5 MB at sm2.
+    The retro tiers also load faster, 5.4 s against 6.3 s, with less to
+    upload.
+  - Against the modern goldens, sm3's dragon close-up moves from a mean of
+    0.16 to 0.47/255: scale detail a little softer. At sm2's 512 the
+    softening is plain up close, as budgeted.
+  - The CPU encode costs load time. A D3D9 package should bake the
+    compressed chain (R3's packaging) rather than repeat it on a 2005 CPU.
+- Next: creature LODs.
 
 ### Budgets to design to
 

@@ -35,6 +35,10 @@ SDL_GPUTextureFormat to_sdl(Format f) {
         case Format::RGBA8: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         case Format::RGBA8_SRGB: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
         case Format::RGBA16F: return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+        case Format::BC1: return SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM;
+        case Format::BC1_SRGB: return SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM_SRGB;
+        case Format::BC3: return SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM;
+        case Format::BC3_SRGB: return SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM_SRGB;
         case Format::D16: return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
         case Format::D24: return SDL_GPU_TEXTUREFORMAT_D24_UNORM;
         case Format::D32F: return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
@@ -468,6 +472,38 @@ public:
         SDL_UploadToGPUTexture(pass, &source, &destination, false);
         SDL_EndGPUCopyPass(pass);
         if (generate_mips) SDL_GenerateMipmapsForGPUTexture(cmd, sdl(texture));
+        submit_and_wait(cmd);
+        SDL_ReleaseGPUTransferBuffer(gpu_, transfer);
+        return true;
+    }
+
+    bool upload_texture_level(Texture* texture, uint32_t level, const void* data, uint32_t bytes,
+                              uint32_t width, uint32_t height) override {
+        if (!texture || !data || bytes == 0) return false;
+        SDL_GPUTransferBufferCreateInfo transfer_info = {};
+        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transfer_info.size = bytes;
+        SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(gpu_, &transfer_info);
+        if (!transfer) {
+            LOG_ERROR("SDL_CreateGPUTransferBuffer(texture level) failed: %s", SDL_GetError());
+            return false;
+        }
+        void* mapped = SDL_MapGPUTransferBuffer(gpu_, transfer, false);
+        std::memcpy(mapped, data, bytes);
+        SDL_UnmapGPUTransferBuffer(gpu_, transfer);
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(gpu_);
+        SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureTransferInfo source = {};
+        source.transfer_buffer = transfer;  // rows and layers 0: tightly packed, blocks included
+        SDL_GPUTextureRegion destination = {};
+        destination.texture = sdl(texture);
+        destination.mip_level = level;
+        destination.w = width;
+        destination.h = height;
+        destination.d = 1;
+        SDL_UploadToGPUTexture(pass, &source, &destination, false);
+        SDL_EndGPUCopyPass(pass);
         submit_and_wait(cmd);
         SDL_ReleaseGPUTransferBuffer(gpu_, transfer);
         return true;

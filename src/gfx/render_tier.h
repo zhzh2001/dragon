@@ -56,6 +56,13 @@ struct RenderTier {
     // retro tier, since the hashed terrain shader is hundreds of instructions.
     // Fixed function has no pixel shader; its preview bakes like the rest.
     bool baked_noise = false;
+    // The texture budget (gfx/texture.h): the largest edge a texture keeps,
+    // 0 for no cap, and whether textures are block-compressed (DXT1 and
+    // DXT5, normal maps as DXT5nm, which the shaders read as
+    // SWIZZLED_NORMALS). The cards on hand have 128 to 256 MB; the roster's
+    // 4096^2 maps are 85 MB each with mips before the cap.
+    uint32_t max_texture_size = 0;
+    bool compress_textures = false;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -69,6 +76,8 @@ struct RenderTier {
         if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
         t.hdr = tier == Tier::Modern || tier == Tier::SM3;
         t.baked_noise = tier != Tier::Modern;
+        t.max_texture_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
+        t.compress_textures = tier != Tier::Modern;
         return t;
     }
 
