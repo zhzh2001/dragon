@@ -51,6 +51,12 @@ struct Options {
     // --gpu-driver vulkan|direct3d12|metal: pick SDL's GPU backend instead of
     // the platform default (D3D12 and Vulkan can both be checked on Windows).
     std::string gpu_driver;
+    bool tier_set = false;  // --tier given (over the saved one)
+    // --preset ultra|high|medium|low|very-low, -1 for none; --graphics
+    // key=level,... over it (gfx/graphics_settings.h).
+    int preset = -1;
+    std::string open_panel;  // --open-panel graphics: expanded at start
+    std::string graphics;
     // --size: the window, or the headless render target.
     int width = 1280;
     int height = 720;
@@ -383,6 +389,24 @@ private:
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
     game::VegetationSettings vegetation_for_tier() const;
+    void load_rocks();
+    // The Graphics panel (gfx/graphics_settings.h).
+    void build_graphics_ui();
+    void apply_graphics(const gfx::GraphicsSettings& next);
+    void save_graphics() const;
+public:
+    // Set by the Graphics panel's Restart: main() starts the game again once
+    // this one has shut down.
+    bool relaunch_requested() const { return relaunch_; }
+private:
+    gfx::GraphicsSettings graphics_;          // in force
+    gfx::GraphicsSettings loaded_graphics_;   // what the models and textures were loaded with
+    gfx::GraphicsSettings graphics_pending_;  // the panel's edit
+    gfx::DeviceLimits device_limits_;
+    gfx::Tier tier_pending_ = gfx::Tier::Modern;
+    std::string driver_pending_;
+    bool graphics_pending_init_ = false;
+    bool relaunch_ = false;
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
                                          uint32_t max_triangles = 0) const;
     void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag);

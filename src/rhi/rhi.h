@@ -202,6 +202,9 @@ public:
 
     virtual const char* driver_name() const = 0;
     virtual bool supports_format(Format format, uint8_t usage) const = 0;
+    // The largest texture edge the device takes: 2048 on an X550, which the
+    // graphics settings respect (gfx/graphics_settings.h).
+    virtual uint32_t max_texture_size() const { return 16384; }
 
     // ---- the frame
     // Starts recording. Windowed, it also waits for a presentable image and

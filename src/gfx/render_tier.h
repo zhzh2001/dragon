@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <string>
 
+#include "gfx/graphics_settings.h"
+
 namespace gfx {
 
 enum class Tier : uint8_t { Modern, SM3, SM2, FixedFunction };
@@ -58,18 +60,9 @@ struct RenderTier {
     // retro tier, since the hashed terrain shader is hundreds of instructions.
     // Fixed function has no pixel shader; its preview bakes like the rest.
     bool baked_noise = false;
-    // The texture budget (gfx/texture.h): the largest edge a texture keeps,
-    // 0 for no cap, and whether textures are block-compressed (DXT1 and
-    // DXT5, normal maps as DXT5nm, which the shaders read as
-    // SWIZZLED_NORMALS). The cards on hand have 128 to 256 MB; the roster's
-    // 4096^2 maps are 85 MB each with mips before the cap.
-    uint32_t max_texture_size = 0;
+    // Whether textures are block-compressed (gfx/texture.h): DXT1 and DXT5,
+    // normal maps as DXT5nm, which the shaders read as SWIZZLED_NORMALS.
     bool compress_textures = false;
-    // The most triangles a skinned mesh keeps (anim/skin_lod.h), 0 for no
-    // cap: the roster's creatures are 60 to 90 thousand. The table in
-    // PORTING.md budgets about 20K at sm3, 10K at sm2 and 6K for fixed
-    // function, whose CPU skinning pays per vertex.
-    uint32_t max_skinned_triangles = 0;
     // Whether a draw's joint palette is packed as three rows a joint
     // (PACKED_JOINTS, shaders/skin_common.hlsl): D3D9's 256 vertex constants
     // hold 64 such joints beside the scene block, and no full matrices.
@@ -79,36 +72,11 @@ struct RenderTier {
     // the fog and the tonemap, not the per-pixel lighting the others do.
     // Fixed function previews through the same shaders until R5.
     bool vertex_lighting = false;
-    // The shadow map's edge, 0 for no cap: PORTING.md's table budgets 1024
-    // for sm3 and 512 for sm2. The cap trades sharpness near the camera, since
-    // the map still covers the same area.
-    uint32_t max_shadow_size = 0;
-    // The terrain grid, as a multiple of the settings' cell size (6 m): the
-    // modern mesh is 1.7 million triangles, and an X550 draws some 4 million
-    // a second through SM2's per-vertex lighting. 2 at sm3 (12 m cells), 3 at
-    // sm2 (18 m). The skirt past the map scales alike. Height queries read
-    // the rendered mesh, so the ground the dragon lands on is the one drawn.
-    float terrain_cell_scale = 1.0f;
-    // Whether the terrain draws into the shadow map. sm2's map covers +-256 m
-    // and the terrain is its largest caster by far (1.4 million triangles at
-    // the modern grid), so the ground stops shadowing itself there; plants,
-    // props and creatures still cast onto it.
-    bool terrain_casts_shadows = true;
-    // The plants' budget. After the terrain, the foliage is the vertex load: a
-    // million triangles a frame at the modern settings. Trees are drawn to
-    // this distance (0: the setting's own), planted this much sparser, and
-    // the grass reaches this fraction of its radius.
-    float tree_draw_distance = 0.0f;
-    float tree_spacing_scale = 1.0f;
-    float grass_radius_scale = 1.0f;
-    // The rocks (gfx/mesh_lod.h): at most this many triangles each, 0 for
-    // the scan's own, drawn to this fraction of their distances.
-    uint32_t max_rock_triangles = 0;
-    float rock_distance_scale = 1.0f;
-    // A skinned mesh's distance LOD (anim::SkinnedMesh::upload_far): this
-    // many triangles past this many metres; 0 triangles for none.
-    uint32_t far_skinned_triangles = 0;
-    float far_skinned_distance = 0.0f;
+    // How much it is asked to draw -- the triangles, distances, texture and
+    // shadow sizes -- from the graphics settings (gfx/graphics_settings.h),
+    // which start on the tier's default preset and change through apply().
+    ContentBudget budget;
+    void apply(const GraphicsSettings& settings) { budget = budget_for(settings); }
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -122,34 +90,10 @@ struct RenderTier {
         if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
         t.hdr = tier == Tier::Modern || tier == Tier::SM3;
         t.baked_noise = tier != Tier::Modern;
-        t.max_texture_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
         t.compress_textures = tier != Tier::Modern;
         t.packed_joints = tier != Tier::Modern;
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
-        t.max_shadow_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
-        t.terrain_cell_scale = tier == Tier::Modern ? 1.0f : tier == Tier::SM3 ? 2.0f : 3.0f;
-        t.terrain_casts_shadows = !t.vertex_lighting;
-        if (tier == Tier::SM3) {
-            t.tree_draw_distance = 2500.0f;
-            t.grass_radius_scale = 0.7f;
-            t.max_rock_triangles = 400;
-            t.far_skinned_triangles = 3000;
-            t.far_skinned_distance = 150.0f;
-        } else if (tier != Tier::Modern) {
-            t.tree_draw_distance = 800.0f;
-            t.tree_spacing_scale = 1.8f;
-            t.grass_radius_scale = 0.45f;
-            t.max_rock_triangles = 150;
-            t.rock_distance_scale = 0.5f;
-            t.far_skinned_triangles = 1500;
-            t.far_skinned_distance = 100.0f;
-        }
-        switch (tier) {
-            case Tier::Modern: break;
-            case Tier::SM3: t.max_skinned_triangles = 20000; break;
-            case Tier::SM2: t.max_skinned_triangles = 10000; break;
-            case Tier::FixedFunction: t.max_skinned_triangles = 6000; break;
-        }
+        t.apply(GraphicsSettings::preset(default_preset(tier), tier, DeviceLimits{}));
         return t;
     }
 

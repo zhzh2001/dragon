@@ -374,6 +374,7 @@ public:
     IDirect3DDevice9* device() const { return dev_; }
 
     Backend backend() const override { return Backend::Direct3D9; }
+    uint32_t max_texture_size() const override { return uint32_t(caps_.MaxTextureWidth); }
     const char* driver_name() const override { return "direct3d9"; }
 
     bool supports_format(Format format, uint8_t usage) const override {

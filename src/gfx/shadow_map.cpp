@@ -34,14 +34,13 @@ PipelineDesc make_shadow_mesh_desc(rhi::Format depth_format) {
 
 bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resolution) {
     pipelines_ = pipelines;
-    // A retro tier's budget (gfx/render_tier.h): 4096^2 of R32F and depth is
-    // 128 MB, the whole of an X550.
-    const uint32_t cap = active_tier().max_shadow_size;
-    resolution_ = cap && resolution > cap ? cap : resolution;
-    // A capped map covers less, to keep about a metre a texel: at the modern
-    // extent a 512 map's 3.5 m texels lose every tree and the dragon. Ridges
-    // past the smaller extent go unshadowed; the extent slider still moves it.
-    if (cap && resolution > cap) extent = std::min(extent, float(resolution_) * 0.5f);
+    resolution_ = resolution;
+    // A map smaller than 4096 (the Shadows setting, gfx/graphics_settings.h)
+    // covers less, to keep about a metre a texel: at the full extent a 512
+    // map's 3.5 m texels lose every tree and the dragon. Ridges past the
+    // smaller extent go unshadowed; the extent slider still moves it.
+    if (base_extent_ <= 0.0f) base_extent_ = extent;
+    extent = resolution_ < 4096 ? std::min(base_extent_, float(resolution_) * 0.5f) : base_extent_;
 
     rhi::Device& rhi = device->rhi();
     if (!rhi.supports_format(format_, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED)) {

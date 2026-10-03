@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <sstream>
 
 #include "core/log.h"
 #include "core/math.h"
@@ -76,7 +77,18 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--tier" && i + 1 < argc) {
             if (!gfx::RenderTier::parse(argv[++i], &options.tier)) {
                 SDL_Log("--tier: expected modern, sm3, sm2 or ff, got '%s'", argv[i]);
+            } else {
+                options.tier_set = true;
             }
+        } else if (arg == "--open-panel" && i + 1 < argc) {
+            options.open_panel = argv[++i];  // e.g. graphics: starts expanded, for a capture
+        } else if (arg == "--preset" && i + 1 < argc) {
+            if (!gfx::parse_preset(argv[++i], &options.preset)) {
+                SDL_Log("--preset: expected ultra, high, medium, low or very-low, got '%s'", argv[i]);
+            }
+        } else if (arg == "--graphics" && i + 1 < argc) {
+            // key=level[,key=level...], e.g. models=3,shadows=4 (gfx/graphics_settings.h).
+            options.graphics = argv[++i];
         } else if (arg == "--size" && i + 1 < argc) {
             // WxH, e.g. 1024x768: the window, or the headless render target.
             int w = 0, h = 0;
@@ -217,7 +229,27 @@ Options parse_options(int argc, char** argv) {
 
 bool App::init(const Options& options) {
     options_ = options;
-    tier_ = gfx::RenderTier::make(options.tier);
+    // The Graphics panel's saved choices (paths::user, graphics.cfg): a tier,
+    // a renderer and the settings' levels. The command line wins over them,
+    // and a headless run ignores them, so captures stay reproducible.
+    std::string saved;
+    if (!options.headless) {
+        std::ifstream file(core::paths::user("graphics.cfg"));
+        if (file) saved.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+    {
+        std::istringstream lines(saved);
+        std::string line;
+        while (std::getline(lines, line)) {
+            if (line.rfind("tier=", 0) == 0 && !options.tier_set) gfx::RenderTier::parse(line.substr(5), &options_.tier);
+            if (line.rfind("driver=", 0) == 0 && options.gpu_driver.empty()) options_.gpu_driver = line.substr(7);
+        }
+    }
+    // D3D9 serves the retro tiers only (rhi/d3d9).
+    if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
+        options_.tier = gfx::Tier::SM3;
+    }
+    tier_ = gfx::RenderTier::make(options_.tier);
     gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
@@ -226,8 +258,34 @@ bool App::init(const Options& options) {
     config.width = options.width;
     config.height = options.height;
     config.headless = options.headless;
-    config.gpu_driver = options.gpu_driver;
+    config.gpu_driver = options_.gpu_driver;
     if (!device_.init(config)) return false;
+
+    // The graphics settings: the tier's default preset, then what was saved,
+    // then --preset and --graphics, each level clamped to what this tier and
+    // device can do (gfx/graphics_settings.h).
+    device_limits_.max_texture_size = device_.rhi().max_texture_size();
+    graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
+    if (!saved.empty()) graphics_.parse(saved);
+    if (options.preset >= 0) graphics_ = gfx::GraphicsSettings::preset(options.preset, tier_.tier, device_limits_);
+    if (!options.graphics.empty()) {
+        std::string list = options.graphics;
+        for (char& c : list) c = c == ',' ? '\n' : c;
+        graphics_.parse(list);
+    }
+    for (int s = 0; s < gfx::SETTING_COUNT; ++s) {
+        graphics_.level[size_t(s)] =
+            uint8_t(gfx::clamp_level(gfx::Setting(s), graphics_.level[size_t(s)], tier_.tier, device_limits_));
+    }
+    tier_.apply(graphics_);
+    gfx::set_active_tier(tier_);
+    loaded_graphics_ = graphics_;
+    graphics_pending_ = graphics_;
+    LOG_INFO("graphics: %s (%s)", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)), [&] {
+        std::string one_line = graphics_.serialize();
+        for (char& c : one_line) c = c == '\n' ? ' ' : c;
+        return one_line;
+    }().c_str());
     // Headless never reads a controller (core/input.h says why).
     input_.set_gamepads_enabled(!options.headless);
 
@@ -242,7 +300,9 @@ bool App::init(const Options& options) {
     // The post stack runs only on an HDR tier; without one its pipelines are
     // never bound, and SM2's pixel shaders could not hold the composite.
     if (device_.hdr() && !post_.init(&device_, &pipelines_)) return false;
-    if (!shadow_.init(&device_, &pipelines_)) return false;
+    // The Shadows setting's size; Off keeps a small map, unused.
+    if (!shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512)) return false;
+    shadow_.enabled = tier_.budget.shadow_size > 0;
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
     if (tier_.baked_noise) {
@@ -263,35 +323,7 @@ bool App::init(const Options& options) {
             LOG_WARN("terrain detail: no terrain_detail.png; the ground stays untextured");
         }
     }
-    // The rocks: six meshes from rocks.glb through the static loader, each
-    // matched to its kind by name, generated for any the file does not have.
-    {
-        std::vector<gfx::StaticMesh> meshes;
-        std::string error;
-        const bool loaded = gfx::load_static_gltf(core::paths::asset("props/rocks.glb").c_str(), meshes, &error);
-        int from_file = 0;
-        for (int k = 0; k < gfx::ROCK_KINDS; ++k) {
-            const std::string name = "rock_" + std::to_string(k);
-            const gfx::StaticMesh* found = nullptr;
-            for (const gfx::StaticMesh& m : meshes) {
-                if (m.name == name) found = &m;
-            }
-            if (found) {
-                // The tier's rock budget (gfx/mesh_lod.h): the scans are 500
-                // to 1,500 flat-shaded triangles each.
-                foliage_.set_rock_mesh(device_, k,
-                                       gfx::simplify_mesh(gfx::encode_rock_mesh(found->data), tier_.max_rock_triangles),
-                                       found->bounds_max.y);
-                ++from_file;
-            } else {
-                foliage_.set_rock_mesh(device_, k, gfx::make_rock_mesh(k), gfx::rock_size(k).y);
-            }
-        }
-        LOG_INFO("rocks: %d kind(s) from rocks.glb%s, %d generated", from_file,
-                 loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
-        foliage_.rock_draw_distance *= tier_.rock_distance_scale;
-        foliage_.big_rock_draw_distance *= tier_.rock_distance_scale;
-    }
+    load_rocks();
 
     regenerate_terrain();
 
@@ -888,12 +920,182 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     return model;
 }
 
+// The rocks: six meshes from rocks.glb through the static loader, each matched
+// to its kind by name, generated for any the file does not have -- at the
+// Rocks setting's budget, so the Graphics panel can call it again.
+void App::load_rocks() {
+        std::vector<gfx::StaticMesh> meshes;
+        std::string error;
+        const bool loaded = gfx::load_static_gltf(core::paths::asset("props/rocks.glb").c_str(), meshes, &error);
+        int from_file = 0;
+        for (int k = 0; k < gfx::ROCK_KINDS; ++k) {
+            const std::string name = "rock_" + std::to_string(k);
+            const gfx::StaticMesh* found = nullptr;
+            for (const gfx::StaticMesh& m : meshes) {
+                if (m.name == name) found = &m;
+            }
+            if (found) {
+                // The tier's rock budget (gfx/mesh_lod.h): the scans are 500
+                // to 1,500 flat-shaded triangles each.
+                foliage_.set_rock_mesh(device_, k,
+                                       gfx::simplify_mesh(gfx::encode_rock_mesh(found->data),
+                                                          tier_.budget.max_rock_triangles),
+                                       found->bounds_max.y);
+                ++from_file;
+            } else {
+                foliage_.set_rock_mesh(device_, k, gfx::make_rock_mesh(k), gfx::rock_size(k).y);
+            }
+        }
+        LOG_INFO("rocks: %d kind(s) from rocks.glb%s, %d generated", from_file,
+                 loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
+}
+
+// Puts `next` in force: what applies live is read next frame, what needs a
+// reload (terrain, trees, rocks, the shadow map) is rebuilt now, and what
+// needs a restart (model detail, textures) waits for one (relaunch_).
+void App::apply_graphics(const gfx::GraphicsSettings& next) {
+    using gfx::Setting;
+    const gfx::GraphicsSettings old = graphics_;
+    graphics_ = next;
+    tier_.apply(graphics_);
+    gfx::set_active_tier(tier_);
+    if (old[Setting::Terrain] != next[Setting::Terrain]) {
+        regenerate_terrain();  // replants too
+        rebuild_courses();
+        select_course(current_course_);
+    } else if (old[Setting::Trees] != next[Setting::Trees]) {
+        replant();
+    }
+    if (old[Setting::Rocks] != next[Setting::Rocks]) {
+        load_rocks();
+        replant();
+    }
+    if (old[Setting::Shadows] != next[Setting::Shadows]) {
+        device_.rhi().wait_idle();
+        shadow_.shutdown(device_);
+        shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512);
+        shadow_.enabled = tier_.budget.shadow_size > 0;
+    }
+    save_graphics();
+    LOG_INFO("graphics applied: %s", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)));
+}
+
+void App::save_graphics() const {
+    if (options_.headless) return;
+    std::ofstream file(core::paths::user("graphics.cfg"));
+    file << "tier=" << gfx::RenderTier::make(tier_pending_).name() << "\n";
+    if (!driver_pending_.empty()) file << "driver=" << driver_pending_ << "\n";
+    file << graphics_.serialize();
+}
+
+void App::build_graphics_ui() {
+    using gfx::Setting;
+    if (!graphics_pending_init_) {
+        tier_pending_ = tier_.tier;
+        driver_pending_ = options_.gpu_driver;
+        graphics_pending_init_ = true;
+    }
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowCollapsed(options_.open_panel != "graphics", ImGuiCond_FirstUseEver);
+    // Opened from the command line, it starts in front of the stack below
+    // it, as a click would put it.
+    static bool focused = false;
+    if (options_.open_panel == "graphics" && !focused) {
+        ImGui::SetNextWindowFocus();
+        focused = true;
+    }
+    if (!ImGui::Begin("Graphics")) {
+        ImGui::End();
+        return;
+    }
+    const float ms = average_frame_ms();
+    ImGui::Text("%s, tier %s   %.1f ms (%.0f fps)", device_.rhi().driver_name(), tier_.name(), ms,
+                ms > 0.0f ? 1000.0f / ms : 0.0f);
+
+    // The renderer and the tier: chosen here, in force after a restart.
+#if defined(_WIN32)
+    static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d9"};
+#elif defined(__APPLE__)
+    static const char* const DRIVERS[] = {"metal"};
+#else
+    static const char* const DRIVERS[] = {"vulkan"};
+#endif
+    const bool d3d9 = driver_pending_.rfind("direct3d9", 0) == 0;
+    if (ImGui::BeginCombo("renderer", driver_pending_.empty() ? "default" : driver_pending_.c_str())) {
+        if (ImGui::Selectable("default", driver_pending_.empty())) driver_pending_.clear();
+        for (const char* d : DRIVERS) {
+            if (ImGui::Selectable(d, driver_pending_ == d)) driver_pending_ = d;
+        }
+        ImGui::EndCombo();
+    }
+    // Every tier previews on the modern backends; D3D9 runs the retro ones.
+    const gfx::Tier tiers[] = {gfx::Tier::Modern, gfx::Tier::SM3, gfx::Tier::SM2};
+    if (d3d9 && tier_pending_ == gfx::Tier::Modern) tier_pending_ = gfx::Tier::SM3;
+    if (ImGui::BeginCombo("tier", gfx::RenderTier::make(tier_pending_).name())) {
+        for (gfx::Tier t : tiers) {
+            if (d3d9 && t == gfx::Tier::Modern) continue;
+            if (ImGui::Selectable(gfx::RenderTier::make(t).name(), tier_pending_ == t)) tier_pending_ = t;
+        }
+        ImGui::EndCombo();
+    }
+
+    // The preset, and each setting with only the levels this tier and
+    // device can do. The pending edit applies on Apply.
+    const int preset = graphics_pending_.preset_level(tier_.tier, device_limits_);
+    if (ImGui::BeginCombo("preset", preset >= 0 ? gfx::preset_name(preset) : "custom")) {
+        for (int p = 0; p < gfx::QUALITY_LEVELS; ++p) {
+            if (ImGui::Selectable(gfx::preset_name(p), preset == p)) {
+                graphics_pending_ = gfx::GraphicsSettings::preset(p, tier_.tier, device_limits_);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    bool restart = tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver;
+    for (int s = 0; s < gfx::SETTING_COUNT; ++s) {
+        const Setting setting = Setting(s);
+        const gfx::SettingInfo& info = gfx::setting_info(setting);
+        uint8_t& level = graphics_pending_.level[size_t(s)];
+        const char* current = info.options[level] ? info.options[level] : "";
+        std::string label = info.label;
+        if (info.applies == gfx::Applies::Restart) label += " *";
+        if (ImGui::BeginCombo(label.c_str(), current)) {
+            for (int l = 0; l < gfx::QUALITY_LEVELS; ++l) {
+                if (!gfx::allowed(setting, l, tier_.tier, device_limits_)) continue;
+                if (ImGui::Selectable(info.options[l], level == l)) level = uint8_t(l);
+            }
+            ImGui::EndCombo();
+        }
+        if (info.applies == gfx::Applies::Restart && graphics_pending_[setting] != loaded_graphics_[setting]) {
+            restart = true;
+        }
+    }
+    const bool changed = !(graphics_pending_ == graphics_);
+    ImGui::BeginDisabled(!changed);
+    if (ImGui::Button("Apply")) apply_graphics(graphics_pending_);
+    ImGui::SameLine();
+    if (ImGui::Button("Revert")) graphics_pending_ = graphics_;
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("* model detail and textures load at start-up");
+    if (restart) {
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "A restart puts the renderer, tier, * settings in force");
+        if (ImGui::Button("Apply and restart")) {
+            graphics_ = graphics_pending_;
+            save_graphics();
+            relaunch_ = true;
+            running_ = false;
+        }
+    }
+    ImGui::End();
+}
+
 // The vegetation settings with the tier's budget applied (gfx/render_tier.h);
 // the panel keeps editing the settings themselves.
 game::VegetationSettings App::vegetation_for_tier() const {
     game::VegetationSettings v = vegetation_settings_;
-    v.tree_spacing *= tier_.tree_spacing_scale;
-    v.grass_radius *= tier_.grass_radius_scale;
+    v.tree_spacing *= tier_.budget.tree_spacing_scale;
+    v.grass_radius *= tier_.budget.grass_radius_scale;
+    v.grass = v.grass && tier_.budget.grass_radius_scale > 0.0f;
     return v;
 }
 
@@ -910,8 +1112,8 @@ void App::replant() {
 void App::regenerate_terrain() {
     // The tier's grid (gfx/render_tier.h); the settings keep the modern one.
     game::TerrainSettings settings = terrain_settings_;
-    settings.cell_size *= tier_.terrain_cell_scale;
-    settings.skirt_cell_size *= tier_.terrain_cell_scale;
+    settings.cell_size *= tier_.budget.terrain_cell_scale;
+    settings.skirt_cell_size *= tier_.budget.terrain_cell_scale;
     terrain_.generate(settings);
     // The terrain's patch noise, once, into the otherwise unused uv.x: the
     // ground is static, and hashing it per vertex per frame was most of
@@ -2058,7 +2260,7 @@ void App::build_ui(float dt) {
 
     // Every panel docks to the right edge, stacked: the tool layer never
     // sits over the centre of the frame where the game is.
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 52.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: it is the tallest panel and holds the settings
     // touched least often, so it is most of the clutter and none of the play.
@@ -2313,6 +2515,9 @@ void App::build_ui(float dt) {
     }
     ImGui::TextDisabled("tab toggles free camera, esc quits");
     ImGui::End();
+
+    // Last, so that expanded it draws over the collapsed stack below it.
+    build_graphics_ui();
 }
 
 namespace {
@@ -2507,7 +2712,7 @@ void App::draw_hud() {
 }
 
 void App::build_rally_ui() {
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 52.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 92.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -2610,7 +2815,7 @@ void App::build_rally_ui() {
 // The studio panel: pick a manoeuvre, read what to look for, drag the rig
 // sliders in the Dragon panel while it loops.
 void App::build_studio_ui() {
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 92.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 132.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(380, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -2803,7 +3008,7 @@ void App::build_dragon_ui() {
     // Right of the Engine window and above Rally. Placement matters: the first
     // version of this panel opened underneath Engine and was invisible, which
     // is indistinguishable from not having built it at all.
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 132.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 172.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
     // the rest stay one click away.
@@ -3446,9 +3651,9 @@ void App::spawn_bots(int count) {
 // fit one draw is split into palettes here, at load, once.
 // The tier's distance LOD for a skinned mesh, if it has one.
 void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag) {
-    if (tier_.far_skinned_triangles == 0 || data.indices.size() / 3 <= tier_.far_skinned_triangles) return;
-    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, tier_.far_skinned_triangles),
-                    tier_.far_skinned_distance, tag);
+    const gfx::ContentBudget& b = tier_.budget;
+    if (b.far_skinned_triangles == 0 || data.indices.size() / 3 <= b.far_skinned_triangles) return;
+    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles), b.far_skinned_distance, tag);
 }
 
 // What a model's texture `index` holds, from the materials that use it: a
@@ -3466,7 +3671,7 @@ gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
                                           uint32_t max_triangles) const {
     // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
-    anim::LodResult lod = anim::simplify_skinned(mesh, max_triangles ? max_triangles : tier_.max_skinned_triangles);
+    anim::LodResult lod = anim::simplify_skinned(mesh, max_triangles ? max_triangles : tier_.budget.max_skinned_triangles);
     if (lod.mesh.indices.size() != mesh.indices.size()) {
         LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size", tag,
                  mesh.indices.size() / 3, lod.mesh.indices.size() / 3, mesh.vertices.size(),
@@ -6089,7 +6294,7 @@ void App::draw_combat_hud() {
 void App::build_combat_ui() {
     game::CombatTuning& t = combat_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 212.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 252.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     ImGui::Begin("Combat");
 
@@ -6477,7 +6682,7 @@ void App::build_flight_ui() {
     const game::FlightState& s = flight_.state();
     game::FlightTuning& t = flight_.tuning;
 
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 172.0f),
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 212.0f),
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     // Collapsed by default: Combat is the panel a fight actually needs;
@@ -6702,9 +6907,9 @@ void App::render() {
     foliage_.wind = vegetation.wind;
     foliage_.grass_fade_end = vegetation.grass_radius;
     foliage_.grass_fade_start = vegetation.grass_radius * 0.7f;
-    if (tier_.tree_draw_distance > 0.0f) {
-        foliage_.tree_draw_distance = core::minf(foliage_.tree_draw_distance, tier_.tree_draw_distance);
-    }
+    // The Trees and Rocks settings' reach, read by the draw each frame.
+    foliage_.tree_distance_cap = tier_.budget.tree_draw_distance;
+    foliage_.rock_distance_scale = tier_.budget.rock_distance_scale;
     for (int k = 0; k < gfx::GRASS_KINDS; ++k) {
         foliage_.upload_grass(device_, gfx::GrassKind(k), grass_scratch_[k]);
     }
@@ -6719,7 +6924,7 @@ void App::render() {
             foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
                                       world_.scene().view_params.z, active_camera().position);
         }
-        if (tier_.terrain_casts_shadows) {
+        if (tier_.budget.terrain_casts_shadows) {
             world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                    gfx::ModelUniforms(), &terrain_chunks_);
         }
@@ -6878,7 +7083,12 @@ void App::render() {
     // The world is in the linear HDR target; bloom it, tonemap it and grade
     // it into the 8-bit target, which the UI then draws onto ungraded. A tier
     // without HDR has already finished the world into that target.
-    if (device_.hdr()) post_.run(device_, post_settings_);
+    if (device_.hdr()) {
+        // The Bloom setting (gfx/graphics_settings.h) over the panel's dial.
+        gfx::PostSettings post = post_settings_;
+        if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
+        post_.run(device_, post);
+    }
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();
     ui_.render(device_, ui_pass);
@@ -6936,6 +7146,8 @@ void App::log_telemetry() const {
 void App::run() {
     uint64_t previous_ticks = SDL_GetTicksNS();
     const uint64_t started = previous_ticks;
+    std::vector<float> frame_ms;  // wall clock, for the summary's percentiles
+    uint64_t frame_started = started;
 
     while (running_) {
         uint64_t now = SDL_GetTicksNS();
@@ -6986,13 +7198,24 @@ void App::run() {
         }
 
         ++frame_index_;
+        const uint64_t frame_ended = SDL_GetTicksNS();
+        frame_ms.push_back(float(double(frame_ended - frame_started) * 1e-6));
+        frame_started = frame_ended;
         if (options_.frames > 0 && frame_index_ >= options_.frames) running_ = false;
     }
     // Wall-clock frame rate over the whole run, loading excluded: how a
     // retro card's run is measured (tools/x99/run_interactive.ps1, the G41).
+    // The median frame and the 99th percentile ("1% low"), past the first
+    // second's warm-up of pipeline and texture uploads.
     const double seconds = double(SDL_GetTicksNS() - started) * 1e-9;
-    LOG_INFO("frames: %llu in %.1f s, %.1f fps (%s, tier %s)", static_cast<unsigned long long>(frame_index_), seconds,
-             seconds > 0.0 ? double(frame_index_) / seconds : 0.0, device_.rhi().driver_name(), tier_.name());
+    std::vector<float> settled(frame_ms.size() > 60 ? frame_ms.begin() + 60 : frame_ms.begin(), frame_ms.end());
+    std::sort(settled.begin(), settled.end());
+    const float median = settled.empty() ? 0.0f : settled[settled.size() / 2];
+    const float p99 = settled.empty() ? 0.0f : settled[std::min(settled.size() - 1, settled.size() * 99 / 100)];
+    LOG_INFO("frames: %llu in %.1f s, %.1f fps; median %.1f ms, 1%% low %.1f ms (%s, tier %s, preset %s)",
+             static_cast<unsigned long long>(frame_index_), seconds,
+             seconds > 0.0 ? double(frame_index_) / seconds : 0.0, median, p99, device_.rhi().driver_name(),
+             tier_.name(), gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)));
 }
 
 }  // namespace app

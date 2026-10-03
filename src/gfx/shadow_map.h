@@ -18,6 +18,8 @@ namespace gfx {
 // standard depth is easier to reason about when debugging shadow acne.
 class ShadowMap {
 public:
+    // Again with another resolution after shutdown() to resize (the Shadows
+    // setting).
     bool init(Device* device, PipelineCache* pipelines, uint32_t resolution = 4096);
     void shutdown(Device& device);
 
@@ -54,6 +56,7 @@ private:
     rhi::Texture* texture_ = nullptr;
     rhi::Sampler* sampler_ = nullptr;
     uint32_t resolution_ = 0;
+    float base_extent_ = 0.0f;  // the extent at full resolution
     rhi::Format format_ = rhi::Format::D32F;
     core::Mat4 light_view_proj_;
 };

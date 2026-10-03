@@ -67,6 +67,10 @@ public:
     // near the camera, where a rock's shadow is bigger than a texel.
     float rock_draw_distance = 1400.0f;
     float big_rock_draw_distance = 2600.0f;
+    // The graphics settings' reach (Trees, Rocks): trees no farther than the
+    // cap (0: none), rocks at this fraction of their distances.
+    float tree_distance_cap = 0.0f;
+    float rock_distance_scale = 1.0f;
     float rock_shadow_distance = 600.0f;
     uint32_t grass_count() const;
 

@@ -678,7 +678,8 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         for (const Cell& cell : set.cells) {
             const float nearest = core::distance(eye, cell.centre) - cell.radius;
-            if (nearest > tree_draw_distance) continue;
+            if (nearest > (tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap)
+                                                    : tree_draw_distance)) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
             // Wholly past the dither band (lod_distance * 1.3, foliage.hlsl):
             // the coarse cards only.
@@ -703,7 +704,7 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         instance_binding.buffer = set.instances;
         device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         const bool big = k == 1 || k == 3 || k == 5;
-        const float reach = big ? big_rock_draw_distance : rock_draw_distance;
+        const float reach = (big ? big_rock_draw_distance : rock_draw_distance) * rock_distance_scale;
         for (const Cell& cell : set.cells) {
             if (core::distance(eye, cell.centre) - cell.radius > reach) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;

@@ -7,6 +7,14 @@
 #include <cstdio>
 #endif
 
+#include <string>
+#include <vector>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "app.h"
 #include "core/paths.h"
 
@@ -31,6 +39,26 @@ void log_to_file(void*, int category, SDL_LogPriority priority, const char* mess
 }
 
 }  // namespace
+
+// The Graphics panel's "Apply and restart": the same program and arguments
+// again, without the ones the panel's saved choices replace.
+void relaunch(int argc, char** argv) {
+    std::vector<char*> args;
+    for (int i = 0; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (i > 0 && (a == "--tier" || a == "--gpu-driver" || a == "--preset" || a == "--graphics")) {
+            ++i;  // and its value
+            continue;
+        }
+        args.push_back(argv[i]);
+    }
+    args.push_back(nullptr);
+#ifdef _WIN32
+    _execv(argv[0], args.data());
+#else
+    execv(argv[0], args.data());
+#endif
+}
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
@@ -62,5 +90,6 @@ int main(int argc, char** argv) {
     }
     application.run();
     application.shutdown();
+    if (application.relaunch_requested()) relaunch(argc, argv);
     return 0;
 }

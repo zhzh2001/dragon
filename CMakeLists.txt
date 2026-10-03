@@ -30,6 +30,7 @@ add_executable(dragon
   src/gfx/mesh.cpp
   src/gfx/noise_lattice.cpp
   src/gfx/mesh_lod.cpp
+  src/gfx/graphics_settings.cpp
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
   src/gfx/particles.cpp
@@ -248,6 +249,15 @@ target_include_directories(test_skin_lod PRIVATE src)
 target_link_libraries(test_skin_lod PRIVATE SDL3::SDL3 meshoptimizer)
 target_compile_options(test_skin_lod PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME skin_lod COMMAND test_skin_lod)
+
+# Graphics presets: allowed where offered, monotonic, saved and read back.
+add_executable(test_graphics_settings
+  tests/test_graphics_settings.cpp
+  src/gfx/graphics_settings.cpp
+)
+target_include_directories(test_graphics_settings PRIVATE src)
+target_compile_options(test_graphics_settings PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME graphics_settings COMMAND test_graphics_settings)
 
 add_executable(test_combat
   tests/test_combat.cpp

@@ -73,7 +73,7 @@ ImageData halve(const ImageData& src, bool srgb) {
 
 TextureBudget active_texture_budget() {
     TextureBudget budget;
-    budget.max_size = active_tier().max_texture_size;
+    budget.max_size = active_tier().budget.max_texture_size;
     budget.compress = active_tier().compress_textures;
     return budget;
 }
