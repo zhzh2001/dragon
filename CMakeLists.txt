@@ -29,6 +29,7 @@ add_executable(dragon
   src/gfx/debug_draw.cpp
   src/gfx/mesh.cpp
   src/gfx/noise_lattice.cpp
+  src/gfx/mesh_lod.cpp
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
   src/gfx/particles.cpp

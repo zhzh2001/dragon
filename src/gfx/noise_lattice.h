@@ -34,6 +34,12 @@ constexpr uint32_t NOISE_LATTICE_SIZE = 512;  // also NOISE_LATTICE_SIZE in scen
 // hash21 from scene_common.hlsl: a value in [0, 1) for a lattice point.
 float noise_hash21(float x, float y);
 
+// scene_common's value_noise and fbm (shaders/noise.hlsl), on the CPU:
+// what the terrain's static per-vertex noise is computed with once, so the
+// SM2 vertex stage need not hash it every frame.
+float value_noise(float x, float y);
+float fbm(float x, float y, int octaves = 3);
+
 // RGBA8, size x size, as described above.
 std::vector<uint8_t> bake_noise_lattice(uint32_t size);
 

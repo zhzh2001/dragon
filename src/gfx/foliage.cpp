@@ -463,9 +463,22 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
     static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};
     for (int k = 0; k < TREE_KINDS; ++k) {
-        if (!trees_[k].mesh.upload(device->rhi(), make_tree_mesh(TreeKind(k)), tree_names[k])) {
-            return false;
+        // Coarse triangles first, the detail cards after: past the LOD's
+        // dither band every detail card is discarded anyway, so a cell out
+        // there draws only the first `coarse_indices` -- the same picture
+        // without the vertex work, which is what an SM2 card runs out of.
+        MeshData mesh = make_tree_mesh(TreeKind(k));
+        std::vector<uint32_t> coarse, detail;
+        for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+            bool is_detail = false;
+            for (int c = 0; c < 3; ++c) is_detail |= mesh.vertices[mesh.indices[t + c]].color.z >= float(FOLIAGE_DETAIL) - 0.5f;
+            std::vector<uint32_t>& into = is_detail ? detail : coarse;
+            into.insert(into.end(), mesh.indices.begin() + ptrdiff_t(t), mesh.indices.begin() + ptrdiff_t(t + 3));
         }
+        trees_[k].coarse_indices = uint32_t(coarse.size());
+        mesh.indices = coarse;
+        mesh.indices.insert(mesh.indices.end(), detail.begin(), detail.end());
+        if (!trees_[k].mesh.upload(device->rhi(), mesh, tree_names[k])) return false;
     }
     for (int k = 0; k < GRASS_KINDS; ++k) {
         if (!grass_[k].mesh.upload(device->rhi(), make_grass_mesh(GrassKind(k)), grass_names[k])) {
@@ -696,9 +709,13 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         instance_binding.buffer = set.instances;
         device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         for (const Cell& cell : set.cells) {
-            if (core::distance(eye, cell.centre) - cell.radius > tree_draw_distance) continue;
+            const float nearest = core::distance(eye, cell.centre) - cell.radius;
+            if (nearest > tree_draw_distance) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
-            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0,
+            // Wholly past the dither band (lod_distance * 1.3, foliage.hlsl):
+            // the coarse cards only.
+            const bool coarse = set.coarse_indices > 0 && nearest > lod_distance * 1.3f;
+            device.rhi().draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
                                          cell.first);
             trees_drawn_ += cell.count;
         }

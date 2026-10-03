@@ -31,13 +31,6 @@ VertexOut vs_main(VertexIn input) {
 #endif
 
 #ifdef FRAGMENT_STAGE
-// sky_color() without the sun disc and glow.
-float3 sky_plain(float3 ray) {
-    float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
-    float3 base = lerp(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
-    return lerp(base, scene.fog_color.rgb, saturate(-ray.y * 6.0) * 0.7);
-}
-
 float4 fs_main(VertexOut input) : SV_Target {
     float3 to_point = input.world_position - scene.camera_position.xyz;
     float dist = length(to_point);

@@ -59,9 +59,12 @@ bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resoluti
 
     rhi::SamplerDesc sampler_desc;
     // Linear filtering on the depth values themselves, which softens the PCF
-    // result further at no cost.
-    sampler_desc.min_filter = rhi::Filter::Linear;
-    sampler_desc.mag_filter = rhi::Filter::Linear;
+    // result further at no cost -- except on SM2, whose cards cannot filter
+    // the 32-bit float map D3D9 keeps it in: the tier point-samples on every
+    // backend, so it looks the same everywhere it runs.
+    const rhi::Filter filter = active_tier().vertex_lighting ? rhi::Filter::Nearest : rhi::Filter::Linear;
+    sampler_desc.min_filter = filter;
+    sampler_desc.mag_filter = filter;
     sampler_desc.mip_mode = rhi::MipMode::Nearest;
     // Clamping to the border would be ideal; clamp-to-edge plus an explicit
     // in-bounds test in the shader achieves the same thing portably.

@@ -649,12 +649,44 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
 - **SM2 hardware has no stream-frequency instancing.** The backend uses
   ATI's `INST` switch (R300 and later), and otherwise draws one instance at
   a time with a zero-stride instance stream.
-- **The X550 is installed on x99 but not yet reachable.** Its driver loads
-  (8.593), but D3D9 enumerates outputs with a desktop, and the card has no
-  monitor (no modes; attaching DISPLAY5 in software returns BADMODE). It
-  needs a monitor or a VGA dummy plug, with the desktop extended onto it.
-  The R0 spike lists adapters and outputs and takes `--adapter N`; the game
-  still uses the default adapter.
+- **The X550 on x99 (2026-10-03).** With a secondary card's outputs unused,
+  D3D9 does not list it: D3D9 enumerates outputs with a desktop, not cards.
+  So the X550 became primary, with VGA connected. It reports vs_2_0/ps_2_0,
+  2048² textures, DXT, R32F (not filterable), 1,048,575 primitives a draw,
+  and ATI's `INST` instancing switch. The game runs on it at both sizes,
+  HUD included.
+  - **The first frame took 1.24 s, entirely vertex work.** 4.3 million
+    triangles a frame went through 160- to 250-slot vertex programs, on a
+    card with two vertex units. Resolution did not matter (320×240 ran no
+    faster). `DRAGON_D3D9_PROFILE`'s per-pipeline primitive counts found
+    where they went, and each became a tier budget (`gfx/render_tier.h`):
+    - the terrain grid: 18 m cells (12 m at sm3), the skirt alike. The
+      terrain no longer casts into SM2's ±256 m shadow map;
+    - the trees: drawn to 800 m (2.5 km at sm3), 1.8× the spacing. A cell
+      wholly past the LOD's dither band draws only the crowns' coarse cards,
+      on every tier, which is invisible since the detail cards were
+      discarded there anyway;
+    - the rocks, the surprise: flat-shaded scans of 500 to 1,500 triangles
+      with no shared vertices, 2,928 of them. They are now welded and
+      simplified to 150 triangles (400 at sm3, `gfx/mesh_lod.h`) and drawn
+      to half the distance;
+    - the vertex programs: the terrain's patch noise is computed once on the
+      CPU into the unused uv.x (163 slots, from 249), and the per-vertex
+      lighting skips three normalizes and a divide.
+  - **Result:** the valley at 640×480 runs 13.9 fps (from 0.8), and at
+    1024×768 10 fps. A hoard run at 1024×768 runs 6.3 fps. There the
+    creatures lead, 171 K skinned triangles plus 120 K in the shadow map,
+    mostly from creatures far outside it. Distance LODs for creatures and
+    culling shadow casters to the map's extent are next, with R7's presets.
+  - **SM2 point-samples its shadow map on every backend,** since its cards
+    cannot filter R32F, so the tier looks the same everywhere. SM2 also
+    treats points beyond the light's far plane as lit, as `sun_visibility`
+    does. Missing that drew a dark trapezoid over the far valley.
+  - **The X550 against the 5060 Ti's D3D12 SM2 render:** seven scenes fall
+    within `--cross-compiler`, at means of 0.36 to 0.71. `ground` is at
+    1.2, along the near shadow's 1 m point-sampled staircase, where the
+    card's FP24 pixel maths moves the steps by a texel. That is hardware
+    variance, so the X550 is a result, not a gate.
 
 ### Budgets to design to
 

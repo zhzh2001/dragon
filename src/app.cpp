@@ -1,5 +1,6 @@
 #include "app.h"
 #include "anim/skin_lod.h"
+#include "gfx/mesh_lod.h"
 #include "anim/skin_partition.h"
 #include "gfx/static_model.h"
 
@@ -75,6 +76,15 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--tier" && i + 1 < argc) {
             if (!gfx::RenderTier::parse(argv[++i], &options.tier)) {
                 SDL_Log("--tier: expected modern, sm3, sm2 or ff, got '%s'", argv[i]);
+            }
+        } else if (arg == "--size" && i + 1 < argc) {
+            // WxH, e.g. 1024x768: the window, or the headless render target.
+            int w = 0, h = 0;
+            if (std::sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
+                options.width = w;
+                options.height = h;
+            } else {
+                SDL_Log("--size: expected WxH, got '%s'", argv[i]);
             }
         } else if (arg == "--gpu-driver" && i + 1 < argc) {
             options.gpu_driver = argv[++i];
@@ -213,8 +223,8 @@ bool App::init(const Options& options) {
 
     gfx::Device::Config config;
     config.title = "Dragon Engine -- M6";
-    config.width = 1280;
-    config.height = 720;
+    config.width = options.width;
+    config.height = options.height;
     config.headless = options.headless;
     config.gpu_driver = options.gpu_driver;
     if (!device_.init(config)) return false;
@@ -267,7 +277,10 @@ bool App::init(const Options& options) {
                 if (m.name == name) found = &m;
             }
             if (found) {
-                foliage_.set_rock_mesh(device_, k, gfx::encode_rock_mesh(found->data),
+                // The tier's rock budget (gfx/mesh_lod.h): the scans are 500
+                // to 1,500 flat-shaded triangles each.
+                foliage_.set_rock_mesh(device_, k,
+                                       gfx::simplify_mesh(gfx::encode_rock_mesh(found->data), tier_.max_rock_triangles),
                                        found->bounds_max.y);
                 ++from_file;
             } else {
@@ -276,6 +289,8 @@ bool App::init(const Options& options) {
         }
         LOG_INFO("rocks: %d kind(s) from rocks.glb%s, %d generated", from_file,
                  loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
+        foliage_.rock_draw_distance *= tier_.rock_distance_scale;
+        foliage_.big_rock_draw_distance *= tier_.rock_distance_scale;
     }
 
     regenerate_terrain();
@@ -873,8 +888,17 @@ gfx::ModelUniforms App::dragon_model_uniforms() const {
     return model;
 }
 
+// The vegetation settings with the tier's budget applied (gfx/render_tier.h);
+// the panel keeps editing the settings themselves.
+game::VegetationSettings App::vegetation_for_tier() const {
+    game::VegetationSettings v = vegetation_settings_;
+    v.tree_spacing *= tier_.tree_spacing_scale;
+    v.grass_radius *= tier_.grass_radius_scale;
+    return v;
+}
+
 void App::replant() {
-    vegetation_.plant(terrain_, vegetation_settings_);
+    vegetation_.plant(terrain_, vegetation_for_tier());
     for (int k = 0; k < gfx::TREE_KINDS; ++k) {
         foliage_.set_trees(device_, gfx::TreeKind(k), vegetation_.trees(gfx::TreeKind(k)));
     }
@@ -884,12 +908,23 @@ void App::replant() {
 }
 
 void App::regenerate_terrain() {
-    terrain_.generate(terrain_settings_);
+    // The tier's grid (gfx/render_tier.h); the settings keep the modern one.
+    game::TerrainSettings settings = terrain_settings_;
+    settings.cell_size *= tier_.terrain_cell_scale;
+    settings.skirt_cell_size *= tier_.terrain_cell_scale;
+    terrain_.generate(settings);
+    // The terrain's patch noise, once, into the otherwise unused uv.x: the
+    // ground is static, and hashing it per vertex per frame was most of
+    // SM2's terrain vertex stage (shaders/terrain.hlsl).
+    auto with_patches = [](gfx::MeshData mesh) {
+        for (gfx::MeshVertex& v : mesh.vertices) v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
+        return mesh;
+    };
     terrain_mesh_.release(device_.rhi());
-    terrain_mesh_.upload(device_.rhi(), terrain_.mesh_data(), "terrain");
+    terrain_mesh_.upload(device_.rhi(), with_patches(terrain_.mesh_data()), "terrain");
     terrain_skirt_mesh_.release(device_.rhi());
     if (!terrain_.skirt_mesh_data().indices.empty()) {
-        terrain_skirt_mesh_.upload(device_.rhi(), terrain_.skirt_mesh_data(), "terrain_skirt");
+        terrain_skirt_mesh_.upload(device_.rhi(), with_patches(terrain_.skirt_mesh_data()), "terrain_skirt");
     }
     // The water surface: one quad at the water line over the whole world. The
     // terrain hides it everywhere the ground is above the line, which is
@@ -6645,10 +6680,14 @@ void App::render() {
     particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
     // Grass is re-placed around the camera every frame, deterministically from
     // the ground cell, and streamed like the particles.
-    vegetation_.grass_around(terrain_, vegetation_settings_, camera.position, grass_scratch_);
-    foliage_.wind = vegetation_settings_.wind;
-    foliage_.grass_fade_end = vegetation_settings_.grass_radius;
-    foliage_.grass_fade_start = vegetation_settings_.grass_radius * 0.7f;
+    const game::VegetationSettings vegetation = vegetation_for_tier();
+    vegetation_.grass_around(terrain_, vegetation, camera.position, grass_scratch_);
+    foliage_.wind = vegetation.wind;
+    foliage_.grass_fade_end = vegetation.grass_radius;
+    foliage_.grass_fade_start = vegetation.grass_radius * 0.7f;
+    if (tier_.tree_draw_distance > 0.0f) {
+        foliage_.tree_draw_distance = core::minf(foliage_.tree_draw_distance, tier_.tree_draw_distance);
+    }
     for (int k = 0; k < gfx::GRASS_KINDS; ++k) {
         foliage_.upload_grass(device_, gfx::GrassKind(k), grass_scratch_[k]);
     }
@@ -6663,8 +6702,10 @@ void App::render() {
             foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
                                       world_.scene().view_params.z, active_camera().position);
         }
-        world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
-                               gfx::ModelUniforms());
+        if (tier_.terrain_casts_shadows) {
+            world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
+                                   gfx::ModelUniforms());
+        }
         world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
                                   dragon_model, dragon_rig_.skinning_matrices());
         for (const auto& bot : bots_) {

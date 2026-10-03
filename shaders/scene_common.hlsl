@@ -140,6 +140,14 @@ float3 sky_color(float3 ray) {
     return base;
 }
 
+// sky_color() without the sun disc and glow: what SM2 fogs toward (its two
+// pows are a fifth of a vs_2_0 lighting budget), and its water's reflection.
+float3 sky_plain(float3 ray) {
+    float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
+    float3 base = lerp(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
+    return lerp(base, scene.fog_color.rgb, saturate(-ray.y * 6.0) * 0.7);
+}
+
 // ---- the one lighting path.
 //
 // Terrain, plants, props and the skinned creature all go through these three
@@ -234,24 +242,29 @@ Sm2Light sm2_light(float4 sun, float4 ambient, float4 fog, float4 shadow) {
 // The vertex stage's half: everything but the shadow test and the albedo.
 // `translucency` lets a plant's back face catch the sun (translucent_sun).
 Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucency) {
+    // direct_sun, translucent_sun, ambient_light and the fog, written for
+    // vs_2_0's slots: the sun direction arrives normalised from the CPU
+    // (gfx::Lighting::sun_direction), so one dot serves the wrap, the
+    // translucency and the shadow's slope bias, and the light's projection is
+    // orthographic, so there is no divide by w.
     Sm2Light l;
-    l.sun = float4(direct_sun(normal, 1.0) + translucent_sun(normal, 1.0, translucency), 0.0);
+    const float n_dot_l = dot(normal, scene.sun.xyz);
+    const float wrap = scene.light_params.x;
+    const float lit = saturate((n_dot_l + wrap) / (1.0 + wrap)) + saturate(-n_dot_l) * translucency;
+    l.sun = float4(scene.sun_color.rgb * (scene.sun.w * lit), 0.0);
     l.ambient = float4(ambient_light(normal), 0.0);
 
     float3 to_point = world_position - scene.camera_position.xyz;
     float dist = length(to_point);
     float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
-    float fog = saturate(1.0 - exp(-pow(dist * density, 2.0)));
-    l.fog = float4(sky_color(to_point / max(dist, 1e-3)), 0.0);
+    float x = dist * density;
+    float fog = saturate(1.0 - exp(-x * x));
+    l.fog = float4(sky_plain(to_point / max(dist, 1e-3)), 0.0);
 
-    // The shadow map's coordinates, as sun_visibility() finds them. The light
-    // projection is orthographic, so they interpolate exactly.
-    float3 offset_position = world_position + normal * scene.shadow_params.x * 1.5;
-    float4 light_clip = mul(scene.light_view_proj, float4(offset_position, 1.0));
-    float3 ndc = light_clip.xyz / light_clip.w;
-    float slope = saturate(1.0 - abs(dot(normal, normalize(scene.sun.xyz))));
-    float bias = scene.shadow_params.y * (0.35 + slope * 2.5);
-    l.shadow = float4(ndc.xy * float2(0.5, -0.5) + 0.5, ndc.z - bias, fog);
+    float3 offset_position = world_position + normal * (scene.shadow_params.x * 1.5);
+    float3 light = mul(scene.light_view_proj, float4(offset_position, 1.0)).xyz;
+    float bias = scene.shadow_params.y * (0.35 + saturate(1.0 - abs(n_dot_l)) * 2.5);
+    l.shadow = float4(light.xy * float2(0.5, -0.5) + 0.5, light.z - bias, fog);
     return l;
 }
 
@@ -266,9 +279,11 @@ float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, Sample
                            shadow_map.Sample(shadow_sampler, uv + float2(-half_texel, half_texel)),
                            shadow_map.Sample(shadow_sampler, uv + float2(half_texel, half_texel)));
     float lit = dot(step((float4)l.shadow.z, stored), (float4)0.25);
-    // Past the map's edges there is no information: lit, as on the other tiers.
+    // Outside the shadow volume -- past the map's edges, or beyond its far
+    // plane, where the cleared 1.0 would read as shadow -- there is no
+    // information: lit, as sun_visibility() has it.
     float2 inside = step(abs(uv - 0.5), (float2)0.5);
-    lit = lerp(1.0, lit, inside.x * inside.y * scene.shadow_params.z);
+    lit = lerp(1.0, lit, inside.x * inside.y * step(l.shadow.z, 1.0) * scene.shadow_params.z);
     float3 color = albedo * (l.ambient.rgb + l.sun.rgb * lit);
     return scene_out(lerp(color, l.fog.rgb, l.shadow.w));
 }

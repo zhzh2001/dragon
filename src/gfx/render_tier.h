@@ -83,6 +83,28 @@ struct RenderTier {
     // for sm3 and 512 for sm2. The cap trades sharpness near the camera, since
     // the map still covers the same area.
     uint32_t max_shadow_size = 0;
+    // The terrain grid, as a multiple of the settings' cell size (6 m): the
+    // modern mesh is 1.7 million triangles, and an X550 draws some 4 million
+    // a second through SM2's per-vertex lighting. 2 at sm3 (12 m cells), 3 at
+    // sm2 (18 m). The skirt past the map scales alike. Height queries read
+    // the rendered mesh, so the ground the dragon lands on is the one drawn.
+    float terrain_cell_scale = 1.0f;
+    // Whether the terrain draws into the shadow map. sm2's map covers +-256 m
+    // and the terrain is its largest caster by far (1.4 million triangles at
+    // the modern grid), so the ground stops shadowing itself there; plants,
+    // props and creatures still cast onto it.
+    bool terrain_casts_shadows = true;
+    // The plants' budget. After the terrain, the foliage is the vertex load: a
+    // million triangles a frame at the modern settings. Trees are drawn to
+    // this distance (0: the setting's own), planted this much sparser, and
+    // the grass reaches this fraction of its radius.
+    float tree_draw_distance = 0.0f;
+    float tree_spacing_scale = 1.0f;
+    float grass_radius_scale = 1.0f;
+    // The rocks (gfx/mesh_lod.h): at most this many triangles each, 0 for
+    // the scan's own, drawn to this fraction of their distances.
+    uint32_t max_rock_triangles = 0;
+    float rock_distance_scale = 1.0f;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -101,6 +123,19 @@ struct RenderTier {
         t.packed_joints = tier != Tier::Modern;
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
         t.max_shadow_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
+        t.terrain_cell_scale = tier == Tier::Modern ? 1.0f : tier == Tier::SM3 ? 2.0f : 3.0f;
+        t.terrain_casts_shadows = !t.vertex_lighting;
+        if (tier == Tier::SM3) {
+            t.tree_draw_distance = 2500.0f;
+            t.grass_radius_scale = 0.7f;
+            t.max_rock_triangles = 400;
+        } else if (tier != Tier::Modern) {
+            t.tree_draw_distance = 800.0f;
+            t.tree_spacing_scale = 1.8f;
+            t.grass_radius_scale = 0.45f;
+            t.max_rock_triangles = 150;
+            t.rock_distance_scale = 0.5f;
+        }
         switch (tier) {
             case Tier::Modern: break;
             case Tier::SM3: t.max_skinned_triangles = 20000; break;

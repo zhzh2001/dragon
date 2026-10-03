@@ -4,6 +4,9 @@ struct VertexIn {
     float3 position : TEXCOORD0;
     float3 normal   : TEXCOORD1;
     float3 color    : TEXCOORD2;
+    // x: fbm(xz * 0.0055), the patch noise, computed once on the CPU
+    // (App::regenerate_terrain) for SM2's vertex stage.
+    float2 uv       : TEXCOORD3;
 };
 
 // The textures, and the noise -- included once: the pipeline cache inlines an
@@ -12,12 +15,6 @@ struct VertexIn {
 DEPTH2D(shadow_map, 0);
 TEXTURE2D(detail_tile, 1);
 #define NOISE_SLOT 2  // the baked lattice, on a retro tier
-#endif
-#ifdef SM2
-// SM2's vertex stage hashes the patch noise (vs_2_0 has no texture fetch),
-// and two octaves: three do not fit vs_2_0's 256 slots beside the lighting.
-// The patches lose their finest, eighth-amplitude octave.
-#define FBM_OCTAVES 2
 #endif
 #include "noise.hlsl"
 
@@ -28,7 +25,8 @@ TEXTURE2D(detail_tile, 1);
 // the four-way blend, one 2x2 shadow lookup, the fog and the tonemap. What
 // they lose against the per-pixel path below: the tile's broad second scale
 // and triplanar rock, the strata, the fine grain, the micro-relief normal and
-// the snow glint. The 6 m grid carries the patch noise and the blends.
+// the snow glint. The grid carries the blends; the patch noise comes per
+// vertex from the CPU.
 
 struct VertexOut {
     float4 clip_position : SV_Position;
@@ -49,7 +47,7 @@ VertexOut vs_main(VertexIn input) {
     float water_level = scene.terrain_params.x;
     float snow_line = scene.terrain_params.y;
     float rock_slope = scene.terrain_params.z;
-    float patches = fbm(p.xz * 0.0055);
+    float patches = input.uv.x;  // fbm(p.xz * 0.0055), from the CPU
 
     o.grass = float4(lerp(scene.palette[PALETTE_GRASS].rgb, scene.palette[PALETTE_GRASS_DRY].rgb,
                           smoothstep(0.35, 0.75, patches)), 0.0);

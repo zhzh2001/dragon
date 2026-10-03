@@ -51,6 +51,9 @@ struct Options {
     // --gpu-driver vulkan|direct3d12|metal: pick SDL's GPU backend instead of
     // the platform default (D3D12 and Vulkan can both be checked on Windows).
     std::string gpu_driver;
+    // --size: the window, or the headless render target.
+    int width = 1280;
+    int height = 720;
     // --tier modern|sm3|sm2|ff: shape the content for a retro tier
     // (gfx/render_tier.h), on whatever backend is running.
     gfx::Tier tier = gfx::Tier::Modern;
@@ -379,6 +382,7 @@ private:
     int grazer_clip_[3] = {-1, -1, -1};
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
+    game::VegetationSettings vegetation_for_tier() const;
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const;
     static gfx::TextureKind texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
                                          size_t index);

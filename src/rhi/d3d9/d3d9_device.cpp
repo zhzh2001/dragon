@@ -226,6 +226,23 @@ struct Profile {
     double seconds[PROF_SLOTS] = {};
     uint64_t calls[PROF_SLOTS] = {};
     LARGE_INTEGER frequency = {};
+    // Per pipeline: draws and primitives (instances counted), where an SM2
+    // card's vertex units go.
+    struct Work {
+        uint64_t draws = 0;
+        uint64_t primitives = 0;
+    };
+    std::vector<std::pair<std::string, Work>> work;
+    void count(const std::string& name, uint64_t primitives) {
+        for (auto& w : work) {
+            if (w.first == name) {
+                ++w.second.draws;
+                w.second.primitives += primitives;
+                return;
+            }
+        }
+        work.push_back({name, Work{1, primitives}});
+    }
 };
 struct ProfileScope {
     Profile& profile;
@@ -342,6 +359,10 @@ public:
             for (int i = 0; i < PROF_SLOTS; ++i) {
                 LOG_INFO("direct3d9 profile: %-14s %7.3f ms/frame, %6.0f calls/frame", PROFILE_NAMES[i],
                          profile_.seconds[i] * 1000.0 / frames, double(profile_.calls[i]) / frames);
+            }
+            for (const auto& w : profile_.work) {
+                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame", w.first.c_str(),
+                         double(w.second.draws) / frames, double(w.second.primitives) / frames);
             }
         }
         release(vertex_id_decl_);
@@ -848,6 +869,7 @@ public:
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
+        if (profile_.on) profile_.count(pipeline_->desc.name, prims);
         if (prims) { PROFILE(PROF_DRAW); dev_->DrawPrimitive(type, first_vertex, prims); }
     }
 
@@ -865,6 +887,7 @@ public:
         }
         bool instanced = false;
         for (uint32_t s = 0; s < 8; ++s) instanced |= pipeline_->stream_instanced[s];
+        if (profile_.on) profile_.count(pipeline_->desc.name, uint64_t(prims) * (instanced ? instance_count : 1));
         if (instanced && instancing_ == Instancing::Loop) {
             // One draw per instance: the instance streams bound at that
             // instance's element with a zero stride, so every vertex reads it.

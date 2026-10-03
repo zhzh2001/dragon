@@ -108,6 +108,8 @@ private:
     };
     struct StaticSet {
         Mesh mesh;
+        // Trees: the indices before the detail cards (the crown's coarse set).
+        uint32_t coarse_indices = 0;
         rhi::Buffer* instances = nullptr;
         uint32_t count = 0;
         std::vector<Cell> cells;

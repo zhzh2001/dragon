@@ -24,6 +24,28 @@ float noise_hash21(float x, float y) {
     return frac(x * y);
 }
 
+float value_noise(float x, float y) {
+    const float cx = std::floor(x), cy = std::floor(y);
+    float fx = x - cx, fy = y - cy;
+    fx = fx * fx * (3.0f - 2.0f * fx);
+    fy = fy * fy * (3.0f - 2.0f * fy);
+    const float a = noise_hash21(cx, cy), b = noise_hash21(cx + 1.0f, cy);
+    const float c = noise_hash21(cx, cy + 1.0f), d = noise_hash21(cx + 1.0f, cy + 1.0f);
+    const float top = a + (b - a) * fx, bottom = c + (d - c) * fx;
+    return top + (bottom - top) * fy;
+}
+
+float fbm(float x, float y, int octaves) {
+    float total = 0.0f, amplitude = 0.5f;
+    for (int i = 0; i < octaves; ++i) {
+        total += amplitude * value_noise(x, y);
+        x = x * 2.17f + 31.7f;
+        y = y * 2.17f + 17.3f;
+        amplitude *= 0.5f;
+    }
+    return total;
+}
+
 std::vector<uint8_t> bake_noise_lattice(uint32_t size) {
     const int n = int(size), half = n / 2;
     // A texel index's cell, and any cell's wrap back into the window.
