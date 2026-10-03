@@ -6,6 +6,7 @@
 #include "core/math.h"
 #include "gfx/foliage_instance.h"
 #include "gfx/mesh.h"
+#include "gfx/noise_lattice.h"
 #include "gfx/pipeline.h"
 #include "gfx/scene_uniforms.h"
 
@@ -44,6 +45,8 @@ public:
     uint32_t rock_count() const;
     // Per-frame staging of one grass kind, before any render pass opens.
     void upload_grass(Device& device, GrassKind kind, const std::vector<FoliageInstance>& grass);
+    // The baked noise lattice the bark grains with, on a tier that bakes it.
+    void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
 
     void draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
     void draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
@@ -89,7 +92,9 @@ private:
     rhi::Texture* leaf_texture_ = nullptr;
     rhi::Texture* needle_texture_ = nullptr;
     rhi::Sampler* card_sampler_ = nullptr;
-    // Binds the two card textures at fragment slots `first` and `first + 1`.
+    const NoiseLattice* noise_lattice_ = nullptr;
+    // Binds the two card textures at fragment slots `first` and `first + 1`,
+    // and the noise lattice after them when there is one.
     void bind_cards(Device& device, rhi::Pass* pass, uint32_t first) const;
     // Static instances are uploaded sorted into square ground cells, each
     // with a bounding sphere, so a draw is one instanced call per cell that

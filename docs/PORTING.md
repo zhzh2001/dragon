@@ -409,7 +409,29 @@ render before a D3D9 device exists.
     tonemapped on its own, so overlapping puffs sum in display space and
     the curve cannot compress the total. Real SM2 hardware does the same.
     Tune the per-tier particle intensity on the card at R3, not blind.
-- Next: baked terrain noise, texture caps and DXT, creature LODs.
+- **Baked noise, done (2026-10-03).** The ground and the bark grain with
+  value noise. The modern shader hashes four lattice corners per lookup, a
+  dozen lookups per terrain pixel, which is hundreds of instructions. Every
+  retro tier compiles `BAKED_NOISE` (`shaders/noise.hlsl`) and reads the four
+  corners from one point sample of a 512^2 RGBA8 lattice
+  (`gfx/noise_lattice.h`, baked at start-up, 1 MB). The smoothstep blend
+  stays in the shader, because old hardware keeps bilinear weights to a few
+  bits.
+  - The lattice is the shader's own hash. It is exact over cells -256..255
+    and repeats seamlessly past them (`tests/test_noise_lattice.cpp`: within
+    half an 8-bit step). That window covers the patch noise everywhere, the
+    grain across the whole map, and the micro-relief within 730 m of the
+    centre.
+  - Against the modern goldens, `--tier sm3` is unchanged except where the
+    micro-relief lies outside its window: valley mean 1.2/255, ground 5.0
+    at the spawn about 2 km out. With the micro-relief switched off in both,
+    the difference falls back to the depth change's 0.03. Past the window it
+    is the same noise with other values. Side by side, the ground reads the
+    same.
+  - A trap found on the way (`common.hlsl`): the count of textures SDL binds
+    comes from reflection, which counts only those the shader uses. A debug
+    edit that returns before reading slots 0 and 1 makes slot 2 read zero.
+- Next: texture caps and DXT, creature LODs.
 
 ### Budgets to design to
 

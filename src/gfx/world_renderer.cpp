@@ -172,6 +172,10 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
         detail.sampler = white_sampler_;
         if (detail.texture && detail.sampler) device.rhi().bind_fragment_textures(pass, 1, &detail, 1);
     }
+    if (noise_lattice_ && noise_lattice_->valid()) {
+        const rhi::TextureBinding lattice = noise_lattice_->binding();
+        device.rhi().bind_fragment_textures(pass, 2, &lattice, 1);
+    }
 
     mesh.bind(device.rhi(), pass);
     device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);

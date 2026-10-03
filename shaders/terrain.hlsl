@@ -27,6 +27,8 @@ VertexOut vs_main(VertexIn input) {
 #ifdef FRAGMENT_STAGE
 DEPTH2D(shadow_map, 0);
 TEXTURE2D(detail_tile, 1);
+#define NOISE_SLOT 2  // the baked lattice, on a retro tier
+#include "noise.hlsl"
 
 // Terrain material from height and slope. Kept in the shader so it can be
 // retuned by saving the file while flying.

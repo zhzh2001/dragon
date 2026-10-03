@@ -100,6 +100,8 @@ VertexOut vs_main(VertexIn input) {
 DEPTH2D(shadow_map, 0);
 TEXTURE2D(leaf_card, 1);
 TEXTURE2D(needle_card, 2);
+#define NOISE_SLOT 3  // the baked lattice, on a retro tier
+#include "noise.hlsl"
 
 float4 fs_main(VertexOut input) : SV_Target {
     int material = int(input.material.x + 0.5);

@@ -232,6 +232,11 @@ bool App::init(const Options& options) {
     if (!shadow_.init(&device_, &pipelines_)) return false;
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
+    if (tier_.baked_noise) {
+        if (!noise_lattice_.create(device_.rhi())) return false;
+        world_.set_noise_lattice(&noise_lattice_);
+        foliage_.set_noise_lattice(&noise_lattice_);
+    }
     // The terrain's detail tile (tools/rocks.md): linear data, not colour.
     {
         std::ifstream file(core::paths::asset("textures/terrain_detail.png"), std::ios::binary);
@@ -950,6 +955,7 @@ void App::shutdown() {
         release_prop(grazer_prop_);
         device_.rhi().destroy(terrain_detail_texture_);
         terrain_detail_texture_ = nullptr;
+        noise_lattice_.destroy(device_.rhi());
         device_.rhi().destroy(model_sampler_);
         foliage_.shutdown(device_);
         world_.shutdown(device_);

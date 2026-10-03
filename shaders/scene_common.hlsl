@@ -7,7 +7,7 @@
 // The block is the uniform in slot 0 of both stages, as `scene`. A shader
 // whose slot 0 is something else (the shadow passes, particles) defines
 // NO_SCENE before including this; it still gets the struct-free helpers
-// (scene_out, the noise), but not the lighting path, which reads `scene`.
+// (scene_out), but not the lighting path, which reads `scene`.
 #pragma once
 
 #include "common.hlsl"
@@ -57,39 +57,8 @@ struct SceneUniforms {
 float3 scene_out(float3 color) { return max(color, 0.0); }
 #endif
 
-// Cheap value noise for breaking up flat material bands -- terrain patches,
-// bark streaks. Not for shaping geometry: purely a surface tint, so it can be
-// crude and fast. Shared, so the ground and the trunks standing on it grain
-// the same way.
-float hash21(float2 p) {
-    p = frac(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return frac(p.x * p.y);
-}
-
-float value_noise(float2 p) {
-    float2 cell = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f);  // smooth the interpolation
-    float a = hash21(cell);
-    float b = hash21(cell + float2(1.0, 0.0));
-    float c = hash21(cell + float2(0.0, 1.0));
-    float d = hash21(cell + float2(1.0, 1.0));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
-
-// Three octaves: single-octave value noise reads as soft blobs, fbm reads as
-// ground. Still cheap enough to call several times per fragment.
-float fbm(float2 p) {
-    float total = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < 3; ++i) {
-        total += amplitude * value_noise(p);
-        p = p * 2.17 + float2(31.7, 17.3);
-        amplitude *= 0.5;
-    }
-    return total;
-}
+// Value noise (value_noise, fbm) lives in noise.hlsl, which a shader includes
+// after declaring its own textures.
 
 #ifndef NO_SCENE
 ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);

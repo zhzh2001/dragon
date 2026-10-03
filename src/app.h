@@ -374,6 +374,7 @@ private:
     // skinned prey animal with three baked clips (tools/grazer.md).
     PropModel spire_prop_, trove_prop_, grazer_prop_;
     rhi::Texture* terrain_detail_texture_ = nullptr;
+    gfx::NoiseLattice noise_lattice_;  // made only on a tier that bakes noise
     std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
     int grazer_clip_[3] = {-1, -1, -1};
     anim::Pose grazer_pose_;

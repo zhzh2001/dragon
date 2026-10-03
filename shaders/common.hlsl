@@ -49,6 +49,10 @@ float3 ldr_encode(float3 c, float4 grade) {
 
 // A sampled texture and its sampler share a slot number, which is how SDL
 // binds them (SDL_BindGPUFragmentSamplers takes texture-sampler pairs).
+// Slots must run 0..n-1 with every one of them read: the count SDL binds
+// comes from reflection, which counts only the textures the compiled shader
+// uses, while each keeps its register. A debug edit that returns early past
+// slots 0 and 1 leaves a count of one, and slot 2 then reads zero.
 #define TEXTURE2D(name, n) Texture2D<float4> name : TEXTURE_SLOT(n); SamplerState name##_sampler : SAMPLER_SLOT(n)
 // The shadow map: a depth texture read as a plain float, compared in the
 // shader (3x3 PCF in sun_visibility), not with a comparison sampler.

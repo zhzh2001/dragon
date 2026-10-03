@@ -3,6 +3,7 @@
 #include "anim/skinned_mesh.h"
 #include "gfx/device.h"
 #include "gfx/mesh.h"
+#include "gfx/noise_lattice.h"
 #include "gfx/pipeline.h"
 #include "gfx/scene_uniforms.h"
 #include "gfx/shadow_map.h"
@@ -86,8 +87,11 @@ private:
     // ground as it was when the file is missing.
     rhi::Texture* terrain_detail_ = nullptr;
     rhi::Texture* neutral_ = nullptr;
+    // The baked noise lattice, on a tier that bakes it (null otherwise).
+    const NoiseLattice* noise_lattice_ = nullptr;
 public:
     void set_terrain_detail(rhi::Texture* texture) { terrain_detail_ = texture; }
+    void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
 private:
     rhi::Sampler* white_sampler_ = nullptr;
     SceneUniforms scene_ = {};

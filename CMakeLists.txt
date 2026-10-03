@@ -26,6 +26,7 @@ add_executable(dragon
   src/gfx/pipeline.cpp
   src/gfx/debug_draw.cpp
   src/gfx/mesh.cpp
+  src/gfx/noise_lattice.cpp
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
   src/gfx/particles.cpp
@@ -207,6 +208,16 @@ target_include_directories(test_skin_partition PRIVATE src)
 target_link_libraries(test_skin_partition PRIVATE SDL3::SDL3)
 target_compile_options(test_skin_partition PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME skin_partition COMMAND test_skin_partition)
+
+# The baked noise lattice: the retro tiers' value noise must be the modern one.
+add_executable(test_noise_lattice
+  tests/test_noise_lattice.cpp
+  src/gfx/noise_lattice.cpp
+)
+target_include_directories(test_noise_lattice PRIVATE src)
+target_link_libraries(test_noise_lattice PRIVATE SDL3::SDL3)
+target_compile_options(test_noise_lattice PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME noise_lattice COMMAND test_noise_lattice)
 
 add_executable(test_combat
   tests/test_combat.cpp

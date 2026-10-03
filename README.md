@@ -62,7 +62,7 @@ model, camera, AI, gameplay and audio synthesis.
   generated at start-up from noise and sines. The game ships no sound
   files.
 - **Verifiable without a human.** `--headless --frames N --screenshot` plus
-  scripted cameras, a self-playing demo pilot, and sixteen renderer-free
+  scripted cameras, a self-playing demo pilot, and seventeen renderer-free
   test suites.
 
 ## Building
@@ -80,7 +80,7 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ./build/dragon --run          # a hoard run
 ./build/dragon --demo         # the game playing itself
-ctest --test-dir build        # sixteen suites, plain executables
+ctest --test-dir build        # seventeen suites, plain executables
 ```
 
 **The models are not in the repository.** They are large, so they are

@@ -51,6 +51,11 @@ struct RenderTier {
     // and there is no bloom. SM3 keeps it: its floor cards render FP16 (an
     // X1300 cannot filter it, which R3 has to meet with point sampling).
     bool hdr = true;
+    // Whether value noise reads its lattice from a texture (BAKED_NOISE,
+    // gfx/noise_lattice.h) instead of hashing four corners per lookup: every
+    // retro tier, since the hashed terrain shader is hundreds of instructions.
+    // Fixed function has no pixel shader; its preview bakes like the rest.
+    bool baked_noise = false;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -63,6 +68,7 @@ struct RenderTier {
         }
         if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
         t.hdr = tier == Tier::Modern || tier == Tier::SM3;
+        t.baked_noise = tier != Tier::Modern;
         return t;
     }
 
