@@ -20,7 +20,7 @@ struct SkinnedVertex {
     // xyz tangent, w handedness (+/-1) for reconstructing the bitangent. Needed
     // only for tangent-space normal mapping; a mesh without one shades flat.
     core::Vec4 tangent = core::Vec4{1.0f, 0.0f, 0.0f, 1.0f};
-    // Joint indices as bytes: MAX_JOINTS is 64, so a byte is ample.
+    // Joint indices as bytes: MAX_JOINTS is 256, so a byte is exactly enough.
     uint8_t joints[4] = {0, 0, 0, 0};
     // Should sum to 1. Normalized on insert, because weights that do not sum to
     // one either shrink the mesh or blow it up.
@@ -37,6 +37,10 @@ struct SkinnedSubmesh {
     int normal_texture = -1;
     // glTF packs occlusion in R, roughness in G, metallic in B of one image.
     int orm_texture = -1;
+    // Empty: the vertices index the skeleton directly. Otherwise the global
+    // joints this batch uses, in the order its vertices index them
+    // (anim/skin_partition.h) -- the draw pushes only these matrices.
+    std::vector<uint16_t> palette;
 };
 
 struct SkinnedMeshData {

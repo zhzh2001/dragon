@@ -5,6 +5,7 @@
 
 #include "game/maneuver.h"
 #include "ui/hud.h"
+#include "gfx/render_tier.h"
 #include "gfx/post.h"
 #include <vector>
 
@@ -50,6 +51,9 @@ struct Options {
     // --gpu-driver vulkan|direct3d12|metal: pick SDL's GPU backend instead of
     // the platform default (D3D12 and Vulkan can both be checked on Windows).
     std::string gpu_driver;
+    // --tier modern|sm3|sm2|ff: shape the content for a retro tier
+    // (gfx/render_tier.h), on whatever backend is running.
+    gfx::Tier tier = gfx::Tier::Modern;
     // --model PATH loads one rigged glTF in place of the default roster, for
     // working on one creature without the others loaded.
     std::string model;
@@ -374,6 +378,9 @@ private:
     int grazer_clip_[3] = {-1, -1, -1};
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
+    anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const;
+    // The content tier (--tier); set before anything loads.
+    gfx::RenderTier tier_;
     bool load_prop(const char* path, PropModel& out, const char* tag,
                    std::vector<anim::AnimationClip>* clips = nullptr);
     void release_prop(PropModel& prop);

@@ -42,7 +42,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # fifteen suites, plain executables, no framework
+ctest --test-dir build            # sixteen suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -107,6 +107,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
+| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first. |
+| `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2). |
 
 Soaks that have caught real bugs:
 
@@ -474,7 +476,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       fifteen suites: math, camera, camera_rig, flight, rally, anim, hoard_run, demo_pilot, element, prey,
+tests/       sixteen suites: math, camera, camera_rig, flight, rally, anim, skin_partition, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

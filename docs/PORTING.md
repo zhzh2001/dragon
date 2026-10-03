@@ -360,6 +360,28 @@ D3D9 is R2.
 `golden.py compare` against `tests/golden/vulkan` and
 `tests/golden/d3d12`.
 
+### R2, in progress
+
+`--tier modern|sm3|sm2|ff` (`gfx/render_tier.h`) shapes the content for a
+tier on any backend, so each R2 piece is checked on Metal against the modern
+render before a D3D9 device exists.
+
+- **Palette splitting, done (2026-10-03).** `anim::partition_palettes`
+  cuts each material submesh into batches of at most 60 joints (sm3) or 50
+  (sm2). Vertices shared between batches are duplicated, and joint indices
+  are remapped to the batch's palette. Each draw pushes only its palette.
+  The shadow pass draws split meshes batch by batch too. In the roster,
+  Frostvein (74 joints), one other species and the local gold dragon need
+  two batches, at a cost of 0 to 174 duplicated vertices. Embercrest's
+  joints already fit.
+  - The split is bit-exact: on the CPU in `tests/test_skin_partition.cpp`
+    and on Frostvein's real mesh, and on the GPU when one batch is enough.
+    With two batches, Metal differs in about 300 pixels (at most 18/255).
+    The same unsplit mesh drawn in two halves differs the same way, so that
+    is the draw boundary, not the palette.
+- Next: the standard-Z path, the LDR fallback, baked terrain noise, texture
+  caps and DXT, creature LODs.
+
 ### Budgets to design to
 
 From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "anim/skin_partition.h"
 #include "gfx/static_model.h"
 
 #include <fstream>
@@ -70,6 +71,10 @@ Options parse_options(int argc, char** argv) {
             options.cycle_models = SDL_atoi(argv[++i]);
         } else if (arg == "--hide-panels") {
             options.hide_panels = true;
+        } else if (arg == "--tier" && i + 1 < argc) {
+            if (!gfx::RenderTier::parse(argv[++i], &options.tier)) {
+                SDL_Log("--tier: expected modern, sm3, sm2 or ff, got '%s'", argv[i]);
+            }
         } else if (arg == "--gpu-driver" && i + 1 < argc) {
             options.gpu_driver = argv[++i];
         } else if (arg == "--no-post") {
@@ -201,6 +206,8 @@ Options parse_options(int argc, char** argv) {
 
 bool App::init(const Options& options) {
     options_ = options;
+    tier_ = gfx::RenderTier::make(options.tier);
+    if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
     gfx::Device::Config config;
     config.title = "Dragon Engine -- M6";
@@ -3279,7 +3286,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
-    out.mesh.upload(device_.rhi(), mesh_data, tag.c_str());
+    out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str()), tag.c_str());
 
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
@@ -3382,6 +3389,19 @@ void App::spawn_bots(int count) {
 
 // ---- props ----
 
+// The tier's skinning budget (gfx/render_tier.h): a mesh whose joints do not
+// fit one draw is split into palettes here, at load, once.
+anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const {
+    if (tier_.max_skin_bones >= uint32_t(anim::MAX_JOINTS)) return mesh;
+    anim::SkinnedMeshData split = anim::partition_palettes(mesh, tier_.max_skin_bones);
+    if (split.submeshes.size() != mesh.submeshes.size() || split.vertices.size() != mesh.vertices.size()) {
+        LOG_INFO("%s: %u-joint palettes: %zu submeshes -> %zu draws, %zu -> %zu vertices", tag,
+                 tier_.max_skin_bones, mesh.submeshes.size(), split.submeshes.size(), mesh.vertices.size(),
+                 split.vertices.size());
+    }
+    return split;
+}
+
 bool App::load_prop(const char* path, PropModel& out, const char* tag,
                     std::vector<anim::AnimationClip>* clips) {
     anim::SkinnedMeshData data;
@@ -3391,7 +3411,7 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
         LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
         return false;
     }
-    if (!out.mesh.upload(device_.rhi(), data, tag)) return false;
+    if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag), tag)) return false;
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
         const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name = std::string(tag) + "_" + std::to_string(i);

@@ -34,6 +34,7 @@ add_executable(dragon
   src/audio/audio.cpp
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
+  src/anim/skin_partition.cpp
   src/anim/dragon_rig.cpp
   src/anim/animation.cpp
   src/anim/gltf_loader.cpp
@@ -195,6 +196,17 @@ target_include_directories(test_anim PRIVATE src)
 target_link_libraries(test_anim PRIVATE SDL3::SDL3 cgltf stb)
 target_compile_options(test_anim PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME anim COMMAND test_anim)
+
+# Palette splitting: the split mesh must skin exactly like the whole.
+add_executable(test_skin_partition
+  tests/test_skin_partition.cpp
+  src/anim/skin_partition.cpp
+  src/anim/skinned_mesh.cpp
+)
+target_include_directories(test_skin_partition PRIVATE src)
+target_link_libraries(test_skin_partition PRIVATE SDL3::SDL3)
+target_compile_options(test_skin_partition PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME skin_partition COMMAND test_skin_partition)
 
 add_executable(test_combat
   tests/test_combat.cpp

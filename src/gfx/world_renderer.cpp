@@ -87,6 +87,17 @@ struct SkinBlock {
     core::Mat4 joints[anim::MAX_JOINTS];
 };
 
+// A batch's palette in the block's first slots (anim/skin_partition.h): what a
+// D3D9 vertex shader's constants will hold, padded like the full block.
+SkinBlock make_palette_block(const std::vector<core::Mat4>& joints, const std::vector<uint16_t>& palette) {
+    SkinBlock block;
+    for (size_t i = 0; i < size_t(anim::MAX_JOINTS); ++i) {
+        block.joints[i] = i < palette.size() && palette[i] < joints.size() ? joints[palette[i]]
+                                                                           : core::Mat4::identity();
+    }
+    return block;
+}
+
 SkinBlock make_skin_block(const std::vector<core::Mat4>& joints) {
     SkinBlock block;
     const size_t count = joints.size() < size_t(anim::MAX_JOINTS) ? joints.size()
@@ -254,6 +265,10 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
             device.rhi().bind_fragment_textures(pass, 0, bindings, 4);
         }
 
+        if (!submesh.palette.empty()) {
+            const SkinBlock palette = make_palette_block(joints, submesh.palette);
+            device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &palette, sizeof(SkinBlock));
+        }
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }
@@ -278,7 +293,18 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &block, sizeof(SkinBlock));
     mesh.bind(device.rhi(), pass);
-    device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+    const bool split = !mesh.submeshes().empty() && !mesh.submeshes().front().palette.empty();
+    if (!split) {
+        device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+        return;
+    }
+    // A palette-split mesh draws batch by batch, each with its own joints.
+    for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
+        if (submesh.index_count == 0) continue;
+        const SkinBlock palette = make_palette_block(joints, submesh.palette);
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &palette, sizeof(SkinBlock));
+        device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
+    }
 }
 
 void WorldRenderer::draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
