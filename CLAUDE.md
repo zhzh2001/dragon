@@ -306,6 +306,18 @@ flight controls.
   the rig before the material repair, `<name>-cand-*.glb` the generator's
   output.
 - Commit messages describe what changed and *why it was wrong before*.
+- **Everything committed here may go public.** The repository is mirrored to
+  github.com/zhzh2001/dragon (`docs/RELEASE.md`), and the mirror's history is
+  append-only, so a published file can only be withdrawn by a forced push.
+  Before committing anything derived from someone else's work -- reference
+  art, another creator's model, screenshots or designs from another game or
+  franchise -- check its licence. If it is not cleared for a public game
+  repository, add its paths to `tools/release/public_excludes.txt` **in the
+  same commit**, and record why in `ATTRIBUTION.md`. Codex sessions follow this
+  too. The rule exists because the D&D-referenced gold dragon
+  studies were committed and partly pushed before anyone read Wizards of the
+  Coast's Fan Content Policy, which forbids Wizards' IP, artwork included, in
+  any game, free or not (`ATTRIBUTION.md`, "Gold reference studies").
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
   a one-liner -- to `codex exec -m gpt-6-astra`, and never start it without
   checking usage first -- see below.** Do not delegate to Fable 5.1 any more

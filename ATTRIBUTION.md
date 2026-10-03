@@ -95,6 +95,30 @@ public mirror's history is rewritten without the old re-exports
 
 ## Gold reference studies (2026-10-02)
 
+**Licence finding (2026-10-03): not cleared for the public repository or any
+release.** Wizards of the Coast's Fan Content Policy
+(<https://company.wizards.com/en/legal/fancontentpolicy>, last updated
+2017-11-15) defines Wizards' IP to include artwork. Its rule 4 says "Don't use
+Wizards' IP in other games. This includes your own or other people's games or
+game components ..., regardless of whether it is distributed for free." This
+project is a game, so the policy's fan-content permission does not reach
+anything derived from the official 2024 anatomy sheets. The policy's other
+terms (free distribution, the "unofficial Fan Content" notice) would not apply
+anyway. Consequences:
+
+- Everything gold that was not yet public stays out of the public mirror. The
+  paths are in `tools/release/public_excludes.txt`: the direct-reference
+  studies, `gold-direct-test`, the rig, integration and tail-flow evidence,
+  the gold tools, skeleton and profiles. The packagers never included the
+  model.
+- **Already public before this finding** (pushed 2026-10-02):
+  `artifacts/dragon-options/gold-ribbon-test/` and the six original files in
+  `docs/concept/metallic-dragons-2026-10-02/`. Removing them needs a history
+  rewrite and a forced push of the mirror, which is the user's decision; until
+  then they remain.
+- The gold dragon stays a local study. `gold-dragon` is in the development
+  roster only when its model is present, and the model is gitignored.
+
 The later `assets/gold-direct-cand-oneshot.glb` is a Hunyuan
 test from the user-approved direct-reference turnaround, with provenance in
 `artifacts/dragon-options/gold-direct-test/`. The user approved rigging and local
