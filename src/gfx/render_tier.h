@@ -30,7 +30,9 @@ enum class Tier : uint8_t { Modern, SM3, SM2, FixedFunction };
 struct DepthConvention {
     bool reversed = true;
     float near_min = 0.0f;  // the camera's own near plane, raised to at least this
-    float far = 0.0f;       // 0: infinite (reversed only)
+    // 0: infinite (reversed only). Not `near`/`far`: Windows headers define
+    // both as empty macros.
+    float far_plane = 0.0f;
 };
 
 struct RenderTier {

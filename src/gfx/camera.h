@@ -28,8 +28,8 @@ struct Camera {
     core::Mat4 projection(float aspect) const {
         const DepthConvention& depth = depth_convention();
         if (depth.reversed) return core::perspective_reverse_z(core::radians(fov_y_deg), aspect, z_near);
-        const float near = z_near > depth.near_min ? z_near : depth.near_min;
-        return core::perspective(core::radians(fov_y_deg), aspect, near, depth.far);
+        const float near_plane = z_near > depth.near_min ? z_near : depth.near_min;
+        return core::perspective(core::radians(fov_y_deg), aspect, near_plane, depth.far_plane);
     }
 
     core::Mat4 view_projection(float aspect) const { return projection(aspect) * view(); }
