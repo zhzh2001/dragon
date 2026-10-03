@@ -291,6 +291,7 @@ public:
     SDL_GPUDevice* gpu() const { return gpu_; }
     SDL_GPUCommandBuffer* cmd() const { return cmd_; }
 
+    Backend backend() const override { return Backend::SdlGpu; }
     const char* driver_name() const override { return SDL_GetGPUDeviceDriver(gpu_); }
 
     bool supports_format(Format format, uint8_t usage) const override {
@@ -837,13 +838,13 @@ private:
 
 }  // namespace
 
-std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& config) {
+namespace sdlgpu {
+
+std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config) {
     auto device = std::make_unique<SdlGpuDevice>();
     if (!device->init(window, config)) return nullptr;
     return device;
 }
-
-namespace sdlgpu {
 
 SDL_GPUDevice* native_device(Device& device) { return static_cast<SdlGpuDevice&>(device).gpu(); }
 SDL_GPUCommandBuffer* native_command_buffer(Device& device) { return static_cast<SdlGpuDevice&>(device).cmd(); }

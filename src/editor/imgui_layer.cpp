@@ -9,6 +9,10 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
+#ifdef _WIN32
+#include "imgui_impl_dx9.h"
+#include "rhi/d3d9/d3d9_backend.h"
+#endif
 
 namespace editor {
 
@@ -118,6 +122,21 @@ bool ImGuiLayer::init(gfx::Device& device) {
     colours[ImGuiCol_TextSelectedBg] = gold_faint;
     colours[ImGuiCol_NavHighlight] = gold;
 
+    // Dear ImGui draws through the backend's own API: SDL GPU, or D3D9's
+    // fixed function (imgui_impl_dx9), which restores the device state it
+    // changes.
+    d3d9_ = device.rhi().backend() == rhi::Backend::Direct3D9;
+#ifdef _WIN32
+    if (d3d9_) {
+        if (!ImGui_ImplSDL3_InitForD3D(device.window()) ||
+            !ImGui_ImplDX9_Init(rhi::d3d9::native_device(device.rhi()))) {
+            LOG_ERROR("ImGui D3D9 init failed");
+            return false;
+        }
+        initialized_ = true;
+        return true;
+    }
+#endif
     if (!ImGui_ImplSDL3_InitForSDLGPU(device.window())) {
         LOG_ERROR("ImGui_ImplSDL3_InitForSDLGPU failed");
         return false;
@@ -141,7 +160,11 @@ bool ImGuiLayer::init(gfx::Device& device) {
 
 void ImGuiLayer::shutdown() {
     if (!initialized_) return;
-    ImGui_ImplSDLGPU3_Shutdown();
+#ifdef _WIN32
+    if (d3d9_) ImGui_ImplDX9_Shutdown();
+    else
+#endif
+        ImGui_ImplSDLGPU3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     initialized_ = false;
@@ -168,7 +191,11 @@ bool ImGuiLayer::process_event(const SDL_Event& event) {
 
 void ImGuiLayer::begin_frame(float target_width, float target_height) {
     if (!initialized_) return;
-    ImGui_ImplSDLGPU3_NewFrame();
+#ifdef _WIN32
+    if (d3d9_) ImGui_ImplDX9_NewFrame();
+    else
+#endif
+        ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGuiIO& io = ImGui::GetIO();
     if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f &&
@@ -185,15 +212,23 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (!draw_data) return;
-    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
     has_draw_data_ = true;
+    if (d3d9_) return;  // D3D9 records nothing ahead of the pass
+    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
+    
 }
 
 void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
     if (!initialized_ || !has_draw_data_ || !pass) return;
     // Dear ImGui's renderer is backend-specific by nature: it records into
-    // SDL's own command buffer and pass (rhi/sdlgpu/sdlgpu.h). A D3D9 build
-    // swaps in imgui_impl_dx9 here.
+    // SDL's own command buffer and pass (rhi/sdlgpu/sdlgpu.h), or draws on the
+    // D3D9 device into the pass's render target.
+#ifdef _WIN32
+    if (d3d9_) {
+        ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+        return;
+    }
+#endif
     ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), rhi::sdlgpu::native_command_buffer(device.rhi()),
                                      rhi::sdlgpu::native_pass(pass));
 }

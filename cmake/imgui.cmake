@@ -23,4 +23,9 @@ target_include_directories(imgui PUBLIC
   ${imgui_SOURCE_DIR}/backends
 )
 target_link_libraries(imgui PUBLIC SDL3::SDL3)
+if(WIN32)
+  # The D3D9 backend's UI (editor/imgui_layer.cpp).
+  target_sources(imgui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_dx9.cpp)
+  target_link_libraries(imgui PUBLIC d3d9)
+endif()
 target_compile_features(imgui PUBLIC cxx_std_20)

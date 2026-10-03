@@ -107,7 +107,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
-| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first. |
+| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or `direct3d9` for the D3D9 backend on Windows (`docs/PORTING.md` R3; needs `--tier sm3` and shaders baked by `tools/d3d9/bake_d3d9.py`). |
 | `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS), for sm2/ff drops the HDR target and bloom and finishes the grade in each world shader (`LDR_OUTPUT`), reads value noise from a baked lattice texture instead of hashing it (`BAKED_NOISE`, `gfx/noise_lattice.h`), caps textures (1024 sm3, 512 sm2/ff) and compresses them to DXT (`gfx/texture.h` `TextureBudget`), and simplifies skinned meshes to 20K/10K/6K triangles (`anim/skin_lod.h`). |
 
 Soaks that have caught real bugs:
@@ -237,6 +237,12 @@ flight controls.
   the C++ structs and HLSL's constant-buffer packing byte-identical. A
   development build needs shadercross installed (`tools/build_shadercross.sh`);
   a package bakes the MSL ahead of time (`tools/release/bake_shaders.sh`).
+  The same source also compiles to D3D9's vs_3_0/ps_3_0
+  (`tools/d3d9/bake_d3d9.py`, `docs/PORTING.md` R3), so a shader must stay
+  inside what SM3 has: a fullscreen pass takes `VERTEX_ID_INPUT` rather than
+  SV_VertexID, a depth-only pass ends in `DEPTH_ONLY_FRAGMENT`, no unsigned
+  integer arithmetic, and every non-header shader file is a pipeline (a
+  header says `#pragma once`).
   `tools/golden/golden.py compare` is the gate for any shader or backend
   change: eight scenes, deterministic in headless, against the backend's
   own set in `tests/golden/{metal,vulkan,d3d12}`, plus `--set metal --loose`
@@ -472,7 +478,7 @@ contributions: never file an issue or a PR against them from a session.
 
 ```
 src/core/    math, input, noise, logging, paths (where data and user files live)
-src/rhi/     the render hardware interface, and its SDL GPU backend (sdlgpu/)
+src/rhi/     the render hardware interface, its SDL GPU backend (sdlgpu/) and the D3D9 one (d3d9/)
 src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig

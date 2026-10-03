@@ -398,7 +398,7 @@ D3D9 is R2.
 `golden.py compare` against `tests/golden/vulkan` and
 `tests/golden/d3d12`.
 
-### R2, in progress
+### R2, as built (2026-10-03)
 
 `--tier modern|sm3|sm2|ff` (`gfx/render_tier.h`) shapes the content for a
 tier on any backend, so each R2 piece is checked on Metal against the modern
@@ -529,6 +529,76 @@ render before a D3D9 device exists.
     to 0.01/255.
 - R2's content work is complete. What is left of the retro track needs the
   D3D9 backend (R3) and real hardware.
+
+### R3, in progress: the D3D9 backend
+
+`--gpu-driver direct3d9` (Windows) selects `rhi/d3d9`, a D3D9 device on
+SDL's window. Everything above the RHI is unchanged, Dear ImGui included:
+it draws through `imgui_impl_dx9`. With `--tier sm3` on x99's RTX 5060 Ti,
+all eight golden scenes match D3D12 at the same tier within a mean of
+0.024/255 (`tests/golden/d3d12-sm3`, the gate). A 6000-frame `--demo` soak
+and a windowed hoard run ran clean.
+
+**Shaders.** The HLSL stays SM 6 and is written once. `tools/d3d9/bake_d3d9.py`
+takes each shader through shadercross (HLSL to SPIR-V, the tier's defines
+plus `D3D9`), SPIRV-Cross's `--shader-model 30` HLSL output (`brew install
+spirv-cross`), and `d3dcompiler_47`. The last is a Windows DLL, so
+`tools/d3d9/hlslc.cpp` wraps D3DCompile and runs under plain Wine on the Mac,
+with Microsoft's DLL copied from x99 to `~/.local/opt/d3dcompiler`. The
+script then reads the compiler's constant table (CTAB) back and checks every
+constant. That check paid for itself on the first run:
+- **fxc ignores `packoffset` for SM 3.0** and packs what a shader uses, so 80
+  constants landed elsewhere. The script now unwraps each cbuffer into
+  globals pinned with `register(cN)`, block after block, and writes the map
+  (`<stem>.<variant>.d3d9.json`) the backend pushes uniforms by.
+- Samplers are pinned to their slots from SPIRV-Cross's reflection, and its
+  `gl_HalfPixel` uniform to the register after the blocks. The backend sets
+  it to (1/width, 1/height), D3D9's half-pixel shift.
+
+What SM3 lacks is spelled in the shaders (`common.hlsl`,
+`skin_common.hlsl`), so the other backends compile the same source:
+- **No SV_VertexID.** The fullscreen passes read TEXCOORD0, which the
+  backend feeds from a buffer of its own.
+- **No depth-only fragment stage, and no portable depth-texture sampling.**
+  The shadow map becomes an R32F colour target plus a D24X8 surface, and
+  the depth passes write z/w into it. R32F is filtered only where the card
+  can filter it (`D3DUSAGE_QUERY_FILTER`); the GeForce 6 and 7 cannot, so
+  they point-sample.
+- **No unsigned integers.** Skinning uses int indices, and a UBYTE4
+  attribute arrives as floats.
+- **256 vertex constants.** The retro tiers push joints as three rows
+  (`PACKED_JOINTS`, 64 joints in 192 registers).
+
+**The backend** (`src/rhi/d3d9/d3d9_device.cpp`, about 800 lines):
+- RGBA8 is uploaded as A8R8G8B8, swizzled on the way in and on readback.
+  sRGB is a sampler state set from the texture's format. BC1 and BC3 are
+  DXT1 and DXT5.
+- Index buffers wait in memory until the first bind gives their width.
+- Dynamic vertex buffers are DEFAULT-pool DISCARD locks.
+- Instanced foliage uses SM3 stream frequencies.
+- The device is created with `D3DCREATE_FPU_PRESERVE`. Without it, D3D9
+  drops the whole process to single-precision x87.
+- Two bugs the goldens found:
+  - The bake scripts recognised a pipeline by a literal `fs_main(`, which
+    the depth passes no longer contain. That dropped the shadow shaders, and
+    the mountain lost its shadow. The scripts now take every file without
+    `#pragma once`.
+  - D3D9 binds a stream with the stride, so `bind_pipeline` re-binds the
+    streams with its own. Before that, the debug skeleton's lines fanned
+    out across the screen.
+
+**Running it.** D3D9 has no adapter in an SSH session (session 0), so a
+D3D9 run on x99 goes through `tools/x99/run_interactive.ps1`.
+`DRAGON_LOG_FILE` sends the log to a file, since a GUI-subsystem exe started
+that way reaches no console. Under plain Wine on the Mac the backend draws
+within 0.29/255 of x99's frame. The differences are wined3d's (tree cards),
+so Wine stays a smoke test, not the gate.
+
+Not done yet:
+- device reset (resize, alt-tab in fullscreen);
+- SM2 profiles (R4);
+- the 32-bit XP build (R6);
+- the G41.
 
 ### Budgets to design to
 

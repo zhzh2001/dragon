@@ -11,6 +11,8 @@
 
 namespace rhi::sdlgpu {
 
+std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config);
+
 SDL_GPUDevice* native_device(Device& device);
 SDL_GPUCommandBuffer* native_command_buffer(Device& device);
 SDL_GPURenderPass* native_pass(Pass* pass);

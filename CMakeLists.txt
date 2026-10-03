@@ -22,6 +22,7 @@ add_executable(dragon
   src/app.cpp
   src/core/input.cpp
   src/core/paths.cpp
+  src/rhi/device.cpp
   src/rhi/sdlgpu/sdlgpu_device.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp
@@ -71,6 +72,11 @@ add_executable(dragon
 
 target_include_directories(dragon PRIVATE src)
 target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio meshoptimizer)
+if(WIN32)
+  # The Direct3D 9 backend (docs/PORTING.md, R3): --gpu-driver direct3d9.
+  target_sources(dragon PRIVATE src/rhi/d3d9/d3d9_device.cpp)
+  target_link_libraries(dragon PRIVATE d3d9)
+endif()
 
 # Data is found beside the executable first (core/paths.h). A development
 # build has none there, so it falls back to the source tree, and hot reload

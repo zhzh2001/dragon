@@ -181,12 +181,21 @@ struct DeviceConfig {
     std::string driver;
 };
 
+enum class Backend : uint8_t { SdlGpu, Direct3D9 };
+
 class Device {
 public:
     virtual ~Device() = default;
 
-    // The backend this build carries, on `window` (which a headless device
-    // never presents to). Null on failure, with the reason logged.
+    // Which implementation answers: only Dear ImGui's renderer glue
+    // (editor/imgui_layer.cpp) needs to know, since it draws through the
+    // backend's native API.
+    virtual Backend backend() const = 0;
+
+    // The backend for `config.driver`: "direct3d9" is the D3D9 backend on
+    // Windows (rhi/d3d9), anything else SDL's GPU API (rhi/sdlgpu), on `window`
+    // (which a headless device never presents to). Null on failure, with the
+    // reason logged.
     static std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config);
 
     virtual const char* driver_name() const = 0;

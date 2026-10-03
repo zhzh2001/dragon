@@ -10,6 +10,28 @@
 #include "app.h"
 #include "core/paths.h"
 
+namespace {
+
+// DRAGON_LOG_FILE: every log line also goes to this file. A run on a desktop
+// session started remotely (tools/x99/run_interactive.ps1, the G41's job
+// runner) has no console or pipe for SDL's own output to reach.
+struct LogFile {
+    FILE* file = nullptr;
+    SDL_LogOutputFunction previous = nullptr;
+    void* previous_data = nullptr;
+};
+LogFile g_log_file;
+
+void log_to_file(void*, int category, SDL_LogPriority priority, const char* message) {
+    if (g_log_file.file) {
+        std::fprintf(g_log_file.file, "%s\n", message);
+        std::fflush(g_log_file.file);
+    }
+    if (g_log_file.previous) g_log_file.previous(g_log_file.previous_data, category, priority, message);
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
 #ifdef _WIN32
     // A package is a GUI-subsystem program, so a double-click opens no
@@ -23,6 +45,13 @@ int main(int argc, char** argv) {
     }
 #endif
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
+    if (const char* path = SDL_getenv("DRAGON_LOG_FILE")) {
+        g_log_file.file = std::fopen(path, "w");
+        if (g_log_file.file) {
+            SDL_GetLogOutputFunction(&g_log_file.previous, &g_log_file.previous_data);
+            SDL_SetLogOutputFunction(log_to_file, nullptr);
+        }
+    }
 
     core::paths::init();
     app::Options options = app::parse_options(argc, argv);

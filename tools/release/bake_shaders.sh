@@ -5,8 +5,8 @@
 #
 # A development build compiles shaders/*.hlsl at runtime through
 # SDL_shadercross. A package is built with DRAGON_SHADERCROSS=OFF and instead
-# loads what this writes: for each shader with an fs_main (the headers have
-# none), <stem>.vertex.<ext> and <stem>.fragment.<ext>, each beside its .json,
+# loads what this writes: for each shader that is not a header (#pragma
+# once), <stem>.vertex.<ext> and <stem>.fragment.<ext>, each beside its .json,
 # the reflection that holds the resource counts SDL needs (gfx/pipeline.cpp).
 # The formats are the package platform's: msl for macOS, spv for Linux
 # (Vulkan), dxil and spv for Windows (D3D12, and Vulkan with --gpu-driver).
@@ -37,7 +37,10 @@ mkdir -p "$out"
 variants="- BAKED_NOISE,PACKED_JOINTS,SWIZZLED_NORMALS BAKED_NOISE,LDR_OUTPUT,PACKED_JOINTS,SWIZZLED_NORMALS"
 count=0
 for src in "$root"/shaders/*.hlsl; do
-  grep -q 'fs_main(' "$src" || continue
+  # Every shader file is a pipeline except the headers, which say #pragma
+  # once. (Looking for "fs_main(" missed the depth-only passes, whose entry
+  # point comes from a macro, DEPTH_ONLY_FRAGMENT.)
+  grep -q '#pragma once' "$src" && continue
   stem=$(basename "$src" .hlsl)
   for variant in $variants; do
     flags=""; suffix=""
