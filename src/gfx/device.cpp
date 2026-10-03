@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "gfx/render_tier.h"
 
 namespace gfx {
 
@@ -139,7 +140,9 @@ rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     pass.clear_rgba[3] = 1.0f;
     pass.depth = depth_;
     pass.clear_depth = true;
-    pass.clear_depth_value = 0.0f;  // reversed-Z: the far plane is 0
+    // The far plane: 0 under reversed-Z, 1 in the conventional layout a
+    // retro tier uses (gfx/render_tier.h).
+    pass.clear_depth_value = depth_convention().reversed ? 0.0f : 1.0f;
     return rhi_->begin_pass(pass);
 }
 

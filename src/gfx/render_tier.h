@@ -21,6 +21,28 @@ namespace gfx {
 
 enum class Tier : uint8_t { Modern, SM3, SM2, FixedFunction };
 
+// How the main pass stores depth. Reversed-Z with an infinite far plane wants
+// a float depth buffer; D3D9-class hardware has a 24-bit fixed-point one,
+// where reversed-Z buys nothing, so the retro tiers use the conventional
+// layout with a finite far plane and a near plane pushed out. 0.5 m to 16 km
+// in 24 bits resolves about 3 m at 5 km (dz ~ d^2 / (near * 2^24)), coarser
+// than the river's banks but finer than anything coplanar at that distance.
+struct DepthConvention {
+    bool reversed = true;
+    float near_min = 0.0f;  // the camera's own near plane, raised to at least this
+    float far = 0.0f;       // 0: infinite (reversed only)
+};
+
+// Process-wide, set once at start-up from the tier, before any camera
+// projects or any pipeline is built. Inline with one shared instance, so the
+// renderer-free suites that include a camera need nothing extra linked.
+inline DepthConvention& depth_convention_storage() {
+    static DepthConvention convention;
+    return convention;
+}
+inline const DepthConvention& depth_convention() { return depth_convention_storage(); }
+inline void set_depth_convention(const DepthConvention& convention) { depth_convention_storage() = convention; }
+
 struct RenderTier {
     Tier tier = Tier::Modern;
     // Joints one skinned draw may address (anim/skin_partition.h). The modern
@@ -30,6 +52,8 @@ struct RenderTier {
     // material constants. Fixed function skins on the CPU (R5), so its value
     // is the CPU path's, not a palette.
     uint32_t max_skin_bones = 256;
+    // The main pass's depth layout (see DepthConvention).
+    DepthConvention depth;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -40,6 +64,7 @@ struct RenderTier {
             case Tier::SM2: t.max_skin_bones = 50; break;
             case Tier::FixedFunction: t.max_skin_bones = 256; break;
         }
+        if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
         return t;
     }
 

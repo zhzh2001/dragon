@@ -379,8 +379,19 @@ render before a D3D9 device exists.
     With two batches, Metal differs in about 300 pixels (at most 18/255).
     The same unsplit mesh drawn in two halves differs the same way, so that
     is the draw boundary, not the palette.
-- Next: the standard-Z path, the LDR fallback, baked terrain noise, texture
-  caps and DXT, creature LODs.
+- **Conventional depth, done (2026-10-03).** Retro tiers project
+  0.5 m to 16 km, clear depth to 1 and compare LESS (`gfx::DepthConvention`).
+  The main-pass pipelines' GREATER is flipped by the pipeline cache, and
+  the shadow pipelines, conventional already, are untouched. Against the
+  modern goldens, `--tier sm3` differs by a mean of at most 0.03/255 and in
+  at most 0.1% of pixels. Those are single pixels on mid-range foliage edges
+  and the line where the river meets its bank: depth precision at work. The
+  first-person view keeps the head and horns whole at the 0.5 m near plane.
+  On real D3D9 hardware the buffer is 24-bit, so far-distance z-fighting is
+  still to look for at R3. Camera-relative positions, the other mitigation
+  in "The five real problems", wait until a capture shows they are needed.
+- Next: the LDR fallback, baked terrain noise, texture caps and DXT,
+  creature LODs.
 
 ### Budgets to design to
 

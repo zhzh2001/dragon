@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/math.h"
+#include "gfx/render_tier.h"
 
 namespace gfx {
 
@@ -21,9 +22,14 @@ struct Camera {
     core::Mat4 view() const { return core::view_from_transform(position, rotation); }
 
     // Reversed-Z with an infinite far plane: nothing ever needs a far-plane
-    // tuning pass, and precision stays good across a whole valley.
+    // tuning pass, and precision stays good across a whole valley. A retro
+    // tier projects conventionally instead, for a fixed-point depth buffer
+    // (gfx/render_tier.h, DepthConvention).
     core::Mat4 projection(float aspect) const {
-        return core::perspective_reverse_z(core::radians(fov_y_deg), aspect, z_near);
+        const DepthConvention& depth = depth_convention();
+        if (depth.reversed) return core::perspective_reverse_z(core::radians(fov_y_deg), aspect, z_near);
+        const float near = z_near > depth.near_min ? z_near : depth.near_min;
+        return core::perspective(core::radians(fov_y_deg), aspect, near, depth.far);
     }
 
     core::Mat4 view_projection(float aspect) const { return projection(aspect) * view(); }

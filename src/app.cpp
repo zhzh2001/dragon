@@ -207,6 +207,7 @@ Options parse_options(int argc, char** argv) {
 bool App::init(const Options& options) {
     options_ = options;
     tier_ = gfx::RenderTier::make(options.tier);
+    gfx::set_depth_convention(tier_.depth);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
     gfx::Device::Config config;

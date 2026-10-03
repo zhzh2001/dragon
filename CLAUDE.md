@@ -108,7 +108,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 | `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first. |
-| `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2). |
+| `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) and switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS). |
 
 Soaks that have caught real bugs:
 
@@ -178,6 +178,10 @@ flight controls.
 - **Depth**: reversed-Z. Near maps to 1, far to 0; depth clears to **0** and the
   compare op is **GREATER**. Use `core::perspective_reverse_z`. This buys the
   depth precision a flight game needs at multi-kilometre view distances.
+  A retro tier (`--tier`) switches to conventional depth for D3D9's 24-bit
+  buffer (`gfx::DepthConvention`). `Camera::projection`, the main pass's
+  clear and every main-pass pipeline's compare follow it, so write a
+  pipeline's compare as if reversed (GREATER) and let the cache flip it.
 - **Rendering**: the world renders LINEAR into a 16-bit `scene_hdr` target
   (the pipeline cache's default colour format); `gfx::PostProcess` then blooms
   it at half resolution, tonemaps and grades it into the 8-bit `scene_color`

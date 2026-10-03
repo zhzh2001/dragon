@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 #include "core/log.h"
+#include "gfx/render_tier.h"
 
 namespace gfx {
 namespace {
@@ -156,6 +157,14 @@ bool PipelineCache::build(Entry& entry) {
     desc.depth_test = d.depth_test;
     desc.depth_write = d.depth_write;
     desc.depth_compare = d.depth_compare;
+    // A main-pass pipeline (one on the device's own depth buffer) states its
+    // compare for reversed-Z; a retro tier's conventional depth flips it. The
+    // shadow pipelines name their own depth format and are conventional
+    // already, so they are left alone.
+    if (!depth_convention().reversed && d.depth_format == rhi::Format::Invalid) {
+        if (desc.depth_compare == rhi::Compare::Greater) desc.depth_compare = rhi::Compare::Less;
+        else if (desc.depth_compare == rhi::Compare::GreaterEqual) desc.depth_compare = rhi::Compare::LessEqual;
+    }
     desc.blend = d.additive_blend ? rhi::Blend::Additive
                  : d.alpha_blend  ? rhi::Blend::Alpha
                                   : rhi::Blend::Opaque;
