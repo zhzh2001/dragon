@@ -83,6 +83,11 @@ public:
     // only the composite and Dear ImGui declare the 8-bit one.
     rhi::Format scene_color_format() const { return rhi::Format::RGBA8; }
     rhi::Format scene_hdr_format() const { return rhi::Format::RGBA16F; }
+    // What the main pass renders into: the HDR scene for the post stack, or,
+    // for a tier without HDR (gfx/render_tier.h), the 8-bit colour target
+    // directly, finished by the world shaders themselves.
+    rhi::Format main_color_format() const { return hdr_ ? scene_hdr_format() : scene_color_format(); }
+    bool hdr() const { return hdr_; }
     rhi::Format depth_format() const { return depth_format_; }
     rhi::Texture* scene_hdr() const { return scene_hdr_; }
     rhi::Texture* scene_color() const { return scene_color_; }
@@ -105,6 +110,7 @@ private:
     std::unique_ptr<rhi::Device> rhi_;
     bool headless_ = false;
     bool in_frame_ = false;
+    bool hdr_ = true;
 
     rhi::Texture* scene_color_ = nullptr;
     rhi::Texture* scene_hdr_ = nullptr;

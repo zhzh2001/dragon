@@ -119,6 +119,7 @@ bool PipelineCache::build(Entry& entry) {
     rhi::ShaderSource shaders;
     shaders.stem = d.shader;
     shaders.root = shader_root_;
+    if (!active_tier().hdr) shaders.defines.push_back("LDR_OUTPUT");
     entry.sources.clear();
     if (rhi.compiles_hlsl()) {
         // Seed the watch list with the primary shader before doing anything
@@ -168,11 +169,11 @@ bool PipelineCache::build(Entry& entry) {
     desc.blend = d.additive_blend ? rhi::Blend::Additive
                  : d.alpha_blend  ? rhi::Blend::Alpha
                                   : rhi::Blend::Opaque;
-    // World pipelines render into the HDR scene target; the post-process
-    // composite and the UI are the only things that write the 8-bit one.
+    // World pipelines render into the main target: the HDR scene, or the
+    // 8-bit one for a tier without HDR. The composite and the UI name theirs.
     desc.color_format = d.no_color_target ? rhi::Format::Invalid
                         : d.color_format != rhi::Format::Invalid ? d.color_format
-                                                                 : device_->scene_hdr_format();
+                                                                 : device_->main_color_format();
     desc.depth_format = d.no_depth_target ? rhi::Format::Invalid
                         : d.depth_format != rhi::Format::Invalid ? d.depth_format
                                                                  : device_->depth_format();

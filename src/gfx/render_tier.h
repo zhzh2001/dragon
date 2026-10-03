@@ -33,16 +33,6 @@ struct DepthConvention {
     float far = 0.0f;       // 0: infinite (reversed only)
 };
 
-// Process-wide, set once at start-up from the tier, before any camera
-// projects or any pipeline is built. Inline with one shared instance, so the
-// renderer-free suites that include a camera need nothing extra linked.
-inline DepthConvention& depth_convention_storage() {
-    static DepthConvention convention;
-    return convention;
-}
-inline const DepthConvention& depth_convention() { return depth_convention_storage(); }
-inline void set_depth_convention(const DepthConvention& convention) { depth_convention_storage() = convention; }
-
 struct RenderTier {
     Tier tier = Tier::Modern;
     // Joints one skinned draw may address (anim/skin_partition.h). The modern
@@ -54,6 +44,13 @@ struct RenderTier {
     uint32_t max_skin_bones = 256;
     // The main pass's depth layout (see DepthConvention).
     DepthConvention depth;
+    // Whether the world renders linear light into a 16-bit float target for
+    // the post stack (bloom, the full grade). SM2 and fixed-function cards have
+    // no float render target, so their world shaders tonemap and grade in
+    // place (LDR_OUTPUT, scene_common.hlsl) straight into the 8-bit target,
+    // and there is no bloom. SM3 keeps it: its floor cards render FP16 (an
+    // X1300 cannot filter it, which R3 has to meet with point sampling).
+    bool hdr = true;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -65,6 +62,7 @@ struct RenderTier {
             case Tier::FixedFunction: t.max_skin_bones = 256; break;
         }
         if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
+        t.hdr = tier == Tier::Modern || tier == Tier::SM3;
         return t;
     }
 
@@ -88,5 +86,17 @@ struct RenderTier {
         return "modern";
     }
 };
+
+// The tier in force: process-wide, set once at start-up before the device
+// makes its targets, any camera projects or any pipeline is built. Inline with
+// one shared instance, so the renderer-free suites that include a camera need
+// nothing extra linked.
+inline RenderTier& active_tier_storage() {
+    static RenderTier tier;
+    return tier;
+}
+inline const RenderTier& active_tier() { return active_tier_storage(); }
+inline void set_active_tier(const RenderTier& tier) { active_tier_storage() = tier; }
+inline const DepthConvention& depth_convention() { return active_tier().depth; }
 
 }  // namespace gfx

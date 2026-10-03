@@ -32,6 +32,10 @@ struct SceneUniforms {
     core::Vec4 shadow_params;   // x texel size, y depth bias, z strength, w enabled
     core::Vec4 light_params;    // x sun wrap, y foliage translucency, z ground bounce
     core::Vec4 palette[PALETTE_COUNT];
+    // The grade a tier without HDR applies in the world shaders themselves
+    // (LDR_OUTPUT): x exposure, y contrast, z saturation, w hue preservation.
+    // Unread when the post stack grades.
+    core::Vec4 output_grade = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

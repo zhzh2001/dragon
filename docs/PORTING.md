@@ -390,8 +390,26 @@ render before a D3D9 device exists.
   On real D3D9 hardware the buffer is 24-bit, so far-distance z-fighting is
   still to look for at R3. Camera-relative positions, the other mitigation
   in "The five real problems", wait until a capture shows they are needed.
-- Next: the LDR fallback, baked terrain noise, texture caps and DXT,
-  creature LODs.
+- **The LDR fallback, done (2026-10-03).** SM2 and fixed-function cards
+  have no float render target (`RenderTier::hdr` is false for them). Their
+  world renders straight into the 8-bit scene colour target, with no HDR
+  target, no bloom chain and no post pass. The pipeline cache compiles every
+  shader with `LDR_OUTPUT`. Under it, `scene_out` and the particle shader
+  finish each pixel with `ldr_encode` (`common.hlsl`): exposure, Reinhard
+  blended toward its hue-preserving form, gamma, contrast and saturation,
+  the composite's own curve fed from the same Grade & bloom dials
+  (`SceneUniforms::output_grade`).
+  - Correctness check: `--tier sm2 --no-post` against the `valley-nopost`
+    golden differs by a mean of 0.04/255 in 0.1% of pixels, so the
+    in-shader curve is the composite's "post off" picture.
+  - With the grade on, `--tier sm2` differs from the modern goldens by a
+    mean of 3.7 to 4.3/255. That is the missing bloom, split-toning, white
+    balance and vignette, which an SM2 pixel shader has no room for.
+  - Additive particles are brighter (fire: mean 10.5/255): each puff is
+    tonemapped on its own, so overlapping puffs sum in display space and
+    the curve cannot compress the total. Real SM2 hardware does the same.
+    Tune the per-tier particle intensity on the card at R3, not blind.
+- Next: baked terrain noise, texture caps and DXT, creature LODs.
 
 ### Budgets to design to
 

@@ -28,6 +28,25 @@
 #define TEXTURE_SLOT(n) register(t##n, RESOURCE_SPACE)
 #define SAMPLER_SLOT(n) register(s##n, RESOURCE_SPACE)
 
+// The LDR tiers' in-shader finish (LDR_OUTPUT): the same curve as
+// post_composite.hlsl -- exposure, Reinhard blended toward its hue-preserving
+// form, gamma 2.2, then contrast about display middle grey and saturation
+// about the luma -- without the bloom, split-toning, white balance and
+// vignette an SM2 pixel shader has no room for.
+float3 ldr_encode(float3 c, float4 grade) {
+    c *= grade.x;
+    const float3 LUMA = float3(0.2126, 0.7152, 0.0722);
+    float l = dot(c, LUMA);
+    float3 hue = c * ((l / (1.0 + l)) / max(l, 1e-4));
+    float peak = max(hue.r, max(hue.g, hue.b));
+    hue = peak > 1.0 ? hue / peak : hue;
+    c = lerp(c / (1.0 + c), hue, grade.w);
+    c = pow(c, (float3)(1.0 / 2.2));
+    c = (c - 0.46) * grade.y + 0.46;
+    c = lerp((float3)dot(c, LUMA), c, grade.z);
+    return saturate(c);
+}
+
 // A sampled texture and its sampler share a slot number, which is how SDL
 // binds them (SDL_BindGPUFragmentSamplers takes texture-sampler pairs).
 #define TEXTURE2D(name, n) Texture2D<float4> name : TEXTURE_SLOT(n); SamplerState name##_sampler : SAMPLER_SLOT(n)

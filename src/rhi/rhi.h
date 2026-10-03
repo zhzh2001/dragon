@@ -133,6 +133,9 @@ struct ShaderSource {
     std::string stem;
     std::string hlsl;
     std::string root;
+    // Preprocessor names defined for both stages, e.g. LDR_OUTPUT for a tier
+    // without a float target (gfx/render_tier.h).
+    std::vector<std::string> defines;
 };
 
 struct BufferBinding {

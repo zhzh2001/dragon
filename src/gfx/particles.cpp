@@ -110,7 +110,7 @@ bool ParticleSystem::ensure_capacity(uint32_t vertices) {
 
 void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 camera_right,
                             Vec3 camera_up) {
-    view_proj_ = view_proj;
+    uniforms_.view_proj = view_proj;
     vertices_.clear();
     for (int i = 0; i < count_; ++i) {
         const Particle& p = pool_[i];
@@ -161,7 +161,8 @@ void ParticleSystem::draw(Device& device, rhi::Pass* pass) {
     if (!pipeline) return;
 
     device.rhi().bind_pipeline(pass, pipeline);
-    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &view_proj_, sizeof(core::Mat4));
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &uniforms_, sizeof(Uniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &uniforms_, sizeof(Uniforms));
     rhi::BufferBinding binding = {};
     binding.buffer = vertex_buffer_;
     device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);

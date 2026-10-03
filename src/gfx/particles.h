@@ -43,6 +43,9 @@ public:
 
     // Build camera-facing quads and stage the upload; call before the render
     // pass, then draw() inside it.
+    // The in-shader grade an LDR tier finishes additive light with (see
+    // SceneUniforms::output_grade).
+    void set_output_grade(core::Vec4 grade) { uniforms_.output_grade = grade; }
     void upload(Device& device, const core::Mat4& view_proj, core::Vec3 camera_right,
                 core::Vec3 camera_up);
     void draw(Device& device, rhi::Pass* pass);
@@ -70,7 +73,12 @@ private:
     uint32_t uploaded_ = 0;
     rhi::Buffer* vertex_buffer_ = nullptr;
     uint32_t capacity_ = 0;
-    core::Mat4 view_proj_ = core::Mat4::identity();
+    // Must match ParticleUniforms in shaders/particles.hlsl.
+    struct Uniforms {
+        core::Mat4 view_proj = core::Mat4::identity();
+        core::Vec4 output_grade = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};  // as SceneUniforms'
+    };
+    Uniforms uniforms_;
 };
 
 }  // namespace gfx

@@ -207,7 +207,7 @@ Options parse_options(int argc, char** argv) {
 bool App::init(const Options& options) {
     options_ = options;
     tier_ = gfx::RenderTier::make(options.tier);
-    gfx::set_depth_convention(tier_.depth);
+    gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
     gfx::Device::Config config;
@@ -6598,6 +6598,15 @@ void App::render() {
     scene.shadow_params = core::Vec4{texel_world, shadow_.depth_bias,
                                      shadow_.enabled ? shadow_.strength : 0.0f,
                                      1.0f / float(shadow_.resolution())};
+    // The grade a tier without HDR finishes the world with in its shaders;
+    // the same dials as the post stack's, or its "off" picture when off.
+    {
+        const gfx::PostSettings& g = post_settings_;
+        const core::Vec4 grade = g.enabled ? core::Vec4{g.exposure, g.contrast, g.saturation, g.hue_preserve}
+                                           : core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
+        scene.output_grade = grade;
+        particles_.set_output_grade(grade);
+    }
     world_.set_scene(scene);
     world_.set_material_toggles(material_toggles_);
 
@@ -6782,8 +6791,9 @@ void App::render() {
     device_.end_pass(pass);
 
     // The world is in the linear HDR target; bloom it, tonemap it and grade
-    // it into the 8-bit target, which the UI then draws onto ungraded.
-    post_.run(device_, post_settings_);
+    // it into the 8-bit target, which the UI then draws onto ungraded. A tier
+    // without HDR has already finished the world into that target.
+    if (device_.hdr()) post_.run(device_, post_settings_);
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();
     ui_.render(device_, ui_pass);

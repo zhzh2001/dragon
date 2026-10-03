@@ -17,11 +17,12 @@ struct VertexOut {
 
 struct ParticleUniforms {
     float4x4 view_proj;
+    float4 output_grade;  // the LDR tiers' in-shader grade (common.hlsl)
 };
 
-#ifdef VERTEX_STAGE
 ConstantBuffer<ParticleUniforms> u : UNIFORM_SLOT(0);
 
+#ifdef VERTEX_STAGE
 VertexOut vs_main(VertexIn input) {
     VertexOut o;
     o.clip_position = mul(u.view_proj, float4(input.position, 1.0));
@@ -38,6 +39,13 @@ float4 fs_main(VertexOut input) : SV_Target {
     float r = length(input.corner);
     float falloff = saturate(1.0 - r);
     falloff *= falloff;
+#ifdef LDR_OUTPUT
+    // Without a float target each puff is finished on its own and the
+    // finished values add: brighter where puffs stack than the modern
+    // tonemap-after-sum, which is the price of eight bits.
+    return float4(ldr_encode(input.color.rgb * falloff, u.output_grade), 1.0);
+#else
     return float4(input.color.rgb * falloff, 1.0);
+#endif
 }
 #endif

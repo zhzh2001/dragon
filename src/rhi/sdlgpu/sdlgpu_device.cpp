@@ -120,13 +120,14 @@ SDL_GPUVertexElementFormat to_sdl(VertexFormat f) {
 SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const ShaderSource& src, const char* entrypoint,
                               SDL_GPUShaderStage stage) {
     const bool vertex = stage == SDL_GPU_SHADERSTAGE_VERTEX;
-    SDL_ShaderCross_HLSL_Define defines[2] = {};
+    std::vector<SDL_ShaderCross_HLSL_Define> defines(src.defines.size() + 2);
     defines[0].name = const_cast<char*>(vertex ? "VERTEX_STAGE" : "FRAGMENT_STAGE");
+    for (size_t i = 0; i < src.defines.size(); ++i) defines[i + 1].name = const_cast<char*>(src.defines[i].c_str());
 
     SDL_ShaderCross_HLSL_Info hlsl = {};
     hlsl.source = src.hlsl.c_str();
     hlsl.entrypoint = entrypoint;
-    hlsl.defines = defines;
+    hlsl.defines = defines.data();
     hlsl.shader_stage = vertex ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
 
     size_t size = 0;
@@ -187,6 +188,12 @@ uint32_t json_count(const std::string& json, const char* key) {
 
 SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const ShaderSource& src, const char* entrypoint,
                               SDL_GPUShaderStage stage) {
+    if (!src.defines.empty()) {
+        // Packages are baked for the modern tier only; a retro tier needs the
+        // runtime compiler, or baked variants that do not exist yet.
+        SDL_SetError("baked shaders have no '%s' variant", src.defines.front().c_str());
+        return nullptr;
+    }
     std::string root = src.root;
     if (!root.empty() && root.back() != '/' && root.back() != '\\') root += '/';
     const std::string base = root + src.stem + "." + stage_name(stage);

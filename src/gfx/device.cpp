@@ -37,6 +37,7 @@ bool Device::init(const Config& config) {
     window_ = SDL_CreateWindow(config.title, config.width, config.height, flags);
     if (!window_) return SDL_FAIL("SDL_CreateWindow");
 
+    hdr_ = active_tier().hdr;
     rhi::DeviceConfig rhi_config;
     rhi_config.headless = headless_;
     rhi_config.driver = config.gpu_driver;
@@ -89,7 +90,24 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     scene_color_ = rhi_->create_texture(color, "scene_color");
     if (!scene_color_) return false;
 
-    // The linear scene, and the two half-size bloom targets.
+    // The linear scene, and the two half-size bloom targets -- unless the tier
+    // has no HDR, when the world finishes straight into scene_color.
+    if (!hdr_) {
+        rhi::TextureDesc depth;
+        depth.width = w;
+        depth.height = h;
+        depth.format = depth_format_;
+        depth.usage = rhi::TEXTURE_DEPTH_TARGET;
+        depth_ = rhi_->create_texture(depth, "scene_depth");
+        if (!depth_) {
+            release_targets();
+            return false;
+        }
+        render_w_ = w;
+        render_h_ = h;
+        LOG_INFO("render targets resized to %ux%u (LDR)", w, h);
+        return true;
+    }
     rhi::TextureDesc hdr = color;
     hdr.format = scene_hdr_format();
     scene_hdr_ = rhi_->create_texture(hdr, "scene_hdr");
@@ -132,7 +150,7 @@ bool Device::begin_frame() {
 
 rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     rhi::PassDesc pass;
-    pass.color = scene_hdr_;
+    pass.color = hdr_ ? scene_hdr_ : scene_color_;
     pass.clear_color = true;
     pass.clear_rgba[0] = r;
     pass.clear_rgba[1] = g;

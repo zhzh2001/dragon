@@ -42,6 +42,9 @@ struct SceneUniforms {
     float4 light_params;
     // The world's named colours; see palette.hlsl for the indices.
     float4 palette[PALETTE_COUNT];
+    // x exposure, y contrast, z saturation, w hue preservation: the grade a
+    // tier without HDR applies here, in place of the post stack (LDR_OUTPUT).
+    float4 output_grade;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -50,7 +53,9 @@ struct SceneUniforms {
 // Every world shader goes through this one function for the same reason the
 // old tonemap was shared: the sky was once written differently from the
 // terrain fogging toward it, and the seam showed along the horizon.
+#ifndef LDR_OUTPUT
 float3 scene_out(float3 color) { return max(color, 0.0); }
+#endif
 
 // Cheap value noise for breaking up flat material bands -- terrain patches,
 // bark streaks. Not for shaping geometry: purely a surface tint, so it can be
@@ -88,6 +93,13 @@ float fbm(float2 p) {
 
 #ifndef NO_SCENE
 ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
+
+#ifdef LDR_OUTPUT
+// A tier without a float target (gfx/render_tier.h): the world shader
+// finishes the pixel itself -- exposure, tonemap, gamma, contrast and
+// saturation, the cheap part of post_composite's grade -- into 8 bits.
+float3 scene_out(float3 color) { return ldr_encode(max(color, 0.0), scene.output_grade); }
+#endif
 
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //
