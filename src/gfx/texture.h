@@ -1,9 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
-
 #include <cstdint>
 #include <vector>
+
+#include "rhi/rhi.h"
 
 namespace gfx {
 
@@ -29,10 +29,10 @@ ImageData decode_image(const uint8_t* bytes, size_t size);
 // decoded through the sRGB curve gives wrong directions, and a roughness map
 // read that way is visibly too glossy -- both look like shading bugs rather than
 // like a colour-space mistake, so the distinction is worth being explicit about.
-SDL_GPUTexture* create_texture_from_image(SDL_GPUDevice* gpu, const ImageData& image,
-                                          const char* debug_name, bool srgb = true);
+rhi::Texture* create_texture_from_image(rhi::Device& rhi, const ImageData& image,
+                                        const char* debug_name, bool srgb = true);
 
 // Anisotropic, repeating sampler suited to model albedo.
-SDL_GPUSampler* create_model_sampler(SDL_GPUDevice* gpu);
+rhi::Sampler* create_model_sampler(rhi::Device& rhi);
 
 }  // namespace gfx

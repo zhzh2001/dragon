@@ -21,9 +21,9 @@ add_executable(dragon
   src/app.cpp
   src/core/input.cpp
   src/core/paths.cpp
+  src/rhi/sdlgpu/sdlgpu_device.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp
-  src/gfx/buffer.cpp
   src/gfx/debug_draw.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -136,7 +136,6 @@ add_executable(test_flight
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
   src/anim/animation.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_flight PRIVATE src)
 target_link_libraries(test_flight PRIVATE SDL3::SDL3)
@@ -155,7 +154,6 @@ add_executable(test_camera_rig
   src/anim/skinned_mesh.cpp
   src/anim/dragon_rig.cpp
   src/anim/animation.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_camera_rig PRIVATE src)
 target_link_libraries(test_camera_rig PRIVATE SDL3::SDL3)
@@ -171,7 +169,6 @@ add_executable(test_rally
   src/game/terrain.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_rally PRIVATE src)
 target_link_libraries(test_rally PRIVATE SDL3::SDL3)
@@ -193,7 +190,6 @@ add_executable(test_anim
   src/game/terrain.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_anim PRIVATE src)
 target_link_libraries(test_anim PRIVATE SDL3::SDL3 cgltf stb)
@@ -213,7 +209,6 @@ add_executable(test_combat
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_combat PRIVATE src)
 target_link_libraries(test_combat PRIVATE SDL3::SDL3)
@@ -230,7 +225,6 @@ add_executable(test_element
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_element PRIVATE src)
 target_link_libraries(test_element PRIVATE SDL3::SDL3)
@@ -249,7 +243,6 @@ add_executable(test_bot
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_bot PRIVATE src)
 target_link_libraries(test_bot PRIVATE SDL3::SDL3)
@@ -267,7 +260,6 @@ add_executable(test_match
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_match PRIVATE src)
 target_link_libraries(test_match PRIVATE SDL3::SDL3)
@@ -283,7 +275,6 @@ add_executable(test_hoard_run
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_hoard_run PRIVATE src)
 target_link_libraries(test_hoard_run PRIVATE SDL3::SDL3)
@@ -303,7 +294,6 @@ add_executable(test_prey
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_prey PRIVATE src)
 target_link_libraries(test_prey PRIVATE SDL3::SDL3)
@@ -324,7 +314,6 @@ add_executable(test_demo_pilot
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_demo_pilot PRIVATE src)
 target_link_libraries(test_demo_pilot PRIVATE SDL3::SDL3)
@@ -337,7 +326,6 @@ add_executable(test_vegetation
   src/game/vegetation.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
-  src/gfx/buffer.cpp
 )
 target_include_directories(test_vegetation PRIVATE src)
 target_link_libraries(test_vegetation PRIVATE SDL3::SDL3)

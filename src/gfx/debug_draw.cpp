@@ -15,28 +15,28 @@ PipelineDesc make_line_pipeline_desc(bool overlay) {
     PipelineDesc desc;
     desc.name = overlay ? "debug_line_overlay" : "debug_line";
     desc.shader = "debug_line";
-    desc.primitive = SDL_GPU_PRIMITIVETYPE_LINELIST;
-    desc.cull = SDL_GPU_CULLMODE_NONE;
+    desc.primitive = rhi::Primitive::LineList;
+    desc.cull = rhi::Cull::None;
     desc.depth_test = !overlay;
     desc.depth_write = !overlay;
 
-    SDL_GPUVertexBufferDescription vb = {};
+    rhi::VertexBufferLayout vb = {};
     vb.slot = 0;
     vb.pitch = sizeof(float) * 6;
-    vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vb.rate = rhi::InputRate::Vertex;
     desc.vertex_buffers.push_back(vb);
 
-    SDL_GPUVertexAttribute position = {};
+    rhi::VertexAttribute position = {};
     position.location = 0;
     position.buffer_slot = 0;
-    position.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    position.format = rhi::VertexFormat::Float3;
     position.offset = 0;
     desc.vertex_attributes.push_back(position);
 
-    SDL_GPUVertexAttribute color = {};
+    rhi::VertexAttribute color = {};
     color.location = 1;
     color.buffer_slot = 0;
-    color.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    color.format = rhi::VertexFormat::Float3;
     color.offset = sizeof(float) * 3;
     desc.vertex_attributes.push_back(color);
 
@@ -57,10 +57,8 @@ bool DebugDraw::init(Device* device, PipelineCache* pipelines) {
 
 void DebugDraw::shutdown() {
     if (!device_) return;
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(device_->gpu(), vertex_buffer_);
-    if (transfer_) SDL_ReleaseGPUTransferBuffer(device_->gpu(), transfer_);
+    device_->rhi().destroy(vertex_buffer_);
     vertex_buffer_ = nullptr;
-    transfer_ = nullptr;
     capacity_ = 0;
 }
 
@@ -183,31 +181,12 @@ bool DebugDraw::ensure_capacity(uint32_t vertex_count) {
     uint32_t new_capacity = capacity_ > 0 ? capacity_ : 4096;
     while (new_capacity < vertex_count) new_capacity *= 2;
 
-    SDL_GPUDevice* gpu = device_->gpu();
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-    if (transfer_) SDL_ReleaseGPUTransferBuffer(gpu, transfer_);
-    vertex_buffer_ = nullptr;
-    transfer_ = nullptr;
+    rhi::Device& rhi = device_->rhi();
+    rhi.destroy(vertex_buffer_);
     capacity_ = 0;
-
-    const uint32_t bytes = new_capacity * uint32_t(sizeof(Vertex));
-
-    SDL_GPUBufferCreateInfo buffer_info = {};
-    buffer_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-    buffer_info.size = bytes;
-    vertex_buffer_ = SDL_CreateGPUBuffer(gpu, &buffer_info);
-    if (!vertex_buffer_) return SDL_FAIL("SDL_CreateGPUBuffer(debug_lines)");
-    SDL_SetGPUBufferName(gpu, vertex_buffer_, "debug_lines");
-
-    SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = bytes;
-    transfer_ = SDL_CreateGPUTransferBuffer(gpu, &transfer_info);
-    if (!transfer_) {
-        SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-        vertex_buffer_ = nullptr;
-        return SDL_FAIL("SDL_CreateGPUTransferBuffer(debug_lines)");
-    }
+    vertex_buffer_ = rhi.create_buffer(rhi::BufferUsage::Vertex, new_capacity * uint32_t(sizeof(Vertex)),
+                                       nullptr, "debug_lines");
+    if (!vertex_buffer_) return false;
 
     capacity_ = new_capacity;
     LOG_INFO("debug line capacity -> %u vertices", capacity_);
@@ -224,12 +203,9 @@ void DebugDraw::upload(Device& device) {
         return;
     }
 
-    SDL_GPUDevice* gpu = device.gpu();
-    // cycle=true hands back fresh storage rather than stalling on the previous
-    // frame's copy still being read.
-    void* mapped = SDL_MapGPUTransferBuffer(gpu, transfer_, true);
+    const uint32_t bytes = total * uint32_t(sizeof(Vertex));
+    void* mapped = device.rhi().map_upload(vertex_buffer_, bytes);
     if (!mapped) {
-        SDL_FAIL("SDL_MapGPUTransferBuffer(debug_lines)");
         uploaded_depth_ = uploaded_overlay_ = 0;
         return;
     }
@@ -238,19 +214,10 @@ void DebugDraw::upload(Device& device) {
         std::memcpy(out, depth_tested_.data(), uploaded_depth_ * sizeof(Vertex));
     if (uploaded_overlay_ > 0)
         std::memcpy(out + uploaded_depth_, overlay_.data(), uploaded_overlay_ * sizeof(Vertex));
-    SDL_UnmapGPUTransferBuffer(gpu, transfer_);
-
-    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(device.cmd());
-    SDL_GPUTransferBufferLocation src = {};
-    src.transfer_buffer = transfer_;
-    SDL_GPUBufferRegion dst = {};
-    dst.buffer = vertex_buffer_;
-    dst.size = total * uint32_t(sizeof(Vertex));
-    SDL_UploadToGPUBuffer(pass, &src, &dst, true);
-    SDL_EndGPUCopyPass(pass);
+    device.rhi().commit_upload(vertex_buffer_, bytes);
 }
 
-void DebugDraw::draw(Device& device, SDL_GPURenderPass* pass, const Mat4& view_proj) {
+void DebugDraw::draw(Device& device, rhi::Pass* pass, const Mat4& view_proj) {
     // Cleared unconditionally: a frame that fails to draw must not leak its
     // geometry into the next one.
     struct Clear {
@@ -267,23 +234,23 @@ void DebugDraw::draw(Device& device, SDL_GPURenderPass* pass, const Mat4& view_p
 
     // Resolved every frame rather than cached, so a hot-reloaded shader is
     // picked up automatically. Either may be null if its shader is broken.
-    SDL_GPUGraphicsPipeline* depth_pipeline = pipelines_->get(depth_pipeline_);
-    SDL_GPUGraphicsPipeline* overlay_pipeline = pipelines_->get(overlay_pipeline_);
+    rhi::Pipeline* depth_pipeline = pipelines_->get(depth_pipeline_);
+    rhi::Pipeline* overlay_pipeline = pipelines_->get(overlay_pipeline_);
 
-    SDL_GPUBufferBinding binding = {};
+    rhi::BufferBinding binding = {};
     binding.buffer = vertex_buffer_;
     binding.offset = 0;
-    SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-    SDL_PushGPUVertexUniformData(device.cmd(), 0, &view_proj, sizeof(Mat4));
+    device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &view_proj, sizeof(Mat4));
 
     if (depth_pipeline && uploaded_depth_ > 0) {
-        SDL_BindGPUGraphicsPipeline(pass, depth_pipeline);
-        SDL_DrawGPUPrimitives(pass, uploaded_depth_, 1, 0, 0);
+        device.rhi().bind_pipeline(pass, depth_pipeline);
+        device.rhi().draw(pass, uploaded_depth_, 1, 0, 0);
     }
     if (overlay_pipeline && uploaded_overlay_ > 0) {
-        SDL_BindGPUGraphicsPipeline(pass, overlay_pipeline);
+        device.rhi().bind_pipeline(pass, overlay_pipeline);
         // Overlay vertices live directly after the depth-tested ones.
-        SDL_DrawGPUPrimitives(pass, uploaded_overlay_, 1, uploaded_depth_, 0);
+        device.rhi().draw(pass, uploaded_overlay_, 1, uploaded_depth_, 0);
     }
 }
 

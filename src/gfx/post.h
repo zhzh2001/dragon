@@ -1,7 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
-
 #include "core/math.h"
 #include "gfx/pipeline.h"
 
@@ -72,7 +70,7 @@ private:
     PipelineHandle bright_ = INVALID_PIPELINE;
     PipelineHandle blur_ = INVALID_PIPELINE;
     PipelineHandle composite_ = INVALID_PIPELINE;
-    SDL_GPUSampler* sampler_ = nullptr;
+    rhi::Sampler* sampler_ = nullptr;
 };
 
 }  // namespace gfx

@@ -38,7 +38,7 @@ public:
     void prepare_draw_data(gfx::Device& device);
 
     // Call inside the main render pass, after the scene has been drawn.
-    void render(gfx::Device& device, SDL_GPURenderPass* pass);
+    void render(gfx::Device& device, rhi::Pass* pass);
 
     // True while the mouse is over any ImGui window -- use it to gate camera
     // look and gameplay clicks.

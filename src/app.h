@@ -222,7 +222,7 @@ private:
     void build_dragon_ui();
     void build_combat_ui();
     game::CombatInput read_combat_input() const;
-    void draw_combat(SDL_GPURenderPass* pass);
+    void draw_combat(rhi::Pass* pass);
     void draw_combat_hud();
     void draw_hud();
     void select_course(int index);
@@ -360,7 +360,7 @@ private:
     struct PropModel {
         anim::Skeleton skeleton;
         anim::SkinnedMesh mesh;
-        std::vector<SDL_GPUTexture*> textures;
+        std::vector<rhi::Texture*> textures;
         std::vector<core::Mat4> joints;  // identity: the bind pose
         bool ok = false;
     };
@@ -369,7 +369,7 @@ private:
     // second cache, so a valley is not one repeated shape; and the grazer, a
     // skinned prey animal with three baked clips (tools/grazer.md).
     PropModel spire_prop_, trove_prop_, grazer_prop_;
-    SDL_GPUTexture* terrain_detail_texture_ = nullptr;
+    rhi::Texture* terrain_detail_texture_ = nullptr;
     std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
     int grazer_clip_[3] = {-1, -1, -1};
     anim::Pose grazer_pose_;
@@ -442,8 +442,8 @@ private:
     float prey_flash_ = 0.0f;
     bool snatch_pending_ = false;
     void update_prey(float dt, const game::CombatEvents& events);
-    void draw_prey(SDL_GPURenderPass* pass);
-    void draw_prey_shadows(SDL_GPURenderPass* shadow_pass);
+    void draw_prey(rhi::Pass* pass);
+    void draw_prey_shadows(rhi::Pass* shadow_pass);
     bool pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin);
     // Which tower silhouette a defence wears: the keep guards caches, the
     // spire stands on the slopes. Hit sphere and brazier follow the model.
@@ -520,7 +520,7 @@ private:
     // loosed behind the player.
     void spawn_rival(int rival_index, bool hunter);
     std::unique_ptr<BotShip> make_bot(int index);
-    void draw_run_world(SDL_GPURenderPass* pass);
+    void draw_run_world(rhi::Pass* pass);
     void draw_run_hud();
     void apply_bot_skill(int level);
     void spawn_bots(int count);
@@ -587,7 +587,7 @@ private:
         anim::Skeleton skeleton;
         anim::DragonJoints joints;
         anim::SkinnedMesh mesh;
-        std::vector<SDL_GPUTexture*> textures;
+        std::vector<rhi::Texture*> textures;
         std::vector<anim::AnimationClip> animations;
         // Which clip serves as the ground idle, and whether it is held at one time.
         int idle_clip = -1;
@@ -670,7 +670,7 @@ private:
     anim::DragonRig ghost_rig_;
     void choose_idle_clip(LoadedModel& model) const;
     void apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const;
-    SDL_GPUSampler* model_sampler_ = nullptr;
+    rhi::Sampler* model_sampler_ = nullptr;
     bool show_skeleton_ = false;
     gfx::MaterialToggles material_toggles_;
     // Trees and grass: placed by the terrain rules, drawn instanced.

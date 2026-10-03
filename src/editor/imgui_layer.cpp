@@ -5,6 +5,7 @@
 
 #include "core/log.h"
 #include "core/paths.h"
+#include "rhi/sdlgpu/sdlgpu.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
@@ -123,11 +124,11 @@ bool ImGuiLayer::init(gfx::Device& device) {
     }
 
     ImGui_ImplSDLGPU3_InitInfo info = {};
-    info.Device = device.gpu();
+    info.Device = rhi::sdlgpu::native_device(device.rhi());
     // The UI is drawn into the offscreen scene target alongside the world, so
     // it must match that format -- not the swapchain's. A useful side effect:
     // headless screenshots include the UI, which makes them verifiable.
-    info.ColorTargetFormat = device.scene_color_format();
+    info.ColorTargetFormat = rhi::sdlgpu::native_format(device.scene_color_format());
     info.MSAASamples = SDL_GPU_SAMPLECOUNT_1;
     if (!ImGui_ImplSDLGPU3_Init(&info)) {
         LOG_ERROR("ImGui_ImplSDLGPU3_Init failed");
@@ -184,13 +185,17 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (!draw_data) return;
-    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, device.cmd());
+    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
     has_draw_data_ = true;
 }
 
-void ImGuiLayer::render(gfx::Device& device, SDL_GPURenderPass* pass) {
+void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
     if (!initialized_ || !has_draw_data_ || !pass) return;
-    ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), device.cmd(), pass);
+    // Dear ImGui's renderer is backend-specific by nature: it records into
+    // SDL's own command buffer and pass (rhi/sdlgpu/sdlgpu.h). A D3D9 build
+    // swaps in imgui_impl_dx9 here.
+    ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), rhi::sdlgpu::native_command_buffer(device.rhi()),
+                                     rhi::sdlgpu::native_pass(pass));
 }
 
 bool ImGuiLayer::wants_mouse() const {

@@ -3,7 +3,6 @@
 #include <cstddef>
 
 #include "core/log.h"
-#include "gfx/buffer.h"
 
 using core::Vec3;
 
@@ -58,23 +57,21 @@ void SkinnedMeshData::recompute_normals() {
     for (SkinnedVertex& v : vertices) v.normal = core::normalize_or(v.normal, Vec3::up());
 }
 
-bool SkinnedMesh::upload(SDL_GPUDevice* gpu, const SkinnedMeshData& data, const char* debug_name) {
+bool SkinnedMesh::upload(rhi::Device& rhi, const SkinnedMeshData& data, const char* debug_name) {
     if (data.vertices.empty() || data.indices.empty()) {
         LOG_ERROR("SkinnedMesh::upload(%s): empty geometry", debug_name);
         return false;
     }
-    release(gpu);
+    release(rhi);
 
-    vertex_buffer_ = gfx::create_buffer_with_data(
-        gpu, data.vertices.data(), uint32_t(data.vertices.size() * sizeof(SkinnedVertex)),
-        SDL_GPU_BUFFERUSAGE_VERTEX, debug_name);
+    vertex_buffer_ = rhi.create_buffer(rhi::BufferUsage::Vertex, uint32_t(data.vertices.size() * sizeof(SkinnedVertex)),
+                                       data.vertices.data(), debug_name);
     if (!vertex_buffer_) return false;
 
-    index_buffer_ = gfx::create_buffer_with_data(gpu, data.indices.data(),
-                                                 uint32_t(data.indices.size() * sizeof(uint32_t)),
-                                                 SDL_GPU_BUFFERUSAGE_INDEX, debug_name);
+    index_buffer_ = rhi.create_buffer(rhi::BufferUsage::Index, uint32_t(data.indices.size() * sizeof(uint32_t)),
+                                      data.indices.data(), debug_name);
     if (!index_buffer_) {
-        SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
+        rhi.destroy(vertex_buffer_);
         vertex_buffer_ = nullptr;
         return false;
     }
@@ -87,49 +84,46 @@ bool SkinnedMesh::upload(SDL_GPUDevice* gpu, const SkinnedMeshData& data, const 
     return true;
 }
 
-void SkinnedMesh::release(SDL_GPUDevice* gpu) {
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-    if (index_buffer_) SDL_ReleaseGPUBuffer(gpu, index_buffer_);
+void SkinnedMesh::release(rhi::Device& rhi) {
+    rhi.destroy(vertex_buffer_);
+    rhi.destroy(index_buffer_);
     vertex_buffer_ = nullptr;
     index_buffer_ = nullptr;
     index_count_ = 0;
 }
 
-void SkinnedMesh::bind(SDL_GPURenderPass* pass) const {
-    SDL_GPUBufferBinding vertex_binding = {};
-    vertex_binding.buffer = vertex_buffer_;
-    SDL_BindGPUVertexBuffers(pass, 0, &vertex_binding, 1);
-    SDL_GPUBufferBinding index_binding = {};
-    index_binding.buffer = index_buffer_;
-    SDL_BindGPUIndexBuffer(pass, &index_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+void SkinnedMesh::bind(rhi::Device& rhi, rhi::Pass* pass) const {
+    const rhi::BufferBinding vertices{vertex_buffer_, 0};
+    rhi.bind_vertex_buffers(pass, 0, &vertices, 1);
+    rhi.bind_index_buffer(pass, rhi::BufferBinding{index_buffer_, 0}, rhi::IndexSize::U32);
 }
 
-std::vector<SDL_GPUVertexBufferDescription> SkinnedMesh::buffer_descriptions() {
-    SDL_GPUVertexBufferDescription vb = {};
+std::vector<rhi::VertexBufferLayout> SkinnedMesh::buffer_descriptions() {
+    rhi::VertexBufferLayout vb;
     vb.slot = 0;
     vb.pitch = sizeof(SkinnedVertex);
-    vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vb.rate = rhi::InputRate::Vertex;
     return {vb};
 }
 
-std::vector<SDL_GPUVertexAttribute> SkinnedMesh::attributes() {
-    std::vector<SDL_GPUVertexAttribute> attributes;
-    auto push = [&attributes](uint32_t location, SDL_GPUVertexElementFormat format,
+std::vector<rhi::VertexAttribute> SkinnedMesh::attributes() {
+    std::vector<rhi::VertexAttribute> attributes;
+    auto push = [&attributes](uint32_t location, rhi::VertexFormat format,
                               uint32_t offset) {
-        SDL_GPUVertexAttribute attribute = {};
+        rhi::VertexAttribute attribute;
         attribute.location = location;
         attribute.buffer_slot = 0;
         attribute.format = format;
         attribute.offset = offset;
         attributes.push_back(attribute);
     };
-    push(0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, position));
-    push(1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, normal));
-    push(2, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, color));
-    push(3, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(SkinnedVertex, uv));
-    push(4, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints));
-    push(5, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights));
-    push(6, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, tangent));
+    push(0, rhi::VertexFormat::Float3, offsetof(SkinnedVertex, position));
+    push(1, rhi::VertexFormat::Float3, offsetof(SkinnedVertex, normal));
+    push(2, rhi::VertexFormat::Float3, offsetof(SkinnedVertex, color));
+    push(3, rhi::VertexFormat::Float2, offsetof(SkinnedVertex, uv));
+    push(4, rhi::VertexFormat::UByte4, offsetof(SkinnedVertex, joints));
+    push(5, rhi::VertexFormat::Float4, offsetof(SkinnedVertex, weights));
+    push(6, rhi::VertexFormat::Float4, offsetof(SkinnedVertex, tangent));
     return attributes;
 }
 

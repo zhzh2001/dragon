@@ -1,7 +1,6 @@
 #include "gfx/mesh.h"
 
 #include "core/log.h"
-#include "gfx/buffer.h"
 
 using core::Vec3;
 
@@ -26,24 +25,22 @@ void MeshData::recompute_normals() {
     for (MeshVertex& v : vertices) v.normal = core::normalize_or(v.normal, Vec3::up());
 }
 
-bool Mesh::upload(SDL_GPUDevice* gpu, const MeshData& data, const char* debug_name) {
+bool Mesh::upload(rhi::Device& rhi, const MeshData& data, const char* debug_name) {
     if (data.vertices.empty() || data.indices.empty()) {
         LOG_ERROR("Mesh::upload(%s): empty geometry", debug_name);
         return false;
     }
 
-    release(gpu);
+    release(rhi);
 
-    vertex_buffer_ = create_buffer_with_data(
-        gpu, data.vertices.data(), uint32_t(data.vertices.size() * sizeof(MeshVertex)),
-        SDL_GPU_BUFFERUSAGE_VERTEX, debug_name);
+    vertex_buffer_ = rhi.create_buffer(rhi::BufferUsage::Vertex, uint32_t(data.vertices.size() * sizeof(MeshVertex)),
+                                       data.vertices.data(), debug_name);
     if (!vertex_buffer_) return false;
 
-    index_buffer_ = create_buffer_with_data(gpu, data.indices.data(),
-                                            uint32_t(data.indices.size() * sizeof(uint32_t)),
-                                            SDL_GPU_BUFFERUSAGE_INDEX, debug_name);
+    index_buffer_ = rhi.create_buffer(rhi::BufferUsage::Index, uint32_t(data.indices.size() * sizeof(uint32_t)),
+                                      data.indices.data(), debug_name);
     if (!index_buffer_) {
-        SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
+        rhi.destroy(vertex_buffer_);
         vertex_buffer_ = nullptr;
         return false;
     }
@@ -55,42 +52,38 @@ bool Mesh::upload(SDL_GPUDevice* gpu, const MeshData& data, const char* debug_na
     return true;
 }
 
-void Mesh::release(SDL_GPUDevice* gpu) {
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-    if (index_buffer_) SDL_ReleaseGPUBuffer(gpu, index_buffer_);
+void Mesh::release(rhi::Device& rhi) {
+    rhi.destroy(vertex_buffer_);
+    rhi.destroy(index_buffer_);
     vertex_buffer_ = nullptr;
     index_buffer_ = nullptr;
     index_count_ = 0;
 }
 
-void Mesh::bind(SDL_GPURenderPass* pass) const {
-    SDL_GPUBufferBinding vertex_binding = {};
-    vertex_binding.buffer = vertex_buffer_;
-    SDL_BindGPUVertexBuffers(pass, 0, &vertex_binding, 1);
-
-    SDL_GPUBufferBinding index_binding = {};
-    index_binding.buffer = index_buffer_;
-    SDL_BindGPUIndexBuffer(pass, &index_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+void Mesh::bind(rhi::Device& rhi, rhi::Pass* pass) const {
+    const rhi::BufferBinding vertices{vertex_buffer_, 0};
+    rhi.bind_vertex_buffers(pass, 0, &vertices, 1);
+    rhi.bind_index_buffer(pass, rhi::BufferBinding{index_buffer_, 0}, rhi::IndexSize::U32);
 }
 
-std::vector<SDL_GPUVertexBufferDescription> Mesh::buffer_descriptions() {
-    SDL_GPUVertexBufferDescription vb = {};
+std::vector<rhi::VertexBufferLayout> Mesh::buffer_descriptions() {
+    rhi::VertexBufferLayout vb;
     vb.slot = 0;
     vb.pitch = sizeof(MeshVertex);
-    vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vb.rate = rhi::InputRate::Vertex;
     return {vb};
 }
 
-std::vector<SDL_GPUVertexAttribute> Mesh::attributes() {
-    std::vector<SDL_GPUVertexAttribute> attributes;
+std::vector<rhi::VertexAttribute> Mesh::attributes() {
+    std::vector<rhi::VertexAttribute> attributes;
     const uint32_t offsets[4] = {offsetof(MeshVertex, position), offsetof(MeshVertex, normal),
                                  offsetof(MeshVertex, color), offsetof(MeshVertex, uv)};
     for (uint32_t i = 0; i < 4; ++i) {
-        SDL_GPUVertexAttribute attribute = {};
+        rhi::VertexAttribute attribute;
         attribute.location = i;
         attribute.buffer_slot = 0;
-        attribute.format = i == 3 ? SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2
-                                  : SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+        attribute.format = i == 3 ? rhi::VertexFormat::Float2
+                                  : rhi::VertexFormat::Float3;
         attribute.offset = offsets[i];
         attributes.push_back(attribute);
     }

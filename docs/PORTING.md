@@ -311,6 +311,55 @@ built. R1 is the load-bearing refactor and is
 worth doing even if the retro track stalls, because it is also what makes
 the golden-screenshot gate backend-agnostic.
 
+### R1, as built (2026-10-03)
+
+The RHI is `src/rhi/rhi.h`, one `rhi::Device` interface, about 30 calls:
+- buffers: static, or dynamic with `map_upload`/`commit_upload` recorded
+  outside any pass;
+- textures, which are also render targets, and samplers;
+- pipelines, built from a description plus a `ShaderSource`;
+- passes with clear and keep flags, binds, uniform pushes by stage and slot,
+  draws;
+- one `end_frame` that presents and optionally reads back.
+
+Handles are opaque. The SDL GPU backend (`src/rhi/sdlgpu/`) casts its own
+objects to them, so it adds no wrapper and no indirection beyond one
+virtual call.
+
+What moved where:
+- **The backend** owns what used to be spread across `gfx/`: device
+  creation, swapchain, staging and copy passes, enum translation, and the
+  whole shader path (shadercross at runtime, or the baked files).
+- **The pipeline cache** keeps include inlining and hot reload. It hands
+  the backend preprocessed HLSL, and asks it which baked files to watch
+  when it does not compile HLSL.
+- **`gfx::Device`** is now policy only: the window, the scene, HDR, bloom
+  and depth targets, the named passes, and screenshots.
+- **`gfx/buffer.cpp`** is gone, folded into `create_buffer`.
+- **SDL's GPU API** is included only by the backend and by
+  `editor/imgui_layer.cpp`. Dear ImGui's renderer is API-specific by
+  nature and reaches the native handles through `rhi/sdlgpu/sdlgpu.h`; a
+  D3D9 build swaps in `imgui_impl_dx9` there.
+
+**The depth convention** is explicit, not assumed. Each pass says what it
+clears depth to and whether it keeps it, and each pipeline names its
+compare op. So no backend bakes in reversed-Z. Choosing standard Z for
+D3D9 is R2.
+
+**Checked on the Mac** (Metal):
+- All eight goldens give the same numbers as before the refactor (most
+  scenes at most 1/255 off), from both the runtime-compiled and the baked
+  shader paths.
+- All 15 suites pass.
+- A windowed run presents correctly, panels and HUD included.
+- Hot reload still fails a broken shared header across its ten pipelines,
+  then reloads them.
+- The MinGW Windows build compiles.
+
+**Not yet run on D3D12 or Vulkan.** That waits for x99: run
+`golden.py compare` against `tests/golden/vulkan` and
+`tests/golden/d3d12`.
+
 ### Budgets to design to
 
 From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run

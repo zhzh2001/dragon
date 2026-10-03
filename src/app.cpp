@@ -230,7 +230,7 @@ bool App::init(const Options& options) {
         if (file) {
             std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             const gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
-            terrain_detail_texture_ = gfx::create_texture_from_image(device_.gpu(), image, "terrain_detail", false);
+            terrain_detail_texture_ = gfx::create_texture_from_image(device_.rhi(), image, "terrain_detail", false);
             world_.set_terrain_detail(terrain_detail_texture_);
             LOG_INFO("terrain detail: %dx%d", image.width, image.height);
         } else {
@@ -274,7 +274,7 @@ bool App::init(const Options& options) {
     // falls through to the generated greybox. Sunspear and Rimeplume are left
     // out while they are still being tuned; --models reaches them.
     {
-        model_sampler_ = gfx::create_model_sampler(device_.gpu());
+        model_sampler_ = gfx::create_model_sampler(device_.rhi());
         std::vector<std::string> roster;
         for (const std::string& path : options_.models) roster.push_back(core::paths::resolve_cli(path));
         if (roster.empty() && !options_.model.empty())
@@ -334,7 +334,7 @@ bool App::init(const Options& options) {
     }
 
     // A unit-radius torus scaled per ring: one mesh, any checkpoint size.
-    ring_mesh_.upload(device_.gpu(),
+    ring_mesh_.upload(device_.rhi(),
                       gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
                       "checkpoint_ring");
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
@@ -352,7 +352,7 @@ bool App::init(const Options& options) {
         LOG_INFO("grazer clips: graze %d, walk %d, run %d", grazer_clip_[0], grazer_clip_[1],
                  grazer_clip_[2]);
     }
-    sphere_mesh_.upload(device_.gpu(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
+    sphere_mesh_.upload(device_.rhi(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
                         "unit_sphere");
     if (!particles_.init(&device_, &pipelines_)) return false;
     // Headless runs have no ears; a machine without an output device plays on
@@ -869,11 +869,11 @@ void App::replant() {
 
 void App::regenerate_terrain() {
     terrain_.generate(terrain_settings_);
-    terrain_mesh_.release(device_.gpu());
-    terrain_mesh_.upload(device_.gpu(), terrain_.mesh_data(), "terrain");
-    terrain_skirt_mesh_.release(device_.gpu());
+    terrain_mesh_.release(device_.rhi());
+    terrain_mesh_.upload(device_.rhi(), terrain_.mesh_data(), "terrain");
+    terrain_skirt_mesh_.release(device_.rhi());
     if (!terrain_.skirt_mesh_data().indices.empty()) {
-        terrain_skirt_mesh_.upload(device_.gpu(), terrain_.skirt_mesh_data(), "terrain_skirt");
+        terrain_skirt_mesh_.upload(device_.rhi(), terrain_.skirt_mesh_data(), "terrain_skirt");
     }
     // The water surface: one quad at the water line over the whole world. The
     // terrain hides it everywhere the ground is above the line, which is
@@ -890,8 +890,8 @@ void App::regenerate_terrain() {
             quad.vertices.push_back(v);
         }
         quad.indices = {0, 2, 1, 1, 2, 3};
-        water_mesh_.release(device_.gpu());
-        water_mesh_.upload(device_.gpu(), quad, "water");
+        water_mesh_.release(device_.rhi());
+        water_mesh_.upload(device_.rhi(), quad, "water");
     }
     replant();
     // Snow should sit sensibly relative to whatever the peaks came out at.
@@ -920,33 +920,37 @@ void App::frame_camera_on_valley() {
 }
 
 void App::shutdown() {
-    if (device_.gpu()) SDL_WaitForGPUIdle(device_.gpu());
-    terrain_mesh_.release(device_.gpu());
-    // Every roster entry owns GPU handles, not just the one being flown.
-    for (auto& model : models_) {
-        model->mesh.release(device_.gpu());
-        for (SDL_GPUTexture* texture : model->textures) {
-            if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
-        }
-        model->textures.clear();
-    }
-    ring_mesh_.release(device_.gpu());
-    release_prop(tower_prop_);
-    release_prop(hoard_prop_);
-    release_prop(spire_prop_);
-    release_prop(trove_prop_);
-    release_prop(grazer_prop_);
-    if (terrain_detail_texture_) SDL_ReleaseGPUTexture(device_.gpu(), terrain_detail_texture_);
-    terrain_detail_texture_ = nullptr;
-    if (model_sampler_) SDL_ReleaseGPUSampler(device_.gpu(), model_sampler_);
-    foliage_.shutdown(device_);
-    world_.shutdown(device_);
-    shadow_.shutdown(device_);
     audio_.shutdown();
-    particles_.shutdown();
-    debug_.shutdown();
-    pipelines_.shutdown();
-    ui_.shutdown();
+    // Everything below owns GPU handles; a failed init may never have made
+    // the device they belong to.
+    if (device_.ready()) {
+        device_.rhi().wait_idle();
+        terrain_mesh_.release(device_.rhi());
+        // Every roster entry owns GPU handles, not just the one being flown.
+        for (auto& model : models_) {
+            model->mesh.release(device_.rhi());
+            for (rhi::Texture* texture : model->textures) {
+                device_.rhi().destroy(texture);
+            }
+            model->textures.clear();
+        }
+        ring_mesh_.release(device_.rhi());
+        release_prop(tower_prop_);
+        release_prop(hoard_prop_);
+        release_prop(spire_prop_);
+        release_prop(trove_prop_);
+        release_prop(grazer_prop_);
+        device_.rhi().destroy(terrain_detail_texture_);
+        terrain_detail_texture_ = nullptr;
+        device_.rhi().destroy(model_sampler_);
+        foliage_.shutdown(device_);
+        world_.shutdown(device_);
+        shadow_.shutdown(device_);
+        particles_.shutdown();
+        debug_.shutdown();
+        pipelines_.shutdown();
+        ui_.shutdown();
+    }
     device_.shutdown();
 }
 
@@ -3205,7 +3209,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name =
             tag + "_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
-        out.textures.push_back(gfx::create_texture_from_image(device_.gpu(), loaded.textures[i],
+        out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i],
                                                               name.c_str(), srgb));
     }
     // Measure the head and the neck for the first-person eye, in body metres
@@ -3275,7 +3279,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
-    out.mesh.upload(device_.gpu(), mesh_data, tag.c_str());
+    out.mesh.upload(device_.rhi(), mesh_data, tag.c_str());
 
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
@@ -3387,12 +3391,12 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
         LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
         return false;
     }
-    if (!out.mesh.upload(device_.gpu(), data, tag)) return false;
+    if (!out.mesh.upload(device_.rhi(), data, tag)) return false;
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
         const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name = std::string(tag) + "_" + std::to_string(i);
         out.textures.push_back(
-            gfx::create_texture_from_image(device_.gpu(), loaded.textures[i], name.c_str(), srgb));
+            gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(), srgb));
     }
     out.joints.assign(size_t(std::max(out.skeleton.count(), 1)), core::Mat4::identity());
     out.ok = true;
@@ -3405,9 +3409,9 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
 }
 
 void App::release_prop(PropModel& prop) {
-    prop.mesh.release(device_.gpu());
-    for (SDL_GPUTexture* texture : prop.textures) {
-        if (texture) SDL_ReleaseGPUTexture(device_.gpu(), texture);
+    prop.mesh.release(device_.rhi());
+    for (rhi::Texture* texture : prop.textures) {
+        device_.rhi().destroy(texture);
     }
     prop.textures.clear();
     prop.ok = false;
@@ -4566,7 +4570,7 @@ bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core:
     return true;
 }
 
-void App::draw_prey(SDL_GPURenderPass* pass) {
+void App::draw_prey(rhi::Pass* pass) {
     if (!run_mode_ || prey_.animals().empty()) return;
     const core::Vec3 eye = active_camera().position;
     for (const game::Prey& prey : prey_.animals()) {
@@ -4594,7 +4598,7 @@ void App::draw_prey(SDL_GPURenderPass* pass) {
     }
 }
 
-void App::draw_prey_shadows(SDL_GPURenderPass* shadow_pass) {
+void App::draw_prey_shadows(rhi::Pass* shadow_pass) {
     if (!run_mode_ || !grazer_prop_.ok) return;
     const core::Vec3 eye = active_camera().position;
     for (const game::Prey& prey : prey_.animals()) {
@@ -4610,7 +4614,7 @@ void App::draw_prey_shadows(SDL_GPURenderPass* shadow_pass) {
 
 // The run's things in the world: the pass gate as a ring, and each cache as a
 // landing ring on the ground with the pile in it.
-void App::draw_run_world(SDL_GPURenderPass* pass) {
+void App::draw_run_world(rhi::Pass* pass) {
     if (!run_mode_ || hoard_run_.phase() == game::HoardPhase::Idle || !ring_mesh_.valid()) return;
     const game::RunLayout& layout = hoard_run_.layout();
     const bool flying = hoard_run_.phase() == game::HoardPhase::Flying;
@@ -5376,7 +5380,7 @@ game::CombatInput App::read_combat_input() const {
 // Sentinels, projectiles and the flame, drawn with the one unit sphere. Colour
 // carries all the meaning here: hostile fire has to be distinguishable from
 // your own at a glance and at speed.
-void App::draw_combat(SDL_GPURenderPass* pass) {
+void App::draw_combat(rhi::Pass* pass) {
     if (!combat_enabled_ || !sphere_mesh_.valid()) return;
 
     // `unlit` drops the sun and ambient terms: fire is a light source, not a
@@ -6597,7 +6601,7 @@ void App::render() {
 
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled) {
-        SDL_GPURenderPass* shadow_pass = shadow_.begin_pass(device_);
+        rhi::Pass* shadow_pass = shadow_.begin_pass(device_);
         if (!options_.hide_vegetation) {
             foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
                                       world_.scene().view_params.z, active_camera().position);
@@ -6669,7 +6673,7 @@ void App::render() {
     // The clear colour is never seen: the sky covers every pixel. It is set to
     // the fog colour anyway so a frame where the sky pipeline is broken still
     // looks like a sky rather than a void.
-    SDL_GPURenderPass* pass = device_.begin_main_pass(
+    rhi::Pass* pass = device_.begin_main_pass(
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_);
@@ -6760,7 +6764,7 @@ void App::render() {
     // it into the 8-bit target, which the UI then draws onto ungraded.
     post_.run(device_, post_settings_);
 
-    SDL_GPURenderPass* ui_pass = device_.begin_ui_pass();
+    rhi::Pass* ui_pass = device_.begin_ui_pass();
     ui_.render(device_, ui_pass);
     device_.end_pass(ui_pass);
 }

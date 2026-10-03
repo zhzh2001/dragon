@@ -22,16 +22,16 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
     // Light does not write depth: particles never occlude anything, including
     // each other, which is also why they need no sorting.
     desc.depth_write = false;
-    desc.cull = SDL_GPU_CULLMODE_NONE;
+    desc.cull = rhi::Cull::None;
 
-    SDL_GPUVertexBufferDescription buffer = {};
+    rhi::VertexBufferLayout buffer = {};
     buffer.slot = 0;
     buffer.pitch = sizeof(Vertex);
-    buffer.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    buffer.rate = rhi::InputRate::Vertex;
     desc.vertex_buffers = {buffer};
 
-    auto attribute = [](uint32_t location, SDL_GPUVertexElementFormat format, uint32_t offset) {
-        SDL_GPUVertexAttribute a = {};
+    auto attribute = [](uint32_t location, rhi::VertexFormat format, uint32_t offset) {
+        rhi::VertexAttribute a = {};
         a.location = location;
         a.buffer_slot = 0;
         a.format = format;
@@ -39,9 +39,9 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
         return a;
     };
     desc.vertex_attributes = {
-        attribute(0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Vertex, position)),
-        attribute(1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex, color)),
-        attribute(2, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex, corner)),
+        attribute(0, rhi::VertexFormat::Float3, offsetof(Vertex, position)),
+        attribute(1, rhi::VertexFormat::Float4, offsetof(Vertex, color)),
+        attribute(2, rhi::VertexFormat::Float2, offsetof(Vertex, corner)),
     };
 
     pipeline_ = pipelines->create(desc);
@@ -50,11 +50,8 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
 
 void ParticleSystem::shutdown() {
     if (!device_) return;
-    SDL_GPUDevice* gpu = device_->gpu();
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-    if (transfer_) SDL_ReleaseGPUTransferBuffer(gpu, transfer_);
+    device_->rhi().destroy(vertex_buffer_);
     vertex_buffer_ = nullptr;
-    transfer_ = nullptr;
     capacity_ = 0;
 }
 
@@ -98,27 +95,13 @@ void ParticleSystem::update(float dt) {
 
 bool ParticleSystem::ensure_capacity(uint32_t vertices) {
     if (vertices <= capacity_) return true;
-    SDL_GPUDevice* gpu = device_->gpu();
-    if (vertex_buffer_) SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-    if (transfer_) SDL_ReleaseGPUTransferBuffer(gpu, transfer_);
-
+    rhi::Device& rhi = device_->rhi();
+    rhi.destroy(vertex_buffer_);
     const uint32_t new_capacity = core::maxf(float(vertices), 1536.0f);
-    const uint32_t bytes = new_capacity * uint32_t(sizeof(Vertex));
-
-    SDL_GPUBufferCreateInfo buffer_info = {};
-    buffer_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-    buffer_info.size = bytes;
-    vertex_buffer_ = SDL_CreateGPUBuffer(gpu, &buffer_info);
-    if (!vertex_buffer_) return false;
-    SDL_SetGPUBufferName(gpu, vertex_buffer_, "particles");
-
-    SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = bytes;
-    transfer_ = SDL_CreateGPUTransferBuffer(gpu, &transfer_info);
-    if (!transfer_) {
-        SDL_ReleaseGPUBuffer(gpu, vertex_buffer_);
-        vertex_buffer_ = nullptr;
+    vertex_buffer_ = rhi.create_buffer(rhi::BufferUsage::Vertex, new_capacity * uint32_t(sizeof(Vertex)),
+                                       nullptr, "particles");
+    if (!vertex_buffer_) {
+        capacity_ = 0;
         return false;
     }
     capacity_ = new_capacity;
@@ -162,36 +145,27 @@ void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 ca
         return;
     }
 
-    SDL_GPUDevice* gpu = device.gpu();
-    void* mapped = SDL_MapGPUTransferBuffer(gpu, transfer_, true);
+    const uint32_t bytes = uploaded_ * uint32_t(sizeof(Vertex));
+    void* mapped = device.rhi().map_upload(vertex_buffer_, bytes);
     if (!mapped) {
         uploaded_ = 0;
         return;
     }
-    std::memcpy(mapped, vertices_.data(), uploaded_ * sizeof(Vertex));
-    SDL_UnmapGPUTransferBuffer(gpu, transfer_);
-
-    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(device.cmd());
-    SDL_GPUTransferBufferLocation src = {};
-    src.transfer_buffer = transfer_;
-    SDL_GPUBufferRegion dst = {};
-    dst.buffer = vertex_buffer_;
-    dst.size = uploaded_ * uint32_t(sizeof(Vertex));
-    SDL_UploadToGPUBuffer(pass, &src, &dst, true);
-    SDL_EndGPUCopyPass(pass);
+    std::memcpy(mapped, vertices_.data(), bytes);
+    device.rhi().commit_upload(vertex_buffer_, bytes);
 }
 
-void ParticleSystem::draw(Device& device, SDL_GPURenderPass* pass) {
+void ParticleSystem::draw(Device& device, rhi::Pass* pass) {
     if (uploaded_ == 0) return;
-    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(pipeline_);
+    rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
     if (!pipeline) return;
 
-    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-    SDL_PushGPUVertexUniformData(device.cmd(), 0, &view_proj_, sizeof(core::Mat4));
-    SDL_GPUBufferBinding binding = {};
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &view_proj_, sizeof(core::Mat4));
+    rhi::BufferBinding binding = {};
     binding.buffer = vertex_buffer_;
-    SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-    SDL_DrawGPUPrimitives(pass, uploaded_, 1, 0, 0);
+    device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);
+    device.rhi().draw(pass, uploaded_, 1, 0, 0);
 }
 
 }  // namespace gfx

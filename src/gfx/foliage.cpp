@@ -12,7 +12,6 @@
 #include "core/paths.h"
 #include "gfx/texture.h"
 
-#include "gfx/buffer.h"
 #include "gfx/device.h"
 #include "gfx/shadow_map.h"
 
@@ -22,26 +21,25 @@ namespace gfx {
 
 namespace {
 
-std::vector<SDL_GPUVertexBufferDescription> foliage_buffers() {
-    std::vector<SDL_GPUVertexBufferDescription> buffers = Mesh::buffer_descriptions();
-    SDL_GPUVertexBufferDescription instances = {};
+std::vector<rhi::VertexBufferLayout> foliage_buffers() {
+    std::vector<rhi::VertexBufferLayout> buffers = Mesh::buffer_descriptions();
+    rhi::VertexBufferLayout instances = {};
     instances.slot = 1;
     instances.pitch = sizeof(FoliageInstance);
-    instances.input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
-    instances.instance_step_rate = 0;  // reserved by SDL; anything else fails creation
+    instances.rate = rhi::InputRate::Instance;  // reserved by SDL; anything else fails creation
     buffers.push_back(instances);
     return buffers;
 }
 
-std::vector<SDL_GPUVertexAttribute> foliage_attributes() {
-    std::vector<SDL_GPUVertexAttribute> attributes = Mesh::attributes();
+std::vector<rhi::VertexAttribute> foliage_attributes() {
+    std::vector<rhi::VertexAttribute> attributes = Mesh::attributes();
     const uint32_t offsets[2] = {offsetof(FoliageInstance, position_scale),
                                  offsetof(FoliageInstance, params)};
     for (uint32_t i = 0; i < 2; ++i) {
-        SDL_GPUVertexAttribute attribute = {};
+        rhi::VertexAttribute attribute = {};
         attribute.location = 4 + i;  // after the mesh's position, normal, colour, uv
         attribute.buffer_slot = 1;
-        attribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+        attribute.format = rhi::VertexFormat::Float4;
         attribute.offset = offsets[i];
         attributes.push_back(attribute);
     }
@@ -55,11 +53,11 @@ PipelineDesc make_foliage_desc() {
     desc.vertex_buffers = foliage_buffers();
     desc.vertex_attributes = foliage_attributes();
     // Blades and cone skirts are seen from both sides.
-    desc.cull = SDL_GPU_CULLMODE_NONE;
+    desc.cull = rhi::Cull::None;
     return desc;
 }
 
-PipelineDesc make_foliage_depth_desc(SDL_GPUTextureFormat depth_format) {
+PipelineDesc make_foliage_depth_desc(rhi::Format depth_format) {
     PipelineDesc desc;
     desc.name = "shadow_foliage";
     desc.shader = "foliage_depth";
@@ -67,8 +65,8 @@ PipelineDesc make_foliage_depth_desc(SDL_GPUTextureFormat depth_format) {
     desc.vertex_attributes = foliage_attributes();
     desc.no_color_target = true;
     desc.depth_format = depth_format;
-    desc.depth_compare = SDL_GPU_COMPAREOP_LESS;
-    desc.cull = SDL_GPU_CULLMODE_NONE;
+    desc.depth_compare = rhi::Compare::Less;
+    desc.cull = rhi::Cull::None;
     return desc;
 }
 
@@ -448,7 +446,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     // alpha, rendered in Blender (tools: the concept-art skill's notes) and
     // coloured by the palette in the shader. Missing files are not fatal --
     // the shader falls back to a solid card -- but they are logged.
-    const auto load = [&](const char* path, const char* name) -> SDL_GPUTexture* {
+    const auto load = [&](const char* path, const char* name) -> rhi::Texture* {
         std::ifstream file(path, std::ios::binary);
         if (!file) {
             LOG_WARN("foliage: no %s at %s; cards will be solid", name, path);
@@ -457,20 +455,20 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
                                    std::istreambuf_iterator<char>());
         const ImageData image = decode_image(bytes.data(), bytes.size());
-        return create_texture_from_image(device->gpu(), image, name, false);
+        return create_texture_from_image(device->rhi(), image, name, false);
     };
     leaf_texture_ = load(core::paths::asset("textures/leaf_cluster.png").c_str(), "leaf_cluster");
     needle_texture_ = load(core::paths::asset("textures/needle_spray.png").c_str(), "needle_spray");
-    card_sampler_ = create_model_sampler(device->gpu());
+    card_sampler_ = create_model_sampler(device->rhi());
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
     static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};
     for (int k = 0; k < TREE_KINDS; ++k) {
-        if (!trees_[k].mesh.upload(device->gpu(), make_tree_mesh(TreeKind(k)), tree_names[k])) {
+        if (!trees_[k].mesh.upload(device->rhi(), make_tree_mesh(TreeKind(k)), tree_names[k])) {
             return false;
         }
     }
     for (int k = 0; k < GRASS_KINDS; ++k) {
-        if (!grass_[k].mesh.upload(device->gpu(), make_grass_mesh(GrassKind(k)), grass_names[k])) {
+        if (!grass_[k].mesh.upload(device->rhi(), make_grass_mesh(GrassKind(k)), grass_names[k])) {
             return false;
         }
     }
@@ -478,28 +476,26 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
 }
 
 void Foliage::shutdown(Device& device) {
-    if (leaf_texture_) SDL_ReleaseGPUTexture(device.gpu(), leaf_texture_);
-    if (needle_texture_) SDL_ReleaseGPUTexture(device.gpu(), needle_texture_);
-    if (card_sampler_) SDL_ReleaseGPUSampler(device.gpu(), card_sampler_);
+    device.rhi().destroy(leaf_texture_);
+    device.rhi().destroy(needle_texture_);
+    device.rhi().destroy(card_sampler_);
     leaf_texture_ = needle_texture_ = nullptr;
     card_sampler_ = nullptr;
-    SDL_GPUDevice* gpu = device.gpu();
+    rhi::Device& rhi = device.rhi();
     for (StaticSet& set : trees_) {
-        set.mesh.release(gpu);
-        if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
+        set.mesh.release(rhi);
+        rhi.destroy(set.instances);
         set.instances = nullptr;
     }
     for (StaticSet& set : rocks_) {
-        set.mesh.release(gpu);
-        if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
+        set.mesh.release(rhi);
+        rhi.destroy(set.instances);
         set.instances = nullptr;
     }
     for (StreamSet& set : grass_) {
-        set.mesh.release(gpu);
-        if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
-        if (set.transfer) SDL_ReleaseGPUTransferBuffer(gpu, set.transfer);
+        set.mesh.release(rhi);
+        rhi.destroy(set.instances);
         set.instances = nullptr;
-        set.transfer = nullptr;
     }
 }
 
@@ -509,8 +505,8 @@ void Foliage::set_trees(Device& device, TreeKind kind, const std::vector<Foliage
 
 void Foliage::set_rock_mesh(Device& device, int kind, const MeshData& mesh, float height) {
     if (kind < 0 || kind >= ROCK_KINDS) return;
-    rocks_[kind].mesh.release(device.gpu());
-    rocks_[kind].mesh.upload(device.gpu(), mesh, "rock");
+    rocks_[kind].mesh.release(device.rhi());
+    rocks_[kind].mesh.upload(device.rhi(), mesh, "rock");
     rock_height_[kind] = height;
 }
 
@@ -527,7 +523,7 @@ uint32_t Foliage::rock_count() const {
 
 void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<FoliageInstance>& items,
                           float height, const char* name) {
-    if (set.instances) SDL_ReleaseGPUBuffer(device.gpu(), set.instances);
+    device.rhi().destroy(set.instances);
     set.instances = nullptr;
     set.count = 0;
     set.cells.clear();
@@ -567,9 +563,9 @@ void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<Foli
         begin = end;
     }
 
-    set.instances = create_buffer_with_data(device.gpu(), sorted.data(),
-                                            uint32_t(sorted.size() * sizeof(FoliageInstance)),
-                                            SDL_GPU_BUFFERUSAGE_VERTEX, name);
+    set.instances = device.rhi().create_buffer(rhi::BufferUsage::Vertex,
+                                               uint32_t(sorted.size() * sizeof(FoliageInstance)),
+                                               sorted.data(), name);
     if (set.instances) set.count = uint32_t(sorted.size());
 }
 
@@ -614,28 +610,13 @@ struct Frustum {
 
 bool Foliage::ensure_capacity(StreamSet& set, uint32_t count, const char* name) {
     if (count <= set.capacity) return true;
-    SDL_GPUDevice* gpu = device_->gpu();
-    if (set.instances) SDL_ReleaseGPUBuffer(gpu, set.instances);
-    if (set.transfer) SDL_ReleaseGPUTransferBuffer(gpu, set.transfer);
+    rhi::Device& rhi = device_->rhi();
+    rhi.destroy(set.instances);
+    set.capacity = 0;
     const uint32_t capacity = count < 2048u ? 2048u : count + count / 4u;
-    const uint32_t bytes = capacity * uint32_t(sizeof(FoliageInstance));
-
-    SDL_GPUBufferCreateInfo buffer_info = {};
-    buffer_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-    buffer_info.size = bytes;
-    set.instances = SDL_CreateGPUBuffer(gpu, &buffer_info);
+    set.instances = rhi.create_buffer(rhi::BufferUsage::Vertex, capacity * uint32_t(sizeof(FoliageInstance)),
+                                      nullptr, name);
     if (!set.instances) return false;
-    SDL_SetGPUBufferName(gpu, set.instances, name);
-
-    SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = bytes;
-    set.transfer = SDL_CreateGPUTransferBuffer(gpu, &transfer_info);
-    if (!set.transfer) {
-        SDL_ReleaseGPUBuffer(gpu, set.instances);
-        set.instances = nullptr;
-        return false;
-    }
     set.capacity = capacity;
     return true;
 }
@@ -645,88 +626,79 @@ void Foliage::upload_grass(Device& device, GrassKind kind,
     StreamSet& set = grass_[int(kind)];
     set.uploaded = 0;
     if (grass.empty() || !ensure_capacity(set, uint32_t(grass.size()), "grass")) return;
-    SDL_GPUDevice* gpu = device.gpu();
-    void* mapped = SDL_MapGPUTransferBuffer(gpu, set.transfer, true);
+    const uint32_t bytes = uint32_t(grass.size() * sizeof(FoliageInstance));
+    void* mapped = device.rhi().map_upload(set.instances, bytes);
     if (!mapped) return;
-    std::memcpy(mapped, grass.data(), grass.size() * sizeof(FoliageInstance));
-    SDL_UnmapGPUTransferBuffer(gpu, set.transfer);
-
-    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(device.cmd());
-    SDL_GPUTransferBufferLocation src = {};
-    src.transfer_buffer = set.transfer;
-    SDL_GPUBufferRegion dst = {};
-    dst.buffer = set.instances;
-    dst.size = uint32_t(grass.size() * sizeof(FoliageInstance));
-    SDL_UploadToGPUBuffer(pass, &src, &dst, true);
-    SDL_EndGPUCopyPass(pass);
+    std::memcpy(mapped, grass.data(), bytes);
+    device.rhi().commit_upload(set.instances, bytes);
     set.uploaded = uint32_t(grass.size());
 }
 
-void Foliage::draw(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene,
-                   const Mesh& mesh, SDL_GPUBuffer* instances, uint32_t count, float fade_start,
+void Foliage::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene,
+                   const Mesh& mesh, rhi::Buffer* instances, uint32_t count, float fade_start,
                    float fade_end, float height) {
     if (!pass || !instances || count == 0 || !mesh.valid()) return;
-    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(pipeline_);
+    rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
     if (!pipeline) return;
 
     Params params;
     params.wind_time_fade = core::Vec4{wind, scene.view_params.z, fade_start, fade_end};
     params.extra = core::Vec4{height, lod_distance, 0.0f, 0.0f};
 
-    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-    SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
-    SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
-    SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
-    SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
     if (shadow_map_ && shadow_map_->texture()) {
-        SDL_GPUTextureSamplerBinding binding = {};
+        rhi::TextureBinding binding = {};
         binding.texture = shadow_map_->texture();
         binding.sampler = shadow_map_->sampler();
-        SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+        device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
     }
-    bind_cards(pass, 1);
-    mesh.bind(pass);
-    SDL_GPUBufferBinding instance_binding = {};
+    bind_cards(device, pass, 1);
+    mesh.bind(device.rhi(), pass);
+    rhi::BufferBinding instance_binding = {};
     instance_binding.buffer = instances;
-    SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
-    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), count, 0, 0, 0);
+    device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
+    device.rhi().draw_indexed(pass, mesh.index_count(), count, 0, 0, 0);
 }
 
-void Foliage::draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene) {
+void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
     // No fade: a forest that thins out with distance is a forest that pops.
     // One instanced draw per ground cell the frustum and the distance admit.
     trees_drawn_ = 0;
     if (!pass) return;
-    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(pipeline_);
+    rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
     if (!pipeline) return;
     const Frustum frustum(scene.view_proj);
     const core::Vec3 eye = scene.camera_position.xyz();
-    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-    SDL_PushGPUVertexUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
-    SDL_PushGPUFragmentUniformData(device.cmd(), 0, &scene, sizeof(SceneUniforms));
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
     if (shadow_map_ && shadow_map_->texture()) {
-        SDL_GPUTextureSamplerBinding binding = {};
+        rhi::TextureBinding binding = {};
         binding.texture = shadow_map_->texture();
         binding.sampler = shadow_map_->sampler();
-        SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+        device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
     }
-    bind_cards(pass, 1);
+    bind_cards(device, pass, 1);
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
         Params params;
         params.wind_time_fade = core::Vec4{wind, scene.view_params.z, 1e8f, 2e8f};
         params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, 0.0f, 0.0f};
-        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
-        SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
-        set.mesh.bind(pass);
-        SDL_GPUBufferBinding instance_binding = {};
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+        device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
+        set.mesh.bind(device.rhi(), pass);
+        rhi::BufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
-        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         for (const Cell& cell : set.cells) {
             if (core::distance(eye, cell.centre) - cell.radius > tree_draw_distance) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
-            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0,
+            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0,
                                          cell.first);
             trees_drawn_ += cell.count;
         }
@@ -739,54 +711,54 @@ void Foliage::draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUni
         Params params;
         params.wind_time_fade = core::Vec4{0.0f, scene.view_params.z, 1e8f, 2e8f};
         params.extra = core::Vec4{1e6f, 1e8f, 0.0f, 0.0f};
-        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
-        SDL_PushGPUFragmentUniformData(device.cmd(), 1, &params, sizeof(Params));
-        set.mesh.bind(pass);
-        SDL_GPUBufferBinding instance_binding = {};
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+        device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
+        set.mesh.bind(device.rhi(), pass);
+        rhi::BufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
-        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         const bool big = k == 1 || k == 3 || k == 5;
         const float reach = big ? big_rock_draw_distance : rock_draw_distance;
         for (const Cell& cell : set.cells) {
             if (core::distance(eye, cell.centre) - cell.radius > reach) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
-            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
+            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
         }
     }
 }
 
-void Foliage::draw_grass(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene) {
+void Foliage::draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
     for (int k = 0; k < GRASS_KINDS; ++k) {
         draw(device, pass, scene, grass_[k].mesh, grass_[k].instances, grass_[k].uploaded,
              grass_fade_start, grass_fade_end, grass_height(GrassKind(k)));
     }
 }
 
-void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
+void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
                                const core::Mat4& light_view_proj, float time, core::Vec3 eye) {
     if (!pass) return;
-    SDL_GPUGraphicsPipeline* pipeline = pipelines_->get(depth_pipeline_);
+    rhi::Pipeline* pipeline = pipelines_->get(depth_pipeline_);
     if (!pipeline) return;
-    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-    SDL_PushGPUVertexUniformData(device.cmd(), 0, &light_view_proj, sizeof(core::Mat4));
-    bind_cards(pass, 0);
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
+    bind_cards(device, pass, 0);
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
         Params params;
         params.wind_time_fade = core::Vec4{wind, time, 1e8f, 2e8f};
         params.extra = core::Vec4{tree_height(TreeKind(k)), 0.0f, 0.0f, 0.0f};
-        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
-        set.mesh.bind(pass);
-        SDL_GPUBufferBinding instance_binding = {};
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+        set.mesh.bind(device.rhi(), pass);
+        rhi::BufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
-        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         // The light's box is the shadow map's extent about the camera; a
         // cell outside it cannot shadow anything that is drawn.
         const Frustum light(light_view_proj);
         for (const Cell& cell : set.cells) {
             if (!light.sees(cell.centre, cell.radius)) continue;
-            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0,
+            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0,
                                          cell.first);
         }
     }
@@ -796,33 +768,33 @@ void Foliage::draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
         Params params;
         params.wind_time_fade = core::Vec4{0.0f, time, 1e8f, 2e8f};
         params.extra = core::Vec4{1e6f, 0.0f, 0.0f, 0.0f};
-        SDL_PushGPUVertexUniformData(device.cmd(), 1, &params, sizeof(Params));
-        set.mesh.bind(pass);
-        SDL_GPUBufferBinding instance_binding = {};
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+        set.mesh.bind(device.rhi(), pass);
+        rhi::BufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
-        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         const Frustum light(light_view_proj);
         for (const Cell& cell : set.cells) {
             if (core::distance(eye, cell.centre) - cell.radius > rock_shadow_distance) continue;
             if (!light.sees(cell.centre, cell.radius)) continue;
-            SDL_DrawGPUIndexedPrimitives(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
+            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
         }
     }
 }
 
-void Foliage::bind_cards(SDL_GPURenderPass* pass, uint32_t first) const {
+void Foliage::bind_cards(Device& device, rhi::Pass* pass, uint32_t first) const {
     // A missing texture binds the other one, so the slot is never empty; the
     // shader's alpha test then cuts the wrong shape, which is visible and
     // logged at load rather than a validation crash.
-    SDL_GPUTexture* leaf = leaf_texture_ ? leaf_texture_ : needle_texture_;
-    SDL_GPUTexture* needle = needle_texture_ ? needle_texture_ : leaf_texture_;
+    rhi::Texture* leaf = leaf_texture_ ? leaf_texture_ : needle_texture_;
+    rhi::Texture* needle = needle_texture_ ? needle_texture_ : leaf_texture_;
     if (!leaf || !card_sampler_) return;
-    SDL_GPUTextureSamplerBinding bindings[2] = {};
+    rhi::TextureBinding bindings[2] = {};
     bindings[0].texture = leaf;
     bindings[0].sampler = card_sampler_;
     bindings[1].texture = needle;
     bindings[1].sampler = card_sampler_;
-    SDL_BindGPUFragmentSamplers(pass, first, bindings, 2);
+    device.rhi().bind_fragment_textures(pass, first, bindings, 2);
 }
 
 uint32_t Foliage::tree_count() const {

@@ -1,10 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
-
 #include <cstdint>
 #include <vector>
 
+#include "rhi/rhi.h"
 #include "core/math.h"
 
 namespace gfx {
@@ -35,20 +34,20 @@ struct MeshData {
 // GPU-resident mesh.
 class Mesh {
 public:
-    bool upload(SDL_GPUDevice* gpu, const MeshData& data, const char* debug_name);
-    void release(SDL_GPUDevice* gpu);
+    bool upload(rhi::Device& rhi, const MeshData& data, const char* debug_name);
+    void release(rhi::Device& rhi);
 
-    void bind(SDL_GPURenderPass* pass) const;
+    void bind(rhi::Device& rhi, rhi::Pass* pass) const;
     uint32_t index_count() const { return index_count_; }
     bool valid() const { return vertex_buffer_ && index_buffer_; }
 
     // Vertex layout matching MeshVertex, for PipelineDesc.
-    static std::vector<SDL_GPUVertexBufferDescription> buffer_descriptions();
-    static std::vector<SDL_GPUVertexAttribute> attributes();
+    static std::vector<rhi::VertexBufferLayout> buffer_descriptions();
+    static std::vector<rhi::VertexAttribute> attributes();
 
 private:
-    SDL_GPUBuffer* vertex_buffer_ = nullptr;
-    SDL_GPUBuffer* index_buffer_ = nullptr;
+    rhi::Buffer* vertex_buffer_ = nullptr;
+    rhi::Buffer* index_buffer_ = nullptr;
     uint32_t index_count_ = 0;
 };
 

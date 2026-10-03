@@ -36,7 +36,10 @@ judged. See [motion preview and evidence](../artifacts/gold-tail-flow/README.md)
   checked on x99, with per-backend goldens and CI on all three. There is a
   Windows package, but no Linux package yet: it needs a build in an older
   container for glibc.
-- **Next**: the retro track, starting with R0 (`docs/PORTING.md`).
+- **R1** (2026-10-03): the RHI (`src/rhi/rhi.h`), with SDL GPU as its one
+  backend. A pure refactor: Metal goldens unchanged.
+- **Next**: R2's content tiers on the Mac, and the R0 spike once x99 or the
+  G41 is up (`docs/PORTING.md`).
 
 ## Latest asset candidates — 2026-09-28
 

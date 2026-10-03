@@ -9,7 +9,7 @@ using core::Vec3;
 namespace gfx {
 namespace {
 
-PipelineDesc make_shadow_mesh_desc(SDL_GPUTextureFormat depth_format) {
+PipelineDesc make_shadow_mesh_desc(rhi::Format depth_format) {
     PipelineDesc desc;
     desc.name = "shadow_mesh";
     desc.shader = "shadow_depth";
@@ -18,13 +18,13 @@ PipelineDesc make_shadow_mesh_desc(SDL_GPUTextureFormat depth_format) {
     desc.no_color_target = true;
     desc.depth_format = depth_format;
     // Conventional depth here, unlike the reversed-Z main pass.
-    desc.depth_compare = SDL_GPU_COMPAREOP_LESS;
+    desc.depth_compare = rhi::Compare::Less;
     desc.depth_test = true;
     desc.depth_write = true;
     // Culling front faces is the usual trick to push acne behind the geometry,
     // but terrain is an open heightfield -- culling either side would punch
     // holes in the shadows. So we keep both and rely on the depth bias.
-    desc.cull = SDL_GPU_CULLMODE_NONE;
+    desc.cull = rhi::Cull::None;
     return desc;
 }
 
@@ -34,53 +34,46 @@ bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resoluti
     pipelines_ = pipelines;
     resolution_ = resolution;
 
-    if (!SDL_GPUTextureSupportsFormat(device->gpu(), format_, SDL_GPU_TEXTURETYPE_2D,
-                                      SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET |
-                                          SDL_GPU_TEXTUREUSAGE_SAMPLER)) {
-        format_ = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+    rhi::Device& rhi = device->rhi();
+    if (!rhi.supports_format(format_, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED)) {
+        format_ = rhi::Format::D16;
         LOG_WARN("shadow map falling back to D16_UNORM");
     }
 
-    SDL_GPUTextureCreateInfo info = {};
-    info.type = SDL_GPU_TEXTURETYPE_2D;
-    info.format = format_;
-    info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    info.width = resolution_;
-    info.height = resolution_;
-    info.layer_count_or_depth = 1;
-    info.num_levels = 1;
-    info.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    texture_ = SDL_CreateGPUTexture(device->gpu(), &info);
-    if (!texture_) return SDL_FAIL("SDL_CreateGPUTexture(shadow_map)");
-    SDL_SetGPUTextureName(device->gpu(), texture_, "shadow_map");
+    rhi::TextureDesc desc;
+    desc.width = resolution_;
+    desc.height = resolution_;
+    desc.format = format_;
+    desc.usage = rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED;
+    texture_ = rhi.create_texture(desc, "shadow_map");
+    if (!texture_) return false;
 
-    SDL_GPUSamplerCreateInfo sampler_info = {};
+    rhi::SamplerDesc sampler_desc;
     // Linear filtering on the depth values themselves, which softens the PCF
     // result further at no cost.
-    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
-    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
-    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_desc.min_filter = rhi::Filter::Linear;
+    sampler_desc.mag_filter = rhi::Filter::Linear;
+    sampler_desc.mip_mode = rhi::MipMode::Nearest;
     // Clamping to the border would be ideal; clamp-to-edge plus an explicit
     // in-bounds test in the shader achieves the same thing portably.
-    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_ = SDL_CreateGPUSampler(device->gpu(), &sampler_info);
+    sampler_desc.address_u = sampler_desc.address_v = sampler_desc.address_w = rhi::Address::Clamp;
+    sampler_desc.max_lod = 0.0f;
+    sampler_ = rhi.create_sampler(sampler_desc);
     if (!sampler_) {
-        SDL_ReleaseGPUTexture(device->gpu(), texture_);
+        rhi.destroy(texture_);
         texture_ = nullptr;
-        return SDL_FAIL("SDL_CreateGPUSampler(shadow_map)");
+        return false;
     }
 
     mesh_pipeline_ = pipelines_->create(make_shadow_mesh_desc(format_));
     LOG_INFO("shadow map: %ux%u %s", resolution_, resolution_,
-             format_ == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ? "D32F" : "D16");
+             format_ == rhi::Format::D32F ? "D32F" : "D16");
     return true;
 }
 
 void ShadowMap::shutdown(Device& device) {
-    if (texture_) SDL_ReleaseGPUTexture(device.gpu(), texture_);
-    if (sampler_) SDL_ReleaseGPUSampler(device.gpu(), sampler_);
+    device.rhi().destroy(texture_);
+    device.rhi().destroy(sampler_);
     texture_ = nullptr;
     sampler_ = nullptr;
 }
@@ -111,21 +104,17 @@ void ShadowMap::update(const Camera& camera, Vec3 sun_direction) {
     light_view_proj_ = projection * view;
 }
 
-SDL_GPURenderPass* ShadowMap::begin_pass(Device& device) {
+rhi::Pass* ShadowMap::begin_pass(Device& device) {
     if (!texture_) return nullptr;
-
-    SDL_GPUDepthStencilTargetInfo depth = {};
-    depth.texture = texture_;
-    depth.clear_depth = 1.0f;  // conventional depth: far is 1
-    depth.load_op = SDL_GPU_LOADOP_CLEAR;
-    depth.store_op = SDL_GPU_STOREOP_STORE;
-    depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-    depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-    depth.cycle = true;
-    return SDL_BeginGPURenderPass(device.cmd(), nullptr, 0, &depth);
+    rhi::PassDesc pass;
+    pass.depth = texture_;
+    pass.clear_depth = true;
+    pass.clear_depth_value = 1.0f;  // conventional depth: far is 1
+    pass.keep_depth = true;         // the world passes sample it
+    return device.rhi().begin_pass(pass);
 }
 
-SDL_GPUGraphicsPipeline* ShadowMap::mesh_pipeline() const {
+rhi::Pipeline* ShadowMap::mesh_pipeline() const {
     return pipelines_ ? pipelines_->get(mesh_pipeline_) : nullptr;
 }
 

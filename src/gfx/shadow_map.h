@@ -26,16 +26,16 @@ public:
     void update(const Camera& camera, core::Vec3 sun_direction);
 
     // Depth-only pass. Returns nullptr if the shadow map is unavailable.
-    SDL_GPURenderPass* begin_pass(Device& device);
+    rhi::Pass* begin_pass(Device& device);
 
     // The pipeline that writes depth for opaque meshes.
-    SDL_GPUGraphicsPipeline* mesh_pipeline() const;
+    rhi::Pipeline* mesh_pipeline() const;
 
-    SDL_GPUTexture* texture() const { return texture_; }
-    SDL_GPUSampler* sampler() const { return sampler_; }
+    rhi::Texture* texture() const { return texture_; }
+    rhi::Sampler* sampler() const { return sampler_; }
     const core::Mat4& light_view_proj() const { return light_view_proj_; }
     uint32_t resolution() const { return resolution_; }
-    SDL_GPUTextureFormat format() const { return format_; }
+    rhi::Format format() const { return format_; }
 
     // Half-width of the shadowed region, in metres. Larger covers more of the
     // valley at the cost of resolution.
@@ -51,10 +51,10 @@ public:
 private:
     PipelineCache* pipelines_ = nullptr;
     PipelineHandle mesh_pipeline_ = INVALID_PIPELINE;
-    SDL_GPUTexture* texture_ = nullptr;
-    SDL_GPUSampler* sampler_ = nullptr;
+    rhi::Texture* texture_ = nullptr;
+    rhi::Sampler* sampler_ = nullptr;
     uint32_t resolution_ = 0;
-    SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+    rhi::Format format_ = rhi::Format::D32F;
     core::Mat4 light_view_proj_;
 };
 

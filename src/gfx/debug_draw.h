@@ -51,7 +51,7 @@ public:
     void upload(Device& device);
 
     // Draws and then clears the accumulated geometry.
-    void draw(Device& device, SDL_GPURenderPass* pass, const core::Mat4& view_proj);
+    void draw(Device& device, rhi::Pass* pass, const core::Mat4& view_proj);
 
     int line_count() const { return int((depth_tested_.size() + overlay_.size()) / 2); }
 
@@ -74,8 +74,7 @@ private:
     std::vector<Vertex> overlay_;
 
     // One growable vertex buffer holding both lists back to back.
-    SDL_GPUBuffer* vertex_buffer_ = nullptr;
-    SDL_GPUTransferBuffer* transfer_ = nullptr;
+    rhi::Buffer* vertex_buffer_ = nullptr;
     uint32_t capacity_ = 0;
     uint32_t uploaded_depth_ = 0;
     uint32_t uploaded_overlay_ = 0;

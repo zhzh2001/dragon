@@ -1,7 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
-
 #include <cstdint>
 #include <vector>
 
@@ -47,9 +45,9 @@ public:
     // Per-frame staging of one grass kind, before any render pass opens.
     void upload_grass(Device& device, GrassKind kind, const std::vector<FoliageInstance>& grass);
 
-    void draw_trees(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene);
-    void draw_grass(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene);
-    void draw_trees_depth(Device& device, SDL_GPURenderPass* pass,
+    void draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
+    void draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
+    void draw_trees_depth(Device& device, rhi::Pass* pass,
                           const core::Mat4& light_view_proj, float time,
                           core::Vec3 eye = core::Vec3::zero());
 
@@ -88,11 +86,11 @@ private:
         core::Vec4 wind_time_fade;  // x wind, y time, z fade start, w fade end
         core::Vec4 extra;           // x nominal height, y LOD distance
     };
-    SDL_GPUTexture* leaf_texture_ = nullptr;
-    SDL_GPUTexture* needle_texture_ = nullptr;
-    SDL_GPUSampler* card_sampler_ = nullptr;
+    rhi::Texture* leaf_texture_ = nullptr;
+    rhi::Texture* needle_texture_ = nullptr;
+    rhi::Sampler* card_sampler_ = nullptr;
     // Binds the two card textures at fragment slots `first` and `first + 1`.
-    void bind_cards(SDL_GPURenderPass* pass, uint32_t first) const;
+    void bind_cards(Device& device, rhi::Pass* pass, uint32_t first) const;
     // Static instances are uploaded sorted into square ground cells, each
     // with a bounding sphere, so a draw is one instanced call per cell that
     // the frustum and the distance admit. Six thousand trees over the valley
@@ -105,7 +103,7 @@ private:
     };
     struct StaticSet {
         Mesh mesh;
-        SDL_GPUBuffer* instances = nullptr;
+        rhi::Buffer* instances = nullptr;
         uint32_t count = 0;
         std::vector<Cell> cells;
     };
@@ -113,13 +111,12 @@ private:
     uint32_t trees_drawn_ = 0;
     struct StreamSet {
         Mesh mesh;
-        SDL_GPUBuffer* instances = nullptr;
-        SDL_GPUTransferBuffer* transfer = nullptr;
+        rhi::Buffer* instances = nullptr;
         uint32_t capacity = 0;
         uint32_t uploaded = 0;
     };
-    void draw(Device& device, SDL_GPURenderPass* pass, const SceneUniforms& scene,
-              const Mesh& mesh, SDL_GPUBuffer* instances, uint32_t count, float fade_start,
+    void draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene,
+              const Mesh& mesh, rhi::Buffer* instances, uint32_t count, float fade_start,
               float fade_end, float height);
     bool ensure_capacity(StreamSet& set, uint32_t count, const char* name);
 

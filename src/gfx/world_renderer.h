@@ -32,7 +32,7 @@ public:
 
     // Fullscreen sky. Draw before anything else: it writes no depth, so opaque
     // geometry simply covers it.
-    void draw_sky(Device& device, SDL_GPURenderPass* pass);
+    void draw_sky(Device& device, rhi::Pass* pass);
 
     // Terrain samples the shadow map, so the renderer needs to know about it.
     void set_shadow_map(ShadowMap* shadow_map) { shadow_map_ = shadow_map; }
@@ -40,27 +40,27 @@ public:
     // Debug only; every map is on in normal use.
     void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
 
-    void draw_terrain(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
+    void draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh);
     // The water surface quad (see water.hlsl).
-    void draw_water(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh);
+    void draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh);
 
     // Lit opaque geometry with per-vertex albedo and procedural deformation.
-    void draw_mesh(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
+    void draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
                    const ModelUniforms& model);
 
     // Depth-only draw for the shadow pass. Applies the same deformation, so a
     // flapping wing casts a flapping shadow.
-    void draw_mesh_depth(Device& device, SDL_GPURenderPass* pass, const Mesh& mesh,
+    void draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
                          const core::Mat4& light_view_proj, const ModelUniforms& model);
 
     // Skinned geometry. `joints` are skinning matrices, at most anim::MAX_JOINTS.
     // `textures` are base-colour textures indexed by each submesh; pass an empty
     // list to draw untextured.
-    void draw_skinned(Device& device, SDL_GPURenderPass* pass, const anim::SkinnedMesh& mesh,
+    void draw_skinned(Device& device, rhi::Pass* pass, const anim::SkinnedMesh& mesh,
                       const ModelUniforms& model, const std::vector<core::Mat4>& joints,
-                      const std::vector<SDL_GPUTexture*>& textures = {},
-                      SDL_GPUSampler* sampler = nullptr);
-    void draw_skinned_depth(Device& device, SDL_GPURenderPass* pass,
+                      const std::vector<rhi::Texture*>& textures = {},
+                      rhi::Sampler* sampler = nullptr);
+    void draw_skinned_depth(Device& device, rhi::Pass* pass,
                             const anim::SkinnedMesh& mesh, const core::Mat4& light_view_proj,
                             const ModelUniforms& model, const std::vector<core::Mat4>& joints);
 
@@ -80,16 +80,16 @@ private:
     // 1x1 white, for submeshes with no base-colour texture. A sampler slot must
     // be filled, and the shadow map cannot serve: it is a depth texture and the
     // shader declares a colour one.
-    SDL_GPUTexture* white_ = nullptr;
+    rhi::Texture* white_ = nullptr;
     // The terrain's tiling detail (assets/textures/terrain_detail.png: R rock,
     // G grass, B dirt, A snow), and a mid-grey stand-in that leaves the
     // ground as it was when the file is missing.
-    SDL_GPUTexture* terrain_detail_ = nullptr;
-    SDL_GPUTexture* neutral_ = nullptr;
+    rhi::Texture* terrain_detail_ = nullptr;
+    rhi::Texture* neutral_ = nullptr;
 public:
-    void set_terrain_detail(SDL_GPUTexture* texture) { terrain_detail_ = texture; }
+    void set_terrain_detail(rhi::Texture* texture) { terrain_detail_ = texture; }
 private:
-    SDL_GPUSampler* white_sampler_ = nullptr;
+    rhi::Sampler* white_sampler_ = nullptr;
     SceneUniforms scene_ = {};
 };
 

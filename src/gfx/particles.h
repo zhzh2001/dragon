@@ -45,7 +45,7 @@ public:
     // pass, then draw() inside it.
     void upload(Device& device, const core::Mat4& view_proj, core::Vec3 camera_right,
                 core::Vec3 camera_up);
-    void draw(Device& device, SDL_GPURenderPass* pass);
+    void draw(Device& device, rhi::Pass* pass);
 
 private:
     struct Vertex {
@@ -68,8 +68,7 @@ private:
 
     std::vector<Vertex> vertices_;
     uint32_t uploaded_ = 0;
-    SDL_GPUBuffer* vertex_buffer_ = nullptr;
-    SDL_GPUTransferBuffer* transfer_ = nullptr;
+    rhi::Buffer* vertex_buffer_ = nullptr;
     uint32_t capacity_ = 0;
     core::Mat4 view_proj_ = core::Mat4::identity();
 };

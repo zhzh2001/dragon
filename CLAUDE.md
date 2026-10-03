@@ -201,6 +201,13 @@ flight controls.
   along the right edge, never over the centre. Do not draw a readout with raw
   `AddText` and pixel constants again -- that is what read as debug output
   with gold paint.
+- **GPU calls go through `rhi::Device`** (`src/rhi/rhi.h`), never SDL's GPU
+  API directly. `gfx::Device::rhi()` reaches it. Only the backend
+  (`src/rhi/sdlgpu/`) and Dear ImGui's renderer glue
+  (`editor/imgui_layer.cpp`) include `SDL_gpu.h`. That is what lets a
+  D3D9 backend be added without touching the renderers
+  (`docs/PORTING.md`, R1). Per-frame buffer data goes through
+  `map_upload`/`commit_upload` before the pass that draws it.
 - **Paths go through `core/paths.h`**, never a literal root. Shipped data is
   `paths::asset("props/x.glb")`, found beside the executable first (a
   package) and in the source tree second (a dev build, `DRAGON_DEV_ROOTS`).
@@ -441,6 +448,7 @@ contributions: never file an issue or a PR against them from a session.
 
 ```
 src/core/    math, input, noise, logging, paths (where data and user files live)
+src/rhi/     the render hardware interface, and its SDL GPU backend (sdlgpu/)
 src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
