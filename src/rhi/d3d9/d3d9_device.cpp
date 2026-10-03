@@ -236,8 +236,8 @@ public:
         LOG_INFO("direct3d9: %s, vs_%lu_%lu ps_%lu_%lu", id.Description,
                  D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion), D3DSHADER_VERSION_MINOR(caps_.VertexShaderVersion),
                  D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion), D3DSHADER_VERSION_MINOR(caps_.PixelShaderVersion));
-        if (D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion) < 3) {
-            LOG_ERROR("direct3d9: this backend needs shader model 3 so far (R3); the card has less");
+        if (D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion) < 2) {
+            LOG_ERROR("direct3d9: this backend needs shader model 2 (--tier sm2) or 3; the card has less");
             return false;
         }
 
@@ -277,6 +277,23 @@ public:
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
+        // Instancing (the foliage): SM3 hardware has stream frequencies. ATI's
+        // SM2 parts (R300 on) expose the same thing behind a FOURCC switch,
+        // 'INST', turned on through D3DRS_POINTSIZE. Anything else draws an
+        // instanced batch one instance at a time.
+        const DWORD inst = MAKEFOURCC('I', 'N', 'S', 'T');
+        if (D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 3) {
+            instancing_ = Instancing::Native;
+        } else if (SUCCEEDED(d3d_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
+                                                     D3DRTYPE_SURFACE, D3DFORMAT(inst)))) {
+            instancing_ = Instancing::AtiInst;
+            dev_->SetRenderState(D3DRS_POINTSIZE, inst);
+        } else {
+            instancing_ = Instancing::Loop;
+        }
+        LOG_INFO("direct3d9: instancing %s", instancing_ == Instancing::Native  ? "native (SM3)"
+                                              : instancing_ == Instancing::AtiInst ? "through ATI's INST switch"
+                                                                                   : "emulated, a draw per instance");
         return vertex_ids_ && vertex_id_decl_;
     }
 
@@ -794,6 +811,20 @@ public:
         }
         bool instanced = false;
         for (uint32_t s = 0; s < 8; ++s) instanced |= pipeline_->stream_instanced[s];
+        if (instanced && instancing_ == Instancing::Loop) {
+            // One draw per instance: the instance streams bound at that
+            // instance's element with a zero stride, so every vertex reads it.
+            for (uint32_t i = 0; i < instance_count; ++i) {
+                for (uint32_t s = 0; s < 8; ++s) {
+                    if (!pipeline_->stream_instanced[s] || !pipeline_->stream_pitch[s]) continue;
+                    D9Buffer* b = streams_[s].buffer ? d9(streams_[s].buffer) : nullptr;
+                    dev_->SetStreamSource(s, b ? b->vb : nullptr,
+                                          streams_[s].offset + (first_instance + i) * pipeline_->stream_pitch[s], 0);
+                }
+                dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims);
+            }
+            return;
+        }
         if (instanced) {
             // SM3 hardware instancing: the per-vertex streams repeat
             // instance_count times, the per-instance ones step once each.
@@ -888,6 +919,7 @@ private:
     bool in_scene_ = false;
     bool has_depth_ = false;
     bool r32f_filterable_ = false;
+    enum class Instancing { Native, AtiInst, Loop } instancing_ = Instancing::Native;
     D9Pass pass_;
     D9Pipeline* pipeline_ = nullptr;
     BufferBinding streams_[8] = {};

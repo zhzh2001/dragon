@@ -600,6 +600,48 @@ Not done yet:
 - the 32-bit XP build (R6);
 - the G41.
 
+### R4, in progress: SM2
+
+Every shader now compiles for vs_2_0/ps_2_0, from the same source, under
+the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
+- **The lighting moves to the vertex** (`sm2_light_vertex` and `sm2_finish`
+  in `scene_common.hlsl`). The pixel stage keeps the albedo, a 2x2 shadow
+  lookup, the combine and `ldr_encode_fast`, the tonemap without the
+  hue-preserving blend.
+- **Counts, from the bake's `--counts`** (ps_2_0 allows 64 arithmetic and 32
+  texture): terrain 55, foliage 57, skinned 50, mesh 45, water 57, sky 54.
+  Terrain's vertex stage takes 249 of vs_2_0's 256, with the patch noise at
+  two octaves.
+- **What the tier loses:**
+  - terrain: the broad detail scale, triplanar rock, strata, grain,
+    micro-relief and snow glint;
+  - skinned: the normal and ORM maps and the specular;
+  - foliage: the bark's streaks;
+  - water: the ripples and the glint ("fresnel only").
+  Without HDR the post stack is not created, and its shaders are not baked.
+  The Metal preview is `artifacts/r4-sm2/sm2-metal-preview.png`.
+- **ps_2_0's limits found on the way:**
+  - 32 float constants. fxc packs only what a shader uses, so the bake lets
+    it and reads the constant table back.
+  - No `tex2Dlod`, so the SM2 shadow lookup uses plain samples.
+  - A dependent-read chain limit. A kill that depends on a texture, ahead
+    of the shadow taps, exceeds it, so foliage kills once, at the end.
+- **The gate:** with `--tier sm2 --gpu-driver direct3d9` on x99's 5060 Ti,
+  all eight scenes pass against D3D12 at the same tier
+  (`tests/golden/d3d12-sm2`) under `golden.py --cross-compiler`: mean 1.0,
+  2% over 8. The means are 0.17 to 0.51, with about 1% of pixels over 8 on
+  lit slopes. That is fxc's SM2 math against DXC's, in vs_2_0's per-vertex
+  lighting; the sky is exact.
+- **SM2 hardware has no stream-frequency instancing.** The backend uses
+  ATI's `INST` switch (R300 and later), and otherwise draws one instance at
+  a time with a zero-stride instance stream.
+- **The X550 is installed on x99 but not yet reachable.** Its driver loads
+  (8.593), but D3D9 enumerates outputs with a desktop, and the card has no
+  monitor (no modes; attaching DISPLAY5 in software returns BADMODE). It
+  needs a monitor or a VGA dummy plug, with the desktop extended onto it.
+  The R0 spike lists adapters and outputs and takes `--adapter N`; the game
+  still uses the default adapter.
+
 ### Budgets to design to
 
 From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run

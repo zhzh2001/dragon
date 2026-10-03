@@ -75,6 +75,11 @@ TOLERANCE = {'mean': 0.6, 'over8': 0.002}
 # wrong fails -- a missing fog, a black pass, a flipped matrix all move the
 # mean by tens. `ground` is the loosest scene, being mostly near cards.
 LOOSE = {'mean': 6.0, 'over8': 0.25}
+# The same shader through two compilers: fxc's SM2 bytecode (D3D9) against
+# DXC's build of the same source (D3D12). fxc expands pow and exp its own way
+# and vs_2_0 lights per vertex in those, so a lit slope moves a few units in
+# about 1% of its pixels; a broken pass still moves the mean by tens.
+CROSS_COMPILER = {'mean': 1.0, 'over8': 0.02}
 DEFAULT_SET = {'darwin': 'metal', 'linux': 'vulkan', 'win32': 'd3d12'}.get(sys.platform, 'metal')
 
 
@@ -124,6 +129,8 @@ def main():
     parser.add_argument('mode', choices=['capture', 'compare', 'commands'])
     parser.add_argument('--set', default=DEFAULT_SET)
     parser.add_argument('--loose', action='store_true')
+    parser.add_argument('--cross-compiler', action='store_true',
+                        help="fxc's D3D9 bytecode against another compiler's set (CROSS_COMPILER)")
     parser.add_argument('--renders', help='compare (or capture) these <name>.bmp/.png instead of rendering')
     parser.add_argument('--exe', default='dragon.exe', help='the executable `commands` names')
     parser.add_argument('--extra', default='', help='arguments appended to every scene, e.g. "--gpu-driver vulkan"')
@@ -156,7 +163,7 @@ def main():
     obtain = provided if args.renders else render
 
     golden = os.path.join(ROOT, 'tests', 'golden', args.set)
-    tolerance = LOOSE if args.loose else TOLERANCE
+    tolerance = LOOSE if args.loose else CROSS_COMPILER if args.cross_compiler else TOLERANCE
     if args.mode == 'capture':
         out = args.out or golden
         os.makedirs(out, exist_ok=True)
