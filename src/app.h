@@ -383,7 +383,9 @@ private:
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
     game::VegetationSettings vegetation_for_tier() const;
-    anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const;
+    anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
+                                         uint32_t max_triangles = 0) const;
+    void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag);
     static gfx::TextureKind texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
                                          size_t index);
     // The content tier (--tier); set before anything loads.
@@ -695,6 +697,8 @@ private:
     void replant();
     // The coarse ground beyond the playable extent.
     gfx::Mesh terrain_skirt_mesh_;
+    std::vector<gfx::MeshChunk> terrain_chunks_;
+    std::vector<gfx::MeshChunk> terrain_skirt_chunks_;
     gfx::Mesh water_mesh_;
     std::string model_tuning_path_;
     std::string model_rig_tuning_path_;

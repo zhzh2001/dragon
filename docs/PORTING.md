@@ -673,11 +673,29 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
     - the vertex programs: the terrain's patch noise is computed once on the
       CPU into the unused uv.x (163 slots, from 249), and the per-vertex
       lighting skips three normalizes and a divide.
-  - **Result:** the valley at 640×480 runs 13.9 fps (from 0.8), and at
-    1024×768 10 fps. A hoard run at 1024×768 runs 6.3 fps. There the
-    creatures lead, 171 K skinned triangles plus 120 K in the shadow map,
-    mostly from creatures far outside it. Distance LODs for creatures and
-    culling shadow casters to the map's extent are next, with R7's presets.
+  - **Then the creatures and the terrain's cull:**
+    - A skinned mesh gets a distance LOD (`SkinnedMesh::upload_far`): 1,500
+      triangles past 100 m at sm2, 3,000 past 150 m at sm3. The renderer
+      picks it by itself.
+    - A skinned caster outside the shadow map's square is skipped (all
+      tiers).
+    - The terrain is uploaded in 320 m chunks (`gfx::chunk_mesh`, the skirt
+      in 1280 m ones). It is drawn only where the camera, or in the shadow
+      pass the light's box, sees it. That is all tiers too: modern goldens
+      move by at most 6/255 on a few pixels where equal-depth triangles now
+      resolve in another order.
+  - **Result on the X550:**
+
+    | | 320×240 | 640×480 | 1024×768 |
+    |---|---|---|---|
+    | valley, first frame | | 0.8 fps | |
+    | valley, now | 19.5 | 15.4 | 10.4 |
+    | hoard run, now | | | 11.0 (from 6.3) |
+
+    About 50 ms of each frame is geometry and the driver, and the rest is
+    fill: at 1024×768 the SM2 pixel programs (near 60 instructions) cost
+    about 45 ms over the overdraw. R7's presets (640×480 to 1024×768,
+    particle caps, fewer bots and less grass) are where that is settled.
   - **SM2 point-samples its shadow map on every backend,** since its cards
     cannot filter R32F, so the tier looks the same everywhere. SM2 also
     treats points beyond the light's far plane as lit, as `sun_visibility`

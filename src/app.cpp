@@ -920,11 +920,18 @@ void App::regenerate_terrain() {
         for (gfx::MeshVertex& v : mesh.vertices) v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
         return mesh;
     };
+    // In chunks, so the renderer culls what the camera and the shadow map do
+    // not see (gfx::chunk_mesh): the terrain is one mesh over five kilometres.
+    gfx::MeshData ground = with_patches(terrain_.mesh_data());
+    terrain_chunks_ = gfx::chunk_mesh(ground, 320.0f);
     terrain_mesh_.release(device_.rhi());
-    terrain_mesh_.upload(device_.rhi(), with_patches(terrain_.mesh_data()), "terrain");
+    terrain_mesh_.upload(device_.rhi(), ground, "terrain");
     terrain_skirt_mesh_.release(device_.rhi());
+    terrain_skirt_chunks_.clear();
     if (!terrain_.skirt_mesh_data().indices.empty()) {
-        terrain_skirt_mesh_.upload(device_.rhi(), with_patches(terrain_.skirt_mesh_data()), "terrain_skirt");
+        gfx::MeshData skirt = with_patches(terrain_.skirt_mesh_data());
+        terrain_skirt_chunks_ = gfx::chunk_mesh(skirt, 1280.0f);
+        terrain_skirt_mesh_.upload(device_.rhi(), skirt, "terrain_skirt");
     }
     // The water surface: one quad at the water line over the whole world. The
     // terrain hides it everywhere the ground is above the line, which is
@@ -3332,6 +3339,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         }
     }
     out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str()), tag.c_str());
+    upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str());
 
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
@@ -3436,6 +3444,13 @@ void App::spawn_bots(int count) {
 
 // The tier's skinning budget (gfx/render_tier.h): a mesh whose joints do not
 // fit one draw is split into palettes here, at load, once.
+// The tier's distance LOD for a skinned mesh, if it has one.
+void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag) {
+    if (tier_.far_skinned_triangles == 0 || data.indices.size() / 3 <= tier_.far_skinned_triangles) return;
+    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, tier_.far_skinned_triangles),
+                    tier_.far_skinned_distance, tag);
+}
+
 // What a model's texture `index` holds, from the materials that use it: a
 // retro tier compresses each kind its own way (gfx/texture.h).
 gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
@@ -3448,9 +3463,10 @@ gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim
     return srgb ? gfx::TextureKind::Colour : gfx::TextureKind::Data;
 }
 
-anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const {
+anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
+                                          uint32_t max_triangles) const {
     // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
-    anim::LodResult lod = anim::simplify_skinned(mesh, tier_.max_skinned_triangles);
+    anim::LodResult lod = anim::simplify_skinned(mesh, max_triangles ? max_triangles : tier_.max_skinned_triangles);
     if (lod.mesh.indices.size() != mesh.indices.size()) {
         LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size", tag,
                  mesh.indices.size() / 3, lod.mesh.indices.size() / 3, mesh.vertices.size(),
@@ -3476,6 +3492,7 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
         return false;
     }
     if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag), tag)) return false;
+    upload_far_lod(out.mesh, data, (std::string(tag) + "_far").c_str());
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
         const std::string name = std::string(tag) + "_" + std::to_string(i);
         out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(),
@@ -6704,7 +6721,7 @@ void App::render() {
         }
         if (tier_.terrain_casts_shadows) {
             world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
-                                   gfx::ModelUniforms());
+                                   gfx::ModelUniforms(), &terrain_chunks_);
         }
         world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
                                   dragon_model, dragon_rig_.skinning_matrices());
@@ -6774,8 +6791,8 @@ void App::render() {
     rhi::Pass* pass = device_.begin_main_pass(
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     world_.draw_sky(device_, pass);
-    world_.draw_terrain(device_, pass, terrain_mesh_);
-    if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_);
+    world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
+    if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
     if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
     if (!options_.hide_vegetation) {
         foliage_.draw_trees(device_, pass, world_.scene());

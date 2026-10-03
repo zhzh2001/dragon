@@ -84,7 +84,20 @@ bool SkinnedMesh::upload(rhi::Device& rhi, const SkinnedMeshData& data, const ch
     return true;
 }
 
+bool SkinnedMesh::upload_far(rhi::Device& rhi, const SkinnedMeshData& data, float distance, const char* debug_name) {
+    auto far = std::make_shared<SkinnedMesh>();
+    if (!far->upload(rhi, data, debug_name)) return false;
+    if (far_) far_->release(rhi);
+    far_ = far;
+    far_distance_ = distance;
+    return true;
+}
+
 void SkinnedMesh::release(rhi::Device& rhi) {
+    if (far_) {
+        far_->release(rhi);
+        far_.reset();
+    }
     rhi.destroy(vertex_buffer_);
     rhi.destroy(index_buffer_);
     vertex_buffer_ = nullptr;

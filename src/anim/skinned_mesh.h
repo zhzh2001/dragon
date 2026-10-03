@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "rhi/rhi.h"
@@ -64,6 +65,15 @@ public:
     const std::vector<SkinnedSubmesh>& submeshes() const { return submeshes_; }
     bool valid() const { return vertex_buffer_ && index_buffer_; }
 
+    // A distance LOD (docs/PORTING.md, R4): a retro tier gives a creature a
+    // cheaper mesh for past `distance` metres, which the renderer picks by
+    // itself (gfx::WorldRenderer::draw_skinned). A rival or a grazer far off
+    // is a few pixels tall, and on an SM2 card ten thousand triangles each.
+    bool upload_far(rhi::Device& rhi, const SkinnedMeshData& data, float distance, const char* debug_name);
+    const SkinnedMesh& for_distance(float metres) const {
+        return far_ && far_->valid() && metres > far_distance_ ? *far_ : *this;
+    }
+
     static std::vector<rhi::VertexBufferLayout> buffer_descriptions();
     static std::vector<rhi::VertexAttribute> attributes();
 
@@ -72,6 +82,8 @@ private:
     rhi::Buffer* index_buffer_ = nullptr;
     uint32_t index_count_ = 0;
     std::vector<SkinnedSubmesh> submeshes_;
+    std::shared_ptr<SkinnedMesh> far_;  // shared: models are copied by value
+    float far_distance_ = 0.0f;
 };
 
 }  // namespace anim

@@ -41,7 +41,9 @@ public:
     // Debug only; every map is on in normal use.
     void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
 
-    void draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh);
+    // With `chunks` (gfx::chunk_mesh), only the chunks the camera sees.
+    void draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
+                      const std::vector<MeshChunk>* chunks = nullptr);
     // The water surface quad (see water.hlsl).
     void draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh);
 
@@ -52,7 +54,8 @@ public:
     // Depth-only draw for the shadow pass. Applies the same deformation, so a
     // flapping wing casts a flapping shadow.
     void draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
-                         const core::Mat4& light_view_proj, const ModelUniforms& model);
+                         const core::Mat4& light_view_proj, const ModelUniforms& model,
+                         const std::vector<MeshChunk>* chunks = nullptr);
 
     // Skinned geometry. `joints` are skinning matrices, at most anim::MAX_JOINTS.
     // `textures` are base-colour textures indexed by each submesh; pass an empty
@@ -94,6 +97,7 @@ public:
     void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
 private:
     rhi::Sampler* white_sampler_ = nullptr;
+    float camera_distance(const ModelUniforms& model) const;
     SceneUniforms scene_ = {};
 };
 

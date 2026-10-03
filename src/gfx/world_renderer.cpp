@@ -1,5 +1,7 @@
 #include "gfx/world_renderer.h"
 
+#include "gfx/frustum.h"
+
 #include <cstring>
 
 #include "anim/skeleton.h"
@@ -140,6 +142,10 @@ SkinBlock make_skin_block(const std::vector<core::Mat4>& joints) {
 
 }  // namespace
 
+// The largest skinned caster's reach from its origin, in metres: a dragon's
+// half wingspan, a tower's height.
+constexpr float CASTER_RADIUS = 40.0f;
+
 bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     pipelines_ = pipelines;
 
@@ -179,7 +185,21 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
     device.rhi().draw(pass, 3, 1, 0, 0);
 }
 
-void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh) {
+// Draws `mesh` whole, or only the chunks inside `view_proj`'s frustum.
+void draw_chunks(rhi::Device& rhi, rhi::Pass* pass, const Mesh& mesh, const std::vector<MeshChunk>* chunks,
+                 const core::Mat4& view_proj) {
+    if (!chunks || chunks->empty()) {
+        rhi.draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+        return;
+    }
+    const Frustum frustum(view_proj);
+    for (const MeshChunk& chunk : *chunks) {
+        if (frustum.sees(chunk.centre, chunk.radius)) rhi.draw_indexed(pass, chunk.index_count, 1, chunk.first_index, 0, 0);
+    }
+}
+
+void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
+                                 const std::vector<MeshChunk>* chunks) {
     rhi::Pipeline* pipeline =
         pipelines_->get(wireframe ? terrain_wireframe_ : terrain_);
     if (!pipeline || !pass || !mesh.valid()) return;
@@ -207,7 +227,8 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
     }
 
     mesh.bind(device.rhi(), pass);
-    device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+    // Chunked, the terrain behind the camera costs nothing.
+    draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);
 }
 
 void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh) {
@@ -241,11 +262,18 @@ void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
     device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
 }
 
+// The camera's distance to a model's origin, which picks its LOD.
+float WorldRenderer::camera_distance(const ModelUniforms& model) const {
+    const core::Vec3 origin{model.model.col[3].x, model.model.col[3].y, model.model.col[3].z};
+    return core::distance(origin, scene_.camera_position.xyz());
+}
+
 void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
-                                 const anim::SkinnedMesh& mesh, const ModelUniforms& model,
+                                 const anim::SkinnedMesh& full_mesh, const ModelUniforms& model,
                                  const std::vector<core::Mat4>& joints,
                                  const std::vector<rhi::Texture*>& textures,
                                  rhi::Sampler* sampler) {
+    const anim::SkinnedMesh& mesh = full_mesh.for_distance(camera_distance(model));
     rhi::Pipeline* pipeline = pipelines_->get(skinned_);
     if (!pipeline || !pass || !mesh.valid()) return;
 
@@ -307,11 +335,22 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
 }
 
 void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
-                                       const anim::SkinnedMesh& mesh,
+                                       const anim::SkinnedMesh& full_mesh,
                                        const core::Mat4& light_view_proj,
                                        const ModelUniforms& model,
                                        const std::vector<core::Mat4>& joints) {
+    const anim::SkinnedMesh& mesh = full_mesh.for_distance(camera_distance(model));
     if (!pass || !mesh.valid() || !shadow_map_) return;
+    // A caster outside the map's square casts nothing into it: the light's
+    // projection runs along the sun, so where a caster's origin lands in it
+    // is where all of its shadow does, give or take its size. A rival two
+    // kilometres off was a full skinned draw into a map covering 512 m.
+    {
+        const core::Vec4 c = light_view_proj * core::Vec4{model.model.col[3].x, model.model.col[3].y,
+                                                          model.model.col[3].z, 1.0f};
+        const float reach = 1.0f + CASTER_RADIUS / core::maxf(shadow_map_->extent, 1.0f);
+        if (std::fabs(c.x) > reach * c.w || std::fabs(c.y) > reach * c.w) return;
+    }
     // Created lazily: it needs the shadow map's depth format, which is not known
     // until the shadow map itself has initialized.
     if (skinned_depth_ == INVALID_PIPELINE) {
@@ -341,7 +380,8 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
 }
 
 void WorldRenderer::draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
-                                    const core::Mat4& light_view_proj, const ModelUniforms& model) {
+                                    const core::Mat4& light_view_proj, const ModelUniforms& model,
+                                    const std::vector<MeshChunk>* chunks) {
     if (!pass || !mesh.valid() || !shadow_map_) return;
     rhi::Pipeline* pipeline = shadow_map_->mesh_pipeline();
     if (!pipeline) return;
@@ -350,7 +390,10 @@ void WorldRenderer::draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh&
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
     mesh.bind(device.rhi(), pass);
-    device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+    // Chunked (the terrain), only what the light's box covers: the map spans
+    // a few hundred metres of a five-kilometre valley. Chunks are in world
+    // space, so this assumes the model transform is the identity.
+    draw_chunks(device.rhi(), pass, mesh, chunks, light_view_proj);
 }
 
 }  // namespace gfx

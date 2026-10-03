@@ -105,6 +105,10 @@ struct RenderTier {
     // the scan's own, drawn to this fraction of their distances.
     uint32_t max_rock_triangles = 0;
     float rock_distance_scale = 1.0f;
+    // A skinned mesh's distance LOD (anim::SkinnedMesh::upload_far): this
+    // many triangles past this many metres; 0 triangles for none.
+    uint32_t far_skinned_triangles = 0;
+    float far_skinned_distance = 0.0f;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -129,12 +133,16 @@ struct RenderTier {
             t.tree_draw_distance = 2500.0f;
             t.grass_radius_scale = 0.7f;
             t.max_rock_triangles = 400;
+            t.far_skinned_triangles = 3000;
+            t.far_skinned_distance = 150.0f;
         } else if (tier != Tier::Modern) {
             t.tree_draw_distance = 800.0f;
             t.tree_spacing_scale = 1.8f;
             t.grass_radius_scale = 0.45f;
             t.max_rock_triangles = 150;
             t.rock_distance_scale = 0.5f;
+            t.far_skinned_triangles = 1500;
+            t.far_skinned_distance = 100.0f;
         }
         switch (tier) {
             case Tier::Modern: break;

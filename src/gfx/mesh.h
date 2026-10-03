@@ -31,6 +31,19 @@ struct MeshData {
     void recompute_normals();
 };
 
+// A run of a mesh's indices covering one square of ground, with bounds, so a
+// large mesh (the terrain) can be drawn chunk by chunk and culled.
+struct MeshChunk {
+    uint32_t first_index = 0;
+    uint32_t index_count = 0;
+    core::Vec3 centre;
+    float radius = 0.0f;
+};
+
+// Reorders `mesh`'s triangles into square chunks of `chunk_size` metres by
+// their centroids' x and z, and returns the chunks.
+std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size);
+
 // GPU-resident mesh.
 class Mesh {
 public:
