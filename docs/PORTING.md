@@ -236,16 +236,23 @@ first is the 1x1 and odd-width textures.
 - CachyOS is the GRUB default. `sudo grub-reboot 'Windows Boot Manager (on
   /dev/nvme0n1p1)' && sudo reboot` boots Windows once, and Windows' next
   reboot is back in CachyOS.
-- **Coming back from Windows needs a cold boot**: shut down, then power on,
-  not Restart. After a warm reboot from Windows, CachyOS comes up with no
-  network. The I217-LM (e1000e) gets a 1 Gbit/s link but passes no traffic,
-  so DHCP never answers. The RTL8188EUS USB Wi-Fi fails "Firmware failed to
-  start" (rtl8xxxu, -11), because its MCU keeps the state Windows left.
-  Tested 2026-10-02 with a boot-time recovery unit on x99
-  (`nic-recover.service`): reloading e1000e, reloading rtl8xxxu and
-  re-enumerating the USB device all failed. The root hub has no per-port
-  power switching, so Linux cannot reset the adapter. A warm reboot from
-  Windows needs someone at the machine to power-cycle it.
+- **Coming back from Windows by Restart works for the wired network now**
+  (2026-10-02). Without help, a warm reboot from Windows left CachyOS with no
+  network: the I217-LM (e1000e) linked at 1 Gbit/s but passed no traffic.
+  Reloading e1000e in Linux did not clear it. So Windows now disables both
+  NICs at every shutdown and restart, from a local Group Policy shutdown script
+  (`C:\ProgramData\nic-cycle\nic-down.cmd`). A SYSTEM startup task
+  (`nic-cycle-up`) re-enables them, and both log to
+  `C:\ProgramData\nic-cycle\log.txt`, which Linux reads at
+  `/mnt/Windows/ProgramData/nic-cycle/log.txt`. Tested: Restart from Windows,
+  and CachyOS was on the LAN and Tailscale in 85 s. **The RTL8188EUS USB
+  Wi-Fi still fails after a warm reboot** ("Firmware failed to start",
+  rtl8xxxu -11): disabling it in Windows does not stop its MCU, Linux driver
+  reloads and USB re-enumeration do not reset it, and the root hub cannot
+  switch port power. Only a cold boot clears it, and remote work does not
+  need it. The cost: Wake-on-LAN from a Windows shutdown no longer works,
+  because the Intel NIC is disabled then. Linux arms Wake-on-LAN itself at its
+  own shutdown, so waking x99 from a Linux power-off is unchanged.
 - Windows answers as `x99-windows` (LAN) or `x99-windows-ts` (Tailscale).
   Its SSH shell is PowerShell 7, so join commands with `;`, not `&`.
 - `D:` under Windows is `/mnt/Data` under Linux: the source tree is at
