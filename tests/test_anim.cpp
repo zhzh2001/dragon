@@ -266,6 +266,15 @@ void test_rig_tuning_profile_round_trip() {
     written.chain_iterations = 9;
     written.ground_wing_arm_sweep_deg = 71.0f;
     written.ground_hip_deg = -8.0f;
+    written.tail_flow_deg = 17.0f;
+    written.tail_flow_period = 5.6f;
+    written.tail_flow_cycles = 0.9f;
+    written.tail_flow_vertical = 0.4f;
+    written.tail_flow_half_life = 0.7f;
+    written.tail_flow_stream_start = 35.0f;
+    written.tail_flow_stream_end = 70.0f;
+    written.tail_flow_stream_scale = 0.6f;
+    written.tail_flow_attack_scale = 0.2f;
     CHECK(anim::save_rig_tuning(written, path.string().c_str()));
 
     anim::RigTuning loaded;
@@ -286,6 +295,15 @@ void test_rig_tuning_profile_round_trip() {
     CHECK(loaded.chain_iterations == written.chain_iterations);
     CHECK(near(loaded.ground_wing_arm_sweep_deg, written.ground_wing_arm_sweep_deg));
     CHECK(near(loaded.ground_hip_deg, written.ground_hip_deg));
+    CHECK(near(loaded.tail_flow_deg, written.tail_flow_deg));
+    CHECK(near(loaded.tail_flow_period, written.tail_flow_period));
+    CHECK(near(loaded.tail_flow_cycles, written.tail_flow_cycles));
+    CHECK(near(loaded.tail_flow_vertical, written.tail_flow_vertical));
+    CHECK(near(loaded.tail_flow_half_life, written.tail_flow_half_life));
+    CHECK(near(loaded.tail_flow_stream_start, written.tail_flow_stream_start));
+    CHECK(near(loaded.tail_flow_stream_end, written.tail_flow_stream_end));
+    CHECK(near(loaded.tail_flow_stream_scale, written.tail_flow_stream_scale));
+    CHECK(near(loaded.tail_flow_attack_scale, written.tail_flow_attack_scale));
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
 }
@@ -2618,7 +2636,80 @@ void test_melee_load_recovery_and_switch() {
     }
 }
 
+void test_tail_flow_is_continuous_and_releases_on_landing() {
+    std::printf("a long tail flows during neutral flight and settles on landing\n");
+    anim::DragonShape shape;
+    shape.tail_joints = 14;
+    shape.tail_length = 20.0f;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    auto rig = std::make_unique<anim::DragonRig>();
+    rig->init(skeleton, joints);
+    rig->tuning.chain_gravity = 0.0f;
+    rig->tuning.chain_drag = rig->tuning.chain_drag_v2 = 0.0f;
+    game::FlightState glide;
+    glide.velocity = Vec3{0, 0, -26};
+    glide.airspeed = 26;
+    glide.ground_clearance = 300;
+    for (int i = 0; i < 360; ++i) rig->update(glide, 1.0f / 60.0f);
+    // Existing species have no periodic motion unless their profile opts in.
+    CHECK(std::fabs(rig->tail_sim().position.back().x) < 1e-5f);
+    rig->tuning.tail_flow_deg = 32;
+    rig->tuning.tail_flow_period = 4.8f;
+    rig->tuning.tail_flow_cycles = 1.1f;
+    rig->tuning.tail_damping_scale = 1.1f;
+    rig->tuning.tail_tip_stiffness = 0.16f;
+    rig->tuning.tail_range_deg = 160;
+    float lo = 1e9f, hi = -1e9f, jump = 0, acceleration = 0, length_error = 0, nonrigid = 0;
+    Vec3 previous = rig->tail_sim().position.back();
+    Vec3 previous_step = Vec3::zero();
+    for (int i = 0; i < 960; ++i) {
+        rig->update(glide, 1.0f / 60.0f);
+        const auto& sim = rig->tail_sim();
+        const Vec3 tip = sim.position.back();
+        lo = std::min(lo, tip.x); hi = std::max(hi, tip.x);
+        const Vec3 step = tip - previous;
+        jump = std::max(jump, core::length(step));
+        const float step_change = core::length(step - previous_step);
+        acceleration = std::max(acceleration, step_change);
+        previous_step = step;
+        previous = tip;
+        // A rigid boom scales middle displacement by its distance to the tip.
+        const size_t mid = sim.position.size() / 2;
+        const float fraction = core::distance(sim.rest[mid], sim.rest.front()) /
+                               core::distance(sim.rest.back(), sim.rest.front());
+        nonrigid = std::max(nonrigid, std::fabs(sim.position[mid].x - fraction * tip.x));
+        for (size_t j = 1; j < sim.position.size(); ++j) {
+            length_error = std::max(length_error, std::fabs(
+                core::distance(sim.position[j], sim.position[j-1]) - sim.segment[j]));
+        }
+    }
+    std::printf("  neutral tip span %.2f m, curvature %.2f m, max step %.3f m, step change %.3f m\n",
+                hi-lo, nonrigid, jump, acceleration);
+    CHECK(hi-lo > 0.5f);
+    CHECK(nonrigid > 0.15f);
+    // At 60 Hz, a moving tip advances under 1% of the tail's length and
+    // changes its per-frame displacement under 0.1% (no snapping at bends).
+    CHECK(jump < 0.01f * shape.tail_length);
+    CHECK(acceleration < 0.001f * shape.tail_length);
+    CHECK(length_error < 1e-4f);
+    glide.grounded = true;
+    glide.velocity = Vec3::zero(); glide.airspeed = 0;
+    for (int i = 0; i < 900; ++i) rig->update(glide, 1.0f / 60.0f);
+    CHECK(std::fabs(rig->tail_sim().position.back().x) < 0.02f);
+    // Switching away from a flowing species cannot leave its wave behind.
+    glide.grounded = false; glide.velocity = Vec3{0, 0, -26}; glide.airspeed = 26;
+    for (int i = 0; i < 180; ++i) rig->update(glide, 1.0f / 60.0f);
+    rig->init(skeleton, joints);
+    rig->tuning.tail_flow_deg = 0;
+    for (int i = 0; i < 60; ++i) rig->update(glide, 1.0f / 60.0f);
+    CHECK(std::fabs(rig->tail_sim().position.back().x) < 1e-5f);
+}
+
 int main() {
+    test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();
     test_melee_gestures_move_the_body();

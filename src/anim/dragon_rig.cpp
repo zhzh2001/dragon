@@ -412,6 +412,15 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(neck_damping_scale),
     RIG_FLOAT_FIELD(tail_damping_scale),
     RIG_FLOAT_FIELD(tail_tip_stiffness),
+    RIG_FLOAT_FIELD(tail_flow_deg),
+    RIG_FLOAT_FIELD(tail_flow_period),
+    RIG_FLOAT_FIELD(tail_flow_cycles),
+    RIG_FLOAT_FIELD(tail_flow_vertical),
+    RIG_FLOAT_FIELD(tail_flow_half_life),
+    RIG_FLOAT_FIELD(tail_flow_stream_start),
+    RIG_FLOAT_FIELD(tail_flow_stream_end),
+    RIG_FLOAT_FIELD(tail_flow_stream_scale),
+    RIG_FLOAT_FIELD(tail_flow_attack_scale),
     RIG_FLOAT_FIELD(neck_range_deg),
     RIG_FLOAT_FIELD(tail_range_deg),
     RIG_FLOAT_FIELD(tail_rudder_deg),
@@ -570,6 +579,7 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     action_ = RigAction{};
     spit_time_ = bite_time_ = claw_time_ = tail_time_ = 1e9f;
     breath_smoothed_ = jaw_open_ = 0.0f;
+    tail_flow_amount_ = tail_flow_phase_ = 0.0f;
 
     // Accumulate world bind rotations, then keep each joint's parent's inverse.
     // A local rotation is expressed in the parent's frame, so that inverse is
@@ -1518,6 +1528,28 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     }
 
     const Vec3 omega = state.angular_velocity;
+    std::vector<Vec3> flow_rest;
+    float flow_length = 0.0f;
+    if (feel.flow_deg > 1e-4f) {
+        // Arc length, rather than joint number: the gold tail has short links
+        // around its bends and longer links through the straight stretch.
+        // A phase delayed toward the tip gives a moving S curve, while the
+        // quadratic envelope holds the muscular base close to its rest line.
+        for (size_t i = 1; i < sim.segment.size(); ++i) flow_length += sim.segment[i];
+        flow_rest = target;
+        float along = 0.0f;
+        for (size_t i = 1; i < target.size(); ++i) {
+            const float u = (along + 0.5f * sim.segment[i]) / core::maxf(flow_length, 1e-4f);
+            along += sim.segment[i];
+            const float phase = feel.flow_phase - core::TWO_PI * feel.flow_cycles * u;
+            const float amplitude = core::radians(feel.flow_deg) * u * u;
+            const Quat wave =
+                Quat::from_axis_angle(Vec3::unit_y(), amplitude * std::sin(phase)) *
+                Quat::from_axis_angle(Vec3::unit_x(), feel.flow_vertical * amplitude * std::cos(phase));
+            target[i] = target[i - 1] +
+                        core::rotate(wave, flow_rest[i] - flow_rest[i - 1]);
+        }
+    }
     // The per-vertebra bend limit is normalised to a four-segment chain: a
     // seven-segment tail with the same per-joint limit could take its whole
     // bend in two joints and did -- a hinge at the base with a straight boom
@@ -1525,6 +1557,19 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
     // length.
     const float per_joint_bend = core::radians(tuning.chain_max_bend_deg) *
                                  core::minf(1.0f, 4.0f / float(std::max<size_t>(sim.position.size(), 2) - 1));
+    // The spring follows the wave, but its safety cone follows the steered
+    // rest shape with room for the wave's maximum curvature. Measuring that
+    // cone from the instantaneous sine pinched it shut at every zero crossing,
+    // producing small, abrupt corrections instead of a flowing bend.
+    const auto& limit_target = flow_rest.empty() ? target : flow_rest;
+    auto bend_limit_at = [&](size_t i) {
+        if (flow_rest.empty()) return per_joint_bend;
+        const float du = 0.5f * (sim.segment[i] + sim.segment[i - 1]) /
+                         core::maxf(flow_length, 1e-4f);
+        const float reserve = core::radians(feel.flow_deg) * (1.0f + feel.flow_vertical) *
+                              (2.0f + core::TWO_PI * feel.flow_cycles) * du;
+        return per_joint_bend + reserve;
+    };
 
     // Gravity, expressed in the dragon's frame.
     const Vec3 gravity_local =
@@ -1580,15 +1625,16 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
             const Vec3 previous_dir =
                 core::normalize_or(sim.position[i - 1] - sim.position[i - 2], along_chain);
             const Vec3 target_previous = core::normalize_or(
-                target[i - 1] - target[i - 2], previous_dir);
-            const Vec3 target_direction = core::normalize_or(target[i] - target[i - 1], along_chain);
+                limit_target[i - 1] - limit_target[i - 2], previous_dir);
+            const Vec3 target_direction = core::normalize_or(limit_target[i] - limit_target[i - 1], along_chain);
             const float rest_bend = std::acos(core::clampf(
                 core::dot(target_previous, target_direction), -1.0f, 1.0f));
             const float bend = std::acos(core::clampf(core::dot(previous_dir, along_chain), -1.0f, 1.0f));
             const float excess = bend - rest_bend;
-            const float soft_start = 0.5f * per_joint_bend;
-            if (excess > soft_start && per_joint_bend > 1e-4f) {
-                const float over = core::saturate((excess - soft_start) / (per_joint_bend - soft_start));
+            const float bend_limit = bend_limit_at(i);
+            const float soft_start = 0.5f * bend_limit;
+            if (excess > soft_start && bend_limit > 1e-4f) {
+                const float over = core::saturate((excess - soft_start) / (bend_limit - soft_start));
                 // Where this point would sit with the excess reduced to the
                 // soft start: rotate the segment back toward the previous one.
                 const Vec3 axis = core::cross(along_chain, previous_dir);
@@ -1686,7 +1732,7 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                 // deviate further from the rest line than the whole chain's
                 // budget allows.
                 const Vec3 target_direction = core::normalize_or(
-                    target[i] - target[i - 1], direction);
+                    limit_target[i] - limit_target[i - 1], direction);
                 const float deviation = std::acos(core::clampf(
                     core::dot(target_direction, direction), -1.0f, 1.0f));
                 if (deviation > range_budget) {
@@ -1737,14 +1783,14 @@ void DragonRig::drive_chain(ChainDynamics& sim, const std::vector<int>& chain,
                 const Vec3 previous = core::normalize_or(
                     sim.position[i - 1] - sim.position[i - 2], direction);
                 const Vec3 target_previous = core::normalize_or(
-                    target[i - 1] - target[i - 2], previous);
+                    limit_target[i - 1] - limit_target[i - 2], previous);
                 const Vec3 target_direction = core::normalize_or(
-                    target[i] - target[i - 1], direction);
+                    limit_target[i] - limit_target[i - 1], direction);
                 const float rest_bend = std::acos(core::clampf(
                     core::dot(target_previous, target_direction), -1.0f, 1.0f));
                 // Hard safety net behind the soft limit above: a tail that
                 // still gets here does so slowly.
-                const float allowed = rest_bend + per_joint_bend;
+                const float allowed = rest_bend + bend_limit_at(i);
                 if (core::dot(previous, direction) < std::cos(allowed)) {
                     // Rotate the direction back toward the previous segment
                     // until it is inside the cone.
@@ -2568,6 +2614,24 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     tail_feel.damping = tuning.tail_damping_scale;
     tail_feel.range_deg = tuning.tail_range_deg;
     tail_feel.tip_stiffness = tuning.tail_tip_stiffness;
+    // Taper the expressive wave when streaming fast or delivering a whip.
+    // Landing fades it through the same contact signal as the authored stance.
+    const float stream_end = core::maxf(tuning.tail_flow_stream_end, tuning.tail_flow_stream_start + 1.0f);
+    const float flow_stream = core::lerpf(1.0f, core::saturate(tuning.tail_flow_stream_scale),
+        core::smoothstep(tuning.tail_flow_stream_start, stream_end, state.airspeed));
+    const float flow_attack = core::lerpf(1.0f, core::saturate(tuning.tail_flow_attack_scale),
+                                        core::saturate(std::fabs(gesture_tail_whip_)));
+    const float flow_target = core::clampf(tuning.tail_flow_deg, 0.0f, 45.0f) *
+                              (1.0f - ground_contact_) * flow_stream * flow_attack;
+    tail_flow_amount_ = core::damp(tail_flow_amount_, flow_target,
+                                 core::maxf(tuning.tail_flow_half_life, 0.01f), dt);
+    // Integrate phase so changing the period in the tuner cannot jump the pose.
+    tail_flow_phase_ = std::fmod(tail_flow_phase_ + core::TWO_PI * dt /
+                                core::maxf(tuning.tail_flow_period, 0.5f), core::TWO_PI);
+    tail_feel.flow_deg = tail_flow_amount_;
+    tail_feel.flow_phase = tail_flow_phase_;
+    tail_feel.flow_cycles = core::clampf(tuning.tail_flow_cycles, 0.25f, 2.0f);
+    tail_feel.flow_vertical = core::saturate(tuning.tail_flow_vertical);
 
     ChainFeel neck_feel;
     // A breathing neck is tensed: it holds the flame steady. A spitting neck

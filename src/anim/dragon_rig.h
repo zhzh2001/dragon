@@ -480,6 +480,18 @@ struct RigTuning {
     // asset showed. Tip stiffness as a fraction of the base's; the deflection
     // then grows toward the tip, which is what a tail does.
     float tail_tip_stiffness = 0.25f;
+    // Optional muscle-driven travelling wave, strongest at the tip. It bends
+    // the spring target, so inertia/steering still own the final motion.
+    // Zero keeps the established passive tail on other species.
+    float tail_flow_deg = 0.0f;
+    float tail_flow_period = 3.8f;       // seconds per wave
+    float tail_flow_cycles = 1.0f;       // phase turns over the measured length
+    float tail_flow_vertical = 0.25f;   // vertical amplitude / lateral amplitude
+    float tail_flow_half_life = 0.35f;  // blend into/out of the wave, seconds
+    float tail_flow_stream_start = 40.0f; // m/s, begin reducing the wave
+    float tail_flow_stream_end = 95.0f;   // m/s, fully streamed
+    float tail_flow_stream_scale = 0.35f; // amplitude retained at high speed
+    float tail_flow_attack_scale = 0.15f; // amplitude retained during a whip
     // Hard articulation limits, total deviation from the rest shape. The neck
     // is tight -- big head turns are the aim system's job, not the sim's; the
     // tail keeps room to whip.
@@ -842,6 +854,10 @@ private:
         // (a neck carrying a head it must hold still); below 1 the chain
         // bends progressively rather than pivoting as a rod.
         float tip_stiffness = 1.0f;
+        float flow_deg = 0.0f;
+        float flow_phase = 0.0f;
+        float flow_cycles = 1.0f;
+        float flow_vertical = 0.25f;
     };
     void setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const;
     // Integrates the chain, then turns the simulated shape back into joint
@@ -951,6 +967,8 @@ private:
     // approach still belongs to the rig.
     Pose clip_pose_;
     float ground_contact_ = 0.0f;
+    float tail_flow_amount_ = 0.0f;
+    float tail_flow_phase_ = 0.0f;
     core::Vec3 aim_target_ = core::Vec3::zero();
     bool aim_active_ = false;
     // The head's own forward axis, in its local frame, measured from the bind

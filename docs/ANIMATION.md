@@ -1101,6 +1101,28 @@ unchanged. [Rig build record](../artifacts/gold-dragon-rig/README.md) and
 [native pose/flight/landing/switch evidence](../artifacts/gold-dragon-integration/README.md)
 record the exact files, settings, checks and remaining human playtest.
 
+### Gold tail flow (2026-10-03)
+
+The long gold tail was nearly static in neutral flight: thirteen segments shared
+a 55-degree articulation budget and high damping. Its profile now opts into a
+slow travelling wave (`tail_flow_deg` 32, `tail_flow_period` 4.8 seconds,
+`tail_flow_cycles` 1.1), with lower damping, a softer tip and more articulation
+room. The wave bends the spring target progressively by measured arc length;
+the quadratic amplitude envelope supports the base while the fin follows
+through. A smaller vertical wave prevents the motion from living in one plane.
+
+The safety cone uses the steered rest shape plus a fixed allowance for wave
+curvature. Following the instantaneous sine with that cone tightened it at zero
+crossings and introduced abrupt corrections. Flow fades on landing, reduces
+with airspeed and tail-whip strength, and resets at model switches. All nine
+flow controls are exposed in the rig panel and registered for profile saving;
+the default amplitude is zero, preserving the other species' passive chains.
+
+[Motion, roster and landing evidence](../artifacts/gold-tail-flow/README.md)
+includes full-size native playback and a continuity regression. All fifteen
+suites pass, with 1,298 animation checks. Human steering and motion judgment
+remain the acceptance gate for the chosen amplitude and period.
+
 ## Optional Sunspear and Rimeplume candidates (2026-09-28)
 
 Two additional user-requested silhouette explorations are selectable with

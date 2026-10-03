@@ -2889,6 +2889,15 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("neck damping x", &rig.neck_damping_scale, 0.5f, 5.0f);
         ImGui::SliderFloat("tail damping x", &rig.tail_damping_scale, 0.5f, 5.0f);
         ImGui::SliderFloat("tail tip stiffness", &rig.tail_tip_stiffness, 0.05f, 1.0f);
+        ImGui::SliderFloat("tail flow", &rig.tail_flow_deg, 0.0f, 45.0f, "%.1f deg");
+        ImGui::SliderFloat("tail flow period", &rig.tail_flow_period, 0.5f, 8.0f, "%.2f s");
+        ImGui::SliderFloat("tail flow cycles", &rig.tail_flow_cycles, 0.25f, 2.0f);
+        ImGui::SliderFloat("tail flow vertical", &rig.tail_flow_vertical, 0.0f, 1.0f);
+        ImGui::SliderFloat("tail flow half-life", &rig.tail_flow_half_life, 0.05f, 2.0f, "%.2f s");
+        ImGui::SliderFloat("tail flow stream start", &rig.tail_flow_stream_start, 10.0f, 100.0f, "%.0f m/s");
+        ImGui::SliderFloat("tail flow stream end", &rig.tail_flow_stream_end, 10.0f, 150.0f, "%.0f m/s");
+        ImGui::SliderFloat("tail flow streamed scale", &rig.tail_flow_stream_scale, 0.0f, 1.0f);
+        ImGui::SliderFloat("tail flow whip scale", &rig.tail_flow_attack_scale, 0.0f, 1.0f);
         ImGui::SliderFloat("neck range", &rig.neck_range_deg, 5.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("tail range", &rig.tail_range_deg, 20.0f, 170.0f, "%.0f deg");
         ImGui::SliderInt("iterations", &rig.chain_iterations, 1, 12);

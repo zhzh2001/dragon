@@ -13,6 +13,13 @@ flight and rig profiles and is the eighth local default entry, after Tidewrack.
 Embercrest remains first; release packaging still includes the seven release
 species. See [validation and limitations](../artifacts/gold-dragon-integration/README.md).
 
+**2026-10-03 tail refinement:** a slow travelling curl now drives the gold
+dragon's spring target, with a supported base, softer tip, and smooth landing
+fade. Flow controls are tunable and saved per species; other profiles default
+to zero flow. Full-size roster, flight, landing and switching inspection plus
+all 15 suites pass (1,298 animation checks). Human steering feel remains to be
+judged. See [motion preview and evidence](../artifacts/gold-tail-flow/README.md).
+
 ## Release — 2026-10-01: public, packaged, one shader source
 
 - **Public** at https://github.com/zhzh2001/dragon. The repo there is a
