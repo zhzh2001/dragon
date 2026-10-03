@@ -1,5 +1,12 @@
 # AI use disclosure
 
+Gold direct reference study (2026-10-02): at the user's request, built-in
+imagegen received their original Ostrowski D&D reference sheet directly to
+generate a concept draft, standalone top drawing and five-view turnaround.
+Saved under `docs/concept/metallic-dragons-2026-10-02/direct-reference/`,
+including exact prompts and inspection limitations. These are unapproved
+reference studies; no new 3D generation or game integration.
+
 Gold wing concept revision (2026-10-02): built-in imagegen edited the gold
 sheet's overhead inset from needle strips to a fuller compact diamond using
 the user-attached Ostrowski D&D anatomy sheet as reference. The saved result
