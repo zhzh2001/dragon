@@ -93,13 +93,17 @@ under CC BY 4.0. Nothing derived from either mesh is in the repository; the
 public mirror's history is rewritten without the old re-exports
 (`tools/release/public_excludes.txt`).
 
-## Gold ribbon-wing test (2026-10-02, not integrated)
+## Gold reference studies (2026-10-02)
 
-The later `assets/gold-direct-cand-oneshot.glb` is another unrigged Hunyuan
+The later `assets/gold-direct-cand-oneshot.glb` is a Hunyuan
 test from the user-approved direct-reference turnaround, with provenance in
-`artifacts/dragon-options/gold-direct-test/`. It is excluded from Git and is
-not part of the game or release roster. This close reference-study model
-remains pending user review; no third-party reuse licence is established.
+`artifacts/dragon-options/gold-direct-test/`. The user approved rigging and local
+game integration: `assets/gold-dragon.glb` is now selectable in the development
+roster. The candidate, rigged GLBs and editable Blender file are excluded from
+Git for size. This close D&D reference study is not included by the public
+release packagers; no third-party reuse licence is established. Rig and native
+game evidence are in `artifacts/gold-dragon-rig/` and
+`artifacts/gold-dragon-integration/`.
 
 `assets/gold-ribbon-cand-oneshot.glb` and
 `assets/gold-ribbon-top-cand-oneshot.glb` are unrigged Tencent Hunyuan hosted

@@ -4,12 +4,21 @@ What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `DIRECTION.md`, and the ports are
 `PORTING.md`.
 
-## Latest — 2026-10-01: public, packaged, one shader source
+## Latest local asset — 2026-10-02: gold dragon
+
+The approved direct-reference Hunyuan gold dragon is rigged and integrated as
+`assets/gold-dragon.glb`: 80 joints, 80k triangles, independent measured
+skeleton, compact sail wings and a 14-joint tail. It has its own fire breath,
+flight and rig profiles and is the eighth local default entry, after Tidewrack.
+Embercrest remains first; release packaging still includes the seven release
+species. See [validation and limitations](../artifacts/gold-dragon-integration/README.md).
+
+## Release — 2026-10-01: public, packaged, one shader source
 
 - **Public** at https://github.com/zhzh2001/dragon. The repo there is a
   filtered mirror of this one (`docs/RELEASE.md`), MIT, with
   `AI_DISCLOSURE.md`. Release v0.1.0 is a universal macOS 11+ app.
-- **The default roster** is the seven finished generated species,
+- **The release roster** is the seven finished generated species,
   Embercrest first. The two Sketchfab dragons are early attempts, not
   shipped (`ATTRIBUTION.md`).
 - **P0**: data beside the executable, saves in the per-user directory, two

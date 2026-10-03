@@ -1,17 +1,27 @@
 # AI use disclosure
 
+Gold dragon rig and local integration (2026-10-02): after the user approved
+the direct-reference Hunyuan candidate, Codex fitted an independent 80-joint
+skeleton, decimated it to 80,000 triangles, repaired its material data maps,
+and added species profiles and native-renderer validation. The playable local
+asset is `assets/gold-dragon.glb`; evidence and rebuild scripts are indexed in
+`artifacts/gold-dragon-rig/README.md` and `artifacts/gold-dragon-integration/README.md`.
+The original colour and metallic texture pixels are preserved. The generated
+sealed mouth permits only a small jaw gesture. Release packaging is unchanged.
+
 Gold direct-reference 3D test (2026-10-02): Tencent Hunyuan hosted one-shot
 was submitted five cropped views from the user-approved direct-reference
 turnaround. Inputs, job record and read-only model previews are retained in
 `artifacts/dragon-options/gold-direct-test/`; local output is
-`assets/gold-direct-cand-oneshot.glb`. No rigging or game integration.
+`assets/gold-direct-cand-oneshot.glb`. This test was subsequently approved for
+the local rig and integration recorded above.
 
 Gold direct reference study (2026-10-02): at the user's request, built-in
 imagegen received their original Ostrowski D&D reference sheet directly to
 generate a concept draft, standalone top drawing and five-view turnaround.
 Saved under `docs/concept/metallic-dragons-2026-10-02/direct-reference/`,
-including exact prompts and inspection limitations. These are unapproved
-reference studies; no new 3D generation or game integration.
+including exact prompts and inspection limitations. The turnaround was
+subsequently approved as input for the direct-reference 3D test above.
 
 Gold wing concept revision (2026-10-02): built-in imagegen edited the gold
 sheet's overhead inset from needle strips to a fuller compact diamond using

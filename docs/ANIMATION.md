@@ -1084,6 +1084,23 @@ brake on the decreasing-speed half of its cycle, correcting an inverted sine.
 All fifteen suites pass; full-size roster inspection and playtest instructions
 are recorded in [the evidence report](../artifacts/flight-leg-refinement/README.md).
 
+## Gold dragon local integration (2026-10-02)
+
+`assets/gold-dragon.glb` is the approved direct-reference candidate, reduced
+to 80k triangles and fitted to its own measured 80-joint skeleton in
+`tools/skeletons/gold-dragon.json`. Four rays support each compact sail; the
+long curved tail uses fourteen joints with continuous longitudinal weighting.
+The species profiles preserve its low quadruped stance, lift the tail clear
+of the floor, and limit the sealed source mouth to a four-degree jaw gesture.
+This is not a sculpt with a modeled oral cavity; a large gape stretches the
+closed seam. The original raised wing roots and head-like tail ornament remain.
+
+It is appended to the local default roster and can be selected with M or
+`--model assets/gold-dragon.glb`. The seven-species release packaging is
+unchanged. [Rig build record](../artifacts/gold-dragon-rig/README.md) and
+[native pose/flight/landing/switch evidence](../artifacts/gold-dragon-integration/README.md)
+record the exact files, settings, checks and remaining human playtest.
+
 ## Optional Sunspear and Rimeplume candidates (2026-09-28)
 
 Two additional user-requested silhouette explorations are selectable with
