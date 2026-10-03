@@ -219,6 +219,7 @@ class D3D9Device final : public Device {
 public:
     bool init(SDL_Window* window, const DeviceConfig& config) {
         headless_ = config.headless;
+        adapter_ = config.adapter;
         hwnd_ = static_cast<HWND>(
             SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         if (!hwnd_) {
@@ -230,9 +231,14 @@ public:
             LOG_ERROR("direct3d9: Direct3DCreate9 failed");
             return false;
         }
+        if (adapter_ >= d3d_->GetAdapterCount()) {
+            LOG_ERROR("direct3d9: no adapter %u (%u: one per display output with a desktop)", adapter_,
+                      d3d_->GetAdapterCount());
+            return false;
+        }
         D3DADAPTER_IDENTIFIER9 id = {};
-        d3d_->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &id);
-        d3d_->GetDeviceCaps(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, &caps_);
+        d3d_->GetAdapterIdentifier(adapter_, 0, &id);
+        d3d_->GetDeviceCaps(adapter_, D3DDEVTYPE_HAL, &caps_);
         LOG_INFO("direct3d9: %s, vs_%lu_%lu ps_%lu_%lu", id.Description,
                  D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion), D3DSHADER_VERSION_MINOR(caps_.VertexShaderVersion),
                  D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion), D3DSHADER_VERSION_MINOR(caps_.PixelShaderVersion));
@@ -253,7 +259,7 @@ public:
         // FPU_PRESERVE: without it D3D9 drops the FPU to single precision for
         // the whole process, under the flight model and the terrain.
         const DWORD flags = D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE;
-        const HRESULT hr = d3d_->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
+        const HRESULT hr = d3d_->CreateDevice(adapter_, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
         if (FAILED(hr)) {
             LOG_ERROR("direct3d9: CreateDevice failed (0x%08lx)%s", static_cast<unsigned long>(hr),
                       hr == D3DERR_INVALIDCALL ? " -- no desktop session? (tools/x99/run_interactive.ps1)" : "");
@@ -274,7 +280,7 @@ public:
         dev_->CreateVertexDeclaration(id_decl, &vertex_id_decl_);
         // Whether the R32F shadow stand-in can be filtered: modern cards, yes;
         // the GeForce 6 and 7 cannot filter a 32-bit float format.
-        r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
+        r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
         // Instancing (the foliage): SM3 hardware has stream frequencies. ATI's
@@ -284,7 +290,7 @@ public:
         const DWORD inst = MAKEFOURCC('I', 'N', 'S', 'T');
         if (D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 3) {
             instancing_ = Instancing::Native;
-        } else if (SUCCEEDED(d3d_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
+        } else if (SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                      D3DRTYPE_SURFACE, D3DFORMAT(inst)))) {
             instancing_ = Instancing::AtiInst;
             dev_->SetRenderState(D3DRS_POINTSIZE, inst);
@@ -325,7 +331,7 @@ public:
         } else if (usage & TEXTURE_COLOR_TARGET) {
             d3d_usage = D3DUSAGE_RENDERTARGET;
         }
-        return SUCCEEDED(d3d_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, d3d_usage,
+        return SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, d3d_usage,
                                                  type, fmt));
     }
 
@@ -912,6 +918,7 @@ private:
 
     HWND hwnd_ = nullptr;
     bool headless_ = false;
+    UINT adapter_ = 0;
     IDirect3D9* d3d_ = nullptr;
     IDirect3DDevice9* dev_ = nullptr;
     D3DCAPS9 caps_ = {};

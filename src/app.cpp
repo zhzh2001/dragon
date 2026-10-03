@@ -6877,6 +6877,7 @@ void App::log_telemetry() const {
 
 void App::run() {
     uint64_t previous_ticks = SDL_GetTicksNS();
+    const uint64_t started = previous_ticks;
 
     while (running_) {
         uint64_t now = SDL_GetTicksNS();
@@ -6929,6 +6930,11 @@ void App::run() {
         ++frame_index_;
         if (options_.frames > 0 && frame_index_ >= options_.frames) running_ = false;
     }
+    // Wall-clock frame rate over the whole run, loading excluded: how a
+    // retro card's run is measured (tools/x99/run_interactive.ps1, the G41).
+    const double seconds = double(SDL_GetTicksNS() - started) * 1e-9;
+    LOG_INFO("frames: %llu in %.1f s, %.1f fps (%s, tier %s)", static_cast<unsigned long long>(frame_index_), seconds,
+             seconds > 0.0 ? double(frame_index_) / seconds : 0.0, device_.rhi().driver_name(), tier_.name());
 }
 
 }  // namespace app

@@ -632,6 +632,16 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
   2% over 8. The means are 0.17 to 0.51, with about 1% of pixels over 8 on
   lit slopes. That is fxc's SM2 math against DXC's, in vs_2_0's per-vertex
   lighting; the sky is exact.
+- **The shadow map is capped per tier:** 1024 at sm3 and 512 at sm2.
+  4096² of R32F plus depth is 128 MB, the whole of an X550. The capped map
+  covers less (±512 m and ±256 m) to keep about a metre a texel. At the
+  modern ±900 m a 512 map's 3.5 m texels lost every tree's shadow and the
+  dragon's. Ridges past that range go unshadowed on those tiers.
+- **Measuring a run:** every run ends with a wall-clock line, `frames: N in
+  S s, F fps (driver, tier)`. `--gpu-driver direct3d9:N` picks D3D9 adapter
+  N. On the 5060 Ti headless, D3D9 runs 130 fps at both tiers against
+  D3D12's 380. That is CPU-side, per-draw state and uniform copies, and
+  worth profiling before the G41.
 - **SM2 hardware has no stream-frequency instancing.** The backend uses
   ATI's `INST` switch (R300 and later), and otherwise draws one instance at
   a time with a zero-stride instance stream.

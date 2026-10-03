@@ -179,6 +179,8 @@ struct DeviceConfig {
     // A backend-specific driver name ("vulkan", "direct3d12", "metal"), or
     // empty for the platform's first.
     std::string driver;
+    // Which adapter, for a backend that picks one (D3D9); 0 is the default.
+    uint32_t adapter = 0;
 };
 
 enum class Backend : uint8_t { SdlGpu, Direct3D9 };

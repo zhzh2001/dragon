@@ -79,6 +79,10 @@ struct RenderTier {
     // the fog and the tonemap, not the per-pixel lighting the others do.
     // Fixed function previews through the same shaders until R5.
     bool vertex_lighting = false;
+    // The shadow map's edge, 0 for no cap: PORTING.md's table budgets 1024
+    // for sm3 and 512 for sm2. The cap trades sharpness near the camera, since
+    // the map still covers the same area.
+    uint32_t max_shadow_size = 0;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -96,6 +100,7 @@ struct RenderTier {
         t.compress_textures = tier != Tier::Modern;
         t.packed_joints = tier != Tier::Modern;
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
+        t.max_shadow_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
         switch (tier) {
             case Tier::Modern: break;
             case Tier::SM3: t.max_skinned_triangles = 20000; break;
