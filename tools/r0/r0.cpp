@@ -8,7 +8,7 @@
 // through XInput. Plain Win32 and D3D9, no SDL: SDL3 does not run on XP,
 // which is what R6 has to replace.
 //
-//   r0.exe [--frames N] [--shot out.bmp] [--ff | --vs] [--no-audio]
+//   r0.exe [--frames N] [--shot out.bmp] [--ff | --vs] [--no-audio] [--adapter N]
 //
 // Everything it learns goes to stdout and to r0.log beside the executable:
 // the adapter, the caps that decide a tier, the XInput DLL found, the audio
@@ -212,12 +212,14 @@ int main(int argc, char** argv) {
     int frames = 120;
     const char* shot = "r0.bmp";
     bool force_ff = false, force_vs = false, audio = true;
+    UINT adapter = D3DADAPTER_DEFAULT;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--frames") && i + 1 < argc) frames = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
         else if (!std::strcmp(argv[i], "--ff")) force_ff = true;
         else if (!std::strcmp(argv[i], "--vs")) force_vs = true;
         else if (!std::strcmp(argv[i], "--no-audio")) audio = false;
+        else if (!std::strcmp(argv[i], "--adapter") && i + 1 < argc) adapter = UINT(std::atoi(argv[++i]));
     }
     open_log();
 
@@ -256,11 +258,39 @@ int main(int argc, char** argv) {
         logf("FAIL: Direct3DCreate9");
         return 1;
     }
+    // The display devices behind them: each card's outputs, whether each is
+    // on the desktop, and the monitor it sees.
+    for (DWORD i = 0;; ++i) {
+        DISPLAY_DEVICEA dd = {};
+        dd.cb = sizeof dd;
+        if (!EnumDisplayDevicesA(nullptr, i, &dd, 0)) break;
+        logf("display %s: %s%s%s", dd.DeviceName, dd.DeviceString,
+             (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) ? ", on the desktop" : ", not attached",
+             (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) ? ", primary" : "");
+        DISPLAY_DEVICEA monitor = {};
+        monitor.cb = sizeof monitor;
+        for (DWORD m = 0; EnumDisplayDevicesA(dd.DeviceName, m, &monitor, 0); ++m)
+            logf("    monitor: %s", monitor.DeviceString);
+    }
+    // D3D9 enumerates displays, not cards: an adapter appears once per output
+    // with a desktop on it, so a second card with nothing attached is absent.
+    for (UINT a = 0; a < d3d->GetAdapterCount(); ++a) {
+        D3DADAPTER_IDENTIFIER9 each = {};
+        d3d->GetAdapterIdentifier(a, 0, &each);
+        D3DCAPS9 each_caps = {};
+        d3d->GetDeviceCaps(a, D3DDEVTYPE_HAL, &each_caps);
+        logf("adapter %u: %s (%s) %s, ps_%lu_%lu", a, each.Description, each.Driver, each.DeviceName,
+             D3DSHADER_VERSION_MAJOR(each_caps.PixelShaderVersion), D3DSHADER_VERSION_MINOR(each_caps.PixelShaderVersion));
+    }
+    if (adapter >= d3d->GetAdapterCount()) {
+        logf("FAIL: no adapter %u", adapter);
+        return 1;
+    }
     D3DADAPTER_IDENTIFIER9 id = {};
-    d3d->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &id);
+    d3d->GetAdapterIdentifier(adapter, 0, &id);
     logf("adapter: %s (%s), vendor %04lx device %04lx", id.Description, id.Driver, id.VendorId, id.DeviceId);
     D3DCAPS9 caps = {};
-    d3d->GetDeviceCaps(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, &caps);
+    d3d->GetDeviceCaps(adapter, D3DDEVTYPE_HAL, &caps);
     const unsigned vs_major = D3DSHADER_VERSION_MAJOR(caps.VertexShaderVersion);
     const unsigned vs_minor = D3DSHADER_VERSION_MINOR(caps.VertexShaderVersion);
     const unsigned ps_major = D3DSHADER_VERSION_MAJOR(caps.PixelShaderVersion);
@@ -273,14 +303,14 @@ int main(int argc, char** argv) {
          (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) ? "yes" : "no",
          (caps.RasterCaps & D3DPRASTERCAPS_FOGTABLE) ? "yes" : "no",
          (caps.RasterCaps & D3DPRASTERCAPS_FOGVERTEX) ? "yes" : "no", tier);
-    const bool dxt1 = SUCCEEDED(d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
+    const bool dxt1 = SUCCEEDED(d3d->CheckDeviceFormat(adapter, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                        D3DRTYPE_TEXTURE, D3DFMT_DXT1));
-    const bool dxt5 = SUCCEEDED(d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
+    const bool dxt5 = SUCCEEDED(d3d->CheckDeviceFormat(adapter, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                        D3DRTYPE_TEXTURE, D3DFMT_DXT5));
-    const bool fp16_rt = SUCCEEDED(d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
+    const bool fp16_rt = SUCCEEDED(d3d->CheckDeviceFormat(adapter, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                           D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE,
                                                           D3DFMT_A16B16G16R16F));
-    const bool d24 = SUCCEEDED(d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
+    const bool d24 = SUCCEEDED(d3d->CheckDeviceFormat(adapter, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                       D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE, D3DFMT_D24X8));
     logf("formats: DXT1 %s, DXT5 %s, FP16 render target %s, D24X8 %s", dxt1 ? "yes" : "no",
          dxt5 ? "yes" : "no", fp16_rt ? "yes" : "no", d24 ? "yes" : "no");
@@ -297,7 +327,7 @@ int main(int argc, char** argv) {
     IDirect3DDevice9* dev = nullptr;
     const DWORD vp = (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) ? D3DCREATE_HARDWARE_VERTEXPROCESSING
                                                                       : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
-    HRESULT hr = d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd, vp, &pp, &dev);
+    HRESULT hr = d3d->CreateDevice(adapter, D3DDEVTYPE_HAL, hwnd, vp, &pp, &dev);
     if (FAILED(hr)) {
         logf("FAIL: CreateDevice 0x%08lx", hr);
         return 1;

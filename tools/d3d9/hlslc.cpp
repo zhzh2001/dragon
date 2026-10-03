@@ -13,6 +13,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -28,6 +29,8 @@ struct Blob {
     } * vtbl;
 };
 
+typedef HRESULT(WINAPI* D3DDisassembleFn)(const void* src, SIZE_T size, UINT flags, const char* comments,
+                                          Blob** disassembly);
 typedef HRESULT(WINAPI* D3DCompileFn)(const void* src, SIZE_T size, const char* name, const void* defines,
                                       void* include, const char* entry, const char* target, UINT flags1,
                                       UINT flags2, Blob** code, Blob** errors);
@@ -59,6 +62,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "hlslc: d3dcompiler_47.dll not found\n");
         return 2;
     }
+    auto disassemble = reinterpret_cast<D3DDisassembleFn>(GetProcAddress(dll, "D3DDisassemble"));
     int failures = 0;
     for (int i = 1; i + 2 < argc; i += 3) {
         const char* profile = argv[i];
@@ -83,6 +87,19 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "%s: %s failed (0x%08lx)\n", in, profile, static_cast<unsigned long>(hr));
             ++failures;
             continue;
+        }
+        // The compiler's own count, from the end of its disassembly: what
+        // the SM2 budget (64 arithmetic, 32 texture) is measured against.
+        Blob* listing = nullptr;
+        if (disassemble && SUCCEEDED(disassemble(code->vtbl->get_buffer_pointer(code),
+                                                 code->vtbl->get_buffer_size(code), 0, nullptr, &listing))) {
+            const char* text = static_cast<const char*>(listing->vtbl->get_buffer_pointer(listing));
+            const char* at = std::strstr(text, "// approximately");
+            if (at) {
+                const char* end = std::strchr(at, '\n');
+                std::printf("%s %s: %.*s\n", in, profile, int(end ? end - at - 3 : 80), at + 3);
+            }
+            listing->vtbl->release(listing);
         }
         FILE* f = std::fopen(out, "wb");
         if (f) {

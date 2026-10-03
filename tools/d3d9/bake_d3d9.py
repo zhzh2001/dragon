@@ -9,19 +9,18 @@ shader takes the route the R3 study found (docs/PORTING.md, R3):
 
   1. shadercross: HLSL -> SPIR-V, with the tier's defines and D3D9;
   2. SPIRV-Cross: SPIR-V -> HLSL for shader model 3.0 (brew install spirv-cross);
-  3. this script: give every uniform block its own constant registers (each
-     SPIRV-Cross cbuffer starts at c0), pin each sampler to its slot and the
-     half-pixel uniform to a register;
+  3. this script: unwrap the uniform blocks into plain globals, which fxc
+     packs (only what a shader uses, in consecutive registers -- ps_2_0 has
+     32), and pin each sampler to its slot;
   4. d3dcompiler_47 (tools/d3d9/hlslc.cpp, under Wine on the Mac): -> bytecode.
 
-Then it reads back the constant table (CTAB) the compiler embedded, checks
-every constant landed where step 3 put it, and writes what the backend needs
-to push uniforms by slot:
+Then it reads back the constant table (CTAB) the compiler embedded and writes
+where each block member landed, which the backend copies pushed blocks by:
 
   <stem><variant>.vs30, .ps30   the bytecode
-  <stem><variant>.d3d9.json     {"vertex": {"blocks": {slot: [base, registers]},
+  <stem><variant>.d3d9.json     {"vertex": {"copies": [[slot, offset, register, count], ...],
                                             "half_pixel": register},
-                                 "fragment": {"blocks": ..., "samplers": [slots]}}
+                                 "fragment": {"copies": ..., "samplers": [slots]}}
 
 <variant> is the define set's file suffix, the same rule as
 tools/release/bake_shaders.sh with D3D9 added: ".baked_noise.d3d9.packed_joints.swizzled_normals".
@@ -45,15 +44,23 @@ D3DCOMPILER = os.environ.get("D3DCOMPILER_DLL") or os.path.expanduser("~/.local/
 # The define sets a tier compiles with (gfx/pipeline.cpp), plus D3D9.
 TIERS = {
     "sm3": ["BAKED_NOISE", "PACKED_JOINTS", "SWIZZLED_NORMALS", "D3D9"],
+    "sm2": ["BAKED_NOISE", "LDR_OUTPUT", "PACKED_JOINTS", "SWIZZLED_NORMALS", "D3D9"],
 }
-PROFILES = {"sm3": ("vs_3_0", "ps_3_0")}
-# Float constant registers each stage has (vs_3_0 256; ps_3_0 224).
-REGISTER_LIMIT = {"sm3": (256, 224)}
+PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0")}
+# Float constant registers each stage has (vs_3_0 256, ps_3_0 224; vs_2_0
+# 256 on every card of the class, ps_2_0 32).
+REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32)}
+
+
+SURVEY = False  # --survey: report every problem instead of stopping at the first
 
 
 def run(cmd, **kw):
     result = subprocess.run(cmd, capture_output=True, text=True, **kw)
     if result.returncode != 0:
+        if SURVEY:
+            print(f"{result.stdout}{result.stderr}")
+            return result.stdout
         sys.exit(f"{' '.join(cmd)}\n{result.stdout}{result.stderr}")
     return result.stdout
 
@@ -62,58 +69,22 @@ def variant_suffix(defines):
     return "".join("." + d.lower() for d in sorted(defines))
 
 
-# ---- step 3: SPIRV-Cross's SM 3.0 HLSL -> registers pinned
+# ---- step 3: SPIRV-Cross's SM 3.0 HLSL -> uniforms unwrapped, samplers pinned
 
-def registers_of(decl):
-    """Constant registers a cbuffer member takes: 'float4x4 a[3]' -> 12."""
-    m = re.match(r"(?:column_major |row_major )?(\w+)\s+\w+(?:\[(\d+)\])?$", decl.strip())
-    if not m:
-        raise ValueError(f"cannot size member: {decl}")
-    kind, count = m.group(1), int(m.group(2) or 1)
-    rows = {"float4x4": 4, "float4": 1, "float3": 1, "float2": 1, "float": 1, "int4": 1, "int": 1}.get(kind)
-    if rows is None:
-        raise ValueError(f"unsupported member type {kind}")
-    return rows * count
+def unwrap_uniforms(hlsl, sampler_slots, stage):
+    """Unwrap each cbuffer into plain globals and pin the samplers.
 
-
-def pin_registers(hlsl, sampler_slots, stage):
-    """Rebase each cbuffer to its own registers; pin samplers and gl_HalfPixel."""
-    blocks = {}       # slot -> [base, registers]
-    members = {}      # member name -> (slot, register)
+    fxc ignores packoffset for SM 3.0 and below and packs the constants a
+    shader actually uses into consecutive registers -- which ps_2_0 needs, with
+    32 registers against the scene block's 39. So the members are left for
+    fxc to place, and where it put each is read back from the constant table
+    after compiling (read_ctab). Returns the HLSL and {member: (slot, offset
+    in its block, in registers)}.
+    """
+    members = {}
     out = []
-    lines = hlsl.split("\n")
-    i = 0
-    cbuffers = []
-    # First pass: find each cbuffer's slot and size.
-    while i < len(lines):
-        m = re.match(r"cbuffer \w+ : register\(b(\d+)\)", lines[i])
-        if m:
-            slot = int(m.group(1))
-            body = []
-            j = i + 2  # skip '{'
-            while not lines[j].startswith("};"):
-                body.append(lines[j])
-                j += 1
-            size = 0
-            for line in body:
-                pm = re.match(r"\s*(.+?)\s*:\s*packoffset\(c(\d+)\);", line)
-                if not pm:
-                    raise ValueError(f"no packoffset: {line}")
-                size = max(size, int(pm.group(2)) + registers_of(pm.group(1)))
-            cbuffers.append((slot, size))
-            i = j
-        i += 1
-    base = 0
-    for slot, size in sorted(cbuffers):
-        blocks[slot] = [base, size]
-        base += size
-    half_pixel = None
-    # Second pass: rewrite. fxc ignores packoffset for SM 3.0 and packs the
-    # constants a shader uses tightly (found by the CTAB check below), so each
-    # cbuffer is unwrapped into globals pinned with register(cN), which it
-    # honours.
     current = None
-    for line in lines:
+    for line in hlsl.split("\n"):
         m = re.match(r"cbuffer \w+ : register\(b(\d+)\)", line)
         if m:
             current = int(m.group(1))
@@ -125,26 +96,19 @@ def pin_registers(hlsl, sampler_slots, stage):
             continue
         pm = re.match(r"\s*(.+?)\s*:\s*packoffset\(c(\d+)\);", line)
         if current is not None and pm:
-            reg = int(pm.group(2)) + blocks[current][0]
             name = pm.group(1).split()[-1].split("[")[0]
-            members[name] = (current, reg)
-            line = f"uniform {pm.group(1)} : register(c{reg});"
+            members[name] = (current, int(pm.group(2)))
+            line = f"uniform {pm.group(1)};"
+        elif current is not None:
+            raise ValueError(f"no packoffset: {line}")
         sm = re.match(r"uniform sampler2D (SPIRV_Cross_Combined(\w+));", line)
         if sm:
             slot = sampler_slots.get(sm.group(1))
             if slot is None:
                 raise ValueError(f"no slot for {sm.group(1)}")
             line = f"uniform sampler2D {sm.group(1)} : register(s{slot});"
-        if line.strip() == "uniform float4 gl_HalfPixel;":
-            half_pixel = base
-            line = f"uniform float4 gl_HalfPixel : register(c{base});"
         out.append(line)
-    layout = {"blocks": {str(k): v for k, v in sorted(blocks.items())}}
-    if half_pixel is not None:
-        layout["half_pixel"] = half_pixel
-    if stage == "fragment":
-        layout["samplers"] = sorted(set(sampler_slots.values()))
-    return "\n".join(out), layout, members
+    return "\n".join(out), members
 
 
 def sampler_slots_from_reflection(spv):
@@ -189,7 +153,12 @@ def main():
     parser.add_argument("out")
     parser.add_argument("--tier", default="sm3", choices=sorted(TIERS))
     parser.add_argument("--only", help="comma-separated shader stems")
+    parser.add_argument("--counts", action="store_true", help="print each stage's instruction slot counts")
+    parser.add_argument("--survey", action="store_true",
+                        help="list every limit overrun and compile error, write what compiles, and fail at the end")
     args = parser.parse_args()
+    global SURVEY
+    SURVEY = args.survey
     os.makedirs(args.out, exist_ok=True)
     defines = TIERS[args.tier]
     suffix = variant_suffix(defines)
@@ -217,13 +186,11 @@ def main():
             run([SHADERCROSS, os.path.join(SHADERS, stem + ".hlsl"), "-s", "HLSL", "-d", "SPIRV", "-t", stage,
                  "-e", entry, "-I", SHADERS, "-o", spv] + flags)
             sm30 = run(["spirv-cross", spv, "--hlsl", "--shader-model", "30"])
-            pinned, layout, members = pin_registers(sm30, sampler_slots_from_reflection(spv), stage)
-            for slot, (base, regs) in layout["blocks"].items():
-                if base + regs > limits[stage]:
-                    sys.exit(f"{stem} {stage}: block {slot} ends at c{base + regs}, past {limits[stage]}")
+            unwrapped, members = unwrap_uniforms(sm30, sampler_slots_from_reflection(spv), stage)
             src = os.path.join(work, f"{stem}.{stage}.hlsl")
-            open(src, "w").write(pinned)
-            layouts[stem][stage] = layout
+            open(src, "w").write(unwrapped)
+            layouts[stem][stage] = {"samplers": sorted(set(sampler_slots_from_reflection(spv).values()))} \
+                if stage == "fragment" else {}
             expected[(stem, stage)] = members
             jobs.append((profile, src, os.path.join(args.out, f"{stem}{suffix}.{ext}")))
 
@@ -236,7 +203,7 @@ def main():
     for profile, src, out in jobs:
         argv += [profile, os.path.basename(src), os.path.abspath(out)]
     if sys.platform == "win32":
-        run(argv, cwd=work)
+        listing = run(argv, cwd=work)
     else:
         wine = os.environ.get("WINE") or shutil.which("wine")
         if not wine:
@@ -244,28 +211,45 @@ def main():
         env = dict(os.environ, WINEDEBUG="-all", WINEDLLOVERRIDES="d3dcompiler_47=n")
         # Wine wants Windows paths for the outputs.
         argv = [wine] + [a if not a.startswith("/") else "Z:" + a.replace("/", "\\") for a in argv]
-        run(argv, cwd=work, env=env)
+        listing = run(argv, cwd=work, env=env)
+    if args.counts:
+        for line in listing.splitlines():
+            if "instruction slots" in line:
+                print(re.sub(r"^.*[\\/]", "", line))
 
-    # Check the compiler put each constant where the rewrite asked.
+    # Where the compiler put each constant: the copies the backend makes from
+    # a pushed block into the registers, [slot, offset in the block, register,
+    # count], and the half-pixel uniform's register.
     problems = 0
     for (stem, stage), members in expected.items():
         ext = "vs30" if stage == "vertex" else "ps30"
-        ctab = read_ctab(open(os.path.join(args.out, f"{stem}{suffix}.{ext}"), "rb").read())
-        for name, (reg_set, index, _count) in ctab.items():
-            if reg_set == 2 and name in members and members[name][1] != index:
-                print(f"MISPLACED {stem} {stage} {name}: c{index}, wanted c{members[name][1]}")
+        path = os.path.join(args.out, f"{stem}{suffix}.{ext}")
+        if not os.path.exists(path):
+            problems += 1
+            continue
+        ctab = read_ctab(open(path, "rb").read())
+        copies = []
+        for name, (reg_set, index, count) in sorted(ctab.items(), key=lambda kv: kv[1][1]):
+            if reg_set != 2:
+                continue
+            if name == "gl_HalfPixel":
+                layouts[stem][stage]["half_pixel"] = index
+            elif name in members:
+                slot, offset = members[name]
+                copies.append([slot, offset, index, count])
+            else:
+                print(f"UNKNOWN constant {stem} {stage} {name}")
                 problems += 1
-        if stage == "vertex" and "half_pixel" in layouts[stem][stage]:
-            hp = ctab.get("gl_HalfPixel")
-            if hp and hp[1] != layouts[stem][stage]["half_pixel"]:
-                print(f"MISPLACED {stem} gl_HalfPixel")
+            if index + count > limits[stage]:
+                print(f"OVER {stem} {stage} {name}: c{index + count}, past {limits[stage]}")
                 problems += 1
+        layouts[stem][stage]["copies"] = copies
     for stem, layout in layouts.items():
         with open(os.path.join(args.out, f"{stem}{suffix}.d3d9.json"), "w") as f:
             json.dump(layout, f, indent=1, sort_keys=True)
     shutil.rmtree(work)
     if problems:
-        sys.exit(f"{problems} constants misplaced")
+        sys.exit(f"{problems} problems")
     print(f"baked {len(jobs)} stages ({args.tier}{suffix}) into {args.out}")
 
 

@@ -50,14 +50,19 @@ struct D9Sampler {
     SamplerDesc desc;
 };
 
-// A uniform block's place in a stage's constant registers.
-struct BlockPlace {
-    int base = -1;
-    int registers = 0;
+// Where part of a pushed uniform block goes: `count` float4s from register
+// `offset` of block `slot` into constant register `reg`. fxc packs only the
+// members a shader uses, so a block arrives as several copies
+// (tools/d3d9/bake_d3d9.py writes them from the compiler's constant table).
+struct ConstantCopy {
+    int slot = 0;
+    int offset = 0;
+    int reg = 0;
+    int count = 0;
 };
 
 struct StageLayout {
-    BlockPlace blocks[4];
+    std::vector<ConstantCopy> copies;
     int half_pixel = -1;
 };
 
@@ -109,8 +114,9 @@ std::string baked_base(const ShaderSource& src) {
     return base;
 }
 
-// Reads one stage's object from the bake's JSON: {"blocks": {"0": [0, 39],
-// ...}, "half_pixel": 238}. The file is ours and flat, so a scan does.
+// Reads one stage's object from the bake's JSON: {"copies": [[slot, offset,
+// register, count], ...], "half_pixel": 238}. The file is ours and flat, so a
+// scan does.
 StageLayout parse_layout(const std::string& json, const char* stage) {
     StageLayout layout;
     const size_t at = json.find(std::string("\"") + stage + "\"");
@@ -124,20 +130,23 @@ StageLayout parse_layout(const std::string& json, const char* stage) {
         if (json[end] == '}' && --depth == 0) break;
     }
     const std::string body = json.substr(open, end - open + 1);
-    const size_t blocks = body.find("\"blocks\"");
-    if (blocks != std::string::npos) {
-        size_t p = body.find('{', blocks) + 1;
-        const size_t close = body.find('}', p);
-        while (p < close) {
-            const size_t q = body.find('"', p);
-            if (q == std::string::npos || q > close) break;
-            const int slot = std::atoi(body.c_str() + q + 1);
-            const size_t bracket = body.find('[', q);
+    const size_t copies = body.find("\"copies\"");
+    if (copies != std::string::npos) {
+        // [[a, b, c, d], [a, b, c, d], ...]: four numbers per inner bracket.
+        size_t p = body.find('[', copies) + 1;
+        const char* c = body.c_str();
+        while (true) {
+            const size_t open_inner = body.find('[', p);
+            const size_t close_outer = body.find(']', p);
+            if (open_inner == std::string::npos || open_inner > close_outer) break;
             char* next = nullptr;
-            const long base = std::strtol(body.c_str() + bracket + 1, &next, 10);
-            const long regs = std::strtol(std::strchr(next, ',') + 1, &next, 10);
-            if (slot >= 0 && slot < 4) layout.blocks[slot] = BlockPlace{int(base), int(regs)};
-            p = body.find(']', bracket) + 1;
+            ConstantCopy copy;
+            copy.slot = int(std::strtol(c + open_inner + 1, &next, 10));
+            copy.offset = int(std::strtol(std::strchr(next, ',') + 1, &next, 10));
+            copy.reg = int(std::strtol(std::strchr(next, ',') + 1, &next, 10));
+            copy.count = int(std::strtol(std::strchr(next, ',') + 1, &next, 10));
+            if (copy.slot >= 0 && copy.slot < 4) layout.copies.push_back(copy);
+            p = body.find(']', open_inner) + 1;
         }
     }
     const size_t hp = body.find("\"half_pixel\"");
@@ -825,14 +834,15 @@ private:
         if (!pipeline_) return false;
         for (int s = 0; s < 2; ++s) {
             const StageLayout& layout = s == 0 ? pipeline_->vertex : pipeline_->fragment;
-            for (uint32_t slot = 0; slot < 4; ++slot) {
-                if (!(uniforms_dirty_[s] & (1u << slot))) continue;
-                const BlockPlace& place = layout.blocks[slot];
-                const std::vector<float>& data = uniforms_[s][slot];
-                if (place.base < 0 || data.empty()) continue;
-                const UINT count = UINT(std::min<size_t>(size_t(place.registers), data.size() / 4));
-                if (s == 0) dev_->SetVertexShaderConstantF(UINT(place.base), data.data(), count);
-                else dev_->SetPixelShaderConstantF(UINT(place.base), data.data(), count);
+            for (const ConstantCopy& copy : layout.copies) {
+                if (!(uniforms_dirty_[s] & (1u << copy.slot))) continue;
+                const std::vector<float>& data = uniforms_[s][copy.slot];
+                const size_t available = data.size() / 4;
+                if (size_t(copy.offset) >= available) continue;
+                const UINT count = UINT(std::min<size_t>(size_t(copy.count), available - size_t(copy.offset)));
+                const float* from = data.data() + size_t(copy.offset) * 4;
+                if (s == 0) dev_->SetVertexShaderConstantF(UINT(copy.reg), from, count);
+                else dev_->SetPixelShaderConstantF(UINT(copy.reg), from, count);
             }
             uniforms_dirty_[s] = 0;
         }
