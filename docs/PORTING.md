@@ -640,8 +640,12 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
 - **Measuring a run:** every run ends with a wall-clock line, `frames: N in
   S s, F fps (driver, tier)`. `--gpu-driver direct3d9:N` picks D3D9 adapter
   N. On the 5060 Ti headless, D3D9 runs 130 fps at both tiers against
-  D3D12's 380. That is CPU-side, per-draw state and uniform copies, and
-  worth profiling before the G41.
+  D3D12's 380. `DRAGON_D3D9_PROFILE=1` times each kind of backend call and
+  logs ms/frame at exit. Over 522 draws a frame the backend itself takes
+  0.3 ms (draw calls 0.22, uniforms 0.04). The other 5.9 ms is `end_frame`
+  waiting for NVIDIA's D3D9 driver and GPU, so it is not the backend's to
+  fix on this card. Redundant render and sampler states are cached anyway,
+  which a 2005 driver will feel more. The profile to read is the G41's.
 - **SM2 hardware has no stream-frequency instancing.** The backend uses
   ATI's `INST` switch (R300 and later), and otherwise draws one instance at
   a time with a zero-stride instance stream.

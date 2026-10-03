@@ -215,11 +215,42 @@ D3DCOLOR to_color(const float rgba[4]) {
     return D3DCOLOR_ARGB(b(rgba[3]), b(rgba[0]), b(rgba[1]), b(rgba[2]));
 }
 
+// DRAGON_D3D9_PROFILE: time each kind of backend call and log the totals at
+// exit, to find where a slow CPU's frame goes (the G41's E3300 is the target).
+enum ProfileSlot { PROF_FRAME, PROF_PASS, PROF_PIPELINE, PROF_BUFFERS, PROF_TEXTURES, PROF_UPLOAD, PROF_UNIFORMS,
+                   PROF_DRAW, PROF_SLOTS };
+const char* const PROFILE_NAMES[PROF_SLOTS] = {"end_frame", "begin_pass", "bind_pipeline", "bind buffers",
+                                               "bind_textures", "map/commit", "uniforms", "draw calls"};
+struct Profile {
+    bool on = false;
+    double seconds[PROF_SLOTS] = {};
+    uint64_t calls[PROF_SLOTS] = {};
+    LARGE_INTEGER frequency = {};
+};
+struct ProfileScope {
+    Profile& profile;
+    int slot;
+    LARGE_INTEGER start = {};
+    ProfileScope(Profile& p, int s) : profile(p), slot(s) {
+        if (profile.on) QueryPerformanceCounter(&start);
+    }
+    ~ProfileScope() {
+        if (!profile.on) return;
+        LARGE_INTEGER end;
+        QueryPerformanceCounter(&end);
+        profile.seconds[slot] += double(end.QuadPart - start.QuadPart) / double(profile.frequency.QuadPart);
+        ++profile.calls[slot];
+    }
+};
+#define PROFILE(slot) ProfileScope profile_scope_(profile_, slot)
+
 class D3D9Device final : public Device {
 public:
     bool init(SDL_Window* window, const DeviceConfig& config) {
         headless_ = config.headless;
         adapter_ = config.adapter;
+        profile_.on = SDL_getenv("DRAGON_D3D9_PROFILE") != nullptr;
+        QueryPerformanceFrequency(&profile_.frequency);
         hwnd_ = static_cast<HWND>(
             SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         if (!hwnd_) {
@@ -293,7 +324,7 @@ public:
         } else if (SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                      D3DRTYPE_SURFACE, D3DFORMAT(inst)))) {
             instancing_ = Instancing::AtiInst;
-            dev_->SetRenderState(D3DRS_POINTSIZE, inst);
+            dev_->SetRenderState(D3DRS_POINTSIZE, inst);  // once, past the cache
         } else {
             instancing_ = Instancing::Loop;
         }
@@ -304,6 +335,13 @@ public:
     }
 
     ~D3D9Device() override {
+        if (profile_.on && profile_.calls[PROF_FRAME]) {
+            const double frames = double(profile_.calls[PROF_FRAME]);
+            for (int i = 0; i < PROF_SLOTS; ++i) {
+                LOG_INFO("direct3d9 profile: %-14s %7.3f ms/frame, %6.0f calls/frame", PROFILE_NAMES[i],
+                         profile_.seconds[i] * 1000.0 / frames, double(profile_.calls[i]) / frames);
+            }
+        }
         release(vertex_id_decl_);
         release(vertex_ids_);
         release(dev_);
@@ -361,6 +399,7 @@ public:
     }
 
     void end_frame(Texture* source, uint32_t width, uint32_t height, std::vector<uint8_t>* readback) override {
+        PROFILE(PROF_FRAME);
         if (!in_scene_) return;
         D9Texture* src = source ? d9(source) : nullptr;
         IDirect3DSurface9* src_surface = nullptr;
@@ -428,6 +467,7 @@ public:
     }
 
     void* map_upload(Buffer* buffer, uint32_t size) override {
+        PROFILE(PROF_UPLOAD);
         if (!buffer || size == 0) return nullptr;
         D9Buffer* b = d9(buffer);
         if (b->usage == BufferUsage::Index) {
@@ -441,6 +481,7 @@ public:
     }
 
     void commit_upload(Buffer* buffer, uint32_t) override {
+        PROFILE(PROF_UPLOAD);
         if (!buffer) return;
         D9Buffer* b = d9(buffer);
         if (b->vb) b->vb->Unlock();
@@ -629,6 +670,7 @@ public:
 
     // ---- passes
     Pass* begin_pass(const PassDesc& desc) override {
+        PROFILE(PROF_PASS);
         D9Texture* color = desc.color ? d9(desc.color) : nullptr;
         D9Texture* depth = desc.depth ? d9(desc.depth) : nullptr;
         // A depth-only pass on a sampled depth target draws into its R32F
@@ -670,6 +712,7 @@ public:
     void end_pass(Pass*) override {}
 
     void bind_pipeline(Pass*, Pipeline* pipeline) override {
+        PROFILE(PROF_PIPELINE);
         D9Pipeline* p = d9(pipeline);
         if (!p) return;
         pipeline_ = p;
@@ -696,33 +739,34 @@ public:
             const bool cull_clockwise = (d.cull == Cull::Back) == (d.front_face == FrontFace::CounterClockwise);
             cull = cull_clockwise ? D3DCULL_CW : D3DCULL_CCW;
         }
-        dev_->SetRenderState(D3DRS_CULLMODE, cull);
-        dev_->SetRenderState(D3DRS_FILLMODE, d.fill == Fill::Wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+        set_render_state(D3DRS_CULLMODE, cull);
+        set_render_state(D3DRS_FILLMODE, d.fill == Fill::Wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
         const bool test = d.depth_test && has_depth_;
-        dev_->SetRenderState(D3DRS_ZENABLE, test || (d.depth_write && has_depth_) ? D3DZB_TRUE : D3DZB_FALSE);
-        dev_->SetRenderState(D3DRS_ZFUNC, test ? to_d3d(d.depth_compare) : D3DCMP_ALWAYS);
-        dev_->SetRenderState(D3DRS_ZWRITEENABLE, d.depth_write && has_depth_ ? TRUE : FALSE);
-        dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, d.blend != Blend::Opaque);
+        set_render_state(D3DRS_ZENABLE, test || (d.depth_write && has_depth_) ? D3DZB_TRUE : D3DZB_FALSE);
+        set_render_state(D3DRS_ZFUNC, test ? to_d3d(d.depth_compare) : D3DCMP_ALWAYS);
+        set_render_state(D3DRS_ZWRITEENABLE, d.depth_write && has_depth_ ? TRUE : FALSE);
+        set_render_state(D3DRS_ALPHABLENDENABLE, d.blend != Blend::Opaque);
         if (d.blend == Blend::Additive) {
-            dev_->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-            dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-            dev_->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+            set_render_state(D3DRS_SRCBLEND, D3DBLEND_ONE);
+            set_render_state(D3DRS_DESTBLEND, D3DBLEND_ONE);
+            set_render_state(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
         } else if (d.blend == Blend::Alpha) {
-            dev_->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-            dev_->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
-            dev_->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
-            dev_->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+            set_render_state(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+            set_render_state(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            set_render_state(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+            set_render_state(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+            set_render_state(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
         }
-        dev_->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-        dev_->SetRenderState(D3DRS_LIGHTING, FALSE);
-        dev_->SetRenderState(D3DRS_FOGENABLE, FALSE);
-        dev_->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-        dev_->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+        set_render_state(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        set_render_state(D3DRS_LIGHTING, FALSE);
+        set_render_state(D3DRS_FOGENABLE, FALSE);
+        set_render_state(D3DRS_ALPHATESTENABLE, FALSE);
+        set_render_state(D3DRS_COLORWRITEENABLE, 0xF);
         uniforms_dirty_[0] = uniforms_dirty_[1] = 0xF;  // a new layout: push every block again
     }
 
     void bind_vertex_buffers(Pass*, uint32_t first_slot, const BufferBinding* bindings, uint32_t count) override {
+        PROFILE(PROF_BUFFERS);
         for (uint32_t i = 0; i < count && first_slot + i < 8; ++i) {
             const uint32_t slot = first_slot + i;
             streams_[slot] = bindings[i];
@@ -733,6 +777,7 @@ public:
     }
 
     void bind_index_buffer(Pass*, const BufferBinding& binding, IndexSize size) override {
+        PROFILE(PROF_BUFFERS);
         D9Buffer* b = binding.buffer ? d9(binding.buffer) : nullptr;
         if (!b) return;
         if (!b->ib || b->ib_size != size) {
@@ -753,6 +798,7 @@ public:
     }
 
     void bind_fragment_textures(Pass*, uint32_t first_slot, const TextureBinding* bindings, uint32_t count) override {
+        PROFILE(PROF_TEXTURES);
         for (uint32_t i = 0; i < count && first_slot + i < 16; ++i) {
             const DWORD stage = first_slot + i;
             D9Texture* t = bindings[i].texture ? d9(bindings[i].texture) : nullptr;
@@ -769,19 +815,19 @@ public:
                 if (aniso) return D3DTEXF_ANISOTROPIC;
                 return f == Filter::Linear ? D3DTEXF_LINEAR : D3DTEXF_POINT;
             };
-            dev_->SetSamplerState(stage, D3DSAMP_MINFILTER, filter(sd.min_filter));
-            dev_->SetSamplerState(stage, D3DSAMP_MAGFILTER, point_only ? D3DTEXF_POINT
+            set_sampler_state(stage, D3DSAMP_MINFILTER, filter(sd.min_filter));
+            set_sampler_state(stage, D3DSAMP_MAGFILTER, point_only ? D3DTEXF_POINT
                                                                          : (sd.mag_filter == Filter::Linear ? D3DTEXF_LINEAR
                                                                                                             : D3DTEXF_POINT));
             const bool mips = t && t->levels > 1 && sd.max_lod > 0.0f;
-            dev_->SetSamplerState(stage, D3DSAMP_MIPFILTER,
+            set_sampler_state(stage, D3DSAMP_MIPFILTER,
                                   !mips ? D3DTEXF_NONE : sd.mip_mode == MipMode::Linear ? D3DTEXF_LINEAR : D3DTEXF_POINT);
-            dev_->SetSamplerState(stage, D3DSAMP_MAXANISOTROPY,
+            set_sampler_state(stage, D3DSAMP_MAXANISOTROPY,
                                   aniso ? DWORD(std::min<float>(sd.max_anisotropy, float(caps_.MaxAnisotropy))) : 1);
-            dev_->SetSamplerState(stage, D3DSAMP_ADDRESSU, to_d3d(sd.address_u));
-            dev_->SetSamplerState(stage, D3DSAMP_ADDRESSV, to_d3d(sd.address_v));
-            dev_->SetSamplerState(stage, D3DSAMP_ADDRESSW, to_d3d(sd.address_w));
-            dev_->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, t && t->srgb() ? TRUE : FALSE);
+            set_sampler_state(stage, D3DSAMP_ADDRESSU, to_d3d(sd.address_u));
+            set_sampler_state(stage, D3DSAMP_ADDRESSV, to_d3d(sd.address_v));
+            set_sampler_state(stage, D3DSAMP_ADDRESSW, to_d3d(sd.address_w));
+            set_sampler_state(stage, D3DSAMP_SRGBTEXTURE, t && t->srgb() ? TRUE : FALSE);
         }
     }
 
@@ -800,7 +846,7 @@ public:
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
-        if (prims) dev_->DrawPrimitive(type, first_vertex, prims);
+        if (prims) { PROFILE(PROF_DRAW); dev_->DrawPrimitive(type, first_vertex, prims); }
     }
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
@@ -827,7 +873,7 @@ public:
                     dev_->SetStreamSource(s, b ? b->vb : nullptr,
                                           streams_[s].offset + (first_instance + i) * pipeline_->stream_pitch[s], 0);
                 }
-                dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims);
+                { PROFILE(PROF_DRAW); dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims); }
             }
             return;
         }
@@ -847,13 +893,36 @@ public:
                 }
             }
         }
-        dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims);
+        { PROFILE(PROF_DRAW); dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims); }
         if (instanced) {
             for (uint32_t s = 0; s < 8; ++s) dev_->SetStreamSourceFreq(s, 1);
         }
     }
 
 private:
+    // D3D9 passes every Set call to the driver, redundant or not, and on a
+    // 2005 CPU those calls are the frame. A cache drops the repeats.
+    void set_render_state(D3DRENDERSTATETYPE state, DWORD value) {
+        if (state < 256) {
+            if (render_state_known_[state] && render_state_[state] == value) return;
+            render_state_known_[state] = true;
+            render_state_[state] = value;
+        }
+        dev_->SetRenderState(state, value);
+    }
+    void set_sampler_state(DWORD stage, D3DSAMPLERSTATETYPE type, DWORD value) {
+        if (stage < 16 && type < 16) {
+            if (sampler_state_known_[stage][type] && sampler_state_[stage][type] == value) return;
+            sampler_state_known_[stage][type] = true;
+            sampler_state_[stage][type] = value;
+        }
+        dev_->SetSamplerState(stage, type, value);
+    }
+    DWORD render_state_[256] = {};
+    bool render_state_known_[256] = {};
+    DWORD sampler_state_[16][16] = {};
+    bool sampler_state_known_[16][16] = {};
+
     D3DPRIMITIVETYPE primitive(uint32_t count, UINT* prims) const {
         switch (pipeline_->desc.primitive) {
             case Primitive::TriangleList: *prims = count / 3; return D3DPT_TRIANGLELIST;
@@ -868,6 +937,7 @@ private:
 
     // Uniform blocks to their constant registers, for the bound pipeline.
     bool flush() {
+        PROFILE(PROF_UNIFORMS);
         if (!pipeline_) return false;
         for (int s = 0; s < 2; ++s) {
             const StageLayout& layout = s == 0 ? pipeline_->vertex : pipeline_->fragment;
@@ -919,6 +989,7 @@ private:
     HWND hwnd_ = nullptr;
     bool headless_ = false;
     UINT adapter_ = 0;
+    Profile profile_;
     IDirect3D9* d3d_ = nullptr;
     IDirect3DDevice9* dev_ = nullptr;
     D3DCAPS9 caps_ = {};
