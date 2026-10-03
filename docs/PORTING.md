@@ -753,6 +753,26 @@ eight settings (`gfx/graphics_settings.h`). Each setting is a level, Ultra
   autopilot round a generated course) and `run` (the demo pilot in a hoard
   run). It reads each run's summary line: wall-clock fps, median and
   99th-percentile ("1% low") frame times, past the first second.
+- **The X550, D3D9, sm2, 1024×768** (2026-10-03, before the sky change
+  below):
+
+  | preset | valley fps (median / 1% low ms) | course fps (median / 1% low ms) |
+  |---|---|---|
+  | ultra | 1.4 (717 / 723) | 1.7 (610 / 646) |
+  | high | 4.3 (233 / 237) | 4.9 (206 / 217) |
+  | medium | 9.9 (101 / 102) | 10.6 (95 / 98) |
+  | low | 13.4 (75 / 76) | 14.1 (71 / 73) |
+  | very low | 15.4 (65 / 66) | 16.1 (62 / 64) |
+
+  - Geometry carries Ultra to Medium, a 7× gain.
+  - Below Medium the curve flattens, because 1024×768's fill is the
+    floor. The sky was then drawn first and untested, a full screen of a
+    54-instruction shader. It now draws last at the far plane, and the
+    terrain draws nearest first, so early depth rejection does its work.
+    Those two are not yet measured on the card.
+  - x99 dropped off the network during the `run` scenario at Ultra, and
+    those numbers are missing.
+  - Frames are steady: the 1% low sits within 5% of the median.
 
 ### Budgets to design to
 
