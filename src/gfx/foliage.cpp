@@ -242,8 +242,11 @@ void card_crown(MeshData& out, Vec3 centre, Vec3 radii, int count, int coarse, f
         const Vec3 n = core::normalize_or(d + Vec3{unit(), unit(), unit()} * 0.45f, d);
         const bool is_coarse = i < coarse;
         const float card_size = is_coarse ? size * 1.5f : size * (0.85f + 0.3f * std::fabs(unit()));
-        card(out, p, n, unit() * core::PI, card_size, card_size * 0.85f,
-             palette_dim(color, 0.85f + 0.3f * std::fabs(unit())),
+        // Drawn one per statement: the order a call's arguments are evaluated
+        // in is the compiler's choice, and GCC and clang choose differently.
+        const float spin = unit() * core::PI;
+        const float shade = 0.85f + 0.3f * std::fabs(unit());
+        card(out, p, n, spin, card_size, card_size * 0.85f, palette_dim(color, shade),
              material + (is_coarse ? 0 : FOLIAGE_DETAIL));
     }
 }
@@ -346,8 +349,9 @@ MeshData make_tree_mesh(TreeKind kind) {
                     const Vec3 p = out_dir * (radius * 0.55f) + Vec3{0.0f, y, 0.0f};
                     // Facing out and DOWN: a spruce skirt hangs.
                     const Vec3 n = core::normalize_or(out_dir + Vec3{0.0f, -0.55f, 0.0f}, out_dir);
-                    card(mesh, p, n, unit() * 0.4f, radius * 1.5f, radius * 1.1f,
-                         palette_dim(needles, 0.85f + 0.3f * std::fabs(unit())),
+                    const float spin = unit() * 0.4f;  // one draw per statement (card_crown)
+                    const float shade = 0.85f + 0.3f * std::fabs(unit());
+                    card(mesh, p, n, spin, radius * 1.5f, radius * 1.1f, palette_dim(needles, shade),
                          FOLIAGE_MAT_NEEDLE + FOLIAGE_DETAIL);
                 }
             }

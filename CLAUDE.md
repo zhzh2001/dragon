@@ -465,6 +465,12 @@ These are not about one system, and every one of them cost real time.
   white and every emissive colour had to be tuned around that. A light source
   should still not also be lit, and a damage flash still reddens rather than
   brightens -- it is on the HUD, past the tonemap.
+- **One random draw per statement.** `f(rng(), rng())` and `a * rng() +
+  b * rng()` are evaluated in the compiler's order, and GCC (the Windows
+  build) and clang (the Mac) differ, so the same seed built different tree
+  crowns, flames and hoard-run valleys on each. Content that must be the
+  same everywhere (LODs) also builds with `-ffp-contract=off`: arm64 fuses
+  multiply-adds and x86-64 does not (`docs/PORTING.md`, R7).
 - **Initialise derived state at spawn, not on the first tick.** A sentinel
   whose position was only set by its update sat at the world origin as a live,
   shootable target.

@@ -239,8 +239,10 @@ RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
         RunCache best;
         float best_flat = -1.0f;
         for (int attempt = 0; attempt < 12; ++attempt) {
-            const float offset = (rng.unit() < 0.5f ? -1.0f : 1.0f) *
-                                 rng.range(20.0f, settings.cache_offset_max);
+            // One draw per statement: operand order is the compiler's choice,
+            // and a seed must build the same valley from every compiler.
+            const float sign = rng.unit() < 0.5f ? -1.0f : 1.0f;
+            const float offset = sign * rng.range(20.0f, settings.cache_offset_max);
             const Vec3 candidate = spine_point + side * offset;
             const float ground = terrain.height_at(candidate.x, candidate.z);
             if (ground < ts.water_level + 3.0f) continue;
@@ -346,8 +348,9 @@ RunLayout generate_run_layout(const Terrain& terrain, float half_extent,
         herd.count = settings.herd_size;
         float best = -1.0f;
         for (int attempt = 0; attempt < 16; ++attempt) {
-            const Vec3 candidate = spine_point + side * rng.range(-220.0f, 220.0f) +
-                                   direction * rng.range(-120.0f, 120.0f);
+            const float across = rng.range(-220.0f, 220.0f);  // one draw per statement (above)
+            const float along = rng.range(-120.0f, 120.0f);
+            const Vec3 candidate = spine_point + side * across + direction * along;
             const float ground = terrain.height_at(candidate.x, candidate.z);
             if (ground < ts.water_level + 3.0f) continue;
             float score = terrain.normal_at(candidate.x, candidate.z).y;

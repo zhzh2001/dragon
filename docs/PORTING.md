@@ -753,26 +753,83 @@ eight settings (`gfx/graphics_settings.h`). Each setting is a level, Ultra
   autopilot round a generated course) and `run` (the demo pilot in a hoard
   run). It reads each run's summary line: wall-clock fps, median and
   99th-percentile ("1% low") frame times, past the first second.
-- **The X550, D3D9, sm2, 1024×768** (2026-10-03, before the sky change
-  below):
+- **The X550, D3D9, sm2** (2026-10-03). fps, with the median and 1% low
+  frame times in ms. High and Ultra are not run on this card any more: the
+  Ultra `run` scenario froze x99 outright (no bluescreen, the clock
+  stopped), and they ran at 1 to 5 fps in any case.
 
-  | preset | valley fps (median / 1% low ms) | course fps (median / 1% low ms) |
-  |---|---|---|
-  | ultra | 1.4 (717 / 723) | 1.7 (610 / 646) |
-  | high | 4.3 (233 / 237) | 4.9 (206 / 217) |
-  | medium | 9.9 (101 / 102) | 10.6 (95 / 98) |
-  | low | 13.4 (75 / 76) | 14.1 (71 / 73) |
-  | very low | 15.4 (65 / 66) | 16.1 (62 / 64) |
+  | preset | valley | course | run |
+  |---|---|---|---|
+  | **1024×768** | | | |
+  | medium | 11.9 (84 / 85) | 13.3 (77 / 79) | 11.8 (85 / 87) |
+  | low | 17.5 (57 / 58) | 19.2 (53 / 55) | 18.4 (54 / 55) |
+  | very low | 20.9 (48 / 48) | 23.1 (44 / 46) | 22.9 (43 / 45) |
+  | **640×480** | | | |
+  | medium | 16.0 (62 / 63) | 18.1 (57 / 59) | 15.2 (66 / 69) |
+  | low | 26.8 (38 / 38) | 30.2 (34 / 35) | 27.5 (37 / 38) |
+  | very low | 35.1 (29 / 29) | 41.2 (25 / 26) | 38.7 (26 / 27) |
 
-  - Geometry carries Ultra to Medium, a 7× gain.
-  - Below Medium the curve flattens, because 1024×768's fill is the
-    floor. The sky was then drawn first and untested, a full screen of a
-    54-instruction shader. It now draws last at the far plane, and the
-    terrain draws nearest first, so early depth rejection does its work.
-    Those two are not yet measured on the card.
-  - x99 dropped off the network during the `run` scenario at Ultra, and
-    those numbers are missing.
+  - Geometry carries Ultra to Medium: 1.4, 4.3 and 9.9 fps in the valley
+    at 1024×768, measured before the sky change below. That is a 7× gain.
+  - Drawing the sky last at the far plane, and the terrain nearest first,
+    lets early depth rejection work. It was worth 20 to 35% at 1024×768
+    (Low valley 13.4 → 17.5, Very low 15.4 → 20.9). The sky had been a
+    full screen of a 54-instruction shader drawn first.
+  - **Below Medium the card is fill-bound.** Very low at 640×480 takes 60%
+    of the time at 1024×768 for 39% of the pixels. That puts about 16 ms in
+    vertices and the CPU, and the rest in pixels. So Low and Very low are
+    640×480 presets on this class of card: 27 to 41 fps, against 17 to 23
+    at 1024×768.
   - Frames are steady: the 1% low sits within 5% of the median.
+- **A preset renders the same on every backend.** Checked per preset
+  (2026-10-03). Each preset's eight golden scenes were captured on Vulkan
+  (the 5060 Ti, `--tier sm2 --preset P`). The same scenes were then
+  rendered on:
+  - D3D9 on the X550 (Medium, Low, Very low): all 24 pass at
+    `--cross-compiler`, with means 0.4 to 1.0.
+  - Metal on the M-series Mac (all five presets): all 40 pass at
+    `--loose`. 37 also pass at `--cross-compiler`. The other three are
+    `ground` at Ultra and Medium (2.3% and 3.2% of pixels past 8, against
+    2%), and they are shadow texels: SM2's one point-sampled map has texels
+    metres wide, and Apple and NVIDIA round the depth test at a caster's
+    edge differently.
+
+  Getting there took two content fixes. Before them the same preset built
+  different content on the Mac and on Windows, which no GPU tolerance
+  should forgive:
+  - **The LODs were shaped by the CPU.** clang on arm64 fuses a multiply
+    and an add into one FMA by default; x86-64 without `-mfma` cannot. The
+    simplifier's collapse errors then round differently and pick different
+    edges, and the Very low dragon was a different shape on the Mac.
+    meshoptimizer and the two LOD files now build with
+    `-ffp-contract=off` (`cmake/meshoptimizer.cmake`). Every LOD logs a
+    fingerprint of its input and output (`model0: LOD 80000 -> 2500
+    triangles ... (d3c0f447 -> ba49b8e8)`), and all of them match between
+    the Mac and x99.
+  - **Random draws were unsequenced.** `card(..., unit() * PI, ...,
+    palette_dim(c, unit()))` evaluates its arguments in the compiler's
+    order: GCC goes right to left, clang left to right. So every crown card
+    swapped its spin and its shade between the two builds. The breath
+    spray, the boost streaks, the lightning and the status bursts did the
+    same with `a * unit() + b * unit()`. So did two draws in the hoard run's
+    layout, so one seed built a slightly different valley on each OS. Each
+    draw is now its own statement, in the source's order (clang's, so the
+    Metal goldens are unchanged). The `vulkan` set was recaptured; the
+    `d3d12`, `d3d12-sm3` and `d3d12-sm2` sets still hold the old crowns and
+    flames, and fail strict until they are recaptured. SDL's D3D12 driver
+    takes DXGI's first high-performance adapter, which on x99 is now the
+    X550, and then gives up. It needs the 5060 Ti primary again for that
+    (a per-app GPU preference does not reach it).
+- **To check a preset across backends**, capture on one and compare on the
+  other, with a set name the repo does not keep:
+
+  ```
+  golden.py capture --set tmp-sm2-low --extra "--gpu-driver vulkan --tier sm2 --preset low"
+  golden.py compare --set tmp-sm2-low --cross-compiler --extra "--gpu-driver direct3d9 --tier sm2 --preset low"
+  ```
+
+  On D3D9 this runs through `run_interactive.ps1`, which needs the desktop
+  session.
 
 ### Budgets to design to
 

@@ -1919,8 +1919,9 @@ void App::update(float dt) {
                     p.position = s.position + s.right() * (side == 0 ? 9.0f : -9.0f) + s.up();
                 }
                 // Left behind, curling slightly: the vortex, not a jet.
-                p.velocity = s.velocity * 0.12f + s.up() * (1.5f * particle_unit()) +
-                             s.right() * (1.0f * particle_unit());
+                const float curl_up = particle_unit();  // one draw per statement (emit_flame)
+                const float curl_side = particle_unit();
+                p.velocity = s.velocity * 0.12f + s.up() * (1.5f * curl_up) + s.right() * (1.0f * curl_side);
                 p.size_start = 0.6f;
                 p.size_end = 2.6f;
                 p.drag = 1.0f;
@@ -1933,9 +1934,9 @@ void App::update(float dt) {
             // Slipstream streak: born ahead and beside, swept backward fast so
             // it rushes past the camera.
             gfx::Particle streak;
-            streak.position = s.position + s.forward() * (30.0f + 20.0f * particle_unit()) +
-                              s.right() * (12.0f * particle_unit()) +
-                              s.up() * (8.0f * particle_unit());
+            const float ahead = particle_unit(), beside = particle_unit(), above = particle_unit();
+            streak.position = s.position + s.forward() * (30.0f + 20.0f * ahead) + s.right() * (12.0f * beside) +
+                              s.up() * (8.0f * above);
             streak.velocity = s.velocity * 0.1f - s.forward() * 60.0f;
             streak.size_start = 0.5f;
             streak.size_end = 1.6f;
@@ -3668,14 +3669,27 @@ gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim
     return srgb ? gfx::TextureKind::Colour : gfx::TextureKind::Data;
 }
 
+// FNV-1a over a mesh's vertices and indices: the same LOD on every platform
+// prints the same value, which is how a preset is checked to build the same
+// content everywhere (docs/PORTING.md, R7).
+static uint32_t fingerprint(const anim::SkinnedMeshData& mesh) {
+    uint32_t h = 2166136261u;
+    const auto mix = [&h](const void* data, size_t size) {
+        for (size_t i = 0; i < size; ++i) h = (h ^ static_cast<const uint8_t*>(data)[i]) * 16777619u;
+    };
+    mix(mesh.vertices.data(), mesh.vertices.size() * sizeof(mesh.vertices[0]));
+    mix(mesh.indices.data(), mesh.indices.size() * sizeof(mesh.indices[0]));
+    return h;
+}
+
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
                                           uint32_t max_triangles) const {
     // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
     anim::LodResult lod = anim::simplify_skinned(mesh, max_triangles ? max_triangles : tier_.budget.max_skinned_triangles);
     if (lod.mesh.indices.size() != mesh.indices.size()) {
-        LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size", tag,
+        LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size (%08x -> %08x)", tag,
                  mesh.indices.size() / 3, lod.mesh.indices.size() / 3, mesh.vertices.size(),
-                 lod.mesh.vertices.size(), double(lod.error) * 100.0);
+                 lod.mesh.vertices.size(), double(lod.error) * 100.0, fingerprint(mesh), fingerprint(lod.mesh));
     }
     if (tier_.max_skin_bones >= uint32_t(anim::MAX_JOINTS)) return std::move(lod.mesh);
     anim::SkinnedMeshData split = anim::partition_palettes(lod.mesh, tier_.max_skin_bones);
@@ -4185,7 +4199,9 @@ void App::emit_arc(core::Vec3 from, core::Vec3 to, core::Vec3 colour) {
     for (int k = 1; k <= kinks; ++k) {
         const float t = float(k) / float(kinks);
         const float amplitude = k == kinks ? 0.0f : length * 0.06f * std::sin(t * core::PI);
-        const core::Vec3 next = from + span * t + (side * particle_unit() + lift * particle_unit()) * amplitude;
+        const float kink_side = particle_unit();  // one draw per statement (emit_flame)
+        const float kink_lift = particle_unit();
+        const core::Vec3 next = from + span * t + (side * kink_side + lift * kink_lift) * amplitude;
         const float piece = core::distance(previous, next);
         const int dots = std::max(1, int(piece / 1.2f));
         for (int d = 0; d < dots; ++d) {
@@ -4213,9 +4229,10 @@ void App::emit_status_burst(const game::StatusBurst& burst) {
         for (int i = 0; i < n; ++i) {
             gfx::Particle p;
             p.position = at + core::Vec3{particle_unit(), particle_unit(), particle_unit()} * 2.0f;
-            p.velocity = core::normalize_or(core::Vec3{particle_unit(), particle_unit(), particle_unit()},
-                                            core::Vec3::up()) * (speed * (0.5f + 0.5f * std::fabs(particle_unit()))) +
-                         core::Vec3{0.0f, up, 0.0f};
+            const core::Vec3 dir = core::normalize_or(
+                core::Vec3{particle_unit(), particle_unit(), particle_unit()}, core::Vec3::up());
+            const float pace = 0.5f + 0.5f * std::fabs(particle_unit());  // one draw per statement (emit_flame)
+            p.velocity = dir * (speed * pace) + core::Vec3{0.0f, up, 0.0f};
             p.acceleration = core::Vec3{0.0f, -gravity, 0.0f};
             p.drag = drag;
             p.life = life * (0.8f + 0.3f * particle_unit());
@@ -5567,8 +5584,12 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
         const float speed = speed_for_range * (1.0f + 0.08f * particle_unit());
         gfx::Particle p;
         p.position = origin + direction * (2.0f + particle_unit());
-        p.velocity = direction * speed + (side * particle_unit() + lift * particle_unit()) *
-                                              (speed * b.spread);
+        // One draw per statement: the two operands of a + are evaluated in the
+        // compiler's order, and GCC and clang differ, so the same seed sprayed
+        // a different flame on Windows than on the Mac.
+        const float spread_side = particle_unit();
+        const float spread_lift = particle_unit();
+        p.velocity = direction * speed + (side * spread_side + lift * spread_lift) * (speed * b.spread);
         // Positive billows like flame, negative pours like frost or heavy gas.
         p.acceleration = core::Vec3{0.0f, b.buoyancy, 0.0f};
         p.drag = b.drag;
