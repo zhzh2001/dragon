@@ -10,6 +10,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
@@ -190,17 +192,29 @@ uint32_t json_count(const std::string& json, const char* key) {
     return at == std::string::npos ? 0 : uint32_t(std::strtoul(json.c_str() + at + needle.size(), nullptr, 10));
 }
 
-SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const ShaderSource& src, const char* entrypoint,
-                              SDL_GPUShaderStage stage) {
-    if (!src.defines.empty()) {
-        // Packages are baked for the modern tier only; a retro tier needs the
-        // runtime compiler, or baked variants that do not exist yet.
-        SDL_SetError("baked shaders have no '%s' variant", src.defines.front().c_str());
-        return nullptr;
+// The file-name part a define set adds to a baked shader: each define
+// lowercased, sorted, after a dot -- ".baked_noise.swizzled_normals" -- the
+// same names tools/release/bake_shaders.sh writes.
+std::string baked_variant(const ShaderSource& src) {
+    std::vector<std::string> names = src.defines;
+    std::sort(names.begin(), names.end());
+    std::string suffix;
+    for (std::string& name : names) {
+        for (char& c : name) c = char(std::tolower(static_cast<unsigned char>(c)));
+        suffix += "." + name;
     }
+    return suffix;
+}
+
+std::string baked_base(const ShaderSource& src) {
     std::string root = src.root;
     if (!root.empty() && root.back() != '/' && root.back() != '\\') root += '/';
-    const std::string base = root + src.stem + "." + stage_name(stage);
+    return root + src.stem + baked_variant(src);
+}
+
+SDL_GPUShader* compile_shader(SDL_GPUDevice* gpu, const ShaderSource& src, const char* entrypoint,
+                              SDL_GPUShaderStage stage) {
+    const std::string base = baked_base(src) + "." + stage_name(stage);
     const BakedFormat baked = baked_format(gpu);
     const std::string code = read_file(base + baked.ext);
     const std::string json = read_file(base + ".json");
@@ -635,16 +649,14 @@ public:
 #endif
     }
 
-    std::vector<std::string> baked_shader_files(const std::string& root, const std::string& stem) const override {
+    std::vector<std::string> baked_shader_files(const ShaderSource& shaders) const override {
 #ifdef DRAGON_SHADERCROSS
-        (void)root;
-        (void)stem;
+        (void)shaders;
         return {};
 #else
-        std::string dir = root;
-        if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') dir += '/';
+        const std::string base = baked_base(shaders);
         const BakedFormat baked = baked_format(gpu_);
-        return {dir + stem + ".vertex" + baked.ext, dir + stem + ".fragment" + baked.ext};
+        return {base + ".vertex" + baked.ext, base + ".fragment" + baked.ext};
 #endif
     }
 

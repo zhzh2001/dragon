@@ -145,7 +145,7 @@ bool PipelineCache::build(Entry& entry) {
     } else {
         // Baked shaders are read as they are; watching them still lets a
         // package pick up a re-bake without a restart.
-        for (const std::string& path : rhi.baked_shader_files(shader_root_, d.shader))
+        for (const std::string& path : rhi.baked_shader_files(shaders))
             entry.sources.push_back({path, file_mtime(path)});
     }
 

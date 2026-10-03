@@ -234,11 +234,10 @@ public:
     virtual Pipeline* create_pipeline(const PipelineDesc& desc, const ShaderSource& shaders) = 0;
     virtual void destroy(Pipeline* pipeline) = 0;
     // Whether create_pipeline compiles ShaderSource::hlsl at runtime. If not,
-    // it loads prebuilt files, which baked_shader_files names so a cache can
-    // watch them.
+    // it loads prebuilt files -- one set per define set -- which
+    // baked_shader_files names so a cache can watch them.
     virtual bool compiles_hlsl() const = 0;
-    virtual std::vector<std::string> baked_shader_files(const std::string& root,
-                                                        const std::string& stem) const = 0;
+    virtual std::vector<std::string> baked_shader_files(const ShaderSource& shaders) const = 0;
 
     // ---- passes
     virtual Pass* begin_pass(const PassDesc& desc) = 0;

@@ -477,6 +477,18 @@ render before a D3D9 device exists.
     the silhouette. The close-up head is faceted at 10K and 6K, as those
     budgets must be. The props' 6K to 13K are cut too where they exceed a
     tier's cap.
+- **Baked tier variants and Windows, done (2026-10-03).** A package has no
+  runtime compiler, so `bake_shaders.sh` bakes every shader once per define
+  set a tier compiles with: modern, sm3 (`BAKED_NOISE`, `SWIZZLED_NORMALS`),
+  and sm2/ff (adding `LDR_OUTPUT`). Each variant's files carry their defines,
+  e.g. `terrain.baked_noise.swizzled_normals.fragment.dxil`, and the loader
+  builds the same name from the pipeline's defines. On x99-windows with the
+  cross-built exe:
+  - All 19 suites pass.
+  - The modern goldens are exact on D3D12 and within 0.003/255 on Vulkan:
+    R1's RHI changed nothing there either.
+  - Every tier renders on both backends, and D3D12 and Vulkan agree per tier
+    to 0.01/255.
 - R2's content work is complete. What is left of the retro track needs the
   D3D9 backend (R3) and real hardware.
 
