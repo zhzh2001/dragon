@@ -87,6 +87,35 @@ struct SkinBlock {
     core::Mat4 joints[anim::MAX_JOINTS];
 };
 
+// A retro tier's block (PACKED_JOINTS, shaders/skin_common.hlsl): each joint's
+// top three rows, 64 joints at most. The fourth row of a rig's affine
+// transform is always 0 0 0 1.
+constexpr size_t PACKED_JOINT_LIMIT = 64;
+struct PackedSkinBlock {
+    core::Vec4 rows[PACKED_JOINT_LIMIT * 3];
+};
+
+PackedSkinBlock pack_joints(const SkinBlock& block) {
+    PackedSkinBlock packed;
+    for (size_t j = 0; j < PACKED_JOINT_LIMIT; ++j) {
+        const core::Mat4& m = block.joints[j];
+        for (int r = 0; r < 3; ++r) {
+            packed.rows[j * 3 + size_t(r)] = core::Vec4{m.col[0][r], m.col[1][r], m.col[2][r], m.col[3][r]};
+        }
+    }
+    return packed;
+}
+
+// Pushes a skin block to vertex slot 2 in the layout the tier's shaders read.
+void push_skin(Device& device, const SkinBlock& block) {
+    if (active_tier().packed_joints) {
+        const PackedSkinBlock packed = pack_joints(block);
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &packed, sizeof(PackedSkinBlock));
+    } else {
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &block, sizeof(SkinBlock));
+    }
+}
+
 // A batch's palette in the block's first slots (anim/skin_partition.h): what a
 // D3D9 vertex shader's constants will hold, padded like the full block.
 SkinBlock make_palette_block(const std::vector<core::Mat4>& joints, const std::vector<uint16_t>& palette) {
@@ -224,7 +253,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
 
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
-    device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &block, sizeof(SkinBlock));
+    push_skin(device, block);
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(device.rhi(), pass);
 
@@ -271,7 +300,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
 
         if (!submesh.palette.empty()) {
             const SkinBlock palette = make_palette_block(joints, submesh.palette);
-            device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &palette, sizeof(SkinBlock));
+            push_skin(device, palette);
         }
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
@@ -295,7 +324,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
-    device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &block, sizeof(SkinBlock));
+    push_skin(device, block);
     mesh.bind(device.rhi(), pass);
     const bool split = !mesh.submeshes().empty() && !mesh.submeshes().front().palette.empty();
     if (!split) {
@@ -306,7 +335,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
         if (submesh.index_count == 0) continue;
         const SkinBlock palette = make_palette_block(joints, submesh.palette);
-        device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &palette, sizeof(SkinBlock));
+        push_skin(device, palette);
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }

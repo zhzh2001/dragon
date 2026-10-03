@@ -21,10 +21,18 @@ void for_each_influence(const SkinnedVertex& v, F&& f) {
 SkinnedMeshData partition_palettes(const SkinnedMeshData& mesh, uint32_t max_bones) {
     if (max_bones < MIN_PALETTE_BONES) max_bones = MIN_PALETTE_BONES;
 
-    // Nothing to do when the whole skeleton the mesh uses fits one palette.
+    // Nothing to do when the vertices can index the palette as they are: every
+    // joint they use is already below the budget. Fewer joints than the budget
+    // is not enough -- a mesh using 40 joints numbered up to 200 still needs
+    // remapping, since a packed palette (shaders/skin_common.hlsl) holds only
+    // the first max_bones.
     std::bitset<256> used;
     for (const SkinnedVertex& v : mesh.vertices) for_each_influence(v, [&](uint8_t j) { used.set(j); });
-    if (used.count() <= max_bones) return mesh;
+    uint32_t highest = 0;
+    for (uint32_t j = 0; j < 256; ++j) {
+        if (used.test(j)) highest = j;
+    }
+    if (highest < max_bones) return mesh;
 
     SkinnedMeshData out;
     out.vertices.reserve(mesh.vertices.size() + mesh.vertices.size() / 8);

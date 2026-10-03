@@ -1,22 +1,14 @@
 #include "model_common.hlsl"
+#include "skin_common.hlsl"
 
 // Skinned character rendering.
-//
-// Joint matrices arrive as a uniform array rather than a storage buffer: 16 KB
-// per draw, which avoids maintaining a per-frame buffer. Must match
-// anim::MAX_JOINTS.
-static const uint MAX_JOINTS = 256;
-
-struct SkinUniforms {
-    float4x4 joints[MAX_JOINTS];
-};
 
 struct VertexIn {
     float3 position    : TEXCOORD0;
     float3 normal      : TEXCOORD1;
     float3 color       : TEXCOORD2;
     float2 uv          : TEXCOORD3;
-    uint4  joint_index : TEXCOORD4;
+    JOINT_INDEX_TYPE joint_index : TEXCOORD4;
     float4 weight      : TEXCOORD5;
     float4 tangent     : TEXCOORD6;
 };
@@ -40,12 +32,7 @@ ConstantBuffer<ModelUniforms> model : UNIFORM_SLOT(1);
 ConstantBuffer<SkinUniforms> skin : UNIFORM_SLOT(2);
 
 VertexOut vs_main(VertexIn input) {
-    // Linear blend skinning. Weights are normalized on the CPU, so no rescaling
-    // is needed here.
-    float4x4 blended = skin.joints[input.joint_index.x] * input.weight.x;
-    blended += skin.joints[input.joint_index.y] * input.weight.y;
-    blended += skin.joints[input.joint_index.z] * input.weight.z;
-    blended += skin.joints[input.joint_index.w] * input.weight.w;
+    float4x4 blended = SKIN_MATRIX(skin, input.joint_index, input.weight);
 
     float4 skinned_position = mul(blended, float4(input.position, 1.0));
     // Blending matrices this way is only correct for rotation and uniform scale,

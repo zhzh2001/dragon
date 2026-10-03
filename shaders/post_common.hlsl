@@ -26,7 +26,8 @@ struct PostVertex {
 
 #ifdef VERTEX_STAGE
 // Every post pass shares this vertex stage.
-PostVertex vs_main(uint vertex_id : SV_VertexID) {
+PostVertex vs_main(VERTEX_ID_INPUT) {
+    const int vertex_id = VERTEX_ID;
     const float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
     PostVertex o;
     o.clip_position = float4(positions[vertex_id], 0.0, 1.0);

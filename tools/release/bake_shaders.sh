@@ -32,9 +32,9 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 sc=${SHADERCROSS:-$(command -v shadercross || echo "$HOME/.local/opt/shadercross/bin/shadercross")}
 [ -x "$sc" ] || { echo "no shadercross at $sc (docs/PORTING.md, P1)" >&2; exit 1; }
 mkdir -p "$out"
-# The define sets, sorted; "-" is none. sm3: BAKED_NOISE SWIZZLED_NORMALS.
-# sm2 and ff add LDR_OUTPUT.
-variants="- BAKED_NOISE,SWIZZLED_NORMALS BAKED_NOISE,LDR_OUTPUT,SWIZZLED_NORMALS"
+# The define sets, sorted; "-" is none. sm3: BAKED_NOISE PACKED_JOINTS
+# SWIZZLED_NORMALS. sm2 and ff add LDR_OUTPUT.
+variants="- BAKED_NOISE,PACKED_JOINTS,SWIZZLED_NORMALS BAKED_NOISE,LDR_OUTPUT,PACKED_JOINTS,SWIZZLED_NORMALS"
 count=0
 for src in "$root"/shaders/*.hlsl; do
   grep -q 'fs_main(' "$src" || continue

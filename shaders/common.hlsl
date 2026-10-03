@@ -28,6 +28,44 @@
 #define TEXTURE_SLOT(n) register(t##n, RESOURCE_SPACE)
 #define SAMPLER_SLOT(n) register(s##n, RESOURCE_SPACE)
 
+// D3D9 (rhi/d3d9, SM3 and below) lacks two things the modern stages use.
+//
+// No SV_VertexID: a fullscreen triangle's vertex stage reads its index from
+// TEXCOORD0 instead, a float the D3D9 backend feeds from a three-entry buffer
+// of its own whenever a pipeline declares no vertex attributes.
+//   VertexOut vs_main(VERTEX_ID_INPUT) { const int vertex_id = VERTEX_ID; ...
+#ifdef D3D9
+#define VERTEX_ID_INPUT float vertex_id_input : TEXCOORD0
+#define VERTEX_ID int(vertex_id_input + 0.5)
+#else
+#define VERTEX_ID_INPUT uint vertex_id_input : SV_VertexID
+#define VERTEX_ID int(vertex_id_input)
+#endif
+
+// No portable way to sample a depth buffer: the shadow map is an R32F colour
+// target there, so the depth-only passes write depth as a colour (z / w, the
+// same value a depth buffer would hold) and the shaders that read the map read
+// .x either way. Elsewhere the fragment stage writes nothing.
+#ifdef D3D9
+#define DEPTH_VARYING float2 depth_zw : TEXCOORD7;
+#define WRITE_DEPTH_VARYING(o) (o).depth_zw = (o).clip_position.zw
+#define DEPTH_FRAGMENT_RETURN float4
+#define DEPTH_FRAGMENT_SEMANTIC : SV_Target
+#define DEPTH_FRAGMENT_END(i) return float4((i).depth_zw.x / (i).depth_zw.y, 0.0, 0.0, 1.0)
+#else
+#define DEPTH_VARYING
+#define WRITE_DEPTH_VARYING(o)
+#define DEPTH_FRAGMENT_RETURN void
+#define DEPTH_FRAGMENT_SEMANTIC
+#define DEPTH_FRAGMENT_END(i)
+#endif
+struct DepthOnlyOut {
+    float4 clip_position : SV_Position;
+    DEPTH_VARYING
+};
+#define DEPTH_ONLY_FRAGMENT \
+    DEPTH_FRAGMENT_RETURN fs_main(DepthOnlyOut input) DEPTH_FRAGMENT_SEMANTIC { DEPTH_FRAGMENT_END(input); }
+
 // The LDR tiers' in-shader finish (LDR_OUTPUT): the same curve as
 // post_composite.hlsl -- exposure, Reinhard blended toward its hue-preserving
 // form, gamma 2.2, then contrast about display middle grey and saturation

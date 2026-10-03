@@ -34,8 +34,9 @@ constexpr uint32_t MIN_PALETTE_BONES = 12;
 // Returns `mesh` with every submesh cut into batches of at most `max_bones`
 // joints (clamped to at least MIN_PALETTE_BONES). Batches keep their
 // submesh's material; vertices shared between batches are duplicated, one copy
-// per batch. A mesh whose joints already fit is returned unchanged, with no
-// palettes, which the renderer reads as "index the skeleton directly".
+// per batch. A mesh whose joint indices are all below `max_bones` is returned
+// unchanged, with no palettes, which the renderer reads as "index the skeleton
+// directly"; any other mesh gets a palette, even when one batch holds it.
 SkinnedMeshData partition_palettes(const SkinnedMeshData& mesh, uint32_t max_bones);
 
 }  // namespace anim

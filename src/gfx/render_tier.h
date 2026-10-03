@@ -41,8 +41,8 @@ struct RenderTier {
     // uniform block holds 256. A D3D9 vertex shader has 256 float4 constants,
     // a joint costs three (4x3), and the scene and model blocks need ~45:
     // 60 joints fit vs_3_0 with room, and SM2 keeps 50 for its longer
-    // material constants. Fixed function skins on the CPU (R5), so its value
-    // is the CPU path's, not a palette.
+    // material constants. Fixed function will skin on the CPU (R5); until then
+    // it previews through the sm2 shaders, so it takes sm2's palette.
     uint32_t max_skin_bones = 256;
     // The main pass's depth layout (see DepthConvention).
     DepthConvention depth;
@@ -70,6 +70,10 @@ struct RenderTier {
     // PORTING.md budgets about 20K at sm3, 10K at sm2 and 6K for fixed
     // function, whose CPU skinning pays per vertex.
     uint32_t max_skinned_triangles = 0;
+    // Whether a draw's joint palette is packed as three rows a joint
+    // (PACKED_JOINTS, shaders/skin_common.hlsl): D3D9's 256 vertex constants
+    // hold 64 such joints beside the scene block, and no full matrices.
+    bool packed_joints = false;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -78,13 +82,14 @@ struct RenderTier {
             case Tier::Modern: break;
             case Tier::SM3: t.max_skin_bones = 60; break;
             case Tier::SM2: t.max_skin_bones = 50; break;
-            case Tier::FixedFunction: t.max_skin_bones = 256; break;
+            case Tier::FixedFunction: t.max_skin_bones = 50; break;
         }
         if (tier != Tier::Modern) t.depth = DepthConvention{false, 0.5f, 16000.0f};
         t.hdr = tier == Tier::Modern || tier == Tier::SM3;
         t.baked_noise = tier != Tier::Modern;
         t.max_texture_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
         t.compress_textures = tier != Tier::Modern;
+        t.packed_joints = tier != Tier::Modern;
         switch (tier) {
             case Tier::Modern: break;
             case Tier::SM3: t.max_skinned_triangles = 20000; break;

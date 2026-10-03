@@ -25,6 +25,7 @@ struct DepthOut {
     float4 clip_position : SV_Position;
     float2 uv : TEXCOORD0;
     float material : TEXCOORD1;
+    DEPTH_VARYING
 };
 
 #ifdef VERTEX_STAGE
@@ -47,6 +48,7 @@ DepthOut vs_main(VertexIn input) {
     o.uv = input.uv;
     int tag = int(input.color.z + 0.5);
     o.material = float(tag >= 10 ? tag - 10 : tag);
+    WRITE_DEPTH_VARYING(o);
     return o;
 }
 #endif
@@ -57,12 +59,13 @@ TEXTURE2D(needle_card, 1);
 
 // A card's shadow is the shape cut out of it, not the quad: the same alpha
 // test as the colour pass, against the same textures (1 leaf, 2 needle).
-void fs_main(DepthOut input) {
+DEPTH_FRAGMENT_RETURN fs_main(DepthOut input) DEPTH_FRAGMENT_SEMANTIC {
     int material = int(input.material + 0.5);
     if (material == 1 || material == 2) {
         float alpha = material == 1 ? leaf_card.Sample(leaf_card_sampler, input.uv).a
                                     : needle_card.Sample(needle_card_sampler, input.uv).a;
         if (alpha < 0.45) discard;
     }
+    DEPTH_FRAGMENT_END(input);
 }
 #endif
