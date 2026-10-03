@@ -323,7 +323,13 @@ flight controls.
   too. The rule exists because the D&D-referenced gold dragon
   studies were committed and partly pushed before anyone read Wizards of the
   Coast's Fan Content Policy, which forbids Wizards' IP, artwork included, in
-  any game, free or not (`ATTRIBUTION.md`, "Gold reference studies").
+  any game, free or not (`ATTRIBUTION.md`, "Gold reference studies"); the
+  pushed part took a forced rewrite of the mirror to withdraw.
+- **Publish only what ships** (the user's call, 2026-10-03). The mirror is
+  updated when something new is ready for players -- a release, a finished
+  feature -- not after every commit, and never with work in progress.
+  `export_public.sh --ref COMMIT` exports `main` up to the last commit worth
+  shipping. Ask before an export that moves the mirror.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
   a one-liner -- to `codex exec -m gpt-6-astra`, and never start it without
   checking usage first -- see below.** Do not delegate to Fable 5.1 any more

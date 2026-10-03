@@ -1,10 +1,12 @@
 #!/bin/sh
 # Build the public mirror of this repository in a separate directory.
 #
-#   tools/release/export_public.sh OUT_DIR [--email ADDRESS] [--squash]
+#   tools/release/export_public.sh OUT_DIR [--ref COMMIT] [--email ADDRESS] [--squash]
 #
 # The working repository is never touched: this clones `main` alone (no
-# codex/*, fable/* or worktree branches), then rewrites the clone's history
+# codex/*, fable/* or worktree branches) -- or with --ref, main's history up
+# to that commit, so work in progress after the last thing worth shipping
+# stays private (docs/RELEASE.md) -- then rewrites the clone's history
 # with git-filter-repo (`brew install git-filter-repo`):
 #   - drops every path in tools/release/public_excludes.txt from all of
 #     history -- the derivatives of the CC BY-NC dragon (ATTRIBUTION.md);
@@ -18,11 +20,12 @@
 # deliberate step (docs/RELEASE.md).
 set -eu
 
-[ $# -ge 1 ] || { sed -n 2,18p "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n 2,20p "$0"; exit 2; }
 out=$1; shift
-email=""; squash=0
+email=""; squash=0; ref=""
 while [ $# -gt 0 ]; do
   case $1 in
+    --ref) ref=$2; shift 2 ;;
     --email) email=$2; shift 2 ;;
     --squash) squash=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
@@ -35,6 +38,13 @@ command -v git-filter-repo >/dev/null || { echo "needs git-filter-repo" >&2; exi
 
 git clone --quiet --no-local --single-branch --branch main "$src" "$out"
 cd "$out"
+if [ -n "$ref" ]; then
+  git merge-base --is-ancestor "$ref" main || { echo "$ref is not on main" >&2; exit 1; }
+  git reset --quiet --hard "$ref"
+  # The clone's origin/main still names the newer commits; without it nothing
+  # past the ref is reachable, and the gc below drops them.
+  git remote remove origin
+fi
 
 paths=""
 while IFS= read -r p; do

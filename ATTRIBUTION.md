@@ -106,16 +106,18 @@ anything derived from the official 2024 anatomy sheets. The policy's other
 terms (free distribution, the "unofficial Fan Content" notice) would not apply
 anyway. Consequences:
 
-- Everything gold that was not yet public stays out of the public mirror. The
-  paths are in `tools/release/public_excludes.txt`: the direct-reference
-  studies, `gold-direct-test`, the rig, integration and tail-flow evidence,
-  the gold tools, skeleton and profiles. The packagers never included the
-  model.
-- **Already public before this finding** (pushed 2026-10-02):
-  `artifacts/dragon-options/gold-ribbon-test/` and the six original files in
-  `docs/concept/metallic-dragons-2026-10-02/`. Removing them needs a history
-  rewrite and a forced push of the mirror, which is the user's decision; until
-  then they remain.
+- Nothing gold is in the public mirror. The paths are in
+  `tools/release/public_excludes.txt`: the metallic concept sheets and
+  direct-reference studies, the ribbon and direct tests, the rig,
+  integration and tail-flow evidence, the gold tools, skeleton and
+  profiles. The packagers never included the model.
+- `artifacts/dragon-options/gold-ribbon-test/` and the six original metallic
+  sheets had been pushed on 2026-10-02, before this finding. At the user's
+  call they were **withdrawn on 2026-10-03** by rewriting the mirror's history
+  without them and force-pushing it: the mirror's one forced update
+  (`docs/RELEASE.md`). The mirror had no forks, stars or watchers. GitHub
+  still serves the old commits by SHA until it collects them; only GitHub
+  Support can purge that sooner.
 - The gold dragon stays a local study. `gold-dragon` is in the development
   roster only when its model is present, and the model is gitignored.
 

@@ -58,7 +58,7 @@ MIT detected, `main` only). The mirror checkout is `~/src/dragon-public`, with
 
 ```sh
 cd ~/src && rm -rf dragon-public-next
-game-claude/tools/release/export_public.sh dragon-public-next
+game-claude/tools/release/export_public.sh dragon-public-next --ref <last commit worth shipping>
 cd dragon-public-next && git remote add origin https://github.com/zhzh2001/dragon.git
 git fetch origin && git merge-base --is-ancestor origin/main main && git push origin main
 cd .. && rm -rf dragon-public && mv dragon-public-next dragon-public
@@ -68,6 +68,25 @@ The rewrite is deterministic, so unchanged history keeps its hashes and the
 push is a fast-forward. If `merge-base` fails, something in the excludes or
 the screenshot rule changed what old commits contain. Find out what before
 anything is forced: a forced push breaks every clone.
+
+**When to publish.** Only when something new is ready to ship -- a release,
+a finished feature -- never after every commit, and never with work in
+progress (the user's call, 2026-10-03). `--ref` exports `main` up to a given
+commit, so a mirror update can stop before whatever is still in progress.
+The retro track's R2 commits, for one, stay private until the retro build
+has something to show.
+
+**The one forced update (2026-10-03).** The D&D-derived gold studies
+(`ATTRIBUTION.md`, "Gold reference studies") had been published on
+2026-10-02. At the user's call the mirror was re-exported with
+`docs/concept/metallic-dragons-2026-10-02/`,
+`artifacts/dragon-options/gold-ribbon-test/` and the ribbon preview tool
+added to the excludes, at `--ref ce13d7a` (the commit already public, so no
+new work went out with it), and force-pushed over `d1a1fe3` with a lease. 176
+of the 186 commits kept their hashes, `v0.1.0` among them; the ten from the
+first gold commit on were rewritten. The repository had no forks, stars or
+watchers. GitHub keeps serving the old commits by SHA until it garbage-collects
+them, and only a GitHub Support request purges that sooner.
 
 ## A copy of the game
 

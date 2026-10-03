@@ -12,14 +12,11 @@ artifacts/model_sketchfab.png
 # "Don't use Wizards' IP in other games. This includes your own or other
 # people's games ..., regardless of whether it is distributed for free" --
 # and its IP includes artwork. So nothing derived from the official sheets
-# goes public. These are the paths that were never published; the earlier
-# gold-ribbon-test renders and six concept sheets already went out on
-# 2026-10-02 (ATTRIBUTION.md says what is pending about them). Excluding only
-# never-published paths keeps the public history append-only.
-docs/concept/metallic-dragons-2026-10-02/direct-reference/
-docs/concept/metallic-dragons-2026-10-02/gold-art-model-research.md
-docs/concept/metallic-dragons-2026-10-02/gold-fire-v3-diamond.png
-docs/concept/metallic-dragons-2026-10-02/gold-wing-revision-prompts.txt
+# goes public. The ribbon test and the metallic concept sheets were published
+# on 2026-10-02 and withdrawn by a forced push on 2026-10-03, the one rewrite
+# of the public history (docs/RELEASE.md).
+docs/concept/metallic-dragons-2026-10-02/
+artifacts/dragon-options/gold-ribbon-test/
 artifacts/dragon-options/gold-direct-test/
 artifacts/gold-dragon-rig/
 artifacts/gold-dragon-integration/
@@ -28,6 +25,7 @@ assets/gold-dragon.glb.breath.cfg
 assets/gold-dragon.glb.flight.cfg
 assets/gold-dragon.glb.rig.cfg
 tools/skeletons/gold-dragon.json
+tools/preview_gold_ribbon_candidate.py
 tools/capture_gold_dragon.py
 tools/capture_gold_tail.py
 tools/gold_dragon_author.py
@@ -38,3 +36,4 @@ tools/gold_dragon_measure.py
 tools/gold_dragon_plots.py
 tools/gold_dragon_validate.py
 tools/gold_dragon_weights.py
+assets/gold-dragon/
