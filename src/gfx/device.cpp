@@ -41,6 +41,16 @@ bool Device::init(const Config& config) {
     rhi::DeviceConfig rhi_config;
     rhi_config.headless = headless_;
     rhi_config.driver = config.gpu_driver;
+    // The GPU debug layer: on in a development build, off in a package (a
+    // player has no use for its validation, and some D3D12 implementations,
+    // D3DMetal under Wine among them, crash on asking for it).
+    // DRAGON_GPU_DEBUG=0 or 1 overrides either way.
+#ifdef DRAGON_SHADERCROSS
+    rhi_config.debug = true;
+#else
+    rhi_config.debug = false;
+#endif
+    if (const char* forced = SDL_getenv("DRAGON_GPU_DEBUG")) rhi_config.debug = forced[0] == '1';
     rhi_ = rhi::Device::create(window_, rhi_config);
     if (!rhi_) return false;
 

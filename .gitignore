@@ -60,5 +60,6 @@ assets/*.bak
 # Release packaging (tools/release/package_macos.sh).
 build-release/
 build-win/
+build-r0/
 build-win-release/
 dist/

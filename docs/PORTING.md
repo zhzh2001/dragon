@@ -311,6 +311,44 @@ built. R1 is the load-bearing refactor and is
 worth doing even if the retro track stalls, because it is also what makes
 the golden-screenshot gate backend-agnostic.
 
+### R0, as built (2026-10-03)
+
+`tools/r0/r0.cpp`, built by `tools/r0/build.sh`: one 32-bit Win32 + D3D9
+program, no SDL. It opens a window and draws a textured, fogged triangle
+twice over: through a hand-assembled `vs_2_0` with fixed-function pixel
+stages, and through fixed function alone (`--ff`). It reads the back buffer
+back with `GetRenderTargetData`, plays a tone through miniaudio, and looks
+for XInput. Everything it learns goes to `r0.log`. Results:
+
+| Where | Result |
+|---|---|
+| x99-windows, RTX 5060 Ti, the real D3D9 runtime | SM3 caps, DXT1/5, FP16 targets, D24X8. Both paths draw, and they are pixel-identical. Readback works, WASAPI plays the tone, XInput 1.4 loads |
+| Mac, plain Wine 10 (Sikarugir's engine, run directly, no CrossOver), wined3d on OpenGL | Draws within 0.017/255 of x99, both paths. Wine reports a GeForce 6800 with SM3 caps and sees the desk's gamepad through XInput. **Good enough as a D3D9 smoke test**, though its caps are fake |
+| Mac, Wine + D9VK (DXVK's D3D9 on MoltenVK) | The 32-bit DLL does not load in Wine's experimental WoW64 mode (status c0000135). Not pursued |
+| The G41 under XP | Not run yet: the G41 is off |
+
+- **The SSH session cannot run D3D9.** Session 0 has no adapter, so
+  `CreateDevice` fails with D3DERR_INVALIDCALL. `tools/x99/run_interactive.ps1`
+  runs a command on the signed-in desktop through a one-off interactive
+  scheduled task and prints its output: the D3D9 loop on x99.
+- **The Mac's i686 MinGW (Homebrew GCC 16) is UCRT, not msvcrt** as this
+  plan assumed. It imports `api-ms-win-crt-*`, which XP has only with the
+  VC++ 2015-2019 redistributable (14.27 or older). `-mcrtdll=msvcrt` does not
+  help: its libstdc++, libgcc and winpthreads were built for UCRT. Its
+  kernel32 and user32 imports are all XP-era, and `_WIN32_WINNT=0x0501`
+  compiles.
+- **llvm-mingw's msvcrt build** (20260922, LLVM 23.1.2, SHA-256 checked) is
+  the XP toolchain. Its releases ship msvcrt only for Linux and Windows
+  hosts, so it lives on x99 at `D:\third\llvm-mingw-msvcrt`. The spike built
+  with it imports only `d3d9`, `msvcrt`, `user32` and `kernel32`, all
+  functions XP's msvcrt.dll and kernel32 have. It renders identically under
+  Wine. Whether it really starts on XP is the G41's to say.
+- **Windows Defender quarantined that msvcrt build** as
+  `Trojan:Win32/Wacatac.C!ml`, a machine-learning verdict on a small
+  unsigned executable. The UCRT build was not flagged. It is a false
+  positive, but a real distribution problem: a release for Windows will want
+  code signing or a Microsoft false-positive submission.
+
 ### R1, as built (2026-10-03)
 
 The RHI is `src/rhi/rhi.h`, one `rhi::Device` interface, about 30 calls:
