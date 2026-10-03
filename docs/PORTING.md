@@ -706,6 +706,54 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
     card's FP24 pixel maths moves the steps by a texel. That is hardware
     variance, so the X550 is a result, not a gate.
 
+### R7, in progress: graphics settings and presets
+
+The tier is what the hardware can do: HDR, per-pixel or per-vertex
+lighting, packed joints, the depth layout. How much it is asked to draw is
+eight settings (`gfx/graphics_settings.h`). Each setting is a level, Ultra
+(0) to Very low (4), and each step down roughly halves its vertex load:
+
+| Setting | Ultra | High | Medium | Low | Very low | Applies |
+|---|---|---|---|---|---|---|
+| Model detail (near, far LOD) | as authored | 20K, 3K past 150 m | 10K, 1.5K past 100 m | 5K, 800 past 80 m | 2.5K, 400 past 60 m | restart |
+| Terrain grid | 6 m | 12 m | 18 m | 24 m | 24 m (36 m lost the river) | reload |
+| Trees (distance, spacing) | 4.2 km, 1× | 2.5 km, 1× | 800 m, 1.8× | 600 m, 2.2× | 400 m, 2.8× | reload |
+| Grass radius | 1× | 0.7× | 0.45× | 0.3× | off | live |
+| Rocks (triangles, distance) | scanned | 400, 1× | 150, 0.5× | 80, 0.4× | 40, 0.3× | reload |
+| Textures | as authored | 1024 | 512 | 256 | 128 | restart |
+| Shadows | 4096 | 2048 | 1024 | 512 | off | reload |
+| Bloom | on | on | on | off | off | live |
+
+- **A preset is every setting at one level.** A tier starts on its own:
+  modern Ultra, sm3 High, sm2 Medium, ff Low. The settings are content, not
+  shaders, so a preset renders the same on every backend that runs its tier.
+- **What a tier or device cannot do is not offered:**
+  - bloom without HDR;
+  - a texture or shadow map past the card's largest (the RHI reports it:
+    2048 on the X550);
+  - full maps uncompressed, or a shadow map past what an SM2 card's memory
+    holds.
+  Presets clamp to the nearest cheaper level, and are still named as
+  themselves (`GraphicsSettings::preset_level`).
+- **Terrain casting.** The terrain casts into the shadow map only at 2048
+  and above. At 1024 and below the map covers too little of it to repay
+  its triangles.
+- **The Graphics panel** (first in the right-hand stack) has:
+  - the renderer, tier and preset;
+  - each setting, with only its allowed levels;
+  - Apply and Revert.
+  Terrain, trees, rocks and shadows rebuild in place. Model detail,
+  textures, the tier and the renderer need a restart, which the panel does
+  itself: `main` relaunches without the overridden arguments. Choices are
+  saved per user in `graphics.cfg`. `--preset` and `--graphics
+  key=level,...` override them, and a headless run ignores them so
+  captures stay reproducible.
+- **The benchmark.** `tools/bench/presets.py` runs every preset through
+  three headless scenarios: `valley` (the start's glide), `course` (the
+  autopilot round a generated course) and `run` (the demo pilot in a hoard
+  run). It reads each run's summary line: wall-clock fps, median and
+  99th-percentile ("1% low") frame times, past the first second.
+
 ### Budgets to design to
 
 From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run

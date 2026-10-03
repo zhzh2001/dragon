@@ -1,6 +1,7 @@
 #include "scene_common.hlsl"
 
-// Fullscreen sky. Drawn first with no depth test, so the terrain overwrites it.
+// Fullscreen sky, drawn after the opaque world at the far plane, so only the
+// pixels nothing else covered run it.
 // Three vertices generated from the vertex id -- no vertex buffer needed.
 
 struct VertexOut {
@@ -15,8 +16,13 @@ VertexOut vs_main(VERTEX_ID_INPUT) {
     const float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
     VertexOut o;
     o.ndc = positions[vertex_id];
-    // z = 0 is the far plane under reversed-Z, which is where sky belongs.
+    // On the far plane, which is where sky belongs: z = 0 under reversed-Z,
+    // z = w in a retro tier's conventional depth (gfx/render_tier.h).
+#ifdef CONVENTIONAL_DEPTH
+    o.clip_position = float4(positions[vertex_id], 1.0, 1.0);
+#else
     o.clip_position = float4(positions[vertex_id], 0.0, 1.0);
+#endif
     return o;
 }
 #endif

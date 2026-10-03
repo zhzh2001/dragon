@@ -6995,7 +6995,6 @@ void App::render() {
     // looks like a sky rather than a void.
     rhi::Pass* pass = device_.begin_main_pass(
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
-    world_.draw_sky(device_, pass);
     world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
     if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
     if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
@@ -7061,6 +7060,10 @@ void App::render() {
         world_.draw_skinned(device_, pass, worn.mesh, bot_model, bot->rig.skinning_matrices(),
                             worn.textures, model_sampler_);
     }
+
+    // The sky: after everything opaque, before anything blended, on only the
+    // pixels left uncovered (make_sky_desc says why).
+    world_.draw_sky(device_, pass);
 
     draw_combat(pass);
 

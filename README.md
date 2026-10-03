@@ -62,7 +62,7 @@ model, camera, AI, gameplay and audio synthesis.
   generated at start-up from noise and sines. The game ships no sound
   files.
 - **Verifiable without a human.** `--headless --frames N --screenshot` plus
-  scripted cameras, a self-playing demo pilot, and nineteen renderer-free
+  scripted cameras, a self-playing demo pilot, and twenty renderer-free
   test suites.
 
 ## Building
@@ -80,7 +80,7 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ./build/dragon --run          # a hoard run
 ./build/dragon --demo         # the game playing itself
-ctest --test-dir build        # nineteen suites, plain executables
+ctest --test-dir build        # twenty suites, plain executables
 ```
 
 **The models are not in the repository.** They are large, so they are
@@ -122,6 +122,13 @@ cross-compiled on the Mac. Linux builds and runs on Vulkan from source. The read
 
 Every gameplay constant sits behind an ImGui slider; the panels are the
 game's editor. `CLAUDE.md` has the full flag and control reference.
+
+**Graphics.** The Graphics panel, first in the stack (F1 shows the
+panels), has the renderer, a tier and a preset from Ultra to Very low, and
+each setting alone: model detail, terrain grid, trees, grass, rocks,
+textures, shadows and bloom. A setting the machine cannot do is not
+offered. The choices are saved, and `--preset low` picks one for a single
+run.
 
 ## Documentation
 

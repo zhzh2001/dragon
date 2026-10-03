@@ -2,6 +2,8 @@
 
 #include "gfx/frustum.h"
 
+#include <algorithm>
+
 #include <cstring>
 
 #include "anim/skeleton.h"
@@ -16,9 +18,15 @@ PipelineDesc make_sky_desc() {
     desc.shader = "sky";
     desc.cull = rhi::Cull::None;
     // No vertex buffer: the triangle is generated from vertex_id.
-    // No depth interaction at all -- the sky is a background, not geometry.
-    desc.depth_test = false;
+    // Drawn after the opaque world, at the far plane, tested and not
+    // writing: only the pixels nothing covered are shaded. Drawn first and
+    // untested it shaded every pixel once more -- on an X550 at 1024x768 a
+    // full screen of a 54-instruction shader, a third of the frame.
+    // GreaterEqual against reversed-Z's cleared 0; the cache flips it for a
+    // conventional tier.
+    desc.depth_test = true;
     desc.depth_write = false;
+    desc.depth_compare = rhi::Compare::GreaterEqual;
     return desc;
 }
 
@@ -185,17 +193,25 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
     device.rhi().draw(pass, 3, 1, 0, 0);
 }
 
-// Draws `mesh` whole, or only the chunks inside `view_proj`'s frustum.
+// Draws `mesh` whole, or only the chunks inside `view_proj`'s frustum. With
+// `eye`, nearest first, so a hill's pixels hide the ones behind it before
+// they are shaded (early depth rejection), which a fill-bound SM2 card feels.
 void draw_chunks(rhi::Device& rhi, rhi::Pass* pass, const Mesh& mesh, const std::vector<MeshChunk>* chunks,
-                 const core::Mat4& view_proj) {
+                 const core::Mat4& view_proj, const core::Vec3* eye = nullptr) {
     if (!chunks || chunks->empty()) {
         rhi.draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
         return;
     }
     const Frustum frustum(view_proj);
+    std::vector<std::pair<float, const MeshChunk*>> visible;
+    visible.reserve(chunks->size());
     for (const MeshChunk& chunk : *chunks) {
-        if (frustum.sees(chunk.centre, chunk.radius)) rhi.draw_indexed(pass, chunk.index_count, 1, chunk.first_index, 0, 0);
+        if (frustum.sees(chunk.centre, chunk.radius)) {
+            visible.push_back({eye ? core::distance(*eye, chunk.centre) : 0.0f, &chunk});
+        }
     }
+    if (eye) std::sort(visible.begin(), visible.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& v : visible) rhi.draw_indexed(pass, v.second->index_count, 1, v.second->first_index, 0, 0);
 }
 
 void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
@@ -228,7 +244,8 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
 
     mesh.bind(device.rhi(), pass);
     // Chunked, the terrain behind the camera costs nothing.
-    draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);
+    const core::Vec3 eye = scene_.camera_position.xyz();
+    draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj, &eye);
 }
 
 void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh) {

@@ -43,8 +43,8 @@ D3DCOMPILER = os.environ.get("D3DCOMPILER_DLL") or os.path.expanduser("~/.local/
 
 # The define sets a tier compiles with (gfx/pipeline.cpp), plus D3D9.
 TIERS = {
-    "sm3": ["BAKED_NOISE", "PACKED_JOINTS", "SWIZZLED_NORMALS", "D3D9"],
-    "sm2": ["BAKED_NOISE", "LDR_OUTPUT", "PACKED_JOINTS", "SM2", "SWIZZLED_NORMALS", "D3D9"],
+    "sm3": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "PACKED_JOINTS", "SWIZZLED_NORMALS", "D3D9"],
+    "sm2": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "LDR_OUTPUT", "PACKED_JOINTS", "SM2", "SWIZZLED_NORMALS", "D3D9"],
 }
 PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0")}
 # Float constant registers each stage has (vs_3_0 256, ps_3_0 224; vs_2_0

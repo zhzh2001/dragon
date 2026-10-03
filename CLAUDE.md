@@ -42,7 +42,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # nineteen suites, plain executables, no framework
+ctest --test-dir build            # twenty suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -107,7 +107,11 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
-| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or `direct3d9` for the D3D9 backend on Windows (`docs/PORTING.md` R3; needs `--tier sm3` and shaders baked by `tools/d3d9/bake_d3d9.py`). |
+| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or `direct3d9[:N]` for the D3D9 backend on Windows, on adapter N (`docs/PORTING.md` R3; a retro tier, shaders baked by `tools/d3d9/bake_d3d9.py`). |
+| `--preset ultra\|high\|medium\|low\|very-low` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium). |
+| `--graphics key=level,...` | Single settings over the preset, levels 0 (ultra) to 4: `models`, `terrain`, `trees`, `grass`, `rocks`, `textures`, `shadows`, `bloom`. Clamped to what the tier and device allow. |
+| `--size WxH` | The window, or the headless render target (default 1280x720). |
+| `--open-panel graphics` | Start with the Graphics panel expanded and in front, for a capture of it. |
 | `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS), for sm2/ff drops the HDR target and bloom and finishes the grade in each world shader (`LDR_OUTPUT`), reads value noise from a baked lattice texture instead of hashing it (`BAKED_NOISE`, `gfx/noise_lattice.h`), caps textures (1024 sm3, 512 sm2/ff) and compresses them to DXT (`gfx/texture.h` `TextureBudget`), and simplifies skinned meshes to 20K/10K/6K triangles (`anim/skin_lod.h`). |
 
 Soaks that have caught real bugs:
@@ -125,7 +129,7 @@ rivals are specks:
 ./build/dragon --bots 6 --bot-range 95 --combat
 ```
 
-Panels worth knowing: **Dragon** has the rig and the hide colour, **Flight**
+Panels worth knowing: **Graphics** (first, collapsed) has the renderer, the tier, the preset and each content setting, saved per user in `graphics.cfg` and ignored by headless runs; **Dragon** has the rig and the hide colour, **Flight**
 has the tuning presets, `heft` and the aerobatics dials, **Terrain > Vegetation** has the trees and
 grass, **Combat** has the difficulty dials and the bots, **Studio** drives the
 animation scenarios and picks which creature is on the stand. Every panel except Combat starts collapsed.
@@ -492,7 +496,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       nineteen suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
+tests/       twenty suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```
