@@ -95,6 +95,12 @@ public mirror's history is rewritten without the old re-exports
 
 ## Gold ribbon-wing test (2026-10-02, not integrated)
 
+The later `assets/gold-direct-cand-oneshot.glb` is another unrigged Hunyuan
+test from the user-approved direct-reference turnaround, with provenance in
+`artifacts/dragon-options/gold-direct-test/`. It is excluded from Git and is
+not part of the game or release roster. This close reference-study model
+remains pending user review; no third-party reuse licence is established.
+
 `assets/gold-ribbon-cand-oneshot.glb` and
 `assets/gold-ribbon-top-cand-oneshot.glb` are unrigged Tencent Hunyuan hosted
 one-shot outputs, generated from the AI-made gold reference and modelling plates

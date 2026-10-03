@@ -1,5 +1,11 @@
 # AI use disclosure
 
+Gold direct-reference 3D test (2026-10-02): Tencent Hunyuan hosted one-shot
+was submitted five cropped views from the user-approved direct-reference
+turnaround. Inputs, job record and read-only model previews are retained in
+`artifacts/dragon-options/gold-direct-test/`; local output is
+`assets/gold-direct-cand-oneshot.glb`. No rigging or game integration.
+
 Gold direct reference study (2026-10-02): at the user's request, built-in
 imagegen received their original Ostrowski D&D reference sheet directly to
 generate a concept draft, standalone top drawing and five-view turnaround.
