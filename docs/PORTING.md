@@ -236,6 +236,16 @@ first is the 1x1 and odd-width textures.
 - CachyOS is the GRUB default. `sudo grub-reboot 'Windows Boot Manager (on
   /dev/nvme0n1p1)' && sudo reboot` boots Windows once, and Windows' next
   reboot is back in CachyOS.
+- **Coming back from Windows needs a cold boot**: shut down, then power on,
+  not Restart. After a warm reboot from Windows, CachyOS comes up with no
+  network. The I217-LM (e1000e) gets a 1 Gbit/s link but passes no traffic,
+  so DHCP never answers. The RTL8188EUS USB Wi-Fi fails "Firmware failed to
+  start" (rtl8xxxu, -11), because its MCU keeps the state Windows left.
+  Tested 2026-10-02 with a boot-time recovery unit on x99
+  (`nic-recover.service`): reloading e1000e, reloading rtl8xxxu and
+  re-enumerating the USB device all failed. The root hub has no per-port
+  power switching, so Linux cannot reset the adapter. A warm reboot from
+  Windows needs someone at the machine to power-cycle it.
 - Windows answers as `x99-windows` (LAN) or `x99-windows-ts` (Tailscale).
   Its SSH shell is PowerShell 7, so join commands with `;`, not `&`.
 - `D:` under Windows is `/mnt/Data` under Linux: the source tree is at
