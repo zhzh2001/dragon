@@ -454,7 +454,31 @@ render before a D3D9 device exists.
     softening is plain up close, as budgeted.
   - The CPU encode costs load time. A D3D9 package should bake the
     compressed chain (R3's packaging) rather than repeat it on a 2005 CPU.
-- Next: creature LODs.
+- **Creature LODs, done (2026-10-03).** At load, `anim::simplify_skinned`
+  (meshoptimizer, MIT) cuts every skinned mesh to the tier's triangle
+  budget: 20K for sm3, 10K for sm2, 6K for ff, against the roster's 80K.
+  That is before the palette split, since fewer triangles can need fewer
+  joints. Edges collapse onto existing vertices, so every surviving vertex
+  is an original, joints and weights byte for byte
+  (`tests/test_skin_lod.cpp`). Nothing is re-rigged, and no `tools/` step
+  or Blender pass is needed. The full mesh still feeds every CPU
+  measurement (the head, the wingtips, the stance). Only the upload is cut.
+  - The first pass held every UV seam. The generated creatures are cut
+    into hundreds of atlas islands, so the simplifier stalled at 11K to 20K
+    triangles for the 10K budget. Forced further, it tore the wing
+    membranes (Tidewrack from above). It now runs permissive (it may cross
+    a seam) with normals (weight 0.5) and UVs (weight 4) as attributes, so
+    crossing a seam is charged for the texture it slides. At weight 1 the
+    close-up head at 6K showed streaks along collapsed seams; at 4 they are
+    mostly gone.
+  - Every species reaches its budget. The error, attributes included, is
+    at most 0.5% of the model's size at sm3, 0.9% at sm2 and 1.6% at ff.
+    Rendered from the side, from above and on the ground, each tier keeps
+    the silhouette. The close-up head is faceted at 10K and 6K, as those
+    budgets must be. The props' 6K to 13K are cut too where they exceed a
+    tier's cap.
+- R2's content work is complete. What is left of the retro track needs the
+  D3D9 backend (R3) and real hardware.
 
 ### Budgets to design to
 

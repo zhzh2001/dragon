@@ -42,7 +42,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # eighteen suites, plain executables, no framework
+ctest --test-dir build            # nineteen suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -108,7 +108,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 | `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first. |
-| `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS), for sm2/ff drops the HDR target and bloom and finishes the grade in each world shader (`LDR_OUTPUT`), reads value noise from a baked lattice texture instead of hashing it (`BAKED_NOISE`, `gfx/noise_lattice.h`), and caps textures (1024 sm3, 512 sm2/ff) and compresses them to DXT (`gfx/texture.h` `TextureBudget`). |
+| `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS), for sm2/ff drops the HDR target and bloom and finishes the grade in each world shader (`LDR_OUTPUT`), reads value noise from a baked lattice texture instead of hashing it (`BAKED_NOISE`, `gfx/noise_lattice.h`), caps textures (1024 sm3, 512 sm2/ff) and compresses them to DXT (`gfx/texture.h` `TextureBudget`), and simplifies skinned meshes to 20K/10K/6K triangles (`anim/skin_lod.h`). |
 
 Soaks that have caught real bugs:
 
@@ -459,7 +459,7 @@ Write what we want to learn; vendor the rest. In: renderer, scene, animation
 blending and procedural animation, flight model, camera, AI, gameplay. Out
 (never hand-rolled): SDL3 (window/input/GPU), SDL_shadercross (the shader
 compiler; dev builds only), Dear ImGui, Jolt (physics), cgltf (glTF),
-stb_image, miniaudio. SDL and SDL_shadercross refuse AI-written
+stb_image, meshoptimizer (the retro tiers' creature LODs), miniaudio. SDL and SDL_shadercross refuse AI-written
 contributions: never file an issue or a PR against them from a session.
 
 ## Layout
@@ -480,7 +480,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       eighteen suites: math, camera, camera_rig, flight, rally, anim, skin_partition, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
+tests/       nineteen suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

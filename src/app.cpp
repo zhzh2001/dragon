@@ -1,4 +1,5 @@
 #include "app.h"
+#include "anim/skin_lod.h"
 #include "anim/skin_partition.h"
 #include "gfx/static_model.h"
 
@@ -3411,12 +3412,19 @@ gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim
 }
 
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag) const {
-    if (tier_.max_skin_bones >= uint32_t(anim::MAX_JOINTS)) return mesh;
-    anim::SkinnedMeshData split = anim::partition_palettes(mesh, tier_.max_skin_bones);
-    if (split.submeshes.size() != mesh.submeshes.size() || split.vertices.size() != mesh.vertices.size()) {
+    // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
+    anim::LodResult lod = anim::simplify_skinned(mesh, tier_.max_skinned_triangles);
+    if (lod.mesh.indices.size() != mesh.indices.size()) {
+        LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size", tag,
+                 mesh.indices.size() / 3, lod.mesh.indices.size() / 3, mesh.vertices.size(),
+                 lod.mesh.vertices.size(), double(lod.error) * 100.0);
+    }
+    if (tier_.max_skin_bones >= uint32_t(anim::MAX_JOINTS)) return std::move(lod.mesh);
+    anim::SkinnedMeshData split = anim::partition_palettes(lod.mesh, tier_.max_skin_bones);
+    if (split.submeshes.size() != lod.mesh.submeshes.size() || split.vertices.size() != lod.mesh.vertices.size()) {
         LOG_INFO("%s: %u-joint palettes: %zu submeshes -> %zu draws, %zu -> %zu vertices", tag,
-                 tier_.max_skin_bones, mesh.submeshes.size(), split.submeshes.size(), mesh.vertices.size(),
-                 split.vertices.size());
+                 tier_.max_skin_bones, lod.mesh.submeshes.size(), split.submeshes.size(),
+                 lod.mesh.vertices.size(), split.vertices.size());
     }
     return split;
 }

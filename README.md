@@ -18,7 +18,7 @@ model you do.
 > code; no AI audio model was used.
 
 Everything above the vendored foundations (SDL3, Dear ImGui, cgltf, stb_image,
-miniaudio) is written for this project: the renderer, animation, flight
+meshoptimizer, miniaudio) is written for this project: the renderer, animation, flight
 model, camera, AI, gameplay and audio synthesis.
 
 ## Highlights
@@ -62,7 +62,7 @@ model, camera, AI, gameplay and audio synthesis.
   generated at start-up from noise and sines. The game ships no sound
   files.
 - **Verifiable without a human.** `--headless --frames N --screenshot` plus
-  scripted cameras, a self-playing demo pilot, and eighteen renderer-free
+  scripted cameras, a self-playing demo pilot, and nineteen renderer-free
   test suites.
 
 ## Building
@@ -80,7 +80,7 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ./build/dragon --run          # a hoard run
 ./build/dragon --demo         # the game playing itself
-ctest --test-dir build        # eighteen suites, plain executables
+ctest --test-dir build        # nineteen suites, plain executables
 ```
 
 **The models are not in the repository.** They are large, so they are

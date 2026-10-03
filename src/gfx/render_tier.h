@@ -63,6 +63,11 @@ struct RenderTier {
     // 4096^2 maps are 85 MB each with mips before the cap.
     uint32_t max_texture_size = 0;
     bool compress_textures = false;
+    // The most triangles a skinned mesh keeps (anim/skin_lod.h), 0 for no
+    // cap: the roster's creatures are 60 to 90 thousand. The table in
+    // PORTING.md budgets about 20K at sm3, 10K at sm2 and 6K for fixed
+    // function, whose CPU skinning pays per vertex.
+    uint32_t max_skinned_triangles = 0;
 
     static RenderTier make(Tier tier) {
         RenderTier t;
@@ -78,6 +83,12 @@ struct RenderTier {
         t.baked_noise = tier != Tier::Modern;
         t.max_texture_size = tier == Tier::Modern ? 0 : tier == Tier::SM3 ? 1024 : 512;
         t.compress_textures = tier != Tier::Modern;
+        switch (tier) {
+            case Tier::Modern: break;
+            case Tier::SM3: t.max_skinned_triangles = 20000; break;
+            case Tier::SM2: t.max_skinned_triangles = 10000; break;
+            case Tier::FixedFunction: t.max_skinned_triangles = 6000; break;
+        }
         return t;
     }
 

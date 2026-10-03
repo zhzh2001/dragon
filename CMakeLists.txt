@@ -14,6 +14,7 @@ include(cmake/sdl3.cmake)
 include(cmake/imgui.cmake)
 include(cmake/cgltf.cmake)
 include(cmake/stb.cmake)
+include(cmake/meshoptimizer.cmake)
 include(cmake/miniaudio.cmake)
 
 add_executable(dragon
@@ -36,6 +37,7 @@ add_executable(dragon
   src/anim/skeleton.cpp
   src/anim/skinned_mesh.cpp
   src/anim/skin_partition.cpp
+  src/anim/skin_lod.cpp
   src/anim/dragon_rig.cpp
   src/anim/animation.cpp
   src/anim/gltf_loader.cpp
@@ -68,7 +70,7 @@ add_executable(dragon
 )
 
 target_include_directories(dragon PRIVATE src)
-target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio)
+target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio meshoptimizer)
 
 # Data is found beside the executable first (core/paths.h). A development
 # build has none there, so it falls back to the source tree, and hot reload
@@ -228,6 +230,17 @@ target_include_directories(test_texture_budget PRIVATE src)
 target_link_libraries(test_texture_budget PRIVATE SDL3::SDL3 stb)
 target_compile_options(test_texture_budget PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME texture_budget COMMAND test_texture_budget)
+
+# Creature LODs: a simplified skinned mesh keeps only original vertices.
+add_executable(test_skin_lod
+  tests/test_skin_lod.cpp
+  src/anim/skin_lod.cpp
+  src/anim/skinned_mesh.cpp
+)
+target_include_directories(test_skin_lod PRIVATE src)
+target_link_libraries(test_skin_lod PRIVATE SDL3::SDL3 meshoptimizer)
+target_compile_options(test_skin_lod PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME skin_lod COMMAND test_skin_lod)
 
 add_executable(test_combat
   tests/test_combat.cpp
