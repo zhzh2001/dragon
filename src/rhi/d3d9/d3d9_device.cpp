@@ -273,6 +273,8 @@ public:
         LOG_INFO("direct3d9: %s, vs_%lu_%lu ps_%lu_%lu", id.Description,
                  D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion), D3DSHADER_VERSION_MINOR(caps_.VertexShaderVersion),
                  D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion), D3DSHADER_VERSION_MINOR(caps_.PixelShaderVersion));
+        LOG_INFO("direct3d9: at most %lu primitives a draw, vertex index %lu", caps_.MaxPrimitiveCount,
+                 caps_.MaxVertexIndex);
         if (D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion) < 2) {
             LOG_ERROR("direct3d9: this backend needs shader model 2 (--tier sm2) or 3; the card has less");
             return false;
@@ -873,7 +875,7 @@ public:
                     dev_->SetStreamSource(s, b ? b->vb : nullptr,
                                           streams_[s].offset + (first_instance + i) * pipeline_->stream_pitch[s], 0);
                 }
-                { PROFILE(PROF_DRAW); dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims); }
+                draw_indexed_chunked(type, vertex_offset, vertices, first_index + index_offset_, prims);
             }
             return;
         }
@@ -893,7 +895,7 @@ public:
                 }
             }
         }
-        { PROFILE(PROF_DRAW); dev_->DrawIndexedPrimitive(type, vertex_offset, 0, vertices, first_index + index_offset_, prims); }
+        draw_indexed_chunked(type, vertex_offset, vertices, first_index + index_offset_, prims);
         if (instanced) {
             for (uint32_t s = 0; s < 8; ++s) dev_->SetStreamSourceFreq(s, 1);
         }
@@ -922,6 +924,23 @@ private:
     bool render_state_known_[256] = {};
     DWORD sampler_state_[16][16] = {};
     bool sampler_state_known_[16][16] = {};
+
+    // A card caps the primitives one draw may carry (MaxPrimitiveCount: ATI's
+    // R300 and R400 parts allow 1,048,575, and the terrain is 1.39 million
+    // triangles), so a bigger list draw is issued in pieces.
+    void draw_indexed_chunked(D3DPRIMITIVETYPE type, INT base_vertex, UINT vertices, UINT start_index, UINT prims) {
+        PROFILE(PROF_DRAW);
+        const UINT limit = caps_.MaxPrimitiveCount ? caps_.MaxPrimitiveCount : prims;
+        const UINT per_prim = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : 0;
+        if (prims <= limit || per_prim == 0) {
+            dev_->DrawIndexedPrimitive(type, base_vertex, 0, vertices, start_index, prims);
+            return;
+        }
+        for (UINT done = 0; done < prims; done += limit) {
+            dev_->DrawIndexedPrimitive(type, base_vertex, 0, vertices, start_index + done * per_prim,
+                                       std::min(limit, prims - done));
+        }
+    }
 
     D3DPRIMITIVETYPE primitive(uint32_t count, UINT* prims) const {
         switch (pipeline_->desc.primitive) {
