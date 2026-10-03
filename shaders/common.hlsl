@@ -85,6 +85,19 @@ float3 ldr_encode(float3 c, float4 grade) {
     return saturate(c);
 }
 
+// ldr_encode for SM2's 64 instructions: the same exposure, Reinhard, gamma,
+// contrast and saturation, without the hue-preserving blend (a bright colour
+// desaturates toward white as the per-channel curve takes it).
+float3 ldr_encode_fast(float3 c, float4 grade) {
+    c *= grade.x;
+    c = c / (1.0 + c);
+    c = pow(c, (float3)(1.0 / 2.2));
+    c = (c - 0.46) * grade.y + 0.46;
+    const float3 LUMA = float3(0.2126, 0.7152, 0.0722);
+    c = lerp((float3)dot(c, LUMA), c, grade.z);
+    return saturate(c);
+}
+
 // A sampled texture and its sampler share a slot number, which is how SDL
 // binds them (SDL_BindGPUFragmentSamplers takes texture-sampler pairs).
 // Slots must run 0..n-1 with every one of them read: the count SDL binds

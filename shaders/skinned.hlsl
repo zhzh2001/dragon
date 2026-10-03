@@ -13,6 +13,56 @@ struct VertexIn {
     float4 tangent     : TEXCOORD6;
 };
 
+#ifdef SM2
+// SM2 (docs/PORTING.md, R4): lit per vertex through scene_common's SM2 path.
+// The pixel stage keeps the base-colour texture and the bots' recolour; the
+// normal map, the ORM map and the specular lobe are the SM2 tier's cut
+// ("ORM dropped"), and the emissive folds into the per-vertex ambient.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    float4 uv : TEXCOORD0;      // xy the uv
+    float4 albedo : TEXCOORD1;  // rgb the vertex colour times the tint
+    SM2_LIGHT_VARYINGS
+};
+
+ConstantBuffer<ModelUniforms> model : UNIFORM_SLOT(1);
+
+#ifdef VERTEX_STAGE
+ConstantBuffer<SkinUniforms> skin : UNIFORM_SLOT(2);
+
+VertexOut vs_main(VertexIn input) {
+    float4x4 blended = SKIN_MATRIX(skin, input.joint_index, input.weight);
+    float4 world = mul(model.model, mul(blended, float4(input.position, 1.0)));
+    float3 normal = normalize(mul(model.model, float4(mul(blended, float4(input.normal, 0.0)).xyz, 0.0)).xyz);
+    // Wing membranes are seen from both sides: light the face toward the viewer.
+    if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
+    VertexOut o;
+    o.clip_position = mul(scene.view_proj, world);
+    o.uv = float4(input.uv, 0.0, 0.0);
+    o.albedo = float4(input.color * model.tint.rgb, 0.0);
+    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
+    light.ambient.rgb += model.tint.a;  // the emissive
+    SM2_LIGHT_OUT(o, light);
+    return o;
+}
+#endif
+
+#ifdef FRAGMENT_STAGE
+DEPTH2D(shadow_map, 0);
+TEXTURE2D(base_colour, 1);
+
+float4 fs_main(VertexOut input) : SV_Target {
+    // The texture is sRGB, so the sample arrives already linear; without one
+    // (material.x 0) the vertex colour stands alone.
+    float3 albedo = input.albedo.rgb * lerp((float3)1.0, base_colour.Sample(base_colour_sampler, input.uv.xy).rgb,
+                                            model.material.x);
+    float luminance = dot(albedo, float3(0.30, 0.59, 0.11));
+    albedo = lerp(albedo, luminance * model.recolour.rgb, model.recolour.a);
+    return float4(sm2_finish(albedo, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
+}
+#endif
+#else  // the per-pixel path
+
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
@@ -153,3 +203,4 @@ float4 fs_main(VertexOut input) : SV_Target {
     return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);
 }
 #endif
+#endif  // SM2

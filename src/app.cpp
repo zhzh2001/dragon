@@ -229,7 +229,9 @@ bool App::init(const Options& options) {
     pipelines_.init(&device_, core::paths::shader_root());
     if (!debug_.init(&device_, &pipelines_)) return false;
     if (!world_.init(&device_, &pipelines_)) return false;
-    if (!post_.init(&device_, &pipelines_)) return false;
+    // The post stack runs only on an HDR tier; without one its pipelines are
+    // never bound, and SM2's pixel shaders could not hold the composite.
+    if (device_.hdr() && !post_.init(&device_, &pipelines_)) return false;
     if (!shadow_.init(&device_, &pipelines_)) return false;
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;

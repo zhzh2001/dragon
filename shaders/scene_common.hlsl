@@ -67,7 +67,11 @@ ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
 // A tier without a float target (gfx/render_tier.h): the world shader
 // finishes the pixel itself -- exposure, tonemap, gamma, contrast and
 // saturation, the cheap part of post_composite's grade -- into 8 bits.
+#ifdef SM2
+float3 scene_out(float3 color) { return ldr_encode_fast(max(color, 0.0), scene.output_grade); }
+#else
 float3 scene_out(float3 color) { return ldr_encode(max(color, 0.0), scene.output_grade); }
+#endif
 #endif
 
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
@@ -188,4 +192,86 @@ float3 apply_fog(float3 lit_color, float3 world_position) {
     float3 ray = to_point / max(dist, 1e-3);
     return lerp(lit_color, sky_color(ray), saturate(fog));
 }
+
+#ifdef SM2
+// ---- SM2: the lighting per vertex (gfx/render_tier.h, docs/PORTING.md R4).
+//
+// ps_2_0 has 64 arithmetic instructions. The per-pixel path above costs more
+// than that before a material does anything, so on this tier the vertex stage
+// lights: direct sun, ambient, the fog's colour and amount, and where the
+// point falls in the shadow map. The pixel stage keeps the albedo, one 2x2
+// shadow lookup, the combine and the tonemap. Four interpolators carry it,
+// TEXCOORD4..7:
+//   sun.rgb      direct sun (and a plant's translucency), before the shadow
+//   ambient.rgb  the hemispheric ambient
+//   fog.rgb      the sky along the view ray
+//   shadow       xy the shadow map's uv, z the biased depth, w the fog amount
+// sun.a, ambient.a and fog.a are the material's to use.
+struct Sm2Light {
+    float4 sun;
+    float4 ambient;
+    float4 fog;
+    float4 shadow;
+};
+#define SM2_LIGHT_VARYINGS          \
+    float4 sm2_sun : TEXCOORD4;     \
+    float4 sm2_ambient : TEXCOORD5; \
+    float4 sm2_fog : TEXCOORD6;     \
+    float4 sm2_shadow : TEXCOORD7;
+#define SM2_LIGHT_OUT(o, l) \
+    (o).sm2_sun = (l).sun; (o).sm2_ambient = (l).ambient; (o).sm2_fog = (l).fog; (o).sm2_shadow = (l).shadow
+#define SM2_LIGHT_IN(i) sm2_light((i).sm2_sun, (i).sm2_ambient, (i).sm2_fog, (i).sm2_shadow)
+
+Sm2Light sm2_light(float4 sun, float4 ambient, float4 fog, float4 shadow) {
+    Sm2Light l;
+    l.sun = sun;
+    l.ambient = ambient;
+    l.fog = fog;
+    l.shadow = shadow;
+    return l;
+}
+
+// The vertex stage's half: everything but the shadow test and the albedo.
+// `translucency` lets a plant's back face catch the sun (translucent_sun).
+Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucency) {
+    Sm2Light l;
+    l.sun = float4(direct_sun(normal, 1.0) + translucent_sun(normal, 1.0, translucency), 0.0);
+    l.ambient = float4(ambient_light(normal), 0.0);
+
+    float3 to_point = world_position - scene.camera_position.xyz;
+    float dist = length(to_point);
+    float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
+    float fog = saturate(1.0 - exp(-pow(dist * density, 2.0)));
+    l.fog = float4(sky_color(to_point / max(dist, 1e-3)), 0.0);
+
+    // The shadow map's coordinates, as sun_visibility() finds them. The light
+    // projection is orthographic, so they interpolate exactly.
+    float3 offset_position = world_position + normal * scene.shadow_params.x * 1.5;
+    float4 light_clip = mul(scene.light_view_proj, float4(offset_position, 1.0));
+    float3 ndc = light_clip.xyz / light_clip.w;
+    float slope = saturate(1.0 - abs(dot(normal, normalize(scene.sun.xyz))));
+    float bias = scene.shadow_params.y * (0.35 + slope * 2.5);
+    l.shadow = float4(ndc.xy * float2(0.5, -0.5) + 0.5, ndc.z - bias, fog);
+    return l;
+}
+
+#ifdef FRAGMENT_STAGE
+// The pixel stage's half: the shadow (2x2 taps; outside the map is lit), the
+// combine, the fog and the tonemap.
+float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+    float2 uv = l.shadow.xy;
+    float half_texel = scene.shadow_params.w * 0.5;
+    float4 stored = float4(shadow_map.Sample(shadow_sampler, uv + float2(-half_texel, -half_texel)),
+                           shadow_map.Sample(shadow_sampler, uv + float2(half_texel, -half_texel)),
+                           shadow_map.Sample(shadow_sampler, uv + float2(-half_texel, half_texel)),
+                           shadow_map.Sample(shadow_sampler, uv + float2(half_texel, half_texel)));
+    float lit = dot(step((float4)l.shadow.z, stored), (float4)0.25);
+    // Past the map's edges there is no information: lit, as on the other tiers.
+    float2 inside = step(abs(uv - 0.5), (float2)0.5);
+    lit = lerp(1.0, lit, inside.x * inside.y * scene.shadow_params.z);
+    float3 color = albedo * (l.ambient.rgb + l.sun.rgb * lit);
+    return scene_out(lerp(color, l.fog.rgb, l.shadow.w));
+}
+#endif
+#endif  // SM2
 #endif  // NO_SCENE

@@ -9,6 +9,46 @@ struct VertexIn {
     float3 color    : TEXCOORD2;
 };
 
+#ifdef SM2
+// SM2 (docs/PORTING.md, R4): lit per vertex through scene_common's SM2 path.
+// Emissive and unlit fold into the per-vertex terms -- the ambient becomes
+// the emissive (plus the ambient when lit), the sun drops to zero when unlit
+// -- so the pixel stage is the albedo and the shared finish.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    float4 albedo : TEXCOORD0;
+    SM2_LIGHT_VARYINGS
+};
+
+#ifdef VERTEX_STAGE
+ConstantBuffer<ModelUniforms> model : UNIFORM_SLOT(1);
+
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    float4 world = mul(model.model, float4(input.position, 1.0));
+    float3 normal = normalize(mul(model.model, float4(input.normal, 0.0)).xyz);
+    // Thin plates seen from both sides: light the face toward the viewer.
+    if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
+    o.albedo = float4(input.color * model.tint.rgb, 0.0);
+    o.clip_position = mul(scene.view_proj, world);
+    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
+    const float lit = 1.0 - model.material.w;
+    light.ambient.rgb = light.ambient.rgb * lit + model.tint.a;
+    light.sun.rgb *= lit;
+    SM2_LIGHT_OUT(o, light);
+    return o;
+}
+#endif
+
+#ifdef FRAGMENT_STAGE
+DEPTH2D(shadow_map, 0);
+
+float4 fs_main(VertexOut input) : SV_Target {
+    return float4(sm2_finish(input.albedo.rgb, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
+}
+#endif
+#else  // the per-pixel path
+
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
@@ -66,3 +106,4 @@ float4 fs_main(VertexOut input) : SV_Target {
     return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);
 }
 #endif
+#endif  // SM2

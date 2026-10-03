@@ -11,6 +11,48 @@ struct VertexIn {
     float3 color    : TEXCOORD2;
 };
 
+#ifdef SM2
+// SM2 (docs/PORTING.md, R4): "fresnel only". The water is one quad across the
+// map, so nothing can be lit per vertex; the pixel stage keeps the fresnel
+// between the deep colour and a cheaper sky (no sun disc), and the fog, and
+// drops the ripples and the glint.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    float3 world_position : TEXCOORD0;
+};
+
+#ifdef VERTEX_STAGE
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    o.world_position = input.position;
+    o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
+    return o;
+}
+#endif
+
+#ifdef FRAGMENT_STAGE
+// sky_color() without the sun disc and glow.
+float3 sky_plain(float3 ray) {
+    float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
+    float3 base = lerp(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
+    return lerp(base, scene.fog_color.rgb, saturate(-ray.y * 6.0) * 0.7);
+}
+
+float4 fs_main(VertexOut input) : SV_Target {
+    float3 to_point = input.world_position - scene.camera_position.xyz;
+    float dist = length(to_point);
+    float3 ray = to_point / max(dist, 1e-3);
+    // A flat surface: the reflection is the ray mirrored upward.
+    float3 reflection = sky_plain(float3(ray.x, abs(ray.y), ray.z));
+    float fresnel = 0.04 + 0.96 * pow(1.0 - saturate(-ray.y), 5.0);
+    float3 color = lerp(scene.palette[PALETTE_WATER_DEEP].rgb, reflection, fresnel);
+    float density = scene.fog_color.a * exp(-max(input.world_position.y, 0.0) * 0.0018);
+    float fog = saturate(1.0 - exp(-pow(dist * density, 2.0)));
+    return float4(scene_out(lerp(color, sky_plain(ray), fog)), 1.0);
+}
+#endif
+#else  // the per-pixel path
+
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
@@ -51,3 +93,4 @@ float4 fs_main(VertexOut input) : SV_Target {
     return float4(scene_out(apply_fog(color, input.world_position)), 1.0);
 }
 #endif
+#endif  // SM2

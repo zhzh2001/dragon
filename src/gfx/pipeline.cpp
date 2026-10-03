@@ -123,6 +123,7 @@ bool PipelineCache::build(Entry& entry) {
     if (active_tier().baked_noise) shaders.defines.push_back("BAKED_NOISE");
     if (active_tier().compress_textures) shaders.defines.push_back("SWIZZLED_NORMALS");
     if (active_tier().packed_joints) shaders.defines.push_back("PACKED_JOINTS");
+    if (active_tier().vertex_lighting) shaders.defines.push_back("SM2");
     entry.sources.clear();
     if (rhi.compiles_hlsl()) {
         // Seed the watch list with the primary shader before doing anything

@@ -6,6 +6,93 @@ struct VertexIn {
     float3 color    : TEXCOORD2;
 };
 
+// The textures, and the noise -- included once: the pipeline cache inlines an
+// include only the first time it meets it, whatever #ifdef it sits under.
+#ifdef FRAGMENT_STAGE
+DEPTH2D(shadow_map, 0);
+TEXTURE2D(detail_tile, 1);
+#define NOISE_SLOT 2  // the baked lattice, on a retro tier
+#endif
+#ifdef SM2
+// SM2's vertex stage hashes the patch noise (vs_2_0 has no texture fetch),
+// and two octaves: three do not fit vs_2_0's 256 slots beside the lighting.
+// The patches lose their finest, eighth-amplitude octave.
+#define FBM_OCTAVES 2
+#endif
+#include "noise.hlsl"
+
+#ifdef SM2
+// ---- SM2 (docs/PORTING.md, R4): the material is worked out per vertex and
+// the lighting is scene_common's per-vertex path. What ps_2_0's 64
+// instructions keep: one detail-tile sample, each material's channel of it,
+// the four-way blend, one 2x2 shadow lookup, the fog and the tonemap. What
+// they lose against the per-pixel path below: the tile's broad second scale
+// and triplanar rock, the strata, the fine grain, the micro-relief normal and
+// the snow glint. The 6 m grid carries the patch noise and the blends.
+
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    float4 detail : TEXCOORD0;  // xy the detail tile's uv, z rock, w snow
+    float4 grass : TEXCOORD1;   // rgb the grass, lush to dry; a sand
+    float4 rock : TEXCOORD2;    // rgb the rock, dark to light; a the detail's strength
+    float4 tint : TEXCOORD3;    // rgb the vertex tint
+    SM2_LIGHT_VARYINGS
+};
+
+#ifdef VERTEX_STAGE
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
+    float3 p = input.position;
+    float3 normal = normalize(input.normal);
+    float flatness = saturate(normal.y);
+    float water_level = scene.terrain_params.x;
+    float snow_line = scene.terrain_params.y;
+    float rock_slope = scene.terrain_params.z;
+    float patches = fbm(p.xz * 0.0055);
+
+    o.grass = float4(lerp(scene.palette[PALETTE_GRASS].rgb, scene.palette[PALETTE_GRASS_DRY].rgb,
+                          smoothstep(0.35, 0.75, patches)), 0.0);
+    o.rock = float4(lerp(scene.palette[PALETTE_ROCK_DARK].rgb, scene.palette[PALETTE_ROCK].rgb,
+                         smoothstep(0.25, 0.8, patches)), 0.0);
+    float bar_top = water_level + 1.0 + 3.0 * patches;
+    o.grass.a = 1.0 - smoothstep(water_level + 0.3, bar_top, p.y);  // sand
+    float slope_blend = 1.0 - smoothstep(rock_slope, rock_slope + 0.22, flatness);
+    float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, p.y) * 0.6;
+    float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
+    float snow = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, p.y) * smoothstep(0.52, 0.78, flatness);
+    o.detail = float4(p.xz / 16.0, saturate(slope_blend + altitude_rockiness), snow);
+    float camera_distance = length(p - scene.camera_position.xyz);
+    o.rock.a = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
+    o.tint = float4(input.color, 0.0);
+
+    Sm2Light light = sm2_light_vertex(p, normal, 0.0);
+    // The map's edge dissolves into the sky, which is the fog's colour.
+    float half_extent = scene.view_params.w;
+    if (half_extent > 0.0) {
+        float edge = max(abs(p.x), abs(p.z)) / half_extent;
+        light.shadow.w = max(light.shadow.w, smoothstep(0.80, 0.99, edge));
+    }
+    SM2_LIGHT_OUT(o, light);
+    return o;
+}
+#endif
+
+#ifdef FRAGMENT_STAGE
+float4 fs_main(VertexOut input) : SV_Target {
+    float4 d = detail_tile.Sample(detail_tile_sampler, input.detail.xy);
+    // Each material wears its channel: 1 + (d - 0.5) * 2 * strength.
+    float4 m = 1.0 + (d - 0.5) * (2.0 * input.rock.a);
+    float3 albedo = lerp(input.grass.rgb * m.g, scene.palette[PALETTE_SAND].rgb * m.b, input.grass.a);
+    albedo = lerp(albedo, input.rock.rgb * m.r, input.detail.z);
+    albedo = lerp(albedo, scene.palette[PALETTE_SNOW].rgb * m.a, input.detail.w);
+    return float4(sm2_finish(albedo * input.tint.rgb, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
+}
+#endif
+
+#else  // the per-pixel path
+
+
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
@@ -25,10 +112,6 @@ VertexOut vs_main(VertexIn input) {
 #endif
 
 #ifdef FRAGMENT_STAGE
-DEPTH2D(shadow_map, 0);
-TEXTURE2D(detail_tile, 1);
-#define NOISE_SLOT 2  // the baked lattice, on a retro tier
-#include "noise.hlsl"
 
 // Terrain material from height and slope. Kept in the shader so it can be
 // retuned by saving the file while flying.
@@ -171,3 +254,4 @@ float4 fs_main(VertexOut input) : SV_Target {
     return float4(scene_out(fogged), 1.0);
 }
 #endif
+#endif  // SM2

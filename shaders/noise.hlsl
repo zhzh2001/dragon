@@ -11,7 +11,8 @@
 // those declarations.
 #pragma once
 
-#ifdef BAKED_NOISE
+// The vertex stage has no texture fetch on SM2 (vs_2_0), so it always hashes.
+#if defined(BAKED_NOISE) && !defined(VERTEX_STAGE)
 #define NOISE_LATTICE_SIZE 512.0  // gfx::NOISE_LATTICE_SIZE
 TEXTURE2D(noise_lattice, NOISE_SLOT);
 
@@ -44,11 +45,16 @@ float value_noise(float2 p) {
 #endif
 
 // Three octaves: single-octave value noise reads as soft blobs, fbm reads as
-// ground. Still cheap enough to call several times per fragment.
+// ground. Still cheap enough to call several times per fragment. A shader may
+// define FBM_OCTAVES before including this to spend less (SM2's terrain
+// vertex stage, where a hashed octave is some 40 of vs_2_0's 256 slots).
+#ifndef FBM_OCTAVES
+#define FBM_OCTAVES 3
+#endif
 float fbm(float2 p) {
     float total = 0.0;
     float amplitude = 0.5;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < FBM_OCTAVES; ++i) {
         total += amplitude * value_noise(p);
         p = p * 2.17 + float2(31.7, 17.3);
         amplitude *= 0.5;
