@@ -15,6 +15,9 @@ not embedded: the archive this was written for keeps its textures unnamed
 <clip name>.jpg/.png/.dds there and references what it finds.
 
 Written for the 3DMark2001 dragon; LightWave 6-era files only (LWO2).
+Layer metadata also retains COLR/DIFF/LUMI channels, opacity, projection and
+mapping transforms. A second DIFF UV channel and source-point indices are
+accessors so a local baker can preserve seams and collapse supported layers.
 """
 import argparse
 import json
@@ -55,6 +58,37 @@ def read_s0(body, pos):
     if pos & 1:
         pos += 1
     return s, pos
+
+
+def image_layer(body):
+    """Keep channel, opacity and projection rather than treating DIFF as COLR."""
+    kind = body[:4].decode('ascii')
+    size = struct.unpack_from('>H', body, 4)[0]
+    header = body[6:6 + size]
+    ordinal, start = read_s0(header, 0)
+    layer = {'kind': kind, 'ordinal': ordinal, 'enabled': True,
+             'channel': None, 'opacity': 1., 'blend': 0, 'uv': None,
+             'clip': None, 'projection': None, 'axis': 2,
+             'center': [0., 0., 0.], 'size': [1., 1., 1.],
+             'rotation': [0., 0., 0.], 'wrap': [1, 1]}
+    for tag, data in read_subchunks(header, start):
+        if tag == b'CHAN': layer['channel'] = data.decode('ascii')
+        elif tag == b'ENAB': layer['enabled'] = bool(struct.unpack_from('>H', data)[0])
+        elif tag == b'OPAC':
+            layer['blend'], layer['opacity'] = struct.unpack_from('>Hf', data)
+        elif tag == b'NEGA': layer['negative'] = bool(struct.unpack_from('>H', data)[0])
+    for tag, data in read_subchunks(body, 6 + size + (size & 1)):
+        if tag == b'VMAP': layer['uv'], _ = read_s0(data, 0)
+        elif tag == b'IMAG': layer['clip'], _ = read_vx(data, 0)
+        elif tag == b'PROJ': layer['projection'] = struct.unpack_from('>H', data)[0]
+        elif tag == b'AXIS': layer['axis'] = struct.unpack_from('>H', data)[0]
+        elif tag == b'WRAP': layer['wrap'] = list(struct.unpack_from('>HH', data))
+        elif tag in (b'WRPW', b'WRPH'): layer[tag.decode().lower()] = struct.unpack_from('>f', data)[0]
+        elif tag == b'TMAP':
+            for sub, value in read_subchunks(data):
+                key = {b'CNTR': 'center', b'SIZE': 'size', b'ROTA': 'rotation'}.get(sub)
+                if key: layer[key] = list(struct.unpack_from('>3f', value))
+    return layer
 
 
 def parse(data):
@@ -111,11 +145,16 @@ def parse(data):
         elif tag == b"SURF":
             name, pos = read_s0(body, 0)
             _, pos = read_s0(body, pos)  # the parent surface
-            surf = {"color": (0.78, 0.78, 0.78), "uv": None, "clip": None}
+            surf = {"color": (0.78, 0.78, 0.78), "uv": None, "clip": None,
+                    "diffuse": 1., "specular": 0., "glossiness": .4,
+                    "luminosity": 0., "layers": []}
             for sub, sbody in read_subchunks(body, pos):
                 if sub == b"COLR":
                     surf["color"] = struct.unpack_from(">3f", sbody, 0)
+                elif sub in (b'DIFF', b'SPEC', b'GLOS', b'LUMI'):
+                    surf[{b'DIFF':'diffuse', b'SPEC':'specular', b'GLOS':'glossiness', b'LUMI':'luminosity'}[sub]] = struct.unpack_from('>f', sbody)[0]
                 elif sub == b"BLOK":
+                    surf['layers'].append(image_layer(sbody))
                     # The first image map layer: its VMAP (the UV set) and IMAG (the clip).
                     header_tag = sbody[:4]
                     header_size = struct.unpack_from(">H", sbody, 4)[0]
@@ -166,20 +205,23 @@ def build_gltf(points, polys, tags, ptag, uv_maps, uv_overrides, weights, clips,
         uv_name = surf["uv"]
         vmap = uv_maps.get(uv_name, {}) if uv_name else {}
         vmad = uv_overrides.get(uv_name, {}) if uv_name else {}
+        diffuse_layer = next((x for x in surf.get('layers', []) if x['channel'] == 'DIFF' and x['uv']), None)
+        diffuse_uv = diffuse_layer['uv'] if diffuse_layer else None
         verts, index_of, indices = [], {}, []
         for pi, poly in faces:
             corner_ids = []
             for v in poly:
                 uv = vmad.get((pi, v), vmap.get(v, (0.0, 0.0)))
-                key = (v, uv)
+                uv2 = uv_overrides.get(diffuse_uv, {}).get((pi, v), uv_maps.get(diffuse_uv, {}).get(v, (0., 0.)))
+                key = (v, uv, uv2)
                 if key not in index_of:
                     index_of[key] = len(verts)
                     verts.append(key)
                 corner_ids.append(index_of[key])
             for k in range(1, len(corner_ids) - 1):  # a fan; LightWave winds clockwise seen from the front
                 indices += [corner_ids[0], corner_ids[k + 1], corner_ids[k]]
-        positions = [tuple(c * scale for c in points[v]) for v, _ in verts]
-        uvs = [(u, 1.0 - w) for _, (u, w) in verts]
+        positions = [tuple(c * scale for c in points[v]) for v, _, _ in verts]
+        uvs = [(u, 1.0 - w) for _, (u, w), _ in verts]
         pos_blob = b"".join(struct.pack("<3f", *p) for p in positions)
         uv_blob = b"".join(struct.pack("<2f", *t) for t in uvs)
         idx_blob = b"".join(struct.pack("<I", i) for i in indices)
@@ -191,9 +233,14 @@ def build_gltf(points, polys, tags, ptag, uv_maps, uv_overrides, weights, clips,
         attributes = {"POSITION": pos_acc, "TEXCOORD_0": uv_acc}
         # The weight maps, as extras: a rigger's starting point.
         extras = {}
+        source_points = add_accessor(add_view(b''.join(struct.pack('<I', v) for v, _, _ in verts), 34962), 5125, len(verts), 'SCALAR')
+        # Preserve the second source UV channel for a layered material bake.
+        if diffuse_layer:
+            uv2 = [uv for _, _, uv in verts]
+            attributes['TEXCOORD_1'] = add_accessor(add_view(b''.join(struct.pack('<2f', u, 1-v) for u,v in uv2), 34962), 5126, len(verts), 'VEC2')
         for name in weight_names:
             table = weights[name]
-            values = [table.get(v, 0.0) for v, _ in verts]
+            values = [table.get(v, 0.0) for v, _, _ in verts]
             if any(values):
                 extras[name] = add_accessor(add_view(b"".join(struct.pack("<f", x) for x in values), 34962), 5126,
                                             len(values), "SCALAR")
@@ -209,12 +256,12 @@ def build_gltf(points, polys, tags, ptag, uv_maps, uv_overrides, weights, clips,
                     textures.append({"source": len(images) - 1, "sampler": 0})
                     material["pbrMetallicRoughness"]["baseColorTexture"] = {"index": len(textures) - 1}
                     break
+        material['extras'] = {'lightwave_surface': surf}
         if clip_name:
-            material["extras"] = {"lightwave_clip": clip_name, "lightwave_uv": uv_name}
+            material["extras"].update({"lightwave_clip": clip_name, "lightwave_uv": uv_name})
         materials.append(material)
         prim = {"attributes": attributes, "indices": idx_acc, "material": len(materials) - 1}
-        if extras:
-            prim["extras"] = {"weight_maps": extras}
+        prim["extras"] = {"weight_maps": extras, "source_points": source_points}
         meshes_prims.append(prim)
     gltf = {
         "asset": {"version": "2.0", "generator": "tools/3dmark/lwo2gltf.py"},
