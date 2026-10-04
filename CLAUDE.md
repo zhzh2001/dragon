@@ -109,7 +109,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
 | `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or `direct3d9[:N]` for the D3D9 backend on Windows, on adapter N (`docs/PORTING.md` R3; a retro tier, shaders baked by `tools/d3d9/bake_d3d9.py`). `DRAGON_GPU_LOW_POWER=1` asks SDL for DXGI's other adapter: on x99 with the X550 driving the display, that is how D3D12 reaches the 5060 Ti. |
-| `--preset ultra\|high\|medium\|low\|very-low\|minimal` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium, ff low). `minimal` is the 1998 floor below very-low (R5 step 5): 1.2K creatures, trees to 250 m, 64-texel textures, 50% world. |
+| `--preset ultra\|high\|medium\|low\|very-low\|minimal` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium, ff low). `minimal` is the 1998 floor below very-low (R5): a 48 m grid with a 96 m far mesh, 1.2K creatures, trees to 250 m, 64-texel textures, 50% world -- for a card whose vertices are processed in software (`DRAGON_D3D9_SOFTWARE_VP=1`, `=2` for a pure software device). |
 | `--graphics key=level,...` | Single settings over the preset, levels 0 (ultra) to 5 (minimal): `models`, `terrain`, `trees`, `grass`, `rocks`, `textures`, `shadows`, `bloom`, `resolution` (the world's, under a whole HUD: 100/85/70/50%). Clamped to what the tier and device allow. |
 | `--restart-every N` | Press R every N frames: the reset soak. With `--telemetry`, the `gpu:` line counts the buffers and textures alive, so anything a reset leaks shows as growth. |
 | `--size WxH` | The window, or the headless render target (default 1280x720, or the window size saved in `graphics.cfg`). |
@@ -348,8 +348,9 @@ flight controls.
   `export_public.sh --ref COMMIT` exports `main` up to the last commit worth
   shipping. Ask before an export that moves the mirror.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
-  a one-liner -- to `codex exec -m gpt-6-astra`, and never start it without
-  checking usage first -- see below.** Do not delegate to Fable 5.1 any more
+  a one-liner -- to `codex exec -m gpt-6.1-sol -c model_reasoning_effort=high`
+  (the user's call, 2026-10-04; it replaces gpt-6-astra at medium below),
+  and never start it without checking usage first -- see below.** Do not delegate to Fable 5.1 any more
   (the user's call, 2026-09-26); when Codex has no headroom, do the work in
   the main session or wait for the reset.
 

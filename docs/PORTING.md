@@ -324,7 +324,7 @@ graphics settings.
 | R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
-| R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes; 97 fps at Minimal, the sixth preset. Software vertex processing works (`DRAGON_D3D9_SOFTWARE_VP=1`): 14 fps at Minimal on the Xeon, 36 x faster than its first frame | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
+| R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes. Minimal, the sixth preset, with a 48 m grid, a far 96 m mesh and a baked sky: 173 fps on the X550, **54 fps with every vertex processed in software** (`DRAGON_D3D9_SOFTWARE_VP=1`, or `=2` for a pure software device) | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
@@ -1207,14 +1207,40 @@ With the terrain's diffuse baked (158 slots to 32): 0.6 s. With each
 chunk's vertices gathered into a run of their own (a chunk's range had
 spanned thousands of the grid's vertices for the two hundred it used):
 **66 ms a frame at Minimal, 14 fps**, against 98.6 with the card's own
-vertex shaders -- a 36 x speed-up over the evening, all of it in how much
-the software pipeline was asked to transform. What remains is that
-pipeline's own throughput over the terrain's 50K vertices and the per-draw
-cost of one draw per instance (software processing has no stream
-frequencies), and that is a question for a 2005 CPU and the real cards,
-not a Xeon. The foliage pre-batched into static chunks with its colours
-baked, and a coarser terrain for the T&L-less class, are the next two
-items if those cards want them.
+vertex shaders.
+
+**The second round (2026-10-04, later).** 14 fps on a Xeon is nothing on a
+Pentium 4, so Minimal was cut further, each cut judged on a render. What
+the measurements said first: the software pipeline costs about **1.3 us
+per vertex it is handed, whatever the program's length** (158 to 32 slots
+barely moved the frame), per draw it costs nothing worth counting (263
+draws to 34 made the frame *slower*, because coarse chunks cull less), and
+a pure software device (`DRAGON_D3D9_SOFTWARE_VP=2`, what a card without
+T&L gets) costs the same as mixed mode. So the vertex count is the one
+lever, and Minimal now sheds:
+- the terrain grid, to 48 m, with the river widened to a cell and a
+  quarter (a 52 m channel is one 48 m cell, and the water drew no pixel);
+- the far terrain, a 96 m mesh on the same 320 m chunk grid, in place of
+  the near one past a kilometre, each chunk with a 30 m flange down its
+  border (the two meshes disagree by tens of metres on a steep slope, and
+  the gap showed sky); the far river keeps the near width and breaks into
+  dashes out there, the lesser sight against a sawtooth bank;
+- the sky, a 512x256 lat-long map baked once on a 153-vertex dome (the
+  sun's disc is back) -- stage 0 SELECTARG1 TEXTURE on D3D9;
+- the checkpoint rings, 16 x 6 and none past 1.5 km (twelve 400-vertex
+  rings through a 99-slot program had been a quarter of the frame);
+- the water grid 16 x 16 and the skirt a 1250 m cell, snapped to a divisor
+  of the half extent after a 1153 m one drew its partly-inside cells over a
+  kilometre of valley.
+
+On the X550: **Minimal 54 fps with every vertex processed in software, 173
+fps with the card's own; Low 9 fps in software**, which is not a preset for
+it. `artifacts/r5-ff-preview/ff-low-metal-vs-minimal-x550-softwarevp.png`
+is Low beside the X550's software-processed Minimal. A Pentium 4 is three
+to four times slower than this Xeon per thread, so Minimal should land in
+the teens there; the real cards will say. If they want more: the foliage
+pre-batched with its colours baked (one draw per instance is the other
+thing software processing cannot avoid), and the creature's far LOD sooner.
 
 ## Beyond the three tiers: the extended study (2026-10-03)
 
@@ -1255,13 +1281,20 @@ preset is ready for them.
 
 **The 3DMark2001 dragon** (asked 2026-10-04): x99 has 3DMark2001 SE
 installed, and its two MAX-FX archives (`data.ras`, `textures.ras`; the
-Max Payne engine's) hold their files raw -- 148 LightWave objects
-(`FORM`/`LWO2`) and 22 `.lws` scenes, carved out by their IFF headers with
-forty lines of Python into `assets/alt/3dmark2001/` (gitignored). The
-Dragothic dragon is there: the body at 8,838 points and 16,817 polygons
-(its surfaces named in Finnish, `drago.siipi` the wing), a head LOD, the
-eyes, the rider, and a 98K-polygon `drako_defskin`. LightWave objects
-import into Blender, so a study is a Blender session away. It is UL's
+Max Payne engine's) hold their files raw behind an encrypted directory --
+148 LightWave objects, 22 `.lws` scenes, 380 JPEG and 356 DDS images,
+carved out by their headers with `tools/3dmark/carve_ras.py` into
+`assets/alt/3dmark2001/` (gitignored). The Dragothic dragon is there: the
+body at 8,838 points and 16,817 polygons (its surfaces named in Finnish,
+`drago.siipi` the wing), a head LOD, the eyes, the rider, and a 98K-polygon
+`drako_defskin`. `tools/3dmark/lwo2gltf.py` converts it to a static glTF
+(15 surfaces, each with its UV set and its clip's name, six weight maps as
+extras, a 19.5-unit wingspan against the engine's assumed 19 m); the
+filenames are lost with the directory, so its textures are unnamed and must
+be matched by eye from the carved set. **The rig is the job left**: the
+deform skeleton fitted as the other species' were, briefed in
+`tools/3dmark/dragothic_rig.md` for Codex (gpt-6.1-sol, high) when its
+window has room; the loader takes nothing unskinned. It is UL's
 copyrighted data: a personal study at most, never committed, never
 shipped, and `ATTRIBUTION.md` says so.
 

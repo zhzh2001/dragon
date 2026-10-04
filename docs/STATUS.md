@@ -38,8 +38,10 @@ What is built, in the order it was built. The plan these came from is
   texture-stage recipes. The Radeon X550 through D3D9 fixed function
   matches D3D12's preview within a mean of 1.1/255 in all eight golden
   scenes; 97 fps at the new sixth preset, Minimal. Software vertex
-  processing (a card without vs_2_0) works and awaits a real card for its
-  budget (`PORTING.md`, "Steps 2 to 4, as built").
+  processing (a card without vs_2_0) runs Minimal at 54 fps on the X550
+  after a round of vertex cuts (`PORTING.md`, "The second round").
+- **The 3DMark2001 dragon** carves out of its archive and converts to a
+  static glTF (`tools/3dmark/`); its rig is briefed for Codex. Local only.
 - **Model packs (R2b, after the publish).** `--bake-packs` writes what a
   retro tier uploads (`anim/model_pack.h`): the nine-species roster loads
   in 0.6 s at 217 MB instead of 6.7 s at 983 MB, pixel-identical at sm3 and
