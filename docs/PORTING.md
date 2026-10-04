@@ -325,7 +325,7 @@ graphics settings.
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
 | R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes. Minimal, the sixth preset, with a 48 m grid, a far 96 m mesh and a baked sky: 173 fps on the X550, **54 fps with every vertex processed in software** (`DRAGON_D3D9_SOFTWARE_VP=1`, or `=2` for a pure software device) | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
-| R6 (XP layer) | Built ("R6, as built"): a 32-bit msvcrt build from the Mac with an SDL3 subset on Win32 and thunks for what XP lacks; pixel-identical to the 64-bit D3D9 frame under Wine, 21 suites pass, `tools/release/package_xp.sh` | **XP SP3's export list** (`tools/xp/check_imports.py --record`, from x99's XP image or the G41), then the G41 under XP |
+| R6 (XP layer) | **Runs on XP** ("R6, as built"): the G41 under XP SP3 with the M6 picks the ff tier itself and draws the valley, 19 fps at Minimal 800x600; the gate checks the imports against XP SP3's recorded exports and the PE header's 5.1 | The other cards on the G41; keyboard and gamepad play by hand |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
 | D3D11 | Done at feature levels 11, 10 and 9 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs at 1.8 to 19.6 fps; the X550 at feature level 9_2 draws the sm2 tier within `--cross-compiler` of D3D12's set, at 20 fps Low | The HD 5450 and Bay Trail boards it was built for; the shaders in the package; a 9_1 or 9_3 device |
@@ -882,7 +882,41 @@ through `DRAGON_LOG_FILE`, and its own `--screenshot` (the pixel oracle; the
 OBS capture is analog VGA). The G41 is shared with the qemu-gpu sessions,
 so jobs go in only when the bench is free.
 
-**Not done:** running it on XP. The order is the G41 under XP SP3 with
+**It runs on XP (2026-10-04).** The G41 (Celeron E3300 at 3.34 GHz, XP
+SP3, the Mobility Radeon M6 on PCI with Omega 2.6.87) started the package
+from the share with no flags: the caps probe found vs_0/ps_0 and picked the
+ff tier, the driver reports no hardware T&L so every vertex program ran in
+D3D9's software pipeline, and the valley, the dragon, the HUD and its
+fonts all drew. `tools/xp/xp-sp3-exports.txt` is recorded from the G41's
+own DLLs (kernel32 5.1.2600.5512, msvcrt 7.0.2600.5512, d3d9 5.3.2600.5512)
+and the build's 227 imports all resolve against it.
+
+| Preset, window | fps (headless timing off: a real window, 2 back buffers) |
+|---|---|
+| Low, 800x600 | 8.0 to 9.3 |
+| Minimal, 800x600 | 19.1 (median 50 ms) |
+| Minimal, 640x480 | 24.7 (median 36 ms) |
+
+Two things the Wine runs could not show, each a no-picture failure:
+
+- **lld stamps an executable for Windows 6.0** unless told otherwise, and
+  XP's loader refuses it outright (`CreateProcess` fails; the first run
+  ended at once with nothing logged). The toolchain file passes OS version
+  5.1, and the subsystem is restated as `windows:5.1` after `-mwindows`,
+  which otherwise resets it; `check_imports.py` now checks the header too.
+- **The M6's driver claims `D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES` and
+  fails the call** (`D3DERR_INVALIDCALL`). The world, rendered at 85% and
+  stretched into the UI's target, never arrived: uninitialised video memory
+  under a HUD that smeared across frames. The D3D9 backend now stretches
+  with a pre-transformed textured quad through fixed function when the cap
+  is absent or the first `StretchRect` fails (`DRAGON_D3D9_NO_STRETCHRECT=1`
+  forces it); the picture matches StretchRect's under Wine within
+  filtering.
+
+`dragon-run.ahk` takes `NAME=VALUE` lines from `bench\dragon\env.txt` for
+such switches. OBS can be off: the game's own screenshot is the record.
+
+**Not done:** the other cards. The order is the G41 under XP SP3 with
 each card (record the exports, then `dragon.exe` with no flags, then the
 R4/R5 budgets); XP's own D3D9 drivers will have their quirks, and the
 thunks' XP sides have run only when forced on a newer Windows. The tests

@@ -447,6 +447,13 @@ public:
         dev_->CreateVertexDeclaration(id_decl, &vertex_id_decl_);
         // Whether the R32F shadow stand-in can be filtered: modern cards, yes;
         // the GeForce 6 and 7 cannot filter a 32-bit float format.
+        // StretchRect out of a texture is a DirectX 9 driver feature: the
+        // M6's Omega driver (a DX7-era design) lacks it, and the world's
+        // stretch and the present silently drew nothing there.
+        // DRAGON_D3D9_NO_STRETCHRECT=1 takes the quad path on any card.
+        stretch_from_textures_ = (caps_.DevCaps2 & D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES) != 0 &&
+                                 !(SDL_getenv("DRAGON_D3D9_NO_STRETCHRECT") && SDL_getenv("DRAGON_D3D9_NO_STRETCHRECT")[0] == '1');
+        if (!stretch_from_textures_) LOG_INFO("direct3d9: no StretchRect from textures; stretching with a textured quad");
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
@@ -554,7 +561,11 @@ public:
             IDirect3DSurface9* back = nullptr;
             if (SUCCEEDED(dev_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back))) {
                 RECT rect = {0, 0, LONG(width), LONG(height)};
-                dev_->StretchRect(src_surface, &rect, back, nullptr, D3DTEXF_LINEAR);
+                if (!stretch_from_textures_ || !stretch_ok(dev_->StretchRect(src_surface, &rect, back, nullptr, D3DTEXF_LINEAR))) {
+                    D3DSURFACE_DESC bd = {};
+                    back->GetDesc(&bd);
+                    quad_stretch(src, width, height, back, bd.Width, bd.Height);
+                }
                 back->Release();
             }
         }
@@ -578,7 +589,8 @@ public:
         if (from && to) {
             RECT src_rect = {0, 0, LONG(sw), LONG(sh)};
             RECT dst_rect = {0, 0, LONG(dw), LONG(dh)};
-            dev_->StretchRect(from, &src_rect, to, &dst_rect, D3DTEXF_LINEAR);
+            if (!stretch_from_textures_ || !stretch_ok(dev_->StretchRect(from, &src_rect, to, &dst_rect, D3DTEXF_LINEAR)))
+                quad_stretch(s, sw, sh, to, dw, dh);
         }
         release(from);
         release(to);
@@ -1136,6 +1148,70 @@ public:
     }
 
 private:
+    // A driver can claim D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES and still
+    // fail the call: the M6's Omega 2.6.87 on XP does, and the frame was
+    // uninitialised memory under the HUD. The first failure turns the quad
+    // path on for good.
+    bool stretch_ok(HRESULT hr) {
+        if (SUCCEEDED(hr)) return true;
+        LOG_WARN("direct3d9: StretchRect failed (0x%08lx) although the caps allow it; stretching with a textured quad",
+                 static_cast<unsigned long>(hr));
+        stretch_from_textures_ = false;
+        return false;
+    }
+
+    // StretchRect's job on a card whose driver cannot stretch out of a
+    // texture: the source's top-left sw x sh drawn over all of `target` as
+    // one pre-transformed, textured quad through fixed function, which every
+    // D3D9 device has. The state it sets goes through the caches, and the
+    // next bind_pipeline restores shaders, declaration and streams.
+    void quad_stretch(D9Texture* source, uint32_t sw, uint32_t sh, IDirect3DSurface9* target, uint32_t dw, uint32_t dh) {
+        if (!source || !source->texture || !target || !dw || !dh) return;
+        dev_->SetRenderTarget(0, target);
+        dev_->SetDepthStencilSurface(nullptr);
+        D3DVIEWPORT9 viewport = {0, 0, dw, dh, 0.0f, 1.0f};
+        dev_->SetViewport(&viewport);
+        dev_->SetVertexShader(nullptr);
+        dev_->SetPixelShader(nullptr);
+        dev_->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+        set_render_state(D3DRS_ZENABLE, D3DZB_FALSE);
+        set_render_state(D3DRS_ZWRITEENABLE, FALSE);
+        set_render_state(D3DRS_CULLMODE, D3DCULL_NONE);
+        set_render_state(D3DRS_FILLMODE, D3DFILL_SOLID);
+        set_render_state(D3DRS_ALPHABLENDENABLE, FALSE);
+        set_render_state(D3DRS_ALPHATESTENABLE, FALSE);
+        set_render_state(D3DRS_FOGENABLE, FALSE);
+        set_render_state(D3DRS_LIGHTING, FALSE);
+        set_render_state(D3DRS_COLORWRITEENABLE, 0xF);
+        set_stage_state(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+        set_stage_state(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+        set_stage_state(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        set_stage_state(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+        set_stage_state(0, D3DTSS_TEXCOORDINDEX, 0);
+        set_stage_state(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        set_stage_state(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+        dev_->SetTexture(0, source->texture);
+        set_sampler_state(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        set_sampler_state(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        set_sampler_state(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        set_sampler_state(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+        set_sampler_state(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        set_sampler_state(0, D3DSAMP_SRGBTEXTURE, FALSE);
+        // Pixel centres: D3D9 samples at the texel's corner, hence the half
+        // pixel taken off the positions.
+        const float u = float(sw) / float(source->width), v = float(sh) / float(source->height);
+        const float x1 = float(dw) - 0.5f, y1 = float(dh) - 0.5f;
+        struct Vertex {
+            float x, y, z, rhw, u, v;
+        } quad[4] = {{-0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f},
+                     {x1, -0.5f, 0.0f, 1.0f, u, 0.0f},
+                     {-0.5f, y1, 0.0f, 1.0f, 0.0f, v},
+                     {x1, y1, 0.0f, 1.0f, u, v}};
+        dev_->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(Vertex));
+        dev_->SetTexture(0, nullptr);
+        pipeline_ = nullptr;
+    }
+
     // DRAGON_D3D9_PROFILE's pixel count: an occlusion query around one draw.
     IDirect3DQuery9* begin_pixel_query() {
         if (!profile_.on || !pipeline_) return nullptr;
@@ -1339,6 +1415,7 @@ private:
     bool in_scene_ = false;
     bool has_depth_ = false;
     bool r32f_filterable_ = false;
+    bool stretch_from_textures_ = true;  // D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES
     enum class Instancing { Native, AtiInst, Loop } instancing_ = Instancing::Native;
     D9Pass pass_;
     D9Pipeline* pipeline_ = nullptr;

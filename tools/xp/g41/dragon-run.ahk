@@ -20,6 +20,16 @@ FileReadLine, args, %dir%\args.txt, 1
 FileAppend, args [%args%] (read %ErrorLevel%)`n, %report%
 log = %dir%\dragon-%stamp%.log
 EnvSet, DRAGON_LOG_FILE, %log%
+; BENCH\dragon\env.txt, if present: NAME=VALUE lines set for this run.
+Loop, Read, %dir%\env.txt
+{
+    StringSplit, kv, A_LoopReadLine, =
+    if (kv1 != "")
+    {
+        EnvSet, %kv1%, %kv2%
+        FileAppend, env %kv1%=%kv2%`n, %report%
+    }
+}
 FileDelete, %dir%\shot.bmp
 Run, "%dir%\dragon.exe" %args%, %dir%, UseErrorLevel, pid
 FileAppend, run error %ErrorLevel% pid %pid%`n, %report%

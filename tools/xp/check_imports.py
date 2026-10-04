@@ -119,6 +119,15 @@ def main():
     if known is None:
         sys.exit(f"no XP export list: run with --dlls DIR (XP SP3's DLLs), or --record DIR once ({RECORDED})")
     problems = 0
+    # The header first: XP's loader refuses an image stamped for a later
+    # Windows before it looks at a single import.
+    header = subprocess.run([OBJDUMP, "-p", args.exe], capture_output=True, text=True, check=True).stdout
+    for field in ("MajorOSystemVersion", "MajorSubsystemVersion"):
+        m = re.search(rf"{field}\s+(\d+)", header)
+        minor = re.search(rf"{field.replace('Major', 'Minor')}\s+(\d+)", header)
+        if m and minor and (int(m.group(1)), int(minor.group(1))) > (5, 1):
+            print(f"HEADER {field} {m.group(1)}.{minor.group(1)}: XP (5.1) will not start it")
+            problems += 1
     found = imports(args.exe)
     for dll, names in sorted(found.items()):
         if dll not in known:

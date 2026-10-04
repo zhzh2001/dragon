@@ -51,7 +51,10 @@ set(_xp_flags "-resource-dir=${DRAGON_LLVM_MINGW}/clang21-resource -stdlib=libc+
 set(CMAKE_C_FLAGS_INIT "${_xp_flags}")
 set(CMAKE_CXX_FLAGS_INIT "${_xp_flags}")
 # One self-contained .exe: libc++, libunwind and the builtins linked in.
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=${DRAGON_LLD}/bin/ld.lld -rtlib=compiler-rt -unwindlib=libunwind -static")
+# lld stamps an executable for Windows 6.0 (Vista) unless told otherwise, and
+# XP's loader then refuses to start it at all ("not a valid Win32
+# application"): the OS and subsystem versions say 5.1.
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=${DRAGON_LLD}/bin/ld.lld -rtlib=compiler-rt -unwindlib=libunwind -static -Wl,--major-os-version,5,--minor-os-version,1,--major-subsystem-version,5,--minor-subsystem-version,1")
 
 set(CMAKE_FIND_ROOT_PATH "${DRAGON_LLVM_MINGW}/i686-w64-mingw32")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

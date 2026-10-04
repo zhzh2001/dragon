@@ -44,8 +44,11 @@ What is built, in the order it was built. The plan these came from is
   the Mac (`build-xp`, `tools/release/package_xp.sh`): the D3D9 backend,
   an SDL3 subset on XP's Win32 in place of SDL3, and thunks for what
   llvm-mingw's libc++ imports that XP lacks. Under Wine it renders
-  pixel-identical to the 64-bit D3D9 build and passes all 21 suites. Not
-  yet run on XP: the XP export list and the G41 are next (`PORTING.md`,
+  pixel-identical to the 64-bit D3D9 build and passes all 21 suites. **On
+  the G41 under real XP SP3** with the Mobility Radeon M6 it picks the ff
+  tier and draws the valley: 8 fps at Low, 19 at Minimal (800x600), after
+  two fixes only real XP showed -- a PE header stamped for Vista, and a
+  driver that claims StretchRect-from-texture and fails it (`PORTING.md`,
   "R6, as built").
 - **D3D11, 2026-10-04.** A third RHI backend (`src/rhi/d3d11/`,
   `--gpu-driver direct3d11`), for the boards that have neither D3D12 nor

@@ -108,6 +108,12 @@ if(DRAGON_XP)
   # Its function-local statics are initialised without guards: the guard is
   # libc++abi's, which would call back into these very functions.
   target_sources(dragon PRIVATE src/platform/xp/xp_thunks.cpp)
+  # XP's loader refuses an image whose subsystem version is above 5.1, and
+  # -mwindows (WIN32_EXECUTABLE) restates the subsystem without one, which
+  # lld then takes as 6.0: say it with the version, after it.
+  # (A generator expression: WIN32_EXECUTABLE is set further down.)
+  target_link_options(dragon PRIVATE
+    "$<IF:$<BOOL:$<TARGET_PROPERTY:dragon,WIN32_EXECUTABLE>>,-Wl$<COMMA>--subsystem$<COMMA>windows:5.1,-Wl$<COMMA>--subsystem$<COMMA>console:5.1>")
   set_source_files_properties(src/platform/xp/xp_thunks.cpp PROPERTIES COMPILE_OPTIONS "-fno-threadsafe-statics")
 endif()
 
