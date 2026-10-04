@@ -4,21 +4,30 @@
 ; arguments go in BENCH\dragon\args.txt, one line, e.g.
 ;   --frames 600 --size 1024x768 --hide-panels --screenshot shot.bmp
 ; (a relative --screenshot lands in BENCH\dragon\). The log is the game's own
-; (DRAGON_LOG_FILE, since the exe is GUI-subsystem); it and the screenshot
-; are copied to BENCH\results\ with this run's time in their names. A run
-; that does not end within 10 minutes is closed and reported as hung.
+; (DRAGON_LOG_FILE, since the exe is GUI-subsystem). BENCH\results\
+; dragon-<time>.txt records each step -- written first, so even a job that
+; fails part-way says how far it got -- and the log and screenshot are
+; copied beside it. A run that does not end within 10 minutes is closed and
+; reported as hung.
 #NoEnv
 name = %1%
 BENCH = %2%
 dir = %BENCH%\dragon
-FileReadLine, args, %dir%\args.txt, 1
 stamp = %A_Now%
+report = %BENCH%\results\dragon-%stamp%.txt
+FileAppend, %stamp% %A_ComputerName% job %name% bench %BENCH%`n, %report%
+FileReadLine, args, %dir%\args.txt, 1
+FileAppend, args [%args%] (read %ErrorLevel%)`n, %report%
 log = %dir%\dragon-%stamp%.log
 EnvSet, DRAGON_LOG_FILE, %log%
 FileDelete, %dir%\shot.bmp
-Run, "%dir%\dragon.exe" %args%, %dir%, , pid
+Run, "%dir%\dragon.exe" %args%, %dir%, UseErrorLevel, pid
+FileAppend, run error %ErrorLevel% pid %pid%`n, %report%
+started := A_TickCount
 Process, WaitClose, %pid%, 600
 hung := ErrorLevel
+seconds := (A_TickCount - started) / 1000
+FileAppend, ended after %seconds% s hung %hung%`n, %report%
 if (hung)
 {
     WinClose, ahk_pid %pid%
@@ -26,7 +35,7 @@ if (hung)
     Process, Close, %pid%
 }
 FileCopy, %log%, %BENCH%\results\dragon-%stamp%.log, 1
+FileAppend, log copy %ErrorLevel%`n, %report%
 if FileExist(dir . "\shot.bmp")
     FileCopy, %dir%\shot.bmp, %BENCH%\results\dragon-%stamp%.bmp, 1
-FileAppend, %stamp% %A_ComputerName% args: %args% hung: %hung%`n, %BENCH%\results\dragon-%stamp%.txt
 ExitApp, % hung ? 2 : 0
