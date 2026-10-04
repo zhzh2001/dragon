@@ -38,6 +38,8 @@ assets/frostvein/
 assets/sunspear/
 assets/rimeplume/
 assets/gold-dragon/
+assets/silver-dragon-reference/
+assets/silver-dragon/
 artifacts/gold-dragon-rig/measurement/canonical-points.npy
 artifacts/gold-dragon-rig/materials/*.glb
 tools/__pycache__/

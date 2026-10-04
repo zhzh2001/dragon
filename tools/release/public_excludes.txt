@@ -37,3 +37,12 @@ tools/gold_dragon_plots.py
 tools/gold_dragon_validate.py
 tools/gold_dragon_weights.py
 assets/gold-dragon/
+
+# Silver D&D direct-reference study (2026-10-03), same licence finding as gold.
+docs/concept/silver-dragon-2026-10-03/
+artifacts/dragon-options/silver-direct-test/
+assets/silver-dragon-reference/
+assets/silver-dragon/
+assets/silver-direct-cand-oneshot.glb
+tools/preview_silver_candidate.py
+tools/validate_silver_candidate.py

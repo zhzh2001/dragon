@@ -140,6 +140,29 @@ Alexander Ostrowski (`https://www.alexanderostrowski.com/2024metallicdragons`).
 The local GLB is excluded from Git under the existing generated-model size
 policy. No game or release roster includes it; model approval is pending.
 
+## Silver reference study (2026-10-03)
+
+The user requested a D&D silver-dragon model study and a stop before game
+integration. The original silver anatomy sheet from Alexander Ostrowski's
+portfolio (<https://www.alexanderostrowski.com/2024metallicdragons>), credited
+to Wizards of the Coast, was supplied directly to each built-in imagegen call.
+The source JPEG stays local, gitignored, with its notices intact. Its URL and
+SHA256 are recorded in `artifacts/dragon-options/silver-direct-test/crop-mapping.json`.
+
+The concept and corrected four-view turnaround are in
+`docs/concept/silver-dragon-2026-10-03/`; the Hunyuan one-shot study and
+read-only inspection are in `artifacts/dragon-options/silver-direct-test/`.
+The generated candidate is `assets/silver-direct-cand-oneshot.glb`, gitignored
+under the existing large-model policy. It is not rigged or game-integrated.
+
+The same licence finding as the gold study applies: Wizards' Fan Content
+Policy does not clear its artwork-derived designs for another game, free or
+otherwise. The policy was checked again on 2026-10-03. No separate permission
+or reuse licence is established. All silver-study images, metadata and
+specialized tools are excluded from the public mirror by
+`tools/release/public_excludes.txt` in the same commit. No public export or push
+is part of this work, and no release package includes silver.
+
 ## Embercrest-scripted (experiment, not tracked)
 
 An original model built for this project by `tools/build_embercrest.py`. The

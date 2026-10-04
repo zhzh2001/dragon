@@ -80,8 +80,20 @@ portfolio as visual references. Their prompts and reference attribution are
 recorded beside the images. The user subsequently selected gold and authorized
 a corrected strip-wing concept and Hunyuan test generation. Its inputs,
 provenance and model inspection are in `artifacts/dragon-options/gold-ribbon-test/`.
-The test remains outside the game pending human model confirmation; silver
-and bronze remain concept-only.
+At the end of that concept pass, silver and bronze remained concept-only;
+the later silver model study is recorded below.
+
+On 2026-10-03 the user selected silver for a separate model study.
+`docs/concept/silver-dragon-2026-10-03/` contains the reference sheet and
+turnaround generated with the **built-in OpenAI imagegen tool**, with
+Ostrowski's original silver anatomy JPEG supplied directly to every call.
+The corrected four cardinal plates were used for a **Tencent Hunyuan hosted
+one-shot V3.1** textured mesh, `assets/silver-direct-cand-oneshot.glb`.
+The model, provenance and read-only Blender inspection are recorded in
+`artifacts/dragon-options/silver-direct-test/`. This AI-generated reference
+study is unrigged and stops before game integration. The source art and large
+model stay local; derived images and tools are excluded from the public mirror,
+as with gold (`ATTRIBUTION.md`).
 
 ## Obligations this file meets
 
