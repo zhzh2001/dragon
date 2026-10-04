@@ -16,6 +16,9 @@ FetchContent_MakeAvailable(meshoptimizer)
 # different shape on the Mac than on Windows. Round every operation alone.
 if(NOT MSVC)
   target_compile_options(meshoptimizer PRIVATE -ffp-contract=off)
-  set_source_files_properties(src/anim/skin_lod.cpp src/gfx/mesh_lod.cpp
+  # The texture chain too (gfx/texture.cpp: the box filter and stb_dxt's
+  # float refinement), since a model pack baked on the Mac is loaded on
+  # Windows and must match what the glTF route computes there.
+  set_source_files_properties(src/anim/skin_lod.cpp src/gfx/mesh_lod.cpp src/gfx/texture.cpp
     DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTIES COMPILE_OPTIONS -ffp-contract=off)
 endif()

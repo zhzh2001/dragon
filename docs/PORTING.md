@@ -336,10 +336,17 @@ graphics settings.
   - SDL's D3D12 driver takes DXGI's first high-performance adapter, which is
     now the X550, and refuses the machine. So D3D12 does not run on x99 at
     the moment; Vulkan does.
-  - Recapturing the `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets needs
-    the 5060 Ti primary again. They predate the sequenced random draws
-    (R7, "A preset renders the same on every backend") and fail strict
-    until then.
+  - `DRAGON_GPU_LOW_POWER=1` reaches the 5060 Ti anyway (2026-10-04): SDL
+    takes the first adapter of DXGI's high-performance order, and with
+    nothing to rank a WDDM 1.0 driver on, that order is adapter order, the
+    display's X550 first. The low-power preference is the same list
+    reversed, so with two cards it is "the one not driving the display".
+    D3D12 then creates on the 5060 Ti and renders headless from the SSH
+    session as before. `dxdiag` confirms the X550 at WDDM 1.0 with feature
+    levels 9_2 and 9_1, so D3D11 FL 9_2 is testable on it as installed.
+  - The `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets predate the
+    sequenced random draws (R7, "A preset renders the same on every
+    backend") and fail strict until recaptured.
 - **The X550 can hang the machine.**
   - Its driver model has no timeout recovery: a GPU hang freezes x99
     outright.
@@ -1007,6 +1014,19 @@ tier never reads one.
 - **The packager** (`package_windows.sh`) bakes the species' packs from the
   staged, shrunk glTFs with the Mac's own build, so the fingerprints are
   the shipped files', and copies the props' from the tree.
+- **On the X550, through D3D9**, the pack frame and the glTF frame first
+  differed in a 14×2-pixel strip of Embercrest's wing by 2/255,
+  reproducibly, while each route alone was deterministic and the LOD
+  fingerprints matched on both. It was the texture chain: `std::pow` in
+  the sRGB tables and FMA contraction in the box filter and stb_dxt's
+  refinement round a few texels differently on arm64 and x86-64, so a
+  pack baked on the Mac carried the Mac's bytes while the glTF route on
+  x99 computed Windows'. The sRGB tables are constants now (generated at
+  double precision, with a threshold search that reproduces the old
+  rounding exactly) and `texture.cpp` builds with `-ffp-contract=off`
+  like the LOD code. `test_model_pack` prints each chain's fingerprint;
+  the Mac and x99 print the same three for Embercrest. One more entry for
+  "a preset must build the same content on every compiler": textures too.
 - **Not done:** a package built with packs and run on x99; the retro-only
   package; the Pi's VC4 has no S3TC, so its packs would need an
   uncompressed or ETC1 variant (the chain is built from the same

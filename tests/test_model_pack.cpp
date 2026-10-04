@@ -318,6 +318,19 @@ void test_real_model() {
         CHECK(same_prepared(trimmed, at_128));
     }
 
+    // Printed, not checked: the same lines from another platform's run of
+    // this suite must match (the texture chain is built on every platform
+    // the glTF route runs on, and a pack baked on the Mac is loaded there).
+    for (size_t i = 0; i < pack.textures.size(); ++i) {
+        uint32_t h = 2166136261u;
+        for (const std::vector<uint8_t>& level : pack.textures[i].prepared.levels)
+            for (uint8_t byte : level) h = (h ^ byte) * 16777619u;
+        std::printf("  texture %zu: %ux%u, chain fingerprint %08x\n", i, pack.textures[i].prepared.width,
+                    pack.textures[i].prepared.height, h);
+    }
+    for (const anim::ModelPackLod& lod : pack.lods)
+        std::printf("  LOD %u: fingerprint %08x\n", lod.max_triangles, fingerprint(lod.mesh));
+
     const std::string path = test_temp_path("embercrest.pack");
     CHECK(anim::write_model_pack(path.c_str(), pack));
     anim::ModelPack back;

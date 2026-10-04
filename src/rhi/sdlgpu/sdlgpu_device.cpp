@@ -254,7 +254,22 @@ public:
 #else
         const SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_SPIRV;
 #endif
-        gpu_ = SDL_CreateGPUDevice(formats, config.debug, config.driver.empty() ? nullptr : config.driver.c_str());
+        // SDL's D3D12 backend takes the one adapter DXGI ranks first for
+        // high performance, and on x99 with the Radeon X550 driving the
+        // display that is the X550, which D3D12 then refuses. The
+        // low-power preference asks DXGI for the opposite order, which is
+        // how the 5060 Ti is reached there (docs/PORTING.md, "Loose ends").
+        const char* low_power = SDL_getenv("DRAGON_GPU_LOW_POWER");
+        const SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, config.debug);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN,
+                               low_power && low_power[0] == '1');
+        if (!config.driver.empty()) SDL_SetStringProperty(props, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, config.driver.c_str());
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, (formats & SDL_GPU_SHADERFORMAT_MSL) != 0);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_DXIL_BOOLEAN, (formats & SDL_GPU_SHADERFORMAT_DXIL) != 0);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, (formats & SDL_GPU_SHADERFORMAT_SPIRV) != 0);
+        gpu_ = SDL_CreateGPUDeviceWithProperties(props);
+        SDL_DestroyProperties(props);
         if (!gpu_) {
             LOG_ERROR("SDL_CreateGPUDevice failed: %s", SDL_GetError());
             return false;
