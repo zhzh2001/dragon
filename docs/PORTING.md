@@ -328,7 +328,7 @@ graphics settings.
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
-| D3D11 | Done at feature levels 11 and 10 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs | Feature level 9 on the X550 (the plan is written down); the HD 5450 and Bay Trail boards it was built for; the shaders in the package |
+| D3D11 | Done at feature levels 11, 10 and 9 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs at 1.8 to 19.6 fps; the X550 at feature level 9_2 draws the sm2 tier within `--cross-compiler` of D3D12's set, at 20 fps Low | The HD 5450 and Bay Trail boards it was built for; the shaders in the package; a 9_1 or 9_3 device |
 
 **Loose ends a new session should know:**
 
@@ -344,7 +344,8 @@ graphics settings.
     reversed, so with two cards it is "the one not driving the display".
     D3D12 then creates on the 5060 Ti and renders headless from the SSH
     session as before. `dxdiag` confirms the X550 at WDDM 1.0 with feature
-    levels 9_2 and 9_1, so D3D11 FL 9_2 is testable on it as installed.
+    levels 9_2 and 9_1, and D3D11 at 9_2 runs on it (adapter 1 from the
+    SSH session: `--gpu-driver direct3d11:1`).
   - The `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets predate the
     sequenced random draws (R7, "A preset renders the same on every
     backend") and fail strict until recaptured.
@@ -1270,7 +1271,7 @@ in a match, 600 frames:
 |---|---|---|---|
 | **D3D9 fixed function (R5), down to TNT / Rage XL** | The FF material layer in the D3D9 backend (texture-stage recipes for the seven pipelines, CPU skinning, blob shadows, table fog). For the DX6-class cards: **software vertex processing** when `D3DDEVCAPS_HWTRANSFORMANDLIGHT` is absent, 16-bit uncompressed textures at 256² (no S3TC before the GeForce 256), 16-bit Z, and a "1998" preset below Very low | ~2K lines, 3 to 5 sessions, one more for the 1998 preset | Already the plan. TNT and Rage XL stay inside the D3D9 tier: their XP drivers are DDI 7 or later, so D3D9 FF runs on them with the runtime's software T&L. Not a backend, a preset. The risk is the look, which a render decides at R5 |
 | **D3D11, FL 11 and 10** (done 2026-10-04, "The D3D11 backend") | A new RHI backend (~1200 lines, simpler than D3D9: cbuffers, no lost device, no pools). The bake adds fxc profiles `vs/ps_4_0` and `5_0` through the existing `hlslc` wrapper and SPIRV-Cross `--shader-model 40/50`. `imgui_impl_dx11` exists | 2 to 3 sessions | Worth more than it looks. SDL3 GPU has no D3D11 backend. Two owned cards have **neither D3D12 nor Vulkan**: the HD 5450 (TeraScale) and the Bay Trail board; the G41's GMA X4500 is FL 10_0. D3D11 is the only path that runs the modern HDR tier on them. And **WARP comes free**: software rendering at every feature level |
-| **D3D11 FL 9_x** (planned, "Feature level 9 on D3D11") | The same backend with the `_level_9_1` and `_level_9_3` profiles. 9_3 maps to the sm3 shader tier, 9_1 and 9_2 to sm2. The known 10level9 limits are already met by those tiers (no SV_VertexID, no depth SRV, instancing only at 9_3, and the backend has a non-instanced path). Check 16F targets and 32-bit indices per format with `CheckFormatSupport`; 9_1 has neither | Half a session on top of D3D11 | A cheap curiosity. The X550 is 9_2 **only through a WDDM driver**; Windows 10 loads no XPDM driver at all, so the testsigned driver on x99 must already be the legacy Vista/7 WDDM one, and `dxdiag` will print its feature level. Expect the SM2 picture exactly: it is the same silicon as D3D9 sm2. The 3DMark Ice Storm box gets ticked and nothing new appears on screen |
+| **D3D11 FL 9_x** (done 2026-10-04, "Feature level 9 on D3D11, as built") | The same backend with the `_level_9_1` and `_level_9_3` profiles. 9_3 maps to the sm3 shader tier, 9_1 and 9_2 to sm2. The known 10level9 limits are already met by those tiers (no SV_VertexID, no depth SRV, instancing only at 9_3, and the backend has a non-instanced path). Check 16F targets and 32-bit indices per format with `CheckFormatSupport`; 9_1 has neither | Half a session on top of D3D11 | A cheap curiosity. The X550 is 9_2 **only through a WDDM driver**; Windows 10 loads no XPDM driver at all, so the testsigned driver on x99 must already be the legacy Vista/7 WDDM one, and `dxdiag` will print its feature level. Expect the SM2 picture exactly: it is the same silicon as D3D9 sm2. The 3DMark Ice Storm box gets ticked and nothing new appears on screen |
 | **Software rendering** | Nothing, at first: `VK_ICD_FILENAMES=.../lvp_icd.x86_64.json ./dragon` on x99's CachyOS (Mesa lavapipe), SwiftShader's ICD on any OS, WARP once D3D11 exists | An hour to measure | Do the free one first. Lavapipe on the ten-core Xeon at 640×480 sm2 should give 10 to 20 fps. An own rasteriser is justified only by the microcontroller item, where nothing else exists |
 | **Pre-DX7: S3 ViRGE/DX, SiS 6326, Riva 128** (all owned) | A D3D7 (or DX6) immediate-mode backend. D3D9 FF is DX7's model, so if R5's material layer is written API-agnostic (stage ops, a vertex layout, light and fog state) this is ~800 lines of device code. Runs only on **98 SE** (XP's in-box ViRGE driver is 2D), so it sits behind R8 and the SiS AGP bench, which is in China. Content a notch below 1998: 2 MB of textures in total, one stage, 320×240 | 3 to 4 sessions plus unknown driver pain | A trophy, not a port. It would start and draw a dragon over a flat-shaded heightfield. Last among the PC items; do it once R5's layer and R8 exist, when its marginal cost is small |
 | **Raspberry Pi 1B** | A **GLES2 RHI backend** (~1200 lines; the shaders are SPIRV-Cross GLSL ES 1.00 from the sm2 variants, compiled by the driver at runtime, so nothing is baked; VC4 has no S3TC, so uncompressed 512² or ETC1), R2b's memory diet, and a "pi" preset (one species, one or two bots, 320×240) | 3 to 5 sessions, the CPU unknown | Possible; prove it on a Pi 3 or 4 first. The backend also covers Pi 2 to 4, pre-Vulkan Linux GPUs and the VC4 class in general. The Pi 1 itself is 50 ms of simulation plus a Mesa driver on an in-order 700 MHz core: 10 to 15 fps at best. Develop the backend on x99's Mesa GL, not on the Pi |
@@ -1387,51 +1388,104 @@ two shaders at runtime through `d3dcompiler_47.dll` -- the one DLL the
 Windows package now imports beyond the system set (`package_windows.sh`
 allows it; every Windows since 8.1 has it).
 
-**WARP** (`DRAGON_D3D11_WARP=1`) creates the device and renders the
-scenes; its frame times on x99's Xeon are measured after this step
-("WARP, measured", below, once written).
+**WARP, measured** (`DRAGON_D3D11_WARP=1`, Microsoft's software
+rasteriser, feature level 11_1 on x99's ten-core Xeon E5): all eight
+scenes render, within 0.16 to 0.35/255 of the 5060 Ti's D3D11 set (a
+different rasteriser's filtering; `--loose` passes everything). At
+1280x720 it runs the modern tier at **1.8 fps at Ultra, 4.8 at Medium and
+19.6 at Minimal**, so a machine with no usable GPU driver at all plays the
+sixth preset at a frame rate, which was the study's software-rendering
+item answered without writing a rasteriser. The X550 at Minimal through
+D3D9 is 173 fps, for scale.
 
-**Not done, in order:** feature level 9 (the next section); a lost-device
-equivalent (`DXGI_ERROR_DEVICE_REMOVED` ends the frame with `Failed`
-today, as D3D9's reset does); fullscreen; the D3D11 shaders in the
-Windows package (the bake needs Wine on the Mac, like D3D9's, and both
-are deployed by hand to `D:\dragon-win\shaders` for now); and the HD 5450
-and Bay Trail boards, which the backend was built for and which have not
-been powered on.
+**Not done, in order:** a lost-device equivalent (a removed device is
+logged and the frame goes on drawing nothing; D3D9's reset is in the same
+state); fullscreen; the D3D11 shaders in the Windows package (the bake
+needs Wine on the Mac, like D3D9's, and both are deployed by hand to
+`D:\dragon-win\shaders` for now); and the HD 5450 and Bay Trail boards,
+which the backend was built for and which have not been powered on.
+Feature level 9 is the next section.
 
-### Feature level 9 on D3D11 (the plan)
+### Feature level 9 on D3D11, as built (2026-10-04)
 
-The X550 is feature level 9_2 under its WDDM 1.0 driver (`dxdiag`), and the
-3DMark Ice Storm box is the only reason anyone remembers 10level9 exists.
-What it takes, all known from the D3D9 tiers:
+The X550 is feature level 9_2 under its WDDM 1.0 driver, and the 3DMark Ice
+Storm box is the only reason anyone remembers 10level9 exists. It is ticked:
+`--gpu-driver direct3d11:1` on x99 probes the adapter's feature level before
+the tier is fixed (`rhi::d3d11::probe_feature_level`), takes the sm2 tier
+for anything under 10_0, and draws the sm2 valley on the X550 **within
+`--cross-compiler` of the D3D12 sm2 set in all eight scenes** (means 0.36
+to 0.90/255; the 5060 Ti forced to 9_2 with `DRAGON_D3D11_FEATURE_LEVEL=9_2`
+is within 0.006 of its own D3D12 sm2 render). At 1024x768 the X550 runs
+**Low at 20 fps, Very low at 26, Minimal at 48** against the D3D9 backend's
+21 to 24, 28 to 33 and 173 (the last at 1280x720): the 10level9 layer costs
+a tenth at the shader-bound presets and half at Minimal, where the frame is
+draw calls -- a draw per foliage instance -- through two API layers. The ff
+shader variant runs the same way (`--tier ff`, 84 fps at Minimal). Nothing
+new appears on screen, as predicted; the point is that the modern code
+path reaches the card without the D3D9 backend.
 
-- **The shaders** are the D3D9 variants: fxc's `vs_4_0_level_9_1` /
-  `ps_4_0_level_9_1` (9_1 and 9_2) and `_level_9_3` (9_3) profiles
-  accept what `ps_2_0` and `ps_2_x` accept, and the sm2 and sm3 tiers
-  already fit those. They want the `D3D9` define's two workarounds too:
-  no `SV_VertexID` at 9_x (the fullscreen passes read `TEXCOORD0` from
-  the backend's own three-entry buffer, which D3D11 needs as well), and
-  no sampled depth (the shadow map is the R32F stand-in the depth-only
-  passes write `z/w` into). The bake is the D3D9 bake's steps 1 to 3 with
-  these profiles; a `level_9` DXBC still goes through `CreateVertexShader`
-  like any other, so the backend change is a profile name and the stand-in.
-- **Instancing** exists at 9_3 only: 9_1 and 9_2 take the D3D9 backend's
-  loop, one draw per instance with the instance stream bound at that
-  element.
-- **Textures:** 2048 at 9_1/9_2, 4096 at 9_3 (`max_texture_size`); mipped
-  textures must be powers of two; BC1/BC3 are there; `R16G16B16A16_FLOAT`
-  as a render target is optional before 9_3, so the sm2 tier's `LDR_OUTPUT`
-  path (no HDR target, no bloom) is the one to run, which is what the X550
-  runs on D3D9 anyway.
-- **Content:** `--tier sm2` at 9_1/9_2, `--tier sm3` at 9_3 -- the tiers
-  exist, and `app.cpp` already forces a retro tier for `direct3d9`; the
-  same rule for a 9_x device.
+**The shaders:** `tools/d3d11/bake_d3d11.py OUT --tier sm2|sm2-noshadows|ff
+--profiles fl91` bakes the tier's variant with `LEVEL9` defined through
+fxc's `vs/ps_4_0_level_9_1` profiles, which run at 9_1, 9_2 and 9_3 alike.
+`LEVEL9` shares D3D9's two macros (no `SV_VertexID`: the fullscreen passes
+read the index from the backend's own buffer; no sampled depth: the shadow
+map is an R32F colour stand-in the depth-only passes write z/w into) and
+adds one of its own: joint indices arrive as UNORM bytes scaled back by
+255, since D3D11 type-checks the input layout against the shader and
+level 9's shaders have no integer inputs. There is **no level_9_3 set**:
+`ps_4_0_level_9_3` still has ps_2_x's 32 constant registers and no
+`texlod`, so the sm3 tier's pixel shaders do not fit it ("Invalid const
+register num: 32", "texlod not supported on this target"), and 9_3 runs
+the sm2 tier like 9_1 and 9_2.
 
-Half a session. The exit test is the X550 drawing the sm2 valley through
-D3D11 within `--cross-compiler` of its D3D9 render -- the same silicon and
-the same fxc, so it should be near-identical -- and then the Ice Storm box
-is ticked. Nothing new appears on screen; the point is that the modern
-code path reaches the card without the D3D9 backend.
+**What level 9 took**, each found from the SSH session by reading the debug
+layer back through `ID3D11InfoQueue` into the log (`DRAGON_GPU_DEBUG=1`;
+`DRAGON_D3D11_TRACE=1` adds every pass, bind and draw, and drains the
+messages after each, which is how a silent `DXGI_ERROR_DRIVER_INTERNAL_ERROR`
+was placed on the draw that raised it):
+
+1. **Typed depth.** Level 9 has no typeless resources: a depth texture is
+   created as `D24_UNORM_S8_UINT` or `D16_UNORM` itself (D32F is not there
+   at all; `gfx::Device` falls back to D24 on its own), and the sampled one
+   gets the R32F stand-in, which the X550 renders to but cannot filter, so
+   it is point-sampled (the shaders' 2x2 PCF still softens it).
+2. **Samplers:** `MaxLOD` must be `FLT_MAX`, anisotropy at most 2 at 9_1.
+3. **Constant buffers are loaded at their declared size.** A pixel shader
+   that declares the 39-register scene block and reads three members of it
+   still has 39 registers set, against the 32 a level-9 pixel shader has,
+   and both the X550's driver and the 5060 Ti's answered the first terrain
+   draw with `DXGI_ERROR_DRIVER_INTERNAL_ERROR` and a removed device. The
+   SM 5.0 HLSL SPIRV-Cross writes declares every member with `packoffset`,
+   so the bake rewrites each cbuffer to the members the stage uses, at
+   consecutive registers (`compact_cbuffers`), and writes the moves as a
+   `.l9copies` sidecar; the backend keeps each pushed block raw and
+   assembles the compact layout before the draw (`flush_level9_uniforms`).
+   The D3D9 bake solved the same problem by unwrapping cbuffers into
+   globals and reading fxc's constant table back.
+4. **The skin palette.** With the scene block compacted, both drivers still
+   removed the device at the first skinned draw: its cbuffers declared 4 +
+   4 + 192 registers (the 64-joint `PACKED_JOINT_LIMIT`), under 256, and
+   fxc had accepted them. Declaring the sm2 tier's 50 joints under `LEVEL9`
+   (150 registers) ended it. Whatever the layer reserves, 200 declared
+   registers is past it and 158 is not; the limit was not measured finer.
+5. **No instancing below 9_3,** and no instanced draw call at all, even
+   for one instance: an instanced slot binds per draw at that instance's
+   element with a stride of 0, the layout reads it per vertex, and the
+   draw repeats (the D3D9 backend's loop). Plain `Draw`/`DrawIndexed`
+   everywhere else.
+6. **Whole-resource copies only:** the screenshot readback copies the
+   whole texture into staging and reads the top-left region.
+7. **Dear ImGui's D3D11 renderer** asks for `vs_4_0`/`ps_4_0`, which a
+   level-9 device refuses, clamps its font sampler's `MaxLOD` to 0, and
+   reports a 16384-texel atlas limit. `cmake/imgui.cmake` patches the
+   fetched source to the `level_9_1` profiles (they run on every feature
+   level) and to `FLT_MAX`, and `imgui_layer.cpp` sets the atlas limit from
+   `max_texture_size()`. With those the run HUD draws on the X550.
+
+Not tested: a 9_1 device (none owned; the 5060 Ti forced to 9_1 refuses
+`R32_FLOAT` outright, so the shadow stand-in would need the `NO_SHADOWS`
+variant there), and 9_3's instancing path (it reports instancing and
+takes the native draws, untested on real 9_3 hardware).
 
 ### vs/ps 1.x for the DX8 cards: the vertex side, not the pixel side (2026-10-04)
 

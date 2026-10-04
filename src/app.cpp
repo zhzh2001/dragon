@@ -16,6 +16,9 @@
 #include <sstream>
 
 #include "core/log.h"
+#ifdef _WIN32
+#include "rhi/d3d11/d3d11_backend.h"  // probe_feature_level: the tier a feature level 9 device gets
+#endif
 #include "core/math.h"
 #include "core/paths.h"
 #include "gfx/primitives.h"
@@ -342,6 +345,19 @@ bool App::init(const Options& options) {
     if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
         options_.tier = gfx::Tier::SM3;
     }
+#ifdef _WIN32
+    // So does a D3D11 device at feature level 9 (rhi/d3d11): the sm2 tier,
+    // 9_3 included, decided before the tier is fixed.
+    if (options_.gpu_driver.rfind("direct3d11", 0) == 0 && options_.tier == gfx::Tier::Modern) {
+        const size_t colon = options_.gpu_driver.find(':');
+        const uint32_t adapter = colon == std::string::npos ? 0 : uint32_t(std::stoul(options_.gpu_driver.substr(colon + 1)));
+        const uint32_t level = rhi::d3d11::probe_feature_level(adapter);
+        if (level && level < 0xa000) {
+            options_.tier = gfx::Tier::SM2;
+            LOG_INFO("direct3d11: feature level %x: the sm2 tier", level);
+        }
+    }
+#endif
     tier_ = gfx::RenderTier::make(options_.tier);
     gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());

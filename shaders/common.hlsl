@@ -28,13 +28,15 @@
 #define TEXTURE_SLOT(n) register(t##n, RESOURCE_SPACE)
 #define SAMPLER_SLOT(n) register(s##n, RESOURCE_SPACE)
 
-// D3D9 (rhi/d3d9, SM3 and below) lacks two things the modern stages use.
+// D3D9 (rhi/d3d9, SM3 and below) lacks two things the modern stages use, and
+// so does Direct3D 11 at feature level 9 (rhi/d3d11, the LEVEL9 define): the
+// same silicon behind a newer API.
 //
 // No SV_VertexID: a fullscreen triangle's vertex stage reads its index from
 // TEXCOORD0 instead, a float the D3D9 backend feeds from a three-entry buffer
 // of its own whenever a pipeline declares no vertex attributes.
 //   VertexOut vs_main(VERTEX_ID_INPUT) { const int vertex_id = VERTEX_ID; ...
-#ifdef D3D9
+#if defined(D3D9) || defined(LEVEL9)
 #define VERTEX_ID_INPUT float vertex_id_input : TEXCOORD0
 #define VERTEX_ID int(vertex_id_input + 0.5)
 #else
@@ -46,7 +48,7 @@
 // target there, so the depth-only passes write depth as a colour (z / w, the
 // same value a depth buffer would hold) and the shaders that read the map read
 // .x either way. Elsewhere the fragment stage writes nothing.
-#ifdef D3D9
+#if defined(D3D9) || defined(LEVEL9)
 #define DEPTH_VARYING float2 depth_zw : TEXCOORD7;
 #define WRITE_DEPTH_VARYING(o) (o).depth_zw = (o).clip_position.zw
 #define DEPTH_FRAGMENT_RETURN float4

@@ -145,6 +145,11 @@ bool ImGuiLayer::init(gfx::Device& device) {
             LOG_ERROR("ImGui D3D11 init failed");
             return false;
         }
+        // The renderer reports D3D11's 16384-texel limit for the font atlas,
+        // which a feature level 9 device cannot create (2048 at 9_2): the
+        // atlas grows past it and the fonts vanish. Tell it the device's.
+        ImGui::GetPlatformIO().Renderer_TextureMaxWidth = int(device.rhi().max_texture_size());
+        ImGui::GetPlatformIO().Renderer_TextureMaxHeight = int(device.rhi().max_texture_size());
         initialized_ = true;
         return true;
     }

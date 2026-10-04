@@ -44,8 +44,10 @@ What is built, in the order it was built. The plan these came from is
   `--gpu-driver direct3d11`), for the boards that have neither D3D12 nor
   Vulkan and for WARP. The 5060 Ti through it is within 0.3/255 of Metal
   in all eight golden scenes, nearer than D3D12's own set; feature level 10
-  renders bit-identical. Feature level 9 for the X550 is planned
-  (`PORTING.md`, "The D3D11 backend").
+  renders bit-identical; WARP plays Minimal at 20 fps. Feature level 9
+  runs the sm2 tier on the X550 within `--cross-compiler` of D3D12's set
+  (20 fps at Low, 1024x768) after a round of 10level9 limits read back from
+  the debug layer (`PORTING.md`, "Feature level 9 on D3D11, as built").
 - **The 3DMark2001 dragon** carves out of its archive and converts to a
   static glTF (`tools/3dmark/`); its rig is briefed for Codex. Local only.
 - **Model packs (R2b, after the publish).** `--bake-packs` writes what a

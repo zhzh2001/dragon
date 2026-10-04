@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <d3d11.h>
+#include <d3d11sdklayers.h>
 #include <dxgi1_2.h>
 
 #include <algorithm>
@@ -10,7 +11,9 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/log.h"
@@ -37,10 +40,19 @@ struct D11Texture {
     ID3D11RenderTargetView* rtv = nullptr;    // a colour target
     ID3D11DepthStencilView* dsv = nullptr;    // a depth target
     bool generates_mips = false;              // created with D3D11_RESOURCE_MISC_GENERATE_MIPS
+    // Feature level 9 cannot sample a depth texture: a sampled depth target
+    // gets an R32F colour stand-in the depth-only shaders write z/w into
+    // (common.hlsl, DEPTH_ONLY_FRAGMENT under LEVEL9); `srv` is its view.
+    ID3D11Texture2D* standin = nullptr;
+    ID3D11RenderTargetView* standin_rtv = nullptr;
 };
 
 struct D11Sampler {
     ID3D11SamplerState* state = nullptr;
+    // The same sampler point-filtered, for the R32F shadow stand-in on a
+    // feature level 9 card that cannot filter a 32-bit float format (the
+    // X550 cannot; the shaders' PCF still softens it).
+    ID3D11SamplerState* point = nullptr;
 };
 
 struct D11Pipeline {
@@ -54,6 +66,21 @@ struct D11Pipeline {
     D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     // A vertex buffer binds with its stride, which is the pipeline's.
     uint32_t stride[8] = {};
+    // Below feature level 9_3 there is no instancing: an instanced slot binds
+    // with a stride of 0 at the instance's element and the draw repeats
+    // (`looped`); `instance_pitch` is the slot's real pitch.
+    bool looped = false;
+    bool instanced[8] = {};
+    uint32_t instance_pitch[8] = {};
+    bool vertex_id = false;  // no attributes at feature level 9: fed from the backend's id buffer
+    // Feature level 9: the shader's cbuffers hold only the members it uses
+    // (tools/d3d11/bake_d3d11.py, compact_cbuffers), assembled from the
+    // pushed blocks through these copies, in float4 registers.
+    struct Copy {
+        uint32_t slot, src, count, dst;
+    };
+    std::vector<Copy> copies[2];                 // per stage
+    uint32_t compact_regs[2][4] = {};            // per stage and slot: the assembled block's size
 };
 
 struct D11Pass {
@@ -78,9 +105,11 @@ std::string read_file(const std::string& path) {
 }
 
 // The baked file name for a define set: the SDL backend's rule (each define
-// lowercased, sorted, after a dot), as tools/d3d11/bake_d3d11.py writes it.
-std::string baked_base(const ShaderSource& src) {
+// lowercased, sorted, after a dot), as tools/d3d11/bake_d3d11.py writes it,
+// with LEVEL9 added at feature level 9.
+std::string baked_base(const ShaderSource& src, bool level9) {
     std::vector<std::string> names = src.defines;
+    if (level9) names.push_back("LEVEL9");
     std::sort(names.begin(), names.end());
     std::string root = src.root;
     if (!root.empty() && root.back() != '/' && root.back() != '\\') root += '/';
@@ -187,12 +216,13 @@ const char* feature_level_name(D3D_FEATURE_LEVEL level) {
     }
 }
 
-// The sizes a pushed uniform block may be, one dynamic constant buffer
-// each per stage and slot: a block is mapped with DISCARD into the smallest
-// that fits, so the driver renames a few hundred bytes, not 64 KB, for the
-// small blocks pushed thousands of times a frame.
-constexpr uint32_t UNIFORM_CLASSES[] = {256, 1024, 4096, 16384, 65536};
-constexpr int UNIFORM_CLASS_COUNT = 5;
+// Uniform blocks pushed to a stage's slot go into a dynamic constant buffer
+// of exactly their size (rounded to 16 bytes), made on first use and kept
+// per size: a slot sees one or two struct sizes, the driver renames a few
+// hundred bytes for the small blocks pushed thousands of times a frame and
+// not 64 KB, and feature level 9 -- which maps every bound buffer whole
+// onto its 256 vertex constant registers (32 for pixels) -- is never handed
+// more bytes than the shader declared.
 constexpr uint32_t UNIFORM_SLOTS = 4;
 
 }  // namespace
@@ -224,7 +254,8 @@ public:
         // (11_0, 10_1, 10_0) caps the list, which is how the 10_0 path --
         // vs/ps_4_0, 8192-texel textures -- is tested on a card that has 11.
         std::vector<D3D_FEATURE_LEVEL> levels = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
-                                                 D3D_FEATURE_LEVEL_10_0};
+                                                 D3D_FEATURE_LEVEL_10_0,  D3D_FEATURE_LEVEL_9_3,  D3D_FEATURE_LEVEL_9_2,
+                                                 D3D_FEATURE_LEVEL_9_1};
         if (const char* cap = SDL_getenv("DRAGON_D3D11_FEATURE_LEVEL")) {
             while (levels.size() > 1 && std::strcmp(feature_level_name(levels.front()), cap) != 0) levels.erase(levels.begin());
         }
@@ -251,6 +282,15 @@ public:
             return false;
         }
         debug_layer_ = (flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
+        if (debug_layer_) {
+            // The validation messages, read back into the log: an SSH session
+            // has no debugger to print them to.
+            device_->QueryInterface(__uuidof(ID3D11InfoQueue), reinterpret_cast<void**>(&info_queue_));
+        }
+        // DRAGON_D3D11_TRACE=1 logs every pass and draw, with the validation
+        // messages they raise: how a silent death on a feature level 9 card
+        // is placed.
+        trace_ = SDL_getenv("DRAGON_D3D11_TRACE") && SDL_getenv("DRAGON_D3D11_TRACE")[0] == '1';
         {
             DXGI_ADAPTER_DESC desc = {};
             IDXGIDevice* dxgi_device = nullptr;
@@ -261,10 +301,34 @@ public:
             if (used) used->GetDesc(&desc);
             char name[128] = "?";
             WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, name, sizeof name, nullptr, nullptr);
-            // vs/ps_5_0 at feature level 11, 4_0 at 10: which baked set loads.
-            profile_ = level_ >= D3D_FEATURE_LEVEL_11_0 ? "sm50" : "sm40";
-            LOG_INFO("direct3d11: %s, feature level %s, %s shaders%s%s", name, feature_level_name(level_), profile_,
-                     warp ? " (WARP)" : "", debug_layer_ ? ", debug layer" : "");
+            // vs/ps_5_0 at feature level 11, 4_0 at 10, the level_9 profiles
+            // of a retro tier's LEVEL9 variant below: which baked set loads.
+            level9_ = level_ < D3D_FEATURE_LEVEL_10_0;
+            instancing_ = level_ >= D3D_FEATURE_LEVEL_9_3;
+            // One level-9 set: level_9_3's pixel side is still ps_2_x-sized
+            // (32 constants, no texlod), so the sm3 tier does not fit it and
+            // 9_3 runs the sm2 tier's level_9_1 bytecode like 9_1 and 9_2.
+            profile_ = level_ >= D3D_FEATURE_LEVEL_11_0 ? "sm50" : level_ >= D3D_FEATURE_LEVEL_10_0 ? "sm40" : "fl91";
+            LOG_INFO("direct3d11: %s, feature level %s, %s shaders%s%s%s", name, feature_level_name(level_), profile_,
+                     warp ? " (WARP)" : "", debug_layer_ ? ", debug layer" : "",
+                     level9_ ? (instancing_ ? " (level 9: shader model 2/3 limits)" : " (level 9: no instancing)") : "");
+            if (level9_) {
+                UINT support = 0;
+                device_->CheckFormatSupport(DXGI_FORMAT_R32_FLOAT, &support);
+                r32f_filterable_ = (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
+                LOG_INFO("direct3d11: R32_FLOAT shadow stand-in %s, %s", (support & D3D11_FORMAT_SUPPORT_RENDER_TARGET) ? "renderable" : "NOT a render target here",
+                         r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
+                if (!r32f_filterable_ && info_queue_) {
+                    // The stand-in is point-sampled where it cannot be
+                    // filtered, which the debug layer says makes this
+                    // warning ignorable -- and it raises it on every draw.
+                    D3D11_MESSAGE_ID deny[] = {D3D11_MESSAGE_ID_DEVICE_DRAW_RESOURCE_FORMAT_SAMPLE_UNSUPPORTED};
+                    D3D11_INFO_QUEUE_FILTER filter = {};
+                    filter.DenyList.NumIDs = 1;
+                    filter.DenyList.pIDList = deny;
+                    info_queue_->AddStorageFilterEntries(&filter);
+                }
+            }
             if (used && used != adapter) used->Release();
             release(dxgi_device);
         }
@@ -297,33 +361,31 @@ public:
             if (!make_backbuffer_view()) return false;
         }
 
-        // The dynamic constant buffers push_uniforms maps into.
-        for (int stage = 0; stage < 2; ++stage) {
-            for (uint32_t slot = 0; slot < UNIFORM_SLOTS; ++slot) {
-                for (int c = 0; c < UNIFORM_CLASS_COUNT; ++c) {
-                    D3D11_BUFFER_DESC bd = {};
-                    bd.ByteWidth = UNIFORM_CLASSES[c];
-                    bd.Usage = D3D11_USAGE_DYNAMIC;
-                    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-                    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-                    if (FAILED(device_->CreateBuffer(&bd, nullptr, &uniforms_[stage][slot][c]))) {
-                        LOG_ERROR("direct3d11: constant buffer creation failed");
-                        return false;
-                    }
-                }
-            }
-        }
         D3D11_SAMPLER_DESC sd = {};
         sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
         sd.MaxLOD = D3D11_FLOAT32_MAX;
         device_->CreateSamplerState(&sd, &blit_sampler_);
+        if (level9_) {
+            // The vertex index a fullscreen triangle reads (VERTEX_ID_INPUT):
+            // no SV_VertexID at feature level 9.
+            const float ids[6] = {0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+            D3D11_BUFFER_DESC bd = {};
+            bd.ByteWidth = sizeof ids;
+            bd.Usage = D3D11_USAGE_IMMUTABLE;
+            bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+            const D3D11_SUBRESOURCE_DATA init = {ids, 0, 0};
+            if (FAILED(device_->CreateBuffer(&bd, &init, &vertex_ids_))) return false;
+        }
         return true;
     }
 
     ~D3D11Device() override {
+        drain_messages("shutdown");
+        release(info_queue_);
         if (context_) context_->ClearState();
         release(blit_sampler_);
+        release(vertex_ids_);
         release(blit_.vs);
         release(blit_.ps);
         release(blit_.rasterizer);
@@ -331,7 +393,7 @@ public:
         release(blit_.blend);
         for (auto& stage : uniforms_)
             for (auto& slot : stage)
-                for (ID3D11Buffer*& b : slot) release(b);
+                for (auto& [size, b] : slot) b->Release();
         release(backbuffer_rtv_);
         release(swapchain_);
         release(context_);
@@ -394,6 +456,7 @@ public:
         } else {
             wait_idle();
         }
+        drain_messages("end_frame");
     }
 
     void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) override {
@@ -470,6 +533,10 @@ public:
     Texture* create_texture(const TextureDesc& desc, const char* debug_name) override {
         auto* t = new D11Texture;
         t->format = desc.format;
+        // Feature level 9 has no 32-bit float depth; D24 holds the
+        // conventional range the retro tiers draw in.
+        if (level9_ && t->format == Format::D32F) t->format = Format::D24;
+        const bool standin = level9_ && (desc.usage & TEXTURE_DEPTH_TARGET) && (desc.usage & TEXTURE_SAMPLED);
         t->width = desc.width;
         t->height = desc.height;
         t->levels = std::max(desc.mip_levels, 1u);
@@ -479,10 +546,13 @@ public:
         td.Height = desc.height;
         td.MipLevels = t->levels;
         td.ArraySize = 1;
-        td.Format = to_dxgi(desc.format);
+        // A depth texture is typeless so it can be sampled too -- except at
+        // feature level 9, which has no typeless resources and no sampled
+        // depth: there it is the typed depth format, and the stand-in samples.
+        td.Format = level9_ && is_depth(t->format) ? depth_view_format(t->format) : to_dxgi(t->format);
         td.SampleDesc.Count = 1;
         td.Usage = D3D11_USAGE_DEFAULT;
-        if (desc.usage & TEXTURE_SAMPLED) td.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+        if ((desc.usage & TEXTURE_SAMPLED) && !standin) td.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
         if (desc.usage & TEXTURE_COLOR_TARGET) td.BindFlags |= D3D11_BIND_RENDER_TARGET;
         if (desc.usage & TEXTURE_DEPTH_TARGET) td.BindFlags |= D3D11_BIND_DEPTH_STENCIL;
         // A mip chain the GPU builds (upload_texture's generate_mips) needs
@@ -494,9 +564,20 @@ public:
             t->generates_mips = true;
         }
         HRESULT hr = device_->CreateTexture2D(&td, nullptr, &t->texture);
-        if (SUCCEEDED(hr) && (desc.usage & TEXTURE_SAMPLED)) {
+        if (SUCCEEDED(hr) && standin) {
+            // The R32F colour the depth-only passes write z/w into, sampled
+            // in the depth texture's place.
+            D3D11_TEXTURE2D_DESC cd = td;
+            cd.Format = DXGI_FORMAT_R32_FLOAT;
+            cd.MipLevels = 1;
+            cd.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+            cd.MiscFlags = 0;
+            hr = device_->CreateTexture2D(&cd, nullptr, &t->standin);
+            if (SUCCEEDED(hr)) hr = device_->CreateShaderResourceView(t->standin, nullptr, &t->srv);
+            if (SUCCEEDED(hr)) hr = device_->CreateRenderTargetView(t->standin, nullptr, &t->standin_rtv);
+        } else if (SUCCEEDED(hr) && (desc.usage & TEXTURE_SAMPLED)) {
             D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
-            sd.Format = is_depth(desc.format) ? depth_sampled_format(desc.format) : td.Format;
+            sd.Format = is_depth(t->format) ? depth_sampled_format(t->format) : td.Format;
             sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
             sd.Texture2D.MipLevels = t->levels;
             hr = device_->CreateShaderResourceView(t->texture, &sd, &t->srv);
@@ -506,9 +587,9 @@ public:
         }
         if (SUCCEEDED(hr) && (desc.usage & TEXTURE_DEPTH_TARGET)) {
             D3D11_DEPTH_STENCIL_VIEW_DESC dd = {};
-            dd.Format = depth_view_format(desc.format);
+            dd.Format = depth_view_format(t->format);
             dd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-            hr = device_->CreateDepthStencilView(t->texture, &dd, &t->dsv);
+            hr = device_->CreateDepthStencilView(t->texture, level9_ ? nullptr : &dd, &t->dsv);
         }
         if (FAILED(hr)) {
             LOG_ERROR("direct3d11: texture '%s' (%ux%u, %u levels) failed (0x%08lx)", debug_name, desc.width,
@@ -557,6 +638,8 @@ public:
         release(t->srv);
         release(t->rtv);
         release(t->dsv);
+        release(t->standin_rtv);
+        release(t->standin);
         release(t->texture);
         delete t;
     }
@@ -577,14 +660,28 @@ public:
         sd.AddressU = to_d3d(desc.address_u);
         sd.AddressV = to_d3d(desc.address_v);
         sd.AddressW = to_d3d(desc.address_w);
-        sd.MaxAnisotropy = UINT(std::clamp(desc.max_anisotropy, 1.0f, 16.0f));
+        // Feature level 9_1 filters two ways at most; 9_2 and up sixteen.
+        sd.MaxAnisotropy = UINT(std::clamp(desc.max_anisotropy, 1.0f, level_ == D3D_FEATURE_LEVEL_9_1 ? 2.0f : 16.0f));
         sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
         sd.MinLOD = 0.0f;
         sd.MaxLOD = desc.max_lod >= 1000.0f ? D3D11_FLOAT32_MAX : desc.max_lod;
+        if (level9_) {
+            // Feature level 9 takes no LOD clamp. A max_lod of 0 means "the
+            // base level only", which the textures it is set on have anyway
+            // (render targets, the lattice): sample the whole chain.
+            sd.MaxLOD = D3D11_FLOAT32_MAX;
+        }
         if (FAILED(device_->CreateSamplerState(&sd, &s->state))) {
-            LOG_ERROR("direct3d11: CreateSamplerState failed");
+            LOG_ERROR("direct3d11: CreateSamplerState failed (filter %d, address %d/%d/%d, anisotropy %u, max lod %g)",
+                      int(sd.Filter), int(sd.AddressU), int(sd.AddressV), int(sd.AddressW), unsigned(sd.MaxAnisotropy),
+                      double(sd.MaxLOD));
             delete s;
             return nullptr;
+        }
+        if (level9_ && !r32f_filterable_) {
+            sd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+            sd.MaxAnisotropy = 1;
+            device_->CreateSamplerState(&sd, &s->point);
         }
         return reinterpret_cast<Sampler*>(s);
     }
@@ -592,22 +689,27 @@ public:
     void destroy(Sampler* sampler) override {
         if (!sampler) return;
         release(d11(sampler)->state);
+        release(d11(sampler)->point);
         delete d11(sampler);
     }
 
     // ---- pipelines
     Pipeline* create_pipeline(const PipelineDesc& d, const ShaderSource& shaders) override {
         if (shader_root_.empty()) shader_root_ = shaders.root;
-        const std::string base = baked_base(shaders);
+        const std::string base = baked_base(shaders, level9_);
         const std::string vs_code = read_file(base + ".vertex." + profile_ + ".dxbc");
         const std::string ps_code = read_file(base + ".fragment." + profile_ + ".dxbc");
         if (vs_code.empty() || ps_code.empty()) {
-            LOG_ERROR("[%s] no D3D11 shader at %s.{vertex,fragment}.%s.dxbc (tools/d3d11/bake_d3d11.py)", d.name.c_str(),
-                      base.c_str(), profile_);
+            LOG_ERROR("[%s] no D3D11 shader at %s.{vertex,fragment}.%s.dxbc (tools/d3d11/bake_d3d11.py%s)", d.name.c_str(),
+                      base.c_str(), profile_, level9_ ? " --tier sm2 --profiles fl91" : "");
             return nullptr;
         }
         auto* p = new D11Pipeline;
         p->desc = d;
+        if (level9_) {
+            read_copies(*p, 0, base + ".vertex." + profile_ + ".l9copies");
+            read_copies(*p, 1, base + ".fragment." + profile_ + ".l9copies");
+        }
         if (!build_pipeline(*p, vs_code, ps_code)) {
             destroy(reinterpret_cast<Pipeline*>(p));
             return nullptr;
@@ -628,7 +730,7 @@ public:
     bool compiles_hlsl() const override { return false; }
 
     std::vector<std::string> baked_shader_files(const ShaderSource& shaders) const override {
-        const std::string base = baked_base(shaders);
+        const std::string base = baked_base(shaders, level9_);
         return {base + ".vertex." + profile_ + ".dxbc", base + ".fragment." + profile_ + ".dxbc"};
     }
 
@@ -645,20 +747,34 @@ public:
         // would unbind the conflicting view itself, with a warning a frame.
         ID3D11ShaderResourceView* const none[16] = {};
         context_->PSSetShaderResources(0, 16, none);
-        ID3D11RenderTargetView* rtv = color ? color->rtv : nullptr;
+        // A depth-only pass on a sampled depth target at feature level 9
+        // draws into its R32F stand-in as well.
+        ID3D11RenderTargetView* rtv = color ? color->rtv : depth && depth->standin_rtv ? depth->standin_rtv : nullptr;
         context_->OMSetRenderTargets(rtv ? 1 : 0, rtv ? &rtv : nullptr, depth ? depth->dsv : nullptr);
         pass_.width = target->width;
         pass_.height = target->height;
         const D3D11_VIEWPORT viewport = {0.0f, 0.0f, float(pass_.width), float(pass_.height), 0.0f, 1.0f};
         context_->RSSetViewports(1, &viewport);
         if (color && desc.clear_color) context_->ClearRenderTargetView(color->rtv, desc.clear_rgba);
-        if (depth && desc.clear_depth) context_->ClearDepthStencilView(depth->dsv, D3D11_CLEAR_DEPTH, desc.clear_depth_value, 0);
+        if (depth && desc.clear_depth) {
+            context_->ClearDepthStencilView(depth->dsv, D3D11_CLEAR_DEPTH, desc.clear_depth_value, 0);
+            if (!color && depth->standin_rtv) {
+                // The stand-in holds depth too, so it clears to the same value.
+                const float v[4] = {desc.clear_depth_value, desc.clear_depth_value, desc.clear_depth_value, 1.0f};
+                context_->ClearRenderTargetView(depth->standin_rtv, v);
+            }
+        }
         // A new pass: the constant buffers pushed so far bind again (the
         // stretch between passes borrows a slot).
         for (int stage = 0; stage < 2; ++stage)
             for (uint32_t slot = 0; slot < UNIFORM_SLOTS; ++slot)
                 if (bound_uniforms_[stage][slot]) set_constant_buffer(stage, slot, bound_uniforms_[stage][slot]);
         pipeline_ = nullptr;
+        if (trace_) {
+            LOG_INFO("direct3d11 trace: pass %ux%u color %s depth %s", pass_.width, pass_.height, color ? "yes" : "no",
+                     depth ? (depth->standin_rtv ? "stand-in" : "yes") : "no");
+            drain_messages("begin_pass");
+        }
         return reinterpret_cast<Pass*>(&pass_);
     }
 
@@ -669,6 +785,21 @@ public:
         if (!p || p == pipeline_) return;
         pipeline_ = p;
         apply_pipeline(*p);
+        pushed_dirty_[0] = pushed_dirty_[1] = 0xF;  // a new layout: assemble every block again
+        if (trace_) {
+            std::string layout;
+            for (const VertexAttribute& a : p->desc.vertex_attributes)
+                layout += " " + std::to_string(a.location) + ":" + std::to_string(int(a.format)) + "@" + std::to_string(a.buffer_slot) + "+" + std::to_string(a.offset);
+            LOG_INFO("direct3d11 trace: pipeline %s, strides %u/%u/%u, blend %d cull %d depth %d/%d cmp %d, attributes%s", p->desc.name.c_str(),
+                     p->stride[0], p->stride[1], p->stride[2], int(p->desc.blend), int(p->desc.cull), int(p->desc.depth_test), int(p->desc.depth_write),
+                     int(p->desc.depth_compare), layout.c_str());
+            drain_messages("bind_pipeline");
+        }
+        if (p->vertex_id) {
+            const UINT stride = sizeof(float), offset = 0;
+            context_->IASetVertexBuffers(0, 1, &vertex_ids_, &stride, &offset);
+            return;
+        }
         // A vertex buffer binds with its stride, which is this pipeline's, so
         // buffers bound before it are bound again.
         for (uint32_t slot = 0; slot < 8; ++slot) {
@@ -684,14 +815,18 @@ public:
             const uint32_t slot = first_slot + i;
             streams_[slot] = bindings[i];
             ID3D11Buffer* b = bindings[i].buffer ? d11(bindings[i].buffer)->buffer : nullptr;
+            if (trace_) LOG_INFO("direct3d11 trace: vertex buffer slot %u: %u bytes, offset %u", slot, bindings[i].buffer ? d11(bindings[i].buffer)->size : 0, bindings[i].offset);
             const UINT stride = pipeline_ ? pipeline_->stride[slot] : 0, offset = bindings[i].offset;
             context_->IASetVertexBuffers(slot, 1, &b, &stride, &offset);
         }
+        if (trace_) drain_messages("bind_vertex_buffers");
     }
 
     void bind_index_buffer(Pass*, const BufferBinding& binding, IndexSize size) override {
         ID3D11Buffer* b = binding.buffer ? d11(binding.buffer)->buffer : nullptr;
+        if (trace_) LOG_INFO("direct3d11 trace: index buffer %u bytes, %s, offset %u", binding.buffer ? d11(binding.buffer)->size : 0, size == IndexSize::U32 ? "u32" : "u16", binding.offset);
         context_->IASetIndexBuffer(b, size == IndexSize::U32 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT, binding.offset);
+        if (trace_) drain_messages("bind_index_buffer");
     }
 
     void bind_fragment_textures(Pass*, uint32_t first_slot, const TextureBinding* bindings, uint32_t count) override {
@@ -699,24 +834,42 @@ public:
         ID3D11SamplerState* samplers[16] = {};
         count = std::min(count, 16u - std::min(first_slot, 16u));
         for (uint32_t i = 0; i < count; ++i) {
-            views[i] = bindings[i].texture ? d11(bindings[i].texture)->srv : nullptr;
-            samplers[i] = bindings[i].sampler ? d11(bindings[i].sampler)->state : nullptr;
+            D11Texture* t = bindings[i].texture ? d11(bindings[i].texture) : nullptr;
+            D11Sampler* s = bindings[i].sampler ? d11(bindings[i].sampler) : nullptr;
+            views[i] = t ? t->srv : nullptr;
+            // The stand-in point-sampled where the card cannot filter R32F.
+            samplers[i] = !s ? nullptr : (t && t->standin && s->point) ? s->point : s->state;
         }
         if (!count) return;
+        if (trace_) {
+            for (uint32_t i = 0; i < count; ++i) {
+                D11Texture* t = bindings[i].texture ? d11(bindings[i].texture) : nullptr;
+                D11Sampler* s = bindings[i].sampler ? d11(bindings[i].sampler) : nullptr;
+                D3D11_SAMPLER_DESC sd = {};
+                if (s && s->state) s->state->GetDesc(&sd);
+                LOG_INFO("direct3d11 trace: texture slot %u: %ux%u levels %u format %d%s, sampler filter %d address %d/%d aniso %u",
+                         first_slot + i, t ? t->width : 0, t ? t->height : 0, t ? t->levels : 0, t ? int(t->format) : -1,
+                         t && t->standin ? " (stand-in)" : "", int(sd.Filter), int(sd.AddressU), int(sd.AddressV), unsigned(sd.MaxAnisotropy));
+            }
+        }
         context_->PSSetShaderResources(first_slot, count, views);
         context_->PSSetSamplers(first_slot, count, samplers);
+        if (trace_) drain_messages("bind_fragment_textures");
     }
 
     void push_uniforms(Stage stage, uint32_t slot, const void* data, uint32_t size) override {
         if (slot >= UNIFORM_SLOTS || size == 0) return;
         const int s = stage == Stage::Vertex ? 0 : 1;
-        int c = 0;
-        while (c + 1 < UNIFORM_CLASS_COUNT && UNIFORM_CLASSES[c] < size) ++c;
-        if (size > UNIFORM_CLASSES[c]) {
-            LOG_ERROR("direct3d11: a %u-byte uniform block, past the 64 KB a constant buffer holds", size);
+        if (trace_) LOG_INFO("direct3d11 trace: uniforms %s slot %u, %u bytes", s == 0 ? "vertex" : "fragment", slot, size);
+        if (level9_) {
+            // Kept raw; the bound pipeline's compact layout is assembled
+            // from it before the draw (flush_level9_uniforms).
+            pushed_[s][slot].assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + size);
+            pushed_dirty_[s] |= 1u << slot;
             return;
         }
-        ID3D11Buffer* buffer = uniforms_[s][slot][c];
+        ID3D11Buffer* buffer = uniform_buffer(s, slot, size);
+        if (!buffer) return;
         D3D11_MAPPED_SUBRESOURCE mapped = {};
         if (FAILED(context_->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
         std::memcpy(mapped.pData, data, size);
@@ -728,16 +881,97 @@ public:
     void draw(Pass*, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
               uint32_t first_instance) override {
         if (!pipeline_ || !vertex_count) return;
-        context_->DrawInstanced(vertex_count, std::max(instance_count, 1u), first_vertex, first_instance);
+        if (trace_) LOG_INFO("direct3d11 trace: draw %s x%u %u verts", pipeline_->desc.name.c_str(), instance_count, vertex_count);
+        if (level9_) flush_level9_uniforms(*pipeline_);
+        if (pipeline_->looped) {
+            for (uint32_t i = 0; i < std::max(instance_count, 1u); ++i) {
+                bind_instance(first_instance + i);
+                context_->Draw(vertex_count, first_vertex);
+            }
+            return;
+        }
+        // The plain draw where nothing is instanced: feature levels 9_1 and
+        // 9_2 have no instanced draw at all, even for one instance.
+        if (instance_count <= 1 && first_instance == 0) {
+            context_->Draw(vertex_count, first_vertex);
+            return;
+        }
+        context_->DrawInstanced(vertex_count, instance_count, first_vertex, first_instance);
     }
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                       int32_t vertex_offset, uint32_t first_instance) override {
         if (!pipeline_ || !index_count) return;
-        context_->DrawIndexedInstanced(index_count, std::max(instance_count, 1u), first_index, vertex_offset, first_instance);
+        if (trace_) {
+            LOG_INFO("direct3d11 trace: draw_indexed %s x%u %u indices from %u, base %d", pipeline_->desc.name.c_str(),
+                     instance_count, index_count, first_index, vertex_offset);
+            drain_messages("before draw");
+        }
+        if (level9_) flush_level9_uniforms(*pipeline_);
+        if (pipeline_->looped) {
+            // One draw per instance (no instancing below feature level 9_3):
+            // the instance slots bound at that instance's element with a
+            // stride of 0, so every vertex reads it.
+            for (uint32_t i = 0; i < std::max(instance_count, 1u); ++i) {
+                bind_instance(first_instance + i);
+                context_->DrawIndexed(index_count, first_index, vertex_offset);
+            }
+            return;
+        }
+        if (instance_count <= 1 && first_instance == 0) {
+            context_->DrawIndexed(index_count, first_index, vertex_offset);
+            return;
+        }
+        context_->DrawIndexedInstanced(index_count, instance_count, first_index, vertex_offset, first_instance);
     }
 
 private:
+    // Everything the debug layer has to say since the last call, to the log.
+    void drain_messages(const char* where) {
+        if (!info_queue_) return;
+        const UINT64 count = info_queue_->GetNumStoredMessages();
+        for (UINT64 i = 0; i < count; ++i) {
+            SIZE_T length = 0;
+            if (FAILED(info_queue_->GetMessage(i, nullptr, &length)) || length == 0) continue;
+            std::vector<uint8_t> storage(length);
+            auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+            if (FAILED(info_queue_->GetMessage(i, message, &length))) continue;
+            LOG_WARN("direct3d11 [%s] %.*s", where, int(message->DescriptionByteLength), message->pDescription);
+        }
+        if (count) info_queue_->ClearStoredMessages();
+    }
+
+    // The constant buffer for a `size`-byte block in `slot` of stage `s`.
+    ID3D11Buffer* uniform_buffer(int s, uint32_t slot, uint32_t size) {
+        const uint32_t rounded = (size + 15u) & ~15u;
+        auto& buffers = uniforms_[s][slot];
+        auto it = buffers.find(rounded);
+        if (it != buffers.end()) return it->second;
+        D3D11_BUFFER_DESC bd = {};
+        bd.ByteWidth = rounded;
+        bd.Usage = D3D11_USAGE_DYNAMIC;
+        bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        ID3D11Buffer* buffer = nullptr;
+        const HRESULT hr = device_->CreateBuffer(&bd, nullptr, &buffer);
+        if (FAILED(hr)) {
+            LOG_ERROR("direct3d11: a %u-byte constant buffer for %s slot %u failed (0x%08lx%s)", rounded, s == 0 ? "vertex" : "fragment",
+                      slot, static_cast<unsigned long>(hr), hr == DXGI_ERROR_DEVICE_REMOVED ? ", device removed" : "");
+            return nullptr;
+        }
+        buffers.emplace(rounded, buffer);
+        return buffer;
+    }
+
+    void bind_instance(uint32_t instance) {
+        for (uint32_t slot = 0; slot < 8; ++slot) {
+            if (!pipeline_->instanced[slot] || !streams_[slot].buffer) continue;
+            ID3D11Buffer* b = d11(streams_[slot].buffer)->buffer;
+            const UINT stride = 0, offset = streams_[slot].offset + instance * pipeline_->instance_pitch[slot];
+            context_->IASetVertexBuffers(slot, 1, &b, &stride, &offset);
+        }
+    }
+
     bool make_backbuffer_view() {
         ID3D11Texture2D* back = nullptr;
         if (FAILED(swapchain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back)))) return false;
@@ -756,6 +990,50 @@ private:
         else context_->PSSetConstantBuffers(slot, 1, &buffer);
     }
 
+    // The level-9 copy table beside a stage's bytecode (.l9copies: "slot
+    // source count destination" a line, in registers).
+    void read_copies(D11Pipeline& p, int stage, const std::string& path) {
+        const std::string text = read_file(path);
+        std::istringstream in(text);
+        D11Pipeline::Copy c;
+        while (in >> c.slot >> c.src >> c.count >> c.dst) {
+            if (c.slot >= UNIFORM_SLOTS) continue;
+            p.copies[stage].push_back(c);
+            p.compact_regs[stage][c.slot] = std::max(p.compact_regs[stage][c.slot], c.dst + c.count);
+        }
+    }
+
+    // Feature level 9: each cbuffer the bound pipeline declares, assembled
+    // from the pushed blocks in its compact layout and bound.
+    void flush_level9_uniforms(D11Pipeline& p) {
+        for (int s = 0; s < 2; ++s) {
+            for (uint32_t slot = 0; slot < UNIFORM_SLOTS; ++slot) {
+                if (!p.compact_regs[s][slot] || !(pushed_dirty_[s] & (1u << slot))) continue;
+                const uint32_t bytes = p.compact_regs[s][slot] * 16;
+                scratch_.assign(bytes, 0);
+                for (const D11Pipeline::Copy& c : p.copies[s]) {
+                    if (c.slot != slot) continue;
+                    const std::vector<uint8_t>& from = pushed_[s][slot];
+                    const size_t src = size_t(c.src) * 16, n = size_t(c.count) * 16;
+                    if (src >= from.size()) continue;
+                    std::memcpy(scratch_.data() + size_t(c.dst) * 16, from.data() + src, std::min(n, from.size() - src));
+                }
+                ID3D11Buffer* buffer = uniform_buffer(s, slot, bytes);
+                D3D11_MAPPED_SUBRESOURCE mapped = {};
+                if (!buffer || FAILED(context_->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) continue;
+                std::memcpy(mapped.pData, scratch_.data(), bytes);
+                context_->Unmap(buffer, 0);
+                bound_uniforms_[s][slot] = buffer;
+                set_constant_buffer(s, slot, buffer);
+                if (trace_) {
+                    LOG_INFO("direct3d11 trace: assembled %s slot %u, %u bytes", s == 0 ? "vertex" : "fragment", slot, bytes);
+                    drain_messages("flush");
+                }
+            }
+            pushed_dirty_[s] = 0;
+        }
+    }
+
     bool build_pipeline(D11Pipeline& p, const std::string& vs_code, const std::string& ps_code) {
         const PipelineDesc& d = p.desc;
         if (FAILED(device_->CreateVertexShader(vs_code.data(), vs_code.size(), nullptr, &p.vs)) ||
@@ -765,25 +1043,43 @@ private:
         }
         name_object(p.vs, d.name.c_str());
         name_object(p.ps, d.name.c_str());
-        for (const VertexBufferLayout& b : d.vertex_buffers)
-            if (b.slot < 8) p.stride[b.slot] = b.pitch;
-        if (!d.vertex_attributes.empty()) {
-            // SPIRV-Cross names every input TEXCOORD<location>.
-            std::vector<D3D11_INPUT_ELEMENT_DESC> elements;
-            for (const VertexAttribute& a : d.vertex_attributes) {
-                bool instanced = false;
+        for (const VertexBufferLayout& b : d.vertex_buffers) {
+            if (b.slot >= 8) continue;
+            p.stride[b.slot] = b.pitch;
+            if (b.rate == InputRate::Instance && !instancing_) {
+                // No instancing below 9_3: the slot binds per draw with a
+                // stride of 0 (bind_instance), and the layout reads it per vertex.
+                p.looped = true;
+                p.instanced[b.slot] = true;
+                p.instance_pitch[b.slot] = b.pitch;
+                p.stride[b.slot] = 0;
+            }
+        }
+        std::vector<D3D11_INPUT_ELEMENT_DESC> elements;
+        if (d.vertex_attributes.empty() && level9_) {
+            // No SV_VertexID: the fullscreen passes read the index from the
+            // backend's own buffer (VERTEX_ID_INPUT under LEVEL9).
+            p.vertex_id = true;
+            elements.push_back({"TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0});
+        }
+        // SPIRV-Cross names every input TEXCOORD<location>.
+        for (const VertexAttribute& a : d.vertex_attributes) {
+            const bool instanced = instancing_ && p.instance_pitch[a.buffer_slot % 8] == 0 && [&] {
                 for (const VertexBufferLayout& b : d.vertex_buffers)
-                    if (b.slot == a.buffer_slot) instanced = b.rate == InputRate::Instance;
-                elements.push_back({"TEXCOORD", a.location, to_dxgi(a.format), a.buffer_slot, a.offset,
-                                    instanced ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA,
-                                    instanced ? 1u : 0u});
-            }
-            if (FAILED(device_->CreateInputLayout(elements.data(), UINT(elements.size()), vs_code.data(), vs_code.size(),
-                                                  &p.layout))) {
-                LOG_ERROR("[%s] input layout rejected: the attributes do not match the vertex shader's inputs",
-                          d.name.c_str());
+                    if (b.slot == a.buffer_slot) return b.rate == InputRate::Instance;
                 return false;
-            }
+            }();
+            // Feature level 9's shaders have no integer inputs: joint indices
+            // arrive as UNORM bytes and the shader scales them (skin_common.hlsl).
+            const DXGI_FORMAT format = level9_ && a.format == VertexFormat::UByte4 ? DXGI_FORMAT_R8G8B8A8_UNORM : to_dxgi(a.format);
+            elements.push_back({"TEXCOORD", a.location, format, a.buffer_slot, a.offset,
+                                instanced ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA, instanced ? 1u : 0u});
+        }
+        if (!elements.empty() &&
+            FAILED(device_->CreateInputLayout(elements.data(), UINT(elements.size()), vs_code.data(), vs_code.size(),
+                                              &p.layout))) {
+            LOG_ERROR("[%s] input layout rejected: the attributes do not match the vertex shader's inputs", d.name.c_str());
+            return false;
         }
         p.topology = to_d3d(d.primitive);
 
@@ -843,13 +1139,18 @@ private:
         ShaderSource src;
         src.stem = "blit";
         src.root = shader_root_;
-        const std::string base = baked_base(src);
+        // Baked without a variant suffix in every tier, level 9 included.
+        const std::string base = baked_base(src, false);
         const std::string vs_code = read_file(base + ".vertex." + profile_ + ".dxbc");
         const std::string ps_code = read_file(base + ".fragment." + profile_ + ".dxbc");
         blit_.desc.name = "blit";
         blit_.desc.cull = Cull::None;
         blit_.desc.depth_test = false;
         blit_.desc.depth_write = false;
+        if (level9_) {
+            read_copies(blit_, 0, base + ".vertex." + profile_ + ".l9copies");
+            read_copies(blit_, 1, base + ".fragment." + profile_ + ".l9copies");
+        }
         if (vs_code.empty() || ps_code.empty() || !build_pipeline(blit_, vs_code, ps_code)) {
             LOG_ERROR("direct3d11: no blit shader at %s.{vertex,fragment}.%s.dxbc; nothing reaches the window", base.c_str(),
                       profile_);
@@ -867,23 +1168,34 @@ private:
         const D3D11_VIEWPORT viewport = {0.0f, 0.0f, float(dw), float(dh), 0.0f, 1.0f};
         context_->RSSetViewports(1, &viewport);
         apply_pipeline(blit_);
+        if (blit_.vertex_id) {
+            const UINT stride = sizeof(float), offset = 0;
+            context_->IASetVertexBuffers(0, 1, &vertex_ids_, &stride, &offset);
+        }
         const float scale[4] = {float(sw) / float(std::max(source->width, 1u)), float(sh) / float(std::max(source->height, 1u)),
                                 0.0f, 0.0f};
         // Fragment slot 0, through the same classes as a pushed block; the
         // next pass puts the engine's block back (begin_pass).
-        ID3D11Buffer* buffer = uniforms_[1][0][0];
-        D3D11_MAPPED_SUBRESOURCE mapped = {};
-        if (SUCCEEDED(context_->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-            std::memcpy(mapped.pData, scale, sizeof scale);
-            context_->Unmap(buffer, 0);
+        if (level9_) {
+            pushed_[1][0].assign(reinterpret_cast<const uint8_t*>(scale), reinterpret_cast<const uint8_t*>(scale) + sizeof scale);
+            pushed_dirty_[1] |= 1u;
+            flush_level9_uniforms(blit_);
+        } else {
+            ID3D11Buffer* buffer = uniform_buffer(1, 0, sizeof scale);
+            D3D11_MAPPED_SUBRESOURCE mapped = {};
+            if (buffer && SUCCEEDED(context_->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+                std::memcpy(mapped.pData, scale, sizeof scale);
+                context_->Unmap(buffer, 0);
+            }
+            context_->PSSetConstantBuffers(0, 1, &buffer);
         }
-        context_->PSSetConstantBuffers(0, 1, &buffer);
         context_->PSSetShaderResources(0, 1, &source->srv);
         context_->PSSetSamplers(0, 1, &blit_sampler_);
         context_->Draw(3, 0);
         context_->PSSetShaderResources(0, 16, none);
         context_->OMSetRenderTargets(0, nullptr, nullptr);
         pipeline_ = nullptr;
+        pushed_dirty_[0] = pushed_dirty_[1] = 0xF;  // the engine's blocks go back at the next draw
     }
 
     void download(D11Texture* source, uint32_t w, uint32_t h, std::vector<uint8_t>& out) {
@@ -893,9 +1205,12 @@ private:
         }
         w = std::min(w, source->width);
         h = std::min(h, source->height);
+        // A staging copy of the whole texture, then the top-left w x h of it:
+        // feature level 9 copies whole resources only (no box), and a full
+        // copy costs nothing a screenshot minds.
         D3D11_TEXTURE2D_DESC td = {};
-        td.Width = w;
-        td.Height = h;
+        td.Width = source->width;
+        td.Height = source->height;
         td.MipLevels = 1;
         td.ArraySize = 1;
         td.Format = to_dxgi(source->format);
@@ -903,9 +1218,18 @@ private:
         td.Usage = D3D11_USAGE_STAGING;
         td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         ID3D11Texture2D* staging = nullptr;
-        if (FAILED(device_->CreateTexture2D(&td, nullptr, &staging))) return;
-        const D3D11_BOX box = {0, 0, 0, w, h, 1};
-        context_->CopySubresourceRegion(staging, 0, 0, 0, 0, source->texture, 0, &box);
+        const HRESULT hr = device_->CreateTexture2D(&td, nullptr, &staging);
+        if (FAILED(hr)) {
+            LOG_ERROR("direct3d11: readback staging texture failed (0x%08lx%s)", static_cast<unsigned long>(hr),
+                      hr == DXGI_ERROR_DEVICE_REMOVED ? ", device removed" : "");
+            return;
+        }
+        if (source->levels == 1) {
+            context_->CopyResource(staging, source->texture);
+        } else {
+            const D3D11_BOX box = {0, 0, 0, source->width, source->height, 1};
+            context_->CopySubresourceRegion(staging, 0, 0, 0, 0, source->texture, 0, &box);
+        }
         D3D11_MAPPED_SUBRESOURCE mapped = {};
         if (SUCCEEDED(context_->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) {
             out.resize(size_t(w) * h * 4);
@@ -924,16 +1248,25 @@ private:
     HWND hwnd_ = nullptr;
     bool headless_ = false;
     bool debug_layer_ = false;
+    bool trace_ = false;
+    ID3D11InfoQueue* info_queue_ = nullptr;
     IDXGIFactory1* factory_ = nullptr;
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;
     D3D_FEATURE_LEVEL level_ = D3D_FEATURE_LEVEL_10_0;
+    bool level9_ = false;     // feature level 9_x: the LEVEL9 shader variants and D3D9's workarounds
+    bool instancing_ = true;  // false below 9_3
+    bool r32f_filterable_ = true;
     const char* profile_ = "sm50";
+    ID3D11Buffer* vertex_ids_ = nullptr;  // feature level 9: what a fullscreen triangle reads its index from
     IDXGISwapChain* swapchain_ = nullptr;
     ID3D11RenderTargetView* backbuffer_rtv_ = nullptr;
     uint32_t swap_width_ = 0, swap_height_ = 0;
     std::string shader_root_;  // where the baked shaders are, from the first pipeline
-    ID3D11Buffer* uniforms_[2][UNIFORM_SLOTS][UNIFORM_CLASS_COUNT] = {};
+    std::unordered_map<uint32_t, ID3D11Buffer*> uniforms_[2][UNIFORM_SLOTS];  // by rounded size
+    std::vector<uint8_t> pushed_[2][UNIFORM_SLOTS];  // feature level 9: the blocks as pushed
+    uint32_t pushed_dirty_[2] = {0xF, 0xF};
+    std::vector<uint8_t> scratch_;
     ID3D11Buffer* bound_uniforms_[2][UNIFORM_SLOTS] = {};  // the last pushed block's buffer, per stage and slot
     D11Pass pass_;
     D11Pipeline* pipeline_ = nullptr;
@@ -947,6 +1280,33 @@ std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config) {
     auto device = std::make_unique<D3D11Device>();
     if (!device->init(window, config)) return nullptr;
     return device;
+}
+
+uint32_t probe_feature_level(uint32_t adapter_index) {
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) return 0;
+    IDXGIAdapter1* adapter = nullptr;
+    const bool warp = SDL_getenv("DRAGON_D3D11_WARP") && SDL_getenv("DRAGON_D3D11_WARP")[0] == '1';
+    if (!warp && FAILED(factory->EnumAdapters1(adapter_index, &adapter))) {
+        factory->Release();
+        return 0;
+    }
+    const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0,
+                                        D3D_FEATURE_LEVEL_9_3,  D3D_FEATURE_LEVEL_9_2,  D3D_FEATURE_LEVEL_9_1};
+    D3D_FEATURE_LEVEL reached = D3D_FEATURE_LEVEL(0);
+    ID3D11Device* device = nullptr;
+    const HRESULT hr = D3D11CreateDevice(adapter, warp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, levels,
+                                         UINT(std::size(levels)), D3D11_SDK_VERSION, &device, &reached, nullptr);
+    release(device);
+    release(adapter);
+    factory->Release();
+    uint32_t level = SUCCEEDED(hr) ? uint32_t(reached) : 0;
+    // The same cap as the device honours, so a forced 9_x probes as 9_x.
+    if (const char* cap = SDL_getenv("DRAGON_D3D11_FEATURE_LEVEL")) {
+        for (D3D_FEATURE_LEVEL l : levels)
+            if (std::strcmp(feature_level_name(l), cap) == 0 && level > uint32_t(l)) level = uint32_t(l);
+    }
+    return level;
 }
 
 ID3D11Device* native_device(Device& device) { return static_cast<D3D11Device&>(device).device(); }
