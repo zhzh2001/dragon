@@ -72,6 +72,16 @@ struct RenderTier {
     // the fog and the tonemap, not the per-pixel lighting the others do.
     // Fixed function previews through the same shaders until R5.
     bool vertex_lighting = false;
+    // What texture stages can do, and nothing more (FIXED_FUNCTION,
+    // docs/PORTING.md R5): per vertex, D3D9's Lambert sun plus a hemisphere
+    // as two more directional lights and an ambient, a fog amount toward
+    // one constant colour; per pixel, texture times colour, alpha test.
+    // Gamma-space maths throughout, since a DX7-class card samples and
+    // writes 8-bit values as they are: the lights are display-encoded on
+    // the way in, the textures are sampled UNORM, and nothing tonemaps.
+    // The shader variant is the preview on every backend and the reference
+    // the D3D9 backend's stage recipes must match.
+    bool fixed_function = false;
     // How much it is asked to draw -- the triangles, distances, texture and
     // shadow sizes -- from the graphics settings (gfx/graphics_settings.h),
     // which start on the tier's default preset and change through apply().
@@ -93,6 +103,7 @@ struct RenderTier {
         t.compress_textures = tier != Tier::Modern;
         t.packed_joints = tier != Tier::Modern;
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
+        t.fixed_function = tier == Tier::FixedFunction;
         t.apply(GraphicsSettings::preset(default_preset(tier), tier, DeviceLimits{}));
         return t;
     }

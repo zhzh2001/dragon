@@ -305,6 +305,14 @@ rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared,
     desc.height = prepared.height;
     desc.mip_levels = uint32_t(prepared.levels.size());
     desc.format = prepared.format;
+    // Fixed function (gfx/render_tier.h) has no sRGB sampling: a colour map
+    // is read as the 8-bit values it stores and lit in that space, so the
+    // preview samples it UNORM too. The bytes are the same either way.
+    if (active_tier().fixed_function) {
+        if (desc.format == rhi::Format::RGBA8_SRGB) desc.format = rhi::Format::RGBA8;
+        if (desc.format == rhi::Format::BC1_SRGB) desc.format = rhi::Format::BC1;
+        if (desc.format == rhi::Format::BC3_SRGB) desc.format = rhi::Format::BC3;
+    }
     desc.usage = rhi::TEXTURE_SAMPLED;
     rhi::Texture* texture = rhi.create_texture(desc, debug_name);
     if (!texture) return nullptr;

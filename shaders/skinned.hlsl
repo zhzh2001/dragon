@@ -35,13 +35,25 @@ VertexOut vs_main(VertexIn input) {
     float4 world = mul(model.model, mul(blended, float4(input.position, 1.0)));
     float3 normal = normalize(mul(model.model, float4(mul(blended, float4(input.normal, 0.0)).xyz, 0.0)).xyz);
     // Wing membranes are seen from both sides: light the face toward the viewer.
+#ifndef FIXED_FUNCTION
     if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
+#endif
     VertexOut o;
     o.clip_position = mul(scene.view_proj, world);
     o.uv = float4(input.uv, 0.0, 0.0);
+#ifdef FIXED_FUNCTION
+    // Fixed function: the vertex colour and the tint are the material's
+    // diffuse, display-encoded; the emissive is an emissive; no recolour
+    // (a stage cannot replace a hue at constant luminance) and no facing
+    // flip (D3D9 lights one side).
+    o.albedo = float4(ff_albedo(input.color * model.tint.rgb), 0.0);
+    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
+    light.ambient.rgb += ff_display((float3)model.tint.a);
+#else
     o.albedo = float4(input.color * model.tint.rgb, 0.0);
     Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     light.ambient.rgb += model.tint.a;  // the emissive
+#endif
     SM2_LIGHT_OUT(o, light);
     return o;
 }
@@ -56,8 +68,10 @@ float4 fs_main(VertexOut input) : SV_Target {
     // (material.x 0) the vertex colour stands alone.
     float3 albedo = input.albedo.rgb * lerp((float3)1.0, base_colour.Sample(base_colour_sampler, input.uv.xy).rgb,
                                             model.material.x);
+#ifndef FIXED_FUNCTION
     float luminance = dot(albedo, float3(0.30, 0.59, 0.11));
     albedo = lerp(albedo, luminance * model.recolour.rgb, model.recolour.a);
+#endif
     return float4(sm2_finish(albedo, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
 }
 #endif

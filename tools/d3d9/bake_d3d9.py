@@ -49,11 +49,16 @@ TIERS = {
     # (scene_common.hlsl, sm2_finish), since ps_2_0 cannot branch past it.
     "sm2-noshadows": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "LDR_OUTPUT", "NO_SHADOWS", "PACKED_JOINTS", "SM2",
                       "SWIZZLED_NORMALS", "D3D9"],
+    # The fixed-function preview (docs/PORTING.md R5): what the stage
+    # recipes must match, run as SM2 shaders on a card that has them.
+    "ff": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "FIXED_FUNCTION", "LDR_OUTPUT", "NO_SHADOWS", "PACKED_JOINTS",
+           "SM2", "SWIZZLED_NORMALS", "D3D9"],
 }
-PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0"), "sm2-noshadows": ("vs_2_0", "ps_2_0")}
+PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0"), "sm2-noshadows": ("vs_2_0", "ps_2_0"),
+            "ff": ("vs_2_0", "ps_2_0")}
 # Float constant registers each stage has (vs_3_0 256, ps_3_0 224; vs_2_0
 # 256 on every card of the class, ps_2_0 32).
-REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32), "sm2-noshadows": (256, 32)}
+REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32), "sm2-noshadows": (256, 32), "ff": (256, 32)}
 
 
 SURVEY = False  # --survey: report every problem instead of stopping at the first

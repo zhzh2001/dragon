@@ -324,7 +324,7 @@ graphics settings.
 | R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
-| R5 (FF) | Planned ("R5, the plan"): a `FIXED_FUNCTION` shader variant as the preview and the reference, then the backend's stage recipes. The tier exists (`--tier ff`) and the settings' floors know it | Step 1, the variant, and the look judged on its render |
+| R5 (FF) | Step 1 done ("R5, the plan", "Step 1, as built"): the `FIXED_FUNCTION` variant renders on every backend as the preview and the reference, pre-lit vertex colours times UNORM textures; the look holds (`artifacts/r5-ff-preview/`) | Step 2, the tier's content (CPU skinning, baked terrain colours, foliage batches, the sky dome, blob shadows); step 3, the D3D9 stage recipes |
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
@@ -1014,19 +1014,25 @@ tier never reads one.
 - **The packager** (`package_windows.sh`) bakes the species' packs from the
   staged, shrunk glTFs with the Mac's own build, so the fingerprints are
   the shipped files', and copies the props' from the tree.
-- **On the X550, through D3D9**, the pack frame and the glTF frame first
-  differed in a 14×2-pixel strip of Embercrest's wing by 2/255,
-  reproducibly, while each route alone was deterministic and the LOD
-  fingerprints matched on both. It was the texture chain: `std::pow` in
-  the sRGB tables and FMA contraction in the box filter and stb_dxt's
-  refinement round a few texels differently on arm64 and x86-64, so a
-  pack baked on the Mac carried the Mac's bytes while the glTF route on
-  x99 computed Windows'. The sRGB tables are constants now (generated at
-  double precision, with a threshold search that reproduces the old
-  rounding exactly) and `texture.cpp` builds with `-ffp-contract=off`
-  like the LOD code. `test_model_pack` prints each chain's fingerprint;
-  the Mac and x99 print the same three for Embercrest. One more entry for
-  "a preset must build the same content on every compiler": textures too.
+- **On the X550, through D3D9**, the pack frame and the glTF frame differ
+  in a 14×2-pixel strip of Embercrest's wing edge by 2/255, reproducibly:
+  each route alone renders twice identical, and the LOD fingerprints
+  match on both. The first suspect was the texture chain -- `std::pow` in
+  the sRGB tables and FMA contraction in the box filter and stb_dxt could
+  round a few texels differently on arm64 and x86-64, so a pack baked on
+  the Mac would carry the Mac's bytes while the glTF route on x99 computed
+  Windows'. The sRGB tables are constants now (generated at double
+  precision, with a threshold search that reproduces the old rounding
+  exactly), `texture.cpp` builds with `-ffp-contract=off` like the LOD
+  code, and `test_model_pack` prints each chain's fingerprint, which the
+  Mac and x99 now agree on. That is right on its own terms -- one more
+  entry for "a preset must build the same content on every compiler" --
+  **but it did not remove the strip**: the same 28 pixels differ by the
+  same 2/255 afterwards. Mesh, LOD and textures are identical by
+  fingerprint, Metal shows no difference in sixteen scenes, and the gate's
+  tolerance is three orders of magnitude above it, so it is left as an
+  observation: something in the D3D9 driver's handling of two otherwise
+  identical resource sequences.
 - **Not done:** a package built with packs and run on x99; the retro-only
   package; the Pi's VC4 has no S3TC, so its packs would need an
   uncompressed or ETC1 variant (the chain is built from the same
@@ -1088,6 +1094,52 @@ first, and making the D3D9 backend match that.
    DXT (the packs decode their BC chains on the CPU for a card without it;
    `PreparedTexture` gets an uncompressed variant), 16-bit Z, 320×240 to
    640×480, one or two bots, no grass.
+
+#### Step 1, as built (2026-10-04): the FIXED_FUNCTION variant
+
+`--tier ff` now compiles every world shader with `FIXED_FUNCTION`
+(`gfx::RenderTier::fixed_function`, `pipeline.cpp`), the ff tier allows
+only Shadows Off, and the bake scripts carry the variant (`bake_shaders.sh`,
+`bake_d3d9.py --tier ff`, which runs it as vs/ps_2_0 on an SM2 card). The
+renders are `artifacts/r5-ff-preview/` (ff left, sm2 right, Low): the
+valley, the glide side-on, the head and the landing. **It reads as the
+game, earlier**: the same valley with a flat-lit, textured dragon, no
+shadows, a flat river, the terrain a shade greener where its material
+resolves per vertex. Three things the plan had wrong, each found on a
+render:
+
+- **Not D3D9 lights.** The plan was the sun, the hemisphere and the
+  ambient as `D3DLIGHT9`s in display space, summed and clamped per vertex
+  as the fixed-function pipeline does. Display-encoding the sun (2.3 →
+  1.46, clamped to 1) and the ambient (0.76) separately put them nearly
+  equal, so every face was lit alike and a dark brown hide read as flat
+  grey-pink; `MODULATE2X` on top washed every texture to white. The
+  variant now **pre-lights**: the modern `direct_sun` and `ambient_light`
+  summed in linear light and `ldr_encode_fast`-ed per vertex into the
+  vertex colour, which the texture modulates (plain `MODULATE`). That is
+  the 2001 pre-lit pipeline, `D3DRS_LIGHTING` off, and it keeps the modern
+  sun-to-ambient ratio. For the backend it means no light setup at all:
+  the terrain's colours are baked at build (the sun is static), a
+  creature's are computed while its vertices are skinned on the CPU, the
+  foliage's at batch time.
+- **Textures sample UNORM** on this tier (`upload_prepared` strips the sRGB
+  flag): a DX7-class card reads a colour map's 8-bit values as they are.
+  The lit result is texture × display-encoded light, which is what those
+  cards drew.
+- **Uniform slot 0 must stay read.** The first fixed-function fragment
+  stage read no field of `scene` (its fog colour came as a varying,
+  `scene_out` only clamps), so slot 0 dropped out of reflection and the
+  `model` block pushed to slot 1 no longer lined up: `material.x` read 0
+  and the dragon drew in its vertex colour alone. The same trap as the
+  texture slots, one layer up. The finish reads the fog colour from
+  `scene` now. A debug edit that returns before `sm2_finish` falls into
+  the texture-slot version of it and samples the shadow map as the hide.
+
+The fog is exp2 on the radial distance toward one constant colour
+(`Lighting::fog_color`, display-encoded), no height term; the sky is the
+analytic one display-encoded (a dome with a baked texture on the real
+backend); the water is one colour under the fog. Not yet: the content
+items of step 2, and any D3D9 fixed-function code.
 
 ## Beyond the three tiers: the extended study (2026-10-03)
 

@@ -39,7 +39,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     float r = length(input.corner);
     float falloff = saturate(1.0 - r);
     falloff *= falloff;
-#ifdef LDR_OUTPUT
+#if defined(FIXED_FUNCTION)
+    // Fixed function: display-encoded vertex colour times the disc, added;
+    // no tonemap, so stacked puffs clip to white as they did in 2001.
+    return float4(pow(saturate(input.color.rgb * u.output_grade.x), (float3)(1.0 / 2.2)) * falloff, 1.0);
+#elif defined(LDR_OUTPUT)
     // Without a float target each puff is finished on its own and the
     // finished values add: brighter where puffs stack than the modern
     // tonemap-after-sum, which is the price of eight bits.

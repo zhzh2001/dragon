@@ -31,6 +31,17 @@ VertexOut vs_main(VertexIn input) {
 #endif
 
 #ifdef FRAGMENT_STAGE
+#ifdef FIXED_FUNCTION
+// Fixed function: one plane, one colour -- the deep water toward the sky
+// at a glancing-average fresnel -- under the same exp2 fog as everything.
+float4 fs_main(VertexOut input) : SV_Target {
+    float3 to_point = input.world_position - scene.camera_position.xyz;
+    float x = length(to_point) * scene.fog_color.a;
+    float fog = saturate(1.0 - exp(-x * x));
+    float3 color = ff_display(lerp(scene.palette[PALETTE_WATER_DEEP].rgb, scene.sky_horizon.rgb, 0.35));
+    return float4(scene_out(lerp(color, ff_display(scene.fog_color.rgb), fog)), 1.0);
+}
+#else
 float4 fs_main(VertexOut input) : SV_Target {
     float3 to_point = input.world_position - scene.camera_position.xyz;
     float dist = length(to_point);
@@ -43,6 +54,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     float fog = saturate(1.0 - exp(-pow(dist * density, 2.0)));
     return float4(scene_out(lerp(color, sky_plain(ray), fog)), 1.0);
 }
+#endif
 #endif
 #else  // the per-pixel path
 

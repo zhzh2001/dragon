@@ -67,7 +67,19 @@ ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
 // A tier without a float target (gfx/render_tier.h): the world shader
 // finishes the pixel itself -- exposure, tonemap, gamma, contrast and
 // saturation, the cheap part of post_composite's grade -- into 8 bits.
-#ifdef SM2
+#if defined(FIXED_FUNCTION)
+// Fixed function (docs/PORTING.md R5) has no tonemap and works in display
+// space throughout: what reaches scene_out is already display-encoded and
+// only clamps, as the 8-bit pipeline would. A linear light colour enters
+// that space through ff_display: the exposure, then the gamma, then the
+// clamp a vertex colour gets. Not the texture: a DX7-class card samples
+// a colour map's 8-bit values as they are, so it is display-encoded already.
+float3 scene_out(float3 color) { return saturate(color); }
+float3 ff_display(float3 linear_color) { return pow(saturate(linear_color * scene.output_grade.x), (float3)(1.0 / 2.2)); }
+// A linear albedo authored on the CPU (a palette colour, a vertex colour)
+// as a texture would carry it: display-encoded, no exposure.
+float3 ff_albedo(float3 linear_color) { return pow(saturate(linear_color), (float3)(1.0 / 2.2)); }
+#elif defined(SM2)
 float3 scene_out(float3 color) { return ldr_encode_fast(max(color, 0.0), scene.output_grade); }
 #else
 float3 scene_out(float3 color) { return ldr_encode(max(color, 0.0), scene.output_grade); }
@@ -241,6 +253,31 @@ Sm2Light sm2_light(float4 sun, float4 ambient, float4 fog, float4 shadow) {
 
 // The vertex stage's half: everything but the shadow test and the albedo.
 // `translucency` lets a plant's back face catch the sun (translucent_sun).
+#ifdef FIXED_FUNCTION
+// Fixed function (docs/PORTING.md R5): the light arrives in the vertex
+// colour, already finished -- the modern sun and ambient summed in linear
+// light and tonemapped per vertex -- and the texture modulates it. That is
+// what a pre-lit pipeline of 2001 did (D3DRS_LIGHTING off, the colours
+// computed on the CPU: the terrain's once at build, a creature's while its
+// vertices are skinned), and it keeps the modern sun-to-ambient ratio.
+// Display-encoding the sun and the ambient as D3D9 lights and summing them
+// clamped did not: in display space the two came out nearly equal, and
+// every face was lit alike. Fog is exp2 on the radial distance toward one
+// constant colour, no height term: D3DFOG_EXP2 with D3DRS_RANGEFOGENABLE.
+Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucency) {
+    Sm2Light l;
+    l.sun = (float4)0.0;
+    float3 light = direct_sun(normal, 1.0) + ambient_light(normal) + translucent_sun(normal, 1.0, translucency);
+    l.ambient = float4(ldr_encode_fast(light, scene.output_grade), 0.0);
+
+    float3 to_point = world_position - scene.camera_position.xyz;
+    float x = length(to_point) * scene.fog_color.a;
+    float fog = saturate(1.0 - exp(-x * x));
+    l.fog = (float4)0.0;  // the finish reads the fog colour from `scene` itself
+    l.shadow = float4(0.0, 0.0, 0.0, fog);
+    return l;
+}
+#else
 Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucency) {
     // direct_sun, translucent_sun, ambient_light and the fog, written for
     // vs_2_0's slots: the sun direction arrives normalised from the CPU
@@ -267,11 +304,24 @@ Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucen
     l.shadow = float4(light.xy * float2(0.5, -0.5) + 0.5, light.z - bias, fog);
     return l;
 }
+#endif
 
 #ifdef FRAGMENT_STAGE
 // The pixel stage's half: the shadow (2x2 taps; outside the map is lit), the
 // combine, the fog and the tonemap.
 float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+#ifdef FIXED_FUNCTION
+    // The stage cascade: the texture modulates the pre-lit vertex colour,
+    // the fog lerps the result toward the one fog colour. The map is still
+    // read once so its slot survives reflection (see NO_SHADOWS below), and
+    // the fog colour is read from `scene` here rather than carried as a
+    // varying for the same reason: a fragment stage that reads no field of
+    // uniform slot 0 loses it from reflection, and the model block pushed
+    // to slot 1 no longer lines up (the dragon drew untextured).
+    float keep = 1.0 + min(shadow_map.Sample(shadow_sampler, (float2)0.5), 0.0);
+    float3 color = albedo * saturate(l.ambient.rgb + l.sun.rgb) * keep;
+    return scene_out(lerp(color, ff_display(scene.fog_color.rgb), l.shadow.w));
+#else
 #ifdef NO_SHADOWS
     // Shadows off (the Shadows setting's Off, docs/PORTING.md R7): ps_2_0 has
     // no branch to skip the lookup with, so it is compiled out -- about a
@@ -295,6 +345,7 @@ float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, Sample
 #endif
     float3 color = albedo * (l.ambient.rgb + l.sun.rgb * lit);
     return scene_out(lerp(color, l.fog.rgb, l.shadow.w));
+#endif  // FIXED_FUNCTION
 }
 #endif
 #endif  // SM2

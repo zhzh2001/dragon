@@ -100,15 +100,22 @@ VertexOut vs_main(VertexIn input) {
     // Dark undersides, judged on the geometric normal before the facing flip.
     if (card) albedo *= 1.0 - 0.35 * saturate(-normal.y);
     o.uv = float4(input.uv, card ? 1.0 : 0.0, material == FOLIAGE_MAT_NEEDLE ? 1.0 : 0.0);
+#ifdef FIXED_FUNCTION
+    o.albedo = float4(ff_albedo(albedo), tag >= FOLIAGE_DETAIL ? 1.0 : 0.0);
+#else
     o.albedo = float4(albedo, tag >= FOLIAGE_DETAIL ? 1.0 : 0.0);
+#endif
     // The LOD's dither threshold, constant over the plant: the instance's hash
     // against how far past the LOD distance its base is.
     const float lod = params.extra.y;
     const float past = (length(input.position_scale.xyz - scene.camera_position.xyz) - lod) / max(lod * 0.3, 1.0);
     o.lod = float4(frac(input.params.z * 0.15915494) - past, 0.0, 0.0, 0.0);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
-    // Two-sided: light the face toward the viewer.
+    // Two-sided: light the face toward the viewer (not in fixed function,
+    // which lights one side; a card seen from behind is in its own shade).
+#ifndef FIXED_FUNCTION
     if (dot(normal, scene.camera_position.xyz - world) < 0.0) normal = -normal;
+#endif
     Sm2Light light = sm2_light_vertex(world, normal, material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y);
     SM2_LIGHT_OUT(o, light);
     return o;

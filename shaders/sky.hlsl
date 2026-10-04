@@ -36,6 +36,12 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 ray = normalize(scene.camera_forward.xyz +
                            scene.camera_right.xyz * input.ndc.x * tan_half_fov * aspect +
                            scene.camera_up.xyz * input.ndc.y * tan_half_fov);
+#ifdef FIXED_FUNCTION
+    // The analytic sky, display-encoded: on the D3D9 fixed-function path
+    // this is baked once into a texture on a dome (docs/PORTING.md R5).
+    return float4(scene_out(ff_display(sky_color(ray))), 1.0);
+#else
     return float4(scene_out(sky_color(ray)), 1.0);
+#endif
 }
 #endif

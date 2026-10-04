@@ -28,6 +28,19 @@ TEXTURE2D(detail_tile, 1);
 // the snow glint. The grid carries the blends; the patch noise comes per
 // vertex from the CPU.
 
+#ifdef FIXED_FUNCTION
+// Fixed function (docs/PORTING.md R5): the material is one colour per
+// vertex -- the same blends, resolved here instead of per pixel -- and the
+// detail tile modulates it 2x. The tile's grass channel serves every
+// material (a stage modulates by the whole texture), and its mips average
+// to the 0.5 that leaves the colour alone, so distance fades it by itself.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    float4 detail : TEXCOORD0;  // xy the detail tile's uv
+    float4 albedo : TEXCOORD1;  // rgb the blended material, display-encoded
+    SM2_LIGHT_VARYINGS
+};
+#else
 struct VertexOut {
     float4 clip_position : SV_Position;
     float4 detail : TEXCOORD0;  // xy the detail tile's uv, z rock, w snow
@@ -36,6 +49,7 @@ struct VertexOut {
     float4 tint : TEXCOORD3;    // rgb the vertex tint
     SM2_LIGHT_VARYINGS
 };
+#endif
 
 #ifdef VERTEX_STAGE
 VertexOut vs_main(VertexIn input) {
@@ -49,20 +63,30 @@ VertexOut vs_main(VertexIn input) {
     float rock_slope = scene.terrain_params.z;
     float patches = input.uv.x;  // fbm(p.xz * 0.0055), from the CPU
 
-    o.grass = float4(lerp(scene.palette[PALETTE_GRASS].rgb, scene.palette[PALETTE_GRASS_DRY].rgb,
-                          smoothstep(0.35, 0.75, patches)), 0.0);
-    o.rock = float4(lerp(scene.palette[PALETTE_ROCK_DARK].rgb, scene.palette[PALETTE_ROCK].rgb,
-                         smoothstep(0.25, 0.8, patches)), 0.0);
+    float3 grass = lerp(scene.palette[PALETTE_GRASS].rgb, scene.palette[PALETTE_GRASS_DRY].rgb,
+                        smoothstep(0.35, 0.75, patches));
+    float3 rock = lerp(scene.palette[PALETTE_ROCK_DARK].rgb, scene.palette[PALETTE_ROCK].rgb,
+                       smoothstep(0.25, 0.8, patches));
     float bar_top = water_level + 1.0 + 3.0 * patches;
-    o.grass.a = 1.0 - smoothstep(water_level + 0.3, bar_top, p.y);  // sand
+    float sand = 1.0 - smoothstep(water_level + 0.3, bar_top, p.y);
     float slope_blend = 1.0 - smoothstep(rock_slope, rock_slope + 0.22, flatness);
     float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, p.y) * 0.6;
     float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
     float snow = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, p.y) * smoothstep(0.52, 0.78, flatness);
+#ifdef FIXED_FUNCTION
+    float3 albedo = lerp(grass, scene.palette[PALETTE_SAND].rgb, sand);
+    albedo = lerp(albedo, rock, saturate(slope_blend + altitude_rockiness));
+    albedo = lerp(albedo, scene.palette[PALETTE_SNOW].rgb, snow);
+    o.detail = float4(p.xz / 16.0, 0.0, 0.0);
+    o.albedo = float4(ff_albedo(albedo * input.color), 0.0);
+#else
+    o.grass = float4(grass, sand);
+    o.rock = float4(rock, 0.0);
     o.detail = float4(p.xz / 16.0, saturate(slope_blend + altitude_rockiness), snow);
     float camera_distance = length(p - scene.camera_position.xyz);
     o.rock.a = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
     o.tint = float4(input.color, 0.0);
+#endif
 
     Sm2Light light = sm2_light_vertex(p, normal, 0.0);
     // The map's edge dissolves into the sky, which is the fog's colour.
@@ -77,6 +101,14 @@ VertexOut vs_main(VertexIn input) {
 #endif
 
 #ifdef FRAGMENT_STAGE
+#ifdef FIXED_FUNCTION
+float4 fs_main(VertexOut input) : SV_Target {
+    // Stage 1: the detail tile, MODULATE2X with the colour.
+    float d = detail_tile.Sample(detail_tile_sampler, input.detail.xy).g;
+    float3 albedo = saturate(input.albedo.rgb * (d * 2.0));
+    return float4(sm2_finish(albedo, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
+}
+#else
 float4 fs_main(VertexOut input) : SV_Target {
     float4 d = detail_tile.Sample(detail_tile_sampler, input.detail.xy);
     // Each material wears its channel: 1 + (d - 0.5) * 2 * strength.
@@ -86,6 +118,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     albedo = lerp(albedo, scene.palette[PALETTE_SNOW].rgb * m.a, input.detail.w);
     return float4(sm2_finish(albedo * input.tint.rgb, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
 }
+#endif
 #endif
 
 #else  // the per-pixel path

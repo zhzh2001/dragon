@@ -53,7 +53,7 @@ int tier_floor(Setting setting, Tier tier) {
     switch (setting) {
         case Setting::Models: return t >= 2 ? t - 1 : 0;   // sm2 20K, ff 10K at most
         case Setting::Textures: return t >= 1 ? (t >= 3 ? 2 : 1) : 0;
-        case Setting::Shadows: return t;                   // sm3 2048, sm2 1024, ff 512
+        case Setting::Shadows: return t >= 3 ? 4 : t;      // sm3 2048, sm2 1024; ff has no shadow map at all
         default: return 0;
     }
 }

@@ -124,6 +124,7 @@ bool PipelineCache::build(Entry& entry) {
     if (active_tier().compress_textures) shaders.defines.push_back("SWIZZLED_NORMALS");
     if (active_tier().packed_joints) shaders.defines.push_back("PACKED_JOINTS");
     if (active_tier().vertex_lighting) shaders.defines.push_back("SM2");
+    if (active_tier().fixed_function) shaders.defines.push_back("FIXED_FUNCTION");
     if (!active_tier().depth.reversed) shaders.defines.push_back("CONVENTIONAL_DEPTH");
     // SM2 cannot branch past a shadow lookup, so shadows off is a variant
     // (scene_common.hlsl, sm2_finish); the other tiers branch on strength.

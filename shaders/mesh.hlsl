@@ -28,12 +28,20 @@ VertexOut vs_main(VertexIn input) {
     float4 world = mul(model.model, float4(input.position, 1.0));
     float3 normal = normalize(mul(model.model, float4(input.normal, 0.0)).xyz);
     // Thin plates seen from both sides: light the face toward the viewer.
+#ifdef FIXED_FUNCTION
+    o.albedo = float4(ff_albedo(input.color * model.tint.rgb), 0.0);
+#else
     if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
     o.albedo = float4(input.color * model.tint.rgb, 0.0);
+#endif
     o.clip_position = mul(scene.view_proj, world);
     Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     const float lit = 1.0 - model.material.w;
+#ifdef FIXED_FUNCTION
+    light.ambient.rgb = light.ambient.rgb * lit + ff_display((float3)model.tint.a);
+#else
     light.ambient.rgb = light.ambient.rgb * lit + model.tint.a;
+#endif
     light.sun.rgb *= lit;
     SM2_LIGHT_OUT(o, light);
     return o;
