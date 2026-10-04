@@ -26,6 +26,16 @@ if [ -n "$dirty" ]; then
   exit 1
 fi
 [ -n "${WINE:-}" ] || { echo "set WINE (and its library path) to bake the D3D9 shaders" >&2; exit 1; }
+# macOS strips DYLD_* from the environment of a protected binary such as
+# /bin/sh, so the Wine library path given to this script never arrives.
+# WINE_LIBRARY_PATH carries it past, or the Sikarugir layout's Frameworks
+# folder beside the engine is found from WINE itself.
+if [ -n "${WINE_LIBRARY_PATH:-}" ]; then
+  DYLD_FALLBACK_LIBRARY_PATH=$WINE_LIBRARY_PATH
+elif [ -d "$(dirname "$WINE")/../../../Frameworks" ]; then
+  DYLD_FALLBACK_LIBRARY_PATH=$(cd "$(dirname "$WINE")/../../../Frameworks" && pwd)
+fi
+export DYLD_FALLBACK_LIBRARY_PATH
 species="embercrest rimefang frostvein blightmaw ironroot stormsail tidewrack"
 for s in $species; do
   [ -f "assets/$s.glb" ] || { echo "missing assets/$s.glb" >&2; exit 1; }
