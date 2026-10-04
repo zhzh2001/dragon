@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
 
     core::paths::init();
     app::Options options = app::parse_options(argc, argv);
+    if (options.bake_packs) return app::App::bake_packs(options) ? 0 : 1;
     app::App application;
     if (!application.init(options)) {
         application.shutdown();

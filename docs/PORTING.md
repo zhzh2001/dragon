@@ -321,6 +321,7 @@ graphics settings.
 | P0-P2 | Done | A Linux package (an older-glibc container) |
 | R0 | Built; runs under Wine and on x99-windows | **The G41 under XP.** The XP toolchain is llvm-mingw's msvcrt build on x99 (`D:\third\llvm-mingw-msvcrt`); the Mac's MinGW is UCRT |
 | R1, R2 | Done | -- |
+| R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
 | R5 (FF) | Not started. The tier exists (`--tier ff`) and the settings' floors know it | Texture-stage materials, CPU skinning, blob shadows, vertex fog |
@@ -966,6 +967,51 @@ working assumption for planning. The G41's Celeron E3300 (two cores,
 for the bots, the rig and per-frame grass placement. Profile it on the G41
 early (R3), not at R7.
 
+### R2b, as built (2026-10-03): model packs
+
+`dragon --bake-packs` writes `<model>.glb.pack` beside every roster model
+and prop (`src/anim/model_pack.h`), and a retro tier loads the pack when
+there is a fresh one. What it holds is what `load_model` used to compute on
+every start: the skeleton and clips, the authored mesh, the LOD at every
+model-detail level's near and far budget (eight per species; a budget the
+mesh already fits is recorded as "whole"), and each texture's mip chain at
+the largest retro cap, 1024, block-compressed with the normal maps already
+swizzled. A lower texture level is the same chain with its top dropped
+(`gfx::PreparedTexture::trim`), because `cap_image` and `build_mips` halve
+the same way; so one file serves sm3, sm2, ff and every preset. The modern
+tier never reads one.
+
+- **Where the memory went.** A process with no model peaks at 151 MB. One
+  species through the glTF added 530 MB: its five 4096² maps decoded at once
+  (320 MB), the file's bytes, the halving copies. From the pack it adds 30.
+
+  | | glTF route | pack |
+  |---|---|---|
+  | one species, ff | 594 MB, 2.2 s | 182 MB, 0.42 s |
+  | one species, sm3 | 651 MB, 1.4 s | 238 MB, 0.58 s |
+  | nine species, ff | 983 MB, 6.7 s | 217 MB, 0.59 s |
+
+  A species' pack is 12 to 14 MB, a prop's 5 to 6, 143 MB for everything
+  here; the mesh and its LODs are most of it, the textures about 3 MB.
+- **The gate:** the eight golden scenes captured from packs and compared
+  against the glTF route (`DRAGON_NO_PACKS=1`), at sm3 and at sm2: every
+  pixel identical, both tiers. `tests/test_model_pack.cpp` holds the
+  round trip, the trim-equals-smaller-cap property, and a real model's LOD
+  fingerprint against `simplify_skinned` run directly.
+- **Freshness** is the source's size and an FNV hash of its first and last
+  256 KB, not its mtime: a zip keeps times to two seconds, so a packaged
+  pack would have been refused against its own model. A pack whose model
+  is absent is trusted, which is what a retro-only package needs. A stale
+  or unreadable pack logs a warning and the glTF is loaded; a device
+  without BC formats does the same, since the chains are DXT.
+- **The packager** (`package_windows.sh`) bakes the species' packs from the
+  staged, shrunk glTFs with the Mac's own build, so the fingerprints are
+  the shipped files', and copies the props' from the tree.
+- **Not done:** a package built with packs and run on x99; the retro-only
+  package; the Pi's VC4 has no S3TC, so its packs would need an
+  uncompressed or ETC1 variant (the chain is built from the same
+  `PreparedTexture`, so that is a bake flag, not a format).
+
 ## Beyond the three tiers: the extended study (2026-10-03)
 
 What it would take to reach the targets past R5, evaluated against the port
@@ -1007,7 +1053,7 @@ preset is ready for them.
 
 1. The acceptance already queued: the G41 for R0, R3 and R4, then R6.
 2. **R2b, per-tier asset packs**: the memory diet, which unblocks 32-bit
-   XP, the Pi and the G41's load.
+   XP, the Pi and the G41's load. Done the same day ("R2b, as built").
 3. R5, designed for the 1998 floor from the start: software vertex
    processing, 16-bit textures, the API-agnostic material layer.
 4. D3D11, with FL 9_2 on the X550 as the free extra once `dxdiag` confirms

@@ -33,6 +33,11 @@ What is built, in the order it was built. The plan these came from is
   profiles moved to `assets/species/`, which is public; the models are not
   (`ATTRIBUTION.md`).
 - **Published** to the mirror at `4d90e0b`.
+- **Model packs (R2b, after the publish).** `--bake-packs` writes what a
+  retro tier uploads (`anim/model_pack.h`): the nine-species roster loads
+  in 0.6 s at 217 MB instead of 6.7 s at 983 MB, pixel-identical at sm3 and
+  sm2. The 32-bit XP build and the Pi now have a load path that fits
+  (`PORTING.md`, "Beyond the three tiers").
 
 ## Latest local asset — 2026-10-02: gold dragon
 

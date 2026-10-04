@@ -44,6 +44,7 @@ add_executable(dragon
   src/anim/dragon_rig.cpp
   src/anim/animation.cpp
   src/anim/gltf_loader.cpp
+  src/anim/model_pack.cpp
   src/gfx/scene_uniforms.cpp
   src/gfx/world_renderer.cpp
   src/gfx/static_model.cpp
@@ -207,6 +208,25 @@ target_include_directories(test_anim PRIVATE src)
 target_link_libraries(test_anim PRIVATE SDL3::SDL3 cgltf stb)
 target_compile_options(test_anim PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME anim COMMAND test_anim)
+
+# Model packs: a pack round-trips, and the content read from one is byte for
+# byte what the glTF route computes (textures trimmed from the baked cap
+# included).
+add_executable(test_model_pack
+  tests/test_model_pack.cpp
+  src/anim/model_pack.cpp
+  src/anim/gltf_loader.cpp
+  src/anim/skin_lod.cpp
+  src/anim/skeleton.cpp
+  src/anim/animation.cpp
+  src/anim/skinned_mesh.cpp
+  src/gfx/texture.cpp
+  src/gfx/graphics_settings.cpp
+)
+target_include_directories(test_model_pack PRIVATE src)
+target_link_libraries(test_model_pack PRIVATE SDL3::SDL3 cgltf stb meshoptimizer)
+target_compile_options(test_model_pack PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME model_pack COMMAND test_model_pack)
 
 # Palette splitting: the split mesh must skin exactly like the whole.
 add_executable(test_skin_partition

@@ -14,6 +14,7 @@
 #include "editor/imgui_layer.h"
 #include "anim/dragon_rig.h"
 #include "anim/gltf_loader.h"
+#include "anim/model_pack.h"
 #include "game/chase_camera.h"
 #include "game/bot.h"
 #include "game/combat.h"
@@ -72,6 +73,9 @@ struct Options {
     // first and the bots are dealt the rest in turn, so one match can field
     // more than one species instead of four hue-pushed copies of one mesh.
     std::vector<std::string> models;
+    // --bake-packs writes <model>.glb.pack beside every roster model and prop
+    // (anim/model_pack.h) and exits; no window, no device.
+    bool bake_packs = false;
     // --hue r,g,b,strength recolours the player's dragon (see ModelUniforms::recolour).
     bool has_hue = false;
     core::Vec4 hue;
@@ -215,6 +219,14 @@ public:
     bool init(const Options& options);
     void shutdown();
     void run();
+
+    // The models to load, resolved: --models, else --model, else the default
+    // roster's files that exist here; one empty entry when none does (the
+    // generated greybox).
+    static std::vector<std::string> roster_paths(const Options& options);
+    // --bake-packs: builds and writes the pack of every roster model and
+    // every prop. False when any fails.
+    static bool bake_packs(const Options& options);
 
 private:
     void pump_events();
@@ -423,11 +435,17 @@ private:
     // the window and the readout change outside Apply, and must not save the
     // panel's unapplied tier or renderer with them.
     void save_graphics_key(const std::string& key, const std::string& value) const;
+    // The mesh a tier uploads: the LOD at `max_triangles` (0: the tier's
+    // budget), then the palette split. From `pack` when it holds that LOD.
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
-                                         uint32_t max_triangles = 0) const;
-    void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag);
-    static gfx::TextureKind texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
-                                         size_t index);
+                                         uint32_t max_triangles = 0, const anim::ModelPack* pack = nullptr) const;
+    void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag,
+                        const anim::ModelPack* pack = nullptr);
+    // A retro tier's model source: the pack beside `path` when there is a
+    // fresh one and the device takes its formats, else null (the glTF route).
+    std::unique_ptr<anim::ModelPack> open_model_pack(const std::string& path) const;
+    // The textures a pack carries, trimmed to the tier's cap and uploaded.
+    void upload_pack_textures(const anim::ModelPack& pack, const char* tag, std::vector<rhi::Texture*>& out);
     // The content tier (--tier); set before anything loads.
     gfx::RenderTier tier_;
     bool load_prop(const char* path, PropModel& out, const char* tag,

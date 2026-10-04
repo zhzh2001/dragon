@@ -14,6 +14,9 @@ assets/runs.txt
 # ATTRIBUTION.md for where to get them.
 assets/*.glb
 assets/*.gltf
+# Model packs are build products (anim/model_pack.h): `dragon --bake-packs`
+# remakes every one in seconds, and the packagers bake their own.
+*.pack
 assets/alt/
 assets/black_dragon_with_idle_animation/
 # Embercrest (the original-model experiment): the GLB, .blend, textures and

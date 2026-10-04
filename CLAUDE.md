@@ -42,7 +42,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty suites, plain executables, no framework
+ctest --test-dir build            # twenty-one suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -100,6 +100,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--hunters-after S` | In a run, loose the first hunter after S seconds instead of two minutes, for a capture of one. |
 | `--walk F[,T]` | Once grounded, walk at F (-1..1) turning at T: with `--input -0.25,0,0,0,0,0` it lands and then walks, the in-game check of the stride. |
 | `--run-empty` | The run with no rivals and no towers: how the autopilot soaks the banking path (`--run-empty --autopilot --frames 8400` banks at the pass). |
+| `--bake-packs` | Write `<model>.glb.pack` beside every roster model (`--models` narrows it) and prop, then exit: the LODs and encoded textures a retro tier uploads, baked once (`anim/model_pack.h`, `PORTING.md` R2b). A retro tier loads a fresh pack instead of decoding the glTF -- 217 MB and 0.6 s for the roster against 983 MB and 6.7 s -- and the frame is byte-identical. `DRAGON_NO_PACKS=1` forces the glTF route for a comparison. Packs are gitignored build products; the Windows packager bakes its own. |
 | `--model PATH` | Load one rigged glTF instead of the default roster. Bench work on one creature should use it: the default roster loads seven meshes, about 3 s more per headless render (4.7 s against 1.9 s for 40 frames). |
 | `--models A,B,C` | Load a whole roster. The player flies the first; bots are dealt the rest in turn, so one match fields several species. With neither flag the roster is the seven release species plus the local gold-dragon and silver-dragon studies when present, Embercrest first (`kDefaultRoster` in `app.cpp`); Sunspear and Rimeplume are reached only through `--models` while they are in progress. |
 | `--bot-range N` | Spawn bots N metres out instead of 650 -- the only way to get the player and every rival into one capture. |
@@ -325,7 +326,8 @@ flight controls.
   theirs, public while their models are not (`ATTRIBUTION.md`).
   Asset names follow one rule: `assets/<name>.glb` ships, `<name>-raw.glb` is
   the rig before the material repair, `<name>-cand-*.glb` the generator's
-  output.
+  output, `<name>.glb.pack` its baked retro-tier pack (`--bake-packs`, never
+  committed).
 - Commit messages describe what changed and *why it was wrong before*.
 - **Everything committed here may go public.** The repository is mirrored to
   github.com/zhzh2001/dragon (`docs/RELEASE.md`), and the mirror's history is
@@ -507,7 +509,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
+tests/       twenty-one suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

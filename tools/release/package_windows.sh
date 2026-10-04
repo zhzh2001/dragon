@@ -9,8 +9,10 @@
 # only Windows system DLLs and the Universal CRT (Windows 10 has it). The
 # shaders are baked to DXIL for D3D12 and SPIR-V for Vulkan, and the loader
 # takes whichever the device accepts. The roster is shrunk to 2048² as on
-# macOS. Nothing here can run the result: check it on Windows
-# (docs/RELEASE.md) before uploading it.
+# macOS, and each shipped model gets its pack (anim/model_pack.h), baked from
+# the shrunk file so the freshness check passes, for the D3D9 tiers' load.
+# Nothing here can run the result: check it on Windows (docs/RELEASE.md)
+# before uploading it.
 set -eu
 
 version=${1:-0.1.0}
@@ -44,12 +46,25 @@ cp build-win-release/dragon.exe "$stage/"
 tools/release/bake_shaders.sh "$stage/shaders" dxil spv
 # assets/species/: the profiles of models not distributed (the gold and
 # silver studies), so a player who has one can drop it in beside them.
-cp -R assets/props assets/textures assets/fonts assets/species "$stage/assets/"
+cp -R assets/textures assets/fonts assets/species "$stage/assets/"
+mkdir -p "$stage/assets/props"
+cp assets/props/*.glb "$stage/assets/props/"
+staged_models=""
 for s in $species; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$stage/assets/$s.glb" --max 2048
   for kind in rig flight breath; do
     [ -f "assets/$s.glb.$kind.cfg" ] && cp "assets/$s.glb.$kind.cfg" "$stage/assets/"
   done
+  staged_models="$staged_models${staged_models:+,}$stage/assets/$s.glb"
+done
+# The packs: the Mac's own build bakes them, from the staged files, so the
+# recorded fingerprints are the shipped files'. Props are baked in place and
+# copied, since they ship unshrunk.
+[ -x build/dragon ] || { echo "build/dragon is needed to bake the model packs" >&2; exit 1; }
+./build/dragon --bake-packs --models "$staged_models" >/dev/null 2>&1
+cp assets/props/*.glb.pack "$stage/assets/props/"
+for s in $species; do
+  [ -f "$stage/assets/$s.glb.pack" ] || { echo "missing pack for $s" >&2; exit 1; }
 done
 cp tools/release/README-windows.txt "$stage/README.txt"
 for f in LICENSE THIRD_PARTY_NOTICES.md ATTRIBUTION.md AI_DISCLOSURE.md; do cp "$f" "$stage/"; done

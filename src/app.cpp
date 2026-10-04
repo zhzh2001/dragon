@@ -42,6 +42,79 @@ void steer_pounce(game::FlightState& st, core::Vec3 target, float turn, float sp
 }  // namespace
 
 
+namespace {
+
+// The props a run places (tools/props.md): loaded at start, baked by
+// --bake-packs. Indexed by load order in App::init.
+const char* const kPropFiles[] = {"props/watchtower.glb", "props/hoard_pile.glb", "props/spire_tower.glb",
+                                  "props/hoard_trove.glb", "props/grazer.glb"};
+
+}  // namespace
+
+std::vector<std::string> App::roster_paths(const Options& options) {
+    std::vector<std::string> roster;
+    for (const std::string& path : options.models) roster.push_back(core::paths::resolve_cli(path));
+    if (roster.empty() && !options.model.empty()) roster.push_back(core::paths::resolve_cli(options.model));
+    if (roster.empty()) {
+        static const char* const kDefaultRoster[] = {
+            "embercrest", "rimefang", "frostvein", "blightmaw",
+            "ironroot",   "stormsail", "tidewrack", "gold-dragon", "silver-dragon"};
+        for (const char* name : kDefaultRoster) {
+            const std::string path = core::paths::asset(std::string(name) + ".glb");
+            if (std::ifstream(path).good()) roster.push_back(path);
+        }
+        if (roster.empty()) roster.push_back(std::string());
+    }
+    return roster;
+}
+
+bool App::bake_packs(const Options& options) {
+    // Every model-detail level's near and far budget, from the tier that may
+    // pick any of them (sm3 allows Full through 2.5K), and the largest cap a
+    // retro tier's textures take (1024: sm3's and sm2's High). A lower level
+    // is this chain with its top dropped, so one pack serves every preset.
+    std::vector<uint32_t> budgets;
+    uint32_t texture_cap = 0;
+    for (int level = 0; level < gfx::QUALITY_LEVELS; ++level) {
+        const gfx::ContentBudget b =
+            gfx::budget_for(gfx::GraphicsSettings::preset(level, gfx::Tier::SM3, gfx::DeviceLimits{}));
+        budgets.push_back(b.max_skinned_triangles);
+        budgets.push_back(b.far_skinned_triangles);
+        if (b.max_texture_size > texture_cap) texture_cap = b.max_texture_size;
+    }
+    std::vector<std::string> paths = roster_paths(options);
+    for (const char* prop : kPropFiles) paths.push_back(core::paths::asset(prop));
+
+    bool all_ok = true;
+    for (const std::string& path : paths) {
+        if (path.empty()) continue;
+        const Uint64 started = SDL_GetTicks();
+        anim::ModelPack pack;
+        std::string error;
+        if (!anim::build_model_pack(path.c_str(), budgets, texture_cap, pack, &error)) {
+            LOG_WARN("%s: not baked: %s", path.c_str(), error.c_str());
+            all_ok = false;
+            continue;
+        }
+        const std::string out = anim::model_pack_path(path);
+        if (!anim::write_model_pack(out.c_str(), pack)) {
+            all_ok = false;
+            continue;
+        }
+        SDL_PathInfo info;
+        const double mb = SDL_GetPathInfo(out.c_str(), &info) ? double(info.size) / (1024.0 * 1024.0) : 0.0;
+        std::string lods;
+        for (const anim::ModelPackLod& lod : pack.lods) {
+            if (!lods.empty()) lods += ", ";
+            lods += std::to_string(lod.max_triangles) + (lod.mesh.indices.empty() ? " (whole)" : "");
+        }
+        LOG_INFO("baked %s: %.1f MB, %zu triangles, %zu texture(s) at %u, LODs %s, in %.1f s", out.c_str(), mb,
+                 pack.mesh.indices.size() / 3, pack.textures.size(), texture_cap, lods.c_str(),
+                 double(SDL_GetTicks() - started) / 1000.0);
+    }
+    return all_ok;
+}
+
 Options parse_options(int argc, char** argv) {
     Options options;
 #ifndef ASSET_ROOT
@@ -103,6 +176,8 @@ Options parse_options(int argc, char** argv) {
             options.gpu_driver = argv[++i];
         } else if (arg == "--no-post") {
             options.no_post = true;
+        } else if (arg == "--bake-packs") {
+            options.bake_packs = true;
         } else if (arg == "--maneuver" && i + 1 < argc) {
             const std::string which = argv[++i];
             options.maneuver = which == "roll" ? 1 : which == "flip" ? 2 : 0;
@@ -355,21 +430,7 @@ bool App::init(const Options& options) {
     // out while they are still being tuned; --models reaches them.
     {
         model_sampler_ = gfx::create_model_sampler(device_.rhi());
-        std::vector<std::string> roster;
-        for (const std::string& path : options_.models) roster.push_back(core::paths::resolve_cli(path));
-        if (roster.empty() && !options_.model.empty())
-            roster.push_back(core::paths::resolve_cli(options_.model));
-        if (roster.empty()) {
-            static const char* const kDefaultRoster[] = {
-                "embercrest", "rimefang", "frostvein", "blightmaw",
-                "ironroot",   "stormsail", "tidewrack", "gold-dragon", "silver-dragon"};
-            for (const char* name : kDefaultRoster) {
-                const std::string path = core::paths::asset(std::string(name) + ".glb");
-                if (std::ifstream(path).good()) roster.push_back(path);
-            }
-            if (roster.empty()) roster.push_back(std::string());
-        }
-        for (const std::string& path : roster) {
+        for (const std::string& path : roster_paths(options_)) {
             auto model = std::make_unique<LoadedModel>();
             load_model(path, *model);
             models_.push_back(std::move(model));
@@ -418,11 +479,11 @@ bool App::init(const Options& options) {
                       gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
                       "checkpoint_ring");
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
-    load_prop(core::paths::asset("props/watchtower.glb").c_str(), tower_prop_, "prop_tower");
-    load_prop(core::paths::asset("props/hoard_pile.glb").c_str(), hoard_prop_, "prop_hoard");
-    load_prop(core::paths::asset("props/spire_tower.glb").c_str(), spire_prop_, "prop_spire");
-    load_prop(core::paths::asset("props/hoard_trove.glb").c_str(), trove_prop_, "prop_trove");
-    if (load_prop(core::paths::asset("props/grazer.glb").c_str(), grazer_prop_, "prop_grazer", &grazer_clips_)) {
+    load_prop(core::paths::asset(kPropFiles[0]).c_str(), tower_prop_, "prop_tower");
+    load_prop(core::paths::asset(kPropFiles[1]).c_str(), hoard_prop_, "prop_hoard");
+    load_prop(core::paths::asset(kPropFiles[2]).c_str(), spire_prop_, "prop_spire");
+    load_prop(core::paths::asset(kPropFiles[3]).c_str(), trove_prop_, "prop_trove");
+    if (load_prop(core::paths::asset(kPropFiles[4]).c_str(), grazer_prop_, "prop_grazer", &grazer_clips_)) {
         static const char* const names[3] = {"graze", "walk", "run"};
         for (int c = 0; c < 3; ++c) {
             for (size_t i = 0; i < grazer_clips_.size(); ++i) {
@@ -3507,8 +3568,26 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     // driven the same way either way -- it only needs to know which joints
     // form the neck, tail and wings, and map_dragon_joints works that out
     // from an arbitrary skeleton.
-    const anim::GltfLoadResult loaded =
-        anim::load_skinned_gltf(model_path.c_str(), out.skeleton, mesh_data);
+    //
+    // A retro tier reads the model's pack when there is one
+    // (anim/model_pack.h): the same skeleton, mesh and clips, with the LODs
+    // and the encoded textures already made, and no 4096² map ever decoded.
+    const std::unique_ptr<anim::ModelPack> pack = open_model_pack(model_path);
+    anim::GltfLoadResult loaded;
+    if (pack) {
+        out.skeleton = pack->skeleton;
+        mesh_data = pack->mesh;
+        loaded.ok = true;
+        loaded.joint_count = pack->skeleton.count();
+        loaded.vertex_count = mesh_data.vertices.size();
+        loaded.triangle_count = mesh_data.indices.size() / 3;
+        loaded.bounds_min = pack->bounds_min;
+        loaded.bounds_max = pack->bounds_max;
+        loaded.bind_pose_error = pack->bind_pose_error;
+        loaded.animations = pack->animations;
+    } else {
+        loaded = anim::load_skinned_gltf(model_path.c_str(), out.skeleton, mesh_data);
+    }
     if (loaded.ok) {
         out.joints = anim::map_dragon_joints(out.skeleton);
         out.imported = out.joints.valid();
@@ -3564,12 +3643,13 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     // debug name carries the roster slot so two species are told apart in a
     // GPU capture.
     const std::string tag = "model" + std::to_string(models_.size());
+    if (pack) upload_pack_textures(*pack, tag.c_str(), out.textures);
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
         const bool srgb = i < loaded.texture_srgb.size() && loaded.texture_srgb[i] != 0;
         const std::string name =
             tag + "_" + std::string(srgb ? "colour_" : "data_") + std::to_string(i);
         out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(),
-                                                              texture_kind(mesh_data, loaded, i)));
+                                                              anim::texture_kind_for(mesh_data, loaded.texture_srgb, i)));
     }
     // Measure the head and the neck for the first-person eye, in body metres
     // relative to the head joint, bind pose. A vertex belongs to a part when
@@ -3638,8 +3718,8 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
-    out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str()), tag.c_str());
-    upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str());
+    out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str(), 0, pack.get()), tag.c_str());
+    upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str(), pack.get());
 
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
@@ -3750,22 +3830,53 @@ void App::spawn_bots(int count) {
 // The tier's skinning budget (gfx/render_tier.h): a mesh whose joints do not
 // fit one draw is split into palettes here, at load, once.
 // The tier's distance LOD for a skinned mesh, if it has one.
-void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag) {
+void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag,
+                         const anim::ModelPack* pack) {
     const gfx::ContentBudget& b = tier_.budget;
     if (b.far_skinned_triangles == 0 || data.indices.size() / 3 <= b.far_skinned_triangles) return;
-    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles), b.far_skinned_distance, tag);
+    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles, pack), b.far_skinned_distance,
+                    tag);
 }
 
-// What a model's texture `index` holds, from the materials that use it: a
-// retro tier compresses each kind its own way (gfx/texture.h).
-gfx::TextureKind App::texture_kind(const anim::SkinnedMeshData& mesh, const anim::GltfLoadResult& loaded,
-                                   size_t index) {
-    for (const anim::SkinnedSubmesh& sub : mesh.submeshes) {
-        if (sub.normal_texture == int(index)) return gfx::TextureKind::NormalMap;
-        if (sub.orm_texture == int(index)) return gfx::TextureKind::Orm;
+std::unique_ptr<anim::ModelPack> App::open_model_pack(const std::string& path) const {
+    if (tier_.tier == gfx::Tier::Modern || path.empty()) return nullptr;
+    // DRAGON_NO_PACKS=1: the glTF route regardless, so the two can be
+    // compared on one build (the pack must draw the identical frame).
+    if (const char* off = SDL_getenv("DRAGON_NO_PACKS"); off && off[0] == '1') return nullptr;
+    const std::string pack_path = anim::model_pack_path(path);
+    if (!std::ifstream(pack_path).good()) return nullptr;
+    auto pack = std::make_unique<anim::ModelPack>();
+    std::string error;
+    if (!anim::read_model_pack(pack_path.c_str(), *pack, &error)) {
+        LOG_WARN("%s: unreadable (%s); loading the glTF instead", pack_path.c_str(), error.c_str());
+        return nullptr;
     }
-    const bool srgb = index < loaded.texture_srgb.size() && loaded.texture_srgb[index] != 0;
-    return srgb ? gfx::TextureKind::Colour : gfx::TextureKind::Data;
+    if (!anim::model_pack_fresh(*pack, path.c_str())) {
+        LOG_WARN("%s: older than its model; loading the glTF instead (re-run --bake-packs)", pack_path.c_str());
+        return nullptr;
+    }
+    // Its textures are block-compressed; a device without BC takes the
+    // glTF route, which encodes nothing.
+    for (const anim::ModelPackTexture& t : pack->textures) {
+        if (t.prepared.compressed() && !device_.rhi().supports_format(t.prepared.format, rhi::TEXTURE_SAMPLED)) {
+            LOG_WARN("%s: this device has no BC formats; loading the glTF instead", pack_path.c_str());
+            return nullptr;
+        }
+    }
+    LOG_INFO("%s: %zu triangles, %zu texture(s), %zu LOD(s)", pack_path.c_str(), pack->mesh.indices.size() / 3,
+             pack->textures.size(), pack->lods.size());
+    return pack;
+}
+
+void App::upload_pack_textures(const anim::ModelPack& pack, const char* tag, std::vector<rhi::Texture*>& out) {
+    for (size_t i = 0; i < pack.textures.size(); ++i) {
+        const anim::ModelPackTexture& t = pack.textures[i];
+        const std::string name =
+            std::string(tag) + "_" + std::string(t.srgb ? "colour_" : "data_") + std::to_string(i);
+        gfx::PreparedTexture prepared = t.prepared;
+        prepared.trim(tier_.budget.max_texture_size);
+        out.push_back(gfx::upload_prepared(device_.rhi(), prepared, name.c_str()));
+    }
 }
 
 // FNV-1a over a mesh's vertices and indices: the same LOD on every platform
@@ -3782,9 +3893,18 @@ static uint32_t fingerprint(const anim::SkinnedMeshData& mesh) {
 }
 
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
-                                          uint32_t max_triangles) const {
+                                          uint32_t max_triangles, const anim::ModelPack* pack) const {
     // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
-    anim::LodResult lod = anim::simplify_skinned(mesh, max_triangles ? max_triangles : tier_.budget.max_skinned_triangles);
+    const uint32_t budget = max_triangles ? max_triangles : tier_.budget.max_skinned_triangles;
+    anim::LodResult lod;
+    const anim::ModelPackLod* baked = pack && budget ? pack->lod(budget) : nullptr;
+    if (baked) {
+        lod.mesh = baked->mesh.indices.empty() ? mesh : baked->mesh;
+        lod.error = baked->error;
+    } else {
+        if (pack && budget) LOG_WARN("%s: the pack has no LOD at %u triangles; simplifying", tag, budget);
+        lod = anim::simplify_skinned(mesh, budget);
+    }
     if (lod.mesh.indices.size() != mesh.indices.size()) {
         LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size (%08x -> %08x)", tag,
                  mesh.indices.size() / 3, lod.mesh.indices.size() / 3, mesh.vertices.size(),
@@ -3803,23 +3923,41 @@ anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, con
 bool App::load_prop(const char* path, PropModel& out, const char* tag,
                     std::vector<anim::AnimationClip>* clips) {
     anim::SkinnedMeshData data;
-    const anim::GltfLoadResult loaded = anim::load_skinned_gltf(path, out.skeleton, data);
+    const std::unique_ptr<anim::ModelPack> pack = open_model_pack(path);
+    anim::GltfLoadResult loaded;
+    if (pack) {
+        out.skeleton = pack->skeleton;
+        data = pack->mesh;
+        loaded.ok = true;
+        loaded.joint_count = pack->skeleton.count();
+        loaded.triangle_count = data.indices.size() / 3;
+        loaded.bounds_min = pack->bounds_min;
+        loaded.bounds_max = pack->bounds_max;
+        loaded.animations = pack->animations;
+    } else {
+        loaded = anim::load_skinned_gltf(path, out.skeleton, data);
+    }
     if (loaded.ok && clips) *clips = loaded.animations;
     if (!loaded.ok) {
         LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
         return false;
     }
-    if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag), tag)) return false;
-    upload_far_lod(out.mesh, data, (std::string(tag) + "_far").c_str());
+    if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag, 0, pack.get()), tag)) return false;
+    upload_far_lod(out.mesh, data, (std::string(tag) + "_far").c_str(), pack.get());
+    if (pack) {
+        std::vector<rhi::Texture*> textures;
+        upload_pack_textures(*pack, tag, textures);
+        out.textures.insert(out.textures.end(), textures.begin(), textures.end());
+    }
     for (size_t i = 0; i < loaded.textures.size(); ++i) {
         const std::string name = std::string(tag) + "_" + std::to_string(i);
         out.textures.push_back(gfx::create_texture_from_image(device_.rhi(), loaded.textures[i], name.c_str(),
-                                                              texture_kind(data, loaded, i)));
+                                                              anim::texture_kind_for(data, loaded.texture_srgb, i)));
     }
     out.joints.assign(size_t(std::max(out.skeleton.count(), 1)), core::Mat4::identity());
     out.ok = true;
     LOG_INFO("prop %s: %zu triangles, %d joint(s), %zu texture(s), %.1f x %.1f x %.1f m", path,
-             loaded.triangle_count, loaded.joint_count, loaded.textures.size(),
+             loaded.triangle_count, loaded.joint_count, out.textures.size(),
              double(loaded.bounds_max.x - loaded.bounds_min.x),
              double(loaded.bounds_max.y - loaded.bounds_min.y),
              double(loaded.bounds_max.z - loaded.bounds_min.z));

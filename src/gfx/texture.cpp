@@ -143,18 +143,33 @@ ImageData decode_image(const uint8_t* bytes, size_t size) {
     return image;
 }
 
-namespace {
+bool PreparedTexture::compressed() const {
+    return format == rhi::Format::BC1 || format == rhi::Format::BC1_SRGB || format == rhi::Format::BC3 ||
+           format == rhi::Format::BC3_SRGB;
+}
 
-// The budgeted path: capped, mips on the CPU, maybe compressed.
-rhi::Texture* create_budgeted_texture(rhi::Device& rhi, const ImageData& image, const char* debug_name,
-                                      TextureKind kind, const TextureBudget& budget) {
+void PreparedTexture::trim(uint32_t max_size) {
+    if (max_size == 0) return;
+    while (levels.size() > 1 && (width > max_size || height > max_size)) {
+        levels.erase(levels.begin());
+        width = width > 1 ? width / 2 : 1;
+        height = height > 1 ? height / 2 : 1;
+    }
+}
+
+PreparedTexture prepare_texture(const ImageData& image, TextureKind kind, const TextureBudget& budget,
+                                bool compress_allowed) {
+    PreparedTexture out;
+    if (!image.valid()) return out;
     const bool srgb = kind == TextureKind::Colour;
+    out.source_width = image.width;
+    out.source_height = image.height;
     ImageData top = cap_image(image, budget.max_size, srgb);
     if (budget.compress && kind == TextureKind::NormalMap) swizzle_normal_map(top);
 
     // What each kind compresses to, if anything (see TextureBudget).
     rhi::Format block = rhi::Format::Invalid;
-    if (budget.compress && top.width % 4 == 0 && top.height % 4 == 0) {
+    if (budget.compress && compress_allowed && top.width % 4 == 0 && top.height % 4 == 0) {
         switch (kind) {
             case TextureKind::Colour: block = has_alpha(top) ? rhi::Format::BC3_SRGB : rhi::Format::BC1_SRGB; break;
             case TextureKind::NormalMap: block = rhi::Format::BC3; break;
@@ -162,38 +177,61 @@ rhi::Texture* create_budgeted_texture(rhi::Device& rhi, const ImageData& image, 
             case TextureKind::Data: break;
         }
     }
-    if (block != rhi::Format::Invalid && !rhi.supports_format(block, rhi::TEXTURE_SAMPLED)) {
-        LOG_WARN("texture '%s': this device has no BC formats; kept uncompressed", debug_name);
-        block = rhi::Format::Invalid;
-    }
     const bool compress = block != rhi::Format::Invalid;
     const bool bc3 = block == rhi::Format::BC3 || block == rhi::Format::BC3_SRGB;
-    const std::vector<ImageData> mips = build_mips(top, srgb, compress);
+    out.format = compress ? block : srgb ? rhi::Format::RGBA8_SRGB : rhi::Format::RGBA8;
+    out.width = uint32_t(top.width);
+    out.height = uint32_t(top.height);
+    for (ImageData& m : build_mips(top, srgb, compress)) {
+        out.levels.push_back(compress ? encode_bc(m, bc3) : std::move(m.rgba));
+    }
+    return out;
+}
 
+rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared, const char* debug_name) {
+    if (!prepared.valid()) return nullptr;
     rhi::TextureDesc desc;
-    desc.width = uint32_t(top.width);
-    desc.height = uint32_t(top.height);
-    desc.mip_levels = uint32_t(mips.size());
-    desc.format = compress ? block : srgb ? rhi::Format::RGBA8_SRGB : rhi::Format::RGBA8;
+    desc.width = prepared.width;
+    desc.height = prepared.height;
+    desc.mip_levels = uint32_t(prepared.levels.size());
+    desc.format = prepared.format;
     desc.usage = rhi::TEXTURE_SAMPLED;
     rhi::Texture* texture = rhi.create_texture(desc, debug_name);
     if (!texture) return nullptr;
     size_t bytes = 0;
-    for (size_t level = 0; level < mips.size(); ++level) {
-        const ImageData& m = mips[level];
-        const std::vector<uint8_t> blocks = compress ? encode_bc(m, bc3) : std::vector<uint8_t>{};
-        const std::vector<uint8_t>& data = compress ? blocks : m.rgba;
-        if (!rhi.upload_texture_level(texture, uint32_t(level), data.data(), uint32_t(data.size()),
-                                      uint32_t(m.width), uint32_t(m.height))) {
+    uint32_t w = prepared.width, h = prepared.height;
+    for (size_t level = 0; level < prepared.levels.size(); ++level) {
+        const std::vector<uint8_t>& data = prepared.levels[level];
+        if (!rhi.upload_texture_level(texture, uint32_t(level), data.data(), uint32_t(data.size()), w, h)) {
             rhi.destroy(texture);
             return nullptr;
         }
         bytes += data.size();
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
     }
-    LOG_INFO("texture '%s': %dx%d -> %dx%d %s, %zu mips, %.1f MB", debug_name, image.width, image.height,
-             top.width, top.height, compress ? (bc3 ? "BC3" : "BC1") : "RGBA8", mips.size(),
+    const bool bc3 = prepared.format == rhi::Format::BC3 || prepared.format == rhi::Format::BC3_SRGB;
+    LOG_INFO("texture '%s': %dx%d -> %ux%u %s, %zu mips, %.1f MB", debug_name, prepared.source_width,
+             prepared.source_height, prepared.width, prepared.height,
+             prepared.compressed() ? (bc3 ? "BC3" : "BC1") : "RGBA8", prepared.levels.size(),
              double(bytes) / (1024.0 * 1024.0));
     return texture;
+}
+
+namespace {
+
+// The budgeted path: capped, mips on the CPU, maybe compressed.
+rhi::Texture* create_budgeted_texture(rhi::Device& rhi, const ImageData& image, const char* debug_name,
+                                      TextureKind kind, const TextureBudget& budget) {
+    // Whether the device takes the block format this kind would get.
+    const rhi::Format probe = kind == TextureKind::Colour ? rhi::Format::BC1_SRGB : rhi::Format::BC1;
+    const bool bc = rhi.supports_format(probe, rhi::TEXTURE_SAMPLED) &&
+                    rhi.supports_format(kind == TextureKind::Colour ? rhi::Format::BC3_SRGB : rhi::Format::BC3,
+                                        rhi::TEXTURE_SAMPLED);
+    if (budget.compress && !bc && kind != TextureKind::Data) {
+        LOG_WARN("texture '%s': this device has no BC formats; kept uncompressed", debug_name);
+    }
+    return upload_prepared(rhi, prepare_texture(image, kind, budget, bc), debug_name);
 }
 
 }  // namespace

@@ -59,6 +59,33 @@ bool has_alpha(const ImageData& image);
 // The DXT5nm layout, in place: (x, y, z, a) -> (0, y, 0, x).
 void swizzle_normal_map(ImageData& image);
 
+// A texture as the budget leaves it, ready to upload and nothing else to do:
+// its format, its capped size and every mip level's bytes (tightly packed
+// texels, or 4x4 blocks for a block format). The result of the budgeted path
+// before the upload, so a pack can store it (anim/model_pack.h) and a retro
+// build can skip the decode, the halving and the encode.
+struct PreparedTexture {
+    rhi::Format format = rhi::Format::Invalid;
+    uint32_t width = 0;   // of level 0
+    uint32_t height = 0;
+    int source_width = 0;  // the image before the cap, for the log
+    int source_height = 0;
+    std::vector<std::vector<uint8_t>> levels;
+
+    bool valid() const { return format != rhi::Format::Invalid && !levels.empty(); }
+    bool compressed() const;
+    // Drops leading levels until level 0 fits `max_size` on its longer edge
+    // (0: no cap). A chain built at 1024 is the chain built at 512 with one
+    // level less: `cap_image` and `build_mips` halve the same way, so the
+    // trimmed result is byte for byte what preparing at the smaller cap gives.
+    void trim(uint32_t max_size);
+};
+// The budgeted path's CPU half: cap, swizzle a normal map, build the chain,
+// encode when `compress_allowed` (the device takes BC formats).
+PreparedTexture prepare_texture(const ImageData& image, TextureKind kind, const TextureBudget& budget,
+                                bool compress_allowed);
+rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared, const char* debug_name);
+
 // Uploads an image as a sampled 2D texture with a full mip chain.
 //
 // Mips are not optional here: a 4K dragon texture viewed from across a valley
