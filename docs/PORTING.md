@@ -1495,10 +1495,26 @@ was placed on the draw that raised it):
    the fog and the diffuse alpha (both 1), the trick particles.hlsl
    already used for the same reason on D3D12.
 
-Not tested: a 9_1 device (none owned; the 5060 Ti forced to 9_1 refuses
-`R32_FLOAT` outright, so the shadow stand-in would need the `NO_SHADOWS`
-variant there), and 9_3's instancing path (it reports instancing and
-takes the native draws, untested on real 9_3 hardware).
+**9_1** runs too, checked on the 5060 Ti forced there
+(`DRAGON_D3D11_FEATURE_LEVEL=9_1`, the debug layer on, no messages; the
+run HUD at 160 fps). It takes three more things than 9_2: **no R32F
+texture**, so no shadow stand-in -- `supports_format` says a depth target
+cannot be sampled, `DeviceLimits::sampled_depth` holds the Shadows setting
+at Off (the sm2-noshadows variant), and the shadow map becomes a 1x1 white
+texture in its slot; **no 32-bit indices**, so the backend keeps a copy of
+each index buffer and draws a 32-bit range as a 16-bit buffer rebased to
+its smallest index, made once per range (`narrow_indices`; every draw the
+game makes spans under 65535 vertices); and **no separate alpha blend**.
+Textures cap at 2048 below 9_3.
+
+Not tested: real 9_1 or 9_3 hardware (none owned that runs Windows 10),
+and 9_3's instancing path (it reports instancing and takes the native
+draws). The GeForce 6200 is SM3 hardware, but it reaches D3D11 at all
+only through NVIDIA's last Vista/7 WDDM driver (309.08); under XP, the
+G41's OS, there is no D3D11 and it runs the D3D9 backend. Which level that
+driver reports -- 9_3 for SM3 parts, by the book -- is a `dxdiag` on a
+Windows 7 install to read, not an assumption; the backend runs any of
+the three, since all take the same level_9_1 bytecode.
 
 ### vs/ps 1.x for the DX8 cards: the vertex side, not the pixel side (2026-10-04)
 

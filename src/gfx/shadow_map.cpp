@@ -53,8 +53,24 @@ bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resoluti
     desc.height = resolution_;
     desc.format = format_;
     desc.usage = rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED;
-    texture_ = rhi.create_texture(desc, "shadow_map");
-    if (!texture_) return false;
+    unavailable_ = !rhi.supports_format(format_, desc.usage);
+    if (unavailable_) {
+        // No depth target can be sampled (D3D11 at feature level 9_1): the
+        // settings hold the shadows off (DeviceLimits::sampled_depth), and
+        // the shaders' slot gets a 1x1 white texture -- "unshadowed" -- so
+        // the bindings stay what every pipeline was built against.
+        desc = rhi::TextureDesc{};
+        desc.width = desc.height = 1;
+        desc.format = rhi::Format::RGBA8;
+        desc.usage = rhi::TEXTURE_SAMPLED;
+        texture_ = rhi.create_texture(desc, "shadow_map_unavailable");
+        const uint8_t white[4] = {255, 255, 255, 255};
+        if (!texture_ || !rhi.upload_texture(texture_, white, 1, 1, false)) return false;
+        LOG_INFO("shadow map: unavailable on this device (no sampled depth), off");
+    } else {
+        texture_ = rhi.create_texture(desc, "shadow_map");
+        if (!texture_) return false;
+    }
 
     rhi::SamplerDesc sampler_desc;
     // Linear filtering on the depth values themselves, which softens the PCF
@@ -77,8 +93,9 @@ bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resoluti
     }
 
     mesh_pipeline_ = pipelines_->create(make_shadow_mesh_desc(format_));
-    LOG_INFO("shadow map: %ux%u %s", resolution_, resolution_,
-             format_ == rhi::Format::D32F ? "D32F" : "D16");
+    if (!unavailable_) {
+        LOG_INFO("shadow map: %ux%u %s", resolution_, resolution_, format_ == rhi::Format::D32F ? "D32F" : "D16");
+    }
     return true;
 }
 

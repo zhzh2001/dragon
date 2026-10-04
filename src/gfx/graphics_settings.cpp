@@ -104,7 +104,7 @@ bool allowed(Setting setting, int level, Tier tier, const DeviceLimits& device) 
             return TEXTURE_SIZE[level] ? TEXTURE_SIZE[level] <= device.max_texture_size
                                        : device.max_texture_size >= 4096;
         case Setting::Shadows:
-            return SHADOW_SIZE[level] <= device.max_texture_size;
+            return SHADOW_SIZE[level] <= device.max_texture_size && (SHADOW_SIZE[level] == 0 || device.sampled_depth);
         case Setting::Bloom:
             // No float target, no bloom: the LDR tiers grade in each shader.
             // (RenderTier::hdr, spelled out: make() asks for a preset.)

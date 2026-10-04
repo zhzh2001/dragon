@@ -374,6 +374,7 @@ bool App::init(const Options& options) {
     // then --preset and --graphics, each level clamped to what this tier and
     // device can do (gfx/graphics_settings.h).
     device_limits_.max_texture_size = device_.rhi().max_texture_size();
+    device_limits_.sampled_depth = device_.rhi().supports_format(rhi::Format::D16, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED);
     graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
     if (!saved.empty()) graphics_.parse(saved);
     if (options.preset >= 0) graphics_ = gfx::GraphicsSettings::preset(options.preset, tier_.tier, device_limits_);
@@ -412,7 +413,7 @@ bool App::init(const Options& options) {
     if (device_.hdr() && !post_.init(&device_, &pipelines_)) return false;
     // The Shadows setting's size; Off keeps a small map, unused.
     if (!shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512)) return false;
-    shadow_.enabled = tier_.budget.shadow_size > 0;
+    shadow_.enabled = tier_.budget.shadow_size > 0 && shadow_.available();
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
     if (tier_.baked_noise) {
@@ -1079,7 +1080,7 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
         device_.rhi().wait_idle();
         shadow_.shutdown(device_);
         shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512);
-        shadow_.enabled = tier_.budget.shadow_size > 0;
+        shadow_.enabled = tier_.budget.shadow_size > 0 && shadow_.available();
         // SM2's shadows-off is a shader variant (NO_SHADOWS, gfx/pipeline.cpp).
         if (tier_.vertex_lighting && (old[Setting::Shadows] == 4) != (next[Setting::Shadows] == 4)) {
             pipelines_.rebuild_all();
@@ -1223,21 +1224,33 @@ void App::build_graphics_ui() {
             restart = true;
         }
     }
-    const bool changed = !(graphics_pending_ == graphics_);
+    const bool changed = !(graphics_pending_ == graphics_) || tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver;
     ImGui::BeginDisabled(!changed);
     if (ImGui::Button("Apply")) apply_graphics(graphics_pending_);
     ImGui::SameLine();
-    if (ImGui::Button("Revert")) graphics_pending_ = graphics_;
+    if (ImGui::Button("Revert")) {
+        graphics_pending_ = graphics_;
+        tier_pending_ = tier_.tier;
+        driver_pending_ = options_.gpu_driver;
+    }
     ImGui::EndDisabled();
-    ImGui::TextDisabled("* takes effect after a restart");
+    // Always laid out, disabled until a choice needs it: the panel's height
+    // is fitted once, when it first opens, so a button that appeared only
+    // after a renderer or tier change fell below the panel's edge and could
+    // not be found (it was "missing" on the Windows build).
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!restart);
+    if (ImGui::Button("Apply and restart")) {
+        graphics_ = graphics_pending_;
+        save_graphics();
+        relaunch_ = true;
+        running_ = false;
+    }
+    ImGui::EndDisabled();
     if (restart) {
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "A restart puts the renderer, tier, * settings in force");
-        if (ImGui::Button("Apply and restart")) {
-            graphics_ = graphics_pending_;
-            save_graphics();
-            relaunch_ = true;
-            running_ = false;
-        }
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "a restart puts the renderer, tier, * settings in force");
+    } else {
+        ImGui::TextDisabled("* takes effect after a restart");
     }
     ImGui::End();
 }
@@ -7267,7 +7280,7 @@ void App::render() {
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
 
     // Shadow pass first: the main pass samples what it writes.
-    if (shadow_.enabled) {
+    if (shadow_.enabled && shadow_.available()) {
         rhi::Pass* shadow_pass = shadow_.begin_pass(device_);
         if (!options_.hide_vegetation) {
             foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),

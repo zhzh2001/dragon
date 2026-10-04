@@ -49,8 +49,11 @@ public:
     // all terrain shape.
     float strength = 0.78f;
     bool enabled = true;
+    // No sampled depth on this device: a stand-in texture, never drawn into.
+    bool available() const { return !unavailable_; }
 
 private:
+    bool unavailable_ = false;
     PipelineCache* pipelines_ = nullptr;
     PipelineHandle mesh_pipeline_ = INVALID_PIPELINE;
     rhi::Texture* texture_ = nullptr;

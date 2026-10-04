@@ -45,6 +45,9 @@ bool parse_preset(const std::string& name, int* level);
 // What the device offers beyond its tier.
 struct DeviceLimits {
     uint32_t max_texture_size = 16384;
+    // Whether a depth target can be sampled (the shadow map): not on D3D11
+    // at feature level 9_1, which has no R32F stand-in either.
+    bool sampled_depth = true;
 };
 
 struct GraphicsSettings {

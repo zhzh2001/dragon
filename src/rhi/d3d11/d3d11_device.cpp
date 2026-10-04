@@ -12,6 +12,8 @@
 #include <fstream>
 #include <iterator>
 #include <sstream>
+#include <map>
+#include <tuple>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,6 +31,12 @@ struct D11Buffer {
     uint32_t size = 0;
     bool dynamic = false;  // per-frame data: D3D11_USAGE_DYNAMIC, mapped with DISCARD
     ID3D11Buffer* buffer = nullptr;
+    // Feature level 9_1 has no 32-bit indices: an index buffer keeps its
+    // data here, and a 32-bit draw is rebuilt from it as a 16-bit one
+    // (D3D11Device::narrow_indices). `generation` invalidates those copies
+    // when the data is uploaded again.
+    std::vector<uint8_t> shadow;
+    uint32_t generation = 0;
 };
 
 struct D11Texture {
@@ -305,6 +313,8 @@ public:
             // of a retro tier's LEVEL9 variant below: which baked set loads.
             level9_ = level_ < D3D_FEATURE_LEVEL_10_0;
             instancing_ = level_ >= D3D_FEATURE_LEVEL_9_3;
+            // 9_1 also lacks 32-bit indices and a separate alpha blend.
+            no_u32_indices_ = level_ == D3D_FEATURE_LEVEL_9_1;
             // One level-9 set: level_9_3's pixel side is still ps_2_x-sized
             // (32 constants, no texlod), so the sm3 tier does not fit it and
             // 9_3 runs the sm2 tier's level_9_1 bytecode like 9_1 and 9_2.
@@ -407,7 +417,8 @@ public:
     Backend backend() const override { return Backend::Direct3D11; }
     const char* driver_name() const override { return "direct3d11"; }
     uint32_t max_texture_size() const override {
-        return level_ >= D3D_FEATURE_LEVEL_11_0 ? 16384 : level_ >= D3D_FEATURE_LEVEL_10_0 ? 8192 : 4096;
+        return level_ >= D3D_FEATURE_LEVEL_11_0 ? 16384 : level_ >= D3D_FEATURE_LEVEL_10_0 ? 8192
+               : level_ >= D3D_FEATURE_LEVEL_9_3 ? 4096 : 2048;
     }
 
     bool supports_format(Format format, uint8_t usage) const override {
@@ -418,6 +429,14 @@ public:
         if ((usage & TEXTURE_COLOR_TARGET) && !(support & D3D11_FORMAT_SUPPORT_RENDER_TARGET)) return false;
         if ((usage & TEXTURE_DEPTH_TARGET) && !(support & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL)) return false;
         if ((usage & TEXTURE_SAMPLED) && !is_depth(format) && !(support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE)) return false;
+        if ((usage & TEXTURE_SAMPLED) && is_depth(format) && level9_) {
+            // Sampled through the R32F stand-in, which 9_1 does not have:
+            // the graphics settings then hold the shadows off.
+            UINT standin = 0;
+            if (FAILED(device_->CheckFormatSupport(DXGI_FORMAT_R32_FLOAT, &standin))) return false;
+            const UINT need = D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_RENDER_TARGET;
+            if ((standin & need) != need) return false;
+        }
         return true;
     }
 
@@ -500,6 +519,10 @@ public:
             return nullptr;
         }
         name_object(b->buffer, debug_name);
+        if (no_u32_indices_ && usage == BufferUsage::Index) {
+            b->shadow.assign(size, 0);
+            if (data) std::memcpy(b->shadow.data(), data, size);
+        }
         track(b, Kind::Buffer, size);
         return reinterpret_cast<Buffer*>(b);
     }
@@ -509,6 +532,15 @@ public:
         D11Buffer* b = d11(buffer);
         for (BufferBinding& s : streams_)
             if (s.buffer == buffer) s = {};
+        if (index_.buffer == buffer) index_ = {};
+        for (auto it = narrowed_.begin(); it != narrowed_.end();) {
+            if (std::get<0>(it->first) == b) {
+                release(it->second.buffer);
+                it = narrowed_.erase(it);
+            } else {
+                ++it;
+            }
+        }
         untrack(b);
         release(b->buffer);
         delete b;
@@ -518,15 +550,29 @@ public:
         if (!buffer || size == 0) return nullptr;
         D11Buffer* b = d11(buffer);
         if (!b->dynamic) return nullptr;
+        if (!b->shadow.empty()) {
+            // Written here, copied up at commit (9_1's index shadow).
+            ++b->generation;
+            return b->shadow.data();
+        }
         D3D11_MAPPED_SUBRESOURCE mapped = {};
         if (FAILED(context_->Map(b->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return nullptr;
         return mapped.pData;
     }
 
-    void commit_upload(Buffer* buffer, uint32_t) override {
+    void commit_upload(Buffer* buffer, uint32_t size) override {
         if (!buffer) return;
         D11Buffer* b = d11(buffer);
-        if (b->dynamic) context_->Unmap(b->buffer, 0);
+        if (!b->dynamic) return;
+        if (!b->shadow.empty()) {
+            D3D11_MAPPED_SUBRESOURCE mapped = {};
+            if (SUCCEEDED(context_->Map(b->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+                std::memcpy(mapped.pData, b->shadow.data(), std::min<size_t>(size ? size : b->size, b->shadow.size()));
+                context_->Unmap(b->buffer, 0);
+            }
+            return;
+        }
+        context_->Unmap(b->buffer, 0);
     }
 
     // ---- textures
@@ -825,6 +871,10 @@ public:
     void bind_index_buffer(Pass*, const BufferBinding& binding, IndexSize size) override {
         ID3D11Buffer* b = binding.buffer ? d11(binding.buffer)->buffer : nullptr;
         if (trace_) LOG_INFO("direct3d11 trace: index buffer %u bytes, %s, offset %u", binding.buffer ? d11(binding.buffer)->size : 0, size == IndexSize::U32 ? "u32" : "u16", binding.offset);
+        index_ = binding;
+        index_size_ = size;
+        // 9_1 binds a 32-bit buffer per draw, narrowed (draw_indexed).
+        if (no_u32_indices_ && size == IndexSize::U32) return;
         context_->IASetIndexBuffer(b, size == IndexSize::U32 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT, binding.offset);
         if (trace_) drain_messages("bind_index_buffer");
     }
@@ -908,6 +958,15 @@ public:
             drain_messages("before draw");
         }
         if (level9_) flush_level9_uniforms(*pipeline_);
+        if (no_u32_indices_ && index_size_ == IndexSize::U32 && index_.buffer) {
+            // The draw's indices, rebased to their smallest and narrowed to
+            // 16 bits, with the base vertex moved up by what was taken off.
+            const Narrowed* n = narrow_indices(d11(index_.buffer), index_.offset / 4 + first_index, index_count);
+            if (!n) return;
+            context_->IASetIndexBuffer(n->buffer, DXGI_FORMAT_R16_UINT, 0);
+            first_index = 0;
+            vertex_offset += int32_t(n->base);
+        }
         if (pipeline_->looped) {
             // One draw per instance (no instancing below feature level 9_3):
             // the instance slots bound at that instance's element with a
@@ -926,6 +985,51 @@ public:
     }
 
 private:
+    struct Narrowed {
+        ID3D11Buffer* buffer = nullptr;
+        uint32_t base = 0;
+        uint32_t generation = 0;
+    };
+
+    // A 32-bit draw range as a 16-bit index buffer, made once and kept
+    // (feature level 9_1). Null when the range spans 65535 vertices or
+    // more, which no 9_1 card could draw in one call anyway.
+    const Narrowed* narrow_indices(D11Buffer* b, uint32_t first, uint32_t count) {
+        const auto key = std::make_tuple(b, first, count);
+        auto it = narrowed_.find(key);
+        if (it != narrowed_.end() && it->second.generation == b->generation) return &it->second;
+        const size_t available = b->shadow.size() / 4;
+        if (size_t(first) + count > available) return nullptr;
+        const uint32_t* src = reinterpret_cast<const uint32_t*>(b->shadow.data()) + first;
+        uint32_t lo = UINT32_MAX, hi = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            lo = std::min(lo, src[i]);
+            hi = std::max(hi, src[i]);
+        }
+        if (hi - lo >= 0xFFFFu) {
+            LOG_ERROR("direct3d11: a draw spanning %u vertices, past feature level 9_1's 16-bit indices", hi - lo + 1);
+            return nullptr;
+        }
+        std::vector<uint16_t> narrow(count);
+        for (uint32_t i = 0; i < count; ++i) narrow[i] = uint16_t(src[i] - lo);
+        D3D11_BUFFER_DESC bd = {};
+        bd.ByteWidth = UINT(count * sizeof(uint16_t) + 3) & ~3u;
+        bd.Usage = D3D11_USAGE_IMMUTABLE;
+        bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        narrow.resize(bd.ByteWidth / sizeof(uint16_t), 0);
+        const D3D11_SUBRESOURCE_DATA init = {narrow.data(), 0, 0};
+        Narrowed n;
+        n.base = lo;
+        n.generation = b->generation;
+        if (FAILED(device_->CreateBuffer(&bd, &init, &n.buffer))) return nullptr;
+        if (it != narrowed_.end()) {
+            release(it->second.buffer);
+            it->second = n;
+            return &it->second;
+        }
+        return &narrowed_.emplace(key, n).first->second;
+    }
+
     // Everything the debug layer has to say since the last call, to the log.
     void drain_messages(const char* where) {
         if (!info_queue_) return;
@@ -1105,7 +1209,9 @@ private:
         } else {
             rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
             rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-            rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+            // 9_1 blends alpha as it blends colour; nothing reads the
+            // target's alpha afterwards, so only the stored value differs.
+            rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_SRC_ALPHA : D3D11_BLEND_ONE;
             rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
         }
         rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
@@ -1257,6 +1363,10 @@ private:
     bool level9_ = false;     // feature level 9_x: the LEVEL9 shader variants and D3D9's workarounds
     bool instancing_ = true;  // false below 9_3
     bool r32f_filterable_ = true;
+    bool no_u32_indices_ = false;  // feature level 9_1
+    BufferBinding index_ = {};
+    IndexSize index_size_ = IndexSize::U16;
+    std::map<std::tuple<D11Buffer*, uint32_t, uint32_t>, Narrowed> narrowed_;
     const char* profile_ = "sm50";
     ID3D11Buffer* vertex_ids_ = nullptr;  // feature level 9: what a fullscreen triangle reads its index from
     IDXGISwapChain* swapchain_ = nullptr;
