@@ -522,6 +522,16 @@ bool save_rig_tuning(const RigTuning& tuning, const char* path) {
     return true;
 }
 
+std::string profile_path(const std::string& model, const char* suffix) {
+    const std::string beside = model + suffix;
+    if (std::ifstream(beside).good()) return beside;
+    const size_t slash = model.find_last_of("/\\");
+    const std::string dir = slash == std::string::npos ? std::string() : model.substr(0, slash + 1);
+    const std::string file = slash == std::string::npos ? model : model.substr(slash + 1);
+    const std::string species = dir + "species/" + file + suffix;
+    return std::ifstream(species).good() ? species : beside;
+}
+
 bool load_rig_tuning(RigTuning& tuning, const char* path) {
     std::ifstream input(path);
     if (!input) return false;

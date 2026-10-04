@@ -73,7 +73,9 @@ cat > "$app/Contents/Info.plist" <<EOF
 EOF
 
 tools/release/bake_shaders.sh "$res/shaders"
-cp -R assets/props assets/textures assets/fonts "$res/assets/"
+# assets/species/: the profiles of models not distributed (the gold and
+# silver studies), so a player who has one can drop it in beside them.
+cp -R assets/props assets/textures assets/fonts assets/species "$res/assets/"
 for s in $species; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$res/assets/$s.glb" --max 2048
   for kind in rig flight breath; do

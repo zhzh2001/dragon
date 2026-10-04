@@ -46,7 +46,7 @@ void relaunch(int argc, char** argv) {
     std::vector<char*> args;
     for (int i = 0; i < argc; ++i) {
         const std::string a = argv[i];
-        if (i > 0 && (a == "--tier" || a == "--gpu-driver" || a == "--preset" || a == "--graphics")) {
+        if (i > 0 && (a == "--tier" || a == "--gpu-driver" || a == "--preset" || a == "--graphics" || a == "--size")) {
             ++i;  // and its value
             continue;
         }

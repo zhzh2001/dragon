@@ -42,7 +42,9 @@ rm -rf "$root/dist/stage-win"
 mkdir -p "$stage/assets"
 cp build-win-release/dragon.exe "$stage/"
 tools/release/bake_shaders.sh "$stage/shaders" dxil spv
-cp -R assets/props assets/textures assets/fonts "$stage/assets/"
+# assets/species/: the profiles of models not distributed (the gold and
+# silver studies), so a player who has one can drop it in beside them.
+cp -R assets/props assets/textures assets/fonts assets/species "$stage/assets/"
 for s in $species; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$stage/assets/$s.glb" --max 2048
   for kind in rig flight breath; do

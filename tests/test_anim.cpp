@@ -1329,7 +1329,7 @@ void test_roster_jaws_open_downward() {
         }
         anim::DragonRig rig;
         rig.init(skeleton, joints);
-        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
         int tip = joints.jaw;
         for (int i = 0; i < skeleton.count(); ++i) {
             if (skeleton.joint(i).parent == joints.jaw) tip = i;
@@ -1796,7 +1796,7 @@ void test_wingtip_reaches_the_commanded_flap() {
         const anim::DragonJoints asset_joints = anim::map_dragon_joints(asset_skeleton);
         if (asset_joints.wing_root[0].empty()) continue;
         anim::RigTuning asset_tuning;
-        anim::load_rig_tuning(asset_tuning, (path.string() + ".rig.cfg").c_str());
+        anim::load_rig_tuning(asset_tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
         const float asset_fraction =
             measured_stroke_fraction(asset_skeleton, asset_joints, asset_tuning);
         std::printf("  %s: tip travels %.0f%% of the commanded stroke\n", name,
@@ -1907,7 +1907,7 @@ void test_legs_brace_during_active_postures() {
             anim::DragonRig fixed, braced, loose;
             for (auto* rig : {&fixed, &braced, &loose}) {
                 rig->init(skeleton, joints);
-                if (fs::exists(path)) anim::load_rig_tuning(rig->tuning, (path.string()+".rig.cfg").c_str());
+                if (fs::exists(path)) anim::load_rig_tuning(rig->tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
             }
             fixed.tuning.leg_posture_sway = 0.0f;
             braced.tuning.leg_posture_sway = 0.2f;
@@ -2092,7 +2092,7 @@ void test_stance_keeps_the_feet_on_the_floor() {
         CHECK(!joints.foot_roots.empty());
         anim::DragonRig rig;
         rig.init(skeleton, joints);
-        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
         if (rig.tuning.ground_stance <= 0.5f) {
             std::printf("  %s carries no stance; skipped\n", name);
             continue;
@@ -2218,7 +2218,7 @@ void test_limbs_plant_on_the_terrain() {
     auto run = [&](float ik_weight, float lift_m) {
         anim::DragonRig rig;
         rig.init(skeleton, joints);
-        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
         rig.tuning.ground_ik = ik_weight;
         rig.tuning.ground_lift_m = lift_m;
         rig.set_model_scale(scale);
@@ -2609,7 +2609,7 @@ void test_melee_load_recovery_and_switch() {
         for (int kind = 0; kind < 3; ++kind) for (float side : {-1.0f, 1.0f}) {
             anim::DragonRig rig;
             rig.init(skeleton, joints); rig.set_model_scale(scale);
-            anim::load_rig_tuning(rig.tuning, (path.string()+".rig.cfg").c_str());
+            anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
             for (int i=0; i<120; ++i) rig.update(state, 1.0f/120.0f);
             const auto rest = rig.world_matrices()[size_t(joints.root)];
             const float duration = kind == 0 ? rig.tuning.bite_duration :

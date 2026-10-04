@@ -60,6 +60,8 @@ struct Options {
     // --size: the window, or the headless render target.
     int width = 1280;
     int height = 720;
+    bool size_set = false;  // --size given (over the saved window size)
+    bool show_fps = false;  // --show-fps: the frame-rate readout, as the panel's toggle
     // --tier modern|sm3|sm2|ff: shape the content for a retro tier
     // (gfx/render_tier.h), on whatever backend is running.
     gfx::Tier tier = gfx::Tier::Modern;
@@ -411,6 +413,16 @@ private:
     std::string driver_pending_;
     bool graphics_pending_init_ = false;
     bool relaunch_ = false;
+    // Saved beside the settings in graphics.cfg: the window's size (applied
+    // live from the panel, and kept when the window is dragged to a new
+    // one) and the frame-rate readout.
+    int saved_window_w_ = 0, saved_window_h_ = 0;
+    bool show_fps_ = false;
+    void draw_fps();
+    // Rewrites one key=value line of graphics.cfg, leaving the rest as saved:
+    // the window and the readout change outside Apply, and must not save the
+    // panel's unapplied tier or renderer with them.
+    void save_graphics_key(const std::string& key, const std::string& value) const;
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
                                          uint32_t max_triangles = 0) const;
     void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag);

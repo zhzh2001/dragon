@@ -38,6 +38,10 @@ tools/gold_dragon_validate.py
 tools/gold_dragon_weights.py
 assets/gold-dragon/
 
+# Their profiles (rig, flight, breath) are tuning numbers, not artwork. Since
+# 2026-10-03 they live in assets/species/, which is public, so anyone with the
+# models can drop them in; the old sidecar paths below stay excluded because
+# un-excluding them would rewrite published history.
 # Silver D&D direct-reference study (2026-10-03), same licence finding as gold.
 docs/concept/silver-dragon-2026-10-03/
 artifacts/dragon-options/silver-direct-test/

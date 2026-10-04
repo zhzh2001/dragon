@@ -109,8 +109,9 @@ anyway. Consequences:
 - Nothing gold is in the public mirror. The paths are in
   `tools/release/public_excludes.txt`: the metallic concept sheets and
   direct-reference studies, the ribbon and direct tests, the rig,
-  integration and tail-flow evidence, the gold tools, skeleton and
-  profiles. The packagers never included the model.
+  integration and tail-flow evidence, the gold tools and skeleton. The
+  packagers never included the model. (The profiles were excluded too until
+  2026-10-03; see "Profiles of the undistributed studies" below.)
 - `artifacts/dragon-options/gold-ribbon-test/` and the six original metallic
   sheets had been pushed on 2026-10-02, before this finding. At the user's
   call they were **withdrawn on 2026-10-03** by rewriting the mirror's history
@@ -167,6 +168,21 @@ or reuse licence is established. All silver-study images, metadata and
 specialized tools are excluded from the public mirror by
 `tools/release/public_excludes.txt` in the same commit. No public export or push
 is part of this work, and no release package includes silver.
+
+## Profiles of the undistributed studies (2026-10-03)
+
+The code that loads gold and silver is public, as it always was: the
+development roster names them, and each loads only when its model is
+present. Since 2026-10-03 their rig, flight and breath profiles are public
+too, in `assets/species/`, and the release packages carry that folder. A
+profile is tuning numbers for the procedural rig (angles, stiffnesses, a
+ground offset, a breath colour), not artwork or a design. A player who has
+one of these models can drop it into `assets/` and it stands, folds and
+breathes as it does here. The models themselves, their reference art,
+renders, skeletons and the tools that built them stay excluded, as above.
+The old sidecar paths (`assets/gold-dragon.glb.*.cfg`, and the silver ones)
+stay in `public_excludes.txt`: un-excluding them would rewrite commits the
+mirror has already published.
 
 ## Embercrest-scripted (experiment, not tracked)
 

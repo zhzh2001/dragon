@@ -111,7 +111,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--preset ultra\|high\|medium\|low\|very-low` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium). |
 | `--graphics key=level,...` | Single settings over the preset, levels 0 (ultra) to 4: `models`, `terrain`, `trees`, `grass`, `rocks`, `textures`, `shadows`, `bloom`, `resolution` (the world's, under a whole HUD: 100/85/70/50%). Clamped to what the tier and device allow. |
 | `--restart-every N` | Press R every N frames: the reset soak. With `--telemetry`, the `gpu:` line counts the buffers and textures alive, so anything a reset leaks shows as growth. |
-| `--size WxH` | The window, or the headless render target (default 1280x720). |
+| `--size WxH` | The window, or the headless render target (default 1280x720, or the window size saved in `graphics.cfg`). |
+| `--show-fps` | The frame-rate readout, top left (the Graphics panel's "show fps", saved; headless runs ignore the saved one). |
 | `--open-panel graphics` | Start with the Graphics panel expanded and in front, for a capture of it. |
 | `--tier modern\|sm3\|sm2\|ff` | Shape the content for a retro tier (`gfx/render_tier.h`, `docs/PORTING.md` R2) on whatever backend is running: how the D3D9 tiers' content is checked on the Mac. So far it palette-splits skinned meshes (60 joints for sm3, 50 for sm2) switches the main pass to conventional depth (0.5 m to 16 km, clear 1, LESS), for sm2/ff drops the HDR target and bloom and finishes the grade in each world shader (`LDR_OUTPUT`), reads value noise from a baked lattice texture instead of hashing it (`BAKED_NOISE`, `gfx/noise_lattice.h`), caps textures (1024 sm3, 512 sm2/ff) and compresses them to DXT (`gfx/texture.h` `TextureBudget`), and simplifies skinned meshes to 20K/10K/6K triangles (`anim/skin_lod.h`). |
 
@@ -130,7 +131,7 @@ rivals are specks:
 ./build/dragon --bots 6 --bot-range 95 --combat
 ```
 
-Panels worth knowing: **Graphics** (first, collapsed) has the renderer, the tier, the preset and each content setting, saved per user in `graphics.cfg` and ignored by headless runs; **Dragon** has the rig and the hide colour, **Flight**
+Panels worth knowing: **Graphics** (first, collapsed) has the renderer, the tier, the preset and each content setting (a `*` needs a restart), the window size and the fps readout, saved per user in `graphics.cfg` and ignored by headless runs; **Dragon** has the rig and the hide colour, **Flight**
 has the tuning presets, `heft` and the aerobatics dials, **Terrain > Vegetation** has the trees and
 grass, **Combat** has the difficulty dials and the bots, **Studio** drives the
 animation scenarios and picks which creature is on the stand. Every panel except Combat starts collapsed.
@@ -319,6 +320,9 @@ flight controls.
   off, meaning "do not fold, do not re-pose". Every shipped profile carries
   its own block; a new species that lists only its character fields cannot
   close its wings or stand. Copy a sibling's blocks and re-tune by render.
+  A profile is found beside the model, or else in `assets/species/`
+  (`anim::profile_path`): that is where the gold and silver studies keep
+  theirs, public while their models are not (`ATTRIBUTION.md`).
   Asset names follow one rule: `assets/<name>.glb` ships, `<name>-raw.glb` is
   the rig before the material repair, `<name>-cand-*.glb` the generator's
   output.

@@ -712,6 +712,13 @@ struct RigTuning {
 bool save_rig_tuning(const RigTuning& tuning, const char* path);
 bool load_rig_tuning(RigTuning& tuning, const char* path);
 
+// Where a model's profile (`suffix` ".rig.cfg", ".flight.cfg" or
+// ".breath.cfg") is: beside the model, or else in `species/` beside it -- the
+// profiles of models the repository does not distribute (the gold and silver
+// studies, ATTRIBUTION.md), so a model dropped into assets/ finds its own.
+// The beside path when neither exists.
+std::string profile_path(const std::string& model, const char* suffix);
+
 // What the dragon is doing with its weapons this frame, for the attack
 // posture. Flight already arrives through FlightState; this is the rest.
 struct RigAction {

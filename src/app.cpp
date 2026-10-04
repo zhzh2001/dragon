@@ -95,6 +95,7 @@ Options parse_options(int argc, char** argv) {
             if (std::sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
                 options.width = w;
                 options.height = h;
+                options.size_set = true;
             } else {
                 SDL_Log("--size: expected WxH, got '%s'", argv[i]);
             }
@@ -202,6 +203,8 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.telemetry_interval = SDL_atoi(argv[++i]);
             }
+        } else if (arg == "--show-fps") {
+            options.show_fps = true;
         } else if (arg == "--restart-every" && i + 1 < argc) {
             options.restart_every = SDL_atoi(argv[++i]);
         } else if (arg == "--input" && i + 1 < argc) {
@@ -245,8 +248,19 @@ bool App::init(const Options& options) {
         while (std::getline(lines, line)) {
             if (line.rfind("tier=", 0) == 0 && !options.tier_set) gfx::RenderTier::parse(line.substr(5), &options_.tier);
             if (line.rfind("driver=", 0) == 0 && options.gpu_driver.empty()) options_.gpu_driver = line.substr(7);
+            int w = 0, h = 0;
+            if (std::sscanf(line.c_str(), "window=%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
+                saved_window_w_ = w;
+                saved_window_h_ = h;
+                if (!options.size_set) {
+                    options_.width = w;
+                    options_.height = h;
+                }
+            }
+            if (line == "fps=1") show_fps_ = true;
         }
     }
+    if (options.show_fps) show_fps_ = true;
     // D3D9 serves the retro tiers only (rhi/d3d9).
     if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
         options_.tier = gfx::Tier::SM3;
@@ -257,8 +271,8 @@ bool App::init(const Options& options) {
 
     gfx::Device::Config config;
     config.title = "Dragon Engine -- M6";
-    config.width = options.width;
-    config.height = options.height;
+    config.width = options_.width;
+    config.height = options_.height;
     config.headless = options.headless;
     config.gpu_driver = options_.gpu_driver;
     if (!device_.init(config)) return false;
@@ -988,11 +1002,30 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
     LOG_INFO("graphics applied: %s", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)));
 }
 
+void App::save_graphics_key(const std::string& key, const std::string& value) const {
+    if (options_.headless) return;
+    const std::string path = core::paths::user("graphics.cfg");
+    std::string kept;
+    {
+        std::ifstream in(path);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.rfind(key + "=", 0) != 0) kept += line + "\n";
+        }
+    }
+    std::ofstream out(path);
+    out << kept << key << "=" << value << "\n";
+}
+
 void App::save_graphics() const {
     if (options_.headless) return;
     std::ofstream file(core::paths::user("graphics.cfg"));
     file << "tier=" << gfx::RenderTier::make(tier_pending_).name() << "\n";
     if (!driver_pending_.empty()) file << "driver=" << driver_pending_ << "\n";
+    int w = 0, h = 0;
+    if (device_.window()) SDL_GetWindowSize(device_.window(), &w, &h);
+    if (w > 0 && h > 0) file << "window=" << w << "x" << h << "\n";
+    file << "fps=" << (show_fps_ ? 1 : 0) << "\n";
     file << graphics_.serialize();
 }
 
@@ -1021,6 +1054,31 @@ void App::build_graphics_ui() {
     ImGui::Text("%s, tier %s   %.1f ms (%.0f fps)", device_.rhi().driver_name(), tier_.name(), ms,
                 ms > 0.0f ? 1000.0f / ms : 0.0f);
 
+    // The window and the readout: in force at once, and remembered.
+    if (!options_.headless && device_.window()) {
+        static const int SIZES[][2] = {{640, 480},   {800, 600},   {1024, 768},  {1280, 720},
+                                       {1280, 1024}, {1600, 900},  {1920, 1080}, {2560, 1440}};
+        int w = 0, h = 0;
+        SDL_GetWindowSize(device_.window(), &w, &h);
+        char current[32];
+        std::snprintf(current, sizeof(current), "%dx%d", w, h);
+        if (ImGui::BeginCombo("window", current)) {
+            for (const auto& s : SIZES) {
+                char label[32];
+                std::snprintf(label, sizeof(label), "%dx%d", s[0], s[1]);
+                if (ImGui::Selectable(label, w == s[0] && h == s[1])) {
+                    SDL_RestoreWindow(device_.window());
+                    SDL_SetWindowSize(device_.window(), s[0], s[1]);
+                    save_graphics_key("window", label);
+                    saved_window_w_ = s[0];
+                    saved_window_h_ = s[1];
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+    if (ImGui::Checkbox("show fps", &show_fps_)) save_graphics_key("fps", show_fps_ ? "1" : "0");
+
     // The renderer and the tier: chosen here, in force after a restart.
 #if defined(_WIN32)
     static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d9"};
@@ -1030,7 +1088,7 @@ void App::build_graphics_ui() {
     static const char* const DRIVERS[] = {"vulkan"};
 #endif
     const bool d3d9 = driver_pending_.rfind("direct3d9", 0) == 0;
-    if (ImGui::BeginCombo("renderer", driver_pending_.empty() ? "default" : driver_pending_.c_str())) {
+    if (ImGui::BeginCombo("renderer *", driver_pending_.empty() ? "default" : driver_pending_.c_str())) {
         if (ImGui::Selectable("default", driver_pending_.empty())) driver_pending_.clear();
         for (const char* d : DRIVERS) {
             if (ImGui::Selectable(d, driver_pending_ == d)) driver_pending_ = d;
@@ -1040,7 +1098,7 @@ void App::build_graphics_ui() {
     // Every tier previews on the modern backends; D3D9 runs the retro ones.
     const gfx::Tier tiers[] = {gfx::Tier::Modern, gfx::Tier::SM3, gfx::Tier::SM2};
     if (d3d9 && tier_pending_ == gfx::Tier::Modern) tier_pending_ = gfx::Tier::SM3;
-    if (ImGui::BeginCombo("tier", gfx::RenderTier::make(tier_pending_).name())) {
+    if (ImGui::BeginCombo("tier *", gfx::RenderTier::make(tier_pending_).name())) {
         for (gfx::Tier t : tiers) {
             if (d3d9 && t == gfx::Tier::Modern) continue;
             if (ImGui::Selectable(gfx::RenderTier::make(t).name(), tier_pending_ == t)) tier_pending_ = t;
@@ -1084,7 +1142,7 @@ void App::build_graphics_ui() {
     ImGui::SameLine();
     if (ImGui::Button("Revert")) graphics_pending_ = graphics_;
     ImGui::EndDisabled();
-    ImGui::TextDisabled("* model detail and textures load at start-up");
+    ImGui::TextDisabled("* takes effect after a restart");
     if (restart) {
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "A restart puts the renderer, tier, * settings in force");
         if (ImGui::Button("Apply and restart")) {
@@ -1189,6 +1247,14 @@ void App::frame_camera_on_valley() {
 
 void App::shutdown() {
     audio_.shutdown();
+    // A window dragged to a new size opens at it next time.
+    if (!options_.headless && device_.window() && !relaunch_) {
+        int w = 0, h = 0;
+        SDL_GetWindowSize(device_.window(), &w, &h);
+        if (w > 0 && h > 0 && (w != saved_window_w_ || h != saved_window_h_)) {
+            save_graphics_key("window", std::to_string(w) + "x" + std::to_string(h));
+        }
+    }
     // Everything below owns GPU handles; a failed init may never have made
     // the device they belong to.
     if (device_.ready()) {
@@ -1221,6 +1287,23 @@ void App::shutdown() {
         ui_.shutdown();
     }
     device_.shutdown();
+}
+
+// The Graphics panel's "show fps": top left, clear of the run's strip (780
+// units centred leaves 68 at 4:3), on with the HUD hidden too.
+void App::draw_fps() {
+    const ui::Tokens& tk = hud_.tokens();
+    const float ms = average_frame_ms();
+    char line[16];
+    std::snprintf(line, sizeof(line), "%.0f", ms > 0.0f ? 1000.0f / ms : 0.0f);
+    const float margin = hud_.margin();
+    const ImVec2 min(margin, margin);
+    const float numeral = 24.0f;
+    const float w = hud_.numeral_width(line, numeral) + hud_.px(6.0f) + hud_.label_width("fps", 12.0f);
+    hud_.plate(min, ImVec2(min.x + w + hud_.px(16.0f), min.y + hud_.px(34.0f)));
+    hud_.numeral(ImVec2(min.x + hud_.px(8.0f), min.y + hud_.px(3.0f)), line, tk.text, numeral);
+    hud_.label(ImVec2(min.x + hud_.px(14.0f) + hud_.numeral_width(line, numeral), min.y + hud_.px(15.0f)), "fps",
+               tk.text_dim, 12.0f);
 }
 
 float App::average_frame_ms() const {
@@ -2552,13 +2635,14 @@ bool project_to_screen(const core::Mat4& view_proj, core::Vec3 world, float widt
 // windows. It needs shapes and free positioning, not widgets, and this avoids
 // building a 2D renderer for it.
 void App::draw_hud() {
-    if (!show_hud_ || options_.hide_ui || studio_active_) return;
-
+    if (options_.hide_ui) return;
     // ImGui's own display size, in its units (points). The render target is
     // in pixels, and on a display with a pixel density of 2 handing the HUD
     // the pixel size drew every readout at twice its place and size -- the
     // strip off the right edge, the reticle off the screen.
     hud_.begin(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+    if (show_fps_) draw_fps();
+    if (!show_hud_ || studio_active_) return;
     const ui::Tokens& tk = hud_.tokens();
     const float width = hud_.width();
     const float height = hud_.height();
@@ -3567,10 +3651,15 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     // without either behaves exactly as one did before the roster existed.
     // The generated fallback borrows the default dragon's profiles, which is
     // where they lived when there was only ever one model.
+    //
+    // A profile beside the model wins; failing that, assets/species/ holds
+    // the profiles of models the repository does not distribute (the gold and
+    // silver studies, ATTRIBUTION.md): drop the model into assets/ and it
+    // finds them, while the model itself never ships.
     const std::string cfg_stem = out.imported ? out.path : core::paths::asset("dragon.glb");
-    out.rig_tuning_path = cfg_stem + ".rig.cfg";
-    out.flight_tuning_path = cfg_stem + ".flight.cfg";
-    out.breath_path = cfg_stem + ".breath.cfg";
+    out.rig_tuning_path = anim::profile_path(cfg_stem, ".rig.cfg");
+    out.flight_tuning_path = anim::profile_path(cfg_stem, ".flight.cfg");
+    out.breath_path = anim::profile_path(cfg_stem, ".breath.cfg");
     if (anim::load_rig_tuning(out.rig_tuning, out.rig_tuning_path.c_str())) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
