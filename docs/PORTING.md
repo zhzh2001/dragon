@@ -311,6 +311,64 @@ built. R1 is the load-bearing refactor and is
 worth doing even if the retro track stalls, because it is also what makes
 the golden-screenshot gate backend-agnostic.
 
+### Where the port stands (handoff, 2026-10-03)
+
+Published to the mirror at `4d90e0b` (`docs/RELEASE.md`), through R7's
+graphics settings.
+
+| Phase | State | What is left |
+|---|---|---|
+| P0-P2 | Done | A Linux package (an older-glibc container) |
+| R0 | Built; runs under Wine and on x99-windows | **The G41 under XP.** The XP toolchain is llvm-mingw's msvcrt build on x99 (`D:\third\llvm-mingw-msvcrt`); the Mac's MinGW is UCRT |
+| R1, R2 | Done | -- |
+| R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
+| R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
+| R5 (FF) | Not started. The tier exists (`--tier ff`) and the settings' floors know it | Texture-stage materials, CPU skinning, blob shadows, vertex fog |
+| R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
+| R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
+| R8 (98 SE) | Not started | -- |
+
+**Loose ends a new session should know:**
+
+- **x99's display.** The X550 (testsigned, XP-era driver) is the primary
+  adapter on VGA, and the 5060 Ti is still installed.
+  - SDL's D3D12 driver takes DXGI's first high-performance adapter, which is
+    now the X550, and refuses the machine. So D3D12 does not run on x99 at
+    the moment; Vulkan does.
+  - Recapturing the `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets needs
+    the 5060 Ti primary again. They predate the sequenced random draws
+    (R7, "A preset renders the same on every backend") and fail strict
+    until then.
+- **The X550 can hang the machine.**
+  - Its driver model has no timeout recovery: a GPU hang freezes x99
+    outright.
+  - Do not run High or Ultra on it. Keep soaks short.
+  - The user reported a freeze after minutes of play at Low. The leak
+    meter rules out a leak (R7, "Played, not benchmarked"); heat or the
+    driver are the suspects.
+- **Running D3D9 on x99** needs the desktop session:
+  - run it through `tools/x99/run_interactive.ps1`;
+  - log to a file with `DRAGON_LOG_FILE` (the exe is GUI-subsystem);
+  - a per-pipeline profile with written pixels comes from
+    `DRAGON_D3D9_PROFILE=1`;
+  - `--restart-every N` with `--telemetry` soaks resets against the
+    `gpu:` resource line.
+- **D3D9 shaders are deployed by hand.** Bake them with
+  `tools/d3d9/bake_d3d9.py OUT --tier sm3|sm2|sm2-noshadows`, which needs
+  Wine at `$WINE` on the Mac, and copy them into `D:\dragon-win\shaders`.
+  The release packagers do not bake D3D9 yet.
+- **A preset must build the same content on every compiler.** Keep one
+  random draw per statement, and build the LOD code without FMA
+  contraction (CLAUDE.md, "One random draw per statement"). The LOD log
+  line's fingerprints compare the Mac and Windows directly.
+- **x99 has the gold and silver studies** in `D:\dragon-win` and in
+  `D:\dragon`, the source copy the cross-built tests read through
+  `DRAGON_SOURCE_ROOT`. That is a personal copy. Their profiles are public
+  in `assets/species/`; the models are not (`ATTRIBUTION.md`).
+
+**Suggested next:** the G41. It is the exit test of R0, R3 and R4 and the
+only place the CPU budget is real. Then R6, which R0's XP run decides.
+
 ### R0, as built (2026-10-03)
 
 `tools/r0/r0.cpp`, built by `tools/r0/build.sh`: one 32-bit Win32 + D3D9

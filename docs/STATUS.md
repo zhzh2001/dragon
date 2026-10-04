@@ -4,6 +4,36 @@ What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `DIRECTION.md`, and the ports are
 `PORTING.md`.
 
+## Latest — 2026-10-03: the retro track, graphics settings, silver
+
+- **The retro track, R0 to R4 and R7** (`docs/PORTING.md`; its "Where the
+  port stands" table is the handoff):
+  - a D3D9 backend behind the RHI;
+  - SM3 and SM2 tiers from the one HLSL source;
+  - the content tiers: LDR, a baked noise lattice, DXT, creature LODs,
+    palette-split skinning and conventional depth.
+- **SM2 on real hardware.** It runs on x99's Radeon X550, from 0.8 fps at
+  first to 42-55 fps in a 640×480 window at Very low.
+- **Graphics settings (R7):**
+  - Nine settings at five levels, and five presets. Each tier and card
+    offers only what it can do.
+  - The Graphics panel (first on the right): restart-only choices are
+    marked `*`; the window size and an fps readout are saved per user.
+  - A world resolution under a whole HUD.
+  - `tools/bench/presets.py`, with valley, course, run and ground scenarios.
+- **A preset renders the same on every backend.** D3D9 on the X550 and
+  Metal match Vulkan per preset. This took two fixes on the CPU side: one
+  random draw per statement, and the LOD code built without FMA
+  contraction.
+- **Diagnostics:**
+  - `rhi::ResourceStats` and `--restart-every` (no leak across resets);
+  - `DRAGON_D3D9_PROFILE` with written pixels per pipeline.
+- **Silver dragon:** rigged by Codex and integrated as a local study beside
+  gold (`artifacts/silver-dragon-integration/`). The gold and silver
+  profiles moved to `assets/species/`, which is public; the models are not
+  (`ATTRIBUTION.md`).
+- **Published** to the mirror at `4d90e0b`.
+
 ## Latest local asset — 2026-10-02: gold dragon
 
 The approved direct-reference Hunyuan gold dragon is rigged and integrated as
@@ -38,8 +68,8 @@ judged. See [motion preview and evidence](../artifacts/gold-tail-flow/README.md)
   container for glibc.
 - **R1** (2026-10-03): the RHI (`src/rhi/rhi.h`), with SDL GPU as its one
   backend. A pure refactor: Metal goldens unchanged.
-- **Next**: R2's content tiers on the Mac, and the R0 spike once x99 or the
-  G41 is up (`docs/PORTING.md`).
+- **Next** (as of 2026-10-01): R2's content tiers on the Mac, and the R0
+  spike once x99 or the G41 is up. All done since; see the top of this file.
 
 ## Latest asset candidates — 2026-09-28
 
@@ -486,6 +516,17 @@ judgment remains. See [evidence and launch commands](../artifacts/elemental-expa
   follows the polish work in DIRECTION.md.
 
 ## Open questions
+
+- **Why the X550 froze x99.** It froze once on an Ultra run and once after
+  minutes of play at Low. Neither left a bluescreen. The leak meter rules
+  out the game's own memory. The XP-era driver model has no timeout
+  recovery, so any GPU hang is a frozen machine; heat is the other
+  suspect. Not reproduced at Very low so far (`docs/PORTING.md`, R7).
+- **Silver's look is unjudged.**
+  - On the ground its sails fold by one whole-wing sweep, and lie along
+    the body.
+  - Its silver reads muted in the valley light (metallic about 0.04).
+  - Both wait on a playtest (`artifacts/silver-dragon-integration/`).
 
 - **Ground beyond the fog.** The terrain builds a coarse skirt out to three
   times the playable extent (see `WORLD.md`), and headless captures from
