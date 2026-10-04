@@ -19,8 +19,10 @@ const SettingInfo INFO[SETTING_COUNT] = {
     {"models", "Model detail", {"Full", "20K triangles", "10K triangles", "5K triangles", "2.5K triangles", "1.2K triangles"},
      Applies::Restart},
     // Four levels: a 36 m grid lost the river, which is how a valley is
-    // navigated; Very low keeps the 24 m one.
-    {"terrain", "Terrain detail", {"6 m grid", "12 m grid", "18 m grid", "24 m grid", nullptr, nullptr}, Applies::Reload},
+    // navigated; Very low keeps the 24 m one. Minimal takes 48 m: a card
+    // without T&L transforms every vertex on the CPU, and the river is
+    // judged on the render (docs/PORTING.md R5).
+    {"terrain", "Terrain detail", {"6 m grid", "12 m grid", "18 m grid", "24 m grid", nullptr, "48 m grid"}, Applies::Reload},
     {"trees", "Trees", {"Very high", "High", "Medium", "Low", "Very low", "Minimal"}, Applies::Reload},
     {"grass", "Grass", {"Very high", "High", "Medium", "Low", "Off", nullptr}, Applies::Live},
     {"rocks", "Rocks", {"Scanned", "400 triangles", "150 triangles", "80 triangles", "40 triangles", "20 triangles"},
@@ -36,7 +38,7 @@ const SettingInfo INFO[SETTING_COUNT] = {
 constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500, 1200};
 constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400, 250};
 constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f};
-constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 4.0f};
+constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 8.0f};
 constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f};
 constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f};
 constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f, 0.0f};
@@ -71,7 +73,7 @@ int preset_to_level(Setting setting, int preset) {
     if (setting == Setting::Bloom) return preset <= 2 ? 0 : 4;                              // off from Low
     if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
     if (setting == Setting::Resolution) return preset <= 2 ? 0 : std::min(preset - 1, 4);  // 85, 70, 50, 50%
-    if (setting == Setting::Terrain) return preset < 3 ? preset : 3;                        // 24 m at most
+    if (setting == Setting::Terrain) return preset < 3 ? preset : preset == 5 ? 5 : 3;      // 24 m, then 48 m for Minimal
     if (setting == Setting::Grass) return std::min(preset, 4);                              // off from Very low
     return preset;
 }

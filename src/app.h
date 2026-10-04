@@ -756,6 +756,14 @@ private:
     // The coarse ground beyond the playable extent.
     gfx::Mesh terrain_skirt_mesh_;
     std::vector<gfx::MeshChunk> terrain_chunks_;
+    // Fixed function: the same ground at twice the cell, drawn in place of
+    // the near mesh's chunks past FAR_TERRAIN_METRES (docs/PORTING.md R5): a
+    // card without T&L pays for every vertex, and most of the terrain's are
+    // a kilometre or more off. Chunked on the same 320 m grid, so each
+    // chunk is drawn from exactly one of the two.
+    gfx::Mesh terrain_far_mesh_;
+    std::vector<gfx::MeshChunk> terrain_far_chunks_;
+    static constexpr float FAR_TERRAIN_METRES = 1000.0f;
     std::vector<gfx::MeshChunk> terrain_skirt_chunks_;
     gfx::Mesh water_mesh_;
     std::string model_tuning_path_;

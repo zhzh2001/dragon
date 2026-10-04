@@ -94,7 +94,7 @@ std::vector<rhi::VertexAttribute> Mesh::attributes() {
     return attributes;
 }
 
-std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size) {
+std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange) {
     std::map<std::pair<int, int>, std::vector<uint32_t>> buckets;
     for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
         const core::Vec3 a = mesh.vertices[mesh.indices[t]].position;
@@ -133,6 +133,40 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size) {
                 vertices.push_back(mesh.vertices[i]);
             }
             indices.push_back(remap[i]);
+        }
+        if (flange > 0.0f) {
+            // Border edges are the ones only one of the chunk's triangles
+            // uses. Each grows a quad down to a copy of its vertices
+            // `flange` lower, wound to face outward like the edge's triangle.
+            std::map<std::pair<uint32_t, uint32_t>, int> edges;
+            std::map<std::pair<uint32_t, uint32_t>, std::pair<uint32_t, uint32_t>> directed;
+            for (size_t t = chunk.first_index; t + 2 < indices.size(); t += 3) {
+                for (int e = 0; e < 3; ++e) {
+                    const uint32_t a = indices[t + size_t(e)], b = indices[t + size_t((e + 1) % 3)];
+                    const auto key = std::make_pair(std::min(a, b), std::max(a, b));
+                    ++edges[key];
+                    directed[key] = {a, b};
+                }
+            }
+            std::map<uint32_t, uint32_t> lowered;
+            const auto lower = [&](uint32_t v) {
+                auto it = lowered.find(v);
+                if (it != lowered.end()) return it->second;
+                MeshVertex copy = vertices[v];
+                copy.position.y -= flange;
+                lowered[v] = uint32_t(vertices.size());
+                vertices.push_back(copy);
+                return lowered[v];
+            };
+            for (const auto& [key, count] : edges) {
+                if (count != 1) continue;
+                const auto [a, b] = directed[key];
+                const uint32_t a2 = lower(a), b2 = lower(b);
+                // The triangle (a, b, c) has the edge a->b; the quad outside it
+                // keeps the same sense: a, a2, b and b, a2, b2.
+                indices.insert(indices.end(), {a, a2, b, b, a2, b2});
+            }
+            chunk.index_count = uint32_t(indices.size()) - chunk.first_index;
         }
         chunk.centre = (lo + hi) * 0.5f;
         chunk.radius = core::length(hi - lo) * 0.5f;

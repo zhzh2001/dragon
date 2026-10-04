@@ -1,5 +1,6 @@
 #include "gfx/world_renderer.h"
 #include "gfx/render_tier.h"
+#include "gfx/prelit.h"
 #include "gfx/primitives.h"
 
 #include "gfx/frustum.h"
@@ -25,12 +26,18 @@ PipelineDesc make_sky_desc() {
         buffer.slot = 0;
         buffer.pitch = sizeof(MeshVertex);
         desc.vertex_buffers = {buffer};
-        rhi::VertexAttribute position = {};
-        position.location = 0;
-        position.buffer_slot = 0;
-        position.format = rhi::VertexFormat::Float3;
-        position.offset = offsetof(MeshVertex, position);
-        desc.vertex_attributes = {position};
+        auto attribute = [](uint32_t location, uint32_t offset) {
+            rhi::VertexAttribute a = {};
+            a.location = location;
+            a.buffer_slot = 0;
+            a.format = rhi::VertexFormat::Float3;
+            a.offset = offset;
+            return a;
+        };
+        rhi::VertexAttribute uv = attribute(3, offsetof(MeshVertex, uv));
+        uv.format = rhi::VertexFormat::Float2;
+        desc.vertex_attributes = {attribute(0, offsetof(MeshVertex, position)), attribute(1, offsetof(MeshVertex, normal)),
+                                  attribute(2, offsetof(MeshVertex, color)), uv};
     }
     // No vertex buffer: the triangle is generated from vertex_id.
     // Drawn after the opaque world, at the far plane, tested and not
@@ -182,7 +189,8 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     neutral_ = create_texture_from_image(device->rhi(), grey, "neutral", false);
     white_sampler_ = create_model_sampler(device->rhi());
     sky_ = pipelines_->create(make_sky_desc());
-    if (active_tier().fixed_function) sky_dome_.upload(device->rhi(), make_sphere(1.0f, core::Vec3::one(), 64, 32), "sky_dome");
+    // The dome's colours are baked by the app once the lighting is known
+    // (bake_sky_dome); it is not drawn before that.
     terrain_ = pipelines_->create(make_terrain_desc(false));
     terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
     water_ = pipelines_->create(make_water_desc());
@@ -192,8 +200,61 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
            skinned_ != INVALID_PIPELINE;
 }
 
+void WorldRenderer::bake_sky_dome(Device& device, const SceneUniforms& scene) {
+    if (!active_tier().fixed_function) return;
+    // The dome: few vertices (a card without T&L transforms each one on the
+    // CPU every frame), lat-long uvs from make_sphere's layout (rings of
+    // segments + 1 vertices, the seam duplicated).
+    constexpr int SEGMENTS = 16, RINGS = 8;
+    MeshData dome = make_sphere(1.0f, core::Vec3::one(), SEGMENTS, RINGS);
+    for (size_t i = 0; i < dome.vertices.size(); ++i) {
+        const int s = int(i % (SEGMENTS + 1)), r = int(i / (SEGMENTS + 1));
+        dome.vertices[i].uv = core::Vec2{float(s) / SEGMENTS, float(r) / RINGS};
+        dome.vertices[i].color = core::Vec3::one();
+    }
+    sky_dome_.release(device.rhi());
+    sky_dome_.upload(device.rhi(), dome, "sky_dome");
+    // The sky itself, baked once into a lat-long map: the texture carries
+    // the gradient, the horizon haze and the sun's disc and glow. Uploaded
+    // past the tier's texture cap (Minimal's 64 would smear the sun).
+    ImageData map;
+    map.width = 512;
+    map.height = 256;
+    map.rgba.resize(size_t(map.width) * map.height * 4);
+    for (int y = 0; y < map.height; ++y) {
+        const float v = (float(y) + 0.5f) / map.height;  // 0 at the zenith, as make_sphere's rings run
+        const float polar = v * core::PI;
+        for (int x = 0; x < map.width; ++x) {
+            const float u = (float(x) + 0.5f) / map.width;
+            const float azimuth = u * core::TWO_PI;
+            // make_sphere's vertex at (u, v) sits at this direction (primitives.cpp).
+            const core::Vec3 ray{std::sin(polar) * std::cos(azimuth), std::cos(polar), std::sin(polar) * std::sin(azimuth)};
+            const core::Vec3 c = prelit::sky_diffuse(scene, ray);
+            uint8_t* p = &map.rgba[(size_t(y) * map.width + x) * 4];
+            p[0] = uint8_t(std::lround(c.x * 255.0f));
+            p[1] = uint8_t(std::lround(c.y * 255.0f));
+            p[2] = uint8_t(std::lround(c.z * 255.0f));
+            p[3] = 255;
+        }
+    }
+    device.rhi().destroy(sky_map_);
+    TextureBudget uncapped;
+    sky_map_ = upload_prepared(device.rhi(), prepare_texture(map, TextureKind::Data, uncapped, false), "sky_map");
+    if (!sky_sampler_) {
+        rhi::SamplerDesc sampler;
+        sampler.address_u = rhi::Address::Repeat;
+        sampler.address_v = rhi::Address::Clamp;
+        sampler.address_w = rhi::Address::Clamp;
+        sky_sampler_ = device.rhi().create_sampler(sampler);
+    }
+}
+
 void WorldRenderer::shutdown(Device& device) {
     sky_dome_.release(device.rhi());
+    device.rhi().destroy(sky_map_);
+    device.rhi().destroy(sky_sampler_);
+    sky_map_ = nullptr;
+    sky_sampler_ = nullptr;
     device.rhi().destroy(white_);
     device.rhi().destroy(neutral_);
     neutral_ = nullptr;
@@ -209,6 +270,12 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
     if (active_tier().fixed_function && sky_dome_.valid()) {
         device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+        if (sky_map_ && sky_sampler_) {
+            rhi::TextureBinding binding = {};
+            binding.texture = sky_map_;
+            binding.sampler = sky_sampler_;
+            device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
+        }
         sky_dome_.bind(device.rhi(), pass);
         device.rhi().draw_indexed(pass, sky_dome_.index_count(), 1, 0, 0, 0);
         return;

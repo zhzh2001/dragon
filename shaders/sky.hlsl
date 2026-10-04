@@ -14,6 +14,9 @@
 // a glow; the disc itself goes soft (64 x 32 keeps the glow's shape).
 struct VertexIn {
     float3 position : TEXCOORD0;
+    float3 normal   : TEXCOORD1;
+    float3 color    : TEXCOORD2;
+    float2 uv       : TEXCOORD3;  // lat-long, into the baked sky map (gfx::WorldRenderer::bake_sky_dome)
 };
 
 struct VertexOut {
@@ -31,16 +34,20 @@ VertexOut vs_main(VertexIn input) {
 #else
     o.clip_position.z = 0.0;
 #endif
-    o.uv = (float4)0.0;
-    o.diffuse = float4(ff_display(sky_color(ray)), 1.0);
+    // The sky is a texture on the dome (stage 0, SELECTARG1 TEXTURE): baked
+    // once (gfx::prelit::sky_diffuse) since the sun is static, so the dome
+    // can be 153 vertices, which a card without T&L transforms on the CPU.
+    o.uv = float4(input.uv, 0.0, 0.0);
+    o.diffuse = float4(input.color, 1.0);
     o.fog = 1.0;
     return o;
 }
 #endif
 
 #ifdef FRAGMENT_STAGE
+TEXTURE2D(sky_map, 0);
 float4 fs_main(VertexOut input) : SV_Target {
-    return float4(scene_out(input.diffuse.rgb), 1.0);
+    return float4(scene_out(sky_map.Sample(sky_map_sampler, input.uv.xy).rgb), 1.0);
 }
 #endif
 #else

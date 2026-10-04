@@ -197,8 +197,17 @@ void Terrain::build_skirt() {
     if (settings_.skirt_extent_factor <= 1.05f) return;
 
     const float half = settings_.half_extent * settings_.skirt_extent_factor;
-    const float cell = core::maxf(settings_.skirt_cell_size, 1.0f);
-    const int cells = int((half * 2.0f) / cell);
+    // The cell snapped to a divisor of the playable half extent, so the fine
+    // mesh's edge falls on a grid line: a 1250 m cell that did not (the
+    // fixed-function tier's Minimal) drew its partly-inside cells over a
+    // kilometre of the valley, river included.
+    // Only for a coarse skirt (past eight fine cells; the tiers' own skirts
+    // are six): those keep the cell they were tuned and golden-captured with.
+    const float asked = core::maxf(settings_.skirt_cell_size, 1.0f);
+    const bool coarse = asked > settings_.cell_size * 8.0f;
+    const int per_half = std::max(1, int(std::lround(settings_.half_extent / asked)));
+    const float cell = coarse ? settings_.half_extent / float(per_half) : asked;
+    const int cells = coarse ? int(std::lround((half * 2.0f) / cell)) : int((half * 2.0f) / cell);
     const int n = cells + 1;
     skirt_verts_per_side_ = n;
     skirt_.vertices.reserve(size_t(n) * size_t(n));
@@ -213,7 +222,11 @@ void Terrain::build_skirt() {
             skirt_.vertices.push_back(vertex);
         }
     }
-    const float inner = settings_.half_extent - cell;
+    // Overlap the fine mesh by one cell to hide the seam, unless the cell
+    // is coarse enough for that overlap to be a visible shelf; then the ring
+    // meets the fine edge exactly (the terrain's flanges cover the gap).
+    const float margin = coarse ? 0.0f : cell;
+    const float inner = settings_.half_extent - margin + (coarse ? 0.01f : 0.0f);
     for (int iz = 0; iz < cells; ++iz) {
         for (int ix = 0; ix < cells; ++ix) {
             const float x0 = -half + float(ix) * cell, x1 = x0 + cell;

@@ -389,10 +389,13 @@ public:
         // processing -- mixed mode where the card has transform and lighting
         // of its own, software alone where it has none (the TNT class).
         // DRAGON_D3D9_SOFTWARE_VP=1 forces that path on a modern card.
+        // DRAGON_D3D9_SOFTWARE_VP=1 forces software processing on a modern
+        // card (mixed mode where it has T&L), =2 a pure software device,
+        // what a card without T&L gets.
         const char* force_sw = SDL_getenv("DRAGON_D3D9_SOFTWARE_VP");
         const bool has_vs2 = D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 2;
-        software_vp_ = !has_vs2 || (force_sw && force_sw[0] == '1');
-        mixed_vp_ = software_vp_ && (caps_.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT);
+        software_vp_ = !has_vs2 || (force_sw && (force_sw[0] == '1' || force_sw[0] == '2'));
+        mixed_vp_ = software_vp_ && (caps_.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) && !(force_sw && force_sw[0] == '2');
 
         int w = 0, h = 0;
         SDL_GetWindowSizeInPixels(window, &w, &h);

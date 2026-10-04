@@ -42,7 +42,11 @@ struct MeshChunk {
 
 // Reorders `mesh`'s triangles into square chunks of `chunk_size` metres by
 // their centroids' x and z, and returns the chunks.
-std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size);
+// With `flange` > 0, each chunk's border edges grow a strip hanging that
+// many metres straight down: when two meshes of different density meet
+// (the fixed-function tier's near and far terrain), the gap their edges
+// leave shows the strip's terrain colour instead of the sky.
+std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange = 0.0f);
 
 // GPU-resident mesh.
 class Mesh {

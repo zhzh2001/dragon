@@ -29,6 +29,10 @@ core::Vec3 ldr_encode_fast(core::Vec3 c, core::Vec4 grade);
 core::Vec3 ff_albedo(core::Vec3 linear_color);
 core::Vec3 ff_lit(const SceneUniforms& scene, core::Vec3 albedo_linear, core::Vec3 normal, float translucency);
 
+// sky.hlsl's FIXED_FUNCTION vertex stage: the analytic sky along `ray`,
+// display-encoded (scene_common.hlsl, sky_color then ff_display).
+core::Vec3 sky_diffuse(const SceneUniforms& scene, core::Vec3 ray);
+
 // terrain.hlsl's FIXED_FUNCTION vertex stage: the material blend at a
 // vertex (`patches` is fbm(xz * 0.0055), the vertex's uv.x) times its tint,
 // lit and finished.

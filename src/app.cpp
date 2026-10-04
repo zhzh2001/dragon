@@ -482,8 +482,11 @@ bool App::init(const Options& options) {
     }
 
     // A unit-radius torus scaled per ring: one mesh, any checkpoint size.
+    // Coarser on the fixed-function tier: twelve 400-vertex rings through a
+    // 99-slot vertex program were a quarter of a software-processed frame.
     ring_mesh_.upload(device_.rhi(),
-                      gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), 40, 10),
+                      gfx::make_torus(RING_MESH_RADIUS, 0.05f, core::Vec3::one(), tier_.fixed_function ? 16 : 40,
+                                      tier_.fixed_function ? 6 : 10),
                       "checkpoint_ring");
     // A unit sphere scaled per use: projectiles, sentinels, blast markers.
     load_prop(core::paths::asset(kPropFiles[0]).c_str(), tower_prop_, "prop_tower");
@@ -1247,7 +1250,16 @@ void App::regenerate_terrain() {
     // The tier's grid (gfx/render_tier.h); the settings keep the modern one.
     game::TerrainSettings settings = terrain_settings_;
     settings.cell_size *= tier_.budget.terrain_cell_scale;
-    settings.skirt_cell_size *= tier_.budget.terrain_cell_scale;
+    settings.skirt_cell_size *= tier_.budget.terrain_cell_scale * tier_.skirt_cell_scale;
+    // A coarse grid misses the river: a 52 m channel is one 48 m cell, and
+    // the bed vertices rarely land in it. Fixed function widens it to span a
+    // cell and a quarter either side, so the valley keeps the line it is
+    // navigated by -- a wider river, on the tier where that is the trade.
+    if (tier_.fixed_function) {
+        settings.river_half_width = core::maxf(settings.river_half_width, 1.25f * settings.cell_size);
+    }
+    // Minimal's skirt coarser again: the far horizon, under the fog.
+    if (tier_.fixed_function && tier_.budget.terrain_cell_scale >= 8.0f) settings.skirt_cell_size *= 2.0f;
     terrain_.generate(settings);
     // The material follows the terrain that came out -- before the meshes are
     // built, since the fixed-function tier bakes it into their colours.
@@ -1278,6 +1290,7 @@ void App::regenerate_terrain() {
         prelit_scene.output_grade = g.enabled ? core::Vec4{g.exposure, g.contrast, g.saturation, g.hue_preserve}
                                               : core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
     }
+    if (tier_.fixed_function) world_.bake_sky_dome(device_, prelit_scene);
     auto with_patches = [&](gfx::MeshData mesh) {
         for (gfx::MeshVertex& v : mesh.vertices) {
             v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
@@ -1290,14 +1303,35 @@ void App::regenerate_terrain() {
     // In chunks, so the renderer culls what the camera and the shadow map do
     // not see (gfx::chunk_mesh): the terrain is one mesh over five kilometres.
     gfx::MeshData ground = with_patches(terrain_.mesh_data());
-    terrain_chunks_ = gfx::chunk_mesh(ground, 320.0f);
+    // Fixed function: flanges down each chunk's border, since its near and far
+    // meshes meet along chunk borders and disagree by tens of metres on a
+    // steep slope (gfx::chunk_mesh).
+    const float flange = tier_.fixed_function ? 30.0f : 0.0f;
+    terrain_chunks_ = gfx::chunk_mesh(ground, tier_.terrain_chunk_metres, flange);
     terrain_mesh_.release(device_.rhi());
     terrain_mesh_.upload(device_.rhi(), ground, "terrain");
+    terrain_far_mesh_.release(device_.rhi());
+    terrain_far_chunks_.clear();
+    if (tier_.fixed_function) {
+        // The far ground: the same generator at twice the cell, the same
+        // chunk grid (see terrain_far_mesh_). Render-only; the height queries
+        // keep the near mesh.
+        game::TerrainSettings far_settings = settings;
+        far_settings.cell_size *= 2.0f;
+        // The river keeps the near mesh's width: wider, it met the near bank
+        // in a sawtooth at the boundary; this width breaks into dashes past a
+        // kilometre instead, which is the lesser sight.
+        game::Terrain far;
+        far.generate(far_settings);
+        gfx::MeshData far_ground = with_patches(far.mesh_data());
+        terrain_far_chunks_ = gfx::chunk_mesh(far_ground, tier_.terrain_chunk_metres, flange);
+        terrain_far_mesh_.upload(device_.rhi(), far_ground, "terrain_far");
+    }
     terrain_skirt_mesh_.release(device_.rhi());
     terrain_skirt_chunks_.clear();
     if (!terrain_.skirt_mesh_data().indices.empty()) {
         gfx::MeshData skirt = with_patches(terrain_.skirt_mesh_data());
-        terrain_skirt_chunks_ = gfx::chunk_mesh(skirt, 1280.0f);
+        terrain_skirt_chunks_ = gfx::chunk_mesh(skirt, tier_.skirt_chunk_metres);
         terrain_skirt_mesh_.upload(device_.rhi(), skirt, "terrain_skirt");
     }
     // The water surface: one quad at the water line over the whole world. The
@@ -1310,7 +1344,9 @@ void App::regenerate_terrain() {
         gfx::MeshData quad;
         const float half = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
         const float y = terrain_settings_.water_level;
-        const int n = tier_.fixed_function ? 32 : 1;
+        // Minimal (the 48 m grid) takes 16: every vertex is one a card
+        // without T&L transforms on the CPU.
+        const int n = !tier_.fixed_function ? 1 : tier_.budget.terrain_cell_scale >= 8.0f ? 16 : 32;
         for (int j = 0; j <= n; ++j) {
             for (int i = 0; i <= n; ++i) {
                 gfx::MeshVertex v;
@@ -1358,7 +1394,8 @@ void App::shutdown() {
     // the device they belong to.
     if (device_.ready()) {
         device_.rhi().wait_idle();
-        terrain_mesh_.release(device_.rhi());
+        terrain_far_mesh_.release(device_.rhi());
+    terrain_mesh_.release(device_.rhi());
         // Every roster entry owns GPU handles, not just the one being flown.
         for (auto& model : models_) {
             model->mesh.release(device_.rhi());
@@ -7291,7 +7328,24 @@ void App::render() {
     // looks like a sky rather than a void.
     rhi::Pass* pass = device_.begin_main_pass(
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
-    world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
+    if (terrain_far_mesh_.valid()) {
+        // Near chunks from the near mesh, the rest from the far one, decided
+        // per 320 m cell of the shared grid so no cell is drawn twice or not
+        // at all (terrain_far_mesh_).
+        const auto cell_distance = [&](const gfx::MeshChunk& chunk) {
+            const float size = tier_.terrain_chunk_metres;
+            const core::Vec3 centre{(std::floor(chunk.centre.x / size) + 0.5f) * size, chunk.centre.y,
+                                    (std::floor(chunk.centre.z / size) + 0.5f) * size};
+            return core::distance(core::Vec3{camera.position.x, centre.y, camera.position.z}, centre);
+        };
+        std::vector<gfx::MeshChunk> near_chunks, far_chunks;
+        for (const gfx::MeshChunk& c : terrain_chunks_) if (cell_distance(c) <= FAR_TERRAIN_METRES) near_chunks.push_back(c);
+        for (const gfx::MeshChunk& c : terrain_far_chunks_) if (cell_distance(c) > FAR_TERRAIN_METRES) far_chunks.push_back(c);
+        world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
+        world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
+    } else {
+        world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
+    }
     if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
     if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
     if (!options_.hide_vegetation) {
@@ -7309,6 +7363,9 @@ void App::render() {
     for (size_t i = 0; i < course.rings.size(); ++i) {
         const game::Ring& ring = course.rings[i];
         const int index = int(i);
+        // Fixed function: a ring more than 1.5 km off is a few pixels, and
+        // its vertices cost a card without T&L the same as a near one's.
+        if (tier_.fixed_function && core::distance(ring.position, flight_.state().position) > 1500.0f) continue;
         gfx::ModelUniforms model;
         model.model = core::Mat4::trs(ring.position, ring.orientation,
                                       core::Vec3(ring.radius / RING_MESH_RADIUS));

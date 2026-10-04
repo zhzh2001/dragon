@@ -62,6 +62,19 @@ Vec3 ff_lit(const SceneUniforms& scene, Vec3 albedo_linear, Vec3 normal, float t
     return saturate(mul(ff_albedo(albedo_linear), ldr_encode_fast(light, scene.output_grade)));
 }
 
+Vec3 sky_diffuse(const SceneUniforms& scene, Vec3 ray) {
+    ray = core::normalize(ray);
+    const float horizon_blend = std::pow(saturate(1.0f - std::fabs(ray.y)), 4.0f);
+    Vec3 base = mix(rgb(scene.sky_zenith), rgb(scene.sky_horizon), horizon_blend);
+    const float below = saturate(-ray.y * 6.0f);
+    base = mix(base, rgb(scene.fog_color), below * 0.7f);
+    const float sun_dot = saturate(core::dot(ray, core::normalize(rgb(scene.sun))));
+    const float glow = std::pow(sun_dot, 8.0f) * 0.35f + std::pow(sun_dot, 256.0f) * 3.0f;
+    base = base + rgb(scene.sun_color) * glow;
+    // ff_display: exposure, clamp, gamma.
+    return pow3(saturate(base * scene.output_grade.x), 1.0f / 2.2f);
+}
+
 Vec3 terrain_diffuse(const SceneUniforms& scene, Vec3 p, Vec3 normal, float patches, Vec3 tint) {
     normal = core::normalize(normal);
     const float flatness = saturate(normal.y);

@@ -81,13 +81,9 @@ VertexOut vs_main(VertexIn input) {
     // blend and the light were most of it.
     o.uv = float4(p.xz / 16.0, 0.0, 0.0);
     o.diffuse = float4(input.color, 1.0);
-    // The map's edge dissolves into the fog colour, through the fog factor.
+    // No edge fade: the skirt's edge is 7.5 km out, where this fog has
+    // already taken it, and a card without T&L pays for every slot here.
     o.fog = ff_fog(p);
-    float half_extent = scene.view_params.w;
-    if (half_extent > 0.0) {
-        float edge = max(abs(p.x), abs(p.z)) / half_extent;
-        o.fog = min(o.fog, 1.0 - smoothstep(0.80, 0.99, edge));
-    }
     return o;
 #else
     o.grass = float4(grass, sand);

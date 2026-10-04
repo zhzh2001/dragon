@@ -71,9 +71,11 @@ D3DTOP_DISABLE, D3DTOP_SELECTARG1, D3DTOP_SELECTARG2, D3DTOP_MODULATE, D3DTOP_MO
 D3DTA_DIFFUSE, D3DTA_CURRENT, D3DTA_TEXTURE = 0, 1, 2
 DIFFUSE_ONLY = [[D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT, -1]]
 FF_RECIPES = {
-    # The pre-lit colour, then the greyscale detail tile MODULATE2X with it.
-    "terrain": {"stages": DIFFUSE_ONLY + [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_CURRENT,
-                                           D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_CURRENT, 1]]},
+    # The greyscale detail tile MODULATE2X the pre-lit colour, in one stage:
+    # as a second stage behind a texture-less first the X550 drew it as
+    # nothing (legal by the book, not by that driver), and one stage is also
+    # what a single-TMU card (the Rage class) has.
+    "terrain": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
     # The base colour (white where a submesh has none) MODULATE the colour.
     "skinned": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
     # The card atlas MODULATE2X the colour, its alpha the cut-out.
@@ -81,7 +83,8 @@ FF_RECIPES = {
                 "alpha_test": 0.45},
     "mesh": {"stages": DIFFUSE_ONLY},
     "water": {"stages": DIFFUSE_ONLY},
-    "sky": {"stages": DIFFUSE_ONLY},
+    # The baked sky map on the dome.
+    "sky": {"stages": [[D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, 0]]},
     "debug_line": {"stages": DIFFUSE_ONLY},
     # The baked disc MODULATE the colour, added by the pipeline's blend.
     "particles": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 0]]},
@@ -90,9 +93,11 @@ FF_RECIPES = {
     "shadow_skinned": {"disabled": True},
     "foliage_depth": {"disabled": True},
 }
-# SPIRV-Cross names every varying TEXCOORDn; the legacy registers the stages
-# read are restored by name (scene_common.hlsl, FF_VARYINGS).
-FF_SEMANTICS = {"out_var_COLOR0": "COLOR0", "out_var_FOG": "FOG"}
+# SPIRV-Cross names every varying TEXCOORDn, in declaration order; the
+# legacy registers the stages read are restored by name (scene_common.hlsl,
+# FF_VARYINGS) -- the uv included, which the order puts third and the stages
+# read from set 0.
+FF_SEMANTICS = {"out_var_COLOR0": "COLOR0", "out_var_FOG": "FOG", "out_var_TEXCOORD0": "TEXCOORD0"}
 
 
 def restore_ff_semantics(hlsl):

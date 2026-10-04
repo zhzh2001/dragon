@@ -82,6 +82,16 @@ struct RenderTier {
     // The shader variant is the preview on every backend and the reference
     // the D3D9 backend's stage recipes must match.
     bool fixed_function = false;
+    // The terrain's chunk (gfx::chunk_mesh), and the skirt's, in metres: the
+    // unit of frustum culling and of nearest-first drawing. Tried at 1280 m
+    // for fixed function to cut 263 draws to 34: slower, because D3D9's
+    // software vertex pipeline costs per vertex, not per draw, and the
+    // coarse chunks culled less (docs/PORTING.md R5). So 320 m everywhere.
+    float terrain_chunk_metres = 320.0f;
+    float skirt_chunk_metres = 1280.0f;
+    // The skirt's cells, over the tier's terrain scale: fixed function
+    // takes it twice as coarse again (it is the far horizon, under the fog).
+    float skirt_cell_scale = 1.0f;
     // How much it is asked to draw -- the triangles, distances, texture and
     // shadow sizes -- from the graphics settings (gfx/graphics_settings.h),
     // which start on the tier's default preset and change through apply().
@@ -104,6 +114,7 @@ struct RenderTier {
         t.packed_joints = tier != Tier::Modern;
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
         t.fixed_function = tier == Tier::FixedFunction;
+        if (t.fixed_function) t.skirt_cell_scale = 2.0f;
         t.apply(GraphicsSettings::preset(default_preset(tier), tier, DeviceLimits{}));
         return t;
     }

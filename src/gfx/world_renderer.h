@@ -34,6 +34,9 @@ public:
     // Fullscreen sky. Draw before anything else: it writes no depth, so opaque
     // geometry simply covers it.
     void draw_sky(Device& device, rhi::Pass* pass);
+    // Fixed function: the sky dome's per-vertex colours from `scene`'s sun
+    // and sky (gfx/prelit.h), once; the dome is not drawn until this runs.
+    void bake_sky_dome(Device& device, const SceneUniforms& scene);
 
     // Terrain samples the shadow map, so the renderer needs to know about it.
     void set_shadow_map(ShadowMap* shadow_map) { shadow_map_ = shadow_map; }
@@ -77,6 +80,10 @@ private:
     // per vertex (sky.hlsl, FIXED_FUNCTION), in place of the fullscreen
     // triangle a pixel stage cannot shade.
     Mesh sky_dome_;
+    // ... and the sky baked into a lat-long map the dome wears (16 x 8
+    // vertices carry it; the texture carries the gradient and the sun).
+    rhi::Texture* sky_map_ = nullptr;
+    rhi::Sampler* sky_sampler_ = nullptr;
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
     PipelineHandle water_ = INVALID_PIPELINE;
