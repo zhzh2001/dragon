@@ -33,6 +33,7 @@ add_executable(dragon
   src/gfx/graphics_settings.cpp
   src/gfx/primitives.cpp
   src/gfx/texture.cpp
+  src/gfx/prelit.cpp
   src/gfx/particles.cpp
   src/gfx/foliage.cpp
   src/game/vegetation.cpp

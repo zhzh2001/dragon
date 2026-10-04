@@ -74,11 +74,13 @@ VertexOut vs_main(VertexIn input) {
     float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
     float snow = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, p.y) * smoothstep(0.52, 0.78, flatness);
 #ifdef FIXED_FUNCTION
-    float3 albedo = lerp(grass, scene.palette[PALETTE_SAND].rgb, sand);
-    albedo = lerp(albedo, rock, saturate(slope_blend + altitude_rockiness));
-    albedo = lerp(albedo, scene.palette[PALETTE_SNOW].rgb, snow);
+    // The vertex colour is the finished diffuse already: the material blend
+    // above and ff_lit, computed once at build (gfx/prelit.h,
+    // App::regenerate_terrain), since neither the ground nor the sun moves.
+    // On a card without T&L this stage runs on the CPU every frame, and the
+    // blend and the light were most of it.
     o.uv = float4(p.xz / 16.0, 0.0, 0.0);
-    o.diffuse = ff_lit(albedo * input.color, normal, 0.0);
+    o.diffuse = float4(input.color, 1.0);
     // The map's edge dissolves into the fog colour, through the fog factor.
     o.fog = ff_fog(p);
     float half_extent = scene.view_params.w;

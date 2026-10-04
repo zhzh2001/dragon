@@ -1,4 +1,6 @@
 #include "app.h"
+
+#include "gfx/prelit.h"
 #include "anim/skin_lod.h"
 #include "gfx/mesh_lod.h"
 #include "anim/skin_partition.h"
@@ -1247,11 +1249,42 @@ void App::regenerate_terrain() {
     settings.cell_size *= tier_.budget.terrain_cell_scale;
     settings.skirt_cell_size *= tier_.budget.terrain_cell_scale;
     terrain_.generate(settings);
+    // The material follows the terrain that came out -- before the meshes are
+    // built, since the fixed-function tier bakes it into their colours.
+    // Snow should sit sensibly relative to whatever the peaks came out at.
+    material_.water_level = terrain_settings_.water_level;
+    material_.rock_slope = 0.62f;
+    // The terrain shader dissolves the ground into the sky over the outermost
+    // band of this extent. It is the SKIRT's edge, not the playable one: the
+    // fade predates the skirt, and left at the playable extent it began 500 m
+    // inside the map -- exactly where the default course puts the start, so
+    // every run opened on a valley floor blended halfway to sky.
+    material_.half_extent = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
+    // High enough that snow reads as mountain caps rather than covering the
+    // whole upper valley.
+    material_.snow_line = core::lerpf(terrain_.min_height(), terrain_.max_height(), 0.74f);
     // The terrain's patch noise, once, into the otherwise unused uv.x: the
     // ground is static, and hashing it per vertex per frame was most of
     // SM2's terrain vertex stage (shaders/terrain.hlsl).
-    auto with_patches = [](gfx::MeshData mesh) {
-        for (gfx::MeshVertex& v : mesh.vertices) v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
+    // On the fixed-function tier the vertex colour is the finished diffuse
+    // (gfx/prelit.h): the material and the light the FIXED_FUNCTION vertex
+    // stage would compute, once here, since neither the ground nor the sun
+    // moves. The lighting dials are read as they are now; a change to them
+    // in play reaches the ground on the next reload of the terrain.
+    gfx::SceneUniforms prelit_scene;
+    if (tier_.fixed_function) {
+        prelit_scene = gfx::make_scene_uniforms(gfx::Camera{}, 1.0f, lighting_, material_, 0.0f);
+        const gfx::PostSettings& g = post_settings_;
+        prelit_scene.output_grade = g.enabled ? core::Vec4{g.exposure, g.contrast, g.saturation, g.hue_preserve}
+                                              : core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
+    }
+    auto with_patches = [&](gfx::MeshData mesh) {
+        for (gfx::MeshVertex& v : mesh.vertices) {
+            v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
+            if (tier_.fixed_function) {
+                v.color = gfx::prelit::terrain_diffuse(prelit_scene, v.position, v.normal, v.uv.x, v.color);
+            }
+        }
         return mesh;
     };
     // In chunks, so the renderer culls what the camera and the shadow map do
@@ -1298,18 +1331,6 @@ void App::regenerate_terrain() {
         water_mesh_.upload(device_.rhi(), quad, "water");
     }
     replant();
-    // Snow should sit sensibly relative to whatever the peaks came out at.
-    material_.water_level = terrain_settings_.water_level;
-    material_.rock_slope = 0.62f;
-    // The terrain shader dissolves the ground into the sky over the outermost
-    // band of this extent. It is the SKIRT's edge, not the playable one: the
-    // fade predates the skirt, and left at the playable extent it began 500 m
-    // inside the map -- exactly where the default course puts the start, so
-    // every run opened on a valley floor blended halfway to sky.
-    material_.half_extent = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
-    // High enough that snow reads as mountain caps rather than covering the
-    // whole upper valley.
-    material_.snow_line = core::lerpf(terrain_.min_height(), terrain_.max_height(), 0.74f);
 }
 
 void App::frame_camera_on_valley() {
