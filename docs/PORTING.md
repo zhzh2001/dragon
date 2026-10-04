@@ -328,6 +328,7 @@ graphics settings.
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
+| D3D11 | Done at feature levels 11 and 10 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs | Feature level 9 on the X550 (the plan is written down); the HD 5450 and Bay Trail boards it was built for; the shaders in the package |
 
 **Loose ends a new session should know:**
 
@@ -361,7 +362,7 @@ graphics settings.
     `DRAGON_D3D9_PROFILE=1`;
   - `--restart-every N` with `--telemetry` soaks resets against the
     `gpu:` resource line.
-- **D3D9 shaders are deployed by hand.** Bake them with
+- **D3D9 and D3D11 shaders are deployed by hand.** Bake them with
   `tools/d3d9/bake_d3d9.py OUT --tier sm3|sm2|sm2-noshadows|ff`, which
   needs Wine on the Mac, and copy them into `D:\dragon-win\shaders`. The
   Wine is Sikarugir's engine, and it finds its libraries only with the
@@ -370,8 +371,9 @@ graphics settings.
   DYLD_FALLBACK_LIBRARY_PATH=~/Applications/Sikarugir/Test.app/Contents/Frameworks
   WINEPREFIX=<a scratch dir>` (2026-10-04). CrossOver's wine refuses
   without a bottle. The modern variants a Windows build loads
-  (`bake_shaders.sh OUT dxil spv`) go the same way. The release packagers
-  do not bake D3D9 yet.
+  (`bake_shaders.sh OUT dxil spv`) and the D3D11 set
+  (`tools/d3d11/bake_d3d11.py OUT`) go the same way. The release packagers
+  do not bake D3D9 or D3D11 yet.
 - **A preset must build the same content on every compiler.** Keep one
   random draw per statement, and build the LOD code without FMA
   contraction (CLAUDE.md, "One random draw per statement"). The LOD log
@@ -1267,8 +1269,8 @@ in a match, 600 frames:
 | Target | Needs | Size | Verdict |
 |---|---|---|---|
 | **D3D9 fixed function (R5), down to TNT / Rage XL** | The FF material layer in the D3D9 backend (texture-stage recipes for the seven pipelines, CPU skinning, blob shadows, table fog). For the DX6-class cards: **software vertex processing** when `D3DDEVCAPS_HWTRANSFORMANDLIGHT` is absent, 16-bit uncompressed textures at 256² (no S3TC before the GeForce 256), 16-bit Z, and a "1998" preset below Very low | ~2K lines, 3 to 5 sessions, one more for the 1998 preset | Already the plan. TNT and Rage XL stay inside the D3D9 tier: their XP drivers are DDI 7 or later, so D3D9 FF runs on them with the runtime's software T&L. Not a backend, a preset. The risk is the look, which a render decides at R5 |
-| **D3D11, FL 11 and 10** | A new RHI backend (~1200 lines, simpler than D3D9: cbuffers, no lost device, no pools). The bake adds fxc profiles `vs/ps_4_0` and `5_0` through the existing `hlslc` wrapper and SPIRV-Cross `--shader-model 40/50`. `imgui_impl_dx11` exists | 2 to 3 sessions | Worth more than it looks. SDL3 GPU has no D3D11 backend. Two owned cards have **neither D3D12 nor Vulkan**: the HD 5450 (TeraScale) and the Bay Trail board; the G41's GMA X4500 is FL 10_0. D3D11 is the only path that runs the modern HDR tier on them. And **WARP comes free**: software rendering at every feature level |
-| **D3D11 FL 9_x** | The same backend with the `_level_9_1` and `_level_9_3` profiles. 9_3 maps to the sm3 shader tier, 9_1 and 9_2 to sm2. The known 10level9 limits are already met by those tiers (no SV_VertexID, no depth SRV, instancing only at 9_3, and the backend has a non-instanced path). Check 16F targets and 32-bit indices per format with `CheckFormatSupport`; 9_1 has neither | Half a session on top of D3D11 | A cheap curiosity. The X550 is 9_2 **only through a WDDM driver**; Windows 10 loads no XPDM driver at all, so the testsigned driver on x99 must already be the legacy Vista/7 WDDM one, and `dxdiag` will print its feature level. Expect the SM2 picture exactly: it is the same silicon as D3D9 sm2. The 3DMark Ice Storm box gets ticked and nothing new appears on screen |
+| **D3D11, FL 11 and 10** (done 2026-10-04, "The D3D11 backend") | A new RHI backend (~1200 lines, simpler than D3D9: cbuffers, no lost device, no pools). The bake adds fxc profiles `vs/ps_4_0` and `5_0` through the existing `hlslc` wrapper and SPIRV-Cross `--shader-model 40/50`. `imgui_impl_dx11` exists | 2 to 3 sessions | Worth more than it looks. SDL3 GPU has no D3D11 backend. Two owned cards have **neither D3D12 nor Vulkan**: the HD 5450 (TeraScale) and the Bay Trail board; the G41's GMA X4500 is FL 10_0. D3D11 is the only path that runs the modern HDR tier on them. And **WARP comes free**: software rendering at every feature level |
+| **D3D11 FL 9_x** (planned, "Feature level 9 on D3D11") | The same backend with the `_level_9_1` and `_level_9_3` profiles. 9_3 maps to the sm3 shader tier, 9_1 and 9_2 to sm2. The known 10level9 limits are already met by those tiers (no SV_VertexID, no depth SRV, instancing only at 9_3, and the backend has a non-instanced path). Check 16F targets and 32-bit indices per format with `CheckFormatSupport`; 9_1 has neither | Half a session on top of D3D11 | A cheap curiosity. The X550 is 9_2 **only through a WDDM driver**; Windows 10 loads no XPDM driver at all, so the testsigned driver on x99 must already be the legacy Vista/7 WDDM one, and `dxdiag` will print its feature level. Expect the SM2 picture exactly: it is the same silicon as D3D9 sm2. The 3DMark Ice Storm box gets ticked and nothing new appears on screen |
 | **Software rendering** | Nothing, at first: `VK_ICD_FILENAMES=.../lvp_icd.x86_64.json ./dragon` on x99's CachyOS (Mesa lavapipe), SwiftShader's ICD on any OS, WARP once D3D11 exists | An hour to measure | Do the free one first. Lavapipe on the ten-core Xeon at 640×480 sm2 should give 10 to 20 fps. An own rasteriser is justified only by the microcontroller item, where nothing else exists |
 | **Pre-DX7: S3 ViRGE/DX, SiS 6326, Riva 128** (all owned) | A D3D7 (or DX6) immediate-mode backend. D3D9 FF is DX7's model, so if R5's material layer is written API-agnostic (stage ops, a vertex layout, light and fog state) this is ~800 lines of device code. Runs only on **98 SE** (XP's in-box ViRGE driver is 2D), so it sits behind R8 and the SiS AGP bench, which is in China. Content a notch below 1998: 2 MB of textures in total, one stage, 320×240 | 3 to 4 sessions plus unknown driver pain | A trophy, not a port. It would start and draw a dragon over a flat-shaded heightfield. Last among the PC items; do it once R5's layer and R8 exist, when its marginal cost is small |
 | **Raspberry Pi 1B** | A **GLES2 RHI backend** (~1200 lines; the shaders are SPIRV-Cross GLSL ES 1.00 from the sm2 variants, compiled by the driver at runtime, so nothing is baked; VC4 has no S3TC, so uncompressed 512² or ETC1), R2b's memory diet, and a "pi" preset (one species, one or two bots, 320×240) | 3 to 5 sessions, the CPU unknown | Possible; prove it on a Pi 3 or 4 first. The backend also covers Pi 2 to 4, pre-Vulkan Linux GPUs and the VC4 class in general. The Pi 1 itself is 50 ms of simulation plus a Mesa driver on an in-order 700 MHz core: 10 to 15 fps at best. Develop the backend on x99's Mesa GL, not on the Pi |
@@ -1311,6 +1313,163 @@ shipped, and `ATTRIBUTION.md` says so.
 6. GLES2 when a Pi 3 or 4 is on the desk; the Pi 1 after that.
 7. D3D7 for the ViRGE once R8 exists; the demake as a separate project.
 
+## The D3D11 backend (2026-10-04)
+
+Item 4 of the order chosen above, built in a session: `src/rhi/d3d11/`, a
+third `rhi::Device` beside SDL's and D3D9's, reached with `--gpu-driver
+direct3d11` (or `direct3d11:N` for DXGI adapter N) and listed in the
+Graphics panel's renderer combo. Windows only. Nine hundred lines, and
+simpler than the D3D9 one by the amount the API grew up: constant buffers
+instead of register copies, views instead of pools, no lost device, a
+stride on the buffer bind instead of a declaration, real instancing with a
+first instance, and depth textures that are sampled as themselves (typeless
+`R32_TYPELESS`, a `D32_FLOAT` depth view and an `R32_FLOAT` shader view).
+
+**Why it exists** when SDL GPU already runs D3D12 and Vulkan on Windows:
+two owned boards have neither -- the Radeon HD 5450 (TeraScale, feature
+level 11_0 on D3D11, no D3D12 driver) and the Bay Trail IGP -- and the
+G41's GMA X4500 is feature level 10_0. D3D11 is the only API that runs the
+**modern HDR tier** on them. And WARP, Microsoft's software rasteriser,
+comes with it on every Windows (`DRAGON_D3D11_WARP=1`), which is the
+software-rendering item of the study for free.
+
+**The shaders** are the same HLSL through one more translation:
+`tools/d3d11/bake_d3d11.py OUT [--tier ...] [--profiles sm50,sm40]`
+runs shadercross to SPIR-V with the tier's defines (the D3D9 bake's define
+sets minus `D3D9`: D3D11 has `SV_VertexID` and sampled depth), SPIRV-Cross
+back to shader model 5.0 HLSL, and `d3dcompiler_47` through the D3D9
+bake's `hlslc` wrapper (Wine on the Mac, the same environment as the D3D9
+bake) to DXBC: `vs/ps_5_0` for feature level 11, `vs/ps_4_0` for 10. The
+files are `<stem><variant>.<vertex|fragment>.<sm50|sm40>.dxbc` beside the
+other backends' bakes; the device loads the profile its feature level
+reached. The whole modern set, 60 stages, bakes in 40 s.
+
+What SPIRV-Cross's SM 5.0 output gives, and the backend relies on: each
+uniform block is a `cbuffer` at `register(bN)` with N our slot, laid out by
+`packoffset` so the C++ struct still matches byte for byte (no unwrapping,
+no register copies -- `push_uniforms` maps a dynamic constant buffer with
+DISCARD and binds it); a fragment texture in slot N is `tN` with its
+sampler at `sN`; every vertex input is `TEXCOORD<location>`, which the
+input layout names by index; `SV_VertexID` is there for the fullscreen
+passes. The pushed blocks go into one of five dynamic constant buffers per
+stage and slot, sized 256 bytes to 64 KB, the smallest that fits, so the
+driver renames a few hundred bytes for the blocks pushed thousands of
+times a frame and not 64 KB each time.
+
+**The one piece of content** the backend owns is `shaders/blit.hlsl`: the
+RHI's `blit` (the world rendered at a fraction of the window, brought up
+to the UI's size) and the present are both a fullscreen triangle that
+stretches a texture, since D3D11 has no `StretchRect` and no
+`SDL_BlitGPUTexture`. It is baked without a variant suffix, loaded lazily
+from the shader directory the first pipeline named, and on D3D9 it is a
+disabled recipe (`FF_RECIPES`), since that backend never draws it.
+
+**Measured on x99's 5060 Ti** (feature level 11_1, `sm50`), headless from
+the SSH session like D3D12, the eight golden scenes rendered through it:
+
+| Against | valley | dragon-side | dragon-head | ground | fire | run-hud |
+|---|---|---|---|---|---|---|
+| `metal`, mean /255 | 0.29 | 0.20 | 0.14 | 0.21 | 0.26 | 0.29 |
+| `d3d12` (the same card through DXC), mean | 1.13 | 0.59 | 0.36 | 2.25 | 1.11 | 1.13 |
+| for scale: the `d3d12` set against `metal` | 1.29 | 0.72 | 0.46 | 2.36 | 1.25 | 1.29 |
+
+So the D3D11 picture sits nearer the Mac's than D3D12's own does -- fxc's
+build of SPIRV-Cross's HLSL and Metal's build of the same SPIR-V agree
+better than either does with DXC's DXIL, whose difference is a checker of
+mip and anisotropy choices over the terrain and the grass (the diff
+images). The renders are the new `tests/golden/d3d11` set, and the gate
+for a change to this backend is `compare --set d3d11` plus `--set metal
+--loose`, as for the others. `DRAGON_D3D11_FEATURE_LEVEL=10_0` caps the
+device at 10_0 and loads the `sm40` set: **bit-identical** to the 11_1
+frames on this card, all eight scenes, so the 4_0 profiles need no set of
+their own. Dear ImGui draws through `imgui_impl_dx11`, which compiles its
+two shaders at runtime through `d3dcompiler_47.dll` -- the one DLL the
+Windows package now imports beyond the system set (`package_windows.sh`
+allows it; every Windows since 8.1 has it).
+
+**WARP** (`DRAGON_D3D11_WARP=1`) creates the device and renders the
+scenes; its frame times on x99's Xeon are measured after this step
+("WARP, measured", below, once written).
+
+**Not done, in order:** feature level 9 (the next section); a lost-device
+equivalent (`DXGI_ERROR_DEVICE_REMOVED` ends the frame with `Failed`
+today, as D3D9's reset does); fullscreen; the D3D11 shaders in the
+Windows package (the bake needs Wine on the Mac, like D3D9's, and both
+are deployed by hand to `D:\dragon-win\shaders` for now); and the HD 5450
+and Bay Trail boards, which the backend was built for and which have not
+been powered on.
+
+### Feature level 9 on D3D11 (the plan)
+
+The X550 is feature level 9_2 under its WDDM 1.0 driver (`dxdiag`), and the
+3DMark Ice Storm box is the only reason anyone remembers 10level9 exists.
+What it takes, all known from the D3D9 tiers:
+
+- **The shaders** are the D3D9 variants: fxc's `vs_4_0_level_9_1` /
+  `ps_4_0_level_9_1` (9_1 and 9_2) and `_level_9_3` (9_3) profiles
+  accept what `ps_2_0` and `ps_2_x` accept, and the sm2 and sm3 tiers
+  already fit those. They want the `D3D9` define's two workarounds too:
+  no `SV_VertexID` at 9_x (the fullscreen passes read `TEXCOORD0` from
+  the backend's own three-entry buffer, which D3D11 needs as well), and
+  no sampled depth (the shadow map is the R32F stand-in the depth-only
+  passes write `z/w` into). The bake is the D3D9 bake's steps 1 to 3 with
+  these profiles; a `level_9` DXBC still goes through `CreateVertexShader`
+  like any other, so the backend change is a profile name and the stand-in.
+- **Instancing** exists at 9_3 only: 9_1 and 9_2 take the D3D9 backend's
+  loop, one draw per instance with the instance stream bound at that
+  element.
+- **Textures:** 2048 at 9_1/9_2, 4096 at 9_3 (`max_texture_size`); mipped
+  textures must be powers of two; BC1/BC3 are there; `R16G16B16A16_FLOAT`
+  as a render target is optional before 9_3, so the sm2 tier's `LDR_OUTPUT`
+  path (no HDR target, no bloom) is the one to run, which is what the X550
+  runs on D3D9 anyway.
+- **Content:** `--tier sm2` at 9_1/9_2, `--tier sm3` at 9_3 -- the tiers
+  exist, and `app.cpp` already forces a retro tier for `direct3d9`; the
+  same rule for a 9_x device.
+
+Half a session. The exit test is the X550 drawing the sm2 valley through
+D3D11 within `--cross-compiler` of its D3D9 render -- the same silicon and
+the same fxc, so it should be near-identical -- and then the Ice Storm box
+is ticked. Nothing new appears on screen; the point is that the modern
+code path reaches the card without the D3D9 backend.
+
+### vs/ps 1.x for the DX8 cards: the vertex side, not the pixel side (2026-10-04)
+
+The question was whether a shader-model-1 tier is worth having for the
+GeForce3/4 Ti and Radeon 8500-9250 class, or whether those should simply
+run the FF tier.
+
+- **`ps_1.x` buys nothing.** The FF tier's pixel side is one or two
+  texture-stage operations -- a texture MODULATE or MODULATE2X with the
+  pre-lit diffuse, an alpha test for the cards -- and `ps_1_1` is exactly
+  those operations written as eight instructions over four textures, at
+  the same fixed-point precision. What the SM2 tier adds over FF (the
+  shadow lookup with its 2x2 PCF, the per-pixel grade) needs `ps_2_0`'s
+  64 instructions and float precision; `ps_1_4`'s dependent reads do not
+  reach it either. A ps_1.x tier would be a third compiler for the same
+  picture. So a DX8 card runs the FF recipes for its pixels.
+- **`vs_1_1` would help, and is cheap.** The FF tier's vertex programs are
+  `vs_2_0`, and a DX8 card has `vs_1_1` in hardware: 128 instructions, 96
+  constants, no flow control. Today that card runs the programs through
+  software vertex processing, 54 fps at Minimal on x99's Xeon and less on
+  the Pentium 4 these boards pair with ("The second round"). The programs
+  are already loop-free; what has to give is size: the skinned palette
+  must fit 96 constants, so about **25 joints a draw** (the partitioner,
+  `anim/skin_partition.h`, already splits to a budget), and the foliage
+  program's 188 slots must come down to 128 (skinned is 124, terrain 17:
+  `bake_d3d9.py --tier ff --counts`). fxc compiles the same HLSL to
+  `vs_1_1`, so it is a bake profile, two register budgets and the
+  partition size -- a session, for every vertex transformed by the card
+  instead of the CPU.
+- **DX7 T&L cards (GeForce2/4 MX, Radeon 7000) have neither**, and
+  software VP is per-vertex bound, so the only lever there is to hand the
+  *static* geometry -- the terrain, the foliage with its world matrix, the
+  water, the sky, nine tenths of the vertices -- to the card's
+  fixed-function transform, and process only the skinned dragon in
+  software (or skin it on the CPU). That is the API-agnostic material
+  layer the R5 plan named and did not build; it would also be the D3D7
+  backend's whole vertex side, so it is worth doing once, there.
+
 ## Where it is tested
 
 The Mac stays the daily driver. Each other machine has one job, chosen so the
@@ -1321,7 +1480,7 @@ slow-to-reach machines are only used for what nothing else can show.
 | **Mac, Metal** | Daily development; the reference goldens | Hot reload, the whole headless workflow, Blender and the tools |
 | **Mac, MinGW-w64 + plain Wine** | Build every Windows binary on the Mac; smoke-run them under Wine, run directly (2026-10-03: Sikarugir's Wine 10 engine, with the template's libraries linked beside it, a scratch prefix, no CrossOver); run `d3dcompiler_47` for the D3D9 bake | No machine to power on. The D3D9 spike draws within 0.017/255 of x99 and the D3D9 backend within 0.29/255, and the modern exe on Vulkan (MoltenVK) within 0.46/255 of the Metal golden. **Not a correctness oracle:** wined3d translates D3D9 to OpenGL, so it answers "does it start and roughly draw", and its caps are a fake GeForce 6800. Two paths do not work: D9VK (DXVK's D3D9 on MoltenVK) will not load in Wine's 32-bit WoW64 mode, and GPTK's D3DMetal loads, then crashes SDL's D3D12 backend on a null call inside D3DMetal |
 | **x99, CachyOS** | Vulkan; the Linux release; Linux headless soaks over SSH once P0 removes the window | The only Linux box with a real modern GPU. Power it off after each session |
-| **x99-windows, Windows 10** | D3D12 and Vulkan on Windows; **the D3D9 debugging platform for all three tiers**, with `--tier` forced on its modern card's driver; apitrace for D3D9 call traces and replays | A real D3D9 driver and runtime, a debugger, and fast iteration. A modern driver still runs D3D9 fixed function. But Windows 10 cannot drive a pre-DX9 card, so this proves the code, not the hardware or the budget |
+| **x99-windows, Windows 10** | D3D12, D3D11 (and WARP) and Vulkan on Windows; **the D3D9 debugging platform for all three tiers**, with `--tier` forced on its modern card's driver; apitrace for D3D9 call traces and replays | A real D3D9 driver and runtime, a debugger, and fast iteration. A modern driver still runs D3D9 fixed function. But Windows 10 cannot drive a pre-DX9 card, so this proves the code, not the hardware or the budget |
 | **G41, Windows XP, driven by `agent.ahk`** | **Acceptance for each retro tier**, on the PCIe and PCI cards from the table above | The only place budgets, driver quirks and the XP platform layer are real. The qemu-gpu harness already copies files over SMB, runs jobs and takes OBS captures |
 | The AGP benches (865G P4; the SiS universal-AGP board) | The AGP cards: the FX 5200 boards, the Radeon 7000 and 9200 LE, the TNT2 | Not yet driven remotely: they need the same agent and share setup as the G41, or the HID-and-capture rig in gpu-hist's `docs/bench-automation.md` |
 | G41 or the SiS bench, Windows 98 SE | R8 | |

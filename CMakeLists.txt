@@ -80,6 +80,9 @@ if(WIN32)
   # The Direct3D 9 backend (docs/PORTING.md, R3): --gpu-driver direct3d9.
   target_sources(dragon PRIVATE src/rhi/d3d9/d3d9_device.cpp)
   target_link_libraries(dragon PRIVATE d3d9)
+  # The Direct3D 11 backend (docs/PORTING.md, D3D11): --gpu-driver direct3d11.
+  target_sources(dragon PRIVATE src/rhi/d3d11/d3d11_device.cpp)
+  target_link_libraries(dragon PRIVATE d3d11 dxgi dxguid)
 endif()
 
 # Data is found beside the executable first (core/paths.h). A development

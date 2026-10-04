@@ -92,6 +92,8 @@ FF_RECIPES = {
     "shadow_depth": {"disabled": True},
     "shadow_skinned": {"disabled": True},
     "foliage_depth": {"disabled": True},
+    # The D3D11 backend's stretch (shaders/blit.hlsl); D3D9 has StretchRect.
+    "blit": {"disabled": True},
 }
 # SPIRV-Cross names every varying TEXCOORDn, in declaration order; the
 # legacy registers the stages read are restored by name (scene_common.hlsl,

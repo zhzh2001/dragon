@@ -47,7 +47,8 @@ public:
 
 private:
     bool initialized_ = false;
-    bool d3d9_ = false;  // drawing through imgui_impl_dx9
+    bool d3d9_ = false;   // drawing through imgui_impl_dx9
+    bool d3d11_ = false;  // ... or imgui_impl_dx11
     ImFont* numeral_font_ = nullptr;
     ImFont* label_font_ = nullptr;
     bool has_draw_data_ = false;

@@ -72,7 +72,7 @@ for f in LICENSE THIRD_PARTY_NOTICES.md ATTRIBUTION.md AI_DISCLOSURE.md; do cp "
 if strings -a "$stage/dragon.exe" | grep -q "$HOME"; then
   echo "FAILED: dragon.exe contains $HOME" >&2; exit 1
 fi
-if x86_64-w64-mingw32-objdump -p "$stage/dragon.exe" | grep 'DLL Name' | grep -v -i -E 'api-ms-win-crt|kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|imm32|setupapi|version|winmm'; then
+if x86_64-w64-mingw32-objdump -p "$stage/dragon.exe" | grep 'DLL Name' | grep -v -i -E 'api-ms-win-crt|d3dcompiler_47|kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|imm32|setupapi|version|winmm'; then
   echo "FAILED: dragon.exe imports a DLL Windows does not ship" >&2; exit 1
 fi
 

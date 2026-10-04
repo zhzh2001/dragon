@@ -2,6 +2,7 @@
 
 #include "rhi/sdlgpu/sdlgpu.h"
 #ifdef _WIN32
+#include "rhi/d3d11/d3d11_backend.h"
 #include "rhi/d3d9/d3d9_backend.h"
 #endif
 
@@ -17,6 +18,14 @@ std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& c
         d3d9_config.adapter = colon == std::string::npos ? 0 : uint32_t(std::stoul(config.driver.substr(colon + 1)));
         d3d9_config.driver = "direct3d9";
         return d3d9::create(window, d3d9_config);
+    }
+    // "direct3d11", or "direct3d11:N" for DXGI adapter N (rhi/d3d11).
+    if (config.driver.rfind("direct3d11", 0) == 0) {
+        DeviceConfig d3d11_config = config;
+        const size_t colon = config.driver.find(':');
+        d3d11_config.adapter = colon == std::string::npos ? 0 : uint32_t(std::stoul(config.driver.substr(colon + 1)));
+        d3d11_config.driver = "direct3d11";
+        return d3d11::create(window, d3d11_config);
     }
 #endif
     return sdlgpu::create(window, config);

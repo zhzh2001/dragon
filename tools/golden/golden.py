@@ -15,7 +15,7 @@ they are copied back.
 tests/golden/<set>/<name>.png. `compare` renders the same scenes into --out
 (default a scratch directory) and diffs each one against the set.
 
-There is one set per backend, named for it (metal, vulkan, d3d12) and chosen
+There is one set per backend, named for it (metal, vulkan, d3d12, d3d11) and chosen
 by platform when --set is omitted. Different GPUs do not filter alike: on
 Vulkan on an RTX 5060 Ti against Metal on an M5, every frame of the valley
 differed by a mean of 1.7/255 from the first frame on. The differences sat

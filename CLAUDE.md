@@ -108,7 +108,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--maneuver roll\|flip` | Begin that manoeuvre at frame 30, so a roll or a flip can be captured without a key press. |
 | `--frame-jitter J` | Headless only: alternate the fixed step between (1+J) and (1-J) times 1/60 s. A live window's frames are uneven, and anything reading one frame's state from another twitches only then -- this is how the first-person camera trailing the head by a frame was reproduced. |
 | `--hue r,g,b,strength` | Recolour the player's hide (the same recolour the bots use). |
-| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or `direct3d9[:N]` for the D3D9 backend on Windows, on adapter N (`docs/PORTING.md` R3; a retro tier, shaders baked by `tools/d3d9/bake_d3d9.py`). `DRAGON_GPU_LOW_POWER=1` asks SDL for DXGI's other adapter: on x99 with the X550 driving the display, that is how D3D12 reaches the 5060 Ti. |
+| `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or on Windows `direct3d9[:N]` for the D3D9 backend on adapter N (`docs/PORTING.md` R3; a retro tier, shaders baked by `tools/d3d9/bake_d3d9.py`) or `direct3d11[:N]` for the D3D11 one (`docs/PORTING.md` "The D3D11 backend"; feature level 11 or 10, the modern tier, shaders baked by `tools/d3d11/bake_d3d11.py`; `DRAGON_D3D11_WARP=1` runs it on Microsoft's software rasteriser, `DRAGON_D3D11_FEATURE_LEVEL=10_0` caps the level). `DRAGON_GPU_LOW_POWER=1` asks SDL for DXGI's other adapter: on x99 with the X550 driving the display, that is how D3D12 reaches the 5060 Ti. |
 | `--preset ultra\|high\|medium\|low\|very-low\|minimal` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium, ff low). `minimal` is the 1998 floor below very-low (R5): a 48 m grid with a 96 m far mesh, 1.2K creatures, trees to 250 m, 64-texel textures, 50% world -- for a card whose vertices are processed in software (`DRAGON_D3D9_SOFTWARE_VP=1`, `=2` for a pure software device). |
 | `--graphics key=level,...` | Single settings over the preset, levels 0 (ultra) to 5 (minimal): `models`, `terrain`, `trees`, `grass`, `rocks`, `textures`, `shadows`, `bloom`, `resolution` (the world's, under a whole HUD: 100/85/70/50%). Clamped to what the tier and device allow. |
 | `--restart-every N` | Press R every N frames: the reset soak. With `--telemetry`, the `gpu:` line counts the buffers and textures alive, so anything a reset leaks shows as growth. |
@@ -252,7 +252,7 @@ flight controls.
   header says `#pragma once`).
   `tools/golden/golden.py compare` is the gate for any shader or backend
   change: eight scenes, deterministic in headless, against the backend's
-  own set in `tests/golden/{metal,vulkan,d3d12}`, plus `--set metal --loose`
+  own set in `tests/golden/{metal,vulkan,d3d12,d3d11}`, plus `--set metal --loose`
   across backends (GPUs filter differently; a wrong frame still fails it).
 - **Lighting is one path.** Every world shader lights through `direct_sun`,
   `ambient_light` and `apply_fog` in `scene_common.hlsl` (plants add
@@ -496,7 +496,7 @@ contributions: never file an issue or a PR against them from a session.
 
 ```
 src/core/    math, input, noise, logging, paths (where data and user files live)
-src/rhi/     the render hardware interface, its SDL GPU backend (sdlgpu/) and the D3D9 one (d3d9/)
+src/rhi/     the render hardware interface, its SDL GPU backend (sdlgpu/), the D3D9 one (d3d9/) and the D3D11 one (d3d11/)
 src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig

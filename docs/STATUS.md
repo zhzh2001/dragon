@@ -40,6 +40,12 @@ What is built, in the order it was built. The plan these came from is
   scenes; 97 fps at the new sixth preset, Minimal. Software vertex
   processing (a card without vs_2_0) runs Minimal at 54 fps on the X550
   after a round of vertex cuts (`PORTING.md`, "The second round").
+- **D3D11, 2026-10-04.** A third RHI backend (`src/rhi/d3d11/`,
+  `--gpu-driver direct3d11`), for the boards that have neither D3D12 nor
+  Vulkan and for WARP. The 5060 Ti through it is within 0.3/255 of Metal
+  in all eight golden scenes, nearer than D3D12's own set; feature level 10
+  renders bit-identical. Feature level 9 for the X550 is planned
+  (`PORTING.md`, "The D3D11 backend").
 - **The 3DMark2001 dragon** carves out of its archive and converts to a
   static glTF (`tools/3dmark/`); its rig is briefed for Codex. Local only.
 - **Model packs (R2b, after the publish).** `--bake-packs` writes what a

@@ -189,7 +189,7 @@ struct DeviceConfig {
     bool fixed_function = false;
 };
 
-enum class Backend : uint8_t { SdlGpu, Direct3D9 };
+enum class Backend : uint8_t { SdlGpu, Direct3D9, Direct3D11 };
 
 // What a device holds alive, by kind: how a leak across resets is found
 // (docs/PORTING.md, R7). Bytes are the backend's estimate of what it asked

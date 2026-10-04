@@ -10,7 +10,9 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
 #ifdef _WIN32
+#include "imgui_impl_dx11.h"
 #include "imgui_impl_dx9.h"
+#include "rhi/d3d11/d3d11_backend.h"
 #include "rhi/d3d9/d3d9_backend.h"
 #endif
 
@@ -126,11 +128,21 @@ bool ImGuiLayer::init(gfx::Device& device) {
     // fixed function (imgui_impl_dx9), which restores the device state it
     // changes.
     d3d9_ = device.rhi().backend() == rhi::Backend::Direct3D9;
+    d3d11_ = device.rhi().backend() == rhi::Backend::Direct3D11;
 #ifdef _WIN32
     if (d3d9_) {
         if (!ImGui_ImplSDL3_InitForD3D(device.window()) ||
             !ImGui_ImplDX9_Init(rhi::d3d9::native_device(device.rhi()))) {
             LOG_ERROR("ImGui D3D9 init failed");
+            return false;
+        }
+        initialized_ = true;
+        return true;
+    }
+    if (d3d11_) {
+        if (!ImGui_ImplSDL3_InitForD3D(device.window()) ||
+            !ImGui_ImplDX11_Init(rhi::d3d11::native_device(device.rhi()), rhi::d3d11::native_context(device.rhi()))) {
+            LOG_ERROR("ImGui D3D11 init failed");
             return false;
         }
         initialized_ = true;
@@ -162,6 +174,7 @@ void ImGuiLayer::shutdown() {
     if (!initialized_) return;
 #ifdef _WIN32
     if (d3d9_) ImGui_ImplDX9_Shutdown();
+    else if (d3d11_) ImGui_ImplDX11_Shutdown();
     else
 #endif
         ImGui_ImplSDLGPU3_Shutdown();
@@ -193,6 +206,7 @@ void ImGuiLayer::begin_frame(float target_width, float target_height) {
     if (!initialized_) return;
 #ifdef _WIN32
     if (d3d9_) ImGui_ImplDX9_NewFrame();
+    else if (d3d11_) ImGui_ImplDX11_NewFrame();
     else
 #endif
         ImGui_ImplSDLGPU3_NewFrame();
@@ -213,7 +227,7 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (!draw_data) return;
     has_draw_data_ = true;
-    if (d3d9_) return;  // D3D9 records nothing ahead of the pass
+    if (d3d9_ || d3d11_) return;  // D3D9 and D3D11 record nothing ahead of the pass
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
     
 }
@@ -226,6 +240,10 @@ void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
 #ifdef _WIN32
     if (d3d9_) {
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+        return;
+    }
+    if (d3d11_) {
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         return;
     }
 #endif

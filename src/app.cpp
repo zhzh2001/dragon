@@ -1152,7 +1152,7 @@ void App::build_graphics_ui() {
 
     // The renderer and the tier: chosen here, in force after a restart.
 #if defined(_WIN32)
-    static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d9"};
+    static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d11", "direct3d9"};
 #elif defined(__APPLE__)
     static const char* const DRIVERS[] = {"metal"};
 #else
