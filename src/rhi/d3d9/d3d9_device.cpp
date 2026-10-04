@@ -1,4 +1,5 @@
 #include "rhi/d3d9/d3d9_backend.h"
+#include "rhi/d3d9/d3d9_probe.h"
 
 #include <SDL3/SDL.h>
 
@@ -1358,6 +1359,21 @@ std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config) {
 }
 
 IDirect3DDevice9* native_device(Device& device) { return static_cast<D3D9Device&>(device).device(); }
+
+ShaderCaps probe_shader_caps(uint32_t adapter) {
+    ShaderCaps caps;
+    IDirect3D9* d3d = Direct3DCreate9(D3D_SDK_VERSION);
+    if (!d3d) return caps;
+    D3DCAPS9 c = {};
+    if (adapter < d3d->GetAdapterCount() && SUCCEEDED(d3d->GetDeviceCaps(adapter, D3DDEVTYPE_HAL, &c))) {
+        caps.valid = true;
+        caps.vertex_shader = D3DSHADER_VERSION_MAJOR(c.VertexShaderVersion);
+        caps.pixel_shader = D3DSHADER_VERSION_MAJOR(c.PixelShaderVersion);
+        caps.hardware_tnl = (c.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) != 0;
+    }
+    d3d->Release();
+    return caps;
+}
 
 }  // namespace d3d9
 }  // namespace rhi

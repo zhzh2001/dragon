@@ -24,6 +24,15 @@ SPIRV-Cross (Apache 2.0) and DirectXShaderCompiler (University of Illinois/NCSA
 Open Source License), to compile the HLSL shaders at runtime. None of them
 is in a release package, which carries the shaders already translated.
 
+The Windows XP package (`tools/release/package_xp.sh`) contains no SDL3: its
+window and input layer is the game's own (`src/platform/xp`). It links
+llvm-mingw's runtimes statically -- libc++, libc++abi, libunwind and
+compiler-rt, under the Apache License 2.0 with LLVM Exceptions, whose
+exception waives the notice requirement for compiled code
+(https://github.com/llvm/llvm-project, built by
+https://github.com/mstorsjo/llvm-mingw) -- and mingw-w64's start-up code
+(public domain and the Zope Public License).
+
 Dear ImGui embeds the ProggyClean font (MIT-compatible, by Tristan Grimmer),
 the last fallback face.
 

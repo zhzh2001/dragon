@@ -54,6 +54,19 @@ cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.c
   -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF -DDRAGON_DEV_ROOTS=OFF
 tools/release/package_macos.sh 0.2.0      # dist/Dragon-0.2.0-macos.zip
 tools/release/package_windows.sh 0.2.0    # dist/Dragon-0.2.0-windows.zip
+tools/release/package_xp.sh 0.2.0         # dist/Dragon-0.2.0-xp.zip
+```
+
+Windows XP is a third build (`docs/PORTING.md`, "R6, as built"): 32-bit,
+the D3D9 backend alone, `src/platform/xp`'s SDL3 subset in place of SDL3,
+with what XP lacks thunked in `src/platform/xp/xp_thunks.cpp` and
+`tools/xp/check_imports.py` as the gate. A change that makes the shared code
+call an SDL function the subset does not declare breaks this build; add it
+to the subset on XP's API.
+
+```sh
+cmake -S . -B build-xp -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw-i686-xp.cmake \
+  -DDRAGON_XP=ON -DDRAGON_SHADERCROSS=OFF -DDRAGON_DEV_ROOTS=OFF
 ```
 
 ### Verifying without a human at the keyboard
@@ -497,6 +510,7 @@ contributions: never file an issue or a PR against them from a session.
 ```
 src/core/    math, input, noise, logging, paths (where data and user files live)
 src/rhi/     the render hardware interface, its SDL GPU backend (sdlgpu/), the D3D9 one (d3d9/) and the D3D11 one (d3d11/)
+src/platform/xp/  the XP build's SDL3 subset on Win32, and the thunks for what XP lacks
 src/gfx/     GPU device, pipeline cache + shader hot reload, world renderer,
              shadow map, additive particles, instanced foliage
 src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig

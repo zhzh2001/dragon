@@ -1,8 +1,12 @@
 #include "rhi/rhi.h"
 
+#ifndef DRAGON_XP
 #include "rhi/sdlgpu/sdlgpu.h"
+#endif
 #ifdef _WIN32
+#ifndef DRAGON_XP
 #include "rhi/d3d11/d3d11_backend.h"
+#endif
 #include "rhi/d3d9/d3d9_backend.h"
 #endif
 
@@ -19,6 +23,13 @@ std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& c
         d3d9_config.driver = "direct3d9";
         return d3d9::create(window, d3d9_config);
     }
+#ifdef DRAGON_XP
+    // The XP build has D3D9 alone (docs/PORTING.md, R6): any other name, or
+    // none, is the D3D9 backend on the default adapter.
+    DeviceConfig d3d9_config = config;
+    d3d9_config.driver = "direct3d9";
+    return d3d9::create(window, d3d9_config);
+#else
     // "direct3d11", or "direct3d11:N" for DXGI adapter N (rhi/d3d11).
     if (config.driver.rfind("direct3d11", 0) == 0) {
         DeviceConfig d3d11_config = config;
@@ -28,7 +39,10 @@ std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& c
         return d3d11::create(window, d3d11_config);
     }
 #endif
+#endif
+#ifndef DRAGON_XP
     return sdlgpu::create(window, config);
+#endif
 }
 
 uint64_t texture_bytes(const TextureDesc& desc) {

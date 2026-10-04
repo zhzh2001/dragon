@@ -15,13 +15,22 @@ add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imgui_tables.cpp
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
   ${imgui_SOURCE_DIR}/imgui_demo.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
 )
 target_include_directories(imgui PUBLIC
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
 )
+if(DRAGON_XP)
+  # The XP build: Win32 for the platform side (fed from the SDL3 subset's
+  # window procedure hook) and D3D9 to draw.
+  target_sources(imgui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
+                               ${imgui_SOURCE_DIR}/backends/imgui_impl_dx9.cpp)
+  target_link_libraries(imgui PUBLIC d3d9 gdi32 dwmapi)
+  target_compile_features(imgui PUBLIC cxx_std_20)
+  return()
+endif()
+target_sources(imgui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+                             ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp)
 target_link_libraries(imgui PUBLIC SDL3::SDL3)
 if(WIN32)
   # The D3D9 backend's UI (editor/imgui_layer.cpp).

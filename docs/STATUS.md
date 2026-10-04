@@ -40,6 +40,13 @@ What is built, in the order it was built. The plan these came from is
   scenes; 97 fps at the new sixth preset, Minimal. Software vertex
   processing (a card without vs_2_0) runs Minimal at 54 fps on the X550
   after a round of vertex cuts (`PORTING.md`, "The second round").
+- **Windows XP (R6), 2026-10-04.** A 32-bit msvcrt build cross-compiled on
+  the Mac (`build-xp`, `tools/release/package_xp.sh`): the D3D9 backend,
+  an SDL3 subset on XP's Win32 in place of SDL3, and thunks for what
+  llvm-mingw's libc++ imports that XP lacks. Under Wine it renders
+  pixel-identical to the 64-bit D3D9 build and passes all 21 suites. Not
+  yet run on XP: the XP export list and the G41 are next (`PORTING.md`,
+  "R6, as built").
 - **D3D11, 2026-10-04.** A third RHI backend (`src/rhi/d3d11/`,
   `--gpu-driver direct3d11`), for the boards that have neither D3D12 nor
   Vulkan and for WARP. The 5060 Ti through it is within 0.3/255 of Metal

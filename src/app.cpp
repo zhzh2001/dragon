@@ -16,8 +16,11 @@
 #include <sstream>
 
 #include "core/log.h"
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(DRAGON_XP)
 #include "rhi/d3d11/d3d11_backend.h"  // probe_feature_level: the tier a feature level 9 device gets
+#endif
+#ifdef _WIN32
+#include "rhi/d3d9/d3d9_probe.h"  // the tier a D3D9 card's shader models allow
 #endif
 #include "core/math.h"
 #include "core/paths.h"
@@ -341,11 +344,37 @@ bool App::init(const Options& options) {
         }
     }
     if (options.show_fps) show_fps_ = true;
+#ifdef DRAGON_XP
+    // The XP build has the D3D9 backend alone (docs/PORTING.md, R6).
+    if (options_.gpu_driver.rfind("direct3d9", 0) != 0) options_.gpu_driver = "direct3d9";
+#endif
     // D3D9 serves the retro tiers only (rhi/d3d9).
     if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
         options_.tier = gfx::Tier::SM3;
     }
 #ifdef _WIN32
+    // And only those the card's shader models reach: sm3 wants vs/ps 3.0,
+    // sm2 ps 2.0 (its vertex programs run in software where the card has
+    // no vs_2_0), anything less fixed function. A tier asked for or saved
+    // above what the card has comes down to it; a lower one is kept. On an
+    // XP machine this is what makes a double-click work on any card.
+    if (options_.gpu_driver.rfind("direct3d9", 0) == 0) {
+        const size_t colon = options_.gpu_driver.find(':');
+        const uint32_t adapter = colon == std::string::npos ? 0 : uint32_t(std::stoul(options_.gpu_driver.substr(colon + 1)));
+        const rhi::d3d9::ShaderCaps caps = rhi::d3d9::probe_shader_caps(adapter);
+        if (caps.valid) {
+            const gfx::Tier best = caps.pixel_shader >= 3 && caps.vertex_shader >= 3 ? gfx::Tier::SM3
+                                   : caps.pixel_shader >= 2                         ? gfx::Tier::SM2
+                                                                                    : gfx::Tier::FixedFunction;
+            if (uint8_t(options_.tier) < uint8_t(best)) {
+                LOG_INFO("direct3d9: vs_%u ps_%u, so the %s tier, not %s", caps.vertex_shader, caps.pixel_shader,
+                         gfx::RenderTier::make(best).name(), gfx::RenderTier::make(options_.tier).name());
+                options_.tier = best;
+            }
+        }
+    }
+#endif
+#if defined(_WIN32) && !defined(DRAGON_XP)
     // So does a D3D11 device at feature level 9 (rhi/d3d11): the sm2 tier,
     // 9_3 included, decided before the tier is fixed.
     if (options_.gpu_driver.rfind("direct3d11", 0) == 0 && options_.tier == gfx::Tier::Modern) {
@@ -1168,7 +1197,9 @@ void App::build_graphics_ui() {
     if (ImGui::Checkbox("show fps", &show_fps_)) save_graphics_key("fps", show_fps_ ? "1" : "0");
 
     // The renderer and the tier: chosen here, in force after a restart.
-#if defined(_WIN32)
+#if defined(DRAGON_XP)
+    static const char* const DRIVERS[] = {"direct3d9"};
+#elif defined(_WIN32)
     static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d11", "direct3d9"};
 #elif defined(__APPLE__)
     static const char* const DRIVERS[] = {"metal"};

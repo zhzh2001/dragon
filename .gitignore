@@ -69,6 +69,8 @@ build-r0/
 # Holds a copy of Microsoft's d3dcompiler_47.dll for the D3D9 bake; never committed.
 build-d3d9/
 build-win-release/
+build-xp/
+build-xp-release/
 dist/
 
 # Regenerated sidecars for the local silver raw/material comparison.

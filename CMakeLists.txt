@@ -9,7 +9,19 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
 endif()
 
-include(cmake/sdl3.cmake)
+# The Windows XP build (docs/PORTING.md, R6): 32-bit, the D3D9 backend
+# alone, and src/platform/xp's SDL3 subset in place of SDL3, which needs
+# Windows 7. Configure it with cmake/llvm-mingw-i686-xp.cmake.
+option(DRAGON_XP "Build for Windows XP: D3D9 only, the Win32 SDL3 subset" OFF)
+if(DRAGON_XP)
+  add_library(sdl3xp STATIC src/platform/xp/sdl3_xp.cpp src/platform/xp/sdl3_xp_main.cpp)
+  target_include_directories(sdl3xp PUBLIC src/platform/xp/include)
+  target_link_libraries(sdl3xp PUBLIC user32 gdi32 shell32)
+  target_compile_features(sdl3xp PUBLIC cxx_std_20)
+  add_library(SDL3::SDL3 ALIAS sdl3xp)
+else()
+  include(cmake/sdl3.cmake)
+endif()
 
 include(cmake/imgui.cmake)
 include(cmake/cgltf.cmake)
@@ -23,7 +35,6 @@ add_executable(dragon
   src/core/input.cpp
   src/core/paths.cpp
   src/rhi/device.cpp
-  src/rhi/sdlgpu/sdlgpu_device.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp
   src/gfx/debug_draw.cpp
@@ -76,13 +87,28 @@ add_executable(dragon
 
 target_include_directories(dragon PRIVATE src)
 target_link_libraries(dragon PRIVATE SDL3::SDL3 imgui cgltf stb miniaudio meshoptimizer)
+if(NOT DRAGON_XP)
+  # SDL's GPU API: Metal, D3D12, Vulkan (rhi/sdlgpu).
+  target_sources(dragon PRIVATE src/rhi/sdlgpu/sdlgpu_device.cpp)
+endif()
 if(WIN32)
   # The Direct3D 9 backend (docs/PORTING.md, R3): --gpu-driver direct3d9.
   target_sources(dragon PRIVATE src/rhi/d3d9/d3d9_device.cpp)
   target_link_libraries(dragon PRIVATE d3d9)
+endif()
+if(WIN32 AND NOT DRAGON_XP)
   # The Direct3D 11 backend (docs/PORTING.md, D3D11): --gpu-driver direct3d11.
   target_sources(dragon PRIVATE src/rhi/d3d11/d3d11_device.cpp)
   target_link_libraries(dragon PRIVATE d3d11 dxgi dxguid)
+endif()
+if(DRAGON_XP)
+  target_compile_definitions(dragon PRIVATE DRAGON_XP)
+  # The imports XP lacks, defined in the executable itself so the linker
+  # takes them before the import libraries (src/platform/xp/xp_thunks.cpp).
+  # Its function-local statics are initialised without guards: the guard is
+  # libc++abi's, which would call back into these very functions.
+  target_sources(dragon PRIVATE src/platform/xp/xp_thunks.cpp)
+  set_source_files_properties(src/platform/xp/xp_thunks.cpp PROPERTIES COMPILE_OPTIONS "-fno-threadsafe-statics")
 endif()
 
 # Data is found beside the executable first (core/paths.h). A development

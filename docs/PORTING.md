@@ -325,7 +325,7 @@ graphics settings.
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
 | R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes. Minimal, the sixth preset, with a 48 m grid, a far 96 m mesh and a baked sky: 173 fps on the X550, **54 fps with every vertex processed in software** (`DRAGON_D3D9_SOFTWARE_VP=1`, or `=2` for a pure software device) | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
-| R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
+| R6 (XP layer) | Built ("R6, as built"): a 32-bit msvcrt build from the Mac with an SDL3 subset on Win32 and thunks for what XP lacks; pixel-identical to the 64-bit D3D9 frame under Wine, 21 suites pass, `tools/release/package_xp.sh` | **XP SP3's export list** (`tools/xp/check_imports.py --record`, from x99's XP image or the G41), then the G41 under XP |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
 | D3D11 | Done at feature levels 11, 10 and 9 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs at 1.8 to 19.6 fps; the X550 at feature level 9_2 draws the sm2 tier within `--cross-compiler` of D3D12's set, at 20 fps Low | The HD 5450 and Bay Trail boards it was built for; the shaders in the package; a 9_1 or 9_3 device |
@@ -784,6 +784,99 @@ the SM2 define (the sm2 and ff tiers, `RenderTier::vertex_lighting`).
     1.2, along the near shadow's 1 m point-sampled staircase, where the
     card's FP24 pixel maths moves the steps by a texel. That is hardware
     variance, so the X550 is a result, not a gate.
+
+### R6, as built (2026-10-04): the XP platform layer
+
+The Windows XP build is `build-xp/dragon.exe`: 32-bit, the D3D9 backend
+alone, and no SDL3, which needs Windows 7.
+
+```sh
+cmake -S . -B build-xp -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw-i686-xp.cmake \
+  -DDRAGON_XP=ON -DDRAGON_SHADERCROSS=OFF -DDRAGON_DEV_ROOTS=OFF
+cmake --build build-xp
+tools/xp/check_imports.py build-xp/dragon.exe     # the gate
+tools/release/package_xp.sh 0.2.0                 # dist/Dragon-0.2.0-xp.zip
+```
+
+**The toolchain** is R0's choice, now hosted on the Mac: llvm-mingw's
+msvcrt target files (mingw-w64's headers and import libraries for
+msvcrt.dll, libc++, libunwind, compiler-rt) unpacked from its Linux-hosted
+release into `~/.local/opt/llvm-mingw-msvcrt` -- target files are the same
+whatever the host -- and compiled by Homebrew's clang 21 with lld, given a
+resource directory of its own that holds the release's i386 builtins. The
+release's LLVM 23 libc++ headers compile under clang 21 unchanged.
+`cmake/llvm-mingw-i686-xp.cmake` has the recipe. SSE2 maths keeps the
+content identical to the x86-64 builds: the XP build's frame under Wine is
+**pixel-identical** to the 64-bit Windows build's D3D9 frame (sm3, the same
+Wine), LOD fingerprints and all. All 21 test suites pass as 32-bit
+libc++ executables under Wine.
+
+**The platform layer is an SDL3 subset, not a new interface.** The engine
+calls about sixty SDL functions outside the SDL GPU backend -- one window,
+its events, scancodes, the mouse with a relative mode, gamepads, logging,
+files, paths, ticks and a BMP writer. Rather than put an interface under
+twenty-odd files, the XP build compiles the same sources against
+`src/platform/xp/include/SDL3/`, which declares exactly those, with SDL3's
+names, signatures and values (HID scancodes, button and axis order), and
+`src/platform/xp/sdl3_xp.cpp` implements them on XP SP3's Win32: a
+`CreateWindowExW` window and a message pump into SDL events, raw-input
+mouse motion with a clipped, hidden cursor for relative mode, XInput
+loaded from whichever DLL exists (9.1.0 ships with XP's DirectX), UTF-8
+paths through the wide-character APIs, `SHGetFolderPathW` for the user
+directory, `QueryPerformanceCounter` for ticks. CMake aliases it as
+`SDL3::SDL3`, so every target, tests included, links it unchanged. The only
+extension is `SDLXP_SetWndProcHook`, through which Dear ImGui's Win32
+backend sees the window's messages (`imgui_impl_win32` and `imgui_impl_dx9`
+replace the SDL3 and SDL GPU ones in that build). A call the shared code
+starts making that the subset does not declare fails the XP build -- which
+is the intended guard. This is hand-rolled platform code against the
+third-party policy's letter; it is the "thin Win32 layer" R6 planned, kept
+to SDL3's shape so nothing else changes, and every other build still links
+SDL3.
+
+**What XP lacks is thunked in the executable.** llvm-mingw's libc++ is
+built for Windows 7 and its msvcrt for Vista's msvcrt.dll: the first link
+imported SRW locks and condition variables, `InitOnceExecuteOnce`, fiber
+storage, `GetLocaleInfoEx`, `GetThreadId`, `K32EnumProcessModules`,
+nineteen `_l` locale functions and `wcrtomb_s` from msvcrt.dll, and Dear
+ImGui's Win32 backend pulled in dwmapi.dll, which XP does not have. Any one
+of those and XP's loader refuses the program before `main`.
+`src/platform/xp/xp_thunks.cpp` defines each import itself -- the
+`__imp__Name@N` pointer and the `_Name@N` stub, compiled into the
+executable so the linker takes them before the import libraries -- and
+each calls the system's function when it exists and otherwise does the job
+with what XP has (a spin lock in the SRW word, a condition variable that
+wakes spuriously, a three-state call-once, TLS for fiber storage, LCIDs for
+locale names, ntdll for a thread's id, psapi.dll, the plain CRT functions
+under the "C" locale). The system set of locks is used only when all of it
+is there, so a lock is never taken by one implementation and released by
+the other. `DRAGON_XP_THUNKS=fallback` forces the XP side on any Windows:
+under Wine the frame is identical either way and the suites pass. The file
+is compiled with `-fno-threadsafe-statics`, since libc++abi's static guard
+would call back into the locks it defines.
+
+**The gate** is `tools/xp/check_imports.py`: the executable's import table
+against what XP SP3's own DLLs export. The lists come from the real files:
+`--dlls DIR` reads kernel32, user32, gdi32, msvcrt, shell32 and DirectX
+9.0c's d3d9 directly, `--record DIR` writes them to
+`tools/xp/xp-sp3-exports.txt` for the packager. **That list is not
+recorded yet**: x99 (whose qemu-gpu XP image has the files) and the G41
+were both off when R6 was built, so the check has run only against Wine's
+DLLs, which proves the parser and nothing about XP. Recording it is the
+first thing to do with either machine; the packager refuses to run
+without it.
+
+**Picking the tier.** A D3D9 device now asks the card's caps before the
+tier is fixed (`rhi::d3d9::probe_shader_caps`): vs/ps 3.0 is sm3, ps 2.0
+sm2, less fixed function, and a tier asked for or saved above that comes
+down to it. On XP that is what makes a double-click work on any card.
+
+**Not done:** running it on XP. The order is the G41 under XP SP3 with
+each card (record the exports, then `dragon.exe` with no flags, then the
+R4/R5 budgets); XP's own D3D9 drivers will have their quirks, and the
+thunks' XP sides have run only when forced on a newer Windows. The tests
+link the import libraries directly and are for Wine, not XP. A Pentium III
+or Athlon XP has no SSE2, which the build requires.
 
 ### R7, in progress: graphics settings and presets
 

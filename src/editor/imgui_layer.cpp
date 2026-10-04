@@ -5,15 +5,24 @@
 
 #include "core/log.h"
 #include "core/paths.h"
-#include "rhi/sdlgpu/sdlgpu.h"
 #include "imgui.h"
+#ifdef DRAGON_XP
+// The XP build (docs/PORTING.md, R6): ImGui's Win32 platform backend, fed
+// from the SDL3 subset's window procedure, and D3D9 to draw.
+#include "rhi/d3d9/d3d9_backend.h"  // first: brings <windows.h> and <d3d9.h>
+#include "imgui_impl_dx9.h"
+#include "imgui_impl_win32.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#else
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
+#include "rhi/sdlgpu/sdlgpu.h"
 #ifdef _WIN32
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_dx9.h"
 #include "rhi/d3d11/d3d11_backend.h"
 #include "rhi/d3d9/d3d9_backend.h"
+#endif
 #endif
 
 namespace editor {
@@ -129,6 +138,21 @@ bool ImGuiLayer::init(gfx::Device& device) {
     // changes.
     d3d9_ = device.rhi().backend() == rhi::Backend::Direct3D9;
     d3d11_ = device.rhi().backend() == rhi::Backend::Direct3D11;
+#ifdef DRAGON_XP
+    {
+        HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(device.window()),
+                                                             SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+        if (!d3d9_ || !ImGui_ImplWin32_Init(hwnd) || !ImGui_ImplDX9_Init(rhi::d3d9::native_device(device.rhi()))) {
+            LOG_ERROR("ImGui Win32/D3D9 init failed");
+            return false;
+        }
+        SDLXP_SetWndProcHook([](void* h, unsigned message, uintptr_t wparam, intptr_t lparam) -> intptr_t {
+            return intptr_t(ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(h), message, wparam, lparam));
+        });
+        initialized_ = true;
+        return true;
+    }
+#else
 #ifdef _WIN32
     if (d3d9_) {
         if (!ImGui_ImplSDL3_InitForD3D(device.window()) ||
@@ -173,10 +197,16 @@ bool ImGuiLayer::init(gfx::Device& device) {
 
     initialized_ = true;
     return true;
+#endif
 }
 
 void ImGuiLayer::shutdown() {
     if (!initialized_) return;
+#ifdef DRAGON_XP
+    SDLXP_SetWndProcHook(nullptr);
+    ImGui_ImplDX9_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+#else
 #ifdef _WIN32
     if (d3d9_) ImGui_ImplDX9_Shutdown();
     else if (d3d11_) ImGui_ImplDX11_Shutdown();
@@ -184,13 +214,17 @@ void ImGuiLayer::shutdown() {
 #endif
         ImGui_ImplSDLGPU3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
+#endif
     ImGui::DestroyContext();
     initialized_ = false;
 }
 
 bool ImGuiLayer::process_event(const SDL_Event& event) {
     if (!initialized_) return false;
+#ifndef DRAGON_XP
+    // (The XP build feeds ImGui from the window procedure instead.)
     ImGui_ImplSDL3_ProcessEvent(&event);
+#endif
     const ImGuiIO& io = ImGui::GetIO();
     switch (event.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -209,6 +243,10 @@ bool ImGuiLayer::process_event(const SDL_Event& event) {
 
 void ImGuiLayer::begin_frame(float target_width, float target_height) {
     if (!initialized_) return;
+#ifdef DRAGON_XP
+    ImGui_ImplDX9_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+#else
 #ifdef _WIN32
     if (d3d9_) ImGui_ImplDX9_NewFrame();
     else if (d3d11_) ImGui_ImplDX11_NewFrame();
@@ -216,6 +254,7 @@ void ImGuiLayer::begin_frame(float target_width, float target_height) {
 #endif
         ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
+#endif
     ImGuiIO& io = ImGui::GetIO();
     if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f &&
         target_height > 0.0f) {
@@ -233,7 +272,9 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     if (!draw_data) return;
     has_draw_data_ = true;
     if (d3d9_ || d3d11_) return;  // D3D9 and D3D11 record nothing ahead of the pass
+#ifndef DRAGON_XP
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
+#endif
     
 }
 
@@ -247,13 +288,19 @@ void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
         return;
     }
+#ifndef DRAGON_XP
     if (d3d11_) {
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         return;
     }
 #endif
+#endif
+#ifndef DRAGON_XP
     ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), rhi::sdlgpu::native_command_buffer(device.rhi()),
                                      rhi::sdlgpu::native_pass(pass));
+#else
+    (void)device;
+#endif
 }
 
 bool ImGuiLayer::wants_mouse() const {
