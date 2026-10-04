@@ -47,7 +47,13 @@ VertexOut vs_main(VertexIn input) {
 #ifdef FRAGMENT_STAGE
 TEXTURE2D(sky_map, 0);
 float4 fs_main(VertexOut input) : SV_Target {
-    return float4(scene_out(sky_map.Sample(sky_map_sampler, input.uv.xy).rgb), 1.0);
+    // Times the fog factor and the diffuse alpha (both 1 here): the reads
+    // keep COLOR0 and FOG in this stage's input signature ahead of the uv,
+    // as in particles.hlsl. DXC drops an unused input and renumbers the
+    // rest, and D3D11 at feature level 9 then refuses to link the stages
+    // ("Semantic 'TEXCOORD' is defined for mismatched hardware registers")
+    // and drew no sky on the X550.
+    return float4(scene_out(sky_map.Sample(sky_map_sampler, input.uv.xy).rgb) * saturate(input.fog) * saturate(input.diffuse.a), 1.0);
 }
 #endif
 #else

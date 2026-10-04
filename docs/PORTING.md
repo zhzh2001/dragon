@@ -344,8 +344,9 @@ graphics settings.
     reversed, so with two cards it is "the one not driving the display".
     D3D12 then creates on the 5060 Ti and renders headless from the SSH
     session as before. `dxdiag` confirms the X550 at WDDM 1.0 with feature
-    levels 9_2 and 9_1, and D3D11 at 9_2 runs on it (adapter 1 from the
-    SSH session: `--gpu-driver direct3d11:1`).
+    levels 9_2 and 9_1, and D3D11 at 9_2 runs on it (`--gpu-driver
+    direct3d11:1` from the SSH session, `direct3d11:0` on the desktop,
+    where it drives the display: DXGI numbers the adapters per session).
   - The `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets predate the
     sequenced random draws (R7, "A preset renders the same on every
     backend") and fail strict until recaptured.
@@ -1420,9 +1421,13 @@ is within 0.006 of its own D3D12 sm2 render). At 1024x768 the X550 runs
 21 to 24, 28 to 33 and 173 (the last at 1280x720): the 10level9 layer costs
 a tenth at the shader-bound presets and half at Minimal, where the frame is
 draw calls -- a draw per foliage instance -- through two API layers. The ff
-shader variant runs the same way (`--tier ff`, 84 fps at Minimal). Nothing
-new appears on screen, as predicted; the point is that the modern code
-path reaches the card without the D3D9 backend.
+shader variant runs the same way (`--tier ff`, about 80 fps at Minimal).
+Windowed, on the desktop session, the X550 presents at 31 fps at its saved
+settings and the 5060 Ti at the 60 of vsync. Nothing new appears on
+screen, as predicted; the point is that the modern code path reaches the
+card without the D3D9 backend. (DXGI numbers the adapters per session:
+the X550 is `direct3d11:1` from SSH and `direct3d11:0` on the desktop,
+where it drives the display.)
 
 **The shaders:** `tools/d3d11/bake_d3d11.py OUT --tier sm2|sm2-noshadows|ff
 --profiles fl91` bakes the tier's variant with `LEVEL9` defined through
@@ -1481,6 +1486,14 @@ was placed on the draw that raised it):
    fetched source to the `level_9_1` profiles (they run on every feature
    level) and to `FLT_MAX`, and `imgui_layer.cpp` sets the atlas limit from
    `max_texture_size()`. With those the run HUD draws on the X550.
+8. **Stage signatures must match register for register.** DXC drops a
+   pixel-stage input the shader never reads and SPIRV-Cross renumbers the
+   rest, which the modern backends link by semantic and level 9 refuses
+   ("Semantic 'TEXCOORD' is defined for mismatched hardware registers"),
+   drawing nothing: the ff sky dome's fragment stage read only the uv of
+   its three varyings and the X550 drew a flat sky. It now multiplies by
+   the fog and the diffuse alpha (both 1), the trick particles.hlsl
+   already used for the same reason on D3D12.
 
 Not tested: a 9_1 device (none owned; the 5060 Ti forced to 9_1 refuses
 `R32_FLOAT` outright, so the shadow stand-in would need the `NO_SHADOWS`
