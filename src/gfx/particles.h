@@ -79,6 +79,11 @@ private:
         core::Vec4 output_grade = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};  // as SceneUniforms'
     };
     Uniforms uniforms_;
+    // The fixed-function tier's disc (particles.hlsl, FIXED_FUNCTION): the
+    // (1 - r)^2 falloff the pixel stage computes, baked into a texture a
+    // stage can modulate by.
+    rhi::Texture* disc_texture_ = nullptr;
+    rhi::Sampler* disc_sampler_ = nullptr;
 };
 
 }  // namespace gfx

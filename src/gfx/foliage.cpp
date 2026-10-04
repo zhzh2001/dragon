@@ -1,5 +1,7 @@
 #include "gfx/foliage.h"
 
+#include "gfx/render_tier.h"
+
 #include "gfx/frustum.h"
 #include "gfx/palette.h"
 
@@ -452,7 +454,8 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     // alpha, rendered in Blender (tools: the concept-art skill's notes) and
     // coloured by the palette in the shader. Missing files are not fatal --
     // the shader falls back to a solid card -- but they are logged.
-    const auto load = [&](const char* path, const char* name) -> rhi::Texture* {
+    ImageData leaf_image, needle_image;
+    const auto load = [&](const char* path, const char* name, ImageData& image) -> rhi::Texture* {
         std::ifstream file(path, std::ios::binary);
         if (!file) {
             LOG_WARN("foliage: no %s at %s; cards will be solid", name, path);
@@ -460,11 +463,37 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         }
         std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
                                    std::istreambuf_iterator<char>());
-        const ImageData image = decode_image(bytes.data(), bytes.size());
+        image = decode_image(bytes.data(), bytes.size());
         return create_texture_from_image(device->rhi(), image, name, false);
     };
-    leaf_texture_ = load(core::paths::asset("textures/leaf_cluster.png").c_str(), "leaf_cluster");
-    needle_texture_ = load(core::paths::asset("textures/needle_spray.png").c_str(), "needle_spray");
+    leaf_texture_ = load(core::paths::asset("textures/leaf_cluster.png").c_str(), "leaf_cluster", leaf_image);
+    needle_texture_ = load(core::paths::asset("textures/needle_spray.png").c_str(), "needle_spray", needle_image);
+    if (active_tier().fixed_function && leaf_image.valid() && needle_image.valid()) {
+        // The atlas (foliage.hlsl, FIXED_FUNCTION): both maps at their own
+        // size side by side, an opaque strip an eighth as tall below, at the
+        // mid-grey that MODULATE2X leaves alone (white doubled the rocks,
+        // trunks and grass).
+        const int w = leaf_image.width, h = leaf_image.height;
+        const int strip = std::max(h / 8, 4);
+        ImageData atlas;
+        atlas.width = w * 2;
+        atlas.height = h + strip;
+        atlas.rgba.assign(size_t(atlas.width) * atlas.height * 4, 128);
+        for (size_t i = 3; i < atlas.rgba.size(); i += 4) atlas.rgba[i] = 255;
+        for (int y = 0; y < h; ++y) {
+            const auto copy = [&](const ImageData& src, int x0) {
+                if (src.width != w || src.height != h) return;
+                std::memcpy(&atlas.rgba[(size_t(y) * atlas.width + x0) * 4], &src.rgba[size_t(y) * w * 4], size_t(w) * 4);
+            };
+            copy(leaf_image, 0);
+            copy(needle_image, w);
+        }
+        if (needle_image.width != w || needle_image.height != h) {
+            LOG_WARN("foliage: the card maps differ in size (%dx%d, %dx%d); the needle half of the atlas is blank",
+                     w, h, needle_image.width, needle_image.height);
+        }
+        card_atlas_ = create_texture_from_image(device->rhi(), atlas, "card_atlas", false);
+    }
     card_sampler_ = create_model_sampler(device->rhi());
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
     static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};
@@ -496,6 +525,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
 
 void Foliage::shutdown(Device& device) {
     device.rhi().destroy(leaf_texture_);
+    device.rhi().destroy(card_atlas_);
     device.rhi().destroy(needle_texture_);
     device.rhi().destroy(card_sampler_);
     leaf_texture_ = needle_texture_ = nullptr;
@@ -686,8 +716,9 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
                                                     : tree_draw_distance)) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
             // Wholly past the dither band (lod_distance * 1.3, foliage.hlsl):
-            // the coarse cards only.
-            const bool coarse = set.coarse_indices > 0 && nearest > lod_distance * 1.3f;
+            // the coarse cards only. Fixed function has no dither, so its
+            // crowns are the coarse cards everywhere.
+            const bool coarse = set.coarse_indices > 0 && (active_tier().fixed_function || nearest > lod_distance * 1.3f);
             device.rhi().draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
                                          cell.first);
             trees_drawn_ += cell.count;
@@ -773,6 +804,15 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
 }
 
 void Foliage::bind_cards(Device& device, rhi::Pass* pass, uint32_t first) const {
+    if (card_atlas_ && card_sampler_ && active_tier().fixed_function) {
+        // The fixed-function stage reads one texture, in the leaf slot; the
+        // needle slot and the lattice are not in that shader.
+        rhi::TextureBinding atlas = {};
+        atlas.texture = card_atlas_;
+        atlas.sampler = card_sampler_;
+        device.rhi().bind_fragment_textures(pass, first, &atlas, 1);
+        return;
+    }
     // A missing texture binds the other one, so the slot is never empty; the
     // shader's alpha test then cuts the wrong shape, which is visible and
     // logged at load rather than a validation crash.

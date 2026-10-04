@@ -11,7 +11,33 @@ struct VertexIn {
     float3 color    : TEXCOORD2;
 };
 
-#ifdef SM2
+#if defined(FIXED_FUNCTION)
+// Fixed function (docs/PORTING.md R5): one plane, one colour -- the deep
+// water toward the sky at a glancing-average fresnel -- the diffuse alone
+// (stage 0, SELECTARG1 DIFFUSE) under the fog. The quad is four vertices
+// across the map, so the fog is per vertex and coarse; the river is small.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    FF_VARYINGS
+};
+
+#ifdef VERTEX_STAGE
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
+    o.uv = (float4)0.0;
+    o.diffuse = float4(ff_display(lerp(scene.palette[PALETTE_WATER_DEEP].rgb, scene.sky_horizon.rgb, 0.2)), 1.0);
+    o.fog = ff_fog(input.position);
+    return o;
+}
+#endif
+
+#ifdef FRAGMENT_STAGE
+float4 fs_main(VertexOut input) : SV_Target {
+    return float4(ff_finish(input.diffuse.rgb, input.fog), 1.0);
+}
+#endif
+#elif defined(SM2)
 // SM2 (docs/PORTING.md, R4): "fresnel only". The water is one quad across the
 // map, so nothing can be lit per vertex; the pixel stage keeps the fresnel
 // between the deep colour and a cheaper sky (no sun disc), and the fog, and
@@ -31,17 +57,6 @@ VertexOut vs_main(VertexIn input) {
 #endif
 
 #ifdef FRAGMENT_STAGE
-#ifdef FIXED_FUNCTION
-// Fixed function: one plane, one colour -- the deep water toward the sky
-// at a glancing-average fresnel -- under the same exp2 fog as everything.
-float4 fs_main(VertexOut input) : SV_Target {
-    float3 to_point = input.world_position - scene.camera_position.xyz;
-    float x = length(to_point) * scene.fog_color.a;
-    float fog = saturate(1.0 - exp(-x * x));
-    float3 color = ff_display(lerp(scene.palette[PALETTE_WATER_DEEP].rgb, scene.sky_horizon.rgb, 0.35));
-    return float4(scene_out(lerp(color, ff_display(scene.fog_color.rgb), fog)), 1.0);
-}
-#else
 float4 fs_main(VertexOut input) : SV_Target {
     float3 to_point = input.world_position - scene.camera_position.xyz;
     float dist = length(to_point);
@@ -54,7 +69,6 @@ float4 fs_main(VertexOut input) : SV_Target {
     float fog = saturate(1.0 - exp(-pow(dist * density, 2.0)));
     return float4(scene_out(lerp(color, sky_plain(ray), fog)), 1.0);
 }
-#endif
 #endif
 #else  // the per-pixel path
 

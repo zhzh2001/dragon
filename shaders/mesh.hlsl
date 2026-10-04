@@ -14,11 +14,21 @@ struct VertexIn {
 // Emissive and unlit fold into the per-vertex terms -- the ambient becomes
 // the emissive (plus the ambient when lit), the sun drops to zero when unlit
 // -- so the pixel stage is the albedo and the shared finish.
+#ifdef FIXED_FUNCTION
+// Fixed function (docs/PORTING.md R5): the diffuse alone (stage 0,
+// SELECTARG1 DIFFUSE): the vertex colour lit and finished per vertex, or
+// for an unlit object its colour times the emissive; no facing flip.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    FF_VARYINGS
+};
+#else
 struct VertexOut {
     float4 clip_position : SV_Position;
     float4 albedo : TEXCOORD0;
     SM2_LIGHT_VARYINGS
 };
+#endif
 
 #ifdef VERTEX_STAGE
 ConstantBuffer<ModelUniforms> model : UNIFORM_SLOT(1);
@@ -27,23 +37,22 @@ VertexOut vs_main(VertexIn input) {
     VertexOut o;
     float4 world = mul(model.model, float4(input.position, 1.0));
     float3 normal = normalize(mul(model.model, float4(input.normal, 0.0)).xyz);
-    // Thin plates seen from both sides: light the face toward the viewer.
-#ifdef FIXED_FUNCTION
-    o.albedo = float4(ff_albedo(input.color * model.tint.rgb), 0.0);
-#else
-    if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
-    o.albedo = float4(input.color * model.tint.rgb, 0.0);
-#endif
     o.clip_position = mul(scene.view_proj, world);
-    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     const float lit = 1.0 - model.material.w;
 #ifdef FIXED_FUNCTION
-    light.ambient.rgb = light.ambient.rgb * lit + ff_display((float3)model.tint.a);
+    float3 albedo = input.color * model.tint.rgb;
+    o.diffuse = float4(saturate(ff_lit(albedo, normal, 0.0).rgb * lit + ff_albedo(albedo) * ff_display((float3)model.tint.a)), 1.0);
+    o.uv = (float4)0.0;
+    o.fog = ff_fog(world.xyz);
 #else
+    // Thin plates seen from both sides: light the face toward the viewer.
+    if (dot(normal, scene.camera_position.xyz - world.xyz) < 0.0) normal = -normal;
+    o.albedo = float4(input.color * model.tint.rgb, 0.0);
+    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     light.ambient.rgb = light.ambient.rgb * lit + model.tint.a;
-#endif
     light.sun.rgb *= lit;
     SM2_LIGHT_OUT(o, light);
+#endif
     return o;
 }
 #endif
@@ -51,9 +60,15 @@ VertexOut vs_main(VertexIn input) {
 #ifdef FRAGMENT_STAGE
 DEPTH2D(shadow_map, 0);
 
+#ifdef FIXED_FUNCTION
+float4 fs_main(VertexOut input) : SV_Target {
+    return float4(ff_finish(input.diffuse.rgb * FF_KEEP_SHADOW_SLOT, input.fog), 1.0);
+}
+#else
 float4 fs_main(VertexOut input) : SV_Target {
     return float4(sm2_finish(input.albedo.rgb, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
 }
+#endif
 #endif
 #else  // the per-pixel path
 

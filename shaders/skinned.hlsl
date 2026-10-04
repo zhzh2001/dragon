@@ -18,12 +18,23 @@ struct VertexIn {
 // The pixel stage keeps the base-colour texture and the bots' recolour; the
 // normal map, the ORM map and the specular lobe are the SM2 tier's cut
 // ("ORM dropped"), and the emissive folds into the per-vertex ambient.
+#ifdef FIXED_FUNCTION
+// Fixed function (docs/PORTING.md R5): the vertex colour and the tint, lit
+// and finished per vertex (ff_lit), the emissive added; stage 0 modulates
+// by the base colour (MODULATE). No recolour (a stage cannot replace a hue
+// at constant luminance) and no facing flip (D3D9 lights one side).
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    FF_VARYINGS
+};
+#else
 struct VertexOut {
     float4 clip_position : SV_Position;
     float4 uv : TEXCOORD0;      // xy the uv
     float4 albedo : TEXCOORD1;  // rgb the vertex colour times the tint
     SM2_LIGHT_VARYINGS
 };
+#endif
 
 ConstantBuffer<ModelUniforms> model : UNIFORM_SLOT(1);
 
@@ -42,19 +53,14 @@ VertexOut vs_main(VertexIn input) {
     o.clip_position = mul(scene.view_proj, world);
     o.uv = float4(input.uv, 0.0, 0.0);
 #ifdef FIXED_FUNCTION
-    // Fixed function: the vertex colour and the tint are the material's
-    // diffuse, display-encoded; the emissive is an emissive; no recolour
-    // (a stage cannot replace a hue at constant luminance) and no facing
-    // flip (D3D9 lights one side).
-    o.albedo = float4(ff_albedo(input.color * model.tint.rgb), 0.0);
-    Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
-    light.ambient.rgb += ff_display((float3)model.tint.a);
+    o.diffuse = saturate(ff_lit(input.color * model.tint.rgb, normal, 0.0) + float4(ff_display((float3)model.tint.a), 0.0));
+    o.fog = ff_fog(world.xyz);
 #else
     o.albedo = float4(input.color * model.tint.rgb, 0.0);
     Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     light.ambient.rgb += model.tint.a;  // the emissive
-#endif
     SM2_LIGHT_OUT(o, light);
+#endif
     return o;
 }
 #endif
@@ -63,17 +69,25 @@ VertexOut vs_main(VertexIn input) {
 DEPTH2D(shadow_map, 0);
 TEXTURE2D(base_colour, 1);
 
+#ifdef FIXED_FUNCTION
+float4 fs_main(VertexOut input) : SV_Target {
+    // Stage 0: the texture (the renderer binds white where a submesh has
+    // none) MODULATE the diffuse.
+    float3 color = saturate(input.diffuse.rgb * base_colour.Sample(base_colour_sampler, input.uv.xy).rgb) *
+                   FF_KEEP_SHADOW_SLOT;
+    return float4(ff_finish(color, input.fog), 1.0);
+}
+#else
 float4 fs_main(VertexOut input) : SV_Target {
     // The texture is sRGB, so the sample arrives already linear; without one
     // (material.x 0) the vertex colour stands alone.
     float3 albedo = input.albedo.rgb * lerp((float3)1.0, base_colour.Sample(base_colour_sampler, input.uv.xy).rgb,
                                             model.material.x);
-#ifndef FIXED_FUNCTION
     float luminance = dot(albedo, float3(0.30, 0.59, 0.11));
     albedo = lerp(albedo, luminance * model.recolour.rgb, model.recolour.a);
-#endif
     return float4(sm2_finish(albedo, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
 }
+#endif
 #endif
 #else  // the per-pixel path
 

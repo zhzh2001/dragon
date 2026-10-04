@@ -407,7 +407,12 @@ bool App::init(const Options& options) {
         std::ifstream file(core::paths::asset("textures/terrain_detail.png"), std::ios::binary);
         if (file) {
             std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            const gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
+            gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
+            if (tier_.fixed_function) {
+                // One stage modulates by the whole texture (terrain.hlsl,
+                // FIXED_FUNCTION): the grass channel in every channel.
+                for (size_t i = 0; i + 3 < image.rgba.size(); i += 4) image.rgba[i] = image.rgba[i + 2] = image.rgba[i + 1];
+            }
             terrain_detail_texture_ = gfx::create_texture_from_image(device_.rhi(), image, "terrain_detail", false);
             world_.set_terrain_detail(terrain_detail_texture_);
             LOG_INFO("terrain detail: %dx%d", image.width, image.height);
@@ -1265,18 +1270,30 @@ void App::regenerate_terrain() {
     // The water surface: one quad at the water line over the whole world. The
     // terrain hides it everywhere the ground is above the line, which is
     // everywhere but the river.
+    // Fixed function fogs per vertex (water.hlsl, FIXED_FUNCTION), and the
+    // quad's corners are at the skirt's edge, fogged out: it draws a 32 x 32
+    // grid there so the river's fog is the river's.
     {
         gfx::MeshData quad;
         const float half = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
         const float y = terrain_settings_.water_level;
-        for (int i = 0; i < 4; ++i) {
-            gfx::MeshVertex v;
-            v.position = core::Vec3{(i & 1) ? half : -half, y, (i & 2) ? half : -half};
-            v.normal = core::Vec3::up();
-            v.color = core::Vec3::one();
-            quad.vertices.push_back(v);
+        const int n = tier_.fixed_function ? 32 : 1;
+        for (int j = 0; j <= n; ++j) {
+            for (int i = 0; i <= n; ++i) {
+                gfx::MeshVertex v;
+                v.position = core::Vec3{-half + 2.0f * half * float(i) / float(n), y,
+                                        -half + 2.0f * half * float(j) / float(n)};
+                v.normal = core::Vec3::up();
+                v.color = core::Vec3::one();
+                quad.vertices.push_back(v);
+            }
         }
-        quad.indices = {0, 2, 1, 1, 2, 3};
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < n; ++i) {
+                const uint32_t a = uint32_t(j * (n + 1) + i), b = a + 1, c = a + uint32_t(n + 1), d = c + 1;
+                quad.indices.insert(quad.indices.end(), {a, c, b, b, c, d});
+            }
+        }
         water_mesh_.release(device_.rhi());
         water_mesh_.upload(device_.rhi(), quad, "water");
     }

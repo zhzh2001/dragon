@@ -30,15 +30,15 @@ TEXTURE2D(detail_tile, 1);
 
 #ifdef FIXED_FUNCTION
 // Fixed function (docs/PORTING.md R5): the material is one colour per
-// vertex -- the same blends, resolved here instead of per pixel -- and the
-// detail tile modulates it 2x. The tile's grass channel serves every
-// material (a stage modulates by the whole texture), and its mips average
-// to the 0.5 that leaves the colour alone, so distance fades it by itself.
+// vertex -- the same blends, resolved here instead of per pixel, lit and
+// finished (ff_lit) -- and the detail tile modulates it 2x (stage 1,
+// MODULATE2X). The tile is greyscale on this tier (its grass channel in
+// every channel, gfx::Device at load), since a stage modulates by the whole
+// texture; its mips average to the 0.5 that leaves the colour alone, so
+// distance fades the detail by itself.
 struct VertexOut {
     float4 clip_position : SV_Position;
-    float4 detail : TEXCOORD0;  // xy the detail tile's uv
-    float4 albedo : TEXCOORD1;  // rgb the blended material, display-encoded
-    SM2_LIGHT_VARYINGS
+    FF_VARYINGS
 };
 #else
 struct VertexOut {
@@ -77,8 +77,16 @@ VertexOut vs_main(VertexIn input) {
     float3 albedo = lerp(grass, scene.palette[PALETTE_SAND].rgb, sand);
     albedo = lerp(albedo, rock, saturate(slope_blend + altitude_rockiness));
     albedo = lerp(albedo, scene.palette[PALETTE_SNOW].rgb, snow);
-    o.detail = float4(p.xz / 16.0, 0.0, 0.0);
-    o.albedo = float4(ff_albedo(albedo * input.color), 0.0);
+    o.uv = float4(p.xz / 16.0, 0.0, 0.0);
+    o.diffuse = ff_lit(albedo * input.color, normal, 0.0);
+    // The map's edge dissolves into the fog colour, through the fog factor.
+    o.fog = ff_fog(p);
+    float half_extent = scene.view_params.w;
+    if (half_extent > 0.0) {
+        float edge = max(abs(p.x), abs(p.z)) / half_extent;
+        o.fog = min(o.fog, 1.0 - smoothstep(0.80, 0.99, edge));
+    }
+    return o;
 #else
     o.grass = float4(grass, sand);
     o.rock = float4(rock, 0.0);
@@ -86,7 +94,6 @@ VertexOut vs_main(VertexIn input) {
     float camera_distance = length(p - scene.camera_position.xyz);
     o.rock.a = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
     o.tint = float4(input.color, 0.0);
-#endif
 
     Sm2Light light = sm2_light_vertex(p, normal, 0.0);
     // The map's edge dissolves into the sky, which is the fog's colour.
@@ -97,16 +104,17 @@ VertexOut vs_main(VertexIn input) {
     }
     SM2_LIGHT_OUT(o, light);
     return o;
+#endif
 }
 #endif
 
 #ifdef FRAGMENT_STAGE
 #ifdef FIXED_FUNCTION
 float4 fs_main(VertexOut input) : SV_Target {
-    // Stage 1: the detail tile, MODULATE2X with the colour.
-    float d = detail_tile.Sample(detail_tile_sampler, input.detail.xy).g;
-    float3 albedo = saturate(input.albedo.rgb * (d * 2.0));
-    return float4(sm2_finish(albedo, SM2_LIGHT_IN(input), shadow_map, shadow_map_sampler), 1.0);
+    // Stage 0 the diffuse, stage 1 the detail tile MODULATE2X with it.
+    float3 d = detail_tile.Sample(detail_tile_sampler, input.uv.xy).rgb;
+    float3 color = saturate(input.diffuse.rgb * d * 2.0) * FF_KEEP_SHADOW_SLOT;
+    return float4(ff_finish(color, input.fog), 1.0);
 }
 #else
 float4 fs_main(VertexOut input) : SV_Target {

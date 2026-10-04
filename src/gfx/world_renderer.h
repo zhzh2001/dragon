@@ -73,6 +73,10 @@ public:
 private:
     PipelineCache* pipelines_ = nullptr;
     PipelineHandle sky_ = INVALID_PIPELINE;
+    // The fixed-function tier's sky: a unit sphere about the camera, coloured
+    // per vertex (sky.hlsl, FIXED_FUNCTION), in place of the fullscreen
+    // triangle a pixel stage cannot shade.
+    Mesh sky_dome_;
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
     PipelineHandle water_ = INVALID_PIPELINE;

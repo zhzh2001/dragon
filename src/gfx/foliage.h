@@ -95,6 +95,10 @@ private:
     };
     rhi::Texture* leaf_texture_ = nullptr;
     rhi::Texture* needle_texture_ = nullptr;
+    // The fixed-function tier's one card texture (gfx/render_tier.h): the
+    // leaf and needle maps side by side over a white opaque strip, so one
+    // texture stage serves cards, bark and solids alike (foliage.hlsl).
+    rhi::Texture* card_atlas_ = nullptr;
     rhi::Sampler* card_sampler_ = nullptr;
     const NoiseLattice* noise_lattice_ = nullptr;
     // Binds the two card textures at fragment slots `first` and `first + 1`,

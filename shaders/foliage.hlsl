@@ -27,7 +27,20 @@ static const int FOLIAGE_MAT_NEEDLE = 2;
 static const int FOLIAGE_MAT_BARK = 3;
 static const int FOLIAGE_DETAIL = 10;
 
-#ifdef SM2
+#if defined(FIXED_FUNCTION)
+// Fixed function (docs/PORTING.md R5): the plant's colour lit and finished
+// per vertex (ff_lit); stage 0 is the card atlas MODULATE2X with it, its
+// alpha the cut-out (the alpha test at 0.45). One texture for every draw:
+// the leaf and needle maps side by side with a mid-grey, opaque strip under
+// them (gfx::Foliage builds it on this tier), and the uv remapped here --
+// a card into its half, bark and solids onto the grey strip, so one stage
+// setup serves the whole mesh. No LOD dither: the renderer draws the coarse
+// cards only on this tier. No facing flip: D3D9 lights one side.
+struct VertexOut {
+    float4 clip_position : SV_Position;
+    FF_VARYINGS
+};
+#elif defined(SM2)
 // SM2 (docs/PORTING.md, R4): lit per vertex through scene_common's SM2 path.
 // The pixel stage keeps the distance LOD's dither, the card's cut-out and
 // mottle and the shared finish; the bark's streaks are the SM2 tier's cut, and
@@ -85,7 +98,30 @@ float3 place_vertex(VertexIn input, float3 camera_position, out float3 world_nor
     return input.position_scale.xyz + rotated;
 }
 
-#ifdef SM2
+#if defined(FIXED_FUNCTION)
+// The atlas: 512 x 288, the leaf map at u 0..0.5 and the needle map at
+// 0.5..1 over v 0..256/288, a mid-grey opaque strip below (gfx::Foliage).
+VertexOut vs_main(VertexIn input) {
+    VertexOut o;
+    float3 normal;
+    float3 world = place_vertex(input, scene.camera_position.xyz, normal);
+    normal = normalize(normal);
+    int entry = clamp(int(input.color.x + 0.5), 0, PALETTE_COUNT - 1);
+    float3 base = scene.palette[entry].rgb * input.color.y * input.params.y;
+    float3 albedo = lerp(base, base * scene.palette[PALETTE_PLANT_WARM].rgb, input.params.w);
+    int tag = int(input.color.z + 0.5);
+    int material = tag >= FOLIAGE_DETAIL ? tag - FOLIAGE_DETAIL : tag;
+    const bool card = material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE;
+    if (card) albedo *= 1.0 - 0.35 * saturate(-normal.y);
+    const float strip = 256.0 / 288.0;
+    o.uv = card ? float4(input.uv.x * 0.5 + (material == FOLIAGE_MAT_NEEDLE ? 0.5 : 0.0), input.uv.y * strip, 0.0, 0.0)
+                : float4(0.25, strip + (1.0 - strip) * 0.5, 0.0, 0.0);
+    o.clip_position = mul(scene.view_proj, float4(world, 1.0));
+    o.diffuse = ff_lit(albedo, normal, material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y);
+    o.fog = ff_fog(world);
+    return o;
+}
+#elif defined(SM2)
 VertexOut vs_main(VertexIn input) {
     VertexOut o;
     float3 normal;
@@ -100,22 +136,15 @@ VertexOut vs_main(VertexIn input) {
     // Dark undersides, judged on the geometric normal before the facing flip.
     if (card) albedo *= 1.0 - 0.35 * saturate(-normal.y);
     o.uv = float4(input.uv, card ? 1.0 : 0.0, material == FOLIAGE_MAT_NEEDLE ? 1.0 : 0.0);
-#ifdef FIXED_FUNCTION
-    o.albedo = float4(ff_albedo(albedo), tag >= FOLIAGE_DETAIL ? 1.0 : 0.0);
-#else
     o.albedo = float4(albedo, tag >= FOLIAGE_DETAIL ? 1.0 : 0.0);
-#endif
     // The LOD's dither threshold, constant over the plant: the instance's hash
     // against how far past the LOD distance its base is.
     const float lod = params.extra.y;
     const float past = (length(input.position_scale.xyz - scene.camera_position.xyz) - lod) / max(lod * 0.3, 1.0);
     o.lod = float4(frac(input.params.z * 0.15915494) - past, 0.0, 0.0, 0.0);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
-    // Two-sided: light the face toward the viewer (not in fixed function,
-    // which lights one side; a card seen from behind is in its own shade).
-#ifndef FIXED_FUNCTION
+    // Two-sided: light the face toward the viewer.
     if (dot(normal, scene.camera_position.xyz - world) < 0.0) normal = -normal;
-#endif
     Sm2Light light = sm2_light_vertex(world, normal, material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y);
     SM2_LIGHT_OUT(o, light);
     return o;
@@ -154,7 +183,16 @@ TEXTURE2D(needle_card, 2);
 #define NOISE_SLOT 3  // the baked lattice, on a retro tier
 #include "noise.hlsl"
 
-#ifdef SM2
+#if defined(FIXED_FUNCTION)
+float4 fs_main(VertexOut input) : SV_Target {
+    // Stage 0: the atlas (bound in the leaf slot) MODULATE2X the diffuse,
+    // its alpha tested at 0.45.
+    float4 card = leaf_card.Sample(leaf_card_sampler, input.uv.xy);
+    clip(card.a - 0.45);
+    float3 color = saturate(input.diffuse.rgb * card.rgb * 2.0) * FF_KEEP_SHADOW_SLOT;
+    return float4(ff_finish(color, input.fog), 1.0);
+}
+#elif defined(SM2)
 float4 fs_main(VertexOut input) : SV_Target {
     float4 leaf = leaf_card.Sample(leaf_card_sampler, input.uv.xy);
     float4 needle = needle_card.Sample(needle_card_sampler, input.uv.xy);

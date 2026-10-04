@@ -1,6 +1,9 @@
 #include "gfx/particles.h"
 
 #include <cstring>
+#include "gfx/texture.h"
+#include "gfx/render_tier.h"
+#include <cmath>
 
 using core::Vec2;
 using core::Vec3;
@@ -45,11 +48,36 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
     };
 
     pipeline_ = pipelines->create(desc);
+    if (active_tier().fixed_function) {
+        constexpr int N = 64;
+        ImageData disc;
+        disc.width = disc.height = N;
+        disc.rgba.resize(size_t(N) * N * 4);
+        for (int y = 0; y < N; ++y) {
+            for (int x = 0; x < N; ++x) {
+                const float u = (float(x) + 0.5f) / N * 2.0f - 1.0f, v = (float(y) + 0.5f) / N * 2.0f - 1.0f;
+                float falloff = std::max(0.0f, 1.0f - std::sqrt(u * u + v * v));
+                falloff *= falloff;
+                const uint8_t value = uint8_t(std::lround(falloff * 255.0f));
+                uint8_t* p = &disc.rgba[(size_t(y) * N + x) * 4];
+                p[0] = p[1] = p[2] = value;
+                p[3] = 255;
+            }
+        }
+        disc_texture_ = create_texture_from_image(device->rhi(), disc, "particle_disc", false);
+        rhi::SamplerDesc sampler;
+        sampler.address_u = sampler.address_v = sampler.address_w = rhi::Address::Clamp;
+        disc_sampler_ = device->rhi().create_sampler(sampler);
+    }
     return pipeline_ != INVALID_PIPELINE;
 }
 
 void ParticleSystem::shutdown() {
     if (!device_) return;
+    device_->rhi().destroy(disc_texture_);
+    device_->rhi().destroy(disc_sampler_);
+    disc_texture_ = nullptr;
+    disc_sampler_ = nullptr;
     device_->rhi().destroy(vertex_buffer_);
     vertex_buffer_ = nullptr;
     capacity_ = 0;
@@ -163,6 +191,12 @@ void ParticleSystem::draw(Device& device, rhi::Pass* pass) {
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &uniforms_, sizeof(Uniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &uniforms_, sizeof(Uniforms));
+    if (disc_texture_ && disc_sampler_) {
+        rhi::TextureBinding disc = {};
+        disc.texture = disc_texture_;
+        disc.sampler = disc_sampler_;
+        device.rhi().bind_fragment_textures(pass, 0, &disc, 1);
+    }
     rhi::BufferBinding binding = {};
     binding.buffer = vertex_buffer_;
     device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);

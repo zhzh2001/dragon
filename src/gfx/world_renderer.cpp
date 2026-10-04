@@ -1,4 +1,6 @@
 #include "gfx/world_renderer.h"
+#include "gfx/render_tier.h"
+#include "gfx/primitives.h"
 
 #include "gfx/frustum.h"
 
@@ -17,6 +19,19 @@ PipelineDesc make_sky_desc() {
     desc.name = "sky";
     desc.shader = "sky";
     desc.cull = rhi::Cull::None;
+    if (active_tier().fixed_function) {
+        // The dome's positions (sky.hlsl, FIXED_FUNCTION), from a MeshVertex.
+        rhi::VertexBufferLayout buffer = {};
+        buffer.slot = 0;
+        buffer.pitch = sizeof(MeshVertex);
+        desc.vertex_buffers = {buffer};
+        rhi::VertexAttribute position = {};
+        position.location = 0;
+        position.buffer_slot = 0;
+        position.format = rhi::VertexFormat::Float3;
+        position.offset = offsetof(MeshVertex, position);
+        desc.vertex_attributes = {position};
+    }
     // No vertex buffer: the triangle is generated from vertex_id.
     // Drawn after the opaque world, at the far plane, tested and not
     // writing: only the pixels nothing covered are shaded. Drawn first and
@@ -167,6 +182,7 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     neutral_ = create_texture_from_image(device->rhi(), grey, "neutral", false);
     white_sampler_ = create_model_sampler(device->rhi());
     sky_ = pipelines_->create(make_sky_desc());
+    if (active_tier().fixed_function) sky_dome_.upload(device->rhi(), make_sphere(1.0f, core::Vec3::one(), 64, 32), "sky_dome");
     terrain_ = pipelines_->create(make_terrain_desc(false));
     terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
     water_ = pipelines_->create(make_water_desc());
@@ -177,6 +193,7 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
 }
 
 void WorldRenderer::shutdown(Device& device) {
+    sky_dome_.release(device.rhi());
     device.rhi().destroy(white_);
     device.rhi().destroy(neutral_);
     neutral_ = nullptr;
@@ -189,6 +206,13 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
     rhi::Pipeline* pipeline = pipelines_->get(sky_);
     if (!pipeline || !pass) return;
     device.rhi().bind_pipeline(pass, pipeline);
+    if (active_tier().fixed_function && sky_dome_.valid()) {
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
+        device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+        sky_dome_.bind(device.rhi(), pass);
+        device.rhi().draw_indexed(pass, sky_dome_.index_count(), 1, 0, 0, 0);
+        return;
+    }
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     device.rhi().draw(pass, 3, 1, 0, 0);
 }
