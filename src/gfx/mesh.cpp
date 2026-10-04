@@ -105,25 +105,41 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size) {
         std::vector<uint32_t>& bucket = buckets[{cx, cz}];
         bucket.insert(bucket.end(), mesh.indices.begin() + ptrdiff_t(t), mesh.indices.begin() + ptrdiff_t(t + 3));
     }
+    // Each chunk's vertices are gathered into their own contiguous run (a
+    // vertex on a chunk border is duplicated into each chunk): a chunk's
+    // draw then names a vertex range of its own two hundred, not the span
+    // of a grid it is a window into. Hardware never cared; D3D9's software
+    // vertex pipeline transforms the whole range named, and on the
+    // fixed-function tier the terrain's 260 chunks a frame each spanned
+    // thousands (docs/PORTING.md R5).
     std::vector<MeshChunk> chunks;
     std::vector<uint32_t> indices;
+    std::vector<MeshVertex> vertices;
     indices.reserve(mesh.indices.size());
+    vertices.reserve(mesh.vertices.size() + mesh.vertices.size() / 10);
+    std::vector<uint32_t> remap(mesh.vertices.size());
     for (const auto& [key, bucket] : buckets) {
         core::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+        std::fill(remap.begin(), remap.end(), UINT32_MAX);
+        MeshChunk chunk;
+        chunk.first_index = uint32_t(indices.size());
+        chunk.index_count = uint32_t(bucket.size());
         for (uint32_t i : bucket) {
             const core::Vec3 p = mesh.vertices[i].position;
             lo = core::Vec3{std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
             hi = core::Vec3{std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+            if (remap[i] == UINT32_MAX) {
+                remap[i] = uint32_t(vertices.size());
+                vertices.push_back(mesh.vertices[i]);
+            }
+            indices.push_back(remap[i]);
         }
-        MeshChunk chunk;
-        chunk.first_index = uint32_t(indices.size());
-        chunk.index_count = uint32_t(bucket.size());
         chunk.centre = (lo + hi) * 0.5f;
         chunk.radius = core::length(hi - lo) * 0.5f;
         chunks.push_back(chunk);
-        indices.insert(indices.end(), bucket.begin(), bucket.end());
     }
     mesh.indices = std::move(indices);
+    mesh.vertices = std::move(vertices);
     return chunks;
 }
 
