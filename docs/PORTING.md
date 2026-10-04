@@ -871,6 +871,17 @@ tier is fixed (`rhi::d3d9::probe_shader_caps`): vs/ps 3.0 is sm3, ps 2.0
 sm2, less fixed function, and a tier asked for or saved above that comes
 down to it. On XP that is what makes a double-click work on any card.
 
+**On the G41** (operated as `~/src/qemu-gpu/docs/G41_TESTBENCH.md`
+describes: `agent.ahk` runs job scripts dropped in XP's shared `bench`
+folder, `g41job.sh` submits them from the Mac over the direct cable, OBS
+watches the VGA output), two jobs are ready in `tools/xp/g41/`:
+`xp-dlls.ahk` copies XP's system DLLs to `bench\results\xp-dlls\` for
+`check_imports.py --record`, and `dragon-run.ahk` runs the unzipped package
+from `bench\dragon\` with the arguments in its `args.txt`, the game's log
+through `DRAGON_LOG_FILE`, and its own `--screenshot` (the pixel oracle; the
+OBS capture is analog VGA). The G41 is shared with the qemu-gpu sessions,
+so jobs go in only when the bench is free.
+
 **Not done:** running it on XP. The order is the G41 under XP SP3 with
 each card (record the exports, then `dragon.exe` with no flags, then the
 R4/R5 budgets); XP's own D3D9 drivers will have their quirks, and the
