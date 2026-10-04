@@ -324,7 +324,7 @@ graphics settings.
 | R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
-| R5 (FF) | Not started. The tier exists (`--tier ff`) and the settings' floors know it | Texture-stage materials, CPU skinning, blob shadows, vertex fog |
+| R5 (FF) | Planned ("R5, the plan"): a `FIXED_FUNCTION` shader variant as the preview and the reference, then the backend's stage recipes. The tier exists (`--tier ff`) and the settings' floors know it | Step 1, the variant, and the look judged on its render |
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
@@ -1031,6 +1031,63 @@ tier never reads one.
   package; the Pi's VC4 has no S3TC, so its packs would need an
   uncompressed or ETC1 variant (the chain is built from the same
   `PreparedTexture`, so that is a bake flag, not a format).
+
+### R5, the plan (2026-10-04): fixed function
+
+Fixed function has no shaders, so it cannot be previewed the way the other
+tiers are, through the same HLSL on Metal. The plan keeps the render-and-look
+workflow anyway by modelling what texture stages can do as a shader variant
+first, and making the D3D9 backend match that.
+
+1. **The `FIXED_FUNCTION` shader variant** (the ff tier's define set, in
+   place of `SM2` plus `NO_SHADOWS`): per vertex, `saturate(ambient + sun *
+   max(N.L, 0))` with D3D9's plain Lambert (no wrap: the wrap becomes a
+   little more ambient), the fog amount and the fog colour; per pixel,
+   texture × vertex colour (modulate, or modulate2x where the range needs
+   it), alpha test, nothing else. No shadow map, no normal or ORM maps, no
+   `ldr_encode`: the grade's exposure is folded into the palette, the sun
+   and the ambient on the CPU (`SceneUniforms` for this tier), and the
+   result clamps. Renders on Metal, D3D12, Vulkan and D3D9 SM3/SM2 as the
+   ff preview. The open question in this file, whether it reads as "the
+   game, earlier" or "the game, broken", is answered on this render,
+   against the concept targets, before any D3D9 work.
+2. **Content the tier needs**, each a `Tier::FixedFunction` branch in
+   `gfx/` or the app, checked on the preview:
+   - terrain: the material per vertex on the CPU at build (the palette
+     blend by slope and height, the patch noise, the sun baked or left to
+     the lights), the detail texture as the second stage;
+   - sky: the analytic sky baked once at start into a lat-long texture
+     (the sun is static), drawn on a dome with one stage, so the look is
+     the shader's;
+   - foliage: the instances expanded into static chunk buffers (no
+     instancing, and one draw per tree is too many draws for a 2001
+     driver); the coarse cards only;
+   - creatures: CPU skinning into a dynamic vertex buffer (a 6K-triangle
+     LOD, 4 influences), the preview may keep skinning on the GPU;
+   - shadows: a blob under each creature, an alpha-blended decal on the
+     terrain, in the main pass; no shadow pass;
+   - water: the alpha-blended plane with the sky texture as its reflection;
+   - particles, the HUD, ImGui: as they are (`imgui_impl_dx9` is fixed
+     function already).
+3. **The D3D9 backend's ff path.** `create_pipeline` without shaders: a
+   recipe per stem that maps the pipeline's attributes to real usages
+   (POSITION, NORMAL, COLOR, TEXCOORD, not TEXCOORDn), and sets the
+   transforms, the light, the material, the stages and the fog from the
+   uniform blocks the renderers push unchanged: slot 0 vertex is
+   `SceneUniforms` (the view is rebuilt from the camera basis, the
+   projection from `view_proj` and it), slot 1 `ModelUniforms` (the world
+   matrix, the tint as `TFACTOR`). `bind_fragment_textures` becomes
+   `SetTexture` per stage. Software vertex processing when the caps have
+   no T&L, for the TNT and Rage class.
+4. **The gate**: D3D9 ff on x99's 5060 Ti (a modern driver still runs
+   fixed function) against D3D12 at `--tier ff`, under `--loose`: stage
+   arithmetic is 8-bit and the fog table is the driver's, so only a wrong
+   frame fails. Then the X550, which also does fixed function, and the FF
+   cards when the G41 is built.
+5. **The 1998 preset** below Very low: 16-bit textures at 256² with no
+   DXT (the packs decode their BC chains on the CPU for a card without it;
+   `PreparedTexture` gets an uncompressed variant), 16-bit Z, 320×240 to
+   640×480, one or two bots, no grass.
 
 ## Beyond the three tiers: the extended study (2026-10-03)
 
