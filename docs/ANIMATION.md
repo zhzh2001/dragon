@@ -1132,3 +1132,29 @@ rays per wing. Each has its own skeleton, jaw mask, skinning and sidecars.
 Both preserve raised source wings and use a relaxed whole-wing ground sweep;
 tight fan convergence damages their generated surfaces. The existing roster
 is unchanged. [Evidence, limitations and rebuild commands](../artifacts/elemental-expansion/README.md).
+
+## Silver dragon local integration (2026-10-03)
+
+The approved `assets/silver-direct-cand-oneshot.glb` is reduced to 80k triangles
+and fitted to its own measured 80-joint skeleton in
+`tools/skeletons/silver-dragon.json`. The canonical Blender frame is +Y forward,
++Z up; export faces engine -Z. Three neck joints, fourteen tail joints, four
+rays per crescent sail and four articulated legs retain the approved silhouette.
+The broad membrane uses continuous weights, with smooth ownership boundaries
+at the shoulder and the inner hind toes.
+
+`assets/silver-dragon.glb` has separate rig, flight and frost-breath profiles.
+A distributed 24-degree standing tail lift clears the floor without lifting
+its feet. Whole-wing sweep preserves the sail; separate aimed elbow/wrist
+folds crease this generated membrane. The source mouth has a rudimentary
+interior, so rest closes it by 18 degrees and the gesture opens only four
+degrees past bind. Base-color and metallic pixels are preserved by material
+repair; silver remains muted under the native valley lighting.
+
+Silver follows gold in the optional local default roster, reachable with M
+or `--model assets/silver-dragon.glb`. Release packaging still uses the seven
+release species. [Rig build record](../artifacts/silver-dragon-rig/README.md)
+and [native integration evidence](../artifacts/silver-dragon-integration/README.md)
+record the probes, pose and motion captures, gameplay checks and remaining
+human playtest. These close reference studies remain excluded from the public
+mirror along with their specialized source and evidence.

@@ -91,8 +91,12 @@ The corrected four cardinal plates were used for a **Tencent Hunyuan hosted
 one-shot V3.1** textured mesh, `assets/silver-direct-cand-oneshot.glb`.
 The model, provenance and read-only Blender inspection are recorded in
 `artifacts/dragon-options/silver-direct-test/`. This AI-generated reference
-study is unrigged and stops before game integration. The source art and large
-model stay local; derived images and tools are excluded from the public mirror,
+study initially stopped before integration. The user subsequently approved
+rigging and local game tests. **OpenAI Codex gpt-6-astra** independently measured
+and fitted its skeleton, weights and data-map repair through Blender scripts;
+Codex tuned the species profiles and checked native game poses, landing and
+model switching. The source art, raw/final GLBs and editable Blender file stay
+local; derived images, rig tools, skeleton and profiles are excluded from the public mirror,
 as with gold (`ATTRIBUTION.md`).
 
 ## Obligations this file meets

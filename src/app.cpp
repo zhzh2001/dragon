@@ -348,7 +348,7 @@ bool App::init(const Options& options) {
         if (roster.empty()) {
             static const char* const kDefaultRoster[] = {
                 "embercrest", "rimefang", "frostvein", "blightmaw",
-                "ironroot",   "stormsail", "tidewrack", "gold-dragon"};
+                "ironroot",   "stormsail", "tidewrack", "gold-dragon", "silver-dragon"};
             for (const char* name : kDefaultRoster) {
                 const std::string path = core::paths::asset(std::string(name) + ".glb");
                 if (std::ifstream(path).good()) roster.push_back(path);

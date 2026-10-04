@@ -153,7 +153,12 @@ The concept and corrected four-view turnaround are in
 `docs/concept/silver-dragon-2026-10-03/`; the Hunyuan one-shot study and
 read-only inspection are in `artifacts/dragon-options/silver-direct-test/`.
 The generated candidate is `assets/silver-direct-cand-oneshot.glb`, gitignored
-under the existing large-model policy. It is not rigged or game-integrated.
+under the existing large-model policy. After reviewing the model, the user
+approved rigging and local integration testing. `assets/silver-dragon.glb` is
+now selectable in the development roster, with its own measured skeleton and
+species profiles. Rig and native test evidence are in
+`artifacts/silver-dragon-rig/` and `artifacts/silver-dragon-integration/`.
+The rigged GLBs and editable Blender file stay local and gitignored.
 
 The same licence finding as the gold study applies: Wizards' Fan Content
 Policy does not clear its artwork-derived designs for another game, free or

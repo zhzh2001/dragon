@@ -1310,7 +1310,8 @@ void test_roster_jaws_open_downward() {
     namespace fs = std::filesystem;
     for (const char* name : {"assets/embercrest.glb", "assets/rimefang.glb",
                              "assets/blightmaw.glb", "assets/ironroot.glb",
-                             "assets/stormsail.glb", "assets/tidewrack.glb", "assets/gold-dragon.glb"}) {
+                             "assets/stormsail.glb", "assets/tidewrack.glb", "assets/gold-dragon.glb",
+                             "assets/silver-dragon.glb"}) {
         const fs::path source_root = test_source_root();
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
@@ -1889,7 +1890,8 @@ void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
     for (const char* name : {"generated", "dragon", "embercrest", "rimefang", "frostvein",
-                             "blightmaw", "ironroot", "stormsail", "tidewrack", "gold-dragon", "alt/prowler"}) {
+                             "blightmaw", "ironroot", "stormsail", "tidewrack", "gold-dragon",
+                             "silver-dragon", "alt/prowler"}) {
         Skeleton skeleton;
         anim::SkinnedMeshData mesh;
         anim::DragonJoints joints;
@@ -2075,7 +2077,8 @@ void test_stance_keeps_the_feet_on_the_floor() {
     const fs::path source_root = test_source_root();
     int with_stance = 0;
     for (const char* name : {"assets/rimefang.glb", "assets/blightmaw.glb", "assets/ironroot.glb",
-                             "assets/stormsail.glb", "assets/tidewrack.glb", "assets/gold-dragon.glb"}) {
+                             "assets/stormsail.glb", "assets/tidewrack.glb", "assets/gold-dragon.glb",
+                             "assets/silver-dragon.glb"}) {
         fs::path path = source_root / name;
         if (!fs::is_regular_file(path)) path = fs::path(name);
         if (!fs::is_regular_file(path)) {
@@ -2588,7 +2591,8 @@ void test_melee_load_recovery_and_switch() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
     for (const char* name : {"dragon", "embercrest", "rimefang", "frostvein", "blightmaw",
-                             "ironroot", "stormsail", "tidewrack", "gold-dragon", "alt/prowler"}) {
+                             "ironroot", "stormsail", "tidewrack", "gold-dragon", "silver-dragon",
+                             "alt/prowler"}) {
         const fs::path path = root / (std::string("assets/") + name + ".glb");
         if (!fs::exists(path)) continue;
         Skeleton skeleton;

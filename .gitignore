@@ -67,3 +67,6 @@ build-r0/
 build-d3d9/
 build-win-release/
 dist/
+
+# Regenerated sidecars for the local silver raw/material comparison.
+assets/silver-dragon-raw.glb.*.cfg
