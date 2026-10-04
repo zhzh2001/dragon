@@ -57,6 +57,32 @@ specifies the bake UV explicitly and puts its data in UV0. A global unwrap
 also blurred small head islands; independent packing per material fixes it.
 Neither failed export is the delivered model.
 
+## Repair pass 2: keratin colour and retained luminosity
+
+Full-size albedo review found that the approximate spike colour had been
+entered as linear RGB, making it too pale. The final substitute is sRGB
+`(0.28, 0.30, 0.18)`, explicitly converted to linear before baking. It now
+reads as dark olive-brown close to the hide. This remains a reference-based
+substitute for the two unrecovered spike images.
+
+Horn ORM roughness is 0.22 in this pass, a reference-driven approximation to
+the benchmark sheen rather than a claim that the LWO's zero-SPEC value
+encodes it. White albedo stays unchanged; the engine's sun and ambient still
+differ from the benchmark's blue-white illumination.
+
+The enabled white LUMI layer overrides the eye's base zero luminosity.
+Its red base texture is also exported as glTF `emissiveTexture`, with
+`emissiveFactor [1,1,1]`. Blender reproduces self-lit red eyes; the existing
+native loader ignores that field, so the native result remains red without
+the benchmark glow. Emission is not painted into skin albedo.
+
+The final asset is 7,226,428 bytes, SHA256
+`110da5aedb92064f6213b1098067d2f723e80afb02fe31e0b18a901f3505d54d`.
+All native captures and albedo comparison plates were refreshed after this
+pass. The asset acceptance, original-UV/source-point checks and profiles'
+byte-for-byte comparison with the pre-repair files pass. The generated
+profiles preserve the previously validated pose and ground dimensions.
+
 ## Geometry diagnosis
 
 The exhaustive source-point/export comparison has maximum error
