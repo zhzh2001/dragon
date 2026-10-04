@@ -33,6 +33,13 @@ What is built, in the order it was built. The plan these came from is
   profiles moved to `assets/species/`, which is public; the models are not
   (`ATTRIBUTION.md`).
 - **Published** to the mirror at `4d90e0b`.
+- **Fixed function (R5), 2026-10-04.** `--tier ff` is a `FIXED_FUNCTION`
+  shader variant on every backend and, on D3D9, vertex programs plus
+  texture-stage recipes. The Radeon X550 through D3D9 fixed function
+  matches D3D12's preview within a mean of 1.1/255 in all eight golden
+  scenes; 97 fps at the new sixth preset, Minimal. Software vertex
+  processing (a card without vs_2_0) works and awaits a real card for its
+  budget (`PORTING.md`, "Steps 2 to 4, as built").
 - **Model packs (R2b, after the publish).** `--bake-packs` writes what a
   retro tier uploads (`anim/model_pack.h`): the nine-species roster loads
   in 0.6 s at 217 MB instead of 6.7 s at 983 MB, pixel-identical at sm3 and

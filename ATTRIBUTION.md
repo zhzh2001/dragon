@@ -192,3 +192,13 @@ and 68-bone skeleton, and reuses no mesh, rig or texture data from either
 third-party dragon. It is rebuilt with Blender as described in
 `docs/EMBERCREST.md`. It is kept as a reference attempt and is not a shipped
 model.
+
+## 3DMark2001 SE (UL Benchmarks, formerly MadOnion/Futuremark)
+
+The Dragothic dragon and the rest of 3DMark2001 SE's LightWave objects,
+carved out of its `data.ras` for a study (`docs/PORTING.md`, "The 3DMark2001
+dragon"), live only in the gitignored `assets/alt/3dmark2001/` on the
+machines that have the benchmark installed. They are UL's copyrighted data
+under the benchmark's licence: a personal study at most. **Nothing from them
+is committed, published or shipped**, and nothing derived from them may be
+either.

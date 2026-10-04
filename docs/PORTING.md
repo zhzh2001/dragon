@@ -324,7 +324,7 @@ graphics settings.
 | R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
 | R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
-| R5 (FF) | Step 1 done ("R5, the plan", "Step 1, as built"): the `FIXED_FUNCTION` variant renders on every backend as the preview and the reference, pre-lit vertex colours times UNORM textures; the look holds (`artifacts/r5-ff-preview/`) | Step 2, the tier's content (CPU skinning, baked terrain colours, foliage batches, the sky dome, blob shadows); step 3, the D3D9 stage recipes |
+| R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes; 97 fps at Minimal, the sixth preset. Software vertex processing works (`DRAGON_D3D9_SOFTWARE_VP=1`): 14 fps at Minimal on the Xeon, 36 x faster than its first frame | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
 | R6 (XP layer) | Not started | SDL3 does not run on XP: a Win32 layer or SDL2 |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
@@ -1143,10 +1143,78 @@ render:
   the texture-slot version of it and samples the shadow map as the hide.
 
 The fog is exp2 on the radial distance toward one constant colour
-(`Lighting::fog_color`, display-encoded), no height term; the sky is the
-analytic one display-encoded (a dome with a baked texture on the real
-backend); the water is one colour under the fog. Not yet: the content
-items of step 2, and any D3D9 fixed-function code.
+(`Lighting::fog_color`, display-encoded), no height term.
+
+#### Steps 2 to 4, as built (2026-10-04): the tier on the X550
+
+**The variant is shaped for stages.** The FIXED_FUNCTION vertex stage hands
+the pixel side exactly what a fixed-function pipeline takes -- `diffuse :
+COLOR0` (pre-lit and finished), `fog : FOG` (D3D's factor, 1 clear),
+`uv : TEXCOORD0` -- and each stem's preview fragment stage is its stage
+recipe spelled out. In that order, because DXC drops a pixel shader's
+unused inputs and packs the rest, and D3D12 then refused every pipeline
+whose stage read fewer than all three (the sky, the water, the props, the
+lines); a stage that reads a prefix leaves its registers where the vertex
+stage put them. Metal and Vulkan link by location and never noticed.
+
+**The content** (step 2), each behind `active_tier().fixed_function`: one
+card atlas (leaf and needle maps side by side over a mid-grey strip, so one
+stage setup serves cards, bark and solids -- white doubled the rocks under
+MODULATE2X; 2w x 2h, since the X550 refused a 256x144 one), the coarse
+crowns everywhere, a greyscale terrain detail (a stage modulates by the
+whole texture), a 64 x 32 sky dome coloured per vertex (the glow survives,
+the disc goes soft), a baked disc texture for the particles, and a 32 x 32
+water grid (one quad fogged per vertex from the skirt's corners was fog
+from shore to shore). **The terrain's diffuse is baked at build**
+(`gfx/prelit.h`, the vertex program line for line in C++): the ground and
+the sun never move, and on a card without T&L the 158-slot program ran on
+the CPU over 55K vertices a frame. The bake is the program's own value to
+1/255; finding the one place it was not moved the material's fit to the
+terrain (the snow line) to before the meshes are built.
+
+**The D3D9 path** (step 3): `bake_d3d9.py --tier ff` bakes each stem's
+vertex program as vs_2_0 with the legacy registers restored by name
+(SPIRV-Cross calls every varying TEXCOORDn -- the uv included, which the
+order puts third; forgetting it sampled one corner texel of every
+texture), and the stem's texture-stage recipe (`FF_RECIPES`) beside it;
+the backend sets no pixel shader, applies the stages, routes each fragment
+texture slot to the stage that reads it, enables D3D's fog with the
+program's oFog and `D3DRS_FOGCOLOR` display-encoded from the scene block,
+and the alpha test for the cards. The terrain's detail is one stage
+(MODULATE2X TEXTURE x DIFFUSE): as a second stage behind a texture-less
+first the X550 drew nothing, legal by the book and not by that driver, and
+one stage is what a single-TMU card has. A card without vs_2_0 runs the
+same programs through D3D9's **software vertex processing** (mixed mode
+with hardware T&L, software alone without); `DRAGON_D3D9_SOFTWARE_VP=1`
+forces it. No fixed-function lighting code anywhere: the colours arrive
+pre-lit.
+
+**The gate** (step 4), the X550 through D3D9 against D3D12 at `--tier ff`
+on the 5060 Ti, all eight scenes under `--loose`: means 0.35 to 1.13,
+0.09 to 0.47% of pixels past 8 -- an order of magnitude inside the gate,
+and nearly inside `--cross-compiler`. `artifacts/r5-ff-preview/
+x550-d3d9-ff-vs-d3d12-ff-valley.png` is the pair. The X550 at Low,
+headless 1280x720: 39 fps; at **Minimal** (the sixth preset, R5 step 5,
+below Very low: 1.2K creatures, trees to 250 m at 3.5x, 20-triangle rocks,
+64-texel textures, 50% world) 97 fps.
+
+**Software vertex processing** on the X550 in mixed mode, Low: 35 s a frame
+at first -- the backend named the whole buffer as every draw's vertex
+range, and the software pipeline transforms the range named, so 264 terrain
+chunks a frame transformed eleven million vertices. With the indices' real
+min..max per draw (read once from the index data the backend keeps): 2.5 s.
+With the terrain's diffuse baked (158 slots to 32): 0.6 s. With each
+chunk's vertices gathered into a run of their own (a chunk's range had
+spanned thousands of the grid's vertices for the two hundred it used):
+**66 ms a frame at Minimal, 14 fps**, against 98.6 with the card's own
+vertex shaders -- a 36 x speed-up over the evening, all of it in how much
+the software pipeline was asked to transform. What remains is that
+pipeline's own throughput over the terrain's 50K vertices and the per-draw
+cost of one draw per instance (software processing has no stream
+frequencies), and that is a question for a 2005 CPU and the real cards,
+not a Xeon. The foliage pre-batched into static chunks with its colours
+baked, and a coarser terrain for the T&L-less class, are the next two
+items if those cards want them.
 
 ## Beyond the three tiers: the extended study (2026-10-03)
 
@@ -1184,6 +1252,18 @@ Hardware: no TNT or Rage XL is in `cards.csv`; the FF cards on hand (the
 M6, the GeForce4 MX PCI, the Radeon 7000 PCI, the Matrox G550 PCIe, the
 Extreme Graphics 2) cover R5, and both are cheap on Xianyu when the 1998
 preset is ready for them.
+
+**The 3DMark2001 dragon** (asked 2026-10-04): x99 has 3DMark2001 SE
+installed, and its two MAX-FX archives (`data.ras`, `textures.ras`; the
+Max Payne engine's) hold their files raw -- 148 LightWave objects
+(`FORM`/`LWO2`) and 22 `.lws` scenes, carved out by their IFF headers with
+forty lines of Python into `assets/alt/3dmark2001/` (gitignored). The
+Dragothic dragon is there: the body at 8,838 points and 16,817 polygons
+(its surfaces named in Finnish, `drago.siipi` the wing), a head LOD, the
+eyes, the rider, and a 98K-polygon `drako_defskin`. LightWave objects
+import into Blender, so a study is a Blender session away. It is UL's
+copyrighted data: a personal study at most, never committed, never
+shipped, and `ATTRIBUTION.md` says so.
 
 **The order chosen** (the user's call, 2026-10-03):
 
