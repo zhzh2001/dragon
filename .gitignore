@@ -73,3 +73,4 @@ dist/
 
 # Regenerated sidecars for the local silver raw/material comparison.
 assets/silver-dragon-raw.glb.*.cfg
+__pycache__/

@@ -70,3 +70,10 @@ tools/silver_dragon_plots.py
 tools/silver_dragon_deformation.py
 tools/silver_dragon_action.py
 tools/silver_dragon_material_inspect.py
+
+# The 3DMark2001 SE dragon's rig (2026-10-04): the skeleton is measured off
+# UL's copyrighted mesh and the scripts rebuild it from the carved files.
+# The model, its textures and every render of it are gitignored already
+# (ATTRIBUTION.md, "3DMark2001 SE").
+tools/skeletons/dragothic.json
+artifacts/dragothic-rig/

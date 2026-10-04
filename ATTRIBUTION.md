@@ -202,3 +202,13 @@ machines that have the benchmark installed. They are UL's copyrighted data
 under the benchmark's licence: a personal study at most. **Nothing from them
 is committed, published or shipped**, and nothing derived from them may be
 either.
+
+The rig Codex fitted to the dragon on 2026-10-04 (`tools/3dmark/
+dragothic_rig_report.md`) lives beside the model, gitignored, with its
+`.rig.cfg`, `.flight.cfg` and `.breath.cfg`. Two things from that work are
+committed and kept off the public mirror (`tools/release/public_excludes.txt`):
+`tools/skeletons/dragothic.json`, whose joint positions and masks are
+measurements of UL's mesh, and `artifacts/dragothic-rig/`, the scripts
+that rebuild the rig from the carved files (its renders and textures are
+gitignored outright). The report itself describes the work and names the
+textures; it carries none of the data.
