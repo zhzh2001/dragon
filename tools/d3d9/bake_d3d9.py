@@ -45,11 +45,15 @@ D3DCOMPILER = os.environ.get("D3DCOMPILER_DLL") or os.path.expanduser("~/.local/
 TIERS = {
     "sm3": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "PACKED_JOINTS", "SWIZZLED_NORMALS", "D3D9"],
     "sm2": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "LDR_OUTPUT", "PACKED_JOINTS", "SM2", "SWIZZLED_NORMALS", "D3D9"],
+    # SM2 with the Shadows setting at Off: the lookup compiled out
+    # (scene_common.hlsl, sm2_finish), since ps_2_0 cannot branch past it.
+    "sm2-noshadows": ["BAKED_NOISE", "CONVENTIONAL_DEPTH", "LDR_OUTPUT", "NO_SHADOWS", "PACKED_JOINTS", "SM2",
+                      "SWIZZLED_NORMALS", "D3D9"],
 }
-PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0")}
+PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0"), "sm2-noshadows": ("vs_2_0", "ps_2_0")}
 # Float constant registers each stage has (vs_3_0 256, ps_3_0 224; vs_2_0
 # 256 on every card of the class, ps_2_0 32).
-REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32)}
+REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32), "sm2-noshadows": (256, 32)}
 
 
 SURVEY = False  # --survey: report every problem instead of stopping at the first

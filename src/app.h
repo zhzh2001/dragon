@@ -198,6 +198,10 @@ struct Options {
     // actually touched down, how long it took, and what the assists were
     // doing while it did. Landing is the case that needed it.
     int telemetry_interval = 0;  // 0 = off
+    // Press R every N frames: the reset soak that found the X550's freeze
+    // (docs/PORTING.md, R7). With --telemetry, the gpu line shows whether
+    // anything the reset makes outlives it.
+    int restart_every = 0;
 };
 
 Options parse_options(int argc, char** argv);

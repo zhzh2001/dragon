@@ -272,6 +272,14 @@ Sm2Light sm2_light_vertex(float3 world_position, float3 normal, float translucen
 // The pixel stage's half: the shadow (2x2 taps; outside the map is lit), the
 // combine, the fog and the tonemap.
 float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+#ifdef NO_SHADOWS
+    // Shadows off (the Shadows setting's Off, docs/PORTING.md R7): ps_2_0 has
+    // no branch to skip the lookup with, so it is compiled out -- about a
+    // third of the terrain's pixel shader. The map is still read once, at a
+    // fixed texel and folded to nothing, because a slot the shader does not
+    // read drops out of its reflection, and the slots must run 0..n-1.
+    float lit = 1.0 + min(shadow_map.Sample(shadow_sampler, (float2)0.5), 0.0);
+#else
     float2 uv = l.shadow.xy;
     float half_texel = scene.shadow_params.w * 0.5;
     float4 stored = float4(shadow_map.Sample(shadow_sampler, uv + float2(-half_texel, -half_texel)),
@@ -284,6 +292,7 @@ float3 sm2_finish(float3 albedo, Sm2Light l, Texture2D<float> shadow_map, Sample
     // information: lit, as sun_visibility() has it.
     float2 inside = step(abs(uv - 0.5), (float2)0.5);
     lit = lerp(1.0, lit, inside.x * inside.y * step(l.shadow.z, 1.0) * scene.shadow_params.z);
+#endif
     float3 color = albedo * (l.ambient.rgb + l.sun.rgb * lit);
     return scene_out(lerp(color, l.fog.rgb, l.shadow.w));
 }

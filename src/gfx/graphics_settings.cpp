@@ -24,6 +24,9 @@ const SettingInfo INFO[SETTING_COUNT] = {
     {"textures", "Textures", {"Full", "1024", "512", "256", "128"}, Applies::Restart},
     {"shadows", "Shadows", {"4096", "2048", "1024", "512", "Off"}, Applies::Reload},
     {"bloom", "Bloom", {"On", nullptr, nullptr, nullptr, "Off"}, Applies::Live},
+    // The world's resolution, the HUD's staying whole: on a fill-bound card
+    // the setting that moves the frame rate most (docs/PORTING.md, R7).
+    {"resolution", "Resolution", {"100%", nullptr, "85%", "70%", "50%"}, Applies::Live},
 };
 
 constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500};
@@ -37,6 +40,7 @@ constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40};
 constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f};
 constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128};
 constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0};
+constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f};
 
 const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low"};
 
@@ -55,9 +59,14 @@ int tier_floor(Setting setting, Tier tier) {
 }
 
 // A preset level's level for each setting: the same, except bloom, which is
-// on through Medium and off below, and the terrain, whose Very low is Low.
+// on through Medium and off below; shadows, off from Low (the 512 map is
+// offered, not preset: on the X550 the lookup was a third of every pixel);
+// the terrain, whose Very low is Low; and the resolution, whole through
+// Medium, 85% at Low and 70% at Very low (50% is offered, not preset).
 int preset_to_level(Setting setting, int preset) {
     if (setting == Setting::Bloom) return preset <= 2 ? 0 : QUALITY_LEVELS - 1;
+    if (setting == Setting::Shadows) return preset <= 2 ? preset : QUALITY_LEVELS - 1;
+    if (setting == Setting::Resolution) return preset <= 2 ? 0 : preset - 1;
     if (setting == Setting::Terrain) return preset < 3 ? preset : 3;
     return preset;
 }
@@ -172,6 +181,7 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     // little of it to be worth its triangles.
     b.terrain_casts_shadows = b.shadow_size >= 2048;
     b.bloom = g[Setting::Bloom] == 0;
+    b.world_scale = WORLD_SCALE[g[Setting::Resolution]];
     return b;
 }
 

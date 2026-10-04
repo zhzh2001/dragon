@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -185,9 +186,26 @@ struct DeviceConfig {
 
 enum class Backend : uint8_t { SdlGpu, Direct3D9 };
 
+// What a device holds alive, by kind: how a leak across resets is found
+// (docs/PORTING.md, R7). Bytes are the backend's estimate of what it asked
+// the driver for -- texel data with its mip chain, buffer sizes -- not what
+// the driver actually spends.
+struct ResourceStats {
+    uint32_t buffers = 0, textures = 0, pipelines = 0;
+    uint64_t buffer_bytes = 0, texture_bytes = 0;
+    // What the driver reports free for textures, in bytes; 0 when it does
+    // not say (only D3D9's GetAvailableTextureMem does).
+    uint64_t driver_available = 0;
+};
+
+// Bytes a texture of `desc` holds, with its mip chain.
+uint64_t texture_bytes(const TextureDesc& desc);
+
 class Device {
 public:
     virtual ~Device() = default;
+
+    ResourceStats stats() const;
 
     // Which implementation answers: only Dear ImGui's renderer glue
     // (editor/imgui_layer.cpp) needs to know, since it draws through the
@@ -216,6 +234,11 @@ public:
     virtual void end_frame(Texture* source, uint32_t width, uint32_t height,
                            std::vector<uint8_t>* readback) = 0;
     virtual void wait_idle() = 0;
+    // Stretches colour target `source` (its top-left sw x sh) over all of
+    // `dest` (dw x dh), linearly filtered. Outside any pass. How a world
+    // rendered at a fraction of the window is brought up to the UI's size
+    // (gfx::Device::finish_world).
+    virtual void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) = 0;
 
     // ---- resources
     // With `data`, the buffer is filled now, synchronously (load time only).
@@ -269,6 +292,20 @@ public:
     virtual void draw_indexed(Pass* pass, uint32_t index_count, uint32_t instance_count = 1,
                               uint32_t first_index = 0, int32_t vertex_offset = 0,
                               uint32_t first_instance = 0) = 0;
+
+protected:
+    // The backends report every create and destroy; a null handle is ignored.
+    enum class Kind : uint8_t { Buffer, Texture, Pipeline };
+    void track(const void* handle, Kind kind, uint64_t bytes);
+    void untrack(const void* handle);
+    virtual uint64_t driver_available() const { return 0; }
+
+private:
+    struct Tracked {
+        Kind kind;
+        uint64_t bytes;
+    };
+    std::unordered_map<const void*, Tracked> live_;
 };
 
 }  // namespace rhi

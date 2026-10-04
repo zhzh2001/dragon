@@ -125,6 +125,9 @@ bool PipelineCache::build(Entry& entry) {
     if (active_tier().packed_joints) shaders.defines.push_back("PACKED_JOINTS");
     if (active_tier().vertex_lighting) shaders.defines.push_back("SM2");
     if (!active_tier().depth.reversed) shaders.defines.push_back("CONVENTIONAL_DEPTH");
+    // SM2 cannot branch past a shadow lookup, so shadows off is a variant
+    // (scene_common.hlsl, sm2_finish); the other tiers branch on strength.
+    if (active_tier().vertex_lighting && active_tier().budget.shadow_size == 0) shaders.defines.push_back("NO_SHADOWS");
     entry.sources.clear();
     if (rhi.compiles_hlsl()) {
         // Seed the watch list with the primary shader before doing anything
@@ -232,6 +235,10 @@ int PipelineCache::poll_hot_reload() {
         }
     }
     return reloaded;
+}
+
+void PipelineCache::rebuild_all() {
+    for (Entry& e : entries_) build(e);
 }
 
 int PipelineCache::broken_count() const {

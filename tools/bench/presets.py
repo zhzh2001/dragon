@@ -31,6 +31,10 @@ SCENARIOS = {
     "course": ["--frames", "1800", "--autopilot", "--course", "1", "--model", "assets/embercrest.glb", "--hide-ui"],
     # A hoard run flown by the demo pilot: rivals, prey, towers and fire.
     "run": ["--frames", "1800", "--autopilot", "--run", "7", "--hide-panels"],
+    # Landed and walking: the camera low among grass, rocks and trunks, where
+    # the X550 played slowest.
+    "ground": ["--frames", "1500", "--input", "-0.25,0,0,0,0,0", "--walk", "0.6,0.15",
+               "--model", "assets/embercrest.glb", "--hide-panels"],
 }
 LINE = re.compile(r"frames: (\d+) in ([\d.]+) s, ([\d.]+) fps; median ([\d.]+) ms, 1% low ([\d.]+) ms")
 

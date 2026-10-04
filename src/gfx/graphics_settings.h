@@ -23,7 +23,7 @@ namespace gfx {
 
 enum class Tier : uint8_t;
 
-enum class Setting : uint8_t { Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Count };
+enum class Setting : uint8_t { Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, Count };
 constexpr int SETTING_COUNT = int(Setting::Count);
 constexpr int QUALITY_LEVELS = 5;
 
@@ -88,6 +88,7 @@ struct ContentBudget {
     uint32_t shadow_size = 4096;         // 0: no shadows
     bool terrain_casts_shadows = true;
     bool bloom = true;
+    float world_scale = 1.0f;            // of the window, per axis (gfx::Device)
 };
 ContentBudget budget_for(const GraphicsSettings& settings);
 

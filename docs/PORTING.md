@@ -831,6 +831,61 @@ eight settings (`gfx/graphics_settings.h`). Each setting is a level, Ultra
   On D3D9 this runs through `run_interactive.ps1`, which needs the desktop
   session.
 
+- **Played, not benchmarked** (2026-10-03, after a playtest). On the X550
+  the game played at about 20 fps at Low, under 20 on the ground, and after
+  several minutes of R restarts x99 froze.
+  - **The freeze is not a leak.** Both backends now count what they hold
+    (`rhi::ResourceStats`, on the `--telemetry` line as `gpu:`, with D3D9's
+    `GetAvailableTextureMem`), and `--restart-every N` presses R every N
+    frames. Twelve run restarts and a five-valley `--demo` soak held flat at
+    103 buffers (8.7 MB) and 41 textures (5 MB) at Very low. That is a
+    tenth of the card. The X550's driver is an XP-era model with no
+    timeout detection and recovery, so any GPU hang stops the whole
+    machine instead of resetting the card. Heat under minutes of full load
+    is the other suspect. Neither can be fixed from here, so the remedy is
+    asking less of the card.
+  - **It is not vsync.** Windowed D3D9 on this machine does not wait for
+    the refresh: one back buffer or two (`DRAGON_D3D9_BACKBUFFERS`) gave
+    the same 41.8 fps. The backend now asks for two, the counterpart of
+    the SDL backend's mailbox.
+  - **It is the terrain's pixels.** `DRAGON_D3D9_PROFILE` now also counts
+    each pipeline's written pixels, with an occlusion query around every
+    draw. At 640×480 the terrain writes 260 to 330 K pixels a frame (a
+    whole screen), and nothing else is a tenth of that. Its ps_2_0 shader
+    used 62 of 64 slots, and about 20 of them were the shadow lookup.
+  - The saved settings were Low, not Very low. At 1024×768, or in a
+    maximised window on its 1024×768 desktop, Low measured 22 to 24 fps,
+    which matches the playtest.
+- **Two settings for a fill-bound card:**
+  - **Resolution** (100%, 85%, 70%, 50%; Live). The world renders at a
+    fraction of the window and the HUD stays whole (`gfx::Device` world
+    targets). On the HDR tiers the composite samples the smaller scene by
+    UV; on the LDR tiers `finish_world` stretches it into the UI's target
+    with the new `rhi::Device::blit` (`StretchRect`,
+    `SDL_BlitGPUTexture`). Low is 85% and Very low 70%; 50% is offered,
+    not preset.
+  - **Shadows off is a shader variant on SM2.** ps_2_0 cannot branch past
+    a lookup, so `NO_SHADOWS` compiles it out (`sm2_finish`, a bake tier
+    `sm2-noshadows`). Terrain goes from 62 slots to 42, foliage from 65 to
+    44, meshes from 51 to 31, and the dragon from 57 to 38. The frame is
+    pixel-identical to the lookup's at strength 0. The shadow map is still
+    read once at a fixed texel, because a slot the shader does not read
+    drops out of reflection and the slots must run 0..n-1. The other tiers
+    branch on strength and need no variant.
+  - Presets now turn shadows off from Low; 512 is offered, not preset.
+- **The X550 in a live window** after both (2026-10-03, fps, median / 1%
+  low ms):
+
+  | | start | ground | run |
+  |---|---|---|---|
+  | low, 640×480 | 32.9 (30 / 33) | 43.6 (22 / 31) | 34.0 (30 / 36) |
+  | very low, 640×480 | 42.5 (23 / 26) | 54.9 (17 / 25) | 44.9 (23 / 25) |
+  | low, 1024×768 | 21.8 (46 / 49) | 24.0 (42 / 49) | 22.3 (46 / 52) |
+  | very low, 1024×768 | 28.1 (35 / 38) | 33.2 (29 / 41) | 30.4 (34 / 38) |
+
+  Very low at 640×480 was 32 to 41 in the same window before. `ground` is
+  the benchmark's new scenario: landed and walking.
+
 ### Budgets to design to
 
 From the cards on hand (`~/src/gpu-hist/data/cards.csv`). **Period cards run

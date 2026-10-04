@@ -71,6 +71,9 @@ public:
     // Rebuilds any pipeline whose shader file changed since the last check.
     // Returns the number rebuilt. Cheap enough to call every frame.
     int poll_hot_reload();
+    // Builds every pipeline again, for a change of defines (a setting that
+    // is a shader variant, gfx/graphics_settings.h). The GPU must be idle.
+    void rebuild_all();
 
     // Number of pipelines that currently have no valid GPU object.
     int broken_count() const;

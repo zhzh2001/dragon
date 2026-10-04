@@ -77,8 +77,10 @@ void PostProcess::run(Device& device, const PostSettings& settings) {
     rhi::Pipeline* composite = pipelines_->get(composite_);
     if (!composite || !device.scene_hdr()) return;
 
-    const float w = float(device.width());
-    const float h = float(device.height());
+    // The scene's own size, which the world scale makes smaller than the
+    // composite's target; the composite samples it by UV and stretches it.
+    const float w = float(device.world_width());
+    const float h = float(device.world_height());
     const float bw = float(device.bloom_width());
     const float bh = float(device.bloom_height());
 

@@ -231,18 +231,27 @@ struct Profile {
     struct Work {
         uint64_t draws = 0;
         uint64_t primitives = 0;
+        // Pixels that passed the depth test and were written, from an
+        // occlusion query around each draw: where a fill-bound card's pixel
+        // shader time goes. Alpha-tested pixels that were killed are not in it.
+        uint64_t pixels = 0;
     };
     std::vector<std::pair<std::string, Work>> work;
-    void count(const std::string& name, uint64_t primitives) {
+    Work& find(const std::string& name) {
         for (auto& w : work) {
-            if (w.first == name) {
-                ++w.second.draws;
-                w.second.primitives += primitives;
-                return;
-            }
+            if (w.first == name) return w.second;
         }
-        work.push_back({name, Work{1, primitives}});
+        work.push_back({name, Work{}});
+        return work.back().second;
     }
+    void count(const std::string& name, uint64_t primitives) {
+        Work& w = find(name);
+        ++w.draws;
+        w.primitives += primitives;
+    }
+    // Queries issued this frame, read back at its end; spare ones are kept.
+    std::vector<std::pair<std::string, IDirect3DQuery9*>> pending;
+    std::vector<IDirect3DQuery9*> spare;
 };
 struct ProfileScope {
     Profile& profile;
@@ -306,6 +315,13 @@ public:
         pp_.BackBufferHeight = UINT(std::max(h, 1));
         pp_.hDeviceWindow = hwnd_;
         pp_.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
+        // Two back buffers: the D3D9 counterpart of the SDL backend's
+        // mailbox. With one, a frame that misses a refresh waits for the
+        // next, so the X550's 34 ms frames played at 50 (20 fps against the
+        // headless benchmark's 29). DRAGON_D3D9_BACKBUFFERS=1 for the old
+        // behaviour, to measure the difference.
+        pp_.BackBufferCount = 2;
+        if (const char* n = SDL_getenv("DRAGON_D3D9_BACKBUFFERS")) pp_.BackBufferCount = UINT(std::clamp(SDL_atoi(n), 1, 3));
         // FPU_PRESERVE: without it D3D9 drops the FPU to single precision for
         // the whole process, under the flight model and the terrain.
         const DWORD flags = D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE;
@@ -361,10 +377,12 @@ public:
                          profile_.seconds[i] * 1000.0 / frames, double(profile_.calls[i]) / frames);
             }
             for (const auto& w : profile_.work) {
-                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame", w.first.c_str(),
-                         double(w.second.draws) / frames, double(w.second.primitives) / frames);
+                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame, %9.0f pixels/frame",
+                         w.first.c_str(), double(w.second.draws) / frames, double(w.second.primitives) / frames,
+                         double(w.second.pixels) / frames);
             }
         }
+        for (IDirect3DQuery9* q : profile_.spare) q->Release();
         release(vertex_id_decl_);
         release(vertex_ids_);
         release(dev_);
@@ -438,10 +456,28 @@ public:
         }
         dev_->EndScene();
         in_scene_ = false;
+        if (profile_.on) collect_pixel_queries();
         if (readback && src_surface) download(src_surface, width, height, *readback);
         if (src_surface) src_surface->Release();
         if (!headless_) dev_->Present(nullptr, nullptr, nullptr, nullptr);
         else wait_idle();
+    }
+
+    void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) override {
+        D9Texture* s = source ? d9(source) : nullptr;
+        D9Texture* d = dest ? d9(dest) : nullptr;
+        if (!s || !d || !s->texture || !d->texture) return;
+        IDirect3DSurface9* from = nullptr;
+        IDirect3DSurface9* to = nullptr;
+        s->texture->GetSurfaceLevel(0, &from);
+        d->texture->GetSurfaceLevel(0, &to);
+        if (from && to) {
+            RECT src_rect = {0, 0, LONG(sw), LONG(sh)};
+            RECT dst_rect = {0, 0, LONG(dw), LONG(dh)};
+            dev_->StretchRect(from, &src_rect, to, &dst_rect, D3DTEXF_LINEAR);
+        }
+        release(from);
+        release(to);
     }
 
     void wait_idle() override {
@@ -463,6 +499,7 @@ public:
         if (usage == BufferUsage::Index) {
             buffer->index_data.assign(size, 0);
             if (data) std::memcpy(buffer->index_data.data(), data, size);
+            track(buffer, Kind::Buffer, size);
             return reinterpret_cast<Buffer*>(buffer);
         }
         const DWORD d3d_usage = D3DUSAGE_WRITEONLY | (buffer->dynamic ? D3DUSAGE_DYNAMIC : 0);
@@ -479,12 +516,14 @@ public:
                 buffer->vb->Unlock();
             }
         }
+        track(buffer, Kind::Buffer, size);
         return reinterpret_cast<Buffer*>(buffer);
     }
 
     void destroy(Buffer* buffer) override {
         if (!buffer) return;
         D9Buffer* b = d9(buffer);
+        untrack(b);
         release(b->vb);
         release(b->ib);
         delete b;
@@ -542,6 +581,7 @@ public:
             destroy(reinterpret_cast<Texture*>(t));
             return nullptr;
         }
+        track(t, Kind::Texture, texture_bytes(desc));
         return reinterpret_cast<Texture*>(t);
     }
 
@@ -617,6 +657,7 @@ public:
     void destroy(Texture* texture) override {
         if (!texture) return;
         D9Texture* t = d9(texture);
+        untrack(t);
         release(t->texture);
         release(t->depth);
         delete t;
@@ -672,6 +713,7 @@ public:
                 return nullptr;
             }
         }
+        track(p, Kind::Pipeline, 0);
         return reinterpret_cast<Pipeline*>(p);
     }
 
@@ -679,6 +721,7 @@ public:
         if (!pipeline) return;
         D9Pipeline* p = d9(pipeline);
         if (pipeline_ == p) pipeline_ = nullptr;
+        untrack(p);
         release(p->vs);
         release(p->ps);
         release(p->decl);
@@ -686,6 +729,8 @@ public:
     }
 
     bool compiles_hlsl() const override { return false; }
+
+    uint64_t driver_available() const override { return dev_ ? uint64_t(dev_->GetAvailableTextureMem()) : 0; }
 
     std::vector<std::string> baked_shader_files(const ShaderSource& shaders) const override {
         const std::string base = baked_base(shaders);
@@ -871,7 +916,13 @@ public:
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
         if (profile_.on) profile_.count(pipeline_->desc.name, prims);
-        if (prims) { PROFILE(PROF_DRAW); dev_->DrawPrimitive(type, first_vertex, prims); }
+        if (!prims) return;
+        IDirect3DQuery9* query = begin_pixel_query();
+        {
+            PROFILE(PROF_DRAW);
+            dev_->DrawPrimitive(type, first_vertex, prims);
+        }
+        end_pixel_query(query);
     }
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
@@ -889,6 +940,12 @@ public:
         bool instanced = false;
         for (uint32_t s = 0; s < 8; ++s) instanced |= pipeline_->stream_instanced[s];
         if (profile_.on) profile_.count(pipeline_->desc.name, uint64_t(prims) * (instanced ? instance_count : 1));
+        IDirect3DQuery9* query = begin_pixel_query();
+        struct EndQuery {
+            D3D9Device* self;
+            IDirect3DQuery9* query;
+            ~EndQuery() { self->end_pixel_query(query); }
+        } end_query{this, query};
         if (instanced && instancing_ == Instancing::Loop) {
             // One draw per instance: the instance streams bound at that
             // instance's element with a zero stride, so every vertex reads it.
@@ -926,6 +983,34 @@ public:
     }
 
 private:
+    // DRAGON_D3D9_PROFILE's pixel count: an occlusion query around one draw.
+    IDirect3DQuery9* begin_pixel_query() {
+        if (!profile_.on || !pipeline_) return nullptr;
+        IDirect3DQuery9* query = nullptr;
+        if (!profile_.spare.empty()) {
+            query = profile_.spare.back();
+            profile_.spare.pop_back();
+        } else if (FAILED(dev_->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query))) {
+            return nullptr;
+        }
+        query->Issue(D3DISSUE_BEGIN);
+        return query;
+    }
+    void end_pixel_query(IDirect3DQuery9* query) {
+        if (!query) return;
+        query->Issue(D3DISSUE_END);
+        profile_.pending.push_back({pipeline_->desc.name, query});
+    }
+    void collect_pixel_queries() {
+        for (auto& [name, query] : profile_.pending) {
+            DWORD pixels = 0;
+            while (query->GetData(&pixels, sizeof pixels, D3DGETDATA_FLUSH) == S_FALSE) SwitchToThread();
+            profile_.find(name).pixels += pixels;
+            profile_.spare.push_back(query);
+        }
+        profile_.pending.clear();
+    }
+
     // D3D9 passes every Set call to the driver, redundant or not, and on a
     // 2005 CPU those calls are the frame. A cache drops the repeats.
     void set_render_state(D3DRENDERSTATETYPE state, DWORD value) {

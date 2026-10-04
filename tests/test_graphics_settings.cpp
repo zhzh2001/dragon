@@ -68,6 +68,15 @@ int main() {
     CHECK(RenderTier::make(Tier::Modern).budget.shadow_size == 4096);
     CHECK(default_preset(Tier::SM2) == 2);
 
+    // The fill-bound presets: shadows off from Low, the world at 85% and 70%.
+    const ContentBudget low = budget_for(GraphicsSettings::preset(3, Tier::SM2, x550));
+    const ContentBudget very_low = budget_for(GraphicsSettings::preset(4, Tier::SM2, x550));
+    CHECK(low.shadow_size == 0 && very_low.shadow_size == 0);
+    CHECK(low.world_scale == 0.85f && very_low.world_scale == 0.7f);
+    CHECK(budget_for(GraphicsSettings::preset(2, Tier::SM2, x550)).world_scale == 1.0f);
+    CHECK(allowed(Setting::Resolution, 4, Tier::Modern, big));   // 50%: offered, not preset
+    CHECK(!allowed(Setting::Resolution, 1, Tier::Modern, big));
+
     // Saved and read back; unknown keys and bad values are ignored.
     GraphicsSettings g = GraphicsSettings::preset(3, Tier::SM3, big);
     GraphicsSettings back;

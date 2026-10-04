@@ -1,5 +1,6 @@
 #include "gfx/device.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "core/log.h"
@@ -80,17 +81,35 @@ void Device::shutdown() {
 }
 
 void Device::release_targets() {
-    for (rhi::Texture** target : {&scene_color_, &scene_hdr_, &bloom_a_, &bloom_b_, &depth_}) {
+    for (rhi::Texture** target : {&scene_color_, &scene_hdr_, &bloom_a_, &bloom_b_, &depth_, &scene_world_}) {
         rhi_->destroy(*target);
         *target = nullptr;
     }
     render_w_ = render_h_ = 0;
+    world_w_ = world_h_ = 0;
+}
+
+void Device::set_world_scale(float scale) {
+    scale = scale < 0.25f ? 0.25f : scale > 1.0f ? 1.0f : scale;
+    if (scale == world_scale_) return;
+    world_scale_ = scale;
+    if (!rhi_ || render_w_ == 0) return;  // sized at the first frame
+    const uint32_t w = render_w_, h = render_h_;
+    rhi_->wait_idle();
+    release_targets();
+    ensure_targets(w, h);
+}
+
+void Device::finish_world() {
+    if (scene_world_) rhi_->blit(scene_world_, world_w_, world_h_, scene_color_, render_w_, render_h_);
 }
 
 bool Device::ensure_targets(uint32_t w, uint32_t h) {
     if (scene_color_ && depth_ && render_w_ == w && render_h_ == h) return true;
     if (w == 0 || h == 0) return false;
     release_targets();
+    const uint32_t ww = std::max(1u, uint32_t(float(w) * world_scale_ + 0.5f));
+    const uint32_t wh = std::max(1u, uint32_t(float(h) * world_scale_ + 0.5f));
 
     rhi::TextureDesc color;
     color.width = w;
@@ -100,38 +119,36 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     scene_color_ = rhi_->create_texture(color, "scene_color");
     if (!scene_color_) return false;
 
+    rhi::TextureDesc world = color;
+    world.width = ww;
+    world.height = wh;
     // The linear scene, and the two half-size bloom targets -- unless the tier
-    // has no HDR, when the world finishes straight into scene_color.
+    // has no HDR, when the world finishes in 8 bits: straight into
+    // scene_color at full size, or into its own target to be stretched.
     if (!hdr_) {
-        rhi::TextureDesc depth;
-        depth.width = w;
-        depth.height = h;
-        depth.format = depth_format_;
-        depth.usage = rhi::TEXTURE_DEPTH_TARGET;
-        depth_ = rhi_->create_texture(depth, "scene_depth");
-        if (!depth_) {
-            release_targets();
-            return false;
+        if (ww != w || wh != h) {
+            scene_world_ = rhi_->create_texture(world, "scene_world");
+            if (!scene_world_) {
+                release_targets();
+                return false;
+            }
         }
-        render_w_ = w;
-        render_h_ = h;
-        LOG_INFO("render targets resized to %ux%u (LDR)", w, h);
-        return true;
+    } else {
+        rhi::TextureDesc hdr = world;
+        hdr.format = scene_hdr_format();
+        scene_hdr_ = rhi_->create_texture(hdr, "scene_hdr");
+        if (!scene_hdr_) return false;
+        rhi::TextureDesc bloom = hdr;
+        bloom.width = ww / 2 > 0 ? ww / 2 : 1;
+        bloom.height = wh / 2 > 0 ? wh / 2 : 1;
+        bloom_a_ = rhi_->create_texture(bloom, "bloom_a");
+        bloom_b_ = rhi_->create_texture(bloom, "bloom_b");
+        if (!bloom_a_ || !bloom_b_) return false;
     }
-    rhi::TextureDesc hdr = color;
-    hdr.format = scene_hdr_format();
-    scene_hdr_ = rhi_->create_texture(hdr, "scene_hdr");
-    if (!scene_hdr_) return false;
-    rhi::TextureDesc bloom = hdr;
-    bloom.width = w / 2 > 0 ? w / 2 : 1;
-    bloom.height = h / 2 > 0 ? h / 2 : 1;
-    bloom_a_ = rhi_->create_texture(bloom, "bloom_a");
-    bloom_b_ = rhi_->create_texture(bloom, "bloom_b");
-    if (!bloom_a_ || !bloom_b_) return false;
 
     rhi::TextureDesc depth;
-    depth.width = w;
-    depth.height = h;
+    depth.width = ww;
+    depth.height = wh;
     depth.format = depth_format_;
     depth.usage = rhi::TEXTURE_DEPTH_TARGET;
     depth_ = rhi_->create_texture(depth, "scene_depth");
@@ -142,7 +159,9 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
 
     render_w_ = w;
     render_h_ = h;
-    LOG_INFO("render targets resized to %ux%u", w, h);
+    world_w_ = ww;
+    world_h_ = wh;
+    LOG_INFO("render targets resized to %ux%u%s, world %ux%u", w, h, hdr_ ? "" : " (LDR)", ww, wh);
     return true;
 }
 
@@ -160,7 +179,7 @@ bool Device::begin_frame() {
 
 rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     rhi::PassDesc pass;
-    pass.color = hdr_ ? scene_hdr_ : scene_color_;
+    pass.color = hdr_ ? scene_hdr_ : scene_world_ ? scene_world_ : scene_color_;
     pass.clear_color = true;
     pass.clear_rgba[0] = r;
     pass.clear_rgba[1] = g;

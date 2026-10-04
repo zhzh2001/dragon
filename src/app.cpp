@@ -202,6 +202,8 @@ Options parse_options(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 options.telemetry_interval = SDL_atoi(argv[++i]);
             }
+        } else if (arg == "--restart-every" && i + 1 < argc) {
+            options.restart_every = SDL_atoi(argv[++i]);
         } else if (arg == "--input" && i + 1 < argc) {
             float* v = options.input_override;
             if (SDL_sscanf(argv[++i], "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4],
@@ -279,6 +281,7 @@ bool App::init(const Options& options) {
     }
     tier_.apply(graphics_);
     gfx::set_active_tier(tier_);
+    device_.set_world_scale(tier_.budget.world_scale);
     loaded_graphics_ = graphics_;
     graphics_pending_ = graphics_;
     LOG_INFO("graphics: %s (%s)", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)), [&] {
@@ -959,6 +962,7 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
     graphics_ = next;
     tier_.apply(graphics_);
     gfx::set_active_tier(tier_);
+    device_.set_world_scale(tier_.budget.world_scale);
     if (old[Setting::Terrain] != next[Setting::Terrain]) {
         regenerate_terrain();  // replants too
         rebuild_courses();
@@ -975,6 +979,10 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
         shadow_.shutdown(device_);
         shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512);
         shadow_.enabled = tier_.budget.shadow_size > 0;
+        // SM2's shadows-off is a shader variant (NO_SHADOWS, gfx/pipeline.cpp).
+        if (tier_.vertex_lighting && (old[Setting::Shadows] == gfx::QUALITY_LEVELS - 1) != (next[Setting::Shadows] == gfx::QUALITY_LEVELS - 1)) {
+            pipelines_.rebuild_all();
+        }
     }
     save_graphics();
     LOG_INFO("graphics applied: %s", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)));
@@ -1252,7 +1260,9 @@ void App::pump_events() {
             camera_.set_position(from.position, from.position + from.forward() * 60.0f);
         }
     }
-    if (input_.pressed(SDL_SCANCODE_R)) {
+    const bool soak_restart = options_.restart_every > 0 && frame_index_ > 0 &&
+                              frame_index_ % options_.restart_every == 0;
+    if (input_.pressed(SDL_SCANCODE_R) || soak_restart) {
         // In a run, R flies the same valley again from the head.
         if (run_mode_) start_run(run_seed_);
         else respawn_dragon();
@@ -2269,8 +2279,8 @@ void App::build_ui(float dt) {
     ImGui::Begin("Engine");
 
     const float ms = average_frame_ms();
-    ImGui::Text("%.2f ms  (%.0f fps)   %ux%u", ms, ms > 0.0f ? 1000.0f / ms : 0.0f,
-                device_.width(), device_.height());
+    ImGui::Text("%.2f ms  (%.0f fps)   %ux%u, world %ux%u", ms, ms > 0.0f ? 1000.0f / ms : 0.0f,
+                device_.width(), device_.height(), device_.world_width(), device_.world_height());
     if (audio_.ready()) {
         float volume = audio_.master();
         if (ImGui::SliderFloat("volume", &volume, 0.0f, 1.0f)) audio_.set_master(volume);
@@ -7103,6 +7113,7 @@ void App::render() {
 
     debug_.draw(device_, pass, camera.view_projection(aspect));
     device_.end_pass(pass);
+    device_.finish_world();
 
     // The world is in the linear HDR target; bloom it, tonemap it and grade
     // it into the 8-bit target, which the UI then draws onto ungraded. A tier
@@ -7131,6 +7142,13 @@ void App::log_telemetry() const {
              double(core::degrees(s.angle_of_attack)), double(s.flap_amplitude),
              double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
              s.stalling ? "STALL " : "", "");
+    {
+        const rhi::ResourceStats g = device_.rhi().stats();
+        LOG_INFO("   gpu: %u buffers %.1f MB, %u textures %.1f MB, %u pipelines%s", g.buffers,
+                 double(g.buffer_bytes) / 1048576.0, g.textures, double(g.texture_bytes) / 1048576.0, g.pipelines,
+                 g.driver_available ? (", driver free " + std::to_string(g.driver_available >> 20) + " MB").c_str()
+                                    : "");
+    }
     if (combat_enabled_) {
         LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d  fury %.2f  charge %.2f  rams %d  furies %d",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,

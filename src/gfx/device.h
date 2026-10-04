@@ -94,12 +94,25 @@ public:
     // Half-resolution ping-pong targets for the bloom.
     rhi::Texture* bloom_a() const { return bloom_a_; }
     rhi::Texture* bloom_b() const { return bloom_b_; }
-    uint32_t bloom_width() const { return render_w_ / 2; }
-    uint32_t bloom_height() const { return render_h_ / 2; }
+    uint32_t bloom_width() const { return world_w_ / 2; }
+    uint32_t bloom_height() const { return world_h_ / 2; }
 
+    // The UI's size: scene_color, the present and the screenshot.
     uint32_t width() const { return render_w_; }
     uint32_t height() const { return render_h_; }
     float aspect() const { return render_h_ > 0 ? float(render_w_) / float(render_h_) : 1.0f; }
+
+    // The world renders at a fraction of that (the Resolution setting,
+    // gfx/graphics_settings.h): a fill-bound card's pixel work falls with the
+    // square of it, while the HUD stays sharp. The HDR tiers' composite
+    // samples the smaller scene by UV and so stretches it on its own; an LDR
+    // tier's world is stretched into scene_color by finish_world().
+    void set_world_scale(float scale);
+    float world_scale() const { return world_scale_; }
+    uint32_t world_width() const { return world_w_; }
+    uint32_t world_height() const { return world_h_; }
+    // After the world's last pass, before the UI's.
+    void finish_world();
 
 private:
     bool ensure_targets(uint32_t w, uint32_t h);
@@ -117,7 +130,12 @@ private:
     rhi::Texture* bloom_a_ = nullptr;
     rhi::Texture* bloom_b_ = nullptr;
     rhi::Texture* depth_ = nullptr;
+    // An LDR tier's world at its scaled size; null at full size, when the
+    // world draws straight into scene_color.
+    rhi::Texture* scene_world_ = nullptr;
     uint32_t render_w_ = 0, render_h_ = 0;
+    uint32_t world_w_ = 0, world_h_ = 0;
+    float world_scale_ = 1.0f;
     rhi::Format depth_format_ = rhi::Format::D32F;
 
     std::string screenshot_path_;

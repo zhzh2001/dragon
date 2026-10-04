@@ -334,6 +334,20 @@ public:
         swapchain_ = nullptr;
     }
 
+    void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) override {
+        if (!cmd_ || !source || !dest) return;
+        SDL_GPUBlitInfo info = {};
+        info.source.texture = sdl(source);
+        info.source.w = sw;
+        info.source.h = sh;
+        info.destination.texture = sdl(dest);
+        info.destination.w = dw;
+        info.destination.h = dh;
+        info.load_op = SDL_GPU_LOADOP_DONT_CARE;
+        info.filter = SDL_GPU_FILTER_LINEAR;
+        SDL_BlitGPUTexture(cmd_, &info);
+    }
+
     void end_frame(Texture* source, uint32_t width, uint32_t height, std::vector<uint8_t>* readback) override {
         if (!cmd_) return;
         if (swapchain_ && source) {
@@ -384,6 +398,7 @@ public:
             SDL_ReleaseGPUBuffer(gpu_, buffer);
             return nullptr;
         }
+        track(buffer, Kind::Buffer, size);
         return reinterpret_cast<Buffer*>(buffer);
     }
 
@@ -394,6 +409,7 @@ public:
             SDL_ReleaseGPUTransferBuffer(gpu_, it->second.transfer);
             staging_.erase(it);
         }
+        untrack(buffer);
         SDL_ReleaseGPUBuffer(gpu_, sdl(buffer));
     }
 
@@ -454,6 +470,7 @@ public:
             return nullptr;
         }
         if (debug_name) SDL_SetGPUTextureName(gpu_, texture, debug_name);
+        track(texture, Kind::Texture, texture_bytes(desc));
         return reinterpret_cast<Texture*>(texture);
     }
 
@@ -525,7 +542,9 @@ public:
     }
 
     void destroy(Texture* texture) override {
-        if (texture) SDL_ReleaseGPUTexture(gpu_, sdl(texture));
+        if (!texture) return;
+        untrack(texture);
+        SDL_ReleaseGPUTexture(gpu_, sdl(texture));
     }
 
     // ---- samplers
@@ -635,11 +654,14 @@ public:
             LOG_ERROR("[%s] pipeline creation failed: %s", d.name.c_str(), SDL_GetError());
             return nullptr;
         }
+        track(pipeline, Kind::Pipeline, 0);
         return reinterpret_cast<Pipeline*>(pipeline);
     }
 
     void destroy(Pipeline* pipeline) override {
-        if (pipeline) SDL_ReleaseGPUGraphicsPipeline(gpu_, sdl(pipeline));
+        if (!pipeline) return;
+        untrack(pipeline);
+        SDL_ReleaseGPUGraphicsPipeline(gpu_, sdl(pipeline));
     }
 
     bool compiles_hlsl() const override {
