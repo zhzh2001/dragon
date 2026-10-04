@@ -362,9 +362,16 @@ graphics settings.
   - `--restart-every N` with `--telemetry` soaks resets against the
     `gpu:` resource line.
 - **D3D9 shaders are deployed by hand.** Bake them with
-  `tools/d3d9/bake_d3d9.py OUT --tier sm3|sm2|sm2-noshadows`, which needs
-  Wine at `$WINE` on the Mac, and copy them into `D:\dragon-win\shaders`.
-  The release packagers do not bake D3D9 yet.
+  `tools/d3d9/bake_d3d9.py OUT --tier sm3|sm2|sm2-noshadows|ff`, which
+  needs Wine on the Mac, and copy them into `D:\dragon-win\shaders`. The
+  Wine is Sikarugir's engine, and it finds its libraries only with the
+  Frameworks directory on the fallback path:
+  `WINE=~/Applications/Sikarugir/Test.app/Contents/SharedSupport/wine/bin/wine
+  DYLD_FALLBACK_LIBRARY_PATH=~/Applications/Sikarugir/Test.app/Contents/Frameworks
+  WINEPREFIX=<a scratch dir>` (2026-10-04). CrossOver's wine refuses
+  without a bottle. The modern variants a Windows build loads
+  (`bake_shaders.sh OUT dxil spv`) go the same way. The release packagers
+  do not bake D3D9 yet.
 - **A preset must build the same content on every compiler.** Keep one
   random draw per statement, and build the LOD code without FMA
   contraction (CLAUDE.md, "One random draw per statement"). The LOD log

@@ -16,9 +16,9 @@ struct VertexIn {
 // stacked puffs clip to white as they did in 2001.
 struct VertexOut {
     float4 clip_position : SV_Position;
-    float4 uv : TEXCOORD0;
-    float4 diffuse : COLOR0;
+    float4 diffuse : COLOR0;  // the order FF_VARYINGS explains
     float fog : FOG;
+    float4 uv : TEXCOORD0;
 };
 #else
 struct VertexOut {
@@ -55,7 +55,9 @@ VertexOut vs_main(VertexIn input) {
 #ifdef FIXED_FUNCTION
 TEXTURE2D(disc, 0);
 float4 fs_main(VertexOut input) : SV_Target {
-    return float4(saturate(input.diffuse.rgb * disc.Sample(disc_sampler, input.uv.xy).rgb), 1.0);
+    // Times the fog factor (always 1 here): the read keeps FOG in this
+    // stage's input signature, between the diffuse and the uv it does use.
+    return float4(saturate(input.diffuse.rgb * disc.Sample(disc_sampler, input.uv.xy).rgb) * saturate(input.fog), 1.0);
 }
 #else
 float4 fs_main(VertexOut input) : SV_Target {

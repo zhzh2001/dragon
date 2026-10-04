@@ -99,8 +99,9 @@ float3 place_vertex(VertexIn input, float3 camera_position, out float3 world_nor
 }
 
 #if defined(FIXED_FUNCTION)
-// The atlas: 512 x 288, the leaf map at u 0..0.5 and the needle map at
-// 0.5..1 over v 0..256/288, a mid-grey opaque strip below (gfx::Foliage).
+// The atlas: twice each map, the leaf map at u 0..0.5 and the needle map
+// at 0.5..1 over v 0..0.5, the mid-grey opaque strip in the lower half
+// (gfx::Foliage; a power of two, which the X550 class insists on).
 VertexOut vs_main(VertexIn input) {
     VertexOut o;
     float3 normal;
@@ -113,9 +114,8 @@ VertexOut vs_main(VertexIn input) {
     int material = tag >= FOLIAGE_DETAIL ? tag - FOLIAGE_DETAIL : tag;
     const bool card = material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE;
     if (card) albedo *= 1.0 - 0.35 * saturate(-normal.y);
-    const float strip = 256.0 / 288.0;
-    o.uv = card ? float4(input.uv.x * 0.5 + (material == FOLIAGE_MAT_NEEDLE ? 0.5 : 0.0), input.uv.y * strip, 0.0, 0.0)
-                : float4(0.25, strip + (1.0 - strip) * 0.5, 0.0, 0.0);
+    o.uv = card ? float4(input.uv.x * 0.5 + (material == FOLIAGE_MAT_NEEDLE ? 0.5 : 0.0), input.uv.y * 0.5, 0.0, 0.0)
+                : float4(0.25, 0.75, 0.0, 0.0);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     o.diffuse = ff_lit(albedo, normal, material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y);
     o.fog = ff_fog(world);

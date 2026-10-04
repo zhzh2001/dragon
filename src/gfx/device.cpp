@@ -42,6 +42,7 @@ bool Device::init(const Config& config) {
     rhi::DeviceConfig rhi_config;
     rhi_config.headless = headless_;
     rhi_config.driver = config.gpu_driver;
+    rhi_config.fixed_function = active_tier().fixed_function;
     // The GPU debug layer: on in a development build, off in a package (a
     // player has no use for its validation, and some D3D12 implementations,
     // D3DMetal under Wine among them, crash on asking for it).

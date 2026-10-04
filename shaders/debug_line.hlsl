@@ -11,9 +11,9 @@ struct VertexIn {
 // SELECTARG1 DIFFUSE), the legacy registers.
 struct VertexOut {
     float4 clip_position : SV_Position;
-    float4 uv : TEXCOORD0;
-    float4 diffuse : COLOR0;
+    float4 diffuse : COLOR0;  // the order FF_VARYINGS explains
     float fog : FOG;
+    float4 uv : TEXCOORD0;
 };
 #else
 struct VertexOut {

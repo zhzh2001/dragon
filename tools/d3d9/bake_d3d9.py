@@ -55,7 +55,52 @@ TIERS = {
            "SM2", "SWIZZLED_NORMALS", "D3D9"],
 }
 PROFILES = {"sm3": ("vs_3_0", "ps_3_0"), "sm2": ("vs_2_0", "ps_2_0"), "sm2-noshadows": ("vs_2_0", "ps_2_0"),
-            "ff": ("vs_2_0", "ps_2_0")}
+            "ff": ("vs_2_0", None)}
+
+# ---- the fixed-function tier (docs/PORTING.md R5).
+#
+# No pixel shader: the vertex program (vs_2_0, run by the card or by D3D9's
+# software vertex processing on a card without vertex shaders) writes the
+# legacy registers -- oT0 the texture coordinate, oD0 the pre-lit diffuse,
+# oFog the fog factor -- and the pixel side is texture stages, one recipe per
+# stem, the same arithmetic the stem's FIXED_FUNCTION fragment stage spells
+# out for the other backends. A stage is (colour op, arg1, arg2, alpha op,
+# arg1, arg2, the fragment texture slot it samples or -1), as D3DTEXTUREOP
+# and D3DTA values; the backend applies them (rhi/d3d9).
+D3DTOP_DISABLE, D3DTOP_SELECTARG1, D3DTOP_SELECTARG2, D3DTOP_MODULATE, D3DTOP_MODULATE2X = 1, 2, 3, 4, 5
+D3DTA_DIFFUSE, D3DTA_CURRENT, D3DTA_TEXTURE = 0, 1, 2
+DIFFUSE_ONLY = [[D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT, -1]]
+FF_RECIPES = {
+    # The pre-lit colour, then the greyscale detail tile MODULATE2X with it.
+    "terrain": {"stages": DIFFUSE_ONLY + [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_CURRENT,
+                                           D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_CURRENT, 1]]},
+    # The base colour (white where a submesh has none) MODULATE the colour.
+    "skinned": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
+    # The card atlas MODULATE2X the colour, its alpha the cut-out.
+    "foliage": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]],
+                "alpha_test": 0.45},
+    "mesh": {"stages": DIFFUSE_ONLY},
+    "water": {"stages": DIFFUSE_ONLY},
+    "sky": {"stages": DIFFUSE_ONLY},
+    "debug_line": {"stages": DIFFUSE_ONLY},
+    # The baked disc MODULATE the colour, added by the pipeline's blend.
+    "particles": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 0]]},
+    # No shadow map on this tier: the depth passes exist but draw nothing.
+    "shadow_depth": {"disabled": True},
+    "shadow_skinned": {"disabled": True},
+    "foliage_depth": {"disabled": True},
+}
+# SPIRV-Cross names every varying TEXCOORDn; the legacy registers the stages
+# read are restored by name (scene_common.hlsl, FF_VARYINGS).
+FF_SEMANTICS = {"out_var_COLOR0": "COLOR0", "out_var_FOG": "FOG"}
+
+
+def restore_ff_semantics(hlsl):
+    for name, semantic in FF_SEMANTICS.items():
+        hlsl, n = re.subn(rf"(\b{name}\b\s*:\s*)TEXCOORD\d+", rf"\g<1>{semantic}", hlsl)
+        if n != 1:
+            raise ValueError(f"expected one {name} output, found {n}")
+    return hlsl
 # Float constant registers each stage has (vs_3_0 256, ps_3_0 224; vs_2_0
 # 256 on every card of the class, ps_2_0 32).
 REGISTER_LIMIT = {"sm3": (256, 224), "sm2": (256, 32), "sm2-noshadows": (256, 32), "ff": (256, 32)}
@@ -189,16 +234,34 @@ def main():
     jobs = []      # (profile, hlsl path, out path)
     layouts = {}   # stem -> {stage: layout}
     expected = {}  # (stem, stage) -> members
+    ff = ps_profile is None
     for stem in stems:
         layouts[stem] = {}
-        for stage, entry, define, profile, ext in (("vertex", "vs_main", "VERTEX_STAGE", vs_profile, "vs30"),
-                                                   ("fragment", "fs_main", "FRAGMENT_STAGE", ps_profile, "ps30")):
+        if ff:
+            recipe = FF_RECIPES.get(stem)
+            if recipe is None:
+                sys.exit(f"{stem}: no fixed-function recipe (FF_RECIPES)")
+            layouts[stem]["ff"] = dict(recipe)
+            if recipe.get("disabled"):
+                continue
+        stages = (("vertex", "vs_main", "VERTEX_STAGE", vs_profile, "vs30"),
+                  ("fragment", "fs_main", "FRAGMENT_STAGE", ps_profile, "ps30"))
+        for stage, entry, define, profile, ext in stages[:1] if ff else stages:
             spv = os.path.join(work, f"{stem}.{stage}.spv")
             flags = [f"-D{d}" for d in defines + [define]]
             run([SHADERCROSS, os.path.join(SHADERS, stem + ".hlsl"), "-s", "HLSL", "-d", "SPIRV", "-t", stage,
                  "-e", entry, "-I", SHADERS, "-o", spv] + flags)
             sm30 = run(["spirv-cross", spv, "--hlsl", "--shader-model", "30"])
+            if ff:
+                sm30 = restore_ff_semantics(sm30)
             unwrapped, members = unwrap_uniforms(sm30, sampler_slots_from_reflection(spv), stage)
+            if ff:
+                # Where the fog colour and the grade sit in the scene block
+                # the vertex stage pushes to slot 0: the backend sets
+                # D3DRS_FOGCOLOR from them (display-encoded, like ff_finish).
+                for member, key in (("scene_fog_color", "fog_color"), ("scene_output_grade", "output_grade")):
+                    if member in members and members[member][0] == 0:
+                        layouts[stem]["ff"][key] = members[member][1]
             src = os.path.join(work, f"{stem}.{stage}.hlsl")
             open(src, "w").write(unwrapped)
             layouts[stem][stage] = {"samplers": sorted(set(sampler_slots_from_reflection(spv).values()))} \

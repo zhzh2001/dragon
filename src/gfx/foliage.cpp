@@ -470,14 +470,15 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     needle_texture_ = load(core::paths::asset("textures/needle_spray.png").c_str(), "needle_spray", needle_image);
     if (active_tier().fixed_function && leaf_image.valid() && needle_image.valid()) {
         // The atlas (foliage.hlsl, FIXED_FUNCTION): both maps at their own
-        // size side by side, an opaque strip an eighth as tall below, at the
-        // mid-grey that MODULATE2X leaves alone (white doubled the rocks,
-        // trunks and grass).
+        // size side by side in the top half, the bottom half an opaque
+        // strip at the mid-grey that MODULATE2X leaves alone (white doubled
+        // the rocks, trunks and grass). Twice the maps' size each way, so
+        // it stays a power of two, which this class of card requires (the
+        // X550 refused a 256 x 144 one).
         const int w = leaf_image.width, h = leaf_image.height;
-        const int strip = std::max(h / 8, 4);
         ImageData atlas;
         atlas.width = w * 2;
-        atlas.height = h + strip;
+        atlas.height = h * 2;
         atlas.rgba.assign(size_t(atlas.width) * atlas.height * 4, 128);
         for (size_t i = 3; i < atlas.rgba.size(); i += 4) atlas.rgba[i] = 255;
         for (int y = 0; y < h; ++y) {

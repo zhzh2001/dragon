@@ -81,15 +81,24 @@ float3 ff_display(float3 linear_color) { return pow(saturate(linear_color * scen
 float3 ff_albedo(float3 linear_color) { return pow(saturate(linear_color), (float3)(1.0 / 2.2)); }
 
 // What a fixed-function vertex stage hands the stages, and nothing else: one
-// texture coordinate, one diffuse colour and the fog factor. D3D9's software
+// diffuse colour, the fog factor and one texture coordinate. D3D9's software
 // vertex processing runs these very vertex programs on a card without
-// vertex shaders, so the semantics are the legacy registers (oT0, oD0,
-// oFog; tools/d3d9/bake_d3d9.py restores them from SPIRV-Cross's output),
+// vertex shaders, so the semantics are the legacy registers (oD0, oFog,
+// oT0; tools/d3d9/bake_d3d9.py restores them from SPIRV-Cross's output),
 // and the fog follows D3D's convention: 1 is clear, 0 is fogged out.
+//
+// In this order, and every fragment stage reads a prefix of it: DXC drops
+// a pixel shader's unused inputs and packs the rest into consecutive
+// registers, and D3D12 then refuses the pipeline whose vertex outputs no
+// longer sit in those registers (E_INVALIDARG; the sky, the water, the
+// props and the lines all failed to build). A stage that reads only the
+// diffuse, or the diffuse and the fog, leaves the registers it does read
+// where the vertex stage put them. Metal and Vulkan link by location and
+// never noticed.
 #define FF_VARYINGS          \
-    float4 uv : TEXCOORD0;   \
     float4 diffuse : COLOR0; \
-    float fog : FOG;
+    float fog : FOG;         \
+    float4 uv : TEXCOORD0;
 
 #elif defined(SM2)
 float3 scene_out(float3 color) { return ldr_encode_fast(max(color, 0.0), scene.output_grade); }

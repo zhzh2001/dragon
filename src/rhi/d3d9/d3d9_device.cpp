@@ -4,11 +4,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/log.h"
@@ -66,6 +68,15 @@ struct StageLayout {
     int half_pixel = -1;
 };
 
+// One texture stage of a fixed-function recipe (tools/d3d9/bake_d3d9.py,
+// FF_RECIPES): D3DTEXTUREOP and D3DTA values, and which fragment texture
+// slot the stage samples (-1: none).
+struct FfStage {
+    DWORD color_op = D3DTOP_DISABLE, color_arg1 = D3DTA_DIFFUSE, color_arg2 = D3DTA_CURRENT;
+    DWORD alpha_op = D3DTOP_DISABLE, alpha_arg1 = D3DTA_DIFFUSE, alpha_arg2 = D3DTA_CURRENT;
+    int texture_slot = -1;
+};
+
 struct D9Pipeline {
     PipelineDesc desc;
     IDirect3DVertexShader9* vs = nullptr;
@@ -75,6 +86,16 @@ struct D9Pipeline {
     bool vertex_id = false;  // no attributes: fed from the backend's own buffer
     uint32_t stream_pitch[8] = {};
     bool stream_instanced[8] = {};
+    // The fixed-function tier (docs/PORTING.md R5): no pixel shader; the
+    // vertex program writes oT0, oD0 and oFog, and these stages finish the
+    // pixel. `ff_disabled` is a pass the tier never draws (the shadow map).
+    bool ff = false;
+    bool ff_disabled = false;
+    std::vector<FfStage> ff_stages;
+    float ff_alpha_test = -1.0f;      // the alpha reference, or none
+    int ff_fog_color = -1;            // the fog colour's register in the scene block
+    int ff_output_grade = -1;         // the grade's (x exposure)
+    int ff_slot_stage[16];            // fragment texture slot -> stage, or -1
 };
 
 struct D9Pass {
@@ -152,6 +173,63 @@ StageLayout parse_layout(const std::string& json, const char* stage) {
     const size_t hp = body.find("\"half_pixel\"");
     if (hp != std::string::npos) layout.half_pixel = std::atoi(body.c_str() + body.find(':', hp) + 1);
     return layout;
+}
+
+// The fixed-function recipe: {"ff": {"disabled": true}} or {"ff": {"stages":
+// [[cop, ca1, ca2, aop, aa1, aa2, slot], ...], "alpha_test": 0.45,
+// "fog_color": 16, "output_grade": 38}}.
+bool parse_ff(const std::string& json, D9Pipeline& p) {
+    const size_t at = json.find("\"ff\"");
+    if (at == std::string::npos) return false;
+    size_t open = json.find('{', at);
+    int depth = 0;
+    size_t end = open;
+    for (; end < json.size(); ++end) {
+        if (json[end] == '{') ++depth;
+        if (json[end] == '}' && --depth == 0) break;
+    }
+    const std::string body = json.substr(open, end - open + 1);
+    p.ff = true;
+    for (int& st : p.ff_slot_stage) st = -1;
+    if (body.find("\"disabled\"") != std::string::npos && body.find("true", body.find("\"disabled\"")) != std::string::npos) {
+        p.ff_disabled = true;
+        return true;
+    }
+    const size_t stages = body.find("\"stages\"");
+    if (stages != std::string::npos) {
+        size_t pos = body.find('[', stages) + 1;
+        const char* c = body.c_str();
+        while (true) {
+            const size_t open_inner = body.find('[', pos);
+            const size_t close_outer = body.find(']', pos);
+            if (open_inner == std::string::npos || open_inner > close_outer) break;
+            long v[7] = {};
+            char* next = const_cast<char*>(c + open_inner + 1);
+            for (long& value : v) {
+                value = std::strtol(next, &next, 10);
+                if (const char* comma = std::strchr(next, ',')) next = const_cast<char*>(comma) + 1;
+            }
+            FfStage stage;
+            stage.color_op = DWORD(v[0]);
+            stage.color_arg1 = DWORD(v[1]);
+            stage.color_arg2 = DWORD(v[2]);
+            stage.alpha_op = DWORD(v[3]);
+            stage.alpha_arg1 = DWORD(v[4]);
+            stage.alpha_arg2 = DWORD(v[5]);
+            stage.texture_slot = int(v[6]);
+            if (stage.texture_slot >= 0 && stage.texture_slot < 16) p.ff_slot_stage[stage.texture_slot] = int(p.ff_stages.size());
+            p.ff_stages.push_back(stage);
+            pos = body.find(']', open_inner) + 1;
+        }
+    }
+    const auto number = [&](const char* key, float fallback) {
+        const size_t k = body.find(key);
+        return k == std::string::npos ? fallback : float(std::atof(body.c_str() + body.find(':', k) + 1));
+    };
+    p.ff_alpha_test = number("\"alpha_test\"", -1.0f);
+    p.ff_fog_color = int(number("\"fog_color\"", -1.0f));
+    p.ff_output_grade = int(number("\"output_grade\"", -1.0f));
+    return true;
 }
 
 D3DFORMAT to_d3d(Format f) {
@@ -301,10 +379,20 @@ public:
                  D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion), D3DSHADER_VERSION_MINOR(caps_.PixelShaderVersion));
         LOG_INFO("direct3d9: at most %lu primitives a draw, vertex index %lu", caps_.MaxPrimitiveCount,
                  caps_.MaxVertexIndex);
-        if (D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion) < 2) {
-            LOG_ERROR("direct3d9: this backend needs shader model 2 (--tier sm2) or 3; the card has less");
+        ff_ = config.fixed_function;
+        if (!ff_ && D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion) < 2) {
+            LOG_ERROR("direct3d9: this backend needs shader model 2 (--tier sm2) or 3, or --tier ff; the card has less");
             return false;
         }
+        // The vertex programs are vs_2_0 at least. A card without them (the
+        // fixed-function tier's) runs them through D3D9's software vertex
+        // processing -- mixed mode where the card has transform and lighting
+        // of its own, software alone where it has none (the TNT class).
+        // DRAGON_D3D9_SOFTWARE_VP=1 forces that path on a modern card.
+        const char* force_sw = SDL_getenv("DRAGON_D3D9_SOFTWARE_VP");
+        const bool has_vs2 = D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 2;
+        software_vp_ = !has_vs2 || (force_sw && force_sw[0] == '1');
+        mixed_vp_ = software_vp_ && (caps_.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT);
 
         int w = 0, h = 0;
         SDL_GetWindowSizeInPixels(window, &w, &h);
@@ -324,7 +412,10 @@ public:
         if (const char* n = SDL_getenv("DRAGON_D3D9_BACKBUFFERS")) pp_.BackBufferCount = UINT(std::clamp(SDL_atoi(n), 1, 3));
         // FPU_PRESERVE: without it D3D9 drops the FPU to single precision for
         // the whole process, under the flight model and the terrain.
-        const DWORD flags = D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE;
+        const DWORD processing = !software_vp_ ? D3DCREATE_HARDWARE_VERTEXPROCESSING
+                                 : mixed_vp_    ? D3DCREATE_MIXED_VERTEXPROCESSING
+                                                : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
+        const DWORD flags = processing | D3DCREATE_FPU_PRESERVE;
         const HRESULT hr = d3d_->CreateDevice(adapter_, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
         if (FAILED(hr)) {
             LOG_ERROR("direct3d9: CreateDevice failed (0x%08lx)%s", static_cast<unsigned long>(hr),
@@ -332,8 +423,14 @@ public:
             return false;
         }
 
+        if (mixed_vp_) dev_->SetSoftwareVertexProcessing(TRUE);
+        if (software_vp_) {
+            LOG_INFO("direct3d9: vertex programs in software (%s)", mixed_vp_ ? "mixed mode" : "no hardware T&L");
+        }
+
         // The vertex index a fullscreen triangle reads (VERTEX_ID_INPUT).
-        dev_->CreateVertexBuffer(sizeof(float) * 6, D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &vertex_ids_, nullptr);
+        dev_->CreateVertexBuffer(sizeof(float) * 6, D3DUSAGE_WRITEONLY | buffer_usage(), 0, D3DPOOL_MANAGED, &vertex_ids_,
+                                 nullptr);
         if (vertex_ids_) {
             float* ids = nullptr;
             if (SUCCEEDED(vertex_ids_->Lock(0, 0, reinterpret_cast<void**>(&ids), 0))) {
@@ -354,7 +451,10 @@ public:
         // 'INST', turned on through D3DRS_POINTSIZE. Anything else draws an
         // instanced batch one instance at a time.
         const DWORD inst = MAKEFOURCC('I', 'N', 'S', 'T');
-        if (D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 3) {
+        if (software_vp_) {
+            // Software vertex processing has no stream frequencies.
+            instancing_ = Instancing::Loop;
+        } else if (D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion) >= 3) {
             instancing_ = Instancing::Native;
         } else if (SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                      D3DRTYPE_SURFACE, D3DFORMAT(inst)))) {
@@ -502,7 +602,7 @@ public:
             track(buffer, Kind::Buffer, size);
             return reinterpret_cast<Buffer*>(buffer);
         }
-        const DWORD d3d_usage = D3DUSAGE_WRITEONLY | (buffer->dynamic ? D3DUSAGE_DYNAMIC : 0);
+        const DWORD d3d_usage = D3DUSAGE_WRITEONLY | buffer_usage() | (buffer->dynamic ? D3DUSAGE_DYNAMIC : 0);
         const D3DPOOL pool = buffer->dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED;
         if (FAILED(dev_->CreateVertexBuffer(size, d3d_usage, 0, pool, &buffer->vb, nullptr))) {
             LOG_ERROR("direct3d9: CreateVertexBuffer(%s, %u bytes) failed", debug_name, size);
@@ -675,19 +775,25 @@ public:
     Pipeline* create_pipeline(const PipelineDesc& d, const ShaderSource& shaders) override {
         const std::string base = baked_base(shaders);
         const std::string vs_code = read_file(base + ".vs30");
-        const std::string ps_code = read_file(base + ".ps30");
+        const std::string ps_code = ff_ ? std::string() : read_file(base + ".ps30");
         const std::string json = read_file(base + ".d3d9.json");
-        if (vs_code.empty() || ps_code.empty() || json.empty()) {
-            LOG_ERROR("[%s] no D3D9 shader at %s.{vs30,ps30,d3d9.json} (tools/d3d9/bake_d3d9.py)", d.name.c_str(),
-                      base.c_str());
-            return nullptr;
-        }
         auto* p = new D9Pipeline;
         p->desc = d;
+        if (ff_ && !json.empty() && parse_ff(json, *p) && p->ff_disabled) {
+            // A pass the tier never draws: a pipeline that draws nothing.
+            track(p, Kind::Pipeline, 0);
+            return reinterpret_cast<Pipeline*>(p);
+        }
+        if (vs_code.empty() || (!ff_ && ps_code.empty()) || json.empty() || (ff_ && !p->ff)) {
+            LOG_ERROR("[%s] no D3D9 shader at %s.{vs30,%sd3d9.json} (tools/d3d9/bake_d3d9.py%s)", d.name.c_str(),
+                      base.c_str(), ff_ ? "" : "ps30,", ff_ ? " --tier ff" : "");
+            delete p;
+            return nullptr;
+        }
         p->vertex = parse_layout(json, "vertex");
         p->fragment = parse_layout(json, "fragment");
         if (FAILED(dev_->CreateVertexShader(reinterpret_cast<const DWORD*>(vs_code.data()), &p->vs)) ||
-            FAILED(dev_->CreatePixelShader(reinterpret_cast<const DWORD*>(ps_code.data()), &p->ps))) {
+            (!ff_ && FAILED(dev_->CreatePixelShader(reinterpret_cast<const DWORD*>(ps_code.data()), &p->ps)))) {
             LOG_ERROR("[%s] the device rejected the D3D9 bytecode in %s", d.name.c_str(), base.c_str());
             destroy(reinterpret_cast<Pipeline*>(p));
             return nullptr;
@@ -785,9 +891,10 @@ public:
         D9Pipeline* p = d9(pipeline);
         if (!p) return;
         pipeline_ = p;
+        if (p->ff_disabled) return;
         const PipelineDesc& d = p->desc;
         dev_->SetVertexShader(p->vs);
-        dev_->SetPixelShader(p->ps);
+        dev_->SetPixelShader(p->ps);  // null on the fixed-function tier: the stages below finish the pixel
         if (p->vertex_id) {
             dev_->SetVertexDeclaration(vertex_id_decl_);
             dev_->SetStreamSource(0, vertex_ids_, 0, sizeof(float));
@@ -828,9 +935,39 @@ public:
         }
         set_render_state(D3DRS_BLENDOP, D3DBLENDOP_ADD);
         set_render_state(D3DRS_LIGHTING, FALSE);
-        set_render_state(D3DRS_FOGENABLE, FALSE);
-        set_render_state(D3DRS_ALPHATESTENABLE, FALSE);
         set_render_state(D3DRS_COLORWRITEENABLE, 0xF);
+        if (p->ff) {
+            // The recipe's stages, then the first unused one disabled, which
+            // ends the cascade. Every stage reads texture coordinate set 0:
+            // the vertex program writes one.
+            DWORD stage = 0;
+            for (const FfStage& st : p->ff_stages) {
+                set_stage_state(stage, D3DTSS_COLOROP, st.color_op);
+                set_stage_state(stage, D3DTSS_COLORARG1, st.color_arg1);
+                set_stage_state(stage, D3DTSS_COLORARG2, st.color_arg2);
+                set_stage_state(stage, D3DTSS_ALPHAOP, st.alpha_op);
+                set_stage_state(stage, D3DTSS_ALPHAARG1, st.alpha_arg1);
+                set_stage_state(stage, D3DTSS_ALPHAARG2, st.alpha_arg2);
+                set_stage_state(stage, D3DTSS_TEXCOORDINDEX, 0);
+                ++stage;
+            }
+            set_stage_state(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+            set_stage_state(stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+            // The vertex program's oFog is the factor (D3DRS_FOGTABLEMODE
+            // none); the colour comes with the scene block (flush).
+            set_render_state(D3DRS_FOGENABLE, TRUE);
+            set_render_state(D3DRS_FOGTABLEMODE, D3DFOG_NONE);
+            set_render_state(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+            set_render_state(D3DRS_RANGEFOGENABLE, FALSE);
+            set_render_state(D3DRS_ALPHATESTENABLE, p->ff_alpha_test >= 0.0f);
+            if (p->ff_alpha_test >= 0.0f) {
+                set_render_state(D3DRS_ALPHAREF, DWORD(std::lround(p->ff_alpha_test * 255.0f)));
+                set_render_state(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+            }
+        } else {
+            set_render_state(D3DRS_FOGENABLE, FALSE);
+            set_render_state(D3DRS_ALPHATESTENABLE, FALSE);
+        }
         uniforms_dirty_[0] = uniforms_dirty_[1] = 0xF;  // a new layout: push every block again
     }
 
@@ -853,7 +990,8 @@ public:
             release(b->ib);
             const D3DFORMAT format = size == IndexSize::U32 ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
             const UINT bytes = UINT(b->index_data.size());
-            if (FAILED(dev_->CreateIndexBuffer(bytes, D3DUSAGE_WRITEONLY, format, D3DPOOL_MANAGED, &b->ib, nullptr)))
+            if (FAILED(dev_->CreateIndexBuffer(bytes, D3DUSAGE_WRITEONLY | buffer_usage(), format, D3DPOOL_MANAGED, &b->ib,
+                                               nullptr)))
                 return;
             void* mapped = nullptr;
             if (SUCCEEDED(b->ib->Lock(0, bytes, &mapped, 0))) {
@@ -869,7 +1007,14 @@ public:
     void bind_fragment_textures(Pass*, uint32_t first_slot, const TextureBinding* bindings, uint32_t count) override {
         PROFILE(PROF_TEXTURES);
         for (uint32_t i = 0; i < count && first_slot + i < 16; ++i) {
-            const DWORD stage = first_slot + i;
+            DWORD stage = first_slot + i;
+            if (pipeline_ && pipeline_->ff) {
+                // A fixed-function recipe samples its slots from its own
+                // stages; a slot no stage reads is not bound at all.
+                const int mapped = pipeline_->ff_slot_stage[stage];
+                if (mapped < 0) continue;
+                stage = DWORD(mapped);
+            }
             D9Texture* t = bindings[i].texture ? d9(bindings[i].texture) : nullptr;
             D9Sampler* s = bindings[i].sampler ? d9(bindings[i].sampler) : nullptr;
             dev_->SetTexture(stage, t ? t->texture : nullptr);
@@ -912,6 +1057,7 @@ public:
               uint32_t first_instance) override {
         (void)instance_count;
         (void)first_instance;
+        if (pipeline_ && pipeline_->ff_disabled) return;
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
@@ -927,6 +1073,7 @@ public:
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                       int32_t vertex_offset, uint32_t first_instance) override {
+        if (pipeline_ && pipeline_->ff_disabled) return;
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(index_count, &prims);
@@ -1021,6 +1168,17 @@ private:
         }
         dev_->SetRenderState(state, value);
     }
+    void set_stage_state(DWORD stage, D3DTEXTURESTAGESTATETYPE type, DWORD value) {
+        if (stage >= 8) return;
+        auto& cache = stage_states_[stage];
+        auto it = cache.find(type);
+        if (it != cache.end() && it->second == value) return;
+        cache[type] = value;
+        dev_->SetTextureStageState(stage, type, value);
+    }
+    // Buffers software vertex processing reads must say so at creation.
+    DWORD buffer_usage() const { return software_vp_ ? D3DUSAGE_SOFTWAREPROCESSING : 0; }
+
     void set_sampler_state(DWORD stage, D3DSAMPLERSTATETYPE type, DWORD value) {
         if (stage < 16 && type < 16) {
             if (sampler_state_known_[stage][type] && sampler_state_[stage][type] == value) return;
@@ -1067,6 +1225,19 @@ private:
     bool flush() {
         PROFILE(PROF_UNIFORMS);
         if (!pipeline_) return false;
+        if (pipeline_->ff && pipeline_->ff_fog_color >= 0 && (uniforms_dirty_[0] & 1u)) {
+            // D3DRS_FOGCOLOR: the scene's fog colour through the tier's
+            // display encode (scene_common.hlsl, ff_finish): exposure, gamma.
+            const std::vector<float>& scene = uniforms_[0][0];
+            const size_t at = size_t(pipeline_->ff_fog_color) * 4;
+            if (at + 3 < scene.size()) {
+                const size_t grade = size_t(std::max(pipeline_->ff_output_grade, 0)) * 4;
+                const float exposure = pipeline_->ff_output_grade >= 0 && grade < scene.size() ? scene[grade] : 1.0f;
+                float rgba[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                for (int c = 0; c < 3; ++c) rgba[c] = std::pow(std::clamp(scene[at + size_t(c)] * exposure, 0.0f, 1.0f), 1.0f / 2.2f);
+                set_render_state(D3DRS_FOGCOLOR, to_color(rgba));
+            }
+        }
         for (int s = 0; s < 2; ++s) {
             const StageLayout& layout = s == 0 ? pipeline_->vertex : pipeline_->fragment;
             for (const ConstantCopy& copy : layout.copies) {
@@ -1121,6 +1292,10 @@ private:
     IDirect3D9* d3d_ = nullptr;
     IDirect3DDevice9* dev_ = nullptr;
     D3DCAPS9 caps_ = {};
+    bool ff_ = false;           // the fixed-function tier (DeviceConfig)
+    bool software_vp_ = false;  // vertex programs run by D3D9's software pipeline
+    bool mixed_vp_ = false;     // ... in mixed mode (the card has T&L of its own)
+    std::unordered_map<DWORD, DWORD> stage_states_[8];
     D3DPRESENT_PARAMETERS pp_ = {};
     bool in_scene_ = false;
     bool has_depth_ = false;

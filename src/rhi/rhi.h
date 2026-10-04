@@ -182,6 +182,11 @@ struct DeviceConfig {
     std::string driver;
     // Which adapter, for a backend that picks one (D3D9); 0 is the default.
     uint32_t adapter = 0;
+    // The fixed-function tier (gfx/render_tier.h): a backend that can run
+    // it (D3D9) loads vertex programs and texture-stage recipes instead of
+    // shader pairs, accepts a card without pixel shaders, and runs the
+    // vertex programs in software where the card has no vs_2_0 either.
+    bool fixed_function = false;
 };
 
 enum class Backend : uint8_t { SdlGpu, Direct3D9 };
