@@ -1302,6 +1302,21 @@ window has room; the loader takes nothing unskinned. It is UL's
 copyrighted data: a personal study at most, never committed, never
 shipped, and `ATTRIBUTION.md` says so.
 
+The rig was fitted on 2026-10-04 (`tools/3dmark/dragothic_rig_report.md`),
+with three of the textures matched by UV and the rest left at their
+surfaces' flat colours -- which read wrong beside the benchmark: cyan
+spikes, pink teeth, an orange belly, a brown head where the benchmark's is
+olive green, and a neck that sits the head on the shoulders. **The
+reference is the benchmark itself**: x99's install is the Pro edition, and
+Game 2 (Dragothic, high detail) runs on the X550 at 1024x768, driven from
+SSH through the console desktop (`tools/x99/desktop_act.ps1`: clicks,
+window focus, and a GDI capture that does see the fullscreen D3D8 frame).
+Ninety frames at 0.7 s cover the test; the close passes over the head and
+under the jaw are frames 30 to 33. They live beside the model in
+`assets/alt/3dmark2001/reference/` (UL's frames, gitignored). The Pro
+edition's Image Quality test, which should write a chosen frame to
+`Quality\*.bmp`, ran and wrote nothing on Windows 10.
+
 **The order chosen** (the user's call, 2026-10-03):
 
 1. The acceptance already queued: the G41 for R0, R3 and R4, then R6.
