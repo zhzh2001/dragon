@@ -34,6 +34,7 @@ add_executable(dragon
   src/app.cpp
   src/core/input.cpp
   src/core/paths.cpp
+  src/core/profile.cpp
   src/rhi/device.cpp
   src/gfx/device.cpp
   src/gfx/pipeline.cpp

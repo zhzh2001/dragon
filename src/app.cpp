@@ -16,6 +16,7 @@
 #include <sstream>
 
 #include "core/log.h"
+#include "core/profile.h"
 #if defined(_WIN32) && !defined(DRAGON_XP)
 #include "rhi/d3d11/d3d11_backend.h"  // probe_feature_level: the tier a feature level 9 device gets
 #endif
@@ -388,6 +389,9 @@ bool App::init(const Options& options) {
     }
 #endif
     tier_ = gfx::RenderTier::make(options_.tier);
+    // DRAGON_TERRAIN_CHUNK=metres: the terrain's draw granularity, for
+    // measuring what a draw costs on a slow machine (PORTING.md, R6).
+    if (const char* chunk = SDL_getenv("DRAGON_TERRAIN_CHUNK")) tier_.terrain_chunk_metres = float(SDL_atof(chunk));
     gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
@@ -7289,14 +7293,20 @@ void App::render() {
 
     // Debug geometry has to be uploaded before any render pass opens, because
     // the upload itself is a copy pass.
-    debug_.upload(device_);
-    // Copy passes cannot open inside a render pass, so particle staging rides
-    // alongside the debug-line upload.
-    particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
+    {
+        CORE_PROFILE("debug + particle upload");
+        debug_.upload(device_);
+        // Copy passes cannot open inside a render pass, so particle staging rides
+        // alongside the debug-line upload.
+        particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
+    }
     // Grass is re-placed around the camera every frame, deterministically from
     // the ground cell, and streamed like the particles.
     const game::VegetationSettings vegetation = vegetation_for_tier();
-    vegetation_.grass_around(terrain_, vegetation, camera.position, grass_scratch_);
+    {
+        CORE_PROFILE("grass placement");
+        vegetation_.grass_around(terrain_, vegetation, camera.position, grass_scratch_);
+    }
     foliage_.wind = vegetation.wind;
     foliage_.grass_fade_end = vegetation.grass_radius;
     foliage_.grass_fade_start = vegetation.grass_radius * 0.7f;
@@ -7304,9 +7314,13 @@ void App::render() {
     foliage_.tree_distance_cap = tier_.budget.tree_draw_distance;
     foliage_.rock_distance_scale = tier_.budget.rock_distance_scale;
     for (int k = 0; k < gfx::GRASS_KINDS; ++k) {
+        CORE_PROFILE("grass upload");
         foliage_.upload_grass(device_, gfx::GrassKind(k), grass_scratch_[k]);
     }
-    ui_.prepare_draw_data(device_);
+    {
+        CORE_PROFILE("ui prepare");
+        ui_.prepare_draw_data(device_);
+    }
 
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
 
@@ -7401,19 +7415,27 @@ void App::render() {
         std::vector<gfx::MeshChunk> near_chunks, far_chunks;
         for (const gfx::MeshChunk& c : terrain_chunks_) if (cell_distance(c) <= FAR_TERRAIN_METRES) near_chunks.push_back(c);
         for (const gfx::MeshChunk& c : terrain_far_chunks_) if (cell_distance(c) > FAR_TERRAIN_METRES) far_chunks.push_back(c);
+        CORE_PROFILE("terrain draws");
         world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
         world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
     } else {
         world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
     }
-    if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
-    if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
+    {
+        CORE_PROFILE("skirt + water");
+        if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
+        if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
+    }
     if (!options_.hide_vegetation) {
+        CORE_PROFILE("vegetation draws");
         foliage_.draw_trees(device_, pass, world_.scene());
         foliage_.draw_grass(device_, pass, world_.scene());
     }
-    world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
-                        dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
+    {
+        CORE_PROFILE("player draw");
+        world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
+                            dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
+    }
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
     // rings that instancing would be premature. Hidden in the studio, whose
@@ -7443,8 +7465,11 @@ void App::render() {
         }
         world_.draw_mesh(device_, pass, ring_mesh_, model);
     }
-    draw_run_world(pass);
-    draw_prey(pass);
+    {
+        CORE_PROFILE("run world + prey");
+        draw_run_world(pass);
+        draw_prey(pass);
+    }
 
     // Bot dragons: the real model, warmed slightly red so a target reads as a
     // target at a glance without a hint of UI.
@@ -7476,13 +7501,22 @@ void App::render() {
 
     // The sky: after everything opaque, before anything blended, on only the
     // pixels left uncovered (make_sky_desc says why).
-    world_.draw_sky(device_, pass);
+    {
+        CORE_PROFILE("sky");
+        world_.draw_sky(device_, pass);
+    }
 
-    draw_combat(pass);
+    {
+        CORE_PROFILE("combat");
+        draw_combat(pass);
+    }
 
     // Particles last among world draws: additive light over everything opaque,
     // depth-tested against it, never writing. (Staged before the pass began.)
-    particles_.draw(device_, pass);
+    {
+        CORE_PROFILE("particles");
+        particles_.draw(device_, pass);
+    }
 
     // Ghost of the best run, flying its own recording alongside.
     game::GhostSample ghost;
@@ -7493,9 +7527,15 @@ void App::render() {
                             ghost_rig_.skinning_matrices());
     }
 
-    debug_.draw(device_, pass, camera.view_projection(aspect));
+    {
+        CORE_PROFILE("debug draw");
+        debug_.draw(device_, pass, camera.view_projection(aspect));
+    }
     device_.end_pass(pass);
-    device_.finish_world();
+    {
+        CORE_PROFILE("finish world");
+        device_.finish_world();
+    }
 
     // The world is in the linear HDR target; bloom it, tonemap it and grade
     // it into the 8-bit target, which the UI then draws onto ungraded. A tier
@@ -7508,7 +7548,10 @@ void App::render() {
     }
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();
-    ui_.render(device_, ui_pass);
+    {
+        CORE_PROFILE("ui render");
+        ui_.render(device_, ui_pass);
+    }
     device_.end_pass(ui_pass);
 }
 
@@ -7572,6 +7615,20 @@ void App::run() {
     const uint64_t started = previous_ticks;
     std::vector<float> frame_ms;  // wall clock, for the summary's percentiles
     uint64_t frame_started = started;
+    // DRAGON_FRAME_PROFILE=1: where a frame's wall clock goes, by phase,
+    // averaged past the first second -- how a slow machine (the G41) is
+    // profiled without a profiler on it.
+    const bool phase_profile = SDL_getenv("DRAGON_FRAME_PROFILE") != nullptr;
+    enum Phase { PH_EVENTS, PH_UPDATE, PH_UI, PH_RENDER, PH_PRESENT, PH_COUNT };
+    static const char* const PHASE_NAMES[PH_COUNT] = {"events", "update", "ui build", "render", "present"};
+    double phase_ns[PH_COUNT] = {};
+    uint64_t phase_frames = 0;
+    uint64_t mark = 0;
+    auto lap = [&](int phase) {
+        const uint64_t t = SDL_GetTicksNS();
+        if (phase_profile && frame_index_ >= 60) phase_ns[phase] += double(t - mark);
+        mark = t;
+    };
 
     while (running_) {
         uint64_t now = SDL_GetTicksNS();
@@ -7597,8 +7654,11 @@ void App::run() {
         frame_cursor_ = (frame_cursor_ + 1) % FRAME_HISTORY;
         if (frame_filled_ < FRAME_HISTORY) ++frame_filled_;
 
+        mark = SDL_GetTicksNS();
         pump_events();
+        lap(PH_EVENTS);
         update(dt);
+        lap(PH_UPDATE);
 
         if (options_.telemetry_interval > 0 &&
             frame_index_ % options_.telemetry_interval == 0) {
@@ -7611,15 +7671,21 @@ void App::run() {
             device_.request_screenshot(options_.screenshot);
         }
 
+        mark = SDL_GetTicksNS();
         if (device_.begin_frame()) {
             ui_.begin_frame(float(device_.width()), float(device_.height()));
             build_ui(dt);
             // The HUD goes on the foreground draw list, so it must be built
             // inside the ImGui frame but layers above every panel.
             draw_hud();
+            lap(PH_UI);
             render();
+            lap(PH_RENDER);
             device_.end_frame();
+            lap(PH_PRESENT);
         }
+        if (frame_index_ >= 60) ++phase_frames;
+        if (frame_index_ == 59) core::profile::reset();  // the sections, past the warm-up too
 
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
@@ -7636,6 +7702,14 @@ void App::run() {
     std::sort(settled.begin(), settled.end());
     const float median = settled.empty() ? 0.0f : settled[settled.size() / 2];
     const float p99 = settled.empty() ? 0.0f : settled[std::min(settled.size() - 1, settled.size() * 99 / 100)];
+    if (phase_profile && phase_frames > 0) {
+        for (int p = 0; p < PH_COUNT; ++p) {
+            LOG_INFO("frame profile: %-8s %7.2f ms", PHASE_NAMES[p], phase_ns[p] * 1e-6 / double(phase_frames));
+        }
+        core::profile::report(phase_frames, [](const char* name, double ms) {
+            LOG_INFO("frame profile:   %-18s %7.2f ms", name, ms);
+        });
+    }
     LOG_INFO("frames: %llu in %.1f s, %.1f fps; median %.1f ms, 1%% low %.1f ms (%s, tier %s, preset %s)",
              static_cast<unsigned long long>(frame_index_), seconds,
              seconds > 0.0 ? double(frame_index_) / seconds : 0.0, median, p99, device_.rhi().driver_name(),

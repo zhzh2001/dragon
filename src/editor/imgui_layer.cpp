@@ -286,6 +286,7 @@ void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
 #ifdef _WIN32
     if (d3d9_) {
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+        rhi::d3d9::forget_state(device.rhi());
         return;
     }
 #ifndef DRAGON_XP

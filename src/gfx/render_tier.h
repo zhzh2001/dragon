@@ -115,6 +115,13 @@ struct RenderTier {
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
         t.fixed_function = tier == Tier::FixedFunction;
         if (t.fixed_function) t.skirt_cell_scale = 2.0f;
+        // Each draw costs the software vertex pipeline a fixed ~50 us on
+        // the G41's Celeron under XP (none of it showed on x99's Xeon):
+        // 320 m chunks were 212 terrain draws and 31 ms of a 640x480
+        // Minimal frame, 1280 m chunks 61 draws and 21.6 ms. 2560 m was
+        // worse again (46 ms): too few chunks to cull, so every vertex is
+        // processed (PORTING.md, R6).
+        if (t.fixed_function) t.terrain_chunk_metres = 1280.0f;
         t.apply(GraphicsSettings::preset(default_preset(tier), tier, DeviceLimits{}));
         return t;
     }

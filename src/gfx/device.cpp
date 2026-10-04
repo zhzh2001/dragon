@@ -102,7 +102,16 @@ void Device::set_world_scale(float scale) {
 }
 
 void Device::finish_world() {
-    if (scene_world_) rhi_->blit(scene_world_, world_w_, world_h_, scene_color_, render_w_, render_h_);
+    // A world drawn smaller than the window is stretched into the UI's
+    // target. Where the backend can hand out the frame's own image, that is
+    // the UI's target too, and the frame presents with no further copy --
+    // one full-screen pass fewer, a quarter of the frame on the M6 under XP.
+    // Not on a frame that is read back: the back buffer cannot be.
+    ui_target_ = scene_color_;
+    if (scene_world_ && screenshot_path_.empty()) {
+        if (rhi::Texture* frame = rhi_->frame_target()) ui_target_ = frame;
+    }
+    if (scene_world_) rhi_->blit(scene_world_, world_w_, world_h_, ui_target_, render_w_, render_h_);
 }
 
 bool Device::ensure_targets(uint32_t w, uint32_t h) {
@@ -203,7 +212,7 @@ rhi::Pass* Device::begin_color_pass(rhi::Texture* target, bool clear) {
 
 rhi::Pass* Device::begin_ui_pass() {
     rhi::PassDesc pass;
-    pass.color = scene_color_;
+    pass.color = ui_target_ ? ui_target_ : scene_color_;
     return rhi_->begin_pass(pass);
 }
 
@@ -233,8 +242,10 @@ void Device::save_screenshot(const std::vector<uint8_t>& rgba) {
 void Device::end_frame() {
     if (!in_frame_) return;
     in_frame_ = false;
+    rhi::Texture* source = ui_target_ ? ui_target_ : scene_color_;
+    ui_target_ = nullptr;
     if (screenshot_path_.empty()) {
-        rhi_->end_frame(scene_color_, render_w_, render_h_, nullptr);
+        rhi_->end_frame(source, render_w_, render_h_, nullptr);
         return;
     }
     std::vector<uint8_t> rgba;

@@ -41,6 +41,7 @@ struct D9Texture {
     uint8_t usage = 0;
     IDirect3DTexture9* texture = nullptr;  // sampled, or a colour target
     IDirect3DSurface9* depth = nullptr;    // a depth target's surface
+    IDirect3DSurface9* surface = nullptr;  // the back buffer, for frame_target()
     // A depth target that is also sampled: `texture` is an R32F colour target
     // the depth-only shaders write z/w into, beside the real depth surface.
     bool depth_as_color = false;
@@ -494,6 +495,7 @@ public:
             }
         }
         for (IDirect3DQuery9* q : profile_.spare) q->Release();
+        release(backbuffer_.surface);
         release(vertex_id_decl_);
         release(vertex_ids_);
         release(dev_);
@@ -501,6 +503,25 @@ public:
     }
 
     IDirect3DDevice9* device() const { return dev_; }
+
+    // Everything the caches believe about device state, forgotten: the next
+    // bind and draw set it all again.
+    void forget_state() {
+        std::fill(std::begin(render_state_known_), std::end(render_state_known_), false);
+        for (auto& stage : sampler_state_known_) std::fill(std::begin(stage), std::end(stage), false);
+        for (auto& stage : stage_states_) stage.clear();
+        pipeline_ = nullptr;
+        bound_index_ = nullptr;
+        uniforms_dirty_[0] = uniforms_dirty_[1] = 0xF;
+        // The states ImGui sets that no pipeline here does, back to D3D9's
+        // defaults -- the scissor above all, or the next frame's world is
+        // clipped to the last panel's rectangle.
+        dev_->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        dev_->SetRenderState(D3DRS_CLIPPING, TRUE);
+        dev_->SetRenderState(D3DRS_SHADEMODE, D3DSHADE_GOURAUD);
+        dev_->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
+        dev_->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+    }
 
     Backend backend() const override { return Backend::Direct3D9; }
     uint32_t max_texture_size() const override { return uint32_t(caps_.MaxTextureWidth); }
@@ -543,12 +564,29 @@ public:
             const uint32_t w = uint32_t(std::max<LONG>(rect.right - rect.left, 0));
             const uint32_t h = uint32_t(std::max<LONG>(rect.bottom - rect.top, 0));
             if (w == 0 || h == 0) return FrameStatus::Skip;
+            present_w_ = w;
+            present_h_ = h;
             if (present_width) *present_width = w;
             if (present_height) *present_height = h;
         }
         dev_->BeginScene();
         in_scene_ = true;
+        // The back buffer as this frame's frame_target(), when it is the
+        // window's size (the device is not reset on a resize, so after one
+        // it is not, and the UI goes through its own target again).
+        release(backbuffer_.surface);
+        if (!headless_ && pp_.BackBufferWidth == present_w_ && pp_.BackBufferHeight == present_h_ &&
+            SUCCEEDED(dev_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer_.surface))) {
+            backbuffer_.width = pp_.BackBufferWidth;
+            backbuffer_.height = pp_.BackBufferHeight;
+            backbuffer_.format = Format::RGBA8;
+            backbuffer_.usage = TEXTURE_COLOR_TARGET;
+        }
         return FrameStatus::Ready;
+    }
+
+    Texture* frame_target() override {
+        return backbuffer_.surface ? reinterpret_cast<Texture*>(&backbuffer_) : nullptr;
     }
 
     void end_frame(Texture* source, uint32_t width, uint32_t height, std::vector<uint8_t>* readback) override {
@@ -557,6 +595,8 @@ public:
         D9Texture* src = source ? d9(source) : nullptr;
         IDirect3DSurface9* src_surface = nullptr;
         if (src && src->texture) src->texture->GetSurfaceLevel(0, &src_surface);
+        // Drawn straight into the back buffer: nothing to copy.
+        if (src && src == &backbuffer_) src_surface = nullptr;
         if (src_surface && !headless_) {
             IDirect3DSurface9* back = nullptr;
             if (SUCCEEDED(dev_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back))) {
@@ -574,6 +614,7 @@ public:
         if (profile_.on) collect_pixel_queries();
         if (readback && src_surface) download(src_surface, width, height, *readback);
         if (src_surface) src_surface->Release();
+        release(backbuffer_.surface);
         if (!headless_) dev_->Present(nullptr, nullptr, nullptr, nullptr);
         else wait_idle();
     }
@@ -581,11 +622,10 @@ public:
     void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) override {
         D9Texture* s = source ? d9(source) : nullptr;
         D9Texture* d = dest ? d9(dest) : nullptr;
-        if (!s || !d || !s->texture || !d->texture) return;
+        if (!s || !d || !s->texture || (!d->texture && !d->surface)) return;
         IDirect3DSurface9* from = nullptr;
-        IDirect3DSurface9* to = nullptr;
         s->texture->GetSurfaceLevel(0, &from);
-        d->texture->GetSurfaceLevel(0, &to);
+        IDirect3DSurface9* to = target_surface(d);
         if (from && to) {
             RECT src_rect = {0, 0, LONG(sw), LONG(sh)};
             RECT dst_rect = {0, 0, LONG(dw), LONG(dh)};
@@ -868,8 +908,8 @@ public:
         // A depth-only pass on a sampled depth target draws into its R32F
         // stand-in (D9Texture::depth_as_color).
         D9Texture* target = color ? color : (depth && depth->depth_as_color ? depth : nullptr);
-        IDirect3DSurface9* surface = nullptr;
-        if (!target || !target->texture || FAILED(target->texture->GetSurfaceLevel(0, &surface))) {
+        IDirect3DSurface9* surface = target ? target_surface(target) : nullptr;
+        if (!surface) {
             LOG_ERROR("direct3d9: a pass with no colour target it can draw into");
             return nullptr;
         }
@@ -1148,6 +1188,19 @@ public:
     }
 
 private:
+    // A colour target's surface, with a reference: a texture's top level, or
+    // the back buffer's own surface.
+    IDirect3DSurface9* target_surface(D9Texture* t) {
+        IDirect3DSurface9* surface = nullptr;
+        if (t->surface) {
+            surface = t->surface;
+            surface->AddRef();
+        } else if (t->texture) {
+            t->texture->GetSurfaceLevel(0, &surface);
+        }
+        return surface;
+    }
+
     // A driver can claim D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES and still
     // fail the call: the M6's Omega 2.6.87 on XP does, and the frame was
     // uninitialised memory under the HUD. The first failure turns the quad
@@ -1416,6 +1469,8 @@ private:
     bool has_depth_ = false;
     bool r32f_filterable_ = false;
     bool stretch_from_textures_ = true;  // D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES
+    D9Texture backbuffer_;               // frame_target(): the back buffer's surface, this frame
+    uint32_t present_w_ = 0, present_h_ = 0;
     enum class Instancing { Native, AtiInst, Loop } instancing_ = Instancing::Native;
     D9Pass pass_;
     D9Pipeline* pipeline_ = nullptr;
@@ -1436,6 +1491,7 @@ std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config) {
 }
 
 IDirect3DDevice9* native_device(Device& device) { return static_cast<D3D9Device&>(device).device(); }
+void forget_state(Device& device) { static_cast<D3D9Device&>(device).forget_state(); }
 
 ShaderCaps probe_shader_caps(uint32_t adapter) {
     ShaderCaps caps;

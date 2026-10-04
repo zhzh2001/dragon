@@ -244,6 +244,14 @@ public:
     // rendered at a fraction of the window is brought up to the UI's size
     // (gfx::Device::finish_world).
     virtual void blit(Texture* source, uint32_t sw, uint32_t sh, Texture* dest, uint32_t dw, uint32_t dh) = 0;
+    // The image this frame presents, as a colour target the UI can draw on,
+    // or null. A frame drawn into it presents with no copy (end_frame with
+    // it as the source): on a card that fills slowly (the M6 under XP), a
+    // full-screen copy of a separate UI target was a quarter of the frame.
+    // Only a windowed D3D9 device whose back buffer is the window's size
+    // has one; it is valid between begin_frame and end_frame, and cannot be
+    // read back.
+    virtual Texture* frame_target() { return nullptr; }
 
     // ---- resources
     // With `data`, the buffer is filled now, synchronously (load time only).

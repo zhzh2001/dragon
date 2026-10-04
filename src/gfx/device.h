@@ -126,6 +126,9 @@ private:
     bool hdr_ = true;
 
     rhi::Texture* scene_color_ = nullptr;
+    // What the UI draws on this frame: scene_color_, or the backend's frame
+    // target (finish_world).
+    rhi::Texture* ui_target_ = nullptr;
     rhi::Texture* scene_hdr_ = nullptr;
     rhi::Texture* bloom_a_ = nullptr;
     rhi::Texture* bloom_b_ = nullptr;

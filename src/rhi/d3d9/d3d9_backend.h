@@ -29,6 +29,9 @@ std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config);
 
 // For Dear ImGui's D3D9 renderer (editor/imgui_layer.cpp), the one caller.
 IDirect3DDevice9* native_device(Device& device);
+// ImGui sets device state behind the backend's caches (and no longer saves
+// and restores it, cmake/imgui.cmake): after it draws, the caches forget.
+void forget_state(Device& device);
 
 }  // namespace d3d9
 }  // namespace rhi
