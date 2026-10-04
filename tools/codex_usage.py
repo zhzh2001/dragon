@@ -23,15 +23,18 @@ import re
 import subprocess
 import sys
 
-URL = 'https://chatgpt.com/codex/cloud/settings/analytics'
+# Moved 2026-10-04 from /codex/cloud/settings/analytics; the layout changed with it.
+URL = 'https://chatgpt.com/settings/usage?tab=overview'
 SESSION = 'cxusage'
 
-# The page lays each window out as heading, then the number, then a word for
-# "remaining", then the reset time. Match the heading in either language.
+# The page lays each window out as a heading ("5 小时限额" / "5-hour limit"),
+# then the reset line ("5 小时 0 分钟后重置" / "resets in ..."), then the
+# remainder ("剩余 100%" / "100% remaining"), in either language. The older
+# analytics page put the bare percentage on its own line; both still match.
 FIVE_HOUR = re.compile(r'(5\s*小时|5[-\s]?hour)', re.I)
 WEEKLY = re.compile(r'(每周|weekly)', re.I)
-PERCENT = re.compile(r'^(\d+(?:\.\d+)?)%$')
-RESET = re.compile(r'(?:重置时间|resets?)\s*[:：]?\s*(.+)', re.I)
+PERCENT = re.compile(r'(?:^|剩余\s*|remaining\s*)(\d+(?:\.\d+)?)%(?:\s*remaining)?\s*$', re.I)
+RESET = re.compile(r'(?:重置时间|resets?(?:\s+in)?)\s*[:：]?\s*(.+)|(.+?)后重置', re.I)
 
 
 def cu(*args, timeout=240):
@@ -65,7 +68,7 @@ def after(lines, index, pattern, span=6):
     for line in lines[index + 1:index + 1 + span]:
         m = pattern.match(line) or pattern.search(line)
         if m:
-            return m.group(1)
+            return next(g for g in m.groups() if g is not None)
     return None
 
 
