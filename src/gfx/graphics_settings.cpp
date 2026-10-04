@@ -1,5 +1,6 @@
 #include "gfx/graphics_settings.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <sstream>
 
@@ -8,41 +9,44 @@
 namespace gfx {
 namespace {
 
-// The levels, Ultra to Very low. The values are what the X550 benchmark
+// The levels, Ultra to Minimal. The values are what the X550 benchmark
 // (docs/PORTING.md, R7) was run against; each step down roughly halves a
-// setting's vertex load.
+// setting's vertex load. The sixth, Minimal, is the 1998 floor (R5): a card
+// without hardware T&L running the vertex programs on the CPU, 16 MB of
+// video memory, 320x240 to 640x480 -- half of Very low again where halving
+// still buys something.
 const SettingInfo INFO[SETTING_COUNT] = {
-    {"models", "Model detail", {"Full", "20K triangles", "10K triangles", "5K triangles", "2.5K triangles"},
+    {"models", "Model detail", {"Full", "20K triangles", "10K triangles", "5K triangles", "2.5K triangles", "1.2K triangles"},
      Applies::Restart},
     // Four levels: a 36 m grid lost the river, which is how a valley is
     // navigated; Very low keeps the 24 m one.
-    {"terrain", "Terrain detail", {"6 m grid", "12 m grid", "18 m grid", "24 m grid", nullptr}, Applies::Reload},
-    {"trees", "Trees", {"Very high", "High", "Medium", "Low", "Very low"}, Applies::Reload},
-    {"grass", "Grass", {"Very high", "High", "Medium", "Low", "Off"}, Applies::Live},
-    {"rocks", "Rocks", {"Scanned", "400 triangles", "150 triangles", "80 triangles", "40 triangles"},
+    {"terrain", "Terrain detail", {"6 m grid", "12 m grid", "18 m grid", "24 m grid", nullptr, nullptr}, Applies::Reload},
+    {"trees", "Trees", {"Very high", "High", "Medium", "Low", "Very low", "Minimal"}, Applies::Reload},
+    {"grass", "Grass", {"Very high", "High", "Medium", "Low", "Off", nullptr}, Applies::Live},
+    {"rocks", "Rocks", {"Scanned", "400 triangles", "150 triangles", "80 triangles", "40 triangles", "20 triangles"},
      Applies::Reload},
-    {"textures", "Textures", {"Full", "1024", "512", "256", "128"}, Applies::Restart},
-    {"shadows", "Shadows", {"4096", "2048", "1024", "512", "Off"}, Applies::Reload},
-    {"bloom", "Bloom", {"On", nullptr, nullptr, nullptr, "Off"}, Applies::Live},
+    {"textures", "Textures", {"Full", "1024", "512", "256", "128", "64"}, Applies::Restart},
+    {"shadows", "Shadows", {"4096", "2048", "1024", "512", "Off", nullptr}, Applies::Reload},
+    {"bloom", "Bloom", {"On", nullptr, nullptr, nullptr, "Off", nullptr}, Applies::Live},
     // The world's resolution, the HUD's staying whole: on a fill-bound card
     // the setting that moves the frame rate most (docs/PORTING.md, R7).
-    {"resolution", "Resolution", {"100%", nullptr, "85%", "70%", "50%"}, Applies::Live},
+    {"resolution", "Resolution", {"100%", nullptr, "85%", "70%", "50%", nullptr}, Applies::Live},
 };
 
-constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500};
-constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400};
-constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f};
-constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f};
-constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f};
-constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f};
-constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f};
-constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40};
-constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f};
-constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128};
-constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0};
-constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f};
+constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500, 1200};
+constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400, 250};
+constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f};
+constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 4.0f};
+constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f};
+constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f};
+constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f, 0.0f};
+constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40, 20};
+constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f, 0.2f};
+constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128, 64};
+constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0, 0};
+constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f, 0.5f};
 
-const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low"};
+const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low", "minimal"};
 
 // The cheapest level a tier is offered, per setting. Above it the tier's
 // cards run out of memory or vertex constants long before the budget
@@ -64,10 +68,11 @@ int tier_floor(Setting setting, Tier tier) {
 // the terrain, whose Very low is Low; and the resolution, whole through
 // Medium, 85% at Low and 70% at Very low (50% is offered, not preset).
 int preset_to_level(Setting setting, int preset) {
-    if (setting == Setting::Bloom) return preset <= 2 ? 0 : QUALITY_LEVELS - 1;
-    if (setting == Setting::Shadows) return preset <= 2 ? preset : QUALITY_LEVELS - 1;
-    if (setting == Setting::Resolution) return preset <= 2 ? 0 : preset - 1;
-    if (setting == Setting::Terrain) return preset < 3 ? preset : 3;
+    if (setting == Setting::Bloom) return preset <= 2 ? 0 : 4;                              // off from Low
+    if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
+    if (setting == Setting::Resolution) return preset <= 2 ? 0 : std::min(preset - 1, 4);  // 85, 70, 50, 50%
+    if (setting == Setting::Terrain) return preset < 3 ? preset : 3;                        // 24 m at most
+    if (setting == Setting::Grass) return std::min(preset, 4);                              // off from Very low
     return preset;
 }
 

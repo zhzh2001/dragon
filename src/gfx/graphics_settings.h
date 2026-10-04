@@ -25,7 +25,7 @@ enum class Tier : uint8_t;
 
 enum class Setting : uint8_t { Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, Count };
 constexpr int SETTING_COUNT = int(Setting::Count);
-constexpr int QUALITY_LEVELS = 5;
+constexpr int QUALITY_LEVELS = 6;
 
 // What a setting needs to change: drawn next frame, re-planted or re-meshed
 // at once, or loaded again at start-up.
@@ -39,7 +39,7 @@ struct SettingInfo {
 };
 const SettingInfo& setting_info(Setting setting);
 
-const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low"
+const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low", "minimal"
 bool parse_preset(const std::string& name, int* level);
 
 // What the device offers beyond its tier.

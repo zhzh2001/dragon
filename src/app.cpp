@@ -1060,7 +1060,7 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
         shadow_.init(&device_, &pipelines_, tier_.budget.shadow_size ? tier_.budget.shadow_size : 512);
         shadow_.enabled = tier_.budget.shadow_size > 0;
         // SM2's shadows-off is a shader variant (NO_SHADOWS, gfx/pipeline.cpp).
-        if (tier_.vertex_lighting && (old[Setting::Shadows] == gfx::QUALITY_LEVELS - 1) != (next[Setting::Shadows] == gfx::QUALITY_LEVELS - 1)) {
+        if (tier_.vertex_lighting && (old[Setting::Shadows] == 4) != (next[Setting::Shadows] == 4)) {
             pipelines_.rebuild_all();
         }
     }

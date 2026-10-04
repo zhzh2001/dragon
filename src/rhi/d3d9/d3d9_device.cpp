@@ -621,6 +621,7 @@ public:
     }
 
     void destroy(Buffer* buffer) override {
+        if (buffer && d9(buffer) == bound_index_) bound_index_ = nullptr;
         if (!buffer) return;
         D9Buffer* b = d9(buffer);
         untrack(b);
@@ -1001,6 +1002,7 @@ public:
             b->ib_size = size;
         }
         index_offset_ = binding.offset / (size == IndexSize::U32 ? 4 : 2);
+        bound_index_ = b;
         dev_->SetIndices(b->ib);
     }
 
@@ -1197,14 +1199,45 @@ private:
     // triangles), so a bigger list draw is issued in pieces.
     void draw_indexed_chunked(D3DPRIMITIVETYPE type, INT base_vertex, UINT vertices, UINT start_index, UINT prims) {
         PROFILE(PROF_DRAW);
+        // The vertex range the draw touches. Hardware ignores it, but D3D9's
+        // software vertex pipeline runs the vertex program over every vertex
+        // in it: with the whole terrain buffer named for each of its 264
+        // chunks, a frame transformed eleven million vertices and took 35 s.
+        // So under software processing the range is the indices' real
+        // min..max, read once from the index data the backend keeps and
+        // remembered per draw range.
+        UINT min_index = 0;
+        if (software_vp_ && bound_index_) {
+            const uint64_t key = (uint64_t(start_index) << 32) ^ uint64_t(prims) ^ (uint64_t(reinterpret_cast<uintptr_t>(bound_index_)) << 7);
+            auto it = index_ranges_.find(key);
+            if (it == index_ranges_.end()) {
+                const UINT per_prim_all = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : prims ? (type == D3DPT_TRIANGLESTRIP ? prims + 2 : 1) : 1;
+                const size_t count = type == D3DPT_TRIANGLESTRIP ? size_t(prims) + 2 : size_t(prims) * per_prim_all;
+                uint32_t lo = UINT32_MAX, hi = 0;
+                const std::vector<uint8_t>& data = bound_index_->index_data;
+                if (bound_index_->ib_size == IndexSize::U32) {
+                    const uint32_t* idx = reinterpret_cast<const uint32_t*>(data.data());
+                    const size_t n = data.size() / 4;
+                    for (size_t i = start_index; i < start_index + count && i < n; ++i) { lo = std::min(lo, idx[i]); hi = std::max(hi, idx[i]); }
+                } else {
+                    const uint16_t* idx = reinterpret_cast<const uint16_t*>(data.data());
+                    const size_t n = data.size() / 2;
+                    for (size_t i = start_index; i < start_index + count && i < n; ++i) { lo = std::min<uint32_t>(lo, idx[i]); hi = std::max<uint32_t>(hi, idx[i]); }
+                }
+                if (lo == UINT32_MAX) { lo = 0; hi = vertices ? vertices - 1 : 0; }
+                it = index_ranges_.emplace(key, std::make_pair(lo, hi)).first;
+            }
+            min_index = it->second.first;
+            vertices = it->second.second - it->second.first + 1;
+        }
         const UINT limit = caps_.MaxPrimitiveCount ? caps_.MaxPrimitiveCount : prims;
         const UINT per_prim = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : 0;
         if (prims <= limit || per_prim == 0) {
-            dev_->DrawIndexedPrimitive(type, base_vertex, 0, vertices, start_index, prims);
+            dev_->DrawIndexedPrimitive(type, base_vertex, min_index, vertices, start_index, prims);
             return;
         }
         for (UINT done = 0; done < prims; done += limit) {
-            dev_->DrawIndexedPrimitive(type, base_vertex, 0, vertices, start_index + done * per_prim,
+            dev_->DrawIndexedPrimitive(type, base_vertex, min_index, vertices, start_index + done * per_prim,
                                        std::min(limit, prims - done));
         }
     }
@@ -1296,6 +1329,8 @@ private:
     bool software_vp_ = false;  // vertex programs run by D3D9's software pipeline
     bool mixed_vp_ = false;     // ... in mixed mode (the card has T&L of its own)
     std::unordered_map<DWORD, DWORD> stage_states_[8];
+    D9Buffer* bound_index_ = nullptr;  // the index buffer SetIndices holds
+    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> index_ranges_;  // software VP: a draw range's min..max index
     D3DPRESENT_PARAMETERS pp_ = {};
     bool in_scene_ = false;
     bool has_depth_ = false;
