@@ -7,13 +7,18 @@ namespace ui {
 void Hud::set_plain(bool plain) {
     // Plain is alpha-tested on D3D9 (ImGuiLayer::set_alpha_tested), where a
     // translucent colour is drawn whole or not at all: each token becomes
-    // opaque, pre-blended over the plate's charcoal, so dim text is darker
-    // text rather than gone and a plate is a solid one.
+    // opaque, pre-blended -- the plate and its edge over the plate's
+    // charcoal, so a plate is a solid one; text and marks over a mid grey,
+    // so dim text is dimmer text rather than gone, and stays readable over
+    // the terrain as well as on a plate (over charcoal, a grey marker
+    // label read dark against the ground).
     if (plain && !plain_) {
         smooth_tokens_ = tokens_;
         ImU32* c = reinterpret_cast<ImU32*>(&tokens_);
-        const ImU32 base = smooth_tokens_.plate;
+        const ImU32* plate_tokens[] = {&tokens_.plate, &tokens_.plate_edge};
         for (size_t i = 0; i < sizeof(Tokens) / sizeof(ImU32); ++i) {
+            const bool on_plate = &c[i] == plate_tokens[0] || &c[i] == plate_tokens[1];
+            const ImU32 base = on_plate ? smooth_tokens_.plate : IM_COL32(100, 100, 100, 255);
             const float a = float((c[i] >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
             const auto mix = [&](int shift) {
                 const float fg = float((c[i] >> shift) & 0xFF), bg = float((base >> shift) & 0xFF);

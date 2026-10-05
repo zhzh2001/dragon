@@ -139,7 +139,10 @@ int default_preset(Tier tier) {
         case Tier::Modern: return 0;
         case Tier::SM3: return 1;
         case Tier::SM2: return 2;
-        case Tier::FixedFunction: return 3;
+        // Minimal, the preset made for these cards: the tier is what a card
+        // without pixel shaders gets, and on the G41's M6 Low was 8 fps and
+        // Minimal 59 -- a double-click on XP started at the unplayable one.
+        case Tier::FixedFunction: return 5;
     }
     return 0;
 }
