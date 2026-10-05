@@ -33,6 +33,11 @@ struct D9Buffer {
     IDirect3DIndexBuffer9* ib = nullptr;
     IndexSize ib_size = IndexSize::U16;
     bool dynamic = false;
+    // A dynamic vertex buffer is in D3DPOOL_DEFAULT, which a device reset
+    // (fullscreen, Alt-Tab) empties: its data is written here first and
+    // copied in, so a reset can copy it in again.
+    std::vector<uint8_t> shadow;
+    uint32_t mapped = 0;
 };
 
 struct D9Texture {
@@ -239,6 +244,7 @@ D3DFORMAT to_d3d(Format f) {
         case Format::RGBA8:
         case Format::RGBA8_SRGB: return D3DFMT_A8R8G8B8;
         case Format::RGBA16F: return D3DFMT_A16B16G16R16F;
+        case Format::RGB565: return D3DFMT_R5G6B5;
         case Format::D16: return D3DFMT_D16;
         case Format::D24:
         case Format::D32F: return D3DFMT_D24X8;  // D3D9-era cards have no float depth
@@ -408,6 +414,27 @@ public:
         pp_.BackBufferHeight = UINT(std::max(h, 1));
         pp_.hDeviceWindow = hwnd_;
         pp_.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
+        // DRAGON_D3D9_VSYNC=0: present at once, tearing, instead of on the
+        // next refresh -- for measuring a frame's real cost.
+        if (const char* vsync = SDL_getenv("DRAGON_D3D9_VSYNC"); vsync && vsync[0] == '0') {
+            pp_.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+        }
+        // Exclusive fullscreen at the window's size: the card scans out the
+        // game's own mode, not a 1024x768 desktop, and a present flips
+        // rather than copying into the desktop. On the G41's M6, whose
+        // memory is the limit, that was 25 -> 19.7 ms at 640x480 Minimal,
+        // and a 16-bit mode 18.9 (docs/PORTING.md, "R6, as built").
+        color16_ = config.color16;
+        fullscreen_ = config.fullscreen && !headless_;
+        if (fullscreen_) {
+            pp_.Windowed = FALSE;
+            if (color16_ && SUCCEEDED(d3d_->CheckDeviceType(adapter_, D3DDEVTYPE_HAL, D3DFMT_R5G6B5, D3DFMT_R5G6B5, FALSE)))
+                pp_.BackBufferFormat = D3DFMT_R5G6B5;
+            // A borderless window over the mode, or the frame's border
+            // and title bar sit on top of the picture.
+            SetWindowLongW(hwnd_, GWL_STYLE, LONG(WS_POPUP | WS_VISIBLE));
+            SetWindowPos(hwnd_, HWND_TOP, 0, 0, w, h, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        }
         // Two back buffers: the D3D9 counterpart of the SDL backend's
         // mailbox. With one, a frame that misses a refresh waits for the
         // next, so the X550's 34 ms frames played at 50 (20 fps against the
@@ -421,14 +448,29 @@ public:
                                  : mixed_vp_    ? D3DCREATE_MIXED_VERTEXPROCESSING
                                                 : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
         const DWORD flags = processing | D3DCREATE_FPU_PRESERVE;
-        const HRESULT hr = d3d_->CreateDevice(adapter_, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
+        HRESULT hr = d3d_->CreateDevice(adapter_, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
+        if (FAILED(hr) && fullscreen_) {
+            // No such mode (a window size the card cannot display): windowed.
+            LOG_WARN("direct3d9: no fullscreen %ux%u mode (0x%08lx); windowed", pp_.BackBufferWidth, pp_.BackBufferHeight,
+                     static_cast<unsigned long>(hr));
+            fullscreen_ = false;
+            pp_.Windowed = TRUE;
+            pp_.BackBufferFormat = D3DFMT_X8R8G8B8;
+            SetWindowLongW(hwnd_, GWL_STYLE, LONG(WS_OVERLAPPEDWINDOW | WS_VISIBLE));
+            SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
+            hr = d3d_->CreateDevice(adapter_, D3DDEVTYPE_HAL, hwnd_, flags, &pp_, &dev_);
+        }
+        if (fullscreen_) {
+            LOG_INFO("direct3d9: fullscreen %ux%u, %s", pp_.BackBufferWidth, pp_.BackBufferHeight,
+                     pp_.BackBufferFormat == D3DFMT_R5G6B5 ? "16-bit" : "32-bit");
+        }
         if (FAILED(hr)) {
             LOG_ERROR("direct3d9: CreateDevice failed (0x%08lx)%s", static_cast<unsigned long>(hr),
                       hr == D3DERR_INVALIDCALL ? " -- no desktop session? (tools/x99/run_interactive.ps1)" : "");
             return false;
         }
 
-        if (mixed_vp_) dev_->SetSoftwareVertexProcessing(TRUE);
+        device_defaults();
         if (software_vp_) {
             LOG_INFO("direct3d9: vertex programs in software (%s)", mixed_vp_ ? "mixed mode" : "no hardware T&L");
         }
@@ -471,7 +513,7 @@ public:
         } else if (SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0,
                                                      D3DRTYPE_SURFACE, D3DFORMAT(inst)))) {
             instancing_ = Instancing::AtiInst;
-            dev_->SetRenderState(D3DRS_POINTSIZE, inst);  // once, past the cache
+            dev_->SetRenderState(D3DRS_POINTSIZE, inst);  // past the cache; again after a reset
         } else {
             instancing_ = Instancing::Loop;
         }
@@ -503,6 +545,82 @@ public:
     }
 
     IDirect3DDevice9* device() const { return dev_; }
+
+    // What this backend sets once and a reset puts back to D3D9's defaults.
+    void device_defaults() {
+        if (mixed_vp_) dev_->SetSoftwareVertexProcessing(TRUE);
+        if (instancing_ == Instancing::AtiInst) dev_->SetRenderState(D3DRS_POINTSIZE, MAKEFOURCC('I', 'N', 'S', 'T'));
+        // 16-bit colour bands a sky gradient into stripes without it.
+        if (color16_) dev_->SetRenderState(D3DRS_DITHERENABLE, TRUE);
+    }
+
+    // A render target's D3D9 objects, from its description: at creation,
+    // and again after a reset.
+    HRESULT create_target(D9Texture* t) {
+        if (t->usage & TEXTURE_DEPTH_TARGET) {
+            HRESULT hr = dev_->CreateDepthStencilSurface(t->width, t->height, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, TRUE,
+                                                         &t->depth, nullptr);
+            if (SUCCEEDED(hr) && t->depth_as_color) {
+                hr = dev_->CreateTexture(t->width, t->height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT,
+                                         &t->texture, nullptr);
+            }
+            return hr;
+        }
+        return dev_->CreateTexture(t->width, t->height, 1, D3DUSAGE_RENDERTARGET, to_d3d(t->format), D3DPOOL_DEFAULT,
+                                   &t->texture, nullptr);
+    }
+
+    HRESULT create_vertex_buffer(D9Buffer* b) {
+        const DWORD usage = D3DUSAGE_WRITEONLY | buffer_usage() | (b->dynamic ? D3DUSAGE_DYNAMIC : 0);
+        return dev_->CreateVertexBuffer(b->size, usage, 0, b->dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, &b->vb, nullptr);
+    }
+
+    void fill_dynamic(D9Buffer* b, uint32_t size) {
+        void* mapped = nullptr;
+        if (!b->vb || size == 0 || FAILED(b->vb->Lock(0, size, &mapped, D3DLOCK_DISCARD))) return;
+        std::memcpy(mapped, b->shadow.data(), size);
+        b->vb->Unlock();
+    }
+
+    void set_reset_hooks(void (*before)(), void (*after)()) {
+        before_reset_ = before;
+        after_reset_ = after;
+    }
+    // Reset needs every D3DPOOL_DEFAULT resource released first: the render
+    // targets and the dynamic buffers, which are made again afterwards from
+    // what this backend kept of them. A target's contents are redrawn by
+    // the next frame; a buffer's are copied back from its shadow. The
+    // device's state is back at D3D9's defaults, so the caches forget theirs.
+    bool reset() {
+        if (before_reset_) before_reset_();
+        release(backbuffer_.surface);
+        for (D9Texture* t : targets_) {
+            release(t->texture);
+            release(t->depth);
+        }
+        for (D9Buffer* b : dynamic_) release(b->vb);
+        for (auto& [name, query] : profile_.pending) query->Release();
+        for (IDirect3DQuery9* query : profile_.spare) query->Release();
+        profile_.pending.clear();
+        profile_.spare.clear();
+        const HRESULT hr = dev_->Reset(&pp_);
+        if (FAILED(hr)) {  // still lost: again next frame
+            if (after_reset_) after_reset_();
+            return false;
+        }
+        for (D9Texture* t : targets_) {
+            if (FAILED(create_target(t))) LOG_ERROR("direct3d9: a %ux%u target failed after a reset", t->width, t->height);
+        }
+        for (D9Buffer* b : dynamic_) {
+            if (SUCCEEDED(create_vertex_buffer(b))) fill_dynamic(b, b->mapped);
+        }
+        device_defaults();
+        forget_state();
+        for (BufferBinding& s : streams_) s = {};
+        if (after_reset_) after_reset_();
+        LOG_INFO("direct3d9: device reset (%zu targets, %zu dynamic buffers)", targets_.size(), dynamic_.size());
+        return true;
+    }
 
     // Everything the caches believe about device state, forgotten: the next
     // bind and draw set it all again.
@@ -549,14 +667,13 @@ public:
 
     // ---- the frame
     FrameStatus begin_frame(uint32_t* present_width, uint32_t* present_height) override {
+        // A fullscreen device is lost when it loses the focus (Alt-Tab) and
+        // stays lost until the window is back in front; a windowed one, on
+        // a mode change or a locked workstation. Wait, then reset.
         const HRESULT coop = dev_->TestCooperativeLevel();
-        if (coop == D3DERR_DEVICELOST) return FrameStatus::Skip;
-        if (coop == D3DERR_DEVICENOTRESET) {
-            // Reset needs every D3DPOOL_DEFAULT resource released first; the
-            // renderers' targets are recreated by size, but this backend does
-            // not track them yet (R3 runs windowed at a fixed size).
-            LOG_ERROR("direct3d9: device needs a reset, which is not handled yet");
-            return FrameStatus::Failed;
+        if (coop == D3DERR_DEVICELOST || (coop == D3DERR_DEVICENOTRESET && !reset())) {
+            Sleep(50);
+            return FrameStatus::Skip;
         }
         if (!headless_) {
             RECT rect = {};
@@ -658,9 +775,11 @@ public:
             track(buffer, Kind::Buffer, size);
             return reinterpret_cast<Buffer*>(buffer);
         }
-        const DWORD d3d_usage = D3DUSAGE_WRITEONLY | buffer_usage() | (buffer->dynamic ? D3DUSAGE_DYNAMIC : 0);
-        const D3DPOOL pool = buffer->dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED;
-        if (FAILED(dev_->CreateVertexBuffer(size, d3d_usage, 0, pool, &buffer->vb, nullptr))) {
+        if (buffer->dynamic) {
+            buffer->shadow.assign(size, 0);
+            dynamic_.push_back(buffer);
+        }
+        if (FAILED(create_vertex_buffer(buffer))) {
             LOG_ERROR("direct3d9: CreateVertexBuffer(%s, %u bytes) failed", debug_name, size);
             delete buffer;
             return nullptr;
@@ -681,6 +800,7 @@ public:
         if (!buffer) return;
         D9Buffer* b = d9(buffer);
         untrack(b);
+        dynamic_.erase(std::remove(dynamic_.begin(), dynamic_.end(), b), dynamic_.end());
         release(b->vb);
         release(b->ib);
         delete b;
@@ -695,8 +815,13 @@ public:
             release(b->ib);  // rebuilt at the next bind
             return b->index_data.data();
         }
+        if (b->dynamic) {
+            if (size > b->shadow.size()) return nullptr;
+            b->mapped = size;
+            return b->shadow.data();
+        }
         void* mapped = nullptr;
-        if (!b->vb || FAILED(b->vb->Lock(0, size, &mapped, b->dynamic ? D3DLOCK_DISCARD : 0))) return nullptr;
+        if (!b->vb || FAILED(b->vb->Lock(0, size, &mapped, 0))) return nullptr;
         return mapped;
     }
 
@@ -704,6 +829,10 @@ public:
         PROFILE(PROF_UPLOAD);
         if (!buffer) return;
         D9Buffer* b = d9(buffer);
+        if (b->dynamic) {
+            fill_dynamic(b, b->mapped);
+            return;
+        }
         if (b->vb) b->vb->Unlock();
     }
 
@@ -716,18 +845,11 @@ public:
         t->levels = desc.mip_levels;
         t->usage = desc.usage;
         HRESULT hr = S_OK;
-        if (desc.usage & TEXTURE_DEPTH_TARGET) {
-            hr = dev_->CreateDepthStencilSurface(desc.width, desc.height, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, TRUE,
-                                                 &t->depth, nullptr);
-            if (SUCCEEDED(hr) && (desc.usage & TEXTURE_SAMPLED)) {
-                t->depth_as_color = true;
-                hr = dev_->CreateTexture(desc.width, desc.height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F,
-                                         D3DPOOL_DEFAULT, &t->texture, nullptr);
-            }
-        } else if (desc.usage & TEXTURE_COLOR_TARGET) {
-            hr = dev_->CreateTexture(desc.width, desc.height, 1, D3DUSAGE_RENDERTARGET, to_d3d(desc.format),
-                                     D3DPOOL_DEFAULT, &t->texture, nullptr);
+        if (desc.usage & (TEXTURE_DEPTH_TARGET | TEXTURE_COLOR_TARGET)) {
+            t->depth_as_color = (desc.usage & TEXTURE_DEPTH_TARGET) && (desc.usage & TEXTURE_SAMPLED);
             t->levels = 1;
+            hr = create_target(t);
+            targets_.push_back(t);
         } else {
             hr = dev_->CreateTexture(desc.width, desc.height, desc.mip_levels, 0, to_d3d(desc.format),
                                      D3DPOOL_MANAGED, &t->texture, nullptr);
@@ -815,6 +937,7 @@ public:
         if (!texture) return;
         D9Texture* t = d9(texture);
         untrack(t);
+        targets_.erase(std::remove(targets_.begin(), targets_.end(), t), targets_.end());
         release(t->texture);
         release(t->depth);
         delete t;
@@ -1460,6 +1583,13 @@ private:
     D3DCAPS9 caps_ = {};
     bool ff_ = false;           // the fixed-function tier (DeviceConfig)
     bool software_vp_ = false;  // vertex programs run by D3D9's software pipeline
+    bool fullscreen_ = false;
+    bool color16_ = false;
+    // What a reset empties and this backend makes again (reset()).
+    std::vector<D9Texture*> targets_;
+    std::vector<D9Buffer*> dynamic_;
+    void (*before_reset_)() = nullptr;
+    void (*after_reset_)() = nullptr;
     bool mixed_vp_ = false;     // ... in mixed mode (the card has T&L of its own)
     std::unordered_map<DWORD, DWORD> stage_states_[8];
     D9Buffer* bound_index_ = nullptr;  // the index buffer SetIndices holds
@@ -1492,6 +1622,9 @@ std::unique_ptr<Device> create(SDL_Window* window, const DeviceConfig& config) {
 
 IDirect3DDevice9* native_device(Device& device) { return static_cast<D3D9Device&>(device).device(); }
 void forget_state(Device& device) { static_cast<D3D9Device&>(device).forget_state(); }
+void set_reset_hooks(Device& device, void (*before)(), void (*after)()) {
+    static_cast<D3D9Device&>(device).set_reset_hooks(before, after);
+}
 
 ShaderCaps probe_shader_caps(uint32_t adapter) {
     ShaderCaps caps;

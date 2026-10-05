@@ -34,6 +34,13 @@ command prompt:
   dragon.exe --run              a hoard run
   dragon.exe --demo             the game playing itself
   dragon.exe --preset minimal   the lightest settings, for the oldest cards
+  dragon.exe --fullscreen --size 640x480
+                                fullscreen, in a 640x480 display mode
+
+Fullscreen is much faster than a window on an old card: it no longer
+shares the card's memory with the desktop. Tick "fullscreen" in the
+Graphics panel (F1 shows the panels) and restart to keep it. Alt-Tab
+leaves and comes back.
 
 
 CONTROLS (gamepad recommended)

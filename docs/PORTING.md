@@ -322,10 +322,10 @@ graphics settings.
 | R0 | Built; runs under Wine and on x99-windows | **The G41 under XP.** The XP toolchain is llvm-mingw's msvcrt build on x99 (`D:\third\llvm-mingw-msvcrt`); the Mac's MinGW is UCRT |
 | R1, R2 | Done | -- |
 | R2b (model packs) | Done on the Mac: `--bake-packs`, pixel-identical at sm3 and sm2 | The Windows packager bakes them but no package has been built since; a retro-only package that ships packs without the glTFs |
-| R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is not handled (windowed only, `begin_frame` logs it). No fullscreen |
+| R3 (SM3) | Matches D3D12 at sm3 on x99's 5060 Ti (`tests/golden/d3d12-sm3`) | The G41 with the GeForce 6200 TC. A lost device is reset (render targets remade, dynamic buffers refilled from their shadows, ImGui's objects through hooks); exclusive fullscreen with `--fullscreen` (R6's optimisation round) |
 | R4 (SM2) | Runs on x99's Radeon X550, matching D3D12's sm2 render within `--cross-compiler` | The G41 with the X550 (budgets on a real 2005 CPU). Exit test is "a valley at 1024×768": 28 to 33 fps at Very low, 21 to 24 at Low |
 | R5 (FF) | Done through the gate ("Steps 2 to 4, as built"): the X550 through D3D9 fixed function matches D3D12 at `--tier ff` within a mean of 1.1/255 in all eight scenes. Minimal, the sixth preset, with a 48 m grid, a far 96 m mesh and a baked sky: 173 fps on the X550, **54 fps with every vertex processed in software** (`DRAGON_D3D9_SOFTWARE_VP=1`, or `=2` for a pure software device) | The FF cards on the G41 (the M6, the GeForce4 MX, the Radeon 7000): the look, the fps, and whether software VP needs the foliage batched and the terrain coarser. Blob shadows. A `--preset minimal` benchmark line |
-| R6 (XP layer) | **Runs on XP** ("R6, as built"): the G41 under XP SP3 with the M6 picks the ff tier itself and draws the valley, 19 fps at Minimal 800x600; the gate checks the imports against XP SP3's recorded exports and the PE header's 5.1 | The other cards on the G41; keyboard and gamepad play by hand |
+| R6 (XP layer) | **Runs on XP** ("R6, as built"): the G41 under XP SP3 with the M6 picks the ff tier itself and draws the valley, 19 fps at Minimal 800x600, and 52.6 at 640x480 fullscreen after the optimisation round; the gate checks the imports against XP SP3's recorded exports and the PE header's 5.1 | The other cards on the G41; keyboard and gamepad play by hand |
 | R7 (presets) | Graphics settings, five presets, the Graphics panel, the benchmark (`tools/bench/presets.py`), the world resolution and SM2's `NO_SHADOWS` variant; the window size and an fps readout are saved | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
 | D3D11 | Done at feature levels 11, 10 and 9 ("The D3D11 backend"): x99's 5060 Ti through it is within 0.3/255 of Metal in all eight scenes, `tests/golden/d3d11`; WARP runs at 1.8 to 19.6 fps; the X550 at feature level 9_2 draws the sm2 tier within `--cross-compiler` of D3D12's set, at 20 fps Low | The HD 5450 and Bay Trail boards it was built for; the shaders in the package; a 9_1 or 9_3 device |
@@ -915,6 +915,60 @@ Two things the Wine runs could not show, each a no-picture failure:
 
 `dragon-run.ahk` takes `NAME=VALUE` lines from `bench\dragon\env.txt` for
 such switches. OBS can be off: the game's own screenshot is the record.
+
+**Making 640x480 Minimal playable on the M6 (2026-10-04).** 25 fps
+windowed was not playable. Measured with `DRAGON_FRAME_PROFILE=1`
+(`run()`'s phases plus `CORE_PROFILE` sections in `render()`),
+`DRAGON_D3D9_PROFILE=1` (draws and primitives per pipeline) and
+`DRAGON_D3D9_VSYNC=0` (present at once, so a frame's real cost shows):
+
+| Step | Median frame | fps |
+|---|---|---|
+| Start: windowed, world 50% stretched into scene_color, then copied to the back buffer | 36 ms | 25 |
+| ff terrain chunks 1280 m instead of 320 (264 draws to ~60; a draw is ~50 us in software VP) | -- | 33.8 |
+| The UI on the back buffer itself (`rhi::Device::frame_target`): the full-screen copy gone | 25 ms | 40 |
+| **Exclusive fullscreen**, 32-bit | 19.7 ms | 48.8 |
+| Fullscreen 16-bit, and a 5-6-5 world target (`--color 16`, the ff default) | 18.6 ms | 52.6 |
+
+What the profile said, so the next card's round starts from it:
+
+- **The CPU is not the limit.** Update is 0.15 ms; the whole scene is about
+  11,000 triangles in 86 draws, and issuing them, software vertex
+  processing included, is ~3.5 ms. The rest is the card: in a window
+  the driver blocks inside whichever draw fills its queue (terrain "took"
+  11 ms), and fullscreen the same wait moves into Present.
+- **The M6 is limited by memory, and the desktop shares it.** A sky-only
+  frame (camera pointed up) cost 15.5 ms at a full 640x480 world: ~21 ns a
+  world pixel, and the textured-quad copy to the back buffer ~26 ns a
+  pixel -- about 45 Mpix/s against the RV100's ~150 peak. Halving the
+  world target's bytes (R5G6B5) bought only 5% in a window. Fullscreen
+  bought 21%: the card no longer scans out a 1024x768x32 desktop and
+  copies each frame into it.
+- **Not worth it:** D16 depth (0.3 ms, and 16 bits over the conventional
+  0.5 m to 16 km range z-fights at a kilometre); a world at 100% (35 fps
+  fullscreen, against 53 at 50%).
+- A full-size LDR world now draws straight into the back buffer too, so
+  `--graphics resolution=0` pays no copy either.
+
+Fullscreen needed the device-lost path R3 skipped: `reset()` releases and
+remakes every `D3DPOOL_DEFAULT` object the backend made (render targets
+from their descriptions; dynamic vertex buffers are written through a CPU
+shadow so their contents survive), ImGui's renderer releases its own
+through `rhi::d3d9::set_reset_hooks`, and the state caches forget.
+`tools/xp/g41/dragon-alttab.ahk` minimises the game 8 s in and restores
+it: "device reset (3 targets)", and the frame after it draws.
+
+Two traps from the round. **XP's screensaver** (`logon.scr`, after ten
+idle minutes) holds the foreground, so a fullscreen device created under
+it stays lost and the run "hangs" until the job's timeout; a synthetic
+mouse move does not end it. The XP shim now refuses `SC_SCREENSAVE` while
+the game is in front (SDL3 does the same by default), and the G41 jobs
+close the configured screensaver before launching. And **`rhi::Format`
+is persisted** -- model packs store it as a byte -- so a format inserted
+mid-enum shifted every later value: a pack's BC1 textures read back as the
+new RGB565 and the RGBA swizzle ran off the end of the data (Dr. Watson's
+log on the G41, `%ALLUSERSPROFILE%\Application Data\Microsoft\Dr Watson`,
+named `upload_texture_level`). New formats go at the end.
 
 **Not done:** the other cards. The order is the G41 under XP SP3 with
 each card (record the exports, then `dragon.exe` with no flags, then the

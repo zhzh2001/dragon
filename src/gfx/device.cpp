@@ -31,6 +31,9 @@ bool Device::init(const Config& config) {
 
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (headless_) flags |= SDL_WINDOW_HIDDEN;
+    // D3D9 takes the display mode itself, on an ordinary window.
+    const bool d3d9 = config.gpu_driver.rfind("direct3d9", 0) == 0;
+    if (config.fullscreen && !headless_ && !d3d9) flags |= SDL_WINDOW_FULLSCREEN;
 #if !defined(__APPLE__) && !defined(_WIN32)
     if (offscreen) flags |= SDL_WINDOW_VULKAN;
 #endif
@@ -43,6 +46,8 @@ bool Device::init(const Config& config) {
     rhi_config.headless = headless_;
     rhi_config.driver = config.gpu_driver;
     rhi_config.fixed_function = active_tier().fixed_function;
+    rhi_config.fullscreen = config.fullscreen;
+    rhi_config.color16 = config.color16;
     // The GPU debug layer: on in a development build, off in a package (a
     // player has no use for its validation, and some D3D12 implementations,
     // D3DMetal under Wine among them, crash on asking for it).
@@ -60,6 +65,8 @@ bool Device::init(const Config& config) {
         depth_format_ = rhi::Format::D24;
         LOG_WARN("D32_FLOAT unsupported, falling back to D24_UNORM");
     }
+    // An LDR world target in 16 bits where the backend has the format (D3D9).
+    color16_ = config.color16 && !hdr_ && rhi_->supports_format(rhi::Format::RGB565, rhi::TEXTURE_COLOR_TARGET);
 
     // Headless never presents, so nothing else establishes the render size.
     if (headless_ && !ensure_targets(uint32_t(config.width), uint32_t(config.height))) return false;
@@ -103,15 +110,21 @@ void Device::set_world_scale(float scale) {
 
 void Device::finish_world() {
     // A world drawn smaller than the window is stretched into the UI's
-    // target. Where the backend can hand out the frame's own image, that is
-    // the UI's target too, and the frame presents with no further copy --
-    // one full-screen pass fewer, a quarter of the frame on the M6 under XP.
-    // Not on a frame that is read back: the back buffer cannot be.
+    // target: the frame's own image where the backend hands one out
+    // (frame_target), and the frame then presents with no further copy.
     ui_target_ = scene_color_;
-    if (scene_world_ && screenshot_path_.empty()) {
-        if (rhi::Texture* frame = rhi_->frame_target()) ui_target_ = frame;
-    }
+    if (rhi::Texture* frame = frame_target()) ui_target_ = frame;
     if (scene_world_) rhi_->blit(scene_world_, world_w_, world_h_, ui_target_, render_w_, render_h_);
+}
+
+rhi::Texture* Device::frame_target() const {
+    // An LDR tier finishes in 8 bits, so the frame's own image can take the
+    // world (at full size) or the UI (over a stretched world) -- the copy
+    // into it that scene_color would need was a full-screen textured quad,
+    // a third of the frame on the M6. Not on a frame that is read back:
+    // the back buffer cannot be.
+    if (hdr_ || !screenshot_path_.empty()) return nullptr;
+    return rhi_->frame_target();
 }
 
 bool Device::ensure_targets(uint32_t w, uint32_t h) {
@@ -137,6 +150,7 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     // scene_color at full size, or into its own target to be stretched.
     if (!hdr_) {
         if (ww != w || wh != h) {
+            if (color16_) world.format = rhi::Format::RGB565;
             scene_world_ = rhi_->create_texture(world, "scene_world");
             if (!scene_world_) {
                 release_targets();
@@ -190,6 +204,9 @@ bool Device::begin_frame() {
 rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     rhi::PassDesc pass;
     pass.color = hdr_ ? scene_hdr_ : scene_world_ ? scene_world_ : scene_color_;
+    if (!scene_world_) {
+        if (rhi::Texture* frame = frame_target()) pass.color = frame;
+    }
     pass.clear_color = true;
     pass.clear_rgba[0] = r;
     pass.clear_rgba[1] = g;

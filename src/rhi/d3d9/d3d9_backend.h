@@ -32,6 +32,10 @@ IDirect3DDevice9* native_device(Device& device);
 // ImGui sets device state behind the backend's caches (and no longer saves
 // and restores it, cmake/imgui.cmake): after it draws, the caches forget.
 void forget_state(Device& device);
+// A device reset (fullscreen, Alt-Tab) fails while anything outside the
+// backend holds a D3DPOOL_DEFAULT resource, as ImGui's renderer does: it
+// releases them in `before` and makes them again in `after`.
+void set_reset_hooks(Device& device, void (*before)(), void (*after)());
 
 }  // namespace d3d9
 }  // namespace rhi

@@ -103,6 +103,7 @@ void* SDL_GetPointerProperty(SDL_PropertiesID props, const char* name, void* def
 // ---- the window
 typedef struct SDL_Window SDL_Window;
 typedef Uint64 SDL_WindowFlags;
+#define SDL_WINDOW_FULLSCREEN 0x0000000000000001ull  // declared, never set: D3D9 takes the mode itself
 #define SDL_WINDOW_HIDDEN 0x0000000000000008ull
 #define SDL_WINDOW_RESIZABLE 0x0000000000000020ull
 #define SDL_WINDOW_HIGH_PIXEL_DENSITY 0x0000000000002000ull

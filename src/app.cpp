@@ -289,6 +289,16 @@ Options parse_options(int argc, char** argv) {
             }
         } else if (arg == "--show-fps") {
             options.show_fps = true;
+        } else if (arg == "--fullscreen") {
+            options.fullscreen = 1;
+        } else if (arg == "--windowed") {
+            options.fullscreen = 0;
+        } else if (arg == "--color" && i + 1 < argc) {
+            options.color_bits = SDL_atoi(argv[++i]);
+            if (options.color_bits != 16 && options.color_bits != 32) {
+                LOG_WARN("--color expects 16 or 32");
+                options.color_bits = 0;
+            }
         } else if (arg == "--restart-every" && i + 1 < argc) {
             options.restart_every = SDL_atoi(argv[++i]);
         } else if (arg == "--input" && i + 1 < argc) {
@@ -342,9 +352,12 @@ bool App::init(const Options& options) {
                 }
             }
             if (line == "fps=1") show_fps_ = true;
+            if (line.rfind("fullscreen=", 0) == 0) fullscreen_ = line == "fullscreen=1";
+            if (line.rfind("color=", 0) == 0 && !options.color_bits) options_.color_bits = line == "color=16" ? 16 : 32;
         }
     }
     if (options.show_fps) show_fps_ = true;
+    if (options.fullscreen >= 0) fullscreen_ = options.fullscreen == 1;
 #ifdef DRAGON_XP
     // The XP build has the D3D9 backend alone (docs/PORTING.md, R6).
     if (options_.gpu_driver.rfind("direct3d9", 0) != 0) options_.gpu_driver = "direct3d9";
@@ -401,6 +414,11 @@ bool App::init(const Options& options) {
     config.height = options_.height;
     config.headless = options.headless;
     config.gpu_driver = options_.gpu_driver;
+    color16_ = options_.color_bits ? options_.color_bits == 16 : tier_.tier == gfx::Tier::FixedFunction;
+    config.fullscreen = fullscreen_;
+    config.color16 = color16_;
+    fullscreen_pending_ = fullscreen_;
+    color16_pending_ = color16_;
     if (!device_.init(config)) return false;
 
     // The graphics settings: the tier's default preset, then what was saved,
@@ -1145,8 +1163,17 @@ void App::save_graphics() const {
     if (!driver_pending_.empty()) file << "driver=" << driver_pending_ << "\n";
     int w = 0, h = 0;
     if (device_.window()) SDL_GetWindowSize(device_.window(), &w, &h);
+    // A fullscreen window is the desktop's size, not the one to come back to.
+    if (fullscreen_ && saved_window_w_ > 0) {
+        w = saved_window_w_;
+        h = saved_window_h_;
+    }
     if (w > 0 && h > 0) file << "window=" << w << "x" << h << "\n";
     file << "fps=" << (show_fps_ ? 1 : 0) << "\n";
+    file << "fullscreen=" << (fullscreen_pending_ ? 1 : 0) << "\n";
+    // The colour depth only where it is not the tier's own (16 bits for ff),
+    // so a card change still starts at the new card's.
+    if (color16_pending_ != (tier_pending_ == gfx::Tier::FixedFunction)) file << "color=" << (color16_pending_ ? 16 : 32) << "\n";
     file << graphics_.serialize();
 }
 
@@ -1188,8 +1215,12 @@ void App::build_graphics_ui() {
                 char label[32];
                 std::snprintf(label, sizeof(label), "%dx%d", s[0], s[1]);
                 if (ImGui::Selectable(label, w == s[0] && h == s[1])) {
-                    SDL_RestoreWindow(device_.window());
-                    SDL_SetWindowSize(device_.window(), s[0], s[1]);
+                    // Fullscreen, the size is the display mode's, taken
+                    // when the device is made: at the next start.
+                    if (!fullscreen_) {
+                        SDL_RestoreWindow(device_.window());
+                        SDL_SetWindowSize(device_.window(), s[0], s[1]);
+                    }
                     save_graphics_key("window", label);
                     saved_window_w_ = s[0];
                     saved_window_h_ = s[1];
@@ -1240,7 +1271,14 @@ void App::build_graphics_ui() {
         }
         ImGui::EndCombo();
     }
-    bool restart = tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver;
+    // The display: D3D9 takes the mode, and its format, with the device.
+    ImGui::Checkbox("fullscreen *", &fullscreen_pending_);
+    if (d3d9) {
+        ImGui::SameLine();
+        ImGui::Checkbox("16-bit colour *", &color16_pending_);
+    }
+    const bool display_changed = fullscreen_pending_ != fullscreen_ || color16_pending_ != color16_;
+    bool restart = tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver || display_changed;
     for (int s = 0; s < gfx::SETTING_COUNT; ++s) {
         const Setting setting = Setting(s);
         const gfx::SettingInfo& info = gfx::setting_info(setting);
@@ -1259,7 +1297,8 @@ void App::build_graphics_ui() {
             restart = true;
         }
     }
-    const bool changed = !(graphics_pending_ == graphics_) || tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver;
+    const bool changed = !(graphics_pending_ == graphics_) || tier_pending_ != tier_.tier ||
+                         driver_pending_ != options_.gpu_driver || display_changed;
     ImGui::BeginDisabled(!changed);
     if (ImGui::Button("Apply")) apply_graphics(graphics_pending_);
     ImGui::SameLine();
@@ -1267,6 +1306,8 @@ void App::build_graphics_ui() {
         graphics_pending_ = graphics_;
         tier_pending_ = tier_.tier;
         driver_pending_ = options_.gpu_driver;
+        fullscreen_pending_ = fullscreen_;
+        color16_pending_ = color16_;
     }
     ImGui::EndDisabled();
     // Always laid out, disabled until a choice needs it: the panel's height
@@ -1283,7 +1324,7 @@ void App::build_graphics_ui() {
     }
     ImGui::EndDisabled();
     if (restart) {
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "a restart puts the renderer, tier, * settings in force");
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.5f, 1.0f), "a restart puts the renderer, tier, display, * settings in force");
     } else {
         ImGui::TextDisabled("* takes effect after a restart");
     }
@@ -1447,7 +1488,7 @@ void App::frame_camera_on_valley() {
 void App::shutdown() {
     audio_.shutdown();
     // A window dragged to a new size opens at it next time.
-    if (!options_.headless && device_.window() && !relaunch_) {
+    if (!options_.headless && device_.window() && !relaunch_ && !fullscreen_) {
         int w = 0, h = 0;
         SDL_GetWindowSize(device_.window(), &w, &h);
         if (w > 0 && h > 0 && (w != saved_window_w_ || h != saved_window_h_)) {

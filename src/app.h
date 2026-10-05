@@ -63,6 +63,10 @@ struct Options {
     int height = 720;
     bool size_set = false;  // --size given (over the saved window size)
     bool show_fps = false;  // --show-fps: the frame-rate readout, as the panel's toggle
+    // --fullscreen / --windowed over the saved choice, -1 for neither.
+    int fullscreen = -1;
+    // --color 16|32 over the saved choice (D3D9), 0 for neither.
+    int color_bits = 0;
     // --tier modern|sm3|sm2|ff: shape the content for a retro tier
     // (gfx/render_tier.h), on whatever backend is running.
     gfx::Tier tier = gfx::Tier::Modern;
@@ -430,6 +434,11 @@ private:
     // one) and the frame-rate readout.
     int saved_window_w_ = 0, saved_window_h_ = 0;
     bool show_fps_ = false;
+    // The display, in force and as the panel has it: fullscreen (D3D9 takes
+    // the mode at the window's size) and 16-bit colour (D3D9; on by default
+    // for the ff tier, whose cards' memory is the limit). Both need a restart.
+    bool fullscreen_ = false, fullscreen_pending_ = false;
+    bool color16_ = false, color16_pending_ = false;
     void draw_fps();
     // Rewrites one key=value line of graphics.cfg, leaving the rest as saved:
     // the window and the readout change outside Apply, and must not save the

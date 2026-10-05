@@ -42,7 +42,7 @@ struct Sampler;
 struct Pipeline;
 struct Pass;
 
-enum class Format : uint8_t {
+enum class Format : uint8_t {  // persisted: append only (see the end)
     Invalid,
     RGBA8,       // 8-bit unorm colour: the scene colour target, data textures
     RGBA8_SRGB,  // 8-bit sRGB colour: base-colour textures, sampled to linear
@@ -56,6 +56,14 @@ enum class Format : uint8_t {
     D16,
     D24,
     D32F,
+    // 16-bit colour, 5-6-5: a retro tier's world target on a card whose
+    // memory is the limit (DeviceConfig::color16). D3D9 only; the other
+    // backends report it unsupported.
+    RGB565,
+    // New formats go here, at the end: the values are written into model
+    // packs (anim/model_pack.h), and one inserted above shifts every format
+    // a baked pack names -- a pack's BC1 then read as RGB565 and crashed
+    // the upload.
 };
 
 enum TextureUsage : uint8_t {
@@ -187,6 +195,11 @@ struct DeviceConfig {
     // shader pairs, accepts a card without pixel shaders, and runs the
     // vertex programs in software where the card has no vs_2_0 either.
     bool fixed_function = false;
+    // Exclusive fullscreen at the window's size, for a backend that does it
+    // itself (D3D9); the others are given a fullscreen window instead.
+    bool fullscreen = false;
+    // 16-bit colour (D3D9): a 5-6-5 display mode when fullscreen, dithered.
+    bool color16 = false;
 };
 
 enum class Backend : uint8_t { SdlGpu, Direct3D9, Direct3D11 };

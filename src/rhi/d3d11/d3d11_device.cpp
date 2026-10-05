@@ -146,6 +146,7 @@ DXGI_FORMAT to_dxgi(Format f) {
         case Format::D16: return DXGI_FORMAT_R16_TYPELESS;
         case Format::D24: return DXGI_FORMAT_R24G8_TYPELESS;
         case Format::D32F: return DXGI_FORMAT_R32_TYPELESS;
+        case Format::RGB565:  // D3D9's alone (rhi.h)
         case Format::Invalid: break;
     }
     return DXGI_FORMAT_UNKNOWN;

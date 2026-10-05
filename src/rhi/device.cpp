@@ -54,6 +54,7 @@ uint64_t texture_bytes(const TextureDesc& desc) {
         case Format::BC3:
         case Format::BC3_SRGB: block = 16; break;
         case Format::RGBA16F: texel = 8; break;
+        case Format::RGB565:
         case Format::D16: texel = 2; break;
         default: break;
     }

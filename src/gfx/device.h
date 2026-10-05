@@ -39,6 +39,11 @@ public:
         // for the platform's first: D3D12 on Windows, Vulkan on Linux, Metal
         // on macOS.
         std::string gpu_driver;
+        // Fullscreen at the window's size: D3D9 takes the display mode
+        // (exclusive); the other backends get a borderless fullscreen window.
+        bool fullscreen = false;
+        // 16-bit colour on D3D9: a 5-6-5 world target, and mode when fullscreen.
+        bool color16 = false;
     };
 
     bool init(const Config& config);
@@ -118,12 +123,15 @@ private:
     bool ensure_targets(uint32_t w, uint32_t h);
     void release_targets();
     void save_screenshot(const std::vector<uint8_t>& rgba);
+    // The backend's frame image when this frame may draw into it, else null.
+    rhi::Texture* frame_target() const;
 
     SDL_Window* window_ = nullptr;
     std::unique_ptr<rhi::Device> rhi_;
     bool headless_ = false;
     bool in_frame_ = false;
     bool hdr_ = true;
+    bool color16_ = false;
 
     rhi::Texture* scene_color_ = nullptr;
     // What the UI draws on this frame: scene_color_, or the backend's frame

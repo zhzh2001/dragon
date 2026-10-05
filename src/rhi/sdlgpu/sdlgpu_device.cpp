@@ -44,6 +44,7 @@ SDL_GPUTextureFormat to_sdl(Format f) {
         case Format::D16: return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
         case Format::D24: return SDL_GPU_TEXTUREFORMAT_D24_UNORM;
         case Format::D32F: return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+        case Format::RGB565:  // D3D9's alone (rhi.h)
         case Format::Invalid: break;
     }
     return SDL_GPU_TEXTUREFORMAT_INVALID;
@@ -310,6 +311,7 @@ public:
     const char* driver_name() const override { return SDL_GetGPUDeviceDriver(gpu_); }
 
     bool supports_format(Format format, uint8_t usage) const override {
+        if (to_sdl(format) == SDL_GPU_TEXTUREFORMAT_INVALID) return false;
         return SDL_GPUTextureSupportsFormat(gpu_, to_sdl(format), SDL_GPU_TEXTURETYPE_2D, to_sdl_usage(usage));
     }
 

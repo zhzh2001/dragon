@@ -31,6 +31,18 @@ Loop, Read, %dir%\env.txt
     }
 }
 FileDelete, %dir%\shot.bmp
+; Dismiss a running screensaver first: one over the launch keeps a
+; fullscreen game from the foreground, and it waits, lost, until the end.
+; A synthetic mouse move does not end XP's logon.scr; closing it does (the
+; G41's is not password-protected, so that is the desktop back).
+RegRead, saver, HKEY_CURRENT_USER, Control Panel\Desktop, SCRNSAVE.EXE
+SplitPath, saver, saver_name
+if (saver_name != "")
+{
+    Process, Close, %saver_name%
+    FileAppend, screensaver %saver_name% closed %ErrorLevel%`n, %report%
+}
+Sleep, 1000
 Run, "%dir%\dragon.exe" %args%, %dir%, UseErrorLevel, pid
 FileAppend, run error %ErrorLevel% pid %pid%`n, %report%
 started := A_TickCount

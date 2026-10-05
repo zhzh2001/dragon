@@ -252,6 +252,12 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
             }
             break;
         }
+        case WM_SYSCOMMAND:
+            // No screensaver or monitor power-off over the game, as SDL3
+            // does by default: one that starts over a fullscreen D3D9
+            // device takes its focus, and the game waits, lost, until it ends.
+            if ((wparam & 0xFFF0) == SC_SCREENSAVE || (wparam & 0xFFF0) == SC_MONITORPOWER) return 0;
+            break;
         case WM_SETCURSOR:
             if (g_window.relative && LOWORD(lparam) == HTCLIENT) {
                 SetCursor(nullptr);
