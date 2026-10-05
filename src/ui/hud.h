@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "core/math.h"
 #include "imgui.h"
 
@@ -37,6 +39,8 @@ struct Tokens {
     ImU32 mark = IM_COL32(238, 230, 214, 140);        // an unremarkable target
     ImU32 flame = IM_COL32(255, 70, 30, 255);         // a rival holding its breath on you
 };
+// Every field above is an ImU32: Hud::set_plain walks them as an array.
+static_assert(sizeof(Tokens) % sizeof(ImU32) == 0);
 
 enum class Align { Left, Centre, Right };
 
@@ -49,6 +53,12 @@ public:
     }
     // Once per frame, before any primitive.
     void begin(float width, float height);
+    // The HUD setting's Plain (ContentBudget::plain_hud): circles and arcs
+    // in fewer segments, no anti-aliasing fringe, and on D3D9 alpha-tested
+    // rather than blended -- for a card that pays per triangle and per
+    // blended pixel.
+    void set_plain(bool plain);
+    bool plain() const { return plain_; }
 
     const Tokens& tokens() const { return tokens_; }
     Tokens& tokens() { return tokens_; }
@@ -88,6 +98,9 @@ public:
     float numeral_width(const char* text, float size_units = 32.0f) const;
 
 private:
+    Tokens smooth_tokens_;  // the tokens as authored, while plain_ swaps in opaque ones
+    bool plain_ = false;
+    int segments(int full) const { return plain_ ? std::max(8, full / 3) : full; }
     void text(ImFont* font, ImVec2 pos, const char* text, ImU32 colour, float size, Align align) const;
     float measure(ImFont* font, const char* text, float size) const;
 

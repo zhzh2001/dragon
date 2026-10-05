@@ -22,6 +22,8 @@ public:
     ImFont* numeral_font() const { return numeral_font_; }
     ImFont* label_font() const { return label_font_; }
     void shutdown();
+    // D3D9's renderer alpha-tests instead of blending (the Plain HUD).
+    void set_alpha_tested(bool on);
 
     // Feed every SDL event here. Returns true if ImGui consumed it, so gameplay
     // input can be suppressed while the user is dragging a slider.

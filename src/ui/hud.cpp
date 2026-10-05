@@ -4,6 +4,34 @@
 
 namespace ui {
 
+void Hud::set_plain(bool plain) {
+    // Plain is alpha-tested on D3D9 (ImGuiLayer::set_alpha_tested), where a
+    // translucent colour is drawn whole or not at all: each token becomes
+    // opaque, pre-blended over the plate's charcoal, so dim text is darker
+    // text rather than gone and a plate is a solid one.
+    if (plain && !plain_) {
+        smooth_tokens_ = tokens_;
+        ImU32* c = reinterpret_cast<ImU32*>(&tokens_);
+        const ImU32 base = smooth_tokens_.plate;
+        for (size_t i = 0; i < sizeof(Tokens) / sizeof(ImU32); ++i) {
+            const float a = float((c[i] >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
+            const auto mix = [&](int shift) {
+                const float fg = float((c[i] >> shift) & 0xFF), bg = float((base >> shift) & 0xFF);
+                return ImU32(fg * a + bg * (1.0f - a) + 0.5f) << shift;
+            };
+            c[i] = mix(IM_COL32_R_SHIFT) | mix(IM_COL32_G_SHIFT) | mix(IM_COL32_B_SHIFT) | (0xFFu << IM_COL32_A_SHIFT);
+        }
+    } else if (!plain && plain_) {
+        tokens_ = smooth_tokens_;
+    }
+    plain_ = plain;
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.AntiAliasedFill = !plain;
+    style.AntiAliasedLines = !plain;
+    // ImGui's own circles (the auto-tessellated ones) coarser too.
+    style.CircleTessellationMaxError = plain ? 1.5f : 0.30f;
+}
+
 void Hud::begin(float width, float height) {
     width_ = width;
     height_ = height;
@@ -33,11 +61,11 @@ void Hud::bar(ImVec2 pos, float width, float height, float fraction, ImU32 fill,
 
 void Hud::arc(ImVec2 centre, float radius, float from, float to, float fraction, ImU32 colour,
               float thickness) const {
-    draw_->PathArcTo(centre, radius, from, to, 32);
+    draw_->PathArcTo(centre, radius, from, to, segments(32));
     draw_->PathStroke(IM_COL32(0, 0, 0, 110), 0, thickness);
     const float f = core::saturate(fraction);
     if (f > 0.005f) {
-        draw_->PathArcTo(centre, radius, from, from + (to - from) * f, 32);
+        draw_->PathArcTo(centre, radius, from, from + (to - from) * f, segments(32));
         draw_->PathStroke(colour, 0, thickness);
     }
 }
@@ -57,16 +85,16 @@ void Hud::bracket(ImVec2 centre, float half, ImU32 colour, float thickness) cons
 }
 
 void Hud::pip(ImVec2 centre, float radius, float ready, const char* glyph, ImU32 colour) const {
-    draw_->AddCircleFilled(centre, radius, tokens_.plate, 24);
+    draw_->AddCircleFilled(centre, radius, tokens_.plate, segments(24));
     const float inner = radius - px(3.0f);
     if (ready >= 1.0f) {
-        draw_->AddCircleFilled(centre, inner, colour, 24);
+        draw_->AddCircleFilled(centre, inner, colour, segments(24));
     } else if (ready > 0.01f) {
-        draw_->PathArcTo(centre, inner, -core::HALF_PI, -core::HALF_PI + core::TWO_PI * ready, 24);
+        draw_->PathArcTo(centre, inner, -core::HALF_PI, -core::HALF_PI + core::TWO_PI * ready, segments(24));
         draw_->PathLineTo(centre);
         draw_->PathFillConvex((colour & 0x00FFFFFF) | (ImU32(110) << 24));
     }
-    draw_->AddCircle(centre, radius, tokens_.plate_edge, 24);
+    draw_->AddCircle(centre, radius, tokens_.plate_edge, segments(24));
     if (glyph) {
         const float size = radius * 1.05f;
         const float w = measure(label_font_, glyph, size);
@@ -91,7 +119,7 @@ void Hud::edge_arrow(ImVec2 centre, core::Vec2 direction, float radius, ImU32 co
 void Hud::edge_arc(ImVec2 centre, core::Vec2 direction, float radius, ImU32 colour,
                    float thickness, float half_width) const {
     const float angle = std::atan2(direction.y, direction.x);
-    draw_->PathArcTo(centre, radius, angle - half_width, angle + half_width, 24);
+    draw_->PathArcTo(centre, radius, angle - half_width, angle + half_width, segments(24));
     draw_->PathStroke(colour, 0, thickness);
 }
 

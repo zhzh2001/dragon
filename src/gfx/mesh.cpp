@@ -157,6 +157,9 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange
                     directed[key] = {a, b};
                 }
             }
+            chunk.body_count = uint32_t(indices.size()) - chunk.first_index;
+            const float x0 = origin + float(key.first) * chunk_size, z0 = origin + float(key.second) * chunk_size;
+            std::vector<uint32_t> sides[4];
             std::map<uint32_t, uint32_t> lowered;
             const auto lower = [&](uint32_t v) {
                 auto it = lowered.find(v);
@@ -171,9 +174,20 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange
                 if (count != 1) continue;
                 const auto [a, b] = directed[key];
                 const uint32_t a2 = lower(a), b2 = lower(b);
+                // Which side of the square the edge lies on: the nearest to
+                // its midpoint.
+                const core::Vec3 m = (vertices[a].position + vertices[b].position) * 0.5f;
+                const float d[4] = {std::fabs(m.x - x0), std::fabs(m.x - (x0 + chunk_size)), std::fabs(m.z - z0),
+                                    std::fabs(m.z - (z0 + chunk_size))};
+                const int side = int(std::min_element(d, d + 4) - d);
                 // The triangle (a, b, c) has the edge a->b; the quad outside it
                 // keeps the same sense: a, a2, b and b, a2, b2.
-                indices.insert(indices.end(), {a, a2, b, b, a2, b2});
+                sides[side].insert(sides[side].end(), {a, a2, b, b, a2, b2});
+            }
+            for (int s = 0; s < 4; ++s) {
+                chunk.side_first[s] = uint32_t(indices.size());
+                chunk.side_count[s] = uint32_t(sides[s].size());
+                indices.insert(indices.end(), sides[s].begin(), sides[s].end());
             }
             chunk.index_count = uint32_t(indices.size()) - chunk.first_index;
         }

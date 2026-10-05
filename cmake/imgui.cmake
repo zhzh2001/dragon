@@ -43,6 +43,30 @@ if(WIN32)
   string(REPLACE "    float    pos[3];\n    D3DCOLOR col;" "    float    pos[4];\n    D3DCOLOR col;" _imgui_dx9_src "${_imgui_dx9_src}")
   string(REPLACE "#define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZ|D3DFVF_DIFFUSE|D3DFVF_TEX1)" "#define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_TEX1)" _imgui_dx9_src "${_imgui_dx9_src}")
   string(REPLACE "            vtx_dst->pos[0] = vtx_src->pos.x;\n            vtx_dst->pos[1] = vtx_src->pos.y;\n            vtx_dst->pos[2] = 0.0f;" "            vtx_dst->pos[0] = (vtx_src->pos.x - draw_data->DisplayPos.x) * draw_data->FramebufferScale.x - 0.5f;\n            vtx_dst->pos[1] = (vtx_src->pos.y - draw_data->DisplayPos.y) * draw_data->FramebufferScale.y - 0.5f;\n            vtx_dst->pos[2] = 0.0f;\n            vtx_dst->pos[3] = 1.0f;" _imgui_dx9_src "${_imgui_dx9_src}")
+  # And on a device whose vertices are processed in software (a card
+  # without T&L), the D3D9 runtime reads the vertex and index buffers with
+  # the CPU, and D3DPOOL_DEFAULT put them in the card's memory, across the
+  # G41's PCI bus: 3,000 HUD vertices were 9.4 ms of a 35 ms frame. Such a
+  # device gets them in system memory.
+  string(REPLACE "D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, D3DFVF_CUSTOMVERTEX, D3DPOOL_DEFAULT" "ImGui_ImplDX9_BufferUsage(device), D3DFVF_CUSTOMVERTEX, ImGui_ImplDX9_BufferPool(device)" _imgui_dx9_src "${_imgui_dx9_src}")
+  string(REPLACE "D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, sizeof(ImDrawIdx) == 2 ? D3DFMT_INDEX16 : D3DFMT_INDEX32, D3DPOOL_DEFAULT" "ImGui_ImplDX9_BufferUsage(device), sizeof(ImDrawIdx) == 2 ? D3DFMT_INDEX16 : D3DFMT_INDEX32, ImGui_ImplDX9_BufferPool(device)" _imgui_dx9_src "${_imgui_dx9_src}")
+  if(NOT _imgui_dx9_src MATCHES "static D3DPOOL ImGui_ImplDX9_BufferPool")
+    string(REPLACE "// DirectX\n#include <d3d9.h>\n" "// DirectX\n#include <d3d9.h>\nstatic bool ImGui_ImplDX9_SoftwareVP(LPDIRECT3DDEVICE9 device) { D3DDEVICE_CREATION_PARAMETERS p = {}; return SUCCEEDED(device->GetCreationParameters(&p)) && (p.BehaviorFlags & (D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MIXED_VERTEXPROCESSING)); }\nstatic DWORD ImGui_ImplDX9_BufferUsage(LPDIRECT3DDEVICE9 device) { return ImGui_ImplDX9_SoftwareVP(device) ? (D3DUSAGE_DYNAMIC | D3DUSAGE_SOFTWAREPROCESSING) : (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY); }\nstatic D3DPOOL ImGui_ImplDX9_BufferPool(LPDIRECT3DDEVICE9 device) { return ImGui_ImplDX9_SoftwareVP(device) ? D3DPOOL_SYSTEMMEM : D3DPOOL_DEFAULT; }\n" _imgui_dx9_src "${_imgui_dx9_src}")
+  endif()
+  # And a switch for the Lowest preset's Plain HUD (ui::Hud::set_plain):
+  # alpha-tested instead of blended, plates opaque, glyph edges hard --
+  # blending the HUD at full resolution was 2.1 ms of a G41 frame.
+  if(NOT _imgui_dx9_src MATCHES "bool ImGui_ImplDX9_AlphaTest")
+    string(REPLACE "// DirectX\n#include <d3d9.h>\n" "// DirectX\n#include <d3d9.h>\nbool ImGui_ImplDX9_AlphaTest = false;\n" _imgui_dx9_src "${_imgui_dx9_src}")
+    string(REPLACE "    device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);\n" "    device->SetRenderState(D3DRS_ALPHATESTENABLE, ImGui_ImplDX9_AlphaTest ? TRUE : FALSE);\n    device->SetRenderState(D3DRS_ALPHAREF, 0x40);\n    device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);\n" _imgui_dx9_src "${_imgui_dx9_src}")
+    string(REPLACE "    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);\n" "    device->SetRenderState(D3DRS_ALPHABLENDENABLE, ImGui_ImplDX9_AlphaTest ? FALSE : TRUE);\n" _imgui_dx9_src "${_imgui_dx9_src}")
+  endif()
+  if(NOT _imgui_dx9_src MATCHES "ALPHABLENDENABLE, ImGui_ImplDX9_AlphaTest")
+    message(FATAL_ERROR "imgui_impl_dx9.cpp changed: the alpha-test patch no longer applies")
+  endif()
+  if(NOT _imgui_dx9_src MATCHES "ImGui_ImplDX9_BufferPool\\(device\\)" OR NOT _imgui_dx9_src MATCHES "static D3DPOOL ImGui_ImplDX9_BufferPool")
+    message(FATAL_ERROR "imgui_impl_dx9.cpp changed: the system-memory buffer patch no longer applies")
+  endif()
   if(NOT _imgui_dx9_src MATCHES "D3DFVF_XYZRHW" OR NOT _imgui_dx9_src MATCHES "pos\\[3\\] = 1.0f")
     message(FATAL_ERROR "imgui_impl_dx9.cpp changed: the pre-transformed vertex patch no longer applies")
   endif()

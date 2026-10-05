@@ -119,13 +119,13 @@ struct RenderTier {
         t.vertex_lighting = tier == Tier::SM2 || tier == Tier::FixedFunction;
         t.fixed_function = tier == Tier::FixedFunction;
         if (t.fixed_function) t.skirt_cell_scale = 2.0f;
-        // Each draw costs the software vertex pipeline a fixed ~50 us on
-        // the G41's Celeron under XP (none of it showed on x99's Xeon):
-        // 320 m chunks were 212 terrain draws and 31 ms of a 640x480
-        // Minimal frame, 1280 m chunks 61 draws and 21.6 ms. 2560 m was
-        // worse again (46 ms): too few chunks to cull, so every vertex is
-        // processed (PORTING.md, R6).
-        if (t.fixed_function) t.terrain_chunk_metres = 1280.0f;
+        // The terrain's chunk on fixed function was 1280 m for a while,
+        // read as "each draw costs ~50 us": it was each chunk's flanges,
+        // drawn on every border (PORTING.md, "R6, as built").
+        // With flanges only on near/far seams (App::render), small chunks
+        // cost nothing extra and cull more: 312 m (three far cells at
+        // Minimal) took the G41's slowest frame from 30.7 to 30.3 ms.
+        if (t.fixed_function) t.terrain_chunk_metres = 312.0f;
         if (t.fixed_function) t.min_draw_pixels = 1.5f;
         // The skirt in one draw: at Minimal its cells are 1250 m, so 1280 m
         // chunks were a draw per cell or two -- dozens of ~50 us draws for a

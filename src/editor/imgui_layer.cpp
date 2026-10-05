@@ -25,6 +25,10 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #endif
 #endif
 
+#ifdef _WIN32
+extern bool ImGui_ImplDX9_AlphaTest;  // cmake/imgui.cmake patches it in
+#endif
+
 namespace editor {
 
 bool ImGuiLayer::init(gfx::Device& device) {
@@ -282,8 +286,32 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     
 }
 
+void ImGuiLayer::set_alpha_tested(bool on) {
+#ifdef _WIN32
+    ImGui_ImplDX9_AlphaTest = on;
+#else
+    (void)on;
+#endif
+}
+
 void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
     if (!initialized_ || !has_draw_data_ || !pass) return;
+    // DRAGON_UI_STATS=1: what the HUD hands the renderer each frame, logged
+    // once a second -- the vertices and draws a card without T&L pays for.
+    if (static const bool stats = SDL_getenv("DRAGON_UI_STATS") != nullptr; stats) {
+        static int frame = 0, updates = 0;
+        for (ImTextureData* t : ImGui::GetPlatformIO().Textures)
+            if (t->Status != ImTextureStatus_OK) ++updates;
+        if (++frame % 60 == 0) {
+            for (ImTextureData* t : ImGui::GetPlatformIO().Textures)
+                LOG_INFO("ui stats: texture %dx%d, %d bytes a texel, %d updates so far", t->Width, t->Height, t->BytesPerPixel, updates);
+            const ImDrawData* d = ImGui::GetDrawData();
+            int commands = 0;
+            for (int i = 0; i < d->CmdListsCount; ++i) commands += d->CmdLists[i]->CmdBuffer.Size;
+            LOG_INFO("ui stats: %d vertices, %d indices, %d lists, %d draw commands", d->TotalVtxCount, d->TotalIdxCount,
+                     d->CmdListsCount, commands);
+        }
+    }
     // Dear ImGui's renderer is backend-specific by nature: it records into
     // SDL's own command buffer and pass (rhi/sdlgpu/sdlgpu.h), or draws on the
     // D3D9 device into the pass's render target.

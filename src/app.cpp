@@ -406,6 +406,11 @@ bool App::init(const Options& options) {
     // measuring what a draw costs on a slow machine (PORTING.md, R6).
     if (const char* chunk = SDL_getenv("DRAGON_TERRAIN_CHUNK")) tier_.terrain_chunk_metres = float(SDL_atof(chunk));
     if (const char* fine = SDL_getenv("DRAGON_FAR_TERRAIN")) far_terrain_metres_ = float(SDL_atof(fine));
+    if (const char* freeze = SDL_getenv("DRAGON_FREEZE_AT")) freeze_at_ = uint64_t(SDL_atoi(freeze));
+    if (const char* ablate = SDL_getenv("DRAGON_ABLATE")) {
+        ablate_ = "," + std::string(ablate) + ",";
+        LOG_INFO("ablated: %s", ablate);
+    }
     gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
@@ -1426,7 +1431,10 @@ void App::regenerate_terrain() {
         terrain_chunk_size_ = core::maxf(1.0f, std::round(terrain_chunk_size_ / far_cell)) * far_cell;
         terrain_chunk_origin_ = -settings.half_extent;
     }
+    const size_t indices_before = ground.indices.size();
     terrain_chunks_ = gfx::chunk_mesh(ground, terrain_chunk_size_, flange, terrain_chunk_origin_);
+    LOG_INFO("terrain chunks: %zu, %zu triangles, %zu of them flanges", terrain_chunks_.size(), ground.indices.size() / 3,
+             (ground.indices.size() - indices_before) / 3);
     terrain_mesh_.release(device_.rhi());
     terrain_mesh_.upload(device_.rhi(), ground, "terrain");
     terrain_far_mesh_.release(device_.rhi());
@@ -2908,9 +2916,9 @@ void App::draw_hud() {
     const float margin = hud_.margin();
     char line[96];
 
-    if (combat_enabled_) draw_combat_hud();
-    if (run_mode_) draw_run_hud();
-    if (autopilot_) {
+    if (combat_enabled_ && !ablated("hud_combat")) draw_combat_hud();
+    if (run_mode_ && !ablated("hud_run")) draw_run_hud();
+    if (autopilot_ && !ablated("hud_autopilot")) {
         // Hands-off, and what the pilot is doing: a demo that explains itself.
         char text[96];
         std::snprintf(text, sizeof(text), demo_active() ? "AUTOPILOT  %s   P to take over"
@@ -2923,7 +2931,7 @@ void App::draw_hud() {
     // Diegetic first: speed is the wind and the FOV surge, so the numeral is
     // modest -- read at a glance, not studied. The ability pips sit beside
     // it when combat is on (draw_combat_hud adds them).
-    {
+    if (!ablated("hud_speed")) {
         const float plate_w = hud_.px(150.0f);
         const float plate_h = hud_.px(56.0f);
         const ImVec2 min(width * 0.5f - plate_w * 0.5f, height - margin - plate_h);
@@ -6157,6 +6165,7 @@ void App::draw_combat(rhi::Pass* pass) {
     };
 
     for (const game::Sentinel& sentinel : combat_.sentinels()) {
+        if (ablated("towers")) break;
         if (!sentinel.alive) continue;
         // External hostiles are drawn as full dragons elsewhere; the drone ball
         // on top of a dragon read as a growth.
@@ -6225,6 +6234,7 @@ void App::draw_combat(rhi::Pass* pass) {
     }
 
     for (const game::Projectile& projectile : combat_.projectiles()) {
+        if (ablated("projectiles")) break;
         if (!projectile.alive) continue;
         const bool mine = projectile.team == game::Team::Player;
         core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f} : core::Vec3{0.45f, 0.80f, 1.0f};
@@ -6304,7 +6314,13 @@ void App::draw_combat_hud() {
     // ---- taking fire ----
     // A full-screen vignette rather than a number: peripheral, unmissable, and
     // it does not compete with the thing you are trying to aim at.
-    if (damage_flash_ > 0.0f) {
+    if (damage_flash_ > 0.0f && hud_.plain()) {
+        // Plain: a solid border, not two bands of blended gradient a fifth
+        // of the screen tall (on the G41's M6, fill it could not afford).
+        const float band = height * 0.015f;
+        draw->AddRectFilled(ImVec2(0, 0), ImVec2(width, band), tk.danger);
+        draw->AddRectFilled(ImVec2(0, height - band), ImVec2(width, height), tk.danger);
+    } else if (damage_flash_ > 0.0f) {
         const float strength = core::saturate(damage_flash_);
         const ImU32 edge = (tk.danger & 0x00FFFFFF) | (ImU32(120.0f * strength) << 24);
         const ImU32 clear = tk.danger & 0x00FFFFFF;
@@ -6321,6 +6337,14 @@ void App::draw_combat_hud() {
         const game::Status& st = combat_.player_status();
         auto edge_glow = [&](core::Vec3 rgb, float strength) {
             if (strength <= 0.01f) return;
+            if (hud_.plain()) {
+                // Plain: thin solid side bars instead of four gradient bands.
+                const ImU32 solid = IM_COL32(int(rgb.x * 255.0f), int(rgb.y * 255.0f), int(rgb.z * 255.0f), 255);
+                const float side = width * 0.01f;
+                draw->AddRectFilled(ImVec2(0, 0), ImVec2(side, height), solid);
+                draw->AddRectFilled(ImVec2(width - side, 0), ImVec2(width, height), solid);
+                return;
+            }
             const ImU32 c = IM_COL32(int(rgb.x * 255.0f), int(rgb.y * 255.0f), int(rgb.z * 255.0f),
                                      int(core::saturate(strength) * 110.0f));
             const ImU32 clear = c & 0x00FFFFFF;
@@ -7334,6 +7358,10 @@ void App::render() {
     gfx::SceneUniforms scene =
         gfx::make_scene_uniforms(camera, aspect, lighting_, material_, time_seconds_);
     scene.light_view_proj = shadow_.light_view_proj();
+    // A short view (the View distance setting): the fog thickened to hide
+    // everything past it, exp(-(d k)^2) at 2% there, k = 1.98 / distance.
+    const float view_distance = tier_.budget.view_distance;
+    if (view_distance > 0.0f) scene.fog_color.w = core::maxf(scene.fog_color.w, 1.98f / view_distance);
     const float texel_world = shadow_.extent * 2.0f / float(shadow_.resolution());
     scene.shadow_params = core::Vec4{texel_world, shadow_.depth_bias,
                                      shadow_.enabled ? shadow_.strength : 0.0f,
@@ -7348,7 +7376,7 @@ void App::render() {
         particles_.set_output_grade(grade);
     }
     world_.set_scene(scene);
-    world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()));
+    world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
     world_.set_material_toggles(material_toggles_);
 
     // Debug geometry has to be uploaded before any render pass opens, because
@@ -7476,28 +7504,60 @@ void App::render() {
             const float dz = core::maxf(0.0f, core::maxf(z0 - camera.position.z, camera.position.z - (z0 + size)));
             return std::sqrt(dx * dx + dz * dz);
         };
+        // Each chunk's own ground, and its flange only on a side whose
+        // neighbour comes from the other mesh: between two chunks of one
+        // mesh the edges match and the flange is never seen.
+        const auto near_at = [&](int gx, int gz) {
+            const float size = terrain_chunk_size_;
+            const float x0 = terrain_chunk_origin_ + float(gx) * size, z0 = terrain_chunk_origin_ + float(gz) * size;
+            const float dx = core::maxf(0.0f, core::maxf(x0 - camera.position.x, camera.position.x - (x0 + size)));
+            const float dz = core::maxf(0.0f, core::maxf(z0 - camera.position.z, camera.position.z - (z0 + size)));
+            return std::sqrt(dx * dx + dz * dz) <= far_terrain_metres_;
+        };
+        const auto add = [&](std::vector<gfx::MeshChunk>& out, const gfx::MeshChunk& c, bool near) {
+            if (c.body_count == 0) {
+                out.push_back(c);
+                return;
+            }
+            gfx::MeshChunk part = c;
+            part.index_count = c.body_count;
+            out.push_back(part);
+            const int nx[4] = {-1, 1, 0, 0}, nz[4] = {0, 0, -1, 1};
+            for (int s = 0; s < 4; ++s) {
+                if (c.side_count[s] == 0 || near_at(c.grid_x + nx[s], c.grid_z + nz[s]) == near) continue;
+                part.first_index = c.side_first[s];
+                part.index_count = c.side_count[s];
+                out.push_back(part);
+            }
+        };
+        // Past the view distance, nothing: it is fog.
+        const float view = view_distance > 0.0f ? view_distance : 1e30f;
         std::vector<gfx::MeshChunk> near_chunks, far_chunks;
-        for (const gfx::MeshChunk& c : terrain_chunks_) if (chunk_distance(c) <= far_terrain_metres_) near_chunks.push_back(c);
-        for (const gfx::MeshChunk& c : terrain_far_chunks_) if (chunk_distance(c) > far_terrain_metres_) far_chunks.push_back(c);
+        for (const gfx::MeshChunk& c : terrain_chunks_) if (chunk_distance(c) <= far_terrain_metres_) add(near_chunks, c, true);
+        for (const gfx::MeshChunk& c : terrain_far_chunks_) {
+            const float d = chunk_distance(c);
+            if (d > far_terrain_metres_ && d <= view) add(far_chunks, c, false);
+        }
         CORE_PROFILE("terrain draws");
-        world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
-        world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
+        if (!ablated("terrain_near")) world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
+        if (!ablated("terrain_far")) world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
     } else {
         world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
     }
     {
         CORE_PROFILE("skirt + water");
-        if (terrain_skirt_mesh_.valid()) world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
-        if (water_mesh_.valid()) world_.draw_water(device_, pass, water_mesh_);
+        if (terrain_skirt_mesh_.valid() && !ablated("skirt"))
+            world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
+        if (water_mesh_.valid() && !ablated("water")) world_.draw_water(device_, pass, water_mesh_);
     }
     if (!options_.hide_vegetation) {
         CORE_PROFILE("vegetation draws");
-        foliage_.draw_trees(device_, pass, world_.scene());
-        foliage_.draw_grass(device_, pass, world_.scene());
+        if (!ablated("trees")) foliage_.draw_trees(device_, pass, world_.scene());
+        if (!ablated("grass")) foliage_.draw_grass(device_, pass, world_.scene());
     }
     {
         CORE_PROFILE("player draw");
-        world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
+        if (!ablated("player")) world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
                             dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
     }
 
@@ -7505,7 +7565,7 @@ void App::render() {
     // rings that instancing would be premature. Hidden in the studio, whose
     // whole point is an uncluttered look at the dragon.
     static const game::Course no_course;
-    const game::Course& course = (studio_active_ || run_mode_) ? no_course : rally_.course();
+    const game::Course& course = (studio_active_ || run_mode_ || ablated("rings")) ? no_course : rally_.course();
     for (size_t i = 0; i < course.rings.size(); ++i) {
         const game::Ring& ring = course.rings[i];
         const int index = int(i);
@@ -7531,13 +7591,14 @@ void App::render() {
     }
     {
         CORE_PROFILE("run world + prey");
-        draw_run_world(pass);
-        draw_prey(pass);
+        if (!ablated("run")) draw_run_world(pass);
+        if (!ablated("prey")) draw_prey(pass);
     }
 
     // Bot dragons: the real model, warmed slightly red so a target reads as a
     // target at a glance without a hint of UI.
     for (const auto& bot : bots_) {
+        if (ablated("bots")) break;
         if (bot->slot < 0 || size_t(bot->slot) >= combat_.sentinels().size()) continue;
         const game::Sentinel& slot = combat_.sentinels()[size_t(bot->slot)];
         if (!slot.alive) continue;
@@ -7567,7 +7628,7 @@ void App::render() {
     // pixels left uncovered (make_sky_desc says why).
     {
         CORE_PROFILE("sky");
-        world_.draw_sky(device_, pass);
+        if (!ablated("sky")) world_.draw_sky(device_, pass);
     }
 
     {
@@ -7579,7 +7640,7 @@ void App::render() {
     // depth-tested against it, never writing. (Staged before the pass began.)
     {
         CORE_PROFILE("particles");
-        particles_.draw(device_, pass);
+        if (!ablated("particles")) particles_.draw(device_, pass);
     }
 
     // Ghost of the best run, flying its own recording alongside.
@@ -7612,9 +7673,13 @@ void App::render() {
     }
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();
+    // The HUD setting's Plain (ui::Hud::set_plain), read when the draw
+    // lists are built, so in force from the next frame.
+    if (hud_.plain() != tier_.budget.plain_hud) hud_.set_plain(tier_.budget.plain_hud);
+    ui_.set_alpha_tested(tier_.budget.plain_hud);
     {
         CORE_PROFILE("ui render");
-        ui_.render(device_, ui_pass);
+        if (!ablated("ui")) ui_.render(device_, ui_pass);
     }
     device_.end_pass(ui_pass);
 }
@@ -7717,6 +7782,11 @@ void App::run() {
                 dt *= (frame_index_ % 2 == 0) ? 1.0f + options_.frame_jitter
                                               : 1.0f - options_.frame_jitter;
             }
+            // DRAGON_FREEZE_AT=N: from frame N the world holds still and the
+            // same frame renders again and again -- a slow moment of a run,
+            // reproduced for as long as it takes to take it apart
+            // (DRAGON_ABLATE). Not zero: a step of nothing divides by it.
+            if (freeze_at_ > 0 && frame_index_ >= freeze_at_) dt = 1e-6f;
         }
 
         frame_history_[frame_cursor_] = dt;

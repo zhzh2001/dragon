@@ -1040,7 +1040,74 @@ DX7-class driver pushing each transformed vertex across the PCI bus when
 the buffer is handed over. Fullscreen, a run is now 47.0 fps, median
 22.5 ms, 1% low 42.3 ms (from 43.9 fps and 48.4 ms).
 
-Still open: the valley-long views. Terrain is ~60% of the draws and ~45% of
+**Third round: taking a slow frame apart (2026-10-05).** The slow frames
+were steady, not stutter: long views down the valley. One was frozen and
+dissected on the G41 itself. `DRAGON_FREEZE_AT=3300` holds frame 3300 of
+`--headless --run 7 --autopilot` (player, a rival, a tower, the hoard and
+projectiles in a long valley view) while it renders again and again, and
+`DRAGON_ABLATE` leaves out one category at a time. Each line is 240
+identical frames, CPU plus card (headless waits for the card every
+frame):
+
+| Removed (Minimal, 34.8 ms) | Saved |
+|---|---|
+| The HUD | **9.4 ms** |
+| Far terrain | 5.0 |
+| Near terrain | 4.0 |
+| Prey (a herd at 570 m) | 2.3 |
+| Player | 1.8 |
+| Run world (hoard, rings) | 1.6 |
+| Particles | 1.2 |
+| Towers | 1.1 |
+| Sky | 1.0 |
+| Water | 0.8 |
+| Rivals | 0.7 |
+| Projectiles, skirt, trees | <= 0.4 each |
+| All of the world | 20.8 (14.0 left: the HUD and a 4.6 ms floor of clear, stretch and present) |
+
+Inside the HUD, the same way: its 3,054 vertices and 3,197 triangles are
+one draw. Without ImGui's anti-aliasing fringe (1,735 triangles) the
+frame was 1.9 ms faster, about 1.3 us a triangle, the world's rate; with
+blending off too, 2.1 ms more. The font atlas (512x128, never
+re-uploaded) and the buffers' pool (system memory or not, ImGui's and
+ours) made no difference. So a frame on this card is triangles at ~1.3 us
+each, plus fill, and the HUD was a third of it.
+
+What came of it:
+
+- **Flanges only on seams.** A chunk's flanges are stored per side and
+  drawn only where the neighbour comes from the other mesh: 34.8 -> 30.7
+  ms. With them gone from the inside of each mesh, small chunks cost
+  nothing extra, and 312 m (three far cells) culls best: 30.3 ms.
+- **The size test on the unpadded radius**, so a herd at 570 m (2.3 px
+  padded, 1.5 unpadded) is culled.
+- **Lowest**, a seventh preset below Minimal for slower cards (a Rage
+  XL), so Minimal keeps its look: 600-triangle creatures (120 far, from
+  30 m), the view cut to 2.5 km in fog (a new View distance setting:
+  terrain chunks and models past it are not drawn, and exp² fog reaches
+  2% there), and a Plain HUD (a new HUD setting: no fringe, circles in a
+  third of the segments, every colour made opaque over the plate's
+  charcoal, alpha-tested on D3D9, and solid edge bars for damage and
+  status instead of gradient bands a fifth of the screen tall).
+
+| Frozen slow frame | Frame |
+|---|---|
+| Minimal, start of the round | 34.8 ms |
+| Minimal now | 30.2 ms |
+| Lowest, smooth HUD | 22.4 ms |
+| Lowest | **16.7 ms** |
+
+The first alpha-tested HUD lost every dim label (text at alpha 140 under
+a 0x60 reference) and turned the gradient vignettes into solid red bars;
+the opaque tokens and the solid edge bars are what fixed it. Grey marker
+labels over the terrain ("THE PASS") read dark in Plain.
+
+Lowest's own ablation (22.4 ms, before the Plain HUD) left near terrain
+2.2 ms, far 1.8, particles 1.2, sky 1.1, water 0.9, run world 0.8, player
+0.2, and the HUD 7.6. Still open: the 4.6 ms floor (the stretch is a
+textured quad, since the M6's StretchRect from a texture fails; one from
+a plain render-target surface might go through the 2D blitter), and the
+sky, water and particles on Lowest. Terrain is ~60% of the draws and ~45% of
 the vertices. The next levers are a third terrain level (192 m) past
 2 km, a shorter view under the fog, and the props' near LODs (1,200
 triangles but 2,200 to 2,600 vertices each, from texture seams).

@@ -25,10 +25,12 @@ struct MaterialToggles {
 class WorldRenderer {
 public:
     // Models smaller than `pixels` across their radius, in a world target
-    // `height` pixels tall, are skipped (RenderTier::min_draw_pixels; 0: off).
-    void set_detail_cull(float pixels, float height) {
+    // `height` pixels tall, are skipped (RenderTier::min_draw_pixels; 0: off),
+    // and so are those wholly past `view` metres (ContentBudget::view_distance).
+    void set_detail_cull(float pixels, float height, float view) {
         min_draw_pixels_ = pixels;
         view_height_ = height;
+        view_distance_ = view;
     }
     bool init(Device* device, PipelineCache* pipelines);
     void shutdown(Device& device);
@@ -118,6 +120,7 @@ private:
     bool in_view(const ModelUniforms& model, core::Vec3 centre, float radius, float pad) const;
     float min_draw_pixels_ = 0.0f;
     float view_height_ = 720.0f;
+    float view_distance_ = 0.0f;
     SceneUniforms scene_ = {};
 };
 

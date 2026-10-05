@@ -778,6 +778,16 @@ private:
     // A chunk whose nearest point is this close is drawn from the near mesh
     // (the Terrain panel's "fine ground within"; DRAGON_FAR_TERRAIN for a run).
     float far_terrain_metres_ = 1000.0f;
+    // DRAGON_ABLATE=terrain_near,player,...: what render() leaves out, to
+    // find by elimination what a slow card's frame is made of (PORTING.md,
+    // "R6, as built"). Names: terrain_near terrain_far skirt water trees
+    // grass player rings run prey bots sky towers projectiles particles ui,
+    // and the HUD's parts: hud_combat hud_run hud_speed hud_autopilot.
+    std::string ablate_;
+    uint64_t freeze_at_ = 0;  // DRAGON_FREEZE_AT
+    bool ablated(const char* what) const {
+        return !ablate_.empty() && ablate_.find("," + std::string(what) + ",") != std::string::npos;
+    }
     std::vector<gfx::MeshChunk> terrain_skirt_chunks_;
     gfx::Mesh water_mesh_;
     std::string model_tuning_path_;

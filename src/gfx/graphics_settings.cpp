@@ -16,7 +16,8 @@ namespace {
 // video memory, 320x240 to 640x480 -- half of Very low again where halving
 // still buys something.
 const SettingInfo INFO[SETTING_COUNT] = {
-    {"models", "Model detail", {"Full", "20K triangles", "10K triangles", "5K triangles", "2.5K triangles", "1.2K triangles"},
+    {"models", "Model detail",
+     {"Full", "20K triangles", "10K triangles", "5K triangles", "2.5K triangles", "1.2K triangles", "600 triangles"},
      Applies::Restart},
     // Four levels: a 36 m grid lost the river, which is how a valley is
     // navigated; Very low keeps the 24 m one. Minimal takes 48 m: a card
@@ -33,22 +34,30 @@ const SettingInfo INFO[SETTING_COUNT] = {
     // The world's resolution, the HUD's staying whole: on a fill-bound card
     // the setting that moves the frame rate most (docs/PORTING.md, R7).
     {"resolution", "Resolution", {"100%", nullptr, "85%", "70%", "50%", nullptr}, Applies::Live},
+    // Lowest's two levers (docs/PORTING.md, "R6, as built"): the view cut
+    // short in fog, as period games hid theirs, and the HUD's shapes
+    // without their anti-aliasing fringe.
+    {"view", "View distance", {"Full", nullptr, nullptr, nullptr, nullptr, nullptr, "2.5 km"}, Applies::Live},
+    {"hud", "HUD", {"Smooth", nullptr, nullptr, nullptr, nullptr, nullptr, "Plain"}, Applies::Live},
 };
 
-constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500, 1200};
-constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400, 250};
-constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f};
-constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 8.0f};
-constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f};
-constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f};
-constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f, 0.0f};
-constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40, 20};
-constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f, 0.2f};
-constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128, 64};
-constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0, 0};
-constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f, 0.5f};
+// The seventh column is Lowest's; where a setting offers no Lowest option
+// (a null label above) it is never read, and the preset takes Minimal's.
+constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500, 1200, 600};
+constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400, 250, 120};
+constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f, 30.0f};
+constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 8.0f, 8.0f};
+constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f, 250.0f};
+constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f, 3.5f};
+constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f, 0.0f, 0.0f};
+constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40, 20, 20};
+constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f, 0.2f, 0.2f};
+constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128, 64, 64};
+constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0, 0, 0};
+constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f, 0.5f, 0.5f};
+constexpr float VIEW_DISTANCE[QUALITY_LEVELS] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2500.0f};
 
-const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low", "minimal"};
+const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low", "minimal", "lowest"};
 
 // The cheapest level a tier is offered, per setting. Above it the tier's
 // cards run out of memory or vertex constants long before the budget
@@ -73,7 +82,8 @@ int preset_to_level(Setting setting, int preset) {
     if (setting == Setting::Bloom) return preset <= 2 ? 0 : 4;                              // off from Low
     if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
     if (setting == Setting::Resolution) return preset <= 2 ? 0 : std::min(preset - 1, 4);  // 85, 70, 50, 50%
-    if (setting == Setting::Terrain) return preset < 3 ? preset : preset == 5 ? 5 : 3;      // 24 m, then 48 m for Minimal
+    if (setting == Setting::Terrain) return preset < 3 ? preset : preset >= 5 ? 5 : 3;      // 24 m, then 48 m for Minimal
+    if (setting == Setting::View || setting == Setting::Hud) return preset == 6 ? 6 : 0;  // Lowest's alone
     if (setting == Setting::Grass) return std::min(preset, 4);                              // off from Very low
     return preset;
 }
@@ -189,6 +199,8 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     b.terrain_casts_shadows = b.shadow_size >= 2048;
     b.bloom = g[Setting::Bloom] == 0;
     b.world_scale = WORLD_SCALE[g[Setting::Resolution]];
+    b.view_distance = VIEW_DISTANCE[g[Setting::View]];
+    b.plain_hud = g[Setting::Hud] == 6;
     return b;
 }
 

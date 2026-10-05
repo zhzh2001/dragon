@@ -41,6 +41,13 @@ struct MeshChunk {
     // Which square of chunk_mesh's grid: two meshes chunked on the same grid
     // name the same ground by the same pair.
     int grid_x = 0, grid_z = 0;
+    // With flanges: the run is the ground's own triangles (body_count
+    // indices) and then each side's flange, -x, +x, -z, +z. A flange is only
+    // seen where the neighbour is drawn from the other mesh, and on a card
+    // that pays per triangle the rest cost 13% of the terrain.
+    uint32_t body_count = 0;
+    uint32_t side_first[4] = {};
+    uint32_t side_count[4] = {};
 };
 
 // Reorders `mesh`'s triangles into square chunks of `chunk_size` metres by

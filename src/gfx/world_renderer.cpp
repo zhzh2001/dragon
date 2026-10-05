@@ -384,10 +384,12 @@ bool WorldRenderer::in_view(const ModelUniforms& model, core::Vec3 centre, float
                                              core::length_sq(m.col[2].xyz())));
     const float r = radius * scale * pad;
     if (!Frustum(scene_.view_proj).sees(c.xyz(), r)) return false;
+    const float d = core::distance(c.xyz(), scene_.camera_position.xyz());
+    if (view_distance_ > 0.0f && d - r > view_distance_) return false;
     if (min_draw_pixels_ > 0.0f) {
         // Its radius in pixels: r / (distance tan(fov/2)) of half the height.
-        const float d = core::distance(c.xyz(), scene_.camera_position.xyz());
-        if (d > r && r / (d * scene_.view_params.x) * 0.5f * view_height_ < min_draw_pixels_) return false;
+        // The unpadded radius: the pad is for a pose reaching out, not size.
+        if (d > r && (r / pad) / (d * scene_.view_params.x) * 0.5f * view_height_ < min_draw_pixels_) return false;
     }
     return true;
 }

@@ -585,8 +585,18 @@ public:
     }
 
     HRESULT create_vertex_buffer(D9Buffer* b) {
-        const DWORD usage = D3DUSAGE_WRITEONLY | buffer_usage() | (b->dynamic ? D3DUSAGE_DYNAMIC : 0);
-        return dev_->CreateVertexBuffer(b->size, usage, 0, b->dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, &b->vb, nullptr);
+        const DWORD usage = (software_vp_ ? 0 : D3DUSAGE_WRITEONLY) | buffer_usage() | (b->dynamic ? D3DUSAGE_DYNAMIC : 0);
+        return dev_->CreateVertexBuffer(b->size, usage, 0, buffer_pool(b->dynamic), &b->vb, nullptr);
+    }
+    // Software vertex processing reads the buffers with the CPU, and a
+    // D3DPOOL_DEFAULT buffer can sit in the card's memory, across a PCI bus
+    // the CPU reads at a few MB/s: system memory then. (Measured on the
+    // G41's M6, it made no difference, static buffers included -- that
+    // driver keeps them in system memory already -- but it is what the
+    // runtime documents, and a system-memory buffer survives a reset.)
+    D3DPOOL buffer_pool(bool dynamic) const {
+        if (software_vp_ && dynamic) return D3DPOOL_SYSTEMMEM;
+        return dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED;
     }
 
     void fill_dynamic(D9Buffer* b, uint32_t size) {
@@ -1187,7 +1197,7 @@ public:
             release(b->ib);
             const D3DFORMAT format = size == IndexSize::U32 ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
             const UINT bytes = UINT(b->index_data.size());
-            if (FAILED(dev_->CreateIndexBuffer(bytes, D3DUSAGE_WRITEONLY | buffer_usage(), format, D3DPOOL_MANAGED, &b->ib,
+            if (FAILED(dev_->CreateIndexBuffer(bytes, (software_vp_ ? 0 : D3DUSAGE_WRITEONLY) | buffer_usage(), format, buffer_pool(false), &b->ib,
                                                nullptr)))
                 return;
             void* mapped = nullptr;
