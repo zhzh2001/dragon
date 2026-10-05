@@ -109,6 +109,7 @@ public:
 private:
     rhi::Sampler* white_sampler_ = nullptr;
     float camera_distance(const ModelUniforms& model) const;
+    bool in_view(const ModelUniforms& model, core::Vec3 centre, float radius, float pad) const;
     SceneUniforms scene_ = {};
 };
 

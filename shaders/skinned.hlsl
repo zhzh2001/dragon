@@ -51,11 +51,12 @@ VertexOut vs_main(VertexIn input) {
 #endif
     VertexOut o;
     o.clip_position = mul(scene.view_proj, world);
-    o.uv = float4(input.uv, 0.0, 0.0);
 #ifdef FIXED_FUNCTION
+    o.uv = input.uv;
     o.diffuse = saturate(ff_lit(input.color * model.tint.rgb, normal, 0.0) + float4(ff_display((float3)model.tint.a), 0.0));
     o.fog = ff_fog(world.xyz);
 #else
+    o.uv = float4(input.uv, 0.0, 0.0);
     o.albedo = float4(input.color * model.tint.rgb, 0.0);
     Sm2Light light = sm2_light_vertex(world.xyz, normal, 0.0);
     light.ambient.rgb += model.tint.a;  // the emissive

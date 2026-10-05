@@ -970,6 +970,63 @@ new RGB565 and the RGBA swizzle ran off the end of the data (Dr. Watson's
 log on the G41, `%ALLUSERSPROFILE%\Application Data\Microsoft\Dr Watson`,
 named `upload_texture_level`). New formats go at the end.
 
+**Second round: the broken ground and the dips (2026-10-04).** Two reports
+from play at Minimal fullscreen.
+
+*Broken triangles in the terrain.* The ff tier draws the ground from a
+48 m mesh near the camera and a 96 m one past it, choosing per chunk.
+The chunk lines sat at multiples of the chunk size from 0, but both grids
+start at -2500 m, so each mesh's border cells fell to whichever side
+their centroids did, and the seams opened into holes up to a cell wide.
+The 30 m flanges only cover a difference in height. It was visible at
+320 m chunks too (sky through a slope on the Mac at `--tier ff`), and the
+1280 m chunks of the first round made it worse: the near/far choice, by
+chunk centre against 1000 m, could put the 96 m mesh under the camera. Now
+the chunk is a whole number of far cells measured from the grid's corner
+(1248 m at Minimal), so both meshes end on the same lines. A chunk is near
+when its *nearest point* is within the Terrain panel's "fine ground
+within" (1000 m; `DRAGON_FAR_TERRAIN` for a run). At 400 m the far mesh's
+staircase river reaches the foreground, for about 4%.
+
+*The dips.* With the card side measured separately (fullscreen, vsync
+off), the costs come apart:
+
+| What changed | Frame |
+|---|---|
+| Nothing on screen but the sky, the stretch and the HUD | 5.0 ms |
+| The flying scene at 640x480 | 20.0 ms |
+| The same at 320x240 (a 160x120 world) | 15.2 ms |
+| Terrain chunks 600 m: +43 draws, same geometry | +2.2 ms (~50 us a draw) |
+| Terrain chunks 2500 m: -10 draws, +3,000 vertices | +3.3 ms (~1 us a vertex) |
+
+So most of the frame is geometry, at about a microsecond per software-
+processed vertex and 50 us per draw, and the slow moments of a run
+(`DRAGON_FRAME_TRACE=1` lists the slowest frames and each second's mean,
+and a headless run replays the same frames on the Mac to look at them)
+are the views along the valley with props, rivals and projectiles in
+them; looking at the ground runs at 15 ms. `DRAGON_D3D9_PROFILE` now
+counts the vertices each pipeline sends.
+
+- **Culling.** `draw_skinned` and `draw_mesh` drew everything asked of
+  them, so every grazer within 2.2 km, every rival and every prop was
+  skinned on the CPU and sent each frame, in view or not. Meshes keep a
+  bounding sphere now (padded 1.5x for a pose) and the renderer tests it
+  against the view: in a run, 22.7 -> 10.1 skinned draws and 5,357 ->
+  2,892 triangles a frame, 8.6 -> 2.4 plain meshes.
+- **A 2-component texture coordinate** in the ff vertex programs (it was
+  a float4 whose zw were always 0): 40 bytes a transformed vertex, in
+  principle 32. It measured no different on the M6 (19.9 against 20.0 ms),
+  so either the runtime sends four components for `vs_2_0` regardless, or
+  the bytes are not what costs; it stays, as the smaller output.
+
+Still open: a run at Minimal averages ~44 fps fullscreen with a 1% low of
+~48 ms, the valley-long views. Terrain is ~60% of the draws and ~45% of
+the vertices. The next levers are a third terrain level (192 m) past
+2 km, a shorter view under the fog, and the props' near LODs (1,200
+triangles but 2,200 to 2,600 vertices each, from texture seams).
+`DRAGON_FRAME_PROFILE=N` profiles from frame N, to take that stretch
+alone.
+
 **Not done:** the other cards. The order is the G41 under XP SP3 with
 each card (record the exports, then `dragon.exe` with no flags, then the
 R4/R5 budgets); XP's own D3D9 drivers will have their quirks, and the

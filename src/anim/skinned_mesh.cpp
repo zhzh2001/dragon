@@ -77,6 +77,13 @@ bool SkinnedMesh::upload(rhi::Device& rhi, const SkinnedMeshData& data, const ch
     }
 
     index_count_ = uint32_t(data.indices.size());
+    core::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+    for (const SkinnedVertex& v : data.vertices) {
+        lo = core::Vec3{std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+        hi = core::Vec3{std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+    }
+    bound_centre_ = (lo + hi) * 0.5f;
+    bound_radius_ = core::length(hi - lo) * 0.5f;
     submeshes_ = data.submeshes;
     if (submeshes_.empty()) submeshes_.push_back({0, index_count_, -1});
     LOG_INFO("skinned mesh '%s': %zu verts, %u indices, %zu submesh(es)", debug_name,

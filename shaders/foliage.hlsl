@@ -114,8 +114,8 @@ VertexOut vs_main(VertexIn input) {
     int material = tag >= FOLIAGE_DETAIL ? tag - FOLIAGE_DETAIL : tag;
     const bool card = material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE;
     if (card) albedo *= 1.0 - 0.35 * saturate(-normal.y);
-    o.uv = card ? float4(input.uv.x * 0.5 + (material == FOLIAGE_MAT_NEEDLE ? 0.5 : 0.0), input.uv.y * 0.5, 0.0, 0.0)
-                : float4(0.25, 0.75, 0.0, 0.0);
+    o.uv = card ? float2(input.uv.x * 0.5 + (material == FOLIAGE_MAT_NEEDLE ? 0.5 : 0.0), input.uv.y * 0.5)
+                : float2(0.25, 0.75);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     o.diffuse = ff_lit(albedo, normal, material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y);
     o.fog = ff_fog(world);

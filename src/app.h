@@ -766,13 +766,18 @@ private:
     gfx::Mesh terrain_skirt_mesh_;
     std::vector<gfx::MeshChunk> terrain_chunks_;
     // Fixed function: the same ground at twice the cell, drawn in place of
-    // the near mesh's chunks past FAR_TERRAIN_METRES (docs/PORTING.md R5): a
+    // the near mesh's chunks past far_terrain_metres_ (docs/PORTING.md R5): a
     // card without T&L pays for every vertex, and most of the terrain's are
-    // a kilometre or more off. Chunked on the same 320 m grid, so each
-    // chunk is drawn from exactly one of the two.
+    // a kilometre or more off. Chunked on the same grid, so each chunk is
+    // drawn from exactly one of the two: terrain_chunk_size_ metres (the
+    // tier's, snapped to whole far cells) from terrain_chunk_origin_.
     gfx::Mesh terrain_far_mesh_;
     std::vector<gfx::MeshChunk> terrain_far_chunks_;
-    static constexpr float FAR_TERRAIN_METRES = 1000.0f;
+    float terrain_chunk_size_ = 320.0f;
+    float terrain_chunk_origin_ = 0.0f;
+    // A chunk whose nearest point is this close is drawn from the near mesh
+    // (the Terrain panel's "fine ground within"; DRAGON_FAR_TERRAIN for a run).
+    float far_terrain_metres_ = 1000.0f;
     std::vector<gfx::MeshChunk> terrain_skirt_chunks_;
     gfx::Mesh water_mesh_;
     std::string model_tuning_path_;

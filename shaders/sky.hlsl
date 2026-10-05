@@ -37,7 +37,7 @@ VertexOut vs_main(VertexIn input) {
     // The sky is a texture on the dome (stage 0, SELECTARG1 TEXTURE): baked
     // once (gfx::prelit::sky_diffuse) since the sun is static, so the dome
     // can be 153 vertices, which a card without T&L transforms on the CPU.
-    o.uv = float4(input.uv, 0.0, 0.0);
+    o.uv = input.uv;
     o.diffuse = float4(input.color, 1.0);
     o.fog = 1.0;
     return o;

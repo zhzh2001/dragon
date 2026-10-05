@@ -13,7 +13,7 @@ struct VertexOut {
     float4 clip_position : SV_Position;
     float4 diffuse : COLOR0;  // the order FF_VARYINGS explains
     float fog : FOG;
-    float4 uv : TEXCOORD0;
+    float2 uv : TEXCOORD0;
 };
 #else
 struct VertexOut {
@@ -33,7 +33,7 @@ VertexOut vs_main(VertexIn input) {
     VertexOut o;
     o.clip_position = mul(u.view_proj, float4(input.position, 1.0));
 #ifdef FIXED_FUNCTION
-    o.uv = (float4)0.0;
+    o.uv = (float2)0.0;
     o.diffuse = float4(input.color, 1.0);
     o.fog = 1.0;
 #else

@@ -321,6 +321,9 @@ struct Profile {
         // occlusion query around each draw: where a fill-bound card's pixel
         // shader time goes. Alpha-tested pixels that were killed are not in it.
         uint64_t pixels = 0;
+        // Vertices run through software vertex processing: each is sent to
+        // the card transformed, and on a PCI card that traffic is the frame.
+        uint64_t vertices = 0;
     };
     std::vector<std::pair<std::string, Work>> work;
     Work& find(const std::string& name) {
@@ -531,9 +534,9 @@ public:
                          profile_.seconds[i] * 1000.0 / frames, double(profile_.calls[i]) / frames);
             }
             for (const auto& w : profile_.work) {
-                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame, %9.0f pixels/frame",
+                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame, %9.0f pixels/frame, %8.0f vertices/frame",
                          w.first.c_str(), double(w.second.draws) / frames, double(w.second.primitives) / frames,
-                         double(w.second.pixels) / frames);
+                         double(w.second.pixels) / frames, double(w.second.vertices) / frames);
             }
         }
         for (IDirect3DQuery9* q : profile_.spare) q->Release();
@@ -1242,7 +1245,10 @@ public:
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
-        if (profile_.on) profile_.count(pipeline_->desc.name, prims);
+        if (profile_.on) {
+            profile_.count(pipeline_->desc.name, prims);
+            profile_.find(pipeline_->desc.name).vertices += vertex_count;
+        }
         if (!prims) return;
         IDirect3DQuery9* query = begin_pixel_query();
         {
@@ -1486,6 +1492,7 @@ private:
             min_index = it->second.first;
             vertices = it->second.second - it->second.first + 1;
         }
+        if (profile_.on && pipeline_) profile_.find(pipeline_->desc.name).vertices += vertices;
         const UINT limit = caps_.MaxPrimitiveCount ? caps_.MaxPrimitiveCount : prims;
         const UINT per_prim = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : 0;
         if (prims <= limit || per_prim == 0) {

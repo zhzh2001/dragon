@@ -79,7 +79,7 @@ VertexOut vs_main(VertexIn input) {
     // App::regenerate_terrain), since neither the ground nor the sun moves.
     // On a card without T&L this stage runs on the CPU every frame, and the
     // blend and the light were most of it.
-    o.uv = float4(p.xz / 16.0, 0.0, 0.0);
+    o.uv = p.xz / 16.0;
     o.diffuse = float4(input.color, 1.0);
     // No edge fade: the skirt's edge is 7.5 km out, where this fog has
     // already taken it, and a card without T&L pays for every slot here.

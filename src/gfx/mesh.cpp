@@ -50,6 +50,13 @@ bool Mesh::upload(rhi::Device& rhi, const MeshData& data, const char* debug_name
     }
 
     index_count_ = uint32_t(data.indices.size());
+    core::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+    for (const MeshVertex& v : data.vertices) {
+        lo = core::Vec3{std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+        hi = core::Vec3{std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+    }
+    bound_centre_ = (lo + hi) * 0.5f;
+    bound_radius_ = core::length(hi - lo) * 0.5f;
     LOG_INFO("mesh '%s': %zu verts, %u indices (%.1f MB)", debug_name, data.vertices.size(),
              index_count_,
              float(data.vertices.size() * sizeof(MeshVertex) + data.indices.size() * 4) / 1048576.0f);
@@ -94,14 +101,14 @@ std::vector<rhi::VertexAttribute> Mesh::attributes() {
     return attributes;
 }
 
-std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange) {
+std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange, float origin) {
     std::map<std::pair<int, int>, std::vector<uint32_t>> buckets;
     for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
         const core::Vec3 a = mesh.vertices[mesh.indices[t]].position;
         const core::Vec3 b = mesh.vertices[mesh.indices[t + 1]].position;
         const core::Vec3 c = mesh.vertices[mesh.indices[t + 2]].position;
-        const int cx = int(std::floor((a.x + b.x + c.x) / (3.0f * chunk_size)));
-        const int cz = int(std::floor((a.z + b.z + c.z) / (3.0f * chunk_size)));
+        const int cx = int(std::floor(((a.x + b.x + c.x) / 3.0f - origin) / chunk_size));
+        const int cz = int(std::floor(((a.z + b.z + c.z) / 3.0f - origin) / chunk_size));
         std::vector<uint32_t>& bucket = buckets[{cx, cz}];
         bucket.insert(bucket.end(), mesh.indices.begin() + ptrdiff_t(t), mesh.indices.begin() + ptrdiff_t(t + 3));
     }
@@ -122,6 +129,8 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange
         core::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
         std::fill(remap.begin(), remap.end(), UINT32_MAX);
         MeshChunk chunk;
+        chunk.grid_x = key.first;
+        chunk.grid_z = key.second;
         chunk.first_index = uint32_t(indices.size());
         chunk.index_count = uint32_t(bucket.size());
         for (uint32_t i : bucket) {

@@ -405,6 +405,7 @@ bool App::init(const Options& options) {
     // DRAGON_TERRAIN_CHUNK=metres: the terrain's draw granularity, for
     // measuring what a draw costs on a slow machine (PORTING.md, R6).
     if (const char* chunk = SDL_getenv("DRAGON_TERRAIN_CHUNK")) tier_.terrain_chunk_metres = float(SDL_atof(chunk));
+    if (const char* fine = SDL_getenv("DRAGON_FAR_TERRAIN")) far_terrain_metres_ = float(SDL_atof(fine));
     gfx::set_active_tier(tier_);
     if (tier_.tier != gfx::Tier::Modern) LOG_INFO("render tier: %s", tier_.name());
 
@@ -1412,7 +1413,16 @@ void App::regenerate_terrain() {
     // meshes meet along chunk borders and disagree by tens of metres on a
     // steep slope (gfx::chunk_mesh).
     const float flange = tier_.fixed_function ? 30.0f : 0.0f;
-    terrain_chunks_ = gfx::chunk_mesh(ground, tier_.terrain_chunk_metres, flange);
+    // And their chunks end on the same lines: a whole number of far cells
+    // from the grid's corner, which is a line of both grids (gfx::chunk_mesh).
+    terrain_chunk_size_ = tier_.terrain_chunk_metres;
+    terrain_chunk_origin_ = 0.0f;
+    if (tier_.fixed_function) {
+        const float far_cell = 2.0f * settings.cell_size;
+        terrain_chunk_size_ = core::maxf(1.0f, std::round(terrain_chunk_size_ / far_cell)) * far_cell;
+        terrain_chunk_origin_ = -settings.half_extent;
+    }
+    terrain_chunks_ = gfx::chunk_mesh(ground, terrain_chunk_size_, flange, terrain_chunk_origin_);
     terrain_mesh_.release(device_.rhi());
     terrain_mesh_.upload(device_.rhi(), ground, "terrain");
     terrain_far_mesh_.release(device_.rhi());
@@ -1429,7 +1439,7 @@ void App::regenerate_terrain() {
         game::Terrain far;
         far.generate(far_settings);
         gfx::MeshData far_ground = with_patches(far.mesh_data());
-        terrain_far_chunks_ = gfx::chunk_mesh(far_ground, tier_.terrain_chunk_metres, flange);
+        terrain_far_chunks_ = gfx::chunk_mesh(far_ground, terrain_chunk_size_, flange, terrain_chunk_origin_);
         terrain_far_mesh_.upload(device_.rhi(), far_ground, "terrain_far");
     }
     terrain_skirt_mesh_.release(device_.rhi());
@@ -2751,6 +2761,10 @@ void App::build_ui(float dt) {
                                 foliage_.grass_count());
             if (replant_now && !ImGui::IsAnyItemActive()) replant();
             ImGui::TreePop();
+        }
+        // Fixed function: how far the fine mesh reaches before the far one.
+        if (terrain_far_mesh_.valid()) {
+            ImGui::SliderFloat("fine ground within", &far_terrain_metres_, 0.0f, 3000.0f, "%.0f m");
         }
         dirty |= ImGui::SliderFloat("half extent", &terrain_settings_.half_extent, 500.0f, 4000.0f,
                                     "%.0f m");
@@ -7445,17 +7459,21 @@ void App::render() {
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
     if (terrain_far_mesh_.valid()) {
         // Near chunks from the near mesh, the rest from the far one, decided
-        // per 320 m cell of the shared grid so no cell is drawn twice or not
-        // at all (terrain_far_mesh_).
-        const auto cell_distance = [&](const gfx::MeshChunk& chunk) {
-            const float size = tier_.terrain_chunk_metres;
-            const core::Vec3 centre{(std::floor(chunk.centre.x / size) + 0.5f) * size, chunk.centre.y,
-                                    (std::floor(chunk.centre.z / size) + 0.5f) * size};
-            return core::distance(core::Vec3{camera.position.x, centre.y, camera.position.z}, centre);
+        // per square of the shared chunk grid so no ground is drawn twice or
+        // not at all (terrain_far_mesh_): near when the square's nearest
+        // point is within far_terrain_metres_ of the camera, so the ground
+        // under and around it is always the fine mesh, however big a chunk.
+        const auto chunk_distance = [&](const gfx::MeshChunk& chunk) {
+            const float size = terrain_chunk_size_;
+            const float x0 = terrain_chunk_origin_ + float(chunk.grid_x) * size;
+            const float z0 = terrain_chunk_origin_ + float(chunk.grid_z) * size;
+            const float dx = core::maxf(0.0f, core::maxf(x0 - camera.position.x, camera.position.x - (x0 + size)));
+            const float dz = core::maxf(0.0f, core::maxf(z0 - camera.position.z, camera.position.z - (z0 + size)));
+            return std::sqrt(dx * dx + dz * dz);
         };
         std::vector<gfx::MeshChunk> near_chunks, far_chunks;
-        for (const gfx::MeshChunk& c : terrain_chunks_) if (cell_distance(c) <= FAR_TERRAIN_METRES) near_chunks.push_back(c);
-        for (const gfx::MeshChunk& c : terrain_far_chunks_) if (cell_distance(c) > FAR_TERRAIN_METRES) far_chunks.push_back(c);
+        for (const gfx::MeshChunk& c : terrain_chunks_) if (chunk_distance(c) <= far_terrain_metres_) near_chunks.push_back(c);
+        for (const gfx::MeshChunk& c : terrain_far_chunks_) if (chunk_distance(c) > far_terrain_metres_) far_chunks.push_back(c);
         CORE_PROFILE("terrain draws");
         world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
         world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
@@ -7660,6 +7678,9 @@ void App::run() {
     // averaged past the first second -- how a slow machine (the G41) is
     // profiled without a profiler on it.
     const bool phase_profile = SDL_getenv("DRAGON_FRAME_PROFILE") != nullptr;
+    // DRAGON_FRAME_PROFILE=N (past 1): from frame N, so one stretch of a
+    // headless run (the same frames every time) can be profiled alone.
+    const uint64_t profile_from = phase_profile ? std::max<uint64_t>(60, uint64_t(SDL_atoi(SDL_getenv("DRAGON_FRAME_PROFILE")))) : 60;
     enum Phase { PH_EVENTS, PH_UPDATE, PH_UI, PH_RENDER, PH_PRESENT, PH_COUNT };
     static const char* const PHASE_NAMES[PH_COUNT] = {"events", "update", "ui build", "render", "present"};
     double phase_ns[PH_COUNT] = {};
@@ -7667,7 +7688,7 @@ void App::run() {
     uint64_t mark = 0;
     auto lap = [&](int phase) {
         const uint64_t t = SDL_GetTicksNS();
-        if (phase_profile && frame_index_ >= 60) phase_ns[phase] += double(t - mark);
+        if (phase_profile && frame_index_ >= profile_from) phase_ns[phase] += double(t - mark);
         mark = t;
     };
 
@@ -7725,8 +7746,8 @@ void App::run() {
             device_.end_frame();
             lap(PH_PRESENT);
         }
-        if (frame_index_ >= 60) ++phase_frames;
-        if (frame_index_ == 59) core::profile::reset();  // the sections, past the warm-up too
+        if (frame_index_ >= profile_from) ++phase_frames;
+        if (frame_index_ + 1 == profile_from) core::profile::reset();  // the sections, from the same frame
 
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
@@ -7750,6 +7771,22 @@ void App::run() {
         core::profile::report(phase_frames, [](const char* name, double ms) {
             LOG_INFO("frame profile:   %-18s %7.2f ms", name, ms);
         });
+    }
+    // DRAGON_FRAME_TRACE=1: the slowest frames by index, and each second's
+    // mean -- which moments of a run are slow, so a headless run (fixed
+    // step, the same frames every time) can render them to see why.
+    if (SDL_getenv("DRAGON_FRAME_TRACE")) {
+        std::vector<std::pair<float, size_t>> slowest;
+        for (size_t i = 60; i < frame_ms.size(); ++i) slowest.push_back({frame_ms[i], i});
+        std::sort(slowest.begin(), slowest.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        for (size_t i = 0; i < slowest.size() && i < 20; ++i) {
+            LOG_INFO("frame trace: slow frame %zu %.1f ms", slowest[i].second, slowest[i].first);
+        }
+        for (size_t start = 0; start + 60 <= frame_ms.size(); start += 60) {
+            double sum = 0.0;
+            for (size_t i = start; i < start + 60; ++i) sum += frame_ms[i];
+            LOG_INFO("frame trace: frames %zu-%zu mean %.1f ms", start, start + 59, sum / 60.0);
+        }
     }
     LOG_INFO("frames: %llu in %.1f s, %.1f fps; median %.1f ms, 1%% low %.1f ms (%s, tier %s, preset %s)",
              static_cast<unsigned long long>(frame_index_), seconds,

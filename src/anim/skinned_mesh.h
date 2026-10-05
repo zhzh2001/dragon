@@ -64,6 +64,10 @@ public:
     uint32_t index_count() const { return index_count_; }
     const std::vector<SkinnedSubmesh>& submeshes() const { return submeshes_; }
     bool valid() const { return vertex_buffer_ && index_buffer_; }
+    // A sphere round the bind pose, in the mesh's own space; a pose can
+    // reach past it, so the renderer pads it before culling with it.
+    core::Vec3 bound_centre() const { return bound_centre_; }
+    float bound_radius() const { return bound_radius_; }
 
     // A distance LOD (docs/PORTING.md, R4): a retro tier gives a creature a
     // cheaper mesh for past `distance` metres, which the renderer picks by
@@ -84,6 +88,8 @@ private:
     std::vector<SkinnedSubmesh> submeshes_;
     std::shared_ptr<SkinnedMesh> far_;  // shared: models are copied by value
     float far_distance_ = 0.0f;
+    core::Vec3 bound_centre_;
+    float bound_radius_ = 0.0f;
 };
 
 }  // namespace anim

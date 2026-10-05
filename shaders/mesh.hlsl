@@ -42,7 +42,7 @@ VertexOut vs_main(VertexIn input) {
 #ifdef FIXED_FUNCTION
     float3 albedo = input.color * model.tint.rgb;
     o.diffuse = float4(saturate(ff_lit(albedo, normal, 0.0).rgb * lit + ff_albedo(albedo) * ff_display((float3)model.tint.a)), 1.0);
-    o.uv = (float4)0.0;
+    o.uv = (float2)0.0;
     o.fog = ff_fog(world.xyz);
 #else
     // Thin plates seen from both sides: light the face toward the viewer.

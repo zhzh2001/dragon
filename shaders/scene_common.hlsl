@@ -95,10 +95,14 @@ float3 ff_albedo(float3 linear_color) { return pow(saturate(linear_color), (floa
 // diffuse, or the diffuse and the fog, leaves the registers it does read
 // where the vertex stage put them. Metal and Vulkan link by location and
 // never noticed.
+// The texture coordinate is two components: a card without T&L has every
+// vertex transformed on the CPU and sent across the bus, and a float4 made
+// each one 40 bytes instead of 32 (on the G41's PCI M6 a vertex sent costs
+// about a microsecond; docs/PORTING.md, "R6, as built").
 #define FF_VARYINGS          \
     float4 diffuse : COLOR0; \
     float fog : FOG;         \
-    float4 uv : TEXCOORD0;
+    float2 uv : TEXCOORD0;
 
 #elif defined(SM2)
 float3 scene_out(float3 color) { return ldr_encode_fast(max(color, 0.0), scene.output_grade); }

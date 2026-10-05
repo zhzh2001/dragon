@@ -353,6 +353,7 @@ void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
                               const ModelUniforms& model) {
     rhi::Pipeline* pipeline = pipelines_->get(mesh_);
     if (!pipeline || !pass || !mesh.valid()) return;
+    if (!in_view(model, mesh.bound_centre(), mesh.bound_radius(), 1.0f)) return;
 
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
@@ -370,6 +371,20 @@ void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
     device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
 }
 
+// Whether a model's bounding sphere (in its own space, scaled by `pad`) is
+// in the view. A draw the camera cannot see still costs its vertices: on a
+// card without T&L every one is transformed on the CPU and sent across the
+// bus, and on the G41's PCI M6 that traffic was most of the frame -- a herd
+// of grazers behind the camera, skinned and sent each frame.
+bool WorldRenderer::in_view(const ModelUniforms& model, core::Vec3 centre, float radius, float pad) const {
+    if (radius <= 0.0f) return true;
+    const core::Mat4& m = model.model;
+    const core::Vec4 c = m * core::Vec4{centre.x, centre.y, centre.z, 1.0f};
+    const float scale = std::sqrt(core::maxf(core::maxf(core::length_sq(m.col[0].xyz()), core::length_sq(m.col[1].xyz())),
+                                             core::length_sq(m.col[2].xyz())));
+    return Frustum(scene_.view_proj).sees(c.xyz(), radius * scale * pad);
+}
+
 // The camera's distance to a model's origin, which picks its LOD.
 float WorldRenderer::camera_distance(const ModelUniforms& model) const {
     const core::Vec3 origin{model.model.col[3].x, model.model.col[3].y, model.model.col[3].z};
@@ -384,6 +399,8 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
     const anim::SkinnedMesh& mesh = full_mesh.for_distance(camera_distance(model));
     rhi::Pipeline* pipeline = pipelines_->get(skinned_);
     if (!pipeline || !pass || !mesh.valid()) return;
+    // Padded: a pose reaches past the bind pose's sphere (a wing, a tail).
+    if (!in_view(model, full_mesh.bound_centre(), full_mesh.bound_radius(), 1.5f)) return;
 
     const SkinBlock block = make_skin_block(joints);
 

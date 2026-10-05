@@ -25,7 +25,7 @@ struct VertexOut {
 VertexOut vs_main(VertexIn input) {
     VertexOut o;
     o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
-    o.uv = (float4)0.0;
+    o.uv = (float2)0.0;
     o.diffuse = float4(ff_display(lerp(scene.palette[PALETTE_WATER_DEEP].rgb, scene.sky_horizon.rgb, 0.2)), 1.0);
     o.fog = ff_fog(input.position);
     return o;
