@@ -56,7 +56,8 @@ public:
     void draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
                       const std::vector<MeshChunk>* chunks = nullptr);
     // The water surface quad (see water.hlsl).
-    void draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh);
+    // With `chunks`, only those in view (the water plane spans the skirt).
+    void draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh, const std::vector<MeshChunk>* chunks = nullptr);
 
     // Lit opaque geometry with per-vertex albedo and procedural deformation.
     void draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,

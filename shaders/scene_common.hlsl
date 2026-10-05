@@ -45,6 +45,7 @@ struct SceneUniforms {
     // x exposure, y contrast, z saturation, w hue preservation: the grade a
     // tier without HDR applies here, in place of the post stack (LDR_OUTPUT).
     float4 output_grade;
+    float4 fog_range;  // x start, y end of a linear fixed-function fog; y 0: exp2 by fog_color.a
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -252,7 +253,12 @@ float4 ff_lit(float3 albedo_linear, float3 normal, float translucency) {
 // D3DFOG_EXP2 on the radial distance (D3DRS_RANGEFOGENABLE), density
 // fog_color.a per metre, no height term: the factor D3D wants.
 float ff_fog(float3 world_position) {
-    float x = length(world_position - scene.camera_position.xyz) * scene.fog_color.a;
+    float d = length(world_position - scene.camera_position.xyz);
+    // A short view (the View distance setting): linear, as the cards of the
+    // time did it -- clear up close, gone at the end -- where exp2 thick
+    // enough to hide the cut washed out the whole valley.
+    if (scene.fog_range.y > 0.0) return saturate((scene.fog_range.y - d) / (scene.fog_range.y - scene.fog_range.x));
+    float x = d * scene.fog_color.a;
     return exp(-x * x);
 }
 #ifdef FRAGMENT_STAGE

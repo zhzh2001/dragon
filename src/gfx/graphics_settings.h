@@ -23,7 +23,9 @@ namespace gfx {
 
 enum class Tier : uint8_t;
 
-enum class Setting : uint8_t { Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, View, Hud, Count };
+enum class Setting : uint8_t {
+    Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, View, Hud, Particles, Count
+};
 constexpr int SETTING_COUNT = int(Setting::Count);
 // Ultra to Minimal, and Lowest below it: for a card slower than the G41's
 // M6 (a Rage XL), with the quality it costs set apart from Minimal's.
@@ -101,6 +103,7 @@ struct ContentBudget {
     // The HUD's shapes without their anti-aliasing fringe, which is half the
     // triangles of a plate on a card that pays per triangle.
     bool plain_hud = false;
+    float particle_density = 1.0f;  // the fraction of particles spawned (gfx::ParticleSystem::set_density)
 };
 ContentBudget budget_for(const GraphicsSettings& settings);
 

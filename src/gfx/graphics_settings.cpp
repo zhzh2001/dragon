@@ -39,6 +39,7 @@ const SettingInfo INFO[SETTING_COUNT] = {
     // without their anti-aliasing fringe.
     {"view", "View distance", {"Full", nullptr, nullptr, nullptr, nullptr, nullptr, "2.5 km"}, Applies::Live},
     {"hud", "HUD", {"Smooth", nullptr, nullptr, nullptr, nullptr, nullptr, "Plain"}, Applies::Live},
+    {"particles", "Particles", {"Full", nullptr, nullptr, nullptr, nullptr, nullptr, "Half"}, Applies::Live},
 };
 
 // The seventh column is Lowest's; where a setting offers no Lowest option
@@ -83,7 +84,8 @@ int preset_to_level(Setting setting, int preset) {
     if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
     if (setting == Setting::Resolution) return preset <= 2 ? 0 : std::min(preset - 1, 4);  // 85, 70, 50, 50%
     if (setting == Setting::Terrain) return preset < 3 ? preset : preset >= 5 ? 5 : 3;      // 24 m, then 48 m for Minimal
-    if (setting == Setting::View || setting == Setting::Hud) return preset == 6 ? 6 : 0;  // Lowest's alone
+    if (setting == Setting::View || setting == Setting::Hud || setting == Setting::Particles)
+        return preset == 6 ? 6 : 0;  // Lowest's alone
     if (setting == Setting::Grass) return std::min(preset, 4);                              // off from Very low
     return preset;
 }
@@ -201,6 +203,7 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     b.world_scale = WORLD_SCALE[g[Setting::Resolution]];
     b.view_distance = VIEW_DISTANCE[g[Setting::View]];
     b.plain_hud = g[Setting::Hud] == 6;
+    b.particle_density = g[Setting::Particles] == 6 ? 0.5f : 1.0f;
     return b;
 }
 

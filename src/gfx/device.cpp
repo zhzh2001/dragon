@@ -207,7 +207,9 @@ rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     if (!scene_world_) {
         if (rhi::Texture* frame = frame_target()) pass.color = frame;
     }
-    pass.clear_color = true;
+    // The fixed-function tier's sky dome covers every pixel the world leaves,
+    // so a colour clear is fill for nothing (DRAGON_CLEAR=1 restores it).
+    pass.clear_color = !active_tier().fixed_function || SDL_getenv("DRAGON_CLEAR") != nullptr;
     pass.clear_rgba[0] = r;
     pass.clear_rgba[1] = g;
     pass.clear_rgba[2] = b;

@@ -36,6 +36,9 @@ struct SceneUniforms {
     // (LDR_OUTPUT): x exposure, y contrast, z saturation, w hue preservation.
     // Unread when the post stack grades.
     core::Vec4 output_grade = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
+    // x start, y end of a linear fixed-function fog (the View distance
+    // setting); y 0 keeps the exp2 fog by fog_color.a. Read by ff_fog only.
+    core::Vec4 fog_range = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

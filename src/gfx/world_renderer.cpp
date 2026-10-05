@@ -339,14 +339,14 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
     draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj, &eye);
 }
 
-void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh) {
+void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh, const std::vector<MeshChunk>* chunks) {
     rhi::Pipeline* pipeline = pipelines_->get(water_);
     if (!pipeline || !pass || !mesh.valid()) return;
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(device.rhi(), pass);
-    device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+    draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);
 }
 
 void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,

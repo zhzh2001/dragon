@@ -1471,27 +1471,65 @@ void App::regenerate_terrain() {
         gfx::MeshData quad;
         const float half = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
         const float y = terrain_settings_.water_level;
-        // Minimal (the 48 m grid) takes 16: every vertex is one a card
-        // without T&L transforms on the CPU.
-        const int n = !tier_.fixed_function ? 1 : tier_.budget.terrain_cell_scale >= 8.0f ? 16 : 32;
-        for (int j = 0; j <= n; ++j) {
-            for (int i = 0; i <= n; ++i) {
-                gfx::MeshVertex v;
-                v.position = core::Vec3{-half + 2.0f * half * float(i) / float(n), y,
-                                        -half + 2.0f * half * float(j) / float(n)};
-                v.normal = core::Vec3::up();
-                v.color = core::Vec3::one();
-                quad.vertices.push_back(v);
+        // Fixed function: only the cells where the ground dips below the
+        // line (sampled nine times a cell, and grown by a cell so a bank
+        // is never short of water), not a plane under the whole valley
+        // that every terrain pixel then depth-tested against -- on the
+        // G41's M6, a card that pays per pixel and per triangle, the plane
+        // was 0.8 ms of the slowest frame. 96 cells of 156 m.
+        const int n = tier_.fixed_function ? 96 : 1;
+        std::vector<uint8_t> wet(size_t(n) * size_t(n), tier_.fixed_function ? 0 : 1);
+        const float cell = 2.0f * half / float(n);
+        if (tier_.fixed_function) {
+            std::vector<uint8_t> dipped(wet.size(), 0);
+            for (int j = 0; j < n; ++j) {
+                for (int i = 0; i < n; ++i) {
+                    for (int s = 0; s < 9 && !dipped[size_t(j) * n + i]; ++s) {
+                        const float x = -half + cell * (float(i) + 0.5f * float(s % 3));
+                        const float z = -half + cell * (float(j) + 0.5f * float(s / 3));
+                        if (terrain_.height_at(x, z) < y + 2.0f) dipped[size_t(j) * n + i] = 1;
+                    }
+                }
+            }
+            for (int j = 0; j < n; ++j) {
+                for (int i = 0; i < n; ++i) {
+                    for (int dj = -1; dj <= 1; ++dj) {
+                        for (int di = -1; di <= 1; ++di) {
+                            const int ii = i + di, jj = j + dj;
+                            if (ii >= 0 && jj >= 0 && ii < n && jj < n && dipped[size_t(jj) * n + ii]) wet[size_t(j) * n + i] = 1;
+                        }
+                    }
+                }
             }
         }
+        std::vector<uint32_t> index_of(size_t(n + 1) * size_t(n + 1), UINT32_MAX);
+        const auto vertex = [&](int i, int j) {
+            uint32_t& at = index_of[size_t(j) * size_t(n + 1) + size_t(i)];
+            if (at == UINT32_MAX) {
+                gfx::MeshVertex v;
+                v.position = core::Vec3{-half + cell * float(i), y, -half + cell * float(j)};
+                v.normal = core::Vec3::up();
+                v.color = core::Vec3::one();
+                at = uint32_t(quad.vertices.size());
+                quad.vertices.push_back(v);
+            }
+            return at;
+        };
         for (int j = 0; j < n; ++j) {
             for (int i = 0; i < n; ++i) {
-                const uint32_t a = uint32_t(j * (n + 1) + i), b = a + 1, c = a + uint32_t(n + 1), d = c + 1;
+                if (!wet[size_t(j) * n + i]) continue;
+                const uint32_t a = vertex(i, j), b = vertex(i + 1, j), c = vertex(i, j + 1), d = vertex(i + 1, j + 1);
                 quad.indices.insert(quad.indices.end(), {a, c, b, b, c, d});
             }
         }
+        // In chunks, so what is out of view is not transformed either.
+        water_chunks_.clear();
+        if (tier_.fixed_function && !quad.indices.empty()) {
+            water_chunks_ = gfx::chunk_mesh(quad, cell * 8.0f, 0.0f, -half);
+            LOG_INFO("water: %zu triangles in %zu chunks", quad.indices.size() / 3, water_chunks_.size());
+        }
         water_mesh_.release(device_.rhi());
-        water_mesh_.upload(device_.rhi(), quad, "water");
+        if (!quad.indices.empty()) water_mesh_.upload(device_.rhi(), quad, "water");
     }
     replant();
 }
@@ -7360,8 +7398,12 @@ void App::render() {
     scene.light_view_proj = shadow_.light_view_proj();
     // A short view (the View distance setting): the fog thickened to hide
     // everything past it, exp(-(d k)^2) at 2% there, k = 1.98 / distance.
-    const float view_distance = tier_.budget.view_distance;
+    float view_distance = tier_.budget.view_distance;
+    // DRAGON_VIEW_DISTANCE=metres over the setting's, for measuring the cut.
+    if (static const char* view_env = SDL_getenv("DRAGON_VIEW_DISTANCE"); view_env) view_distance = float(SDL_atof(view_env));
     if (view_distance > 0.0f) scene.fog_color.w = core::maxf(scene.fog_color.w, 1.98f / view_distance);
+    // Fixed function fogs linearly over the last 55% instead (ff_fog).
+    if (view_distance > 0.0f) scene.fog_range = core::Vec4{0.45f * view_distance, view_distance, 0.0f, 0.0f};
     const float texel_world = shadow_.extent * 2.0f / float(shadow_.resolution());
     scene.shadow_params = core::Vec4{texel_world, shadow_.depth_bias,
                                      shadow_.enabled ? shadow_.strength : 0.0f,
@@ -7507,12 +7549,16 @@ void App::render() {
         // Each chunk's own ground, and its flange only on a side whose
         // neighbour comes from the other mesh: between two chunks of one
         // mesh the edges match and the flange is never seen.
+        // The fine mesh's reach is the same under a short view: the 96 m
+        // mesh's river breaks into pools, and nearer than a kilometre that
+        // read as broken ground even in Lowest's haze.
+        const float fine = far_terrain_metres_;
         const auto near_at = [&](int gx, int gz) {
             const float size = terrain_chunk_size_;
             const float x0 = terrain_chunk_origin_ + float(gx) * size, z0 = terrain_chunk_origin_ + float(gz) * size;
             const float dx = core::maxf(0.0f, core::maxf(x0 - camera.position.x, camera.position.x - (x0 + size)));
             const float dz = core::maxf(0.0f, core::maxf(z0 - camera.position.z, camera.position.z - (z0 + size)));
-            return std::sqrt(dx * dx + dz * dz) <= far_terrain_metres_;
+            return std::sqrt(dx * dx + dz * dz) <= fine;
         };
         const auto add = [&](std::vector<gfx::MeshChunk>& out, const gfx::MeshChunk& c, bool near) {
             if (c.body_count == 0) {
@@ -7533,10 +7579,10 @@ void App::render() {
         // Past the view distance, nothing: it is fog.
         const float view = view_distance > 0.0f ? view_distance : 1e30f;
         std::vector<gfx::MeshChunk> near_chunks, far_chunks;
-        for (const gfx::MeshChunk& c : terrain_chunks_) if (chunk_distance(c) <= far_terrain_metres_) add(near_chunks, c, true);
+        for (const gfx::MeshChunk& c : terrain_chunks_) if (chunk_distance(c) <= fine) add(near_chunks, c, true);
         for (const gfx::MeshChunk& c : terrain_far_chunks_) {
             const float d = chunk_distance(c);
-            if (d > far_terrain_metres_ && d <= view) add(far_chunks, c, false);
+            if (d > fine && d <= view) add(far_chunks, c, false);
         }
         CORE_PROFILE("terrain draws");
         if (!ablated("terrain_near")) world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
@@ -7548,7 +7594,7 @@ void App::render() {
         CORE_PROFILE("skirt + water");
         if (terrain_skirt_mesh_.valid() && !ablated("skirt"))
             world_.draw_terrain(device_, pass, terrain_skirt_mesh_, &terrain_skirt_chunks_);
-        if (water_mesh_.valid() && !ablated("water")) world_.draw_water(device_, pass, water_mesh_);
+        if (water_mesh_.valid() && !ablated("water")) world_.draw_water(device_, pass, water_mesh_, &water_chunks_);
     }
     if (!options_.hide_vegetation) {
         CORE_PROFILE("vegetation draws");
@@ -7676,6 +7722,7 @@ void App::render() {
     // The HUD setting's Plain (ui::Hud::set_plain), read when the draw
     // lists are built, so in force from the next frame.
     if (hud_.plain() != tier_.budget.plain_hud) hud_.set_plain(tier_.budget.plain_hud);
+    particles_.set_density(tier_.budget.particle_density);
     ui_.set_alpha_tested(tier_.budget.plain_hud);
     {
         CORE_PROFILE("ui render");
@@ -7782,12 +7829,13 @@ void App::run() {
                 dt *= (frame_index_ % 2 == 0) ? 1.0f + options_.frame_jitter
                                               : 1.0f - options_.frame_jitter;
             }
-            // DRAGON_FREEZE_AT=N: from frame N the world holds still and the
-            // same frame renders again and again -- a slow moment of a run,
-            // reproduced for as long as it takes to take it apart
-            // (DRAGON_ABLATE). Not zero: a step of nothing divides by it.
-            if (freeze_at_ > 0 && frame_index_ >= freeze_at_) dt = 1e-6f;
         }
+        // DRAGON_FREEZE_AT=N: from frame N the world holds still and the same
+        // frame renders again and again -- a slow moment of a run, reproduced
+        // for as long as it takes to take it apart (DRAGON_ABLATE). Not zero:
+        // a step of nothing divides by it. In a window too, with the fixed
+        // step before it, so a fullscreen run freezes on the headless frame.
+        if (freeze_at_ > 0) dt = frame_index_ >= int(freeze_at_) ? 1e-6f : 1.0f / 60.0f;
 
         frame_history_[frame_cursor_] = dt;
         frame_cursor_ = (frame_cursor_ + 1) % FRAME_HISTORY;

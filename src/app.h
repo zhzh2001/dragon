@@ -790,6 +790,7 @@ private:
     }
     std::vector<gfx::MeshChunk> terrain_skirt_chunks_;
     gfx::Mesh water_mesh_;
+    std::vector<gfx::MeshChunk> water_chunks_;  // fixed function only; empty draws it whole
     std::string model_tuning_path_;
     std::string model_rig_tuning_path_;
     // The player's hide colour: a hue the texture is pushed toward at its own

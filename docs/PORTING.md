@@ -1102,12 +1102,48 @@ a 0x60 reference) and turned the gradient vignettes into solid red bars;
 the opaque tokens and the solid edge bars are what fixed it. Grey marker
 labels over the terrain ("THE PASS") read dark in Plain.
 
-Lowest's own ablation (22.4 ms, before the Plain HUD) left near terrain
-2.2 ms, far 1.8, particles 1.2, sky 1.1, water 0.9, run world 0.8, player
-0.2, and the HUD 7.6. Still open: the 4.6 ms floor (the stretch is a
-textured quad, since the M6's StretchRect from a texture fails; one from
-a plain render-target surface might go through the 2D blitter), and the
-sky, water and particles on Lowest. Terrain is ~60% of the draws and ~45% of
+**Headless overstates the HUD.** Headless waits for the card every frame,
+so CPU and card work add; a fullscreen game overlaps them. With the
+freeze also working in a window (`DRAGON_FREEZE_AT` pins the step to
+1/60 before the freeze, so a fullscreen run reaches the headless frame),
+the same frozen frame in the real present path is 26.3 ms at Minimal and
+14.2 at Lowest, and there the Plain HUD costs 1.9 ms, not 7.6. The rest of
+this round was measured that way:
+
+| Removed (Lowest, fullscreen, 14.0 ms) | Saved |
+|---|---|
+| Near terrain | 2.2 ms |
+| Far terrain | 1.9 |
+| Particles | 1.2 |
+| Sky | 1.0 |
+| Water, run world | 0.8 each |
+| Projectiles | 0.6 |
+| Rivals, towers | 0.4 each |
+| Skirt, player | <= 0.3 |
+| All of the world | 9.8 (4.2 left: the HUD, the stretch, present) |
+
+- **Particles, a new setting**: Half at Lowest (every other spawn,
+  counted, not random, each a little larger): 14.0 -> 13.2 ms.
+- **Linear fog for a short view.** exp² thick enough to hide the 2.5 km
+  cut was 47% at a kilometre and greyed the whole valley out; the ff fog
+  now runs linearly from 45% of the view distance to its end
+  (`SceneUniforms::fog_range`, read by `ff_fog` alone), clear up close as
+  the cards of the time did it. At no cost. 3.5 km instead of 2.5 costs
+  2.2 ms (`DRAGON_VIEW_DISTANCE` to try others).
+- The fine terrain stays within 1000 m on Lowest: at 500 m the 96 m
+  mesh's river broke into pools, which read as broken ground.
+- No colour clear on the ff tier (the sky dome covers every pixel): 0.2 ms.
+- Water only on wet cells (ground below the line, nine samples a cell and
+  a cell's margin), instead of a plane under the whole valley: no
+  measurable change, kept for the triangles out of view.
+- StretchRect from a plain render-target surface was tried for the
+  stretch: the M6 refuses it too, even at matching formats, and the
+  fallback's extra copy made it slower. Reverted.
+
+| Frozen slow frame, fullscreen | Frame |
+|---|---|
+| Minimal | 26.3 ms (38 fps) |
+| Lowest | **13.2 ms (76 fps)** | Terrain is ~60% of the draws and ~45% of
 the vertices. The next levers are a third terrain level (192 m) past
 2 km, a shorter view under the fog, and the props' near LODs (1,200
 triangles but 2,200 to 2,600 vertices each, from texture seams).

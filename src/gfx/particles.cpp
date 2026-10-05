@@ -83,7 +83,16 @@ void ParticleSystem::shutdown() {
     capacity_ = 0;
 }
 
-void ParticleSystem::spawn(const Particle& particle) {
+void ParticleSystem::spawn(const Particle& source) {
+    Particle particle = source;
+    if (density_ < 1.0f) {
+        density_owed_ += density_;
+        if (density_owed_ < 1.0f) return;
+        density_owed_ -= 1.0f;
+        const float grow = 1.0f / std::sqrt(core::maxf(density_, 0.25f));
+        particle.size_start *= grow;
+        particle.size_end *= grow;
+    }
     // Full pool: replace the oldest-ish slot rather than dropping the new one.
     // New particles are the bright, close, just-happened ones -- the exact ones
     // whose absence the player would notice.

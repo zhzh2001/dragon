@@ -37,6 +37,11 @@ public:
     void shutdown();
 
     void spawn(const Particle& particle);
+    // The Particles setting (ContentBudget::particle_density): below 1, that
+    // fraction of spawns is kept -- every other one at Lowest, counted, not
+    // drawn at random, so a seed builds the same effects everywhere -- each
+    // a little larger so a plume still reads as one.
+    void set_density(float density) { density_ = density; }
     void update(float dt);
     void clear() { count_ = 0; }
     int alive() const { return count_; }
@@ -68,6 +73,8 @@ private:
     static constexpr int MAX_PARTICLES = 4096;
     std::vector<Particle> pool_;
     int count_ = 0;
+    float density_ = 1.0f;
+    float density_owed_ = 0.0f;
 
     std::vector<Vertex> vertices_;
     uint32_t uploaded_ = 0;
