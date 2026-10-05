@@ -326,6 +326,14 @@ struct Profile {
         uint64_t vertices = 0;
     };
     std::vector<std::pair<std::string, Work>> work;
+    uint64_t from = 0;    // the frame counting starts at
+    uint64_t frame = 0;   // frames ended so far
+    // Before `from`, everything counted so far is dropped at each frame's end.
+    void restart() {
+        std::fill(std::begin(seconds), std::end(seconds), 0.0);
+        std::fill(std::begin(calls), std::end(calls), 0);
+        work.clear();
+    }
     Work& find(const std::string& name) {
         for (auto& w : work) {
             if (w.first == name) return w.second;
@@ -365,6 +373,9 @@ public:
         headless_ = config.headless;
         adapter_ = config.adapter;
         profile_.on = SDL_getenv("DRAGON_D3D9_PROFILE") != nullptr;
+        // DRAGON_D3D9_PROFILE=N (past 1): count from frame N only, for one
+        // stretch of a headless run (DRAGON_FRAME_PROFILE=N takes the same).
+        if (profile_.on) profile_.from = uint64_t(std::max(0, SDL_atoi(SDL_getenv("DRAGON_D3D9_PROFILE"))));
         QueryPerformanceFrequency(&profile_.frequency);
         hwnd_ = static_cast<HWND>(
             SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
@@ -731,7 +742,10 @@ public:
         }
         dev_->EndScene();
         in_scene_ = false;
-        if (profile_.on) collect_pixel_queries();
+        if (profile_.on) {
+            collect_pixel_queries();
+            if (++profile_.frame < profile_.from) profile_.restart();
+        }
         if (readback && src_surface) download(src_surface, width, height, *readback);
         if (src_surface) src_surface->Release();
         release(backbuffer_.surface);

@@ -572,7 +572,11 @@ bool App::init(const Options& options) {
         LOG_INFO("grazer clips: graze %d, walk %d, run %d", grazer_clip_[0], grazer_clip_[1],
                  grazer_clip_[2]);
     }
-    sphere_mesh_.upload(device_.rhi(), gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
+    // Fixed function pays per vertex (each software-transformed and sent):
+    // 66 for a fireball instead of 247.
+    sphere_mesh_.upload(device_.rhi(),
+                        tier_.fixed_function ? gfx::make_sphere(1.0f, core::Vec3::one(), 10, 6)
+                                             : gfx::make_sphere(1.0f, core::Vec3::one(), 18, 12),
                         "unit_sphere");
     if (!particles_.init(&device_, &pipelines_)) return false;
     // Headless runs have no ears; a machine without an output device plays on
@@ -7344,6 +7348,7 @@ void App::render() {
         particles_.set_output_grade(grade);
     }
     world_.set_scene(scene);
+    world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()));
     world_.set_material_toggles(material_toggles_);
 
     // Debug geometry has to be uploaded before any render pass opens, because
@@ -7684,6 +7689,8 @@ void App::run() {
     enum Phase { PH_EVENTS, PH_UPDATE, PH_UI, PH_RENDER, PH_PRESENT, PH_COUNT };
     static const char* const PHASE_NAMES[PH_COUNT] = {"events", "update", "ui build", "render", "present"};
     double phase_ns[PH_COUNT] = {};
+    double profile_cpu = 0.0;
+    uint64_t profile_wall = 0;
     uint64_t phase_frames = 0;
     uint64_t mark = 0;
     auto lap = [&](int phase) {
@@ -7747,7 +7754,11 @@ void App::run() {
             lap(PH_PRESENT);
         }
         if (frame_index_ >= profile_from) ++phase_frames;
-        if (frame_index_ + 1 == profile_from) core::profile::reset();  // the sections, from the same frame
+        if (frame_index_ + 1 == profile_from) {
+            core::profile::reset();  // the sections, from the same frame
+            profile_cpu = core::profile::process_cpu_seconds();
+            profile_wall = SDL_GetTicksNS();
+        }
 
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
@@ -7771,6 +7782,10 @@ void App::run() {
         core::profile::report(phase_frames, [](const char* name, double ms) {
             LOG_INFO("frame profile:   %-18s %7.2f ms", name, ms);
         });
+        const double wall = double(SDL_GetTicksNS() - profile_wall) * 1e-9;
+        const double cpu = core::profile::process_cpu_seconds() - profile_cpu;
+        LOG_INFO("frame profile: cpu %.1f s over %.1f s of wall clock (%.0f%% of one core)", cpu, wall,
+                 wall > 0.0 ? 100.0 * cpu / wall : 0.0);
     }
     // DRAGON_FRAME_TRACE=1: the slowest frames by index, and each second's
     // mean -- which moments of a run are slow, so a headless run (fixed

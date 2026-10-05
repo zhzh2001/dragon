@@ -1019,8 +1019,28 @@ counts the vertices each pipeline sends.
   so either the runtime sends four components for `vs_2_0` regardless, or
   the bytes are not what costs; it stays, as the smaller output.
 
-Still open: a run at Minimal averages ~44 fps fullscreen with a 1% low of
-~48 ms, the valley-long views. Terrain is ~60% of the draws and ~45% of
+Then, profiling only the slow stretch of a headless run (frames 3180 to
+3600 of `--run 7 --autopilot`, a long view down the valley with a tower,
+the hoard, rivals and projectiles; `DRAGON_FRAME_PROFILE=N` and
+`DRAGON_D3D9_PROFILE=N` count from frame N):
+
+| Step | Card's time a frame (headless waits for it) | Run, headless |
+|---|---|---|
+| After culling | 30.7 ms (render 6.5) | 41.0 fps, 1% low 40.2 ms |
+| Models under 1.5 world pixels skipped (`RenderTier::min_draw_pixels`, ff only), a 66-vertex sphere for projectiles | 27.5 ms | 45.2 fps, 1% low 35.7 ms |
+| The skirt in one draw (terrain 59.8 -> 16.5 draws a frame) | 27.5 ms | 45.2 fps |
+
+The last row settles the per-draw question: 43 fewer draws a frame cost
+nothing, so it is the vertices, about 1.5 us each. The earlier "50 us a
+draw" from smaller chunks was their flange vertices. The CPU readout
+(`frame profile: cpu`) shows 100% of one core throughout, the wait
+included, but both waits spin, so it cannot separate a card at work from
+a driver at work. What fits is D3D9 buffering the draws and the M6's
+DX7-class driver pushing each transformed vertex across the PCI bus when
+the buffer is handed over. Fullscreen, a run is now 47.0 fps, median
+22.5 ms, 1% low 42.3 ms (from 43.9 fps and 48.4 ms).
+
+Still open: the valley-long views. Terrain is ~60% of the draws and ~45% of
 the vertices. The next levers are a third terrain level (192 m) past
 2 km, a shorter view under the fog, and the props' near LODs (1,200
 triangles but 2,200 to 2,600 vertices each, from texture seams).

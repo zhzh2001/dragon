@@ -83,15 +83,19 @@ struct RenderTier {
     // the D3D9 backend's stage recipes must match.
     bool fixed_function = false;
     // The terrain's chunk (gfx::chunk_mesh), and the skirt's, in metres: the
-    // unit of frustum culling and of nearest-first drawing. Tried at 1280 m
-    // for fixed function to cut 263 draws to 34: slower, because D3D9's
-    // software vertex pipeline costs per vertex, not per draw, and the
-    // coarse chunks culled less (docs/PORTING.md R5). So 320 m everywhere.
+    // unit of frustum culling and of nearest-first drawing. 320 m, and 1280
+    // for fixed function (make() says why; App snaps it to whole far cells).
     float terrain_chunk_metres = 320.0f;
     float skirt_chunk_metres = 1280.0f;
     // The skirt's cells, over the tier's terrain scale: fixed function
     // takes it twice as coarse again (it is the far horizon, under the fog).
     float skirt_cell_scale = 1.0f;
+    // A model whose bounding sphere covers fewer world pixels than this
+    // across its radius is not drawn (gfx::WorldRenderer::in_view). Fixed
+    // function only: there a draw costs ~50 us and each vertex ~1 us however
+    // small it lands, and a herd of grazers half a kilometre off was a
+    // dozen draws of sub-pixel dots.
+    float min_draw_pixels = 0.0f;
     // How much it is asked to draw -- the triangles, distances, texture and
     // shadow sizes -- from the graphics settings (gfx/graphics_settings.h),
     // which start on the tier's default preset and change through apply().
@@ -122,6 +126,11 @@ struct RenderTier {
         // worse again (46 ms): too few chunks to cull, so every vertex is
         // processed (PORTING.md, R6).
         if (t.fixed_function) t.terrain_chunk_metres = 1280.0f;
+        if (t.fixed_function) t.min_draw_pixels = 1.5f;
+        // The skirt in one draw: at Minimal its cells are 1250 m, so 1280 m
+        // chunks were a draw per cell or two -- dozens of ~50 us draws for a
+        // couple of hundred triangles, 169 vertices in all.
+        if (t.fixed_function) t.skirt_chunk_metres = 100000.0f;
         t.apply(GraphicsSettings::preset(default_preset(tier), tier, DeviceLimits{}));
         return t;
     }

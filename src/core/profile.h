@@ -16,6 +16,10 @@ void add(const char* name, uint64_t ns);
 // The sections in first-seen order, averaged over `frames`, through `print`.
 void report(uint64_t frames, void (*print)(const char* name, double ms));
 void reset();
+// The process's CPU time so far, every thread, user and kernel, in seconds:
+// set against the wall clock, it says whether a frame's wait for the GPU
+// is the card's time or a driver busy on the CPU.
+double process_cpu_seconds();
 
 struct Scope {
     explicit Scope(const char* section);

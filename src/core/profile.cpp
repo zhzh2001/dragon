@@ -4,6 +4,12 @@
 
 #include <cstring>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
+
 namespace core::profile {
 namespace {
 
@@ -45,6 +51,22 @@ Scope::Scope(const char* section) : name(section), start(enabled() ? SDL_GetTick
 
 Scope::~Scope() {
     if (start) add(name, SDL_GetTicksNS() - start);
+}
+
+double process_cpu_seconds() {
+#ifdef _WIN32
+    FILETIME created, exited, kernel, user;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return 0.0;
+    const auto seconds = [](const FILETIME& t) {
+        return double((uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime) * 1e-7;
+    };
+    return seconds(kernel) + seconds(user);
+#else
+    rusage usage = {};
+    getrusage(RUSAGE_SELF, &usage);
+    return double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) +
+           double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) * 1e-6;
+#endif
 }
 
 }  // namespace core::profile

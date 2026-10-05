@@ -382,7 +382,14 @@ bool WorldRenderer::in_view(const ModelUniforms& model, core::Vec3 centre, float
     const core::Vec4 c = m * core::Vec4{centre.x, centre.y, centre.z, 1.0f};
     const float scale = std::sqrt(core::maxf(core::maxf(core::length_sq(m.col[0].xyz()), core::length_sq(m.col[1].xyz())),
                                              core::length_sq(m.col[2].xyz())));
-    return Frustum(scene_.view_proj).sees(c.xyz(), radius * scale * pad);
+    const float r = radius * scale * pad;
+    if (!Frustum(scene_.view_proj).sees(c.xyz(), r)) return false;
+    if (min_draw_pixels_ > 0.0f) {
+        // Its radius in pixels: r / (distance tan(fov/2)) of half the height.
+        const float d = core::distance(c.xyz(), scene_.camera_position.xyz());
+        if (d > r && r / (d * scene_.view_params.x) * 0.5f * view_height_ < min_draw_pixels_) return false;
+    }
+    return true;
 }
 
 // The camera's distance to a model's origin, which picks its LOD.
