@@ -132,6 +132,7 @@ private:
     bool in_frame_ = false;
     bool hdr_ = true;
     bool color16_ = false;
+    bool no_color_targets_ = false;  // the backend could not make a colour-target texture (ensure_targets)
 
     rhi::Texture* scene_color_ = nullptr;
     // What the UI draws on this frame: scene_color_, or the backend's frame

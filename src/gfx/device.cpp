@@ -123,12 +123,12 @@ rhi::Texture* Device::frame_target() const {
     // into it that scene_color would need was a full-screen textured quad,
     // a third of the frame on the M6. Not on a frame that is read back:
     // the back buffer cannot be.
-    if (hdr_ || !screenshot_path_.empty()) return nullptr;
+    if (hdr_ || (!screenshot_path_.empty() && scene_color_)) return nullptr;
     return rhi_->frame_target();
 }
 
 bool Device::ensure_targets(uint32_t w, uint32_t h) {
-    if (scene_color_ && depth_ && render_w_ == w && render_h_ == h) return true;
+    if ((scene_color_ || no_color_targets_) && depth_ && render_w_ == w && render_h_ == h) return true;
     if (w == 0 || h == 0) return false;
     release_targets();
     const uint32_t ww = std::max(1u, uint32_t(float(w) * world_scale_ + 0.5f));
@@ -139,8 +139,15 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     color.height = h;
     color.format = scene_color_format();
     color.usage = rhi::TEXTURE_COLOR_TARGET | rhi::TEXTURE_SAMPLED;
-    scene_color_ = rhi_->create_texture(color, "scene_color");
-    if (!scene_color_) return false;
+    scene_color_ = no_color_targets_ ? nullptr : rhi_->create_texture(color, "scene_color");
+    if (!scene_color_) {
+        // A card that cannot render into a texture (the oldest D3D9 drivers):
+        // the frame's own image takes everything (frame_target), the world
+        // at full size. No screenshot, which reads scene_color back.
+        if (headless_ || hdr_) return false;
+        if (!no_color_targets_) LOG_WARN("no render-target textures: drawing straight into the back buffer");
+        no_color_targets_ = true;
+    }
 
     rhi::TextureDesc world = color;
     world.width = ww;
@@ -149,13 +156,11 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     // has no HDR, when the world finishes in 8 bits: straight into
     // scene_color at full size, or into its own target to be stretched.
     if (!hdr_) {
-        if (ww != w || wh != h) {
+        if ((ww != w || wh != h) && !no_color_targets_) {
             if (color16_) world.format = rhi::Format::RGB565;
             scene_world_ = rhi_->create_texture(world, "scene_world");
-            if (!scene_world_) {
-                release_targets();
-                return false;
-            }
+            // No world target: the world at full size instead of stretched.
+            if (!scene_world_) LOG_WARN("no %ux%u world target: the world at full size", ww, wh);
         }
     } else {
         rhi::TextureDesc hdr = world;
@@ -171,8 +176,8 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     }
 
     rhi::TextureDesc depth;
-    depth.width = ww;
-    depth.height = wh;
+    depth.width = scene_world_ ? ww : w;
+    depth.height = scene_world_ ? wh : h;
     depth.format = depth_format_;
     depth.usage = rhi::TEXTURE_DEPTH_TARGET;
     depth_ = rhi_->create_texture(depth, "scene_depth");
@@ -183,8 +188,8 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
 
     render_w_ = w;
     render_h_ = h;
-    world_w_ = ww;
-    world_h_ = wh;
+    world_w_ = scene_world_ ? ww : w;
+    world_h_ = scene_world_ ? wh : h;
     LOG_INFO("render targets resized to %ux%u%s, world %ux%u", w, h, hdr_ ? "" : " (LDR)", ww, wh);
     return true;
 }
@@ -263,6 +268,10 @@ void Device::end_frame() {
     in_frame_ = false;
     rhi::Texture* source = ui_target_ ? ui_target_ : scene_color_;
     ui_target_ = nullptr;
+    if (!screenshot_path_.empty() && !scene_color_) {
+        LOG_WARN("screenshot: no render-target texture to read back on this device");
+        screenshot_path_.clear();
+    }
     if (screenshot_path_.empty()) {
         rhi_->end_frame(source, render_w_, render_h_, nullptr);
         return;

@@ -43,6 +43,10 @@ struct D9Buffer {
 struct D9Texture {
     Format format = Format::Invalid;
     uint32_t width = 0, height = 0, levels = 1;
+    // The size the D3D9 objects were made at: the width and height, or on a
+    // card that takes only powers of two the next ones up, drawn into at
+    // the corner (D3D9Device::pow2_only_).
+    uint32_t alloc_w = 0, alloc_h = 0;
     uint8_t usage = 0;
     IDirect3DTexture9* texture = nullptr;  // sampled, or a colour target
     IDirect3DSurface9* depth = nullptr;    // a depth target's surface
@@ -511,6 +515,9 @@ public:
         stretch_from_textures_ = (caps_.DevCaps2 & D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES) != 0 &&
                                  !(SDL_getenv("DRAGON_D3D9_NO_STRETCHRECT") && SDL_getenv("DRAGON_D3D9_NO_STRETCHRECT")[0] == '1');
         if (!stretch_from_textures_) LOG_INFO("direct3d9: no StretchRect from textures; stretching with a textured quad");
+        pow2_only_ = ((caps_.TextureCaps & D3DPTEXTURECAPS_POW2) && !(caps_.TextureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL)) ||
+                     SDL_getenv("DRAGON_D3D9_POW2") != nullptr;
+        if (pow2_only_) LOG_INFO("direct3d9: textures at powers of two only; targets padded to them");
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
@@ -571,16 +578,33 @@ public:
     // A render target's D3D9 objects, from its description: at creation,
     // and again after a reset.
     HRESULT create_target(D9Texture* t) {
+        // A card that takes only power-of-two textures (D3DPTEXTURECAPS_POW2
+        // without NONPOW2CONDITIONAL: the DX6 and DX7 parts, a Rage XL among
+        // them) refused the 320x240 world target outright. The target is
+        // made at the next powers of two and drawn into at its corner; a
+        // depth surface likewise, as D3D9 wants it no smaller than the
+        // colour target it is used with.
+        const auto up = [&](uint32_t v) {
+            if (!pow2_only_) return v;
+            uint32_t p = 1;
+            while (p < v) p <<= 1;
+            return p;
+        };
+        t->alloc_w = up(t->width);
+        t->alloc_h = up(t->height);
         if (t->usage & TEXTURE_DEPTH_TARGET) {
-            HRESULT hr = dev_->CreateDepthStencilSurface(t->width, t->height, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, TRUE,
+            HRESULT hr = dev_->CreateDepthStencilSurface(t->alloc_w, t->alloc_h, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, TRUE,
                                                          &t->depth, nullptr);
             if (SUCCEEDED(hr) && t->depth_as_color) {
-                hr = dev_->CreateTexture(t->width, t->height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT,
+                hr = dev_->CreateTexture(t->alloc_w, t->alloc_h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT,
                                          &t->texture, nullptr);
             }
             return hr;
         }
-        return dev_->CreateTexture(t->width, t->height, 1, D3DUSAGE_RENDERTARGET, to_d3d(t->format), D3DPOOL_DEFAULT,
+        // DRAGON_D3D9_NO_RT_TEXTURES=1: as a card that cannot render into a
+        // texture at all (gfx::Device then draws straight into the back buffer).
+        if (no_rt_textures_) return D3DERR_NOTAVAILABLE;
+        return dev_->CreateTexture(t->alloc_w, t->alloc_h, 1, D3DUSAGE_RENDERTARGET, to_d3d(t->format), D3DPOOL_DEFAULT,
                                    &t->texture, nullptr);
     }
 
@@ -1405,7 +1429,8 @@ private:
         set_sampler_state(0, D3DSAMP_SRGBTEXTURE, FALSE);
         // Pixel centres: D3D9 samples at the texel's corner, hence the half
         // pixel taken off the positions.
-        const float u = float(sw) / float(source->width), v = float(sh) / float(source->height);
+        const float u = float(sw) / float(source->alloc_w ? source->alloc_w : source->width);
+        const float v = float(sh) / float(source->alloc_h ? source->alloc_h : source->height);
         const float x1 = float(dw) - 0.5f, y1 = float(dh) - 0.5f;
         struct Vertex {
             float x, y, z, rhw, u, v;
@@ -1583,7 +1608,13 @@ private:
 
     void download(IDirect3DSurface9* source, uint32_t w, uint32_t h, std::vector<uint8_t>& out) {
         IDirect3DSurface9* sys = nullptr;
-        if (FAILED(dev_->CreateOffscreenPlainSurface(w, h, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sys, nullptr))) return;
+        // At the source's own size: GetRenderTargetData wants them equal, and
+        // a power-of-two target is larger than what was drawn in it.
+        D3DSURFACE_DESC desc = {};
+        source->GetDesc(&desc);
+        if (FAILED(dev_->CreateOffscreenPlainSurface(desc.Width, desc.Height, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sys,
+                                                     nullptr)))
+            return;
         D3DLOCKED_RECT locked = {};
         if (SUCCEEDED(dev_->GetRenderTargetData(source, sys)) &&
             SUCCEEDED(sys->LockRect(&locked, nullptr, D3DLOCK_READONLY))) {
@@ -1616,6 +1647,8 @@ private:
     bool software_vp_ = false;  // vertex programs run by D3D9's software pipeline
     bool fullscreen_ = false;
     bool color16_ = false;
+    bool pow2_only_ = false;      // render targets at powers of two (create_target)
+    bool no_rt_textures_ = SDL_getenv("DRAGON_D3D9_NO_RT_TEXTURES") != nullptr;
     // What a reset empties and this backend makes again (reset()).
     std::vector<D9Texture*> targets_;
     std::vector<D9Buffer*> dynamic_;

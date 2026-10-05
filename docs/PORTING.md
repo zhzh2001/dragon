@@ -1143,7 +1143,33 @@ this round was measured that way:
 | Frozen slow frame, fullscreen | Frame |
 |---|---|
 | Minimal | 26.3 ms (38 fps) |
-| Lowest | **13.2 ms (76 fps)** | Terrain is ~60% of the draws and ~45% of
+| Lowest | **13.2 ms (76 fps)** |
+
+Whole runs of `--run 7 --autopilot`, fullscreen, 3600 frames:
+
+| | Average | Median | 1% low |
+|---|---|---|---|
+| Minimal, before the second round | 47.0 fps | 22.5 ms | 42.3 ms |
+| Minimal, real time | 59.4 fps | 15.5 ms | 22.0 ms |
+| Lowest, real time | 82.2 fps | 12.2 ms | 13.7 ms |
+| Minimal, fixed step (the slow stretch at ~26 ms) | 57.8 fps | 17.0 ms | 26.7 ms |
+| Lowest, fixed step (the slow stretch at ~14 ms) | 87.8 fps | 11.7 ms | 15.8 ms |
+
+**For the cards below the M6.** A Rage XL (and the DX6/DX7 parts like it)
+takes only power-of-two textures, and some drivers of that age cannot
+render into a texture from D3D9 at all; either would have meant no
+picture, as the 320x240 world target could not be made. Both are met now
+without the card to try them on, each forced on the G41 to check it:
+
+- A power-of-two-only card (`D3DPTEXTURECAPS_POW2` without
+  `NONPOW2CONDITIONAL`; `DRAGON_D3D9_POW2=1` forces it) gets its render
+  targets and depth surfaces at the next powers of two, drawn into at the
+  corner; the stretch quad's coordinates and the readback use the real
+  size. The picture is the same.
+- A device that cannot make a colour-target texture
+  (`DRAGON_D3D9_NO_RT_TEXTURES=1` forces it) draws everything straight
+  into the back buffer, the world at full size (Minimal at 36 fps on the
+  M6, against 59), and takes no screenshots. Terrain is ~60% of the draws and ~45% of
 the vertices. The next levers are a third terrain level (192 m) past
 2 km, a shorter view under the fog, and the props' near LODs (1,200
 triangles but 2,200 to 2,600 vertices each, from texture seams).
