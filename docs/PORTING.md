@@ -1169,7 +1169,12 @@ without the card to try them on, each forced on the G41 to check it:
 - A device that cannot make a colour-target texture
   (`DRAGON_D3D9_NO_RT_TEXTURES=1` forces it) draws everything straight
   into the back buffer, the world at full size (Minimal at 36 fps on the
-  M6, against 59), and takes no screenshots. Terrain is ~60% of the draws and ~45% of
+  M6, against 59), and takes no screenshots.
+- A card without `MODULATE2X` (`DRAGON_D3D9_NO_MODULATE2X=1` forces it)
+  draws the terrain's and the trees' stage as the pre-lit colour alone:
+  the detail tile is lost, not half the brightness, as plain `MODULATE`
+  would have done. Every ff recipe is already one stage, for a
+  single-texture-unit card. Terrain is ~60% of the draws and ~45% of
 the vertices. The next levers are a third terrain level (192 m) past
 2 km, a shorter view under the fog, and the props' near LODs (1,200
 triangles but 2,200 to 2,600 vertices each, from texture seams).

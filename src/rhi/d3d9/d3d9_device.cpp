@@ -518,6 +518,8 @@ public:
         pow2_only_ = ((caps_.TextureCaps & D3DPTEXTURECAPS_POW2) && !(caps_.TextureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL)) ||
                      SDL_getenv("DRAGON_D3D9_POW2") != nullptr;
         if (pow2_only_) LOG_INFO("direct3d9: textures at powers of two only; targets padded to them");
+        modulate2x_ = (caps_.TextureOpCaps & D3DTEXOPCAPS_MODULATE2X) && !SDL_getenv("DRAGON_D3D9_NO_MODULATE2X");
+        if (!modulate2x_) LOG_INFO("direct3d9: no MODULATE2X; the ground's detail tile is left out");
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
@@ -1173,7 +1175,14 @@ public:
             // the vertex program writes one.
             DWORD stage = 0;
             for (const FfStage& st : p->ff_stages) {
-                set_stage_state(stage, D3DTSS_COLOROP, st.color_op);
+                // A card without MODULATE2X (some single-unit DX6 parts):
+                // the recipe's second argument -- the pre-lit diffuse -- on
+                // its own. MODULATE instead would halve the ground's
+                // brightness (the detail tile averages grey); this loses only
+                // the detail. DRAGON_D3D9_NO_MODULATE2X=1 forces it.
+                DWORD op = st.color_op;
+                if (op == D3DTOP_MODULATE2X && !modulate2x_) op = D3DTOP_SELECTARG2;
+                set_stage_state(stage, D3DTSS_COLOROP, op);
                 set_stage_state(stage, D3DTSS_COLORARG1, st.color_arg1);
                 set_stage_state(stage, D3DTSS_COLORARG2, st.color_arg2);
                 set_stage_state(stage, D3DTSS_ALPHAOP, st.alpha_op);
@@ -1648,6 +1657,7 @@ private:
     bool fullscreen_ = false;
     bool color16_ = false;
     bool pow2_only_ = false;      // render targets at powers of two (create_target)
+    bool modulate2x_ = true;      // D3DTEXOPCAPS_MODULATE2X
     bool no_rt_textures_ = SDL_getenv("DRAGON_D3D9_NO_RT_TEXTURES") != nullptr;
     // What a reset empties and this backend makes again (reset()).
     std::vector<D9Texture*> targets_;
