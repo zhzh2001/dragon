@@ -89,6 +89,8 @@ bool App::bake_packs(const Options& options) {
             gfx::budget_for(gfx::GraphicsSettings::preset(level, gfx::Tier::SM3, gfx::DeviceLimits{}));
         budgets.push_back(b.max_skinned_triangles);
         budgets.push_back(b.far_skinned_triangles);
+        budgets.push_back(b.max_prop_triangles);
+        budgets.push_back(b.far_prop_triangles);
         if (b.max_texture_size > texture_cap) texture_cap = b.max_texture_size;
     }
     std::vector<std::string> paths = roster_paths(options);
@@ -293,6 +295,8 @@ Options parse_options(int argc, char** argv) {
             options.fullscreen = 1;
         } else if (arg == "--windowed") {
             options.fullscreen = 0;
+        } else if (arg == "--no-vsync") {
+            options.no_vsync = true;
         } else if (arg == "--color" && i + 1 < argc) {
             options.color_bits = SDL_atoi(argv[++i]);
             if (options.color_bits != 16 && options.color_bits != 32) {
@@ -353,11 +357,13 @@ bool App::init(const Options& options) {
             }
             if (line == "fps=1") show_fps_ = true;
             if (line.rfind("fullscreen=", 0) == 0) fullscreen_ = line == "fullscreen=1";
+            if (line == "vsync=0") vsync_ = false;
             if (line.rfind("color=", 0) == 0 && !options.color_bits) options_.color_bits = line == "color=16" ? 16 : 32;
         }
     }
     if (options.show_fps) show_fps_ = true;
     if (options.fullscreen >= 0) fullscreen_ = options.fullscreen == 1;
+    if (options.no_vsync) vsync_ = false;
 #ifdef DRAGON_XP
     // The XP build has the D3D9 backend alone (docs/PORTING.md, R6).
     if (options_.gpu_driver.rfind("direct3d9", 0) != 0) options_.gpu_driver = "direct3d9";
@@ -423,6 +429,8 @@ bool App::init(const Options& options) {
     color16_ = options_.color_bits ? options_.color_bits == 16 : tier_.tier == gfx::Tier::FixedFunction;
     config.fullscreen = fullscreen_;
     config.color16 = color16_;
+    config.vsync = vsync_;
+    vsync_pending_ = vsync_;
     fullscreen_pending_ = fullscreen_;
     color16_pending_ = color16_;
     if (!device_.init(config)) return false;
@@ -1181,6 +1189,7 @@ void App::save_graphics() const {
     if (w > 0 && h > 0) file << "window=" << w << "x" << h << "\n";
     file << "fps=" << (show_fps_ ? 1 : 0) << "\n";
     file << "fullscreen=" << (fullscreen_pending_ ? 1 : 0) << "\n";
+    if (!vsync_pending_) file << "vsync=0\n";
     // The colour depth only where it is not the tier's own (16 bits for ff),
     // so a card change still starts at the new card's.
     if (color16_pending_ != (tier_pending_ == gfx::Tier::FixedFunction)) file << "color=" << (color16_pending_ ? 16 : 32) << "\n";
@@ -1286,8 +1295,12 @@ void App::build_graphics_ui() {
     if (d3d9) {
         ImGui::SameLine();
         ImGui::Checkbox("16-bit colour *", &color16_pending_);
+        ImGui::SameLine();
+        // On, a 60 Hz mode caps the frame rate at 60; off, it tears.
+        ImGui::Checkbox("vsync *", &vsync_pending_);
     }
-    const bool display_changed = fullscreen_pending_ != fullscreen_ || color16_pending_ != color16_;
+    const bool display_changed =
+        fullscreen_pending_ != fullscreen_ || color16_pending_ != color16_ || vsync_pending_ != vsync_;
     bool restart = tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver || display_changed;
     for (int s = 0; s < gfx::SETTING_COUNT; ++s) {
         const Setting setting = Setting(s);
@@ -1318,6 +1331,7 @@ void App::build_graphics_ui() {
         driver_pending_ = options_.gpu_driver;
         fullscreen_pending_ = fullscreen_;
         color16_pending_ = color16_;
+        vsync_pending_ = vsync_;
     }
     ImGui::EndDisabled();
     // Always laid out, disabled until a choice needs it: the panel's height
@@ -3962,8 +3976,8 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
-    out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str(), 0, pack.get()), tag.c_str());
-    upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str(), pack.get());
+    out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str(), 0, pack.get(), &loaded.textures), tag.c_str());
+    upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str(), pack.get(), &loaded.textures);
 
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
@@ -4075,11 +4089,11 @@ void App::spawn_bots(int count) {
 // fit one draw is split into palettes here, at load, once.
 // The tier's distance LOD for a skinned mesh, if it has one.
 void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag,
-                         const anim::ModelPack* pack) {
+                         const anim::ModelPack* pack, const std::vector<gfx::ImageData>* textures) {
     const gfx::ContentBudget& b = tier_.budget;
     if (b.far_skinned_triangles == 0 || data.indices.size() / 3 <= b.far_skinned_triangles) return;
-    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles, pack), b.far_skinned_distance,
-                    tag);
+    mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles, pack, textures),
+                    b.far_skinned_distance, tag);
 }
 
 std::unique_ptr<anim::ModelPack> App::open_model_pack(const std::string& path) const {
@@ -4137,7 +4151,8 @@ static uint32_t fingerprint(const anim::SkinnedMeshData& mesh) {
 }
 
 anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
-                                          uint32_t max_triangles, const anim::ModelPack* pack) const {
+                                          uint32_t max_triangles, const anim::ModelPack* pack,
+                                          const std::vector<gfx::ImageData>* textures) const {
     // The LOD first (anim/skin_lod.h): fewer triangles can need fewer joints.
     const uint32_t budget = max_triangles ? max_triangles : tier_.budget.max_skinned_triangles;
     anim::LodResult lod;
@@ -4147,7 +4162,7 @@ anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, con
         lod.error = baked->error;
     } else {
         if (pack && budget) LOG_WARN("%s: the pack has no LOD at %u triangles; simplifying", tag, budget);
-        lod = anim::simplify_skinned(mesh, budget);
+        lod = anim::simplify_skinned(mesh, budget, textures);
     }
     if (lod.mesh.indices.size() != mesh.indices.size()) {
         LOG_INFO("%s: LOD %zu -> %zu triangles, %zu -> %zu vertices, error %.2f%% of its size (%08x -> %08x)", tag,
@@ -4186,8 +4201,20 @@ bool App::load_prop(const char* path, PropModel& out, const char* tag,
         LOG_WARN("prop %s: %s (the run falls back to the placeholder)", path, loaded.error.c_str());
         return false;
     }
-    if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag, 0, pack.get()), tag)) return false;
-    upload_far_lod(out.mesh, data, (std::string(tag) + "_far").c_str(), pack.get());
+    // An animated prop is a creature (the grazer, in herds): the creatures'
+    // budget, not the static props' -- six grazers at 5,000 triangles each
+    // would be a herd swooped through at 30,000.
+    const uint32_t budget = clips ? tier_.budget.max_skinned_triangles : tier_.budget.max_prop_triangles;
+    if (!out.mesh.upload(device_.rhi(), shape_for_tier(data, tag, budget, pack.get(), &loaded.textures), tag)) return false;
+    if (clips) {
+        upload_far_lod(out.mesh, data, (std::string(tag) + "_far").c_str(), pack.get(), &loaded.textures);
+    } else if (const gfx::ContentBudget& b = tier_.budget;
+               b.far_prop_triangles > 0 && data.indices.size() / 3 > b.far_prop_triangles) {
+        const std::string far_tag = std::string(tag) + "_far";
+        out.mesh.upload_far(device_.rhi(),
+                            shape_for_tier(data, far_tag.c_str(), b.far_prop_triangles, pack.get(), &loaded.textures),
+                            b.far_prop_distance, far_tag.c_str());
+    }
     if (pack) {
         std::vector<rhi::Texture*> textures;
         upload_pack_textures(*pack, tag, textures);

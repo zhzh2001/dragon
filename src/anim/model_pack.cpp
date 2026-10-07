@@ -18,7 +18,9 @@ namespace {
 // the layout does; a pack from another version is refused, and the loader
 // falls back to the glTF.
 constexpr char MAGIC[8] = {'D', 'R', 'G', 'N', 'P', 'A', 'C', 'K'};
-constexpr uint32_t VERSION = 1;
+// 2: the low LODs are vertex-coloured (anim/skin_lod.h); a version-1 pack's
+// textured ones scramble their atlas, so it is refused and rebuilt.
+constexpr uint32_t VERSION = 2;
 
 class Writer {
 public:
@@ -201,7 +203,7 @@ bool build_model_pack(const char* model_path, const std::vector<uint32_t>& trian
         ModelPackLod lod;
         lod.max_triangles = budget;
         if (out.mesh.indices.size() / 3 > budget) {
-            LodResult result = simplify_skinned(out.mesh, budget);
+            LodResult result = simplify_skinned(out.mesh, budget, &loaded.textures);
             lod.error = result.error;
             lod.mesh = std::move(result.mesh);
         }

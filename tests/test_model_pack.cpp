@@ -304,7 +304,7 @@ void test_real_model() {
     CHECK(loaded.ok);
     CHECK(same_mesh(mesh, pack.mesh));
     CHECK(skeleton.count() == pack.skeleton.count());
-    const anim::LodResult direct = anim::simplify_skinned(mesh, 2500);
+    const anim::LodResult direct = anim::simplify_skinned(mesh, 2500, &loaded.textures);
     CHECK(fingerprint(direct.mesh) == fingerprint(pack.lod(2500)->mesh));
     // And a texture at the Very low cap is the trimmed chain.
     if (!loaded.textures.empty()) {

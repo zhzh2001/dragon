@@ -67,6 +67,7 @@ struct Options {
     int fullscreen = -1;
     // --color 16|32 over the saved choice (D3D9), 0 for neither.
     int color_bits = 0;
+    bool no_vsync = false;  // --no-vsync over the saved choice (D3D9)
     // --tier modern|sm3|sm2|ff: shape the content for a retro tier
     // (gfx/render_tier.h), on whatever backend is running.
     gfx::Tier tier = gfx::Tier::Modern;
@@ -439,17 +440,21 @@ private:
     // for the ff tier, whose cards' memory is the limit). Both need a restart.
     bool fullscreen_ = false, fullscreen_pending_ = false;
     bool color16_ = false, color16_pending_ = false;
+    bool vsync_ = true, vsync_pending_ = true;  // D3D9, restart-applied
     void draw_fps();
     // Rewrites one key=value line of graphics.cfg, leaving the rest as saved:
     // the window and the readout change outside Apply, and must not save the
     // panel's unapplied tier or renderer with them.
     void save_graphics_key(const std::string& key, const std::string& value) const;
     // The mesh a tier uploads: the LOD at `max_triangles` (0: the tier's
-    // budget), then the palette split. From `pack` when it holds that LOD.
+    // budget), then the palette split. From `pack` when it holds that LOD;
+    // with the model's decoded `textures`, a low LOD is vertex-coloured
+    // (anim/skin_lod.h).
     anim::SkinnedMeshData shape_for_tier(const anim::SkinnedMeshData& mesh, const char* tag,
-                                         uint32_t max_triangles = 0, const anim::ModelPack* pack = nullptr) const;
+                                         uint32_t max_triangles = 0, const anim::ModelPack* pack = nullptr,
+                                         const std::vector<gfx::ImageData>* textures = nullptr) const;
     void upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& data, const char* tag,
-                        const anim::ModelPack* pack = nullptr);
+                        const anim::ModelPack* pack = nullptr, const std::vector<gfx::ImageData>* textures = nullptr);
     // A retro tier's model source: the pack beside `path` when there is a
     // fresh one and the device takes its formats, else null (the glTF route).
     std::unique_ptr<anim::ModelPack> open_model_pack(const std::string& path) const;

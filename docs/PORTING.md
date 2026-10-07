@@ -1155,6 +1155,39 @@ Whole runs of `--run 7 --autopilot`, fullscreen, 3600 frames:
 | Minimal, fixed step (the slow stretch at ~26 ms) | 57.8 fps | 17.0 ms | 26.7 ms |
 | Lowest, fixed step (the slow stretch at ~14 ms) | 87.8 fps | 11.7 ms | 15.8 ms |
 
+**The low LODs, made whole (2026-10-06).** The playtest saw the dragon
+"very broken" at Lowest and "a bit broken" from Minimal up. Renders split
+the cause: in the bind pose the 2.5K LOD was nearly the 10K one and even
+600 triangles kept the shape, but every LOD at 5K and below drew its
+texture as a scramble of patches. Reaching those budgets means collapsing
+across the UV seams of an atlas cut into hundreds of islands
+(`skin_lod.cpp` explains why holding them stalls at 15-20K), so the
+surviving vertices map their triangles across islands; a 512 texture only
+showed the scramble sharper. Two things tried first changed nothing on a
+render and were dropped: a skinning term in the collapse cost (each
+vertex's weights' blend of its joints' centres of influence), and the
+LOD's normals recomputed from its faces on their own.
+
+- **At 5,000 triangles and below the LOD is vertex-coloured**
+  (`anim::VERTEX_COLOUR_TRIANGLES`): every full-mesh vertex gives its base
+  colour to the nearest LOD vertex of the same texture, each LOD vertex
+  takes the mean, the maps are dropped, the normals are recomputed from
+  the LOD's faces, and the seam copies the UVs made are welded. The
+  dragon is clean at 5K, 2.5K, 1.2K and 600; and the weld halves the
+  vertices it costs on a card that pays per vertex (the 1.2K dragon 1,339
+  -> 599, its far LOD 238 -> 127). Model packs are version 2, so an older
+  pack's scrambled LODs are refused and rebuilt (`--bake-packs`).
+- **The run's static props have their own budget**: 5,000 near and 800
+  past 80 m from Low through Minimal, 2,500 and 400 past 60 m at Lowest,
+  where they had the creatures' 1,200 near and 248 past 45 m -- a
+  hard-surface watchtower lost a wall at 1,200 and was a ruin at 88 m.
+  The grazer, an animated prop in herds, keeps the creatures' budget.
+
+The frame rate the playtest read under 60 at Lowest is vsync: a 640x480
+mode at 60 Hz caps it there, and the 82 fps above was measured with it
+off (`DRAGON_D3D9_VSYNC=0`). Vsync is now a Graphics-panel setting
+(`--no-vsync`).
+
 **For the cards below the M6.** A Rage XL (and the DX6/DX7 parts like it)
 takes only power-of-two textures, and some drivers of that age cannot
 render into a texture from D3D9 at all; either would have meant no

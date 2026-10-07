@@ -44,6 +44,7 @@ public:
         bool fullscreen = false;
         // 16-bit colour on D3D9: a 5-6-5 world target, and mode when fullscreen.
         bool color16 = false;
+        bool vsync = true;  // D3D9: present on the refresh (rhi::DeviceConfig::vsync)
     };
 
     bool init(const Config& config);

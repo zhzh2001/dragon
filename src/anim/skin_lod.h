@@ -15,6 +15,10 @@
 
 #include "anim/skinned_mesh.h"
 
+namespace gfx {
+struct ImageData;
+}
+
 namespace anim {
 
 struct LodResult {
@@ -28,6 +32,18 @@ struct LodResult {
 // cut by the same ratio), unused vertices dropped and the indices ordered for
 // the post-transform cache. Returned unchanged when it already fits or when
 // `max_triangles` is 0.
-LodResult simplify_skinned(const SkinnedMeshData& mesh, uint32_t max_triangles);
+//
+// At VERTEX_COLOUR_TRIANGLES or fewer, with the model's decoded `textures`,
+// the LOD is drawn untextured instead: each vertex carries the mean of the
+// base colour over the part of the full surface nearest it, and the
+// submeshes' maps are dropped. Reaching a few thousand triangles means
+// collapsing across the UV seams of an atlas cut into hundreds of islands,
+// and the surviving vertices then map their triangles across islands -- the
+// texture came out as a scramble of patches on every triangle, which was the
+// "broken" 600- and 1,200-triangle dragon. A sharper texture only showed the
+// scramble better.
+constexpr uint32_t VERTEX_COLOUR_TRIANGLES = 5000;
+LodResult simplify_skinned(const SkinnedMeshData& mesh, uint32_t max_triangles,
+                           const std::vector<gfx::ImageData>* textures = nullptr);
 
 }  // namespace anim

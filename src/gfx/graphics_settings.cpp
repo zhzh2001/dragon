@@ -46,6 +46,9 @@ const SettingInfo INFO[SETTING_COUNT] = {
 // (a null label above) it is never read, and the preset takes Minimal's.
 constexpr uint32_t MODEL_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 2500, 1200, 600};
 constexpr uint32_t FAR_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 400, 250, 120};
+constexpr uint32_t PROP_TRIANGLES[QUALITY_LEVELS] = {0, 20000, 10000, 5000, 5000, 5000, 2500};
+constexpr uint32_t FAR_PROP_TRIANGLES[QUALITY_LEVELS] = {0, 3000, 1500, 800, 800, 800, 400};
+constexpr float FAR_PROP_DISTANCE[QUALITY_LEVELS] = {0.0f, 400.0f, 200.0f, 80.0f, 80.0f, 80.0f, 60.0f};
 constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f, 30.0f};
 constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 8.0f, 8.0f};
 constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f, 250.0f};
@@ -189,6 +192,9 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     ContentBudget b;
     const int models = g[Setting::Models];
     b.max_skinned_triangles = MODEL_TRIANGLES[models];
+    b.max_prop_triangles = PROP_TRIANGLES[models];
+    b.far_prop_triangles = FAR_PROP_TRIANGLES[models];
+    b.far_prop_distance = FAR_PROP_DISTANCE[models];
     b.far_skinned_triangles = FAR_TRIANGLES[models];
     b.far_skinned_distance = FAR_DISTANCE[models];
     b.terrain_cell_scale = TERRAIN_SCALE[g[Setting::Terrain]];

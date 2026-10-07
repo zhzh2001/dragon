@@ -200,6 +200,9 @@ struct DeviceConfig {
     bool fullscreen = false;
     // 16-bit colour (D3D9): a 5-6-5 display mode when fullscreen, dithered.
     bool color16 = false;
+    // Present on the display's refresh (D3D9). Off: at once, tearing, and
+    // the frame rate is the frame's own instead of capped at the refresh.
+    bool vsync = true;
 };
 
 enum class Backend : uint8_t { SdlGpu, Direct3D9, Direct3D11 };

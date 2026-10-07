@@ -48,6 +48,7 @@ bool Device::init(const Config& config) {
     rhi_config.fixed_function = active_tier().fixed_function;
     rhi_config.fullscreen = config.fullscreen;
     rhi_config.color16 = config.color16;
+    rhi_config.vsync = config.vsync;
     // The GPU debug layer: on in a development build, off in a package (a
     // player has no use for its validation, and some D3D12 implementations,
     // D3DMetal under Wine among them, crash on asking for it).

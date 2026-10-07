@@ -83,6 +83,14 @@ int default_preset(Tier tier);
 // (through RenderTier, gfx/render_tier.h).
 struct ContentBudget {
     uint32_t max_skinned_triangles = 0;  // 0: the model's own
+    // The run's props (towers, the hoard): static, near only within the far
+    // distance, and hard-surfaced, which the simplifier wrecks at a
+    // creature's budget -- a 1,200-triangle watchtower lost a wall.
+    uint32_t max_prop_triangles = 0;     // 0: the model's own
+    // And their distance LOD: a 40 m tower at 90 m is not a speck, and the
+    // creatures' 248 triangles past 45 m read as a ruin.
+    uint32_t far_prop_triangles = 0;     // 0: no distance LOD
+    float far_prop_distance = 0.0f;
     uint32_t far_skinned_triangles = 0;  // 0: no distance LOD
     float far_skinned_distance = 0.0f;
     float terrain_cell_scale = 1.0f;

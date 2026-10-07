@@ -432,11 +432,11 @@ public:
         pp_.BackBufferHeight = UINT(std::max(h, 1));
         pp_.hDeviceWindow = hwnd_;
         pp_.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
-        // DRAGON_D3D9_VSYNC=0: present at once, tearing, instead of on the
-        // next refresh -- for measuring a frame's real cost.
-        if (const char* vsync = SDL_getenv("DRAGON_D3D9_VSYNC"); vsync && vsync[0] == '0') {
-            pp_.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
-        }
+        // Vsync off (the Graphics panel's "vsync", or DRAGON_D3D9_VSYNC=0):
+        // present at once, tearing, instead of on the next refresh. On, a
+        // 60 Hz mode caps the frame rate at 60 whatever the frame costs.
+        const char* vsync_env = SDL_getenv("DRAGON_D3D9_VSYNC");
+        if (!config.vsync || (vsync_env && vsync_env[0] == '0')) pp_.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
         // Exclusive fullscreen at the window's size: the card scans out the
         // game's own mode, not a 1024x768 desktop, and a present flips
         // rather than copying into the desktop. On the G41's M6, whose

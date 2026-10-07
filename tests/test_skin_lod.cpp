@@ -10,6 +10,7 @@
 #include <string>
 
 #include "anim/skin_lod.h"
+#include "gfx/texture.h"
 
 static int g_checks = 0, g_failures = 0;
 #define CHECK(cond)                                                       \
@@ -104,6 +105,37 @@ int main() {
         CHECK(lod.mesh.submeshes[0].base_color_texture == 0 && lod.mesh.submeshes[1].base_color_texture == 1);
         CHECK(lod.mesh.submeshes[1].index_offset == lod.mesh.submeshes[0].index_count);
         CHECK(lod.mesh.submeshes[0].index_count + lod.mesh.submeshes[1].index_count == lod.mesh.indices.size());
+    }
+
+    // At a low budget with the textures, untextured and vertex-coloured
+    // (skin_lod.h): the maps dropped, each half carrying its texture's
+    // colour -- red on the left, blue on the right -- and every triangle
+    // still within the budget.
+    {
+        std::vector<gfx::ImageData> textures(2);
+        for (int t = 0; t < 2; ++t) {
+            textures[size_t(t)].width = 2;
+            textures[size_t(t)].height = 2;
+            for (int p = 0; p < 4; ++p) {
+                const uint8_t texel[4] = {uint8_t(t == 0 ? 255 : 0), 0, uint8_t(t == 1 ? 255 : 0), 255};
+                textures[size_t(t)].rgba.insert(textures[size_t(t)].rgba.end(), texel, texel + 4);
+            }
+        }
+        const anim::LodResult coloured = anim::simplify_skinned(full, 1000, &textures);
+        CHECK(coloured.mesh.indices.size() / 3 <= 1000 + 2);
+        bool untextured = true;
+        for (const anim::SkinnedSubmesh& s : coloured.mesh.submeshes) untextured = untextured && s.base_color_texture < 0;
+        CHECK(untextured);
+        int red_left = 0, blue_right = 0, others = 0;
+        for (const anim::SkinnedVertex& v : coloured.mesh.vertices) {
+            if (v.position.x < 4.5f && v.color.x > 0.9f && v.color.z < 0.1f) ++red_left;
+            else if (v.position.x > 5.5f && v.color.z > 0.9f && v.color.x < 0.1f) ++blue_right;
+            else if (v.position.x < 4.5f || v.position.x > 5.5f) ++others;
+        }
+        CHECK(red_left > 0 && blue_right > 0 && others == 0);
+        // Fewer vertices than the textured LOD of the same budget: the seam
+        // copies are welded.
+        CHECK(coloured.mesh.vertices.size() <= anim::simplify_skinned(full, 1000).mesh.vertices.size());
     }
 
     std::printf("skin_lod: %d checks, %d failures\n", g_checks, g_failures);
