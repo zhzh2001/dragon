@@ -1361,7 +1361,26 @@ it is for the cards whose driver takes T&L (the M6). Where Windows 7's
 `d3d9.dll` sits beside the exe, its JIT is faster than this C++ on the
 foliage (1.7 ms against 7.1: per-vertex `pow` and `exp`, four vertices at
 a time in the JIT's SSE) and slower on everything batched. Still to
-measure: all three under XP on the Atom (the BIOS back in IDE), and the M6.
+measure: the M6.
+
+Under XP on the Atom the order turns over, because XP's runtime compiles
+the programs (ff Minimal, 640x480, headless, median frame):
+
+| | program | `ff` | `cpu` |
+|---|---|---|---|
+| default view | **13.7** | 14.4 | 23.2 |
+| 900 frames into a hoard run | **18.7** | 19.2 | 33.0 |
+
+The terrain costs the same every way (8.8-9.4 ms: the GMA and its driver,
+not the vertices), and the C++ is 3-5x slower than XP's SSE on the lit
+programs (the creatures 11.8 ms against 3.1, the trees 3.7 against 0.8):
+per-vertex `pow` and `exp` where the JIT runs four vertices at once. So
+the path follows the runtime: unset, a software-processing device on the
+ff tier takes `cpu` where `d3d9.dll` exports `Direct3DCreate9On12`
+(Windows 10's, the interpreter) and keeps the programs elsewhere (XP, 7,
+and a Windows 7 `d3d9.dll` beside the exe); `DRAGON_D3D9_VERTEX_PATH=
+program|ff|cpu` overrides it. Windows 8 and 8.1 are unmeasured and keep
+the programs.
 
 So a card the sm2 tier fits by its pixel shaders can still have software
 vertices, and then sm2's own default (Medium) runs at 12 fps; the tier's

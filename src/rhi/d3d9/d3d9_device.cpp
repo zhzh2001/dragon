@@ -640,15 +640,27 @@ public:
         if (const char* v = SDL_getenv("DRAGON_D3D9_INDEX16")) index16_only_ = v[0] == '1';
         if (index16_only_) LOG_INFO("direct3d9: no 32-bit indices; 32-bit draws rebased into 16-bit copies");
         // The ff tier's terrain without its vertex program (docs/PORTING.md,
-        // "Three vertex paths"): DRAGON_D3D9_VERTEX_PATH=ff or cpu.
+        // "Three vertex paths"): DRAGON_D3D9_VERTEX_PATH=program, ff or cpu.
+        // Unset, it follows the runtime: XP's and Windows 7's d3d9.dll compile a
+        // software-processed vertex program to SSE (and beat path "cpu" by
+        // 3-5x on lit vertices on the Atom under XP), Windows 10's interprets
+        // it (path "cpu" 265 -> 29 ms a frame there). Windows 10's is the one
+        // that exports Direct3DCreate9On12 -- and a Windows 7 d3d9.dll placed
+        // beside the exe does not, so it keeps its programs. Windows 8 and
+        // 8.1 have not been measured and keep theirs.
+        if (ff_ && software_vp_) {
+            HMODULE runtime = GetModuleHandleA("d3d9.dll");
+            if (runtime && GetProcAddress(runtime, "Direct3DCreate9On12")) vertex_path_ = VertexPath::Cpu;
+        }
         if (const char* v = SDL_getenv("DRAGON_D3D9_VERTEX_PATH"); v && ff_) {
+            vertex_path_ = VertexPath::Program;
             if (!std::strcmp(v, "ff")) vertex_path_ = VertexPath::FixedFunction;
             if (!std::strcmp(v, "cpu")) vertex_path_ = VertexPath::Cpu;
         }
         if (vertex_path_ != VertexPath::Program) {
-            LOG_INFO("direct3d9: the terrain's vertices %s; guard band %.0f..%.0f x %.0f..%.0f",
-                     vertex_path_ == VertexPath::Cpu ? "transformed here and drawn pre-transformed"
-                                                     : "through fixed-function vertex processing",
+            LOG_INFO("direct3d9: %s; guard band %.0f..%.0f x %.0f..%.0f",
+                     vertex_path_ == VertexPath::Cpu ? "the ff programs' vertices transformed here and drawn pre-transformed"
+                                                     : "the terrain's vertices through fixed-function vertex processing",
                      caps_.GuardBandLeft, caps_.GuardBandRight, caps_.GuardBandTop, caps_.GuardBandBottom);
         }
         if (!modulate2x_) LOG_INFO("direct3d9: no MODULATE2X; the ground's detail tile is left out");
