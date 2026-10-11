@@ -32,6 +32,10 @@ struct D9Buffer {
     std::vector<uint8_t> index_data;
     IDirect3DIndexBuffer9* ib = nullptr;
     IndexSize ib_size = IndexSize::U16;
+    // On a card without 32-bit indices (D3D9Device::index16_only_), each
+    // 32-bit draw range as a 16-bit buffer of its own, rebased to its lowest
+    // index; keyed by the range's first index and primitive count.
+    std::unordered_map<uint64_t, IDirect3DIndexBuffer9*> narrow;
     bool dynamic = false;
     // A dynamic vertex buffer is in D3DPOOL_DEFAULT, which a device reset
     // (fullscreen, Alt-Tab) empties: its data is written here first and
@@ -122,6 +126,24 @@ template <typename T>
 void release(T*& p) {
     if (p) p->Release();
     p = nullptr;
+}
+
+// An index buffer's 16-bit copies (D9Buffer::narrow), whenever its data or
+// its width changes.
+void release_narrow(D9Buffer* b) {
+    for (auto& entry : b->narrow) release(entry.second);
+    b->narrow.clear();
+}
+
+// How many indices a draw of `prims` primitives reads.
+size_t index_count(D3DPRIMITIVETYPE type, UINT prims) {
+    switch (type) {
+        case D3DPT_TRIANGLELIST: return size_t(prims) * 3;
+        case D3DPT_TRIANGLESTRIP: return prims ? size_t(prims) + 2 : 0;
+        case D3DPT_LINELIST: return size_t(prims) * 2;
+        case D3DPT_LINESTRIP: return prims ? size_t(prims) + 1 : 0;
+        default: return prims;
+    }
 }
 
 std::string read_file(const std::string& path) {
@@ -519,6 +541,16 @@ public:
                      SDL_getenv("DRAGON_D3D9_POW2") != nullptr;
         if (pow2_only_) LOG_INFO("direct3d9: textures at powers of two only; targets padded to them");
         modulate2x_ = (caps_.TextureOpCaps & D3DTEXOPCAPS_MODULATE2X) && !SDL_getenv("DRAGON_D3D9_NO_MODULATE2X");
+        // A MaxVertexIndex of 0xFFFF or less means no D3DFMT_INDEX32. The
+        // GMA 3150's XP driver says so and means it: handed the terrain's and
+        // the creatures' 32-bit indices, it read them as 16-bit pairs and
+        // drew a few huge triangles fanned from vertex 0, the dragon not at
+        // all. (The M6's Omega driver says the same and copes.) There each
+        // 32-bit draw range is drawn from a 16-bit copy of its own, rebased
+        // to its lowest index. DRAGON_D3D9_INDEX16=1 forces it, =0 refuses it.
+        index16_only_ = caps_.MaxVertexIndex <= 0xFFFF;
+        if (const char* v = SDL_getenv("DRAGON_D3D9_INDEX16")) index16_only_ = v[0] == '1';
+        if (index16_only_) LOG_INFO("direct3d9: no 32-bit indices; 32-bit draws rebased into 16-bit copies");
         if (!modulate2x_) LOG_INFO("direct3d9: no MODULATE2X; the ground's detail tile is left out");
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
@@ -856,6 +888,7 @@ public:
         dynamic_.erase(std::remove(dynamic_.begin(), dynamic_.end(), b), dynamic_.end());
         release(b->vb);
         release(b->ib);
+        release_narrow(b);
         delete b;
     }
 
@@ -866,6 +899,7 @@ public:
         if (b->usage == BufferUsage::Index) {
             if (b->index_data.size() < size) b->index_data.resize(size);
             release(b->ib);  // rebuilt at the next bind
+            release_narrow(b);
             return b->index_data.data();
         }
         if (b->dynamic) {
@@ -1228,6 +1262,7 @@ public:
         if (!b) return;
         if (!b->ib || b->ib_size != size) {
             release(b->ib);
+            release_narrow(b);
             const D3DFORMAT format = size == IndexSize::U32 ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
             const UINT bytes = UINT(b->index_data.size());
             if (FAILED(dev_->CreateIndexBuffer(bytes, (software_vp_ ? 0 : D3DUSAGE_WRITEONLY) | buffer_usage(), format, buffer_pool(false), &b->ib,
@@ -1514,9 +1549,8 @@ private:
     DWORD sampler_state_[16][16] = {};
     bool sampler_state_known_[16][16] = {};
 
-    // A card caps the primitives one draw may carry (MaxPrimitiveCount: ATI's
-    // R300 and R400 parts allow 1,048,575, and the terrain is 1.39 million
-    // triangles), so a bigger list draw is issued in pieces.
+    // One indexed draw, through the range and width workarounds below to
+    // issue_indexed.
     void draw_indexed_chunked(D3DPRIMITIVETYPE type, INT base_vertex, UINT vertices, UINT start_index, UINT prims) {
         PROFILE(PROF_DRAW);
         // The vertex range the draw touches. Hardware ignores it, but D3D9's
@@ -1527,12 +1561,12 @@ private:
         // min..max, read once from the index data the backend keeps and
         // remembered per draw range.
         UINT min_index = 0;
-        if (software_vp_ && bound_index_) {
+        const bool narrow = index16_only_ && bound_index_ && bound_index_->ib_size == IndexSize::U32;
+        if ((software_vp_ || narrow) && bound_index_) {
             const uint64_t key = (uint64_t(start_index) << 32) ^ uint64_t(prims) ^ (uint64_t(reinterpret_cast<uintptr_t>(bound_index_)) << 7);
             auto it = index_ranges_.find(key);
             if (it == index_ranges_.end()) {
-                const UINT per_prim_all = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : prims ? (type == D3DPT_TRIANGLESTRIP ? prims + 2 : 1) : 1;
-                const size_t count = type == D3DPT_TRIANGLESTRIP ? size_t(prims) + 2 : size_t(prims) * per_prim_all;
+                const size_t count = index_count(type, prims);
                 uint32_t lo = UINT32_MAX, hi = 0;
                 const std::vector<uint8_t>& data = bound_index_->index_data;
                 if (bound_index_->ib_size == IndexSize::U32) {
@@ -1551,6 +1585,21 @@ private:
             vertices = it->second.second - it->second.first + 1;
         }
         if (profile_.on && pipeline_) profile_.find(pipeline_->desc.name).vertices += vertices;
+        if (narrow) {
+            if (IDirect3DIndexBuffer9* ib16 = narrow_indices(type, start_index, prims, min_index, vertices)) {
+                dev_->SetIndices(ib16);
+                issue_indexed(type, base_vertex + INT(min_index), 0, vertices, 0, prims);
+                dev_->SetIndices(bound_index_->ib);
+                return;
+            }
+        }
+        issue_indexed(type, base_vertex, min_index, vertices, start_index, prims);
+    }
+
+    // A card caps the primitives one draw may carry (MaxPrimitiveCount: ATI's
+    // R300 and R400 parts allow 1,048,575, and the terrain is 1.39 million
+    // triangles), so a bigger list draw is issued in pieces.
+    void issue_indexed(D3DPRIMITIVETYPE type, INT base_vertex, UINT min_index, UINT vertices, UINT start_index, UINT prims) {
         const UINT limit = caps_.MaxPrimitiveCount ? caps_.MaxPrimitiveCount : prims;
         const UINT per_prim = type == D3DPT_TRIANGLELIST ? 3 : type == D3DPT_LINELIST ? 2 : 0;
         if (prims <= limit || per_prim == 0) {
@@ -1561,6 +1610,38 @@ private:
             dev_->DrawIndexedPrimitive(type, base_vertex, min_index, vertices, start_index + done * per_prim,
                                        std::min(limit, prims - done));
         }
+    }
+
+    // The bound 32-bit range [start_index, +prims) as a 16-bit buffer, each
+    // index less `lo` (the range's lowest), made once per range. Null when the
+    // range spans more than 16 bits can reach, and the draw goes as it is.
+    IDirect3DIndexBuffer9* narrow_indices(D3DPRIMITIVETYPE type, UINT start_index, UINT prims, UINT lo, UINT vertices) {
+        if (vertices > 0x10000) {
+            if (!narrow_warned_) {
+                LOG_WARN("direct3d9: a draw spans %u vertices, past 16-bit indices; drawn with 32-bit ones", vertices);
+                narrow_warned_ = true;
+            }
+            return nullptr;
+        }
+        const uint64_t key = (uint64_t(start_index) << 32) | prims;
+        auto it = bound_index_->narrow.find(key);
+        if (it != bound_index_->narrow.end()) return it->second;
+        const size_t count = index_count(type, prims);
+        const uint32_t* src = reinterpret_cast<const uint32_t*>(bound_index_->index_data.data());
+        if (count == 0 || start_index + count > bound_index_->index_data.size() / 4) return nullptr;
+        IDirect3DIndexBuffer9* ib = nullptr;
+        if (FAILED(dev_->CreateIndexBuffer(UINT(count * 2), (software_vp_ ? 0 : D3DUSAGE_WRITEONLY) | buffer_usage(),
+                                           D3DFMT_INDEX16, buffer_pool(false), &ib, nullptr)))
+            return nullptr;
+        uint16_t* dst = nullptr;
+        if (FAILED(ib->Lock(0, 0, reinterpret_cast<void**>(&dst), 0))) {
+            ib->Release();
+            return nullptr;
+        }
+        for (size_t i = 0; i < count; ++i) dst[i] = uint16_t(src[start_index + i] - lo);
+        ib->Unlock();
+        bound_index_->narrow.emplace(key, ib);
+        return ib;
     }
 
     D3DPRIMITIVETYPE primitive(uint32_t count, UINT* prims) const {
@@ -1658,6 +1739,8 @@ private:
     bool color16_ = false;
     bool pow2_only_ = false;      // render targets at powers of two (create_target)
     bool modulate2x_ = true;      // D3DTEXOPCAPS_MODULATE2X
+    bool index16_only_ = false;   // no D3DFMT_INDEX32 (MaxVertexIndex <= 0xFFFF)
+    bool narrow_warned_ = false;
     bool no_rt_textures_ = SDL_getenv("DRAGON_D3D9_NO_RT_TEXTURES") != nullptr;
     // What a reset empties and this backend makes again (reset()).
     std::vector<D9Texture*> targets_;

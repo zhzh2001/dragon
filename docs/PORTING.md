@@ -1214,6 +1214,46 @@ triangles but 2,200 to 2,600 vertices each, from texture seams).
 `DRAGON_FRAME_PROFILE=N` profiles from frame N, to take that stretch
 alone.
 
+**A second machine: the Atom D525 and its GMA 3150 (2026-10-11).** The
+PT55D board (Atom D525, 1.8 GHz, 8 GB) runs the G41's own XP disk in IDE
+mode, agent and all, beside a Windows 10 install. The GMA reports ps_2_0,
+no vertex shaders and no T&L, so the sm2 tier with pure software vertex
+processing, under Intel's XP driver (14.37.50.4.5260, installed from its
+INF) and under Windows 10's (a modded "PHDGD" build) alike.
+
+- **Windows 10 is no place to measure such a card.** The same frame took
+  1.8-2.2 s there (sm2 Minimal) and 28 ms under XP: Windows 10's D3D9
+  software vertex pipeline cost ~50 us a vertex on this CPU, inside the
+  draw calls, whatever the resolution.
+- **The GMA's XP driver has no 32-bit indices** (MaxVertexIndex 65534)
+  and does not pretend otherwise: given the terrain's and the creatures'
+  32-bit index buffers it drew a few huge triangles fanned from one vertex
+  (sm2) or a black world (ff), and no dragon. The M6's Omega driver reports
+  the same cap and copes, which is why the G41 never showed it. Where the
+  cap is under 0x10000 each 32-bit draw range is now drawn from a 16-bit
+  copy of its own, rebased to its lowest index (`D9Buffer::narrow`;
+  `DRAGON_D3D9_INDEX16=1` forces it, `=0` refuses it). Both tiers then
+  match the Mac's `--tier` frames. The M6 takes the same path now and has
+  not been run with it yet.
+
+640x480 fullscreen, hoard run seed 7, autopilot, 3,600 frames, vsync off,
+on the Atom under XP:
+
+| | Average | Median | 1% low |
+|---|---|---|---|
+| ff, Minimal | 91.4 fps | 11.4 ms | 14.8 ms |
+| ff, Lowest | 118.6 fps | 8.8 ms | 11.2 ms |
+| sm2, Minimal | 59.8 fps | 14.5 ms | 29.8 ms |
+| sm2, Very low | 31.8 fps | 36.1 ms | 55.7 ms |
+| sm2, Low (1,200 frames) | 23.5 fps | 37.6 ms | 75.4 ms |
+| sm2, Medium (1,200 frames) | 12.6 fps | 71.3 ms | 127.7 ms |
+
+So a card the sm2 tier fits by its pixel shaders can still have software
+vertices, and then sm2's own default (Medium) runs at 12 fps; the tier's
+default should follow the vertex processing, not only the shader model. sm2 Minimal
+also hides the river behind the coarse ground, on the Mac's `--tier sm2`
+as well; the ff tier's water, built on the wet cells only, shows it.
+
 **Not done:** the other cards. The order is the G41 under XP SP3 with
 each card (record the exports, then `dragon.exe` with no flags, then the
 R4/R5 budgets); XP's own D3D9 drivers will have their quirks, and the
