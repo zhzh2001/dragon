@@ -1306,6 +1306,42 @@ on the Atom under XP:
 | sm2, Low (1,200 frames) | 23.5 fps | 37.6 ms | 75.4 ms |
 | sm2, Medium (1,200 frames) | 12.6 fps | 71.3 ms | 127.7 ms |
 
+**Three vertex paths (2026-10-11).** With the interpreter found, the ff
+tier's terrain can now be drawn three ways, picked by
+`DRAGON_D3D9_VERTEX_PATH` (unset: the vertex program, as before):
+
+- `ff`: fixed-function vertex processing. view_proj goes in as D3D9's
+  transforms with the camera folded into the view (D3D range-fogs on
+  camera-space distance), the uv comes from camera-space texture
+  generation through a texture matrix, the fog is ff_fog's two modes as
+  D3D vertex fog, and the colour is packed to a D3DCOLOR copy of the
+  buffer in FVF order. On a card with T&L this runs on the card (the M6's
+  driver emulates it); without, in D3D9's software path.
+- `cpu`: the backend transforms the draw's vertex range itself with the
+  program's arithmetic, culls triangles wholly outside one plane, clips
+  against the near plane, and draws pre-transformed vertices (XYZRHW,
+  the fog factor in the specular alpha): D3D9 does no vertex work.
+
+The bake marks the terrain's recipe `"transform": "terrain"` with the
+registers it reads. On x99 (Windows 10, pure software processing, ff
+Minimal) both frames match the program's (cpu within 4 levels, ff within
+17 on 0.02% of the pixels) and `DRAGON_D3D9_PROFILE`, which now times
+each pipeline, gives:
+
+| ms a frame in the draw calls | program | cpu |
+|---|---|---|
+| terrain (238 draws, 4,708 vertices) | 7.55 | 0.85 |
+| foliage (a draw per tree, 1,257 vertices) | 11.9 | -- |
+| skinned (698 vertices) | 5.0 | -- |
+| mesh, water, sky | 2.8 | -- |
+
+On Windows 10 the foliage is now the frame: few vertices, but a draw per
+tree, each paying the interpreter's setup. It, the creatures and the props
+are the next to port (the shared ff_lit lighting once, the trees batched
+into one draw); fixed function cannot sway or light the way ff_lit does,
+so `ff` stays the terrain's (and the pre-lit props') path. Still to
+measure: all three on the Atom under XP and Windows 10, and on the M6.
+
 So a card the sm2 tier fits by its pixel shaders can still have software
 vertices, and then sm2's own default (Medium) runs at 12 fps; the tier's
 default should follow the vertex processing, not only the shader model. sm2 Minimal
