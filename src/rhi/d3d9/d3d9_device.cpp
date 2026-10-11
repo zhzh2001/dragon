@@ -36,6 +36,13 @@ struct D9Buffer {
     // 32-bit draw range as a 16-bit buffer of its own, rebased to its lowest
     // index; keyed by the range's first index and primitive count.
     std::unordered_map<uint64_t, IDirect3DIndexBuffer9*> narrow;
+    // A static vertex buffer's data, kept when a pipeline may be drawn
+    // without its vertex program (D3D9Device::vertex_path_), and the packed
+    // copy fixed function reads (position, D3DCOLOR diffuse: 16 bytes).
+    std::vector<uint8_t> cpu;
+    IDirect3DVertexBuffer9* packed = nullptr;
+    void* locked = nullptr;
+    uint32_t locked_size = 0;
     bool dynamic = false;
     // A dynamic vertex buffer is in D3DPOOL_DEFAULT, which a device reset
     // (fullscreen, Alt-Tab) empties: its data is written here first and
@@ -111,6 +118,12 @@ struct D9Pipeline {
     int ff_fog_color = -1;            // the fog colour's register in the scene block
     int ff_output_grade = -1;         // the grade's (x exposure)
     int ff_slot_stage[16];            // fragment texture slot -> stage, or -1
+    // What the vertex program computes, for drawing without it
+    // (DRAGON_D3D9_VERTEX_PATH): the terrain's transform, and where its
+    // inputs sit in the scene block (registers) and in the vertex.
+    bool ff_terrain = false;
+    int ff_view_proj = -1, ff_camera = -1, ff_fog_range = -1;
+    uint32_t position_offset = 0, colour_offset = 0;
 };
 
 struct D9Pass {
@@ -262,6 +275,12 @@ bool parse_ff(const std::string& json, D9Pipeline& p) {
     p.ff_alpha_test = number("\"alpha_test\"", -1.0f);
     p.ff_fog_color = int(number("\"fog_color\"", -1.0f));
     p.ff_output_grade = int(number("\"output_grade\"", -1.0f));
+    p.ff_view_proj = int(number("\"view_proj\"", -1.0f));
+    p.ff_camera = int(number("\"camera_position\"", -1.0f));
+    p.ff_fog_range = int(number("\"fog_range\"", -1.0f));
+    const size_t transform = body.find("\"transform\"");
+    p.ff_terrain = transform != std::string::npos && body.compare(body.find('"', body.find(':', transform)), 9, "\"terrain\"") == 0 &&
+                   p.ff_view_proj >= 0 && p.ff_camera >= 0 && p.ff_fog_color >= 0 && p.ff_fog_range >= 0;
     return true;
 }
 
@@ -350,6 +369,9 @@ struct Profile {
         // Vertices run through software vertex processing: each is sent to
         // the card transformed, and on a PCI card that traffic is the frame.
         uint64_t vertices = 0;
+        // Wall time inside the draw calls (D3D9's own vertex processing
+        // runs there, synchronously, under software processing).
+        double seconds = 0;
     };
     std::vector<std::pair<std::string, Work>> work;
     uint64_t from = 0;    // the frame counting starts at
@@ -375,6 +397,21 @@ struct Profile {
     // Queries issued this frame, read back at its end; spare ones are kept.
     std::vector<std::pair<std::string, IDirect3DQuery9*>> pending;
     std::vector<IDirect3DQuery9*> spare;
+};
+// The time a draw of one pipeline takes, into its Work.
+struct WorkTimer {
+    Profile& profile;
+    const std::string* name;
+    LARGE_INTEGER start = {};
+    WorkTimer(Profile& p, const std::string* n) : profile(p), name(n) {
+        if (profile.on && name) QueryPerformanceCounter(&start);
+    }
+    ~WorkTimer() {
+        if (!profile.on || !name) return;
+        LARGE_INTEGER end;
+        QueryPerformanceCounter(&end);
+        profile.find(*name).seconds += double(end.QuadPart - start.QuadPart) / double(profile.frequency.QuadPart);
+    }
 };
 struct ProfileScope {
     Profile& profile;
@@ -551,6 +588,18 @@ public:
         index16_only_ = caps_.MaxVertexIndex <= 0xFFFF;
         if (const char* v = SDL_getenv("DRAGON_D3D9_INDEX16")) index16_only_ = v[0] == '1';
         if (index16_only_) LOG_INFO("direct3d9: no 32-bit indices; 32-bit draws rebased into 16-bit copies");
+        // The ff tier's terrain without its vertex program (docs/PORTING.md,
+        // "Three vertex paths"): DRAGON_D3D9_VERTEX_PATH=ff or cpu.
+        if (const char* v = SDL_getenv("DRAGON_D3D9_VERTEX_PATH"); v && ff_) {
+            if (!std::strcmp(v, "ff")) vertex_path_ = VertexPath::FixedFunction;
+            if (!std::strcmp(v, "cpu")) vertex_path_ = VertexPath::Cpu;
+        }
+        if (vertex_path_ != VertexPath::Program) {
+            LOG_INFO("direct3d9: the terrain's vertices %s; guard band %.0f..%.0f x %.0f..%.0f",
+                     vertex_path_ == VertexPath::Cpu ? "transformed here and drawn pre-transformed"
+                                                     : "through fixed-function vertex processing",
+                     caps_.GuardBandLeft, caps_.GuardBandRight, caps_.GuardBandTop, caps_.GuardBandBottom);
+        }
         if (!modulate2x_) LOG_INFO("direct3d9: no MODULATE2X; the ground's detail tile is left out");
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
@@ -586,9 +635,10 @@ public:
                          profile_.seconds[i] * 1000.0 / frames, double(profile_.calls[i]) / frames);
             }
             for (const auto& w : profile_.work) {
-                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame, %9.0f pixels/frame, %8.0f vertices/frame",
+                LOG_INFO("direct3d9 work: %-22s %7.1f draws/frame, %9.0f primitives/frame, %9.0f pixels/frame, %8.0f vertices/frame, %7.2f ms/frame",
                          w.first.c_str(), double(w.second.draws) / frames, double(w.second.primitives) / frames,
-                         double(w.second.pixels) / frames, double(w.second.vertices) / frames);
+                         double(w.second.pixels) / frames, double(w.second.vertices) / frames,
+                         w.second.seconds * 1000.0 / frames);
             }
         }
         for (IDirect3DQuery9* q : profile_.spare) q->Release();
@@ -875,6 +925,7 @@ public:
                 std::memcpy(mapped, data, size);
                 buffer->vb->Unlock();
             }
+            if (vertex_path_ != VertexPath::Program) buffer->cpu.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + size);
         }
         track(buffer, Kind::Buffer, size);
         return reinterpret_cast<Buffer*>(buffer);
@@ -888,6 +939,7 @@ public:
         dynamic_.erase(std::remove(dynamic_.begin(), dynamic_.end(), b), dynamic_.end());
         release(b->vb);
         release(b->ib);
+        release(b->packed);
         release_narrow(b);
         delete b;
     }
@@ -909,6 +961,8 @@ public:
         }
         void* mapped = nullptr;
         if (!b->vb || FAILED(b->vb->Lock(0, size, &mapped, 0))) return nullptr;
+        b->locked = mapped;
+        b->locked_size = size;
         return mapped;
     }
 
@@ -920,6 +974,15 @@ public:
             fill_dynamic(b, b->mapped);
             return;
         }
+        if (vertex_path_ != VertexPath::Program && b->locked) {
+            // The data drawn without a program: kept, and the packed copy
+            // made again at the next draw.
+            const uint8_t* from = static_cast<const uint8_t*>(b->locked);
+            if (b->cpu.size() < b->locked_size) b->cpu.resize(b->locked_size);
+            std::memcpy(b->cpu.data(), from, b->locked_size);
+            release(b->packed);
+        }
+        b->locked = nullptr;
         if (b->vb) b->vb->Unlock();
     }
 
@@ -1050,6 +1113,17 @@ public:
             // A pass the tier never draws: a pipeline that draws nothing.
             track(p, Kind::Pipeline, 0);
             return reinterpret_cast<Pipeline*>(p);
+        }
+        if (p->ff_terrain) {
+            // The terrain program reads TEXCOORD0 (position) and TEXCOORD2
+            // (the pre-lit colour), both float3 in stream 0, as a list.
+            bool position = false, colour = false;
+            for (const VertexAttribute& a : d.vertex_attributes) {
+                if (a.buffer_slot != 0 || a.format != VertexFormat::Float3) continue;
+                if (a.location == 0) position = true, p->position_offset = a.offset;
+                if (a.location == 2) colour = true, p->colour_offset = a.offset;
+            }
+            p->ff_terrain = position && colour && d.primitive == Primitive::TriangleList;
         }
         if (vs_code.empty() || (!ff_ && ps_code.empty()) || json.empty() || (ff_ && !p->ff)) {
             LOG_ERROR("[%s] no D3D9 shader at %s.{vs30,%sd3d9.json} (tools/d3d9/bake_d3d9.py%s)", d.name.c_str(),
@@ -1222,7 +1296,11 @@ public:
                 set_stage_state(stage, D3DTSS_ALPHAOP, st.alpha_op);
                 set_stage_state(stage, D3DTSS_ALPHAARG1, st.alpha_arg1);
                 set_stage_state(stage, D3DTSS_ALPHAARG2, st.alpha_arg2);
-                set_stage_state(stage, D3DTSS_TEXCOORDINDEX, 0);
+                // Path "ff" generates the terrain's from camera space; the
+                // vertex program and path "cpu" hand set 0 over as it is.
+                const bool generated = vertex_path_ == VertexPath::FixedFunction && p->ff_terrain;
+                set_stage_state(stage, D3DTSS_TEXCOORDINDEX, generated ? D3DTSS_TCI_CAMERASPACEPOSITION : 0);
+                set_stage_state(stage, D3DTSS_TEXTURETRANSFORMFLAGS, generated ? D3DTTFF_COUNT2 : D3DTTFF_DISABLE);
                 ++stage;
             }
             set_stage_state(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
@@ -1233,6 +1311,20 @@ public:
             set_render_state(D3DRS_FOGTABLEMODE, D3DFOG_NONE);
             set_render_state(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
             set_render_state(D3DRS_RANGEFOGENABLE, FALSE);
+            if (vertex_path_ != VertexPath::Program && p->ff_terrain) {
+                // No program: fixed function reads a packed position and
+                // colour (bound at the draw) and fogs on the range from the
+                // eye (the mode and its numbers come with the scene block,
+                // flush); pre-transformed vertices carry the fog factor in
+                // the specular alpha, as the program's oFog would.
+                dev_->SetVertexShader(nullptr);
+                if (vertex_path_ == VertexPath::FixedFunction) {
+                    dev_->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+                    set_render_state(D3DRS_RANGEFOGENABLE, TRUE);
+                } else {
+                    dev_->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1);
+                }
+            }
             set_render_state(D3DRS_ALPHATESTENABLE, p->ff_alpha_test >= 0.0f);
             if (p->ff_alpha_test >= 0.0f) {
                 set_render_state(D3DRS_ALPHAREF, DWORD(std::lround(p->ff_alpha_test * 255.0f)));
@@ -1334,6 +1426,7 @@ public:
         (void)instance_count;
         (void)first_instance;
         if (pipeline_ && pipeline_->ff_disabled) return;
+        WorkTimer timer(profile_, pipeline_ ? &pipeline_->desc.name : nullptr);
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(vertex_count, &prims);
@@ -1353,6 +1446,7 @@ public:
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                       int32_t vertex_offset, uint32_t first_instance) override {
         if (pipeline_ && pipeline_->ff_disabled) return;
+        WorkTimer timer(profile_, pipeline_ ? &pipeline_->desc.name : nullptr);
         if (!flush()) return;
         UINT prims = 0;
         const D3DPRIMITIVETYPE type = primitive(index_count, &prims);
@@ -1366,6 +1460,20 @@ public:
         bool instanced = false;
         for (uint32_t s = 0; s < 8; ++s) instanced |= pipeline_->stream_instanced[s];
         if (profile_.on) profile_.count(pipeline_->desc.name, uint64_t(prims) * (instanced ? instance_count : 1));
+        if (vertex_path_ != VertexPath::Program && pipeline_->ff_terrain && !instanced) {
+            if (vertex_path_ == VertexPath::Cpu) {
+                draw_terrain_cpu(vertex_offset, first_index + index_offset_, prims);
+                return;
+            }
+            // Fixed function reads the packed copy, one per source vertex,
+            // so the indices and the base vertex stand as they are.
+            D9Buffer* b = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
+            const uint32_t pitch = pipeline_->stream_pitch[0];
+            if (!b || !pitch || !packed_terrain(b)) return;
+            dev_->SetStreamSource(0, b->packed, streams_[0].offset / pitch * 16, 16);
+            draw_indexed_chunked(type, vertex_offset, vertices, first_index + index_offset_, prims);
+            return;
+        }
         IDirect3DQuery9* query = begin_pixel_query();
         struct EndQuery {
             D3D9Device* self;
@@ -1612,6 +1720,237 @@ private:
         }
     }
 
+    // ---- the terrain without its vertex program (DRAGON_D3D9_VERTEX_PATH)
+
+    // The scene's view_proj as the vertex program applies it, row by row
+    // (clip[r] = dot(rows[r], (p, 1))): stored column-major, then the half
+    // pixel SPIRV-Cross adds (x -= w / width, y += w / height).
+    bool terrain_clip_rows(float rows[4][4]) const {
+        const std::vector<float>& scene = uniforms_[0][0];
+        const size_t at = size_t(pipeline_->ff_view_proj) * 4;
+        if (at + 16 > scene.size() || !pass_.width || !pass_.height) return false;
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c) rows[r][c] = scene[at + size_t(c) * 4 + size_t(r)];
+        const float hx = 1.0f / float(pass_.width), hy = 1.0f / float(pass_.height);
+        for (int c = 0; c < 4; ++c) {
+            rows[0][c] -= hx * rows[3][c];
+            rows[1][c] += hy * rows[3][c];
+        }
+        return true;
+    }
+    const float* scene_register(int reg) const {
+        const std::vector<float>& scene = uniforms_[0][0];
+        return reg >= 0 && size_t(reg) * 4 + 4 <= scene.size() ? scene.data() + size_t(reg) * 4 : nullptr;
+    }
+
+    // Path "ff": the world at the origin, the eye at the camera (so range
+    // fog measures from it: D3D fogs on camera-space distance), and the
+    // projection the camera offset put back in front of view_proj; texture
+    // coordinates are the camera-space position plus the camera, x and z
+    // over 16, through each stage's texture matrix; ff_fog's two modes.
+    void set_terrain_transforms() {
+        float rows[4][4];
+        const float* cam = scene_register(pipeline_->ff_camera);
+        const float* fog = scene_register(pipeline_->ff_fog_color);
+        const float* range = scene_register(pipeline_->ff_fog_range);
+        if (!terrain_clip_rows(rows) || !cam || !fog || !range) return;
+        D3DMATRIX world = {}, view = {}, proj = {}, tex = {};
+        for (int i = 0; i < 4; ++i) world.m[i][i] = view.m[i][i] = 1.0f;
+        for (int i = 0; i < 3; ++i) view.m[3][i] = -cam[i];
+        // Row vectors: v * proj = (p - cam) * proj = p * view_proj^T.
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j) proj.m[i][j] = rows[j][i];
+        for (int j = 0; j < 4; ++j) proj.m[3][j] += cam[0] * rows[j][0] + cam[1] * rows[j][1] + cam[2] * rows[j][2];
+        dev_->SetTransform(D3DTS_WORLD, &world);
+        dev_->SetTransform(D3DTS_VIEW, &view);
+        dev_->SetTransform(D3DTS_PROJECTION, &proj);
+        tex.m[0][0] = 1.0f / 16.0f;
+        tex.m[2][1] = 1.0f / 16.0f;
+        tex.m[3][0] = cam[0] / 16.0f;
+        tex.m[3][1] = cam[2] / 16.0f;
+        for (DWORD stage = 0; stage < pipeline_->ff_stages.size(); ++stage)
+            dev_->SetTransform(D3DTRANSFORMSTATETYPE(D3DTS_TEXTURE0 + stage), &tex);
+        const auto bits = [](float f) { DWORD d; std::memcpy(&d, &f, 4); return d; };
+        if (range[1] > 0.0f) {
+            set_render_state(D3DRS_FOGVERTEXMODE, D3DFOG_LINEAR);
+            set_render_state(D3DRS_FOGSTART, bits(range[0]));
+            set_render_state(D3DRS_FOGEND, bits(range[1]));
+        } else {
+            set_render_state(D3DRS_FOGVERTEXMODE, D3DFOG_EXP2);
+            set_render_state(D3DRS_FOGDENSITY, bits(fog[3]));
+        }
+    }
+
+    // The packed copy path "ff" reads: position and the colour as a
+    // D3DCOLOR, in FVF order -- XP's runtime refuses a float3 colour for
+    // fixed function and reads a declaration as the FVF it stands for.
+    bool packed_terrain(D9Buffer* b) {
+        if (b->packed) return true;
+        const uint32_t pitch = pipeline_->stream_pitch[0];
+        if (b->cpu.empty() || !pitch) return false;
+        const size_t count = b->cpu.size() / pitch;
+        if (FAILED(dev_->CreateVertexBuffer(UINT(count * 16), (software_vp_ ? 0 : D3DUSAGE_WRITEONLY) | buffer_usage(), 0,
+                                            buffer_pool(false), &b->packed, nullptr)))
+            return false;
+        uint8_t* out = nullptr;
+        if (FAILED(b->packed->Lock(0, 0, reinterpret_cast<void**>(&out), 0))) {
+            release(b->packed);
+            return false;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            const uint8_t* v = b->cpu.data() + i * pitch;
+            float colour[4] = {0, 0, 0, 1};
+            std::memcpy(out + i * 16, v + pipeline_->position_offset, 12);
+            std::memcpy(colour, v + pipeline_->colour_offset, 12);
+            const DWORD c = to_color(colour);
+            std::memcpy(out + i * 16 + 12, &c, 4);
+        }
+        b->packed->Unlock();
+        return true;
+    }
+
+    // Path "cpu": the draw's vertex range transformed by the program's own
+    // arithmetic, each triangle culled when all three corners are outside
+    // one plane and clipped against the near plane when one or two are
+    // behind it, the rest sent pre-transformed with the fog factor in the
+    // specular alpha -- D3D9 neither transforms nor clips them. The guard
+    // band takes what crosses the screen's edges.
+    void draw_terrain_cpu(INT base_vertex, UINT start_index, UINT prims) {
+        PROFILE(PROF_DRAW);
+        D9Buffer* vb = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
+        const uint32_t pitch = pipeline_->stream_pitch[0];
+        float rows[4][4];
+        const float* cam = scene_register(pipeline_->ff_camera);
+        const float* fog = scene_register(pipeline_->ff_fog_color);
+        const float* range = scene_register(pipeline_->ff_fog_range);
+        if (!vb || vb->cpu.empty() || !pitch || !bound_index_ || !terrain_clip_rows(rows) || !cam || !fog || !range) return;
+        const std::vector<uint8_t>& idata = bound_index_->index_data;
+        const bool wide = bound_index_->ib_size == IndexSize::U32;
+        const size_t icount = size_t(prims) * 3, ilimit = idata.size() / (wide ? 4 : 2);
+        if (start_index + icount > ilimit) return;
+        const auto index = [&](size_t i) -> int64_t {
+            return int64_t(wide ? reinterpret_cast<const uint32_t*>(idata.data())[i] : reinterpret_cast<const uint16_t*>(idata.data())[i]) +
+                   base_vertex;
+        };
+        int64_t lo = INT64_MAX, hi = INT64_MIN;
+        for (size_t i = start_index; i < start_index + icount; ++i) {
+            const int64_t v = index(i);
+            lo = std::min(lo, v);
+            hi = std::max(hi, v);
+        }
+        const uint8_t* base = vb->cpu.data() + streams_[0].offset;
+        const int64_t available = int64_t((vb->cpu.size() - streams_[0].offset) / pitch);
+        if (lo < 0 || hi >= available) return;
+        const size_t n = size_t(hi - lo + 1);
+        if (n > 60000) {
+            if (!tl_warned_) LOG_WARN("direct3d9: a terrain draw spans %zu vertices; not drawn on the cpu path", n);
+            tl_warned_ = true;
+            return;
+        }
+        if (profile_.on) profile_.find(pipeline_->desc.name).vertices += n;
+        // ff_fog: linear over fog_range when it is set, else exp2 on the
+        // radial distance, density fog_color.a.
+        const bool linear = range[1] > 0.0f;
+        const float fog_scale = linear ? 1.0f / (range[1] - range[0]) : 0.0f;
+        clip_scratch_.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            const uint8_t* src = base + (size_t(lo) + i) * pitch;
+            float p[3], c[3];
+            std::memcpy(p, src + pipeline_->position_offset, 12);
+            std::memcpy(c, src + pipeline_->colour_offset, 12);
+            ClipVertex& o = clip_scratch_[i];
+            o.x = rows[0][0] * p[0] + rows[0][1] * p[1] + rows[0][2] * p[2] + rows[0][3];
+            o.y = rows[1][0] * p[0] + rows[1][1] * p[1] + rows[1][2] * p[2] + rows[1][3];
+            o.z = rows[2][0] * p[0] + rows[2][1] * p[1] + rows[2][2] * p[2] + rows[2][3];
+            o.w = rows[3][0] * p[0] + rows[3][1] * p[1] + rows[3][2] * p[2] + rows[3][3];
+            o.r = c[0], o.g = c[1], o.b = c[2];
+            const float dx = p[0] - cam[0], dy = p[1] - cam[1], dz = p[2] - cam[2];
+            const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (linear) {
+                o.fog = std::clamp((range[1] - d) * fog_scale, 0.0f, 1.0f);
+            } else {
+                const float x = d * fog[3];
+                o.fog = std::exp(-x * x);
+            }
+            o.u = p[0] / 16.0f;
+            o.v = p[2] / 16.0f;
+            o.code = (o.x < -o.w ? 1u : 0u) | (o.x > o.w ? 2u : 0u) | (o.y < -o.w ? 4u : 0u) | (o.y > o.w ? 8u : 0u) |
+                     (o.z < 0.0f ? 16u : 0u) | (o.z > o.w ? 32u : 0u);
+        }
+        const float width = float(pass_.width), height = float(pass_.height);
+        const auto project = [&](const ClipVertex& c) {
+            TlVertex t;
+            const float rhw = 1.0f / c.w;
+            t.x = (c.x * rhw + 1.0f) * 0.5f * width;
+            t.y = (1.0f - c.y * rhw) * 0.5f * height;
+            t.z = c.z * rhw;
+            t.rhw = rhw;
+            const float rgba[4] = {c.r, c.g, c.b, 1.0f};
+            t.diffuse = to_color(rgba);
+            t.specular = DWORD(std::lround(std::clamp(c.fog, 0.0f, 1.0f) * 255.0f)) << 24;
+            t.u = c.u;
+            t.v = c.v;
+            return t;
+        };
+        tl_scratch_.resize(n);
+        for (size_t i = 0; i < n; ++i)
+            if (!(clip_scratch_[i].code & 16u)) tl_scratch_[i] = project(clip_scratch_[i]);
+        tl_indices_.clear();
+        for (size_t t = 0; t < icount; t += 3) {
+            const size_t a = size_t(index(start_index + t) - lo), b = size_t(index(start_index + t + 1) - lo),
+                         c = size_t(index(start_index + t + 2) - lo);
+            const unsigned ca = clip_scratch_[a].code, cb = clip_scratch_[b].code, cc = clip_scratch_[c].code;
+            if (ca & cb & cc) continue;  // all outside one plane
+            if (!((ca | cb | cc) & 16u)) {
+                tl_indices_.push_back(uint16_t(a));
+                tl_indices_.push_back(uint16_t(b));
+                tl_indices_.push_back(uint16_t(c));
+                continue;
+            }
+            // One or two corners behind the near plane (z < 0 in D3D's
+            // clip space): the part in front, as a triangle fan.
+            const ClipVertex* in[3] = {&clip_scratch_[a], &clip_scratch_[b], &clip_scratch_[c]};
+            const size_t ids[3] = {a, b, c};
+            size_t poly[4];
+            int count = 0;
+            for (int e = 0; e < 3; ++e) {
+                const ClipVertex& P = *in[e];
+                const ClipVertex& Q = *in[(e + 1) % 3];
+                const bool p_in = P.z >= 0.0f, q_in = Q.z >= 0.0f;
+                if (p_in) poly[count++] = ids[e];
+                if (p_in != q_in && count < 4) {
+                    const float k = P.z / (P.z - Q.z);
+                    ClipVertex m;
+                    m.x = P.x + (Q.x - P.x) * k;
+                    m.y = P.y + (Q.y - P.y) * k;
+                    m.z = 0.0f;
+                    m.w = P.w + (Q.w - P.w) * k;
+                    m.r = P.r + (Q.r - P.r) * k;
+                    m.g = P.g + (Q.g - P.g) * k;
+                    m.b = P.b + (Q.b - P.b) * k;
+                    m.fog = P.fog + (Q.fog - P.fog) * k;
+                    m.u = P.u + (Q.u - P.u) * k;
+                    m.v = P.v + (Q.v - P.v) * k;
+                    m.code = 0;
+                    poly[count++] = tl_scratch_.size();
+                    tl_scratch_.push_back(project(m));
+                }
+            }
+            for (int k = 1; k + 1 < count; ++k) {
+                tl_indices_.push_back(uint16_t(poly[0]));
+                tl_indices_.push_back(uint16_t(poly[k]));
+                tl_indices_.push_back(uint16_t(poly[k + 1]));
+            }
+        }
+        if (tl_indices_.empty() || tl_scratch_.size() > 65535) return;
+        dev_->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, UINT(tl_scratch_.size()), UINT(tl_indices_.size() / 3),
+                                     tl_indices_.data(), D3DFMT_INDEX16, tl_scratch_.data(), sizeof(TlVertex));
+        // UP leaves stream 0 and the indices unset; the next draw expects
+        // what was bound.
+        dev_->SetStreamSource(0, vb->vb, streams_[0].offset, pitch);
+        dev_->SetIndices(bound_index_->ib);
+    }
+
     // The bound 32-bit range [start_index, +prims) as a 16-bit buffer, each
     // index less `lo` (the range's lowest), made once per range. Null when the
     // range spans more than 16 bits can reach, and the draw goes as it is.
@@ -1673,6 +2012,7 @@ private:
                 set_render_state(D3DRS_FOGCOLOR, to_color(rgba));
             }
         }
+        if (vertex_path_ == VertexPath::FixedFunction && pipeline_->ff_terrain && (uniforms_dirty_[0] & 1u)) set_terrain_transforms();
         for (int s = 0; s < 2; ++s) {
             const StageLayout& layout = s == 0 ? pipeline_->vertex : pipeline_->fragment;
             for (const ConstantCopy& copy : layout.copies) {
@@ -1740,6 +2080,27 @@ private:
     bool pow2_only_ = false;      // render targets at powers of two (create_target)
     bool modulate2x_ = true;      // D3DTEXOPCAPS_MODULATE2X
     bool index16_only_ = false;   // no D3DFMT_INDEX32 (MaxVertexIndex <= 0xFFFF)
+    // DRAGON_D3D9_VERTEX_PATH: the ff tier's terrain drawn with its vertex
+    // program (the default), through fixed-function vertex processing
+    // ("ff": the card's T&L where it has it, else D3D9's own), or
+    // transformed, fogged and clipped here and drawn pre-transformed
+    // ("cpu": D3D9 does no vertex work at all).
+    enum class VertexPath { Program, FixedFunction, Cpu };
+    VertexPath vertex_path_ = VertexPath::Program;
+    struct ClipVertex {
+        float x, y, z, w;
+        float r, g, b, fog, u, v;
+        unsigned code;
+    };
+    struct TlVertex {
+        float x, y, z, rhw;
+        DWORD diffuse, specular;
+        float u, v;
+    };
+    std::vector<ClipVertex> clip_scratch_;
+    std::vector<TlVertex> tl_scratch_;
+    std::vector<uint16_t> tl_indices_;
+    bool tl_warned_ = false;
     bool narrow_warned_ = false;
     bool no_rt_textures_ = SDL_getenv("DRAGON_D3D9_NO_RT_TEXTURES") != nullptr;
     // What a reset empties and this backend makes again (reset()).

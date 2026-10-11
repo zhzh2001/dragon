@@ -75,7 +75,12 @@ FF_RECIPES = {
     # as a second stage behind a texture-less first the X550 drew it as
     # nothing (legal by the book, not by that driver), and one stage is also
     # what a single-TMU card (the Rage class) has.
-    "terrain": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
+    # "transform": what the vertex program computes, for a backend that
+    # draws without it (DRAGON_D3D9_VERTEX_PATH, docs/PORTING.md): "terrain"
+    # is clip = view_proj * position, uv = position.xz / 16, diffuse = the
+    # vertex colour, fog = ff_fog.
+    "terrain": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]],
+                "transform": "terrain"},
     # The base colour (white where a submesh has none) MODULATE the colour.
     "skinned": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
     # The card atlas MODULATE2X the colour, its alpha the cut-out.
@@ -266,7 +271,11 @@ def main():
                 # Where the fog colour and the grade sit in the scene block
                 # the vertex stage pushes to slot 0: the backend sets
                 # D3DRS_FOGCOLOR from them (display-encoded, like ff_finish).
-                for member, key in (("scene_fog_color", "fog_color"), ("scene_output_grade", "output_grade")):
+                # A stem with a "transform" also says where the rest of what
+                # that transform reads sits.
+                for member, key in (("scene_fog_color", "fog_color"), ("scene_output_grade", "output_grade"),
+                                    ("scene_view_proj", "view_proj"), ("scene_camera_position", "camera_position"),
+                                    ("scene_fog_range", "fog_range")):
                     if member in members and members[member][0] == 0:
                         layouts[stem]["ff"][key] = members[member][1]
             src = os.path.join(work, f"{stem}.{stage}.hlsl")
