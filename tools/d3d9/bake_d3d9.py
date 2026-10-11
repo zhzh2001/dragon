@@ -82,12 +82,13 @@ FF_RECIPES = {
     "terrain": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]],
                 "transform": "terrain"},
     # The base colour (white where a submesh has none) MODULATE the colour.
-    "skinned": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]]},
+    "skinned": {"stages": [[D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]],
+                "transform": "skinned"},
     # The card atlas MODULATE2X the colour, its alpha the cut-out.
     "foliage": {"stages": [[D3DTOP_MODULATE2X, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, 1]],
-                "alpha_test": 0.45},
-    "mesh": {"stages": DIFFUSE_ONLY},
-    "water": {"stages": DIFFUSE_ONLY},
+                "alpha_test": 0.45, "transform": "foliage"},
+    "mesh": {"stages": DIFFUSE_ONLY, "transform": "mesh"},
+    "water": {"stages": DIFFUSE_ONLY, "transform": "water"},
     # The baked sky map on the dome.
     "sky": {"stages": [[D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, 0]]},
     "debug_line": {"stages": DIFFUSE_ONLY},
@@ -278,6 +279,10 @@ def main():
                                     ("scene_fog_range", "fog_range")):
                     if member in members and members[member][0] == 0:
                         layouts[stem]["ff"][key] = members[member][1]
+                if "transform" in layouts[stem]["ff"]:
+                    # Every uniform member's [slot, register], for the backend's
+                    # own copy of the program (DRAGON_D3D9_VERTEX_PATH=cpu).
+                    layouts[stem]["ff"]["registers"] = {m: list(v) for m, v in sorted(members.items())}
             src = os.path.join(work, f"{stem}.{stage}.hlsl")
             open(src, "w").write(unwrapped)
             layouts[stem][stage] = {"samplers": sorted(set(sampler_slots_from_reflection(spv).values()))} \

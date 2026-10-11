@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "gfx/palette.h"  // the palette entries the foliage program names (PlantWarm, GroundBounce)
 
 namespace rhi {
 namespace d3d9 {
@@ -122,8 +123,31 @@ struct D9Pipeline {
     // (DRAGON_D3D9_VERTEX_PATH): the terrain's transform, and where its
     // inputs sit in the scene block (registers) and in the vertex.
     bool ff_terrain = false;
+    bool ff_foliage = false;  // the plants' program: placement, sway, ff_lit (path "cpu" only)
+    // The rest path "cpu" has a copy of: water, the props, the creatures.
+    enum class Cpu { None, Water, Mesh, Skinned } cpu = Cpu::None;
+    // Each input location's stream-0 offset (TEXCOORD<n>), present or not.
+    uint32_t attr_offset[8] = {};
+    unsigned attr_present = 0;
     int ff_view_proj = -1, ff_camera = -1, ff_fog_range = -1;
     uint32_t position_offset = 0, colour_offset = 0;
+    // The foliage program's other inputs (TEXCOORD1, 3, 4, 5) and every
+    // uniform member's [slot, register] the bake recorded ("registers").
+    uint32_t normal_offset = 0, uv_offset = 0, instance_offset = 0, params_offset = 0;
+    std::unordered_map<std::string, std::pair<int, int>> registers;
+};
+
+// Path "cpu" (DRAGON_D3D9_VERTEX_PATH): a vertex in clip space with what the
+// program hands the stages, and the pre-transformed vertex it becomes.
+struct ClipVertex {
+    float x, y, z, w;
+    float r, g, b, fog, u, v;
+    unsigned code;  // outside -x, +x, -y, +y, near, far
+};
+struct TlVertex {
+    float x, y, z, rhw;
+    DWORD diffuse, specular;  // the fog factor in the specular alpha
+    float u, v;
 };
 
 struct D9Pass {
@@ -279,8 +303,35 @@ bool parse_ff(const std::string& json, D9Pipeline& p) {
     p.ff_camera = int(number("\"camera_position\"", -1.0f));
     p.ff_fog_range = int(number("\"fog_range\"", -1.0f));
     const size_t transform = body.find("\"transform\"");
-    p.ff_terrain = transform != std::string::npos && body.compare(body.find('"', body.find(':', transform)), 9, "\"terrain\"") == 0 &&
-                   p.ff_view_proj >= 0 && p.ff_camera >= 0 && p.ff_fog_color >= 0 && p.ff_fog_range >= 0;
+    const bool inputs = p.ff_view_proj >= 0 && p.ff_camera >= 0 && p.ff_fog_color >= 0 && p.ff_fog_range >= 0;
+    const auto transform_is = [&](const char* name) {
+        if (transform == std::string::npos) return false;
+        const size_t q = body.find('"', body.find(':', transform));
+        return body.compare(q + 1, std::strlen(name), name) == 0 && body[q + 1 + std::strlen(name)] == '"';
+    };
+    p.ff_terrain = inputs && transform_is("terrain");
+    p.ff_foliage = inputs && transform_is("foliage");
+    if (inputs && transform_is("water")) p.cpu = D9Pipeline::Cpu::Water;
+    if (inputs && transform_is("mesh")) p.cpu = D9Pipeline::Cpu::Mesh;
+    if (inputs && transform_is("skinned")) p.cpu = D9Pipeline::Cpu::Skinned;
+    // "registers": {"scene_sun": [0, 12], ...}
+    const size_t regs = body.find("\"registers\"");
+    if (regs != std::string::npos) {
+        size_t pos = body.find('{', regs) + 1;
+        const size_t end_regs = body.find('}', pos);
+        while (pos < end_regs) {
+            const size_t q0 = body.find('"', pos);
+            if (q0 == std::string::npos || q0 > end_regs) break;
+            const size_t q1 = body.find('"', q0 + 1);
+            const std::string name = body.substr(q0 + 1, q1 - q0 - 1);
+            const size_t open_br = body.find('[', q1);
+            char* next = nullptr;
+            const int slot = int(std::strtol(body.c_str() + open_br + 1, &next, 10));
+            const int reg = int(std::strtol(std::strchr(next, ',') + 1, &next, 10));
+            p.registers[name] = {slot, reg};
+            pos = body.find(']', open_br) + 1;
+        }
+    }
     return true;
 }
 
@@ -840,6 +891,7 @@ public:
 
     void end_frame(Texture* source, uint32_t width, uint32_t height, std::vector<uint8_t>* readback) override {
         PROFILE(PROF_FRAME);
+        flush_tl();
         if (!in_scene_) return;
         D9Texture* src = source ? d9(source) : nullptr;
         IDirect3DSurface9* src_surface = nullptr;
@@ -1125,6 +1177,39 @@ public:
             }
             p->ff_terrain = position && colour && d.primitive == Primitive::TriangleList;
         }
+        if (p->cpu != D9Pipeline::Cpu::None) {
+            // Water reads TEXCOORD0; the props 0..2 (position, normal,
+            // colour); the creatures also 3 (uv), 4 (joints, UBYTE4) and 5
+            // (weights) -- all from stream 0, as a list.
+            for (const VertexAttribute& a : d.vertex_attributes) {
+                if (a.buffer_slot != 0 || a.location >= 8) continue;
+                const bool ok = a.location == 4 ? a.format == VertexFormat::UByte4
+                                : a.location == 5 ? a.format == VertexFormat::Float4
+                                : a.location == 3 ? a.format == VertexFormat::Float2
+                                                  : a.format == VertexFormat::Float3;
+                if (!ok) continue;
+                p->attr_offset[a.location] = a.offset;
+                p->attr_present |= 1u << a.location;
+            }
+            const unsigned need = p->cpu == D9Pipeline::Cpu::Water ? 0x1u : p->cpu == D9Pipeline::Cpu::Mesh ? 0x7u : 0x3Fu;
+            if ((p->attr_present & need) != need || d.primitive != Primitive::TriangleList) p->cpu = D9Pipeline::Cpu::None;
+        }
+        if (p->ff_foliage) {
+            // The plant mesh in stream 0 (TEXCOORD0..3), the instance in
+            // stream 1 (TEXCOORD4 position and scale, 5 the params).
+            int found = 0;
+            for (const VertexAttribute& a : d.vertex_attributes) {
+                const bool f3 = a.format == VertexFormat::Float3, f2 = a.format == VertexFormat::Float2,
+                           f4 = a.format == VertexFormat::Float4;
+                if (a.buffer_slot == 0 && a.location == 0 && f3) p->position_offset = a.offset, found |= 1;
+                if (a.buffer_slot == 0 && a.location == 1 && f3) p->normal_offset = a.offset, found |= 2;
+                if (a.buffer_slot == 0 && a.location == 2 && f3) p->colour_offset = a.offset, found |= 4;
+                if (a.buffer_slot == 0 && a.location == 3 && f2) p->uv_offset = a.offset, found |= 8;
+                if (a.buffer_slot == 1 && a.location == 4 && f4) p->instance_offset = a.offset, found |= 16;
+                if (a.buffer_slot == 1 && a.location == 5 && f4) p->params_offset = a.offset, found |= 32;
+            }
+            p->ff_foliage = found == 63 && d.primitive == Primitive::TriangleList;
+        }
         if (vs_code.empty() || (!ff_ && ps_code.empty()) || json.empty() || (ff_ && !p->ff)) {
             LOG_ERROR("[%s] no D3D9 shader at %s.{vs30,%sd3d9.json} (tools/d3d9/bake_d3d9.py%s)", d.name.c_str(),
                       base.c_str(), ff_ ? "" : "ps30,", ff_ ? " --tier ff" : "");
@@ -1187,6 +1272,7 @@ public:
     // ---- passes
     Pass* begin_pass(const PassDesc& desc) override {
         PROFILE(PROF_PASS);
+        flush_tl();
         D9Texture* color = desc.color ? d9(desc.color) : nullptr;
         D9Texture* depth = desc.depth ? d9(desc.depth) : nullptr;
         // A depth-only pass on a sampled depth target draws into its R32F
@@ -1229,6 +1315,7 @@ public:
 
     void bind_pipeline(Pass*, Pipeline* pipeline) override {
         PROFILE(PROF_PIPELINE);
+        flush_tl();
         D9Pipeline* p = d9(pipeline);
         if (!p) return;
         pipeline_ = p;
@@ -1311,7 +1398,8 @@ public:
             set_render_state(D3DRS_FOGTABLEMODE, D3DFOG_NONE);
             set_render_state(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
             set_render_state(D3DRS_RANGEFOGENABLE, FALSE);
-            if (vertex_path_ != VertexPath::Program && p->ff_terrain) {
+            if ((vertex_path_ != VertexPath::Program && p->ff_terrain) ||
+                (vertex_path_ == VertexPath::Cpu && (p->ff_foliage || p->cpu != D9Pipeline::Cpu::None))) {
                 // No program: fixed function reads a packed position and
                 // colour (bound at the draw) and fogs on the range from the
                 // eye (the mode and its numbers come with the scene block,
@@ -1374,6 +1462,7 @@ public:
 
     void bind_fragment_textures(Pass*, uint32_t first_slot, const TextureBinding* bindings, uint32_t count) override {
         PROFILE(PROF_TEXTURES);
+        flush_tl();
         for (uint32_t i = 0; i < count && first_slot + i < 16; ++i) {
             DWORD stage = first_slot + i;
             if (pipeline_ && pipeline_->ff) {
@@ -1425,6 +1514,7 @@ public:
               uint32_t first_instance) override {
         (void)instance_count;
         (void)first_instance;
+        flush_tl();
         if (pipeline_ && pipeline_->ff_disabled) return;
         WorkTimer timer(profile_, pipeline_ ? &pipeline_->desc.name : nullptr);
         if (!flush()) return;
@@ -1445,6 +1535,9 @@ public:
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                       int32_t vertex_offset, uint32_t first_instance) override {
+        if (!(vertex_path_ == VertexPath::Cpu && pipeline_ &&
+              (pipeline_->ff_terrain || pipeline_->ff_foliage || pipeline_->cpu != D9Pipeline::Cpu::None)))
+            flush_tl();
         if (pipeline_ && pipeline_->ff_disabled) return;
         WorkTimer timer(profile_, pipeline_ ? &pipeline_->desc.name : nullptr);
         if (!flush()) return;
@@ -1460,6 +1553,14 @@ public:
         bool instanced = false;
         for (uint32_t s = 0; s < 8; ++s) instanced |= pipeline_->stream_instanced[s];
         if (profile_.on) profile_.count(pipeline_->desc.name, uint64_t(prims) * (instanced ? instance_count : 1));
+        if (vertex_path_ == VertexPath::Cpu && pipeline_->cpu != D9Pipeline::Cpu::None && !instanced) {
+            draw_model_cpu(vertex_offset, first_index + index_offset_, prims);
+            return;
+        }
+        if (vertex_path_ == VertexPath::Cpu && pipeline_->ff_foliage && instanced) {
+            draw_foliage_cpu(vertex_offset, first_index + index_offset_, prims, first_instance, instance_count);
+            return;
+        }
         if (vertex_path_ != VertexPath::Program && pipeline_->ff_terrain && !instanced) {
             if (vertex_path_ == VertexPath::Cpu) {
                 draw_terrain_cpu(vertex_offset, first_index + index_offset_, prims);
@@ -1549,6 +1650,7 @@ private:
     // next bind_pipeline restores shaders, declaration and streams.
     void quad_stretch(D9Texture* source, uint32_t sw, uint32_t sh, IDirect3DSurface9* target, uint32_t dw, uint32_t dh) {
         if (!source || !source->texture || !target || !dw || !dh) return;
+        flush_tl();
         dev_->SetRenderTarget(0, target);
         dev_->SetDepthStencilSurface(nullptr);
         D3DVIEWPORT9 viewport = {0, 0, dw, dh, 0.0f, 1.0f};
@@ -1809,74 +1911,79 @@ private:
         return true;
     }
 
-    // Path "cpu": the draw's vertex range transformed by the program's own
-    // arithmetic, each triangle culled when all three corners are outside
-    // one plane and clipped against the near plane when one or two are
-    // behind it, the rest sent pre-transformed with the fog factor in the
-    // specular alpha -- D3D9 neither transforms nor clips them. The guard
-    // band takes what crosses the screen's edges.
-    void draw_terrain_cpu(INT base_vertex, UINT start_index, UINT prims) {
-        PROFILE(PROF_DRAW);
-        D9Buffer* vb = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
-        const uint32_t pitch = pipeline_->stream_pitch[0];
-        float rows[4][4];
-        const float* cam = scene_register(pipeline_->ff_camera);
+    // Path "cpu": the draw's vertex range transformed by a C++ copy of the
+    // program, each triangle culled when all three corners are outside one
+    // plane and clipped against the near plane when one or two are behind
+    // it, the rest gathered pre-transformed with the fog factor in the
+    // specular alpha (flush_tl) -- D3D9 neither transforms nor clips them.
+    // The guard band takes what crosses the screen's edges.
+
+    // ff_fog: linear over fog_range when it is set, else exp2 on the radial
+    // distance, density fog_color.a.
+    struct FogParams {
+        const float* camera;
+        float density, start, end;
+        bool linear;
+        float operator()(float x, float y, float z) const {
+            const float dx = x - camera[0], dy = y - camera[1], dz = z - camera[2];
+            const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (linear) return std::clamp((end - d) / (end - start), 0.0f, 1.0f);
+            const float k = d * density;
+            return std::exp(-k * k);
+        }
+    };
+    bool fog_params(FogParams& f) const {
         const float* fog = scene_register(pipeline_->ff_fog_color);
         const float* range = scene_register(pipeline_->ff_fog_range);
-        if (!vb || vb->cpu.empty() || !pitch || !bound_index_ || !terrain_clip_rows(rows) || !cam || !fog || !range) return;
+        f.camera = scene_register(pipeline_->ff_camera);
+        if (!fog || !range || !f.camera) return false;
+        f.density = fog[3], f.start = range[0], f.end = range[1], f.linear = range[1] > 0.0f;
+        return true;
+    }
+    static void clip_of(ClipVertex& o, const float rows[4][4], float x, float y, float z) {
+        o.x = rows[0][0] * x + rows[0][1] * y + rows[0][2] * z + rows[0][3];
+        o.y = rows[1][0] * x + rows[1][1] * y + rows[1][2] * z + rows[1][3];
+        o.z = rows[2][0] * x + rows[2][1] * y + rows[2][2] * z + rows[2][3];
+        o.w = rows[3][0] * x + rows[3][1] * y + rows[3][2] * z + rows[3][3];
+        o.code = (o.x < -o.w ? 1u : 0u) | (o.x > o.w ? 2u : 0u) | (o.y < -o.w ? 4u : 0u) | (o.y > o.w ? 8u : 0u) |
+                 (o.z < 0.0f ? 16u : 0u) | (o.z > o.w ? 32u : 0u);
+    }
+
+    // The draw's indices, read with the base vertex, and their min..max.
+    struct IndexRange {
+        const uint8_t* data = nullptr;
+        bool wide = false;
+        INT base = 0;
+        int64_t lo = 0, hi = -1;
+        int64_t operator[](size_t i) const {
+            return int64_t(wide ? reinterpret_cast<const uint32_t*>(data)[i] : reinterpret_cast<const uint16_t*>(data)[i]) + base;
+        }
+    };
+    bool index_range_of(INT base_vertex, UINT start_index, size_t icount, int64_t available, IndexRange& r) const {
+        if (!bound_index_) return false;
         const std::vector<uint8_t>& idata = bound_index_->index_data;
-        const bool wide = bound_index_->ib_size == IndexSize::U32;
-        const size_t icount = size_t(prims) * 3, ilimit = idata.size() / (wide ? 4 : 2);
-        if (start_index + icount > ilimit) return;
-        const auto index = [&](size_t i) -> int64_t {
-            return int64_t(wide ? reinterpret_cast<const uint32_t*>(idata.data())[i] : reinterpret_cast<const uint16_t*>(idata.data())[i]) +
-                   base_vertex;
-        };
-        int64_t lo = INT64_MAX, hi = INT64_MIN;
+        r.data = idata.data();
+        r.wide = bound_index_->ib_size == IndexSize::U32;
+        r.base = base_vertex;
+        if (start_index + icount > idata.size() / (r.wide ? 4 : 2)) return false;
+        r.lo = INT64_MAX, r.hi = INT64_MIN;
         for (size_t i = start_index; i < start_index + icount; ++i) {
-            const int64_t v = index(i);
-            lo = std::min(lo, v);
-            hi = std::max(hi, v);
+            const int64_t v = r[i];
+            r.lo = std::min(r.lo, v);
+            r.hi = std::max(r.hi, v);
         }
-        const uint8_t* base = vb->cpu.data() + streams_[0].offset;
-        const int64_t available = int64_t((vb->cpu.size() - streams_[0].offset) / pitch);
-        if (lo < 0 || hi >= available) return;
-        const size_t n = size_t(hi - lo + 1);
-        if (n > 60000) {
-            if (!tl_warned_) LOG_WARN("direct3d9: a terrain draw spans %zu vertices; not drawn on the cpu path", n);
+        if (r.lo < 0 || r.hi >= available) return false;
+        if (r.hi - r.lo + 1 > 60000) {
+            if (!tl_warned_) LOG_WARN("direct3d9: a draw spans %lld vertices; not drawn on the cpu path", (long long)(r.hi - r.lo + 1));
             tl_warned_ = true;
-            return;
+            return false;
         }
-        if (profile_.on) profile_.find(pipeline_->desc.name).vertices += n;
-        // ff_fog: linear over fog_range when it is set, else exp2 on the
-        // radial distance, density fog_color.a.
-        const bool linear = range[1] > 0.0f;
-        const float fog_scale = linear ? 1.0f / (range[1] - range[0]) : 0.0f;
-        clip_scratch_.resize(n);
-        for (size_t i = 0; i < n; ++i) {
-            const uint8_t* src = base + (size_t(lo) + i) * pitch;
-            float p[3], c[3];
-            std::memcpy(p, src + pipeline_->position_offset, 12);
-            std::memcpy(c, src + pipeline_->colour_offset, 12);
-            ClipVertex& o = clip_scratch_[i];
-            o.x = rows[0][0] * p[0] + rows[0][1] * p[1] + rows[0][2] * p[2] + rows[0][3];
-            o.y = rows[1][0] * p[0] + rows[1][1] * p[1] + rows[1][2] * p[2] + rows[1][3];
-            o.z = rows[2][0] * p[0] + rows[2][1] * p[1] + rows[2][2] * p[2] + rows[2][3];
-            o.w = rows[3][0] * p[0] + rows[3][1] * p[1] + rows[3][2] * p[2] + rows[3][3];
-            o.r = c[0], o.g = c[1], o.b = c[2];
-            const float dx = p[0] - cam[0], dy = p[1] - cam[1], dz = p[2] - cam[2];
-            const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
-            if (linear) {
-                o.fog = std::clamp((range[1] - d) * fog_scale, 0.0f, 1.0f);
-            } else {
-                const float x = d * fog[3];
-                o.fog = std::exp(-x * x);
-            }
-            o.u = p[0] / 16.0f;
-            o.v = p[2] / 16.0f;
-            o.code = (o.x < -o.w ? 1u : 0u) | (o.x > o.w ? 2u : 0u) | (o.y < -o.w ? 4u : 0u) | (o.y > o.w ? 8u : 0u) |
-                     (o.z < 0.0f ? 16u : 0u) | (o.z > o.w ? 32u : 0u);
-        }
+        return true;
+    }
+
+    // clip_scratch_[0..n) the range's vertices in clip space; each of the
+    // draw's triangles culled, near-clipped and gathered into the batch.
+    void emit_tl(size_t n, const IndexRange& r, UINT start_index, size_t icount) {
         const float width = float(pass_.width), height = float(pass_.height);
         const auto project = [&](const ClipVertex& c) {
             TlVertex t;
@@ -1892,19 +1999,20 @@ private:
             t.v = c.v;
             return t;
         };
-        tl_scratch_.resize(n);
+        if (tl_scratch_.size() + n + 2 * icount > 65535) flush_tl();
+        const size_t first = tl_scratch_.size();
+        tl_scratch_.resize(first + n);
         for (size_t i = 0; i < n; ++i)
-            if (!(clip_scratch_[i].code & 16u)) tl_scratch_[i] = project(clip_scratch_[i]);
-        tl_indices_.clear();
+            if (!(clip_scratch_[i].code & 16u)) tl_scratch_[first + i] = project(clip_scratch_[i]);
         for (size_t t = 0; t < icount; t += 3) {
-            const size_t a = size_t(index(start_index + t) - lo), b = size_t(index(start_index + t + 1) - lo),
-                         c = size_t(index(start_index + t + 2) - lo);
+            const size_t a = size_t(r[start_index + t] - r.lo), b = size_t(r[start_index + t + 1] - r.lo),
+                         c = size_t(r[start_index + t + 2] - r.lo);
             const unsigned ca = clip_scratch_[a].code, cb = clip_scratch_[b].code, cc = clip_scratch_[c].code;
             if (ca & cb & cc) continue;  // all outside one plane
             if (!((ca | cb | cc) & 16u)) {
-                tl_indices_.push_back(uint16_t(a));
-                tl_indices_.push_back(uint16_t(b));
-                tl_indices_.push_back(uint16_t(c));
+                tl_indices_.push_back(uint16_t(first + a));
+                tl_indices_.push_back(uint16_t(first + b));
+                tl_indices_.push_back(uint16_t(first + c));
                 continue;
             }
             // One or two corners behind the near plane (z < 0 in D3D's
@@ -1917,7 +2025,7 @@ private:
                 const ClipVertex& P = *in[e];
                 const ClipVertex& Q = *in[(e + 1) % 3];
                 const bool p_in = P.z >= 0.0f, q_in = Q.z >= 0.0f;
-                if (p_in) poly[count++] = ids[e];
+                if (p_in) poly[count++] = first + ids[e];
                 if (p_in != q_in && count < 4) {
                     const float k = P.z / (P.z - Q.z);
                     ClipVertex m;
@@ -1942,13 +2050,356 @@ private:
                 tl_indices_.push_back(uint16_t(poly[k + 1]));
             }
         }
-        if (tl_indices_.empty() || tl_scratch_.size() > 65535) return;
-        dev_->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, UINT(tl_scratch_.size()), UINT(tl_indices_.size() / 3),
-                                     tl_indices_.data(), D3DFMT_INDEX16, tl_scratch_.data(), sizeof(TlVertex));
+        tl_pipeline_ = &pipeline_->desc.name;
+    }
+
+    // terrain.hlsl's ff program: clip = view_proj * p, uv = p.xz / 16, the
+    // pre-lit colour, ff_fog.
+    void draw_terrain_cpu(INT base_vertex, UINT start_index, UINT prims) {
+        PROFILE(PROF_DRAW);
+        D9Buffer* vb = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
+        const uint32_t pitch = pipeline_->stream_pitch[0];
+        float rows[4][4];
+        FogParams fog;
+        if (!vb || vb->cpu.empty() || !pitch || !terrain_clip_rows(rows) || !fog_params(fog)) return;
+        const size_t icount = size_t(prims) * 3;
+        const uint8_t* base = vb->cpu.data() + streams_[0].offset;
+        IndexRange r;
+        if (!index_range_of(base_vertex, start_index, icount, int64_t((vb->cpu.size() - streams_[0].offset) / pitch), r)) return;
+        const size_t n = size_t(r.hi - r.lo + 1);
+        if (profile_.on) profile_.find(pipeline_->desc.name).vertices += n;
+        clip_scratch_.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            const uint8_t* src = base + (size_t(r.lo) + i) * pitch;
+            float p[3], c[3];
+            std::memcpy(p, src + pipeline_->position_offset, 12);
+            std::memcpy(c, src + pipeline_->colour_offset, 12);
+            ClipVertex& o = clip_scratch_[i];
+            clip_of(o, rows, p[0], p[1], p[2]);
+            o.r = c[0], o.g = c[1], o.b = c[2];
+            o.fog = fog(p[0], p[1], p[2]);
+            o.u = p[0] / 16.0f;
+            o.v = p[2] / 16.0f;
+        }
+        emit_tl(n, r, start_index, icount);
+    }
+
+    // A uniform member by name ("scene_sun"), from the block the vertex
+    // stage was pushed in its slot.
+    const float* member(const char* name) const {
+        auto it = pipeline_->registers.find(name);
+        if (it == pipeline_->registers.end() || it->second.first < 0 || it->second.first >= 4) return nullptr;
+        const std::vector<float>& block = uniforms_[0][it->second.first];
+        const size_t at = size_t(it->second.second) * 4;
+        return at + 4 <= block.size() ? block.data() + at : nullptr;
+    }
+
+    // ff_lit (scene_common.hlsl): the albedo lit by direct_sun +
+    // ambient_light + translucent_sun, through ldr_encode_fast, times
+    // ff_albedo; the scene's part worked out once a draw.
+    struct FfLight {
+        float to_sun[3], sky[3], bounce[3], sun[3];
+        float wrap, translucency, ambient;
+        const float* grade;
+        static float encode(float c) { return std::pow(std::max(c, 0.0f), 1.0f / 2.2f); }
+        // ff_display: a linear light colour into the tier's display space.
+        float display(float c) const { return encode(std::clamp(c * grade[0], 0.0f, 1.0f)); }
+        void lit(const float albedo[3], const float n[3], float translucency_of, float out[3]) const {
+            const float ndl = n[0] * to_sun[0] + n[1] * to_sun[1] + n[2] * to_sun[2];
+            const float wrapped = std::clamp((ndl + wrap) / (1.0f + wrap), 0.0f, 1.0f);
+            const float sky_amount = std::clamp(n[1] * 0.5f + 0.5f, 0.0f, 1.0f);
+            const float behind = std::clamp(-ndl, 0.0f, 1.0f);
+            float l[3];
+            for (int k = 0; k < 3; ++k) {
+                const float amb = (bounce[k] + (sky[k] - bounce[k]) * sky_amount) * ambient;
+                const float e = (sun[k] * wrapped + amb + sun[k] * behind * translucency_of) * grade[0];
+                l[k] = (encode(e / (1.0f + e)) - 0.46f) * grade[1] + 0.46f;
+            }
+            const float luma = 0.2126f * l[0] + 0.7152f * l[1] + 0.0722f * l[2];
+            for (int k = 0; k < 3; ++k) {
+                const float encoded = std::clamp(luma + (l[k] - luma) * grade[2], 0.0f, 1.0f);
+                out[k] = std::clamp(encode(std::clamp(albedo[k], 0.0f, 1.0f)) * encoded, 0.0f, 1.0f);
+            }
+        }
+    };
+    bool ff_light(FfLight& f) const {
+        const float* sun = member("scene_sun");
+        const float* sun_color = member("scene_sun_color");
+        const float* sky_zenith = member("scene_sky_zenith");
+        const float* sky_horizon = member("scene_sky_horizon");
+        const float* terrain_params = member("scene_terrain_params");
+        const float* light_params = member("scene_light_params");
+        const float* palette = member("scene_palette");
+        f.grade = member("scene_output_grade");
+        if (!sun || !sun_color || !sky_zenith || !sky_horizon || !terrain_params || !light_params || !palette || !f.grade) return false;
+        const float* bounce = palette + 4 * int(gfx::PaletteEntry::GroundBounce);
+        const float len = std::sqrt(sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2]);
+        for (int k = 0; k < 3; ++k) {
+            f.to_sun[k] = sun[k] / std::max(len, 1e-6f);
+            f.sky[k] = sky_horizon[k] + (sky_zenith[k] - sky_horizon[k]) * 0.6f;
+            f.bounce[k] = bounce[k] * light_params[2] * sun_color[k] * std::clamp(sun[1] * 4.0f, 0.0f, 1.0f);
+            f.sun[k] = sun_color[k] * sun[3];
+        }
+        f.wrap = light_params[0];
+        f.translucency = light_params[1];
+        f.ambient = terrain_params[3];
+        return true;
+    }
+
+    // water.hlsl's, mesh.hlsl's and skinned.hlsl's ff programs.
+    // Water: clip = view_proj * p, the deep water toward the sky in display
+    // space, ff_fog. The props: the model matrix, ff_lit scaled by
+    // 1 - material.w plus the albedo times the emissive. The creatures:
+    // linear-blend skinning over the packed joint rows first, then ff_lit
+    // plus the emissive, the uv as it is.
+    void draw_model_cpu(INT base_vertex, UINT start_index, UINT prims) {
+        PROFILE(PROF_DRAW);
+        const D9Pipeline::Cpu kind = pipeline_->cpu;
+        D9Buffer* vb = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
+        const uint32_t pitch = pipeline_->stream_pitch[0];
+        float rows[4][4];
+        FogParams fog;
+        FfLight light;
+        if (!vb || vb->cpu.empty() || !pitch || !terrain_clip_rows(rows) || !fog_params(fog) || !ff_light(light)) return;
+        const float* model = member("model_model");
+        const float* tint = member("model_tint");
+        const float* material = member("model_material");
+        const float* palette = member("scene_palette");
+        const float* sky_horizon = member("scene_sky_horizon");
+        const float* skin = member("skin_rows");
+        if (kind != D9Pipeline::Cpu::Water && (!model || !tint || !material)) return;
+        if (kind == D9Pipeline::Cpu::Skinned && !skin) return;
+        const std::vector<float>* skin_block = nullptr;
+        if (skin) skin_block = &uniforms_[0][pipeline_->registers["skin_rows"].first];
+        const size_t icount = size_t(prims) * 3;
+        IndexRange r;
+        if (!index_range_of(base_vertex, start_index, icount, int64_t((vb->cpu.size() - streams_[0].offset) / pitch), r)) return;
+        const size_t n = size_t(r.hi - r.lo + 1);
+        if (profile_.on) profile_.find(pipeline_->desc.name).vertices += n;
+        // The model matrix, column-major: m(r, c) = model[c * 4 + r].
+        const auto mm = [&](int rr, int c) { return model[c * 4 + rr]; };
+        float water[3] = {};
+        if (kind == D9Pipeline::Cpu::Water) {
+            const float* deep = palette + 4 * int(gfx::PaletteEntry::WaterDeep);
+            for (int k = 0; k < 3; ++k) water[k] = light.display(deep[k] + (sky_horizon[k] - deep[k]) * 0.2f);
+        }
+        const float lit_scale = material ? 1.0f - material[3] : 1.0f;
+        const float emissive = tint ? light.display(tint[3]) : 0.0f;
+        clip_scratch_.resize(n);
+        const uint32_t* off = pipeline_->attr_offset;
+        for (size_t i = 0; i < n; ++i) {
+            const uint8_t* src = vb->cpu.data() + streams_[0].offset + (size_t(r.lo) + i) * pitch;
+            float p[3];
+            std::memcpy(p, src + off[0], 12);
+            ClipVertex& o = clip_scratch_[i];
+            if (kind == D9Pipeline::Cpu::Water) {
+                clip_of(o, rows, p[0], p[1], p[2]);
+                o.r = water[0], o.g = water[1], o.b = water[2];
+                o.fog = fog(p[0], p[1], p[2]);
+                o.u = o.v = 0.0f;
+                continue;
+            }
+            float nrm[3], col[3];
+            std::memcpy(nrm, src + off[1], 12);
+            std::memcpy(col, src + off[2], 12);
+            if (kind == D9Pipeline::Cpu::Skinned) {
+                // SKIN_MATRIX with SKIN_JOINT's packed rows: the weighted
+                // sum of each joint's top three rows, the fourth 0 0 0 1.
+                uint8_t joint[4];
+                float weight[4];
+                std::memcpy(joint, src + off[4], 4);
+                std::memcpy(weight, src + off[5], 16);
+                float b[3][4] = {};
+                for (int j = 0; j < 4; ++j) {
+                    if (weight[j] == 0.0f) continue;
+                    const size_t at = (size_t(pipeline_->registers["skin_rows"].second) + size_t(joint[j]) * 3) * 4;
+                    if (at + 12 > skin_block->size()) continue;
+                    const float* m = skin_block->data() + at;
+                    for (int rr = 0; rr < 3; ++rr)
+                        for (int c = 0; c < 4; ++c) b[rr][c] += m[rr * 4 + c] * weight[j];
+                }
+                const float sp[3] = {b[0][0] * p[0] + b[0][1] * p[1] + b[0][2] * p[2] + b[0][3],
+                                     b[1][0] * p[0] + b[1][1] * p[1] + b[1][2] * p[2] + b[1][3],
+                                     b[2][0] * p[0] + b[2][1] * p[1] + b[2][2] * p[2] + b[2][3]};
+                const float sn[3] = {b[0][0] * nrm[0] + b[0][1] * nrm[1] + b[0][2] * nrm[2],
+                                     b[1][0] * nrm[0] + b[1][1] * nrm[1] + b[1][2] * nrm[2],
+                                     b[2][0] * nrm[0] + b[2][1] * nrm[1] + b[2][2] * nrm[2]};
+                std::memcpy(p, sp, 12);
+                std::memcpy(nrm, sn, 12);
+            }
+            const float w[3] = {mm(0, 0) * p[0] + mm(0, 1) * p[1] + mm(0, 2) * p[2] + mm(0, 3),
+                                mm(1, 0) * p[0] + mm(1, 1) * p[1] + mm(1, 2) * p[2] + mm(1, 3),
+                                mm(2, 0) * p[0] + mm(2, 1) * p[1] + mm(2, 2) * p[2] + mm(2, 3)};
+            float wn[3] = {mm(0, 0) * nrm[0] + mm(0, 1) * nrm[1] + mm(0, 2) * nrm[2],
+                           mm(1, 0) * nrm[0] + mm(1, 1) * nrm[1] + mm(1, 2) * nrm[2],
+                           mm(2, 0) * nrm[0] + mm(2, 1) * nrm[1] + mm(2, 2) * nrm[2]};
+            const float nl = std::sqrt(wn[0] * wn[0] + wn[1] * wn[1] + wn[2] * wn[2]);
+            for (float& v : wn) v /= std::max(nl, 1e-6f);
+            const float albedo[3] = {col[0] * tint[0], col[1] * tint[1], col[2] * tint[2]};
+            float lit[3];
+            light.lit(albedo, wn, 0.0f, lit);
+            for (int k = 0; k < 3; ++k) {
+                const float v = kind == D9Pipeline::Cpu::Skinned ? lit[k] + emissive
+                                                               : lit[k] * lit_scale + FfLight::encode(std::clamp(albedo[k], 0.0f, 1.0f)) * emissive;
+                (&o.r)[k] = std::clamp(v, 0.0f, 1.0f);
+            }
+            clip_of(o, rows, w[0], w[1], w[2]);
+            o.fog = fog(w[0], w[1], w[2]);
+            if (kind == D9Pipeline::Cpu::Skinned) {
+                float uv[2];
+                std::memcpy(uv, src + off[3], 8);
+                o.u = uv[0], o.v = uv[1];
+            } else {
+                o.u = o.v = 0.0f;
+            }
+        }
+        emit_tl(n, r, start_index, icount);
+    }
+
+    // foliage.hlsl's ff program, every instance of the draw into the one
+    // batch: the plant placed (yaw, scale, the grass fade, the wind's sway),
+    // its palette colour lit by ff_lit (direct_sun + ambient_light +
+    // translucent_sun through ldr_encode_fast, over ff_albedo), the uv onto
+    // the atlas, ff_fog.
+    void draw_foliage_cpu(INT base_vertex, UINT start_index, UINT prims, uint32_t first_instance, uint32_t instances) {
+        PROFILE(PROF_DRAW);
+        D9Buffer* vb = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr;
+        D9Buffer* ib = streams_[1].buffer ? d9(streams_[1].buffer) : nullptr;
+        const uint32_t pitch = pipeline_->stream_pitch[0], ipitch = pipeline_->stream_pitch[1];
+        float rows[4][4];
+        FogParams fog;
+        const float* wind = member("params_wind_time_fade");
+        const float* extra = member("params_extra");
+        const float* sun = member("scene_sun");
+        const float* sun_color = member("scene_sun_color");
+        const float* sky_zenith = member("scene_sky_zenith");
+        const float* sky_horizon = member("scene_sky_horizon");
+        const float* terrain_params = member("scene_terrain_params");
+        const float* light_params = member("scene_light_params");
+        const float* grade = member("scene_output_grade");
+        const float* palette = member("scene_palette");
+        if (!vb || vb->cpu.empty() || !ib || !pitch || !ipitch || !terrain_clip_rows(rows) || !fog_params(fog) || !wind ||
+            !extra || !sun || !sun_color || !sky_zenith || !sky_horizon || !terrain_params || !light_params || !grade || !palette)
+            return;
+        const std::vector<uint8_t>& idata = ib->dynamic ? ib->shadow : ib->cpu;
+        const size_t icount = size_t(prims) * 3;
+        IndexRange r;
+        if (!index_range_of(base_vertex, start_index, icount, int64_t((vb->cpu.size() - streams_[0].offset) / pitch), r)) return;
+        const size_t n = size_t(r.hi - r.lo + 1);
+        if (profile_.on) profile_.find(pipeline_->desc.name).vertices += n * instances;
+        const float* warm = palette + 4 * int(gfx::PaletteEntry::PlantWarm);
+        const float* bounce = palette + 4 * int(gfx::PaletteEntry::GroundBounce);
+        // The scene's light, once: to the sun, the ambient's two ends.
+        float to_sun[3] = {sun[0], sun[1], sun[2]};
+        const float sun_len = std::sqrt(to_sun[0] * to_sun[0] + to_sun[1] * to_sun[1] + to_sun[2] * to_sun[2]);
+        for (float& v : to_sun) v /= std::max(sun_len, 1e-6f);
+        float sky[3], bounce_light[3], sun_light[3];
+        for (int k = 0; k < 3; ++k) {
+            sky[k] = sky_horizon[k] + (sky_zenith[k] - sky_horizon[k]) * 0.6f;
+            bounce_light[k] = bounce[k] * light_params[2] * sun_color[k] * std::clamp(sun[1] * 4.0f, 0.0f, 1.0f);
+            sun_light[k] = sun_color[k] * sun[3];
+        }
+        const float wrap = light_params[0];
+        const auto smoothstep = [](float e0, float e1, float x) {
+            const float t = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        const auto encode = [&](float c) { return std::pow(std::max(c, 0.0f), 1.0f / 2.2f); };
+        clip_scratch_.resize(n);
+        for (uint32_t inst = 0; inst < instances; ++inst) {
+            const size_t at = streams_[1].offset + size_t(first_instance + inst) * ipitch;
+            if (at + ipitch > idata.size()) break;
+            float ps[4], params[4];
+            std::memcpy(ps, idata.data() + at + pipeline_->instance_offset, 16);
+            std::memcpy(params, idata.data() + at + pipeline_->params_offset, 16);
+            const float c = std::cos(params[0]), s = std::sin(params[0]);
+            const float dist = std::sqrt((ps[0] - fog.camera[0]) * (ps[0] - fog.camera[0]) + (ps[1] - fog.camera[1]) * (ps[1] - fog.camera[1]) +
+                                         (ps[2] - fog.camera[2]) * (ps[2] - fog.camera[2]));
+            const float fade = 1.0f - smoothstep(wind[2], wind[3], dist);
+            const float t = wind[1];
+            const float gust = wind[0] * (std::sin(t * 1.3f + params[2]) + 0.5f * std::sin(t * 2.9f + params[2] * 1.7f));
+            const float height = std::max(ps[3] * extra[0], 0.01f);
+            for (size_t i = 0; i < n; ++i) {
+                const uint8_t* src = vb->cpu.data() + streams_[0].offset + (size_t(r.lo) + i) * pitch;
+                float p[3], nrm[3], col[3], uv[2];
+                std::memcpy(p, src + pipeline_->position_offset, 12);
+                std::memcpy(nrm, src + pipeline_->normal_offset, 12);
+                std::memcpy(col, src + pipeline_->colour_offset, 12);
+                std::memcpy(uv, src + pipeline_->uv_offset, 8);
+                const float lx = p[0] * ps[3], ly = p[1] * ps[3], lz = p[2] * ps[3];
+                float rx = (c * lx + s * lz) * fade, ry = ly * fade, rz = (-s * lx + c * lz) * fade;
+                const float hf = std::clamp(ly / height, 0.0f, 1.0f);
+                const float sway = gust * hf * hf;
+                rx += sway;
+                rz += sway * 0.6f;
+                float n3[3] = {c * nrm[0] + s * nrm[2], nrm[1], -s * nrm[0] + c * nrm[2]};
+                const float nl = std::sqrt(n3[0] * n3[0] + n3[1] * n3[1] + n3[2] * n3[2]);
+                for (float& v : n3) v /= std::max(nl, 1e-6f);
+                const float wx = ps[0] + rx, wy = ps[1] + ry, wz = ps[2] + rz;
+                // The colour: the palette entry, its brightness, the plant's
+                // shade and warm push; dark undersides on the cards.
+                const int entry = std::clamp(int(col[0] + 0.5f), 0, gfx::PALETTE_COUNT - 1);
+                const int tag = int(col[2] + 0.5f);
+                const int material = tag >= 10 ? tag - 10 : tag;
+                const bool card = material == 1 || material == 2;
+                float albedo[3];
+                for (int k = 0; k < 3; ++k) {
+                    const float b = palette[4 * entry + k] * col[1] * params[1];
+                    albedo[k] = b + (b * warm[k] - b) * params[3];
+                    if (card) albedo[k] *= 1.0f - 0.35f * std::clamp(-n3[1], 0.0f, 1.0f);
+                }
+                // ff_lit.
+                const float ndl = n3[0] * to_sun[0] + n3[1] * to_sun[1] + n3[2] * to_sun[2];
+                const float wrapped = std::clamp((ndl + wrap) / (1.0f + wrap), 0.0f, 1.0f);
+                const float sky_amount = std::clamp(n3[1] * 0.5f + 0.5f, 0.0f, 1.0f);
+                const float translucency = material == 3 ? 0.0f : light_params[1];
+                const float behind = std::clamp(-ndl, 0.0f, 1.0f);
+                float light[3];
+                for (int k = 0; k < 3; ++k) {
+                    const float ambient = (bounce_light[k] + (sky[k] - bounce_light[k]) * sky_amount) * terrain_params[3];
+                    light[k] = sun_light[k] * wrapped + ambient + sun_light[k] * behind * translucency;
+                }
+                float lit[3];
+                for (int k = 0; k < 3; ++k) {
+                    const float e = light[k] * grade[0];
+                    lit[k] = encode(e / (1.0f + e));
+                    lit[k] = (lit[k] - 0.46f) * grade[1] + 0.46f;
+                }
+                const float luma = 0.2126f * lit[0] + 0.7152f * lit[1] + 0.0722f * lit[2];
+                ClipVertex& o = clip_scratch_[i];
+                for (int k = 0; k < 3; ++k) {
+                    const float encoded = std::clamp(luma + (lit[k] - luma) * grade[2], 0.0f, 1.0f);
+                    (&o.r)[k] = std::clamp(encode(std::clamp(albedo[k], 0.0f, 1.0f)) * encoded, 0.0f, 1.0f);
+                }
+                clip_of(o, rows, wx, wy, wz);
+                o.fog = fog(wx, wy, wz);
+                if (card) {
+                    o.u = uv[0] * 0.5f + (material == 2 ? 0.5f : 0.0f);
+                    o.v = uv[1] * 0.5f;
+                } else {
+                    o.u = 0.25f;
+                    o.v = 0.75f;
+                }
+            }
+            emit_tl(n, r, start_index, icount);
+        }
+    }
+
+    // The gathered pre-transformed draw, before anything that changes what
+    // it would be drawn with or drawn after.
+    void flush_tl() {
+        if (tl_scratch_.empty()) return;
+        WorkTimer timer(profile_, tl_pipeline_);
+        if (!tl_indices_.empty())
+            dev_->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, UINT(tl_scratch_.size()), UINT(tl_indices_.size() / 3),
+                                         tl_indices_.data(), D3DFMT_INDEX16, tl_scratch_.data(), sizeof(TlVertex));
+        tl_scratch_.clear();
+        tl_indices_.clear();
         // UP leaves stream 0 and the indices unset; the next draw expects
         // what was bound.
-        dev_->SetStreamSource(0, vb->vb, streams_[0].offset, pitch);
-        dev_->SetIndices(bound_index_->ib);
+        if (D9Buffer* b = streams_[0].buffer ? d9(streams_[0].buffer) : nullptr)
+            dev_->SetStreamSource(0, b->vb, streams_[0].offset, pipeline_ ? pipeline_->stream_pitch[0] : 0);
+        if (bound_index_) dev_->SetIndices(bound_index_->ib);
     }
 
     // The bound 32-bit range [start_index, +prims) as a 16-bit buffer, each
@@ -2087,20 +2538,11 @@ private:
     // ("cpu": D3D9 does no vertex work at all).
     enum class VertexPath { Program, FixedFunction, Cpu };
     VertexPath vertex_path_ = VertexPath::Program;
-    struct ClipVertex {
-        float x, y, z, w;
-        float r, g, b, fog, u, v;
-        unsigned code;
-    };
-    struct TlVertex {
-        float x, y, z, rhw;
-        DWORD diffuse, specular;
-        float u, v;
-    };
     std::vector<ClipVertex> clip_scratch_;
     std::vector<TlVertex> tl_scratch_;
     std::vector<uint16_t> tl_indices_;
-    bool tl_warned_ = false;
+    mutable bool tl_warned_ = false;
+    const std::string* tl_pipeline_ = nullptr;  // whose draws the gathered batch is, for the profile
     bool narrow_warned_ = false;
     bool no_rt_textures_ = SDL_getenv("DRAGON_D3D9_NO_RT_TEXTURES") != nullptr;
     // What a reset empties and this backend makes again (reset()).
