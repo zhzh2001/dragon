@@ -16,6 +16,10 @@
 //   - the buffer pool: MANAGED (the game's static buffers), SYSTEMMEM (its
 //     dynamic ones), DEFAULT, or none (DrawIndexedPrimitiveUP),
 //   - the batching: the whole grid in one draw, or one draw per row pair,
+// plus "ff-terrain": fixed function set up as the game's ff terrain program
+// would be -- a float3 vertex colour, texture coordinates generated from the
+// camera-space position through a texture matrix, range-based EXP2 vertex
+// fog -- with a readback that the float3 colour arrived,
 // and prints the microseconds per vertex and per draw for each, measured
 // to the GPU's end of each frame. Built with the XP toolchain, so the same
 // exe runs on XP, 7 and 10 (D3D9 needs the desktop session: run it from the
@@ -37,7 +41,7 @@ const int GRID = 128;  // vertices a side
 const int FRAMES = 8;  // timed frames per case
 
 struct Vertex {
-    float pos[3], normal[3], uv[2];
+    float pos[3], normal[3], uv[2], colour[3];
 };
 
 FILE* g_out = nullptr;
@@ -107,6 +111,12 @@ int main(int argc, char** argv) {
         D3DSHADER_VERSION_MINOR(caps.VertexShaderVersion),
         (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) ? "yes" : "no", caps.MaxVertexIndex);
 
+    // The whole run on one device: software vertex processing always, and
+    // where the card has T&L of its own (the G41's M6, any DX7 T&L part)
+    // again on a hardware device, where fixed function runs on the card.
+    auto bench = [&](DWORD processing, const char* label) -> int {
+    const bool software = processing == D3DCREATE_SOFTWARE_VERTEXPROCESSING;
+    say("\n== %s vertex processing\n", label);
     D3DPRESENT_PARAMETERS pp = {};
     pp.Windowed = TRUE;
     pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
@@ -116,8 +126,7 @@ int main(int argc, char** argv) {
     pp.hDeviceWindow = hwnd;
     pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
     IDirect3DDevice9* dev = nullptr;
-    HRESULT hr = d3d->CreateDevice(0, D3DDEVTYPE_HAL, hwnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE,
-                                   &pp, &dev);
+    HRESULT hr = d3d->CreateDevice(0, D3DDEVTYPE_HAL, hwnd, processing | D3DCREATE_FPU_PRESERVE, &pp, &dev);
     if (FAILED(hr)) {
         say("CreateDevice failed 0x%08lx\n", hr);
         return 1;
@@ -136,6 +145,9 @@ int main(int argc, char** argv) {
             v.normal[2] = 0.3f;
             v.uv[0] = x / float(GRID);
             v.uv[1] = z / float(GRID);
+            v.colour[0] = 0.8f;
+            v.colour[1] = 0.4f;
+            v.colour[2] = 0.2f;
         }
     std::vector<WORD> indices;
     for (int z = 0; z + 1 < GRID; ++z)
@@ -153,6 +165,26 @@ int main(int argc, char** argv) {
                                           D3DDECL_END()};
     IDirect3DVertexDeclaration9* decl = nullptr;
     dev->CreateVertexDeclaration(elements, &decl);
+    // The game's vertex: the colour as three floats, which fixed function
+    // must accept for the ff tier to keep its vertex formats.
+    const D3DVERTEXELEMENT9 terrain_elements[] = {
+        {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+        {0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0},
+        {0, 24, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+        {0, 32, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0},
+        D3DDECL_END()};
+    IDirect3DVertexDeclaration9* terrain_decl = nullptr;
+    say("float3 COLOR0 declaration: %s\n",
+        SUCCEEDED(dev->CreateVertexDeclaration(terrain_elements, &terrain_decl)) ? "created" : "refused");
+    IDirect3DTexture9* white = nullptr;
+    say("white texture: 0x%08lx\n", dev->CreateTexture(4, 4, 1, 0, D3DFMT_X8R8G8B8, D3DPOOL_MANAGED, &white, nullptr));
+    if (white) {
+        D3DLOCKED_RECT r;
+        if (SUCCEEDED(white->LockRect(0, &r, nullptr, 0))) {
+            for (int y = 0; y < 4; ++y) std::memset(static_cast<char*>(r.pBits) + y * r.Pitch, 0xFF, 16);
+            white->UnlockRect(0);
+        }
+    }
     IDirect3DVertexShader9* vs = nullptr;
     if (FAILED(dev->CreateVertexShader(reinterpret_cast<const DWORD*>(kVertexProgram), &vs))) say("no vertex program\n");
 
@@ -169,6 +201,27 @@ int main(int argc, char** argv) {
     dev->SetRenderState(D3DRS_ZENABLE, FALSE);
     dev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
     dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    D3DMATRIX tex_scale = {};
+    tex_scale.m[0][0] = tex_scale.m[1][1] = 1.0f / 16;
+    tex_scale.m[2][2] = tex_scale.m[3][3] = 1;
+    const float fog_density = 0.0005f;
+    // fixed function as the ff terrain program, or plain (lighting off, no
+    // texture, no fog), for each stage the loop below draws.
+    auto ff_terrain = [&](bool on, bool fogged) {
+        dev->SetTexture(0, on ? white : nullptr);
+        dev->SetTextureStageState(0, D3DTSS_COLOROP, on ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
+        dev->SetTextureStageState(0, D3DTSS_COLORARG1, on ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
+        dev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+        dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, on ? D3DTSS_TCI_CAMERASPACEPOSITION : 0);
+        dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, on ? D3DTTFF_COUNT2 : D3DTTFF_DISABLE);
+        dev->SetTransform(D3DTS_TEXTURE0, &tex_scale);
+        dev->SetRenderState(D3DRS_FOGENABLE, on && fogged);
+        dev->SetRenderState(D3DRS_FOGCOLOR, 0x8090A0);
+        dev->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_EXP2);
+        dev->SetRenderState(D3DRS_FOGTABLEMODE, D3DFOG_NONE);
+        dev->SetRenderState(D3DRS_RANGEFOGENABLE, TRUE);
+        dev->SetRenderState(D3DRS_FOGDENSITY, *reinterpret_cast<const DWORD*>(&fog_density));
+    };
 
     // The end of a frame on the GPU: an event query, or where the driver has
     // none (the GMA 3150's XP driver), a copy of the back buffer back.
@@ -182,6 +235,89 @@ int main(int argc, char** argv) {
     }
     say("frame end: %s\n", done ? "event query" : "back buffer readback");
 
+    // What fixed function accepts here: the colour as float3 (the game's
+    // vertices) or D3DCOLOR, with and without texture coordinates generated
+    // from the camera-space position, with and without vertex fog. Each
+    // draws the grid once and reads the middle pixel back: the colour
+    // 0.8, 0.4, 0.2 is cc6633 (fog off).
+    // In FVF order (position, normal, diffuse, texture coordinates): XP's
+    // runtime reads a fixed-function declaration as the FVF it stands for, so
+    // a colour declared after the uv was read from the uv's bytes, as black.
+    struct PackedVertex {
+        float pos[3], normal[3];
+        DWORD colour;
+        float uv[2];
+    };
+    std::vector<PackedVertex> packed(verts.size());
+    for (size_t i = 0; i < verts.size(); ++i) {
+        std::memcpy(packed[i].pos, verts[i].pos, 12);
+        std::memcpy(packed[i].normal, verts[i].normal, 12);
+        packed[i].colour = 0xFFCC6633;
+        std::memcpy(packed[i].uv, verts[i].uv, 8);
+    }
+    const D3DVERTEXELEMENT9 packed_elements[] = {
+        {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+        {0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0},
+        {0, 24, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0},
+        {0, 28, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+        D3DDECL_END()};
+    IDirect3DVertexDeclaration9* packed_decl = nullptr;
+    dev->CreateVertexDeclaration(packed_elements, &packed_decl);
+    bool float3_ok = false, packed_ok = false;
+    {
+        IDirect3DSurface9* bb = nullptr;
+        IDirect3DSurface9* sys = nullptr;
+        dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb);
+        dev->CreateOffscreenPlainSurface(320, 240, D3DFMT_X8R8G8B8, D3DPOOL_SYSTEMMEM, &sys, nullptr);
+        for (int combo = 0; combo < 10; ++combo) {
+            // 8 and 9: the colour alone (no texture stage), float3 and D3DCOLOR.
+            const bool diffuse_only = combo >= 8;
+            const bool use_packed = combo & 1, texgen = !diffuse_only && (combo & 2), fogged = !diffuse_only && (combo & 4);
+            IDirect3DVertexDeclaration9* d = use_packed ? packed_decl : terrain_decl;
+            if (!d) continue;
+            dev->Clear(0, nullptr, D3DCLEAR_TARGET, 0, 1, 0);
+            dev->BeginScene();
+            dev->SetVertexDeclaration(d);
+            dev->SetVertexShader(nullptr);
+            dev->SetTransform(D3DTS_WORLD, &world);
+            dev->SetTransform(D3DTS_VIEW, &ident);
+            dev->SetTransform(D3DTS_PROJECTION, &ident);
+            ff_terrain(true, fogged);
+            if (diffuse_only) ff_terrain(false, false);
+            if (!texgen) {
+                dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+                dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+            }
+            const HRESULT drawn = use_packed
+                ? dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, GRID * GRID, tris, indices.data(), D3DFMT_INDEX16,
+                                              packed.data(), sizeof(PackedVertex))
+                : dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, GRID * GRID, tris, indices.data(), D3DFMT_INDEX16,
+                                              verts.data(), sizeof(Vertex));
+            dev->EndScene();
+            D3DLOCKED_RECT r = {};
+            DWORD pixel = 0xDEADBEEF;
+            if (bb && sys && SUCCEEDED(dev->GetRenderTargetData(bb, sys)) &&
+                SUCCEEDED(sys->LockRect(&r, nullptr, D3DLOCK_READONLY))) {
+                pixel = reinterpret_cast<const DWORD*>(static_cast<const char*>(r.pBits) + 120 * r.Pitch)[160] & 0xFFFFFF;
+                sys->UnlockRect();
+            }
+            say("ff check: colour %-8s %-12s texgen %-3s fog %-3s -> draw 0x%08lx, middle pixel %06lx\n",
+                use_packed ? "D3DCOLOR" : "float3", diffuse_only ? "diffuse only" : "x texture", texgen ? "on" : "off",
+                fogged ? "on" : "off", drawn, pixel);
+            if (texgen && fogged && SUCCEEDED(drawn)) (use_packed ? packed_ok : float3_ok) = true;
+        }
+        ff_terrain(false, false);
+        if (sys) sys->Release();
+        if (bb) bb->Release();
+    }
+    // The timed ff-terrain stage takes whichever colour this runtime draws.
+    const bool ff_packed = !float3_ok && packed_ok;
+    if (!float3_ok && !packed_ok) {
+        if (terrain_decl) terrain_decl->Release();
+        terrain_decl = nullptr;
+    }
+    say("ff-terrain timing uses: %s\n", terrain_decl ? (ff_packed ? "D3DCOLOR" : "float3") : "nothing (refused)");
+
     struct Pool {
         const char* name;
         D3DPOOL pool;
@@ -194,22 +330,28 @@ int main(int argc, char** argv) {
     const double spin = argc > 2 ? atof(argv[2]) : 0;
     say("%-9s %-10s %-6s %9s %9s %10s %9s %9s\n", "stage", "pool", "draws", "ms/frame", "draws/f", "verts/f",
         "us/vert", "us/draw");
-    for (int program = spin > 0 ? 1 : 0; program < 2; ++program) {
+    const char* stage_names[] = {"fixed", "vs_2_0", "ff-terr"};
+    for (int program = spin > 0 ? 1 : 0; program < 3; ++program) {
+        if (program == 2 && (!terrain_decl || spin > 0)) break;
+        if (program == 1 && !vs) continue;
         for (const Pool& p : pools) {
             if (spin > 0 && p.pool != D3DPOOL_MANAGED) continue;
             IDirect3DVertexBuffer9* vb = nullptr;
             IDirect3DIndexBuffer9* ib = nullptr;
             if (!p.up) {
-                const DWORD usage = D3DUSAGE_SOFTWAREPROCESSING;
-                if (FAILED(dev->CreateVertexBuffer(UINT(verts.size() * sizeof(Vertex)), usage, 0, p.pool, &vb, nullptr)) ||
+                const DWORD usage = software ? D3DUSAGE_SOFTWAREPROCESSING : D3DUSAGE_WRITEONLY;
+                const bool pk = program == 2 && ff_packed;
+                const UINT stride = pk ? sizeof(PackedVertex) : sizeof(Vertex);
+                if (FAILED(dev->CreateVertexBuffer(UINT(verts.size() * stride), usage, 0, p.pool, &vb, nullptr)) ||
                     FAILED(dev->CreateIndexBuffer(UINT(indices.size() * 2), usage, D3DFMT_INDEX16, p.pool, &ib, nullptr))) {
-                    say("%-9s %-10s buffers refused\n", program ? "vs_2_0" : "fixed", p.name);
+                    say("%-9s %-10s buffers refused\n", stage_names[program], p.name);
                     if (vb) vb->Release();
                     continue;
                 }
                 void* m = nullptr;
                 vb->Lock(0, 0, &m, 0);
-                std::memcpy(m, verts.data(), verts.size() * sizeof(Vertex));
+                if (pk) std::memcpy(m, packed.data(), packed.size() * sizeof(PackedVertex));
+                else std::memcpy(m, verts.data(), verts.size() * sizeof(Vertex));
                 vb->Unlock();
                 ib->Lock(0, 0, &m, 0);
                 std::memcpy(m, indices.data(), indices.size() * 2);
@@ -228,8 +370,9 @@ int main(int argc, char** argv) {
                     UINT f_draws = 0, f_verts = 0;
                     dev->Clear(0, nullptr, D3DCLEAR_TARGET, 0x203040, 1, 0);
                     dev->BeginScene();
-                    dev->SetVertexDeclaration(decl);
-                    if (program) {
+                    dev->SetVertexDeclaration(program == 2 ? (ff_packed ? packed_decl : terrain_decl) : decl);
+                    ff_terrain(program == 2, true);
+                    if (program == 1) {
                         dev->SetVertexShader(vs);
                         dev->SetVertexShaderConstantF(0, mvp, 4);
                         dev->SetVertexShaderConstantF(4, sun, 1);
@@ -241,7 +384,7 @@ int main(int argc, char** argv) {
                         dev->SetTransform(D3DTS_PROJECTION, &ident);
                     }
                     if (!p.up) {
-                        dev->SetStreamSource(0, vb, 0, sizeof(Vertex));
+                        dev->SetStreamSource(0, vb, 0, program == 2 && ff_packed ? sizeof(PackedVertex) : sizeof(Vertex));
                         dev->SetIndices(ib);
                     }
                     const UINT pieces = rows ? GRID - 1 : 1;
@@ -255,8 +398,12 @@ int main(int argc, char** argv) {
                             // UP takes the vertices from min_index on as its own base.
                             std::vector<WORD> local(indices.begin() + first_tri * 3, indices.begin() + (first_tri + count) * 3);
                             for (WORD& i : local) i = WORD(i - min_index);
-                            dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, nverts, count, local.data(), D3DFMT_INDEX16,
-                                                        &verts[min_index], sizeof(Vertex));
+                            if (program == 2 && ff_packed)
+                                dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, nverts, count, local.data(), D3DFMT_INDEX16,
+                                                            &packed[min_index], sizeof(PackedVertex));
+                            else
+                                dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, nverts, count, local.data(), D3DFMT_INDEX16,
+                                                            &verts[min_index], sizeof(Vertex));
                         } else {
                             dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, min_index, nverts, first_tri * 3, count);
                         }
@@ -282,7 +429,7 @@ int main(int argc, char** argv) {
                     vertices += f_verts;
                 }
                 const double ms = total / frames / 1000.0;
-                say("%-9s %-10s %-6s %9.2f %9u %10u %9.3f %9.1f   (in draw calls %.2f ms)\n", program ? "vs_2_0" : "fixed",
+                say("%-9s %-10s %-6s %9.2f %9u %10u %9.3f %9.1f   (in draw calls %.2f ms)\n", stage_names[program],
                     p.name, rows ? "rows" : "one", ms, draws / frames, vertices / frames, total / vertices,
                     total / draws, in_draws / frames / 1000.0);
             }
@@ -294,9 +441,16 @@ int main(int argc, char** argv) {
     if (back) back->Release();
     if (readback) readback->Release();
     if (vs) vs->Release();
+    if (terrain_decl) terrain_decl->Release();
+    if (packed_decl) packed_decl->Release();
+    if (white) white->Release();
     decl->Release();
     dev->Release();
+    return 0;
+    };
+    int status = bench(D3DCREATE_SOFTWARE_VERTEXPROCESSING, "software");
+    if (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) bench(D3DCREATE_HARDWARE_VERTEXPROCESSING, "hardware");
     d3d->Release();
     if (g_out) fclose(g_out);
-    return 0;
+    return status;
 }

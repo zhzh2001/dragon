@@ -1249,7 +1249,38 @@ INF) and under Windows 10's (a modded "PHDGD" build) alike.
   `4D99A75D...`). Fixed function (no program) is native there, 0.31 us a
   vertex on x99 against 0.82, but the game's ff tier is vertex programs
   too, so both D3D9 tiers pay the interpreter on Windows 8/10 with a card
-  that has no vertex shaders. Windows 7 boots on the Atom in IDE mode as
+  that has no vertex shaders.
+- **Windows 7's `d3d9.dll` beside the exe undoes it (2026-10-11).**
+  `d3d9.dll` is not a KnownDLL, so a copy in the program's folder loads in
+  place of the system's. Windows 7's 32-bit one (SysWOW64) runs on Windows
+  10 once one import is repointed: `user32!SfmDxGetSwapChainStats`, a DWM
+  statistics call Windows 10 dropped, called from one site that takes a
+  zero return as "no statistics" -- `GetWindowRect` has the same shape and
+  returns zero for a pointer that is not a window. On x99 (Windows 10
+  22H2, the X550's 8.14 WDDM 1.1 driver) the vs_2_0 draw went 13.5 ->
+  0.27 ms, fixed function 5.1 -> 0.26, and the game itself, ff tier, pure
+  software vertex processing, Minimal: draw calls 26.5 -> 0.9 ms a frame,
+  the median frame 26.4 -> 1.9 ms, the picture unchanged. Microsoft's DLL
+  cannot ship with the game; it is a fix a player with a Windows 7 licence
+  can make on their own machine. Not yet run on the Atom's own Windows 10
+  (its SSD wants the BIOS in AHCI).
+- **Fixed-function vertex processing only pays where the card does it.**
+  `swvp.exe`'s "ff-terr" stage is fixed function set up as the ff terrain
+  program would be (texture coordinates generated from the camera-space
+  position through a texture matrix, range EXP2 vertex fog). In software
+  it is slower than the vs_2_0 program everywhere: 6.9 ms against 1.4 on
+  XP, 21 against 13.5 on Windows 10 (which appears to turn fixed function
+  into a program for the same interpreter), 0.6 against 0.3 with Windows
+  7's DLL. On a device with T&L it costs no CPU at all (the X550's
+  hardware pass: 0.00 ms in the draw call), so it is for the M6 and the
+  other DX7 T&L parts, not the GMA 3150. Two constraints from XP's
+  runtime: fixed function refuses a float3 colour (D3DERR_INVALIDCALL;
+  Windows 10 takes it), and it reads a declaration as the FVF it stands
+  for, so the elements must come in FVF order -- position, normal,
+  D3DCOLOR diffuse, texture coordinates. A colour declared after the uv
+  was read from the uv's bytes, as black. The ff tier's vertices are
+  already in that order with a float3 colour, so it would want the colour
+  packed to 4 bytes on this path. Windows 7 boots on the Atom in IDE mode as
   it is (it had failed once in AHCI, and its next boot went straight to
   Startup Repair).
 - **The GMA's XP driver has no 32-bit indices** (MaxVertexIndex 65534)
