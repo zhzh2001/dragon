@@ -1335,12 +1335,33 @@ each pipeline, gives:
 | skinned (698 vertices) | 5.0 | -- |
 | mesh, water, sky | 2.8 | -- |
 
-On Windows 10 the foliage is now the frame: few vertices, but a draw per
-tree, each paying the interpreter's setup. It, the creatures and the props
-are the next to port (the shared ff_lit lighting once, the trees batched
-into one draw); fixed function cannot sway or light the way ff_lit does,
-so `ff` stays the terrain's (and the pre-lit props') path. Still to
-measure: all three on the Atom under XP and Windows 10, and on the M6.
+Path `cpu` now covers every ff program with real vertex work: the terrain,
+the foliage (placement, sway and ff_lit per instance, all the trees of a
+draw in one batch), the creatures (packed-joint skinning), the props and
+the water, from the bake's [slot, register] map of every uniform member
+(`"registers"`, written for a recipe with a `"transform"`). Consecutive
+draws of one pipeline gather into one pre-transformed draw, flushed before
+anything that changes state or order -- the terrain's 240 chunks of ~20
+vertices cost more in draws than in arithmetic, and with the batch the
+terrain beat even Windows 7's JIT (6.8 ms against 9.2). Only the sky and
+the particles still go through D3D9's own vertex processing. On the Atom's
+Windows 10 (ff Minimal, 640x480, headless; frames within 5 levels):
+
+| ms a frame | program | `ff` | `cpu` |
+|---|---|---|---|
+| terrain | 73.6 | 60.4 | 6.9 |
+| foliage | 104.9 | (program) | 7.8 |
+| creatures | 44.1 | (program) | 4.7 |
+| props + water | 22.9 | (program) | 3.4 |
+| **median frame** | **264.8** | 239.2 | **29.0** |
+| median, 900 frames into a hoard run | 262.4 | -- | 37.9 |
+
+`ff` helps little here because Windows 10 interprets fixed function too;
+it is for the cards whose driver takes T&L (the M6). Where Windows 7's
+`d3d9.dll` sits beside the exe, its JIT is faster than this C++ on the
+foliage (1.7 ms against 7.1: per-vertex `pow` and `exp`, four vertices at
+a time in the JIT's SSE) and slower on everything batched. Still to
+measure: all three under XP on the Atom (the BIOS back in IDE), and the M6.
 
 So a card the sm2 tier fits by its pixel shaders can still have software
 vertices, and then sm2's own default (Medium) runs at 12 fps; the tier's
