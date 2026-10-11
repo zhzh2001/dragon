@@ -1224,7 +1224,34 @@ INF) and under Windows 10's (a modded "PHDGD" build) alike.
 - **Windows 10 is no place to measure such a card.** The same frame took
   1.8-2.2 s there (sm2 Minimal) and 28 ms under XP: Windows 10's D3D9
   software vertex pipeline cost ~50 us a vertex on this CPU, inside the
-  draw calls, whatever the resolution.
+  draw calls, whatever the resolution. The reason is in the runtime, not
+  the card or its (modded) driver: **Windows 10's `d3d9.dll` interprets
+  vertex shaders.** `tools/d3d9/swvp/` measures it without the game
+  (`swvp.exe`: a 128x128 grid, fixed function or a 17-slot vs_2_0 program,
+  each pool, one draw or 127) and finds where the time goes
+  (`sampler.exe`: suspends the busiest thread 1,000 times a second, by
+  module and RVA, named offline against Microsoft's public PDBs). Time
+  inside the draw call for one 16,384-vertex vs_2_0 draw:
+
+  | | ms | us/vertex |
+  |---|---|---|
+  | Atom D525, XP SP3, Intel 14.37.50 | 1.35 | 0.08 |
+  | Atom D525, Windows 7 x64 (WoW64), "Chell 1.8b" | 4.66 | 0.28 |
+  | x99's Xeon, Windows 10 22H2, X550 | 13.5 | 0.82 |
+
+  On x99, 92% of the samples were in `d3d9.dll`'s `CVertexVM`
+  (`EvalSource`, `GetDataAddr`, `EvalPredicate`...), an instruction-by-
+  instruction interpreter. XP's `d3d9.dll` and Windows 7's 32-bit one carry
+  `CodeGeneratorSSE2`, `CSSEPSGPShader4V`/`8V` and AMD's `DeclJIT`: they
+  compile each vertex shader to SSE code that runs four or eight vertices
+  at a time, and on XP that code was 0.6% of the samples. Windows 10's has
+  only the interpreter (the Atom's copy is the same build as x99's, PDB
+  `4D99A75D...`). Fixed function (no program) is native there, 0.31 us a
+  vertex on x99 against 0.82, but the game's ff tier is vertex programs
+  too, so both D3D9 tiers pay the interpreter on Windows 8/10 with a card
+  that has no vertex shaders. Windows 7 boots on the Atom in IDE mode as
+  it is (it had failed once in AHCI, and its next boot went straight to
+  Startup Repair).
 - **The GMA's XP driver has no 32-bit indices** (MaxVertexIndex 65534)
   and does not pretend otherwise: given the terrain's and the creatures'
   32-bit index buffers it drew a few huge triangles fanned from one vertex
