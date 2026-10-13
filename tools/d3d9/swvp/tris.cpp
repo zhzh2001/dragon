@@ -9,7 +9,9 @@
 // XYZRHW vertices, which the runtime hands the driver as they are) and
 // draws the same triangles each way that might matter to such a driver:
 //   - the primitive: an indexed list, a plain list (three vertices a
-//     triangle), strips one per row (one vertex a triangle);
+//     triangle), strips one per row (one vertex a triangle), the rows as
+//     one strip joined by degenerate triangles ("joined"), and that strip
+//     indexed ("ix-strp");
 //   - the vertex: position and colour (20 bytes), plus a uv (28), plus the
 //     specular whose alpha is vertex fog (32);
 //   - fog and the texture stage on or off;
@@ -211,7 +213,22 @@ int main(int argc, char** argv) {
                     pack(verts[z * GRID + x], strips[z]);
                     pack(verts[(z + 1) * GRID + x], strips[z]);
                 }
-            for (int prim = 0; prim < 3; ++prim) {
+            // The rows as one strip, joined by repeating the last vertex of
+            // a row and the first of the next (four degenerate triangles a
+            // join, which keeps the winding): one draw, as a batch would be.
+            std::vector<BYTE> joined;
+            std::vector<WORD> strip_indices;  // the same, indexed
+            for (int z = 0; z + 1 < GRID; ++z) {
+                if (z > 0) strip_indices.push_back(WORD(z * GRID));
+                for (int x = 0; x < GRID; ++x) {
+                    strip_indices.push_back(WORD(z * GRID + x));
+                    strip_indices.push_back(WORD((z + 1) * GRID + x));
+                }
+                if (z + 2 < GRID) strip_indices.push_back(WORD((z + 1) * GRID + GRID - 1));
+            }
+            for (WORD i : strip_indices) pack(verts[i], joined);
+            const UINT joined_prims = UINT(strip_indices.size()) - 2;
+            for (int prim = 0; prim < 5; ++prim) {
                 for (int tex_on = 0; tex_on < (has_uv ? 2 : 1); ++tex_on) {
                     for (int fog_on = 0; fog_on < (has_spec ? 2 : 1); ++fog_on) {
                         dev->SetFVF(f.fvf);
@@ -241,6 +258,12 @@ int main(int argc, char** argv) {
                                                                     D3DFMT_INDEX16, indexed.data(), stride);
                             } else if (prim == 1) {
                                 drawn = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, tris, flat.data(), stride);
+                            } else if (prim == 3) {
+                                drawn = dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, joined_prims, joined.data(), stride);
+                            } else if (prim == 4) {
+                                drawn = dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLESTRIP, 0, GRID * GRID, joined_prims,
+                                                                    strip_indices.data(), D3DFMT_INDEX16, indexed.data(),
+                                                                    stride);
                             } else {
                                 for (const auto& s : strips) {
                                     drawn = dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, UINT(s.size() / stride) - 2, s.data(),
@@ -253,8 +276,11 @@ int main(int argc, char** argv) {
                             dev->Present(nullptr, nullptr, nullptr, nullptr);
                         }
                         const double ms = total / FRAMES / 1000.0;
-                        const double sent = prim == 0 ? double(GRID * GRID) : prim == 1 ? tris * 3.0 : (GRID - 1) * GRID * 2.0;
-                        const char* prim_names[] = {"indexed", "list", "strips"};
+                        const double sent = prim == 0 || prim == 4 ? double(GRID * GRID)
+                                            : prim == 1           ? tris * 3.0
+                                            : prim == 2           ? (GRID - 1) * GRID * 2.0
+                                                                  : double(strip_indices.size());
+                        const char* prim_names[] = {"indexed", "list", "strips", "joined", "ix-strp"};
                         say("%-6s %-16s %-7s %-4s %-4s %9.2f %8u %8.3f %8.3f%s\n", large ? "large" : "tiny", f.name,
                             prim_names[prim], tex_on ? "on" : "off", fog_on ? "on" : "off", ms, tris, ms * 1000 / tris,
                             ms * 1000 / sent, FAILED(drawn) ? "  (draw failed)" : "");

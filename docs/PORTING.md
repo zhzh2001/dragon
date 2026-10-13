@@ -1433,18 +1433,53 @@ sending them to the frame's end on the card:
 | indexed list, uv, vertex fog (the ff tier's case) | 6.9-7.8 |
 | plain list (three vertices a triangle) | 5.3-7.4 |
 | strips, one a row (one vertex a triangle) | 3.8-4.9 |
+| the rows as one strip joined by degenerates, plain or indexed | 3.7-5.4 |
 
 Fill, texturing and fog barely move it: about 3 us a triangle plus 0.8 a
 vertex, some 200K triangles a second, which reads as the driver writing
-every vertex to the card itself rather than by bus-master DMA. The driver
-reads a `User.BusMastering` value (with `BusMastering2D`,
-`BusMasteringOGL`, `ForceAGP`); set to 1 on the active video key and
-rebooted, it changed nothing (same table within 3%), and it is removed
-again. So for this card the frame is a triangle budget: the game sends
-about 8,300 a frame at Minimal (terrain 4.8K, the dragon 1.2K, trees 0.7K,
-rocks 0.6K, water 0.5K, sky 0.25K), each at the indexed-and-fogged price.
-What would move it: fewer triangles (Lowest), and strips out of path `cpu`
-(`meshopt_stripify` is vendored), about a third off what is sent.
+every vertex to the card itself rather than by bus-master DMA.
+
+**The driver's own settings did not change it.** The miniport
+(`g550dhm.sys`) defines its registry values as category-prefixed names
+with defaults, read from the device's video key -- `Engine.BusMastering`,
+`Engine.BusMastering2D` and `Engine.BusMasteringOGL` default to **1**
+already, `CPU.WriteCombining`, `CPU.AGP` and `User3D.ForceAGP` to 0,
+`User3D.GuardBand` to 0. Set on the active key and rebooted, each in turn,
+`User.BusMastering` (a wrong guess at the name), then `CPU.WriteCombining`
+with `User3D.GuardBand`, left the table within 3% and the reported guard
+band at 0; all are removed again. `ForceAGP` on a board with no AGP was
+not tried.
+
+**Strips do not pay in the game.** Path `cpu` gathers each pipeline's
+triangles into one pre-transformed draw, so `meshopt_stripify` on that
+batch was tried (with `meshopt_optimizeVertexCacheStrip` first): the
+batches are short culled and clipped runs of a few chunks, and the strip
+drew **1.65 primitives a triangle**, the rest degenerate joins, which this
+driver pays for like any other. Lowest went 27.5 -> 25.8 ms headless,
+Minimal no better; the change was not kept.
+
+**Path `cpu` is the G550's default.** Its culling and batching cost this
+driver less than the runtime's own clipping into it: headless at
+640x480, Lowest median 31.8 -> 27.4 ms and Minimal 52-54 -> 46, and in a
+real run (hoard run seed 7, autopilot, 3,600 frames, fullscreen 640x480
+16-bit, vsync off) Lowest **23.9 -> 29.6 fps**. A Matrox adapter
+(`VendorId` 0x102B) now takes it unless `DRAGON_D3D9_VERTEX_PATH` says
+otherwise; the frame matches the Mac's
+(`artifacts/r5-ff-preview/g550-d3d9-ff-cpu-vs-metal-ff-lowest.png`).
+
+| G550, XP, the run above | Average | Median | 1% low |
+|---|---|---|---|
+| ff, Lowest, path `cpu` | 29.6 fps | 33.2 ms | 49.8 ms |
+| ff, Lowest, programs | 23.9 fps | 49.8 ms | 49.8 ms |
+| ff, Minimal, path `cpu` | 15.7 fps | 66.4 ms | 83.0 ms |
+
+The fullscreen medians land on whole 60 Hz refreshes with vsync off, so
+the driver appears to flip on the blank whatever the present interval
+(its `User3D.FlipOnVBlank`); the headless figures are the real costs.
+Lowest is the G550's preset. More would have to come from fewer
+triangles -- the game sends about 4,900 a frame at Lowest (terrain 2.9K,
+rocks 0.6K, water 0.5K, trees 0.5K, sky 0.25K, the dragon 0.1K), each at
+the price above.
 
 ### R7, in progress: graphics settings and presets
 

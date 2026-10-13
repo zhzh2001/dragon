@@ -510,6 +510,7 @@ public:
         D3DADAPTER_IDENTIFIER9 id = {};
         d3d_->GetAdapterIdentifier(adapter_, 0, &id);
         d3d_->GetDeviceCaps(adapter_, D3DDEVTYPE_HAL, &caps_);
+        vendor_id_ = id.VendorId;
         LOG_INFO("direct3d9: %s, vs_%lu_%lu ps_%lu_%lu", id.Description,
                  D3DSHADER_VERSION_MAJOR(caps_.VertexShaderVersion), D3DSHADER_VERSION_MINOR(caps_.VertexShaderVersion),
                  D3DSHADER_VERSION_MAJOR(caps_.PixelShaderVersion), D3DSHADER_VERSION_MINOR(caps_.PixelShaderVersion));
@@ -648,9 +649,15 @@ public:
         // that exports Direct3DCreate9On12 -- and a Windows 7 d3d9.dll placed
         // beside the exe does not, so it keeps its programs. Windows 8 and
         // 8.1 have not been measured and keep theirs.
+        // A Matrox card takes path "cpu" everywhere: the G550's driver feeds
+        // the card a triangle at a time, and the triangles path "cpu" culls
+        // and batches itself cost it less than the runtime's own clipping
+        // into the same driver (13% off the median frame under XP, Lowest
+        // and Minimal alike, against the Atom's 70% the other way).
         if (ff_ && software_vp_) {
             HMODULE runtime = GetModuleHandleA("d3d9.dll");
-            if (runtime && GetProcAddress(runtime, "Direct3DCreate9On12")) vertex_path_ = VertexPath::Cpu;
+            if ((runtime && GetProcAddress(runtime, "Direct3DCreate9On12")) || vendor_id_ == 0x102B)
+                vertex_path_ = VertexPath::Cpu;
         }
         if (const char* v = SDL_getenv("DRAGON_D3D9_VERTEX_PATH"); v && ff_) {
             vertex_path_ = VertexPath::Program;
@@ -2616,6 +2623,7 @@ private:
     bool in_scene_ = false;
     bool has_depth_ = false;
     bool r32f_filterable_ = false;
+    DWORD vendor_id_ = 0;  // the adapter's PCI vendor (0x102B: Matrox)
     D3DFORMAT depth_format_ = D3DFMT_D24X8;  // choose_depth_format()
     bool stretch_from_textures_ = true;  // D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES
     D9Texture backbuffer_;               // frame_target(): the back buffer's surface, this frame
