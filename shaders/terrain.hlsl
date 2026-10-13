@@ -1,6 +1,7 @@
 // The atmosphere's atlas after the shadow map and the detail tile (the baked
 // lattice takes slot 2 only on a retro tier, which has no atmosphere).
 #define ATMOSPHERE_SLOT 2
+#define TERRAIN_SUN_SLOT 3  // and the terrain's shadow heights after it
 #include "scene_common.hlsl"
 
 struct VertexIn {

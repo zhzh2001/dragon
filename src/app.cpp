@@ -1423,6 +1423,22 @@ void App::regenerate_terrain() {
     // High enough that snow reads as mountain caps rather than covering the
     // whole upper valley.
     material_.snow_line = core::lerpf(terrain_.min_height(), terrain_.max_height(), 0.74f);
+    // The terrain as the sun sees it, over the whole extent the shaders fade
+    // out at (gfx::Atmosphere::set_heightfield): 7 m a texel. Rendered
+    // heights, so the shadows fall from the ground that is drawn.
+    if (atmosphere_.available()) {
+        constexpr int SUN_GRID = 1024;
+        const float half = material_.half_extent;
+        std::vector<float> heights(size_t(SUN_GRID) * size_t(SUN_GRID));
+        for (int j = 0; j < SUN_GRID; ++j) {
+            for (int i = 0; i < SUN_GRID; ++i) {
+                const float x = -half + (float(i) + 0.5f) * (2.0f * half / float(SUN_GRID));
+                const float z = -half + (float(j) + 0.5f) * (2.0f * half / float(SUN_GRID));
+                heights[size_t(j) * size_t(SUN_GRID) + size_t(i)] = terrain_.surface_at(x, z);
+            }
+        }
+        atmosphere_.set_heightfield(heights, SUN_GRID, half);
+    }
     // The terrain's patch noise, once, into the otherwise unused uv.x: the
     // ground is static, and hashing it per vertex per frame was most of
     // SM2's terrain vertex stage (shaders/terrain.hlsl).

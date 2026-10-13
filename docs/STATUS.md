@@ -30,6 +30,10 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
   erosion carves the mountains into branching valleys and gullies, with
   scree at their feet. One eroded valley on every tier. 0.9 s at
   generation on the M5. Renders in `artifacts/fidelity-f2/`.
+- **F4, long shadows** (`docs/FIDELITY.md`, "F4, first part"): the
+  terrain's shadow at every distance and height, from a heightfield
+  marched toward the sun, so a low sun throws the ridges' shadows across
+  the valley. Renders in `artifacts/fidelity-f4/`.
 - **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal

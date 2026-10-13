@@ -1,4 +1,5 @@
 #define ATMOSPHERE_SLOT 0  // the atmosphere's atlas: water has no textures of its own
+#define TERRAIN_SUN_SLOT 1  // and the terrain's shadow heights after it
 #include "scene_common.hlsl"
 
 // A still water surface: one quad at the water line, fresnel between a deep
@@ -108,7 +109,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 color = lerp(DEEP, reflection, fresnel);
     // Sun glint on the ripples.
     float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 180.0);
-    color += scene.sun_color.rgb * scene.sun.w * glint * 0.6;
+    float glint_light = 1.0;
+#ifdef USE_TERRAIN_SUN
+    glint_light = terrain_sun(input.world_position);  // no glint in a mountain's shadow
+#endif
+    color += scene.sun_color.rgb * scene.sun.w * glint * 0.6 * glint_light;
 
     return float4(scene_out(apply_fog(color, input.world_position)), 1.0);
 }

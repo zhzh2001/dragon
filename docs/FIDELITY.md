@@ -84,7 +84,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F1** sky and air (**done 2026-10-13**, below) | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
 | **F2** terrain shape (**done 2026-10-13**, below) | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
 | **F3** terrain detail | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
-| **F4** light | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
+| **F4** light (**heightfield shadows done 2026-10-13**, below; cascades and sky light to come) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
 | **F7** forest | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
@@ -199,6 +199,35 @@ face, the face close, and the run's chase view.
 - **Cost**: 0.9 s on the M5 (12 m), 0.2 s at 24 m, and paid twice on a
   `--run` start, which generates the arena's default terrain before the
   run's seed. On the G41 it wants measuring before the next XP package.
+
+## F4, first part, as built (2026-10-13): the terrain's shadow at every distance
+
+`shaders/terrain_sun.hlsl`, owned by `gfx::Atmosphere`. Renders in
+`artifacts/fidelity-f4/`.
+
+- **What it fixes.** The shadow map covers 1.8 km about the camera, but a
+  900 m ridge under a 14 degree sun throws its shadow 3.6 km. Past the map
+  nothing shadowed anything, so the low sun -- the whole point of the
+  late-afternoon direction -- gave no long shadows.
+- **A map of shadow heights, not of shadow.** For every column of the
+  world (2048² over the terrain's 15 km, 7 m a texel), a fragment pass
+  marches a 1024² height texture toward the sun and stores the shadow's top
+  there, max over t of (ground(t) - t tan(elevation)), with the distance to
+  the ridge that sets it. A point at any height compares itself against
+  that: the ground, a crown, a dragon flying over a shadowed valley, all
+  from one lookup, with a penumbra that widens with the ridge's distance.
+  `sun_visibility` takes the darker of it and the shadow map, so every lit
+  shader has it; the water's glint reads it too.
+- **Rebuilt only when the sun or the terrain changes**, so the sun slider
+  sweeps the shadows live.
+- **What it shows.** With erosion (F2), this is the frame the target is
+  about: lit crests, faces banded light and dark, the valley floor in the
+  ridges' shadow with patches of sun. **It is darker to play in.** The
+  dragon flies in shade more of the time, lit by the sky alone. That is a
+  playtest call: the sun's elevation is the dial.
+- **Retro tiers**: not there (no `ATMOSPHERE`). The ff tier bakes terrain
+  shadows into its vertex colour already; doing the same from this map is
+  the cheap way to give it the long ones too.
 
 ## Budgets
 

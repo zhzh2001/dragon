@@ -1,5 +1,6 @@
 #include "gfx/atmosphere.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -42,6 +43,32 @@ rhi::Texture* make_target(rhi::Device& rhi, uint32_t w, uint32_t h, const char* 
     desc.usage = rhi::TEXTURE_SAMPLED | rhi::TEXTURE_COLOR_TARGET;
     return rhi.create_texture(desc, name);
 }
+
+// IEEE half from float, rounding to nearest; heights and distances only,
+// so no NaN handling beyond what falls out.
+uint16_t to_half(float value) {
+    uint32_t bits;
+    std::memcpy(&bits, &value, 4);
+    const uint32_t sign = (bits >> 16) & 0x8000u;
+    const int exponent = int((bits >> 23) & 0xFFu) - 127 + 15;
+    uint32_t mantissa = bits & 0x7FFFFFu;
+    if (exponent <= 0) return uint16_t(sign);  // tiny: zero
+    if (exponent >= 31) return uint16_t(sign | 0x7BFFu);  // huge: the largest finite
+    mantissa += 0x1000u;  // round
+    if (mantissa & 0x800000u) {
+        mantissa = 0;
+        if (exponent + 1 >= 31) return uint16_t(sign | 0x7BFFu);
+        return uint16_t(sign | (uint32_t(exponent + 1) << 10));
+    }
+    return uint16_t(sign | (uint32_t(exponent) << 10) | (mantissa >> 13));
+}
+
+struct TerrainSunUniforms {
+    core::Vec4 sun;     // xy the sun's horizontal direction, z tan(elevation), w the extent's half
+    core::Vec4 height;  // x the height texture's size
+};
+
+constexpr uint32_t TERRAIN_SUN_SIZE = 2048;
 
 // Whether the inputs of the static tables differ (not the camera or the sun).
 bool tables_differ(const AtmosphereUniforms& a, const AtmosphereUniforms& b) {
@@ -106,7 +133,11 @@ bool Atmosphere::init(Device* device, PipelineCache* pipelines) {
     transmittance_pipeline_ = pipelines->create(table_desc("atmosphere_transmittance"));
     multiscatter_pipeline_ = pipelines->create(table_desc("atmosphere_multiscatter"));
     frame_pipeline_ = pipelines->create(table_desc("atmosphere_frame"));
-    if (!transmittance_ || !multiscatter_ || !atlas_ || !sampler_) {
+    terrain_sun_pipeline_ = pipelines->create(table_desc("terrain_sun"));
+    terrain_sun_ = make_target(rhi, TERRAIN_SUN_SIZE, TERRAIN_SUN_SIZE, "terrain sun");
+    // No terrain yet: one texel at sea level, which shades nothing.
+    set_heightfield(std::vector<float>(1, 0.0f), 1, 1.0f);
+    if (!transmittance_ || !multiscatter_ || !atlas_ || !sampler_ || !terrain_sun_ || !heights_) {
         LOG_ERROR("atmosphere: could not create its tables; the analytic sky stays");
         shutdown();
         return false;
@@ -121,6 +152,9 @@ void Atmosphere::shutdown() {
     rhi.destroy(multiscatter_);
     rhi.destroy(atlas_);
     rhi.destroy(sampler_);
+    rhi.destroy(heights_);
+    rhi.destroy(terrain_sun_);
+    heights_ = terrain_sun_ = nullptr;
     transmittance_ = multiscatter_ = atlas_ = nullptr;
     sampler_ = nullptr;
     tables_valid_ = false;
@@ -193,6 +227,26 @@ void Atmosphere::update(Device& device, const SceneUniforms& scene, const Atmosp
         last_multiscatter_ = multiscatter;
     }
 
+    // The terrain's shadow heights, when the sun or the terrain moved.
+    rhi::Pipeline* terrain_sun = pipelines_->get(terrain_sun_pipeline_);
+    const core::Vec3 sun = scene.sun.xyz();
+    if (terrain_sun && heights_ &&
+        (terrain_sun_dirty_ || core::length(sun - terrain_sun_for_) > 1e-5f || terrain_sun != last_terrain_sun_)) {
+        const float horizontal = core::maxf(std::sqrt(sun.x * sun.x + sun.z * sun.z), 1e-4f);
+        TerrainSunUniforms t;
+        t.sun = core::Vec4{sun.x / horizontal, sun.z / horizontal, sun.y / horizontal, heights_half_};
+        t.height = core::Vec4{float(heights_size_), 0.0f, 0.0f, 0.0f};
+        rhi::Pass* pass = device.begin_color_pass(terrain_sun_, true);
+        rhi.bind_pipeline(pass, terrain_sun);
+        rhi.push_uniforms(rhi::Stage::Fragment, 0, &t, sizeof(t));
+        bind(pass, heights_, 0);
+        rhi.draw(pass, 3, 1, 0, 0);
+        device.end_pass(pass);
+        terrain_sun_dirty_ = false;
+        terrain_sun_for_ = sun;
+        last_terrain_sun_ = terrain_sun;
+    }
+
     rhi::Pass* pass = device.begin_color_pass(atlas_, true);
     rhi.bind_pipeline(pass, frame);
     rhi.push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(scene));
@@ -203,12 +257,34 @@ void Atmosphere::update(Device& device, const SceneUniforms& scene, const Atmosp
     device.end_pass(pass);
 }
 
-void Atmosphere::bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const {
+void Atmosphere::set_heightfield(const std::vector<float>& heights, int n, float half) {
+    if (!device_ || active_tier().tier != Tier::Modern || n < 1 || heights.size() != size_t(n) * size_t(n)) return;
+    rhi::Device& rhi = device_->rhi();
+    if (!heights_ || heights_size_ != uint32_t(n)) {
+        rhi.destroy(heights_);
+        rhi::TextureDesc desc;
+        desc.width = desc.height = uint32_t(n);
+        desc.format = rhi::Format::RGBA16F;
+        desc.usage = rhi::TEXTURE_SAMPLED;
+        heights_ = rhi.create_texture(desc, "terrain heights");
+        heights_size_ = uint32_t(n);
+    }
+    if (!heights_) return;
+    std::vector<uint16_t> texels(heights.size() * 4, 0);
+    for (size_t i = 0; i < heights.size(); ++i) texels[i * 4] = to_half(heights[i]);
+    rhi.upload_texture(heights_, texels.data(), uint32_t(n), uint32_t(n), false);
+    heights_half_ = half;
+    terrain_sun_dirty_ = true;
+}
+
+void Atmosphere::bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot, bool terrain_sun) const {
     if (!available()) return;
-    rhi::TextureBinding binding = {};
-    binding.texture = atlas_;
-    binding.sampler = sampler_;
-    rhi.bind_fragment_textures(pass, slot, &binding, 1);
+    rhi::TextureBinding bindings[2] = {};
+    bindings[0].texture = atlas_;
+    bindings[0].sampler = sampler_;
+    bindings[1].texture = terrain_sun_;
+    bindings[1].sampler = sampler_;
+    rhi.bind_fragment_textures(pass, slot, bindings, terrain_sun ? 2 : 1);
 }
 
 void Atmosphere::bind_transmittance(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const {

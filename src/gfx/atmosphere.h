@@ -13,6 +13,7 @@
 // of it exists: the shaders keep the analytic sky, and bind() does nothing.
 
 #include <string>
+#include <vector>
 
 #include "core/math.h"
 #include "gfx/pipeline.h"
@@ -87,8 +88,15 @@ public:
     // the frame atlas for `scene` (after apply()).
     void update(Device& device, const SceneUniforms& scene, const AtmosphereSettings& settings);
 
-    // The atlas into fragment slot `slot`; nothing on a retro tier.
-    void bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
+    // The terrain as the sun sees it (F4, shaders/terrain_sun.hlsl): `n` x
+    // `n` heights in metres, row-major from (-half, -half), over the
+    // terrain's whole extent. Marched toward the sun into a map of shadow
+    // heights on the next update(), and again whenever the sun moves.
+    void set_heightfield(const std::vector<float>& heights, int n, float half);
+
+    // The atlas into fragment slot `slot`, and with `terrain_sun` the
+    // terrain's shadow heights into `slot + 1`; nothing on a retro tier.
+    void bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot, bool terrain_sun = true) const;
     // The transmittance table, for the sky's sun disc.
     void bind_transmittance(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
 
@@ -100,6 +108,14 @@ private:
     PipelineHandle transmittance_pipeline_ = INVALID_PIPELINE;
     PipelineHandle multiscatter_pipeline_ = INVALID_PIPELINE;
     PipelineHandle frame_pipeline_ = INVALID_PIPELINE;
+    PipelineHandle terrain_sun_pipeline_ = INVALID_PIPELINE;
+    rhi::Texture* heights_ = nullptr;      // RGBA16F, height in r
+    rhi::Texture* terrain_sun_ = nullptr;  // RGBA16F: shadow top, ridge distance
+    uint32_t heights_size_ = 1;
+    float heights_half_ = 1.0f;
+    bool terrain_sun_dirty_ = true;
+    core::Vec3 terrain_sun_for_ = {};
+    const rhi::Pipeline* last_terrain_sun_ = nullptr;
     rhi::Texture* transmittance_ = nullptr;
     rhi::Texture* multiscatter_ = nullptr;
     rhi::Texture* atlas_ = nullptr;

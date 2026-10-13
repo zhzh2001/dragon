@@ -1,6 +1,7 @@
 // The atmosphere's atlas after the shadow map and the two cards (the baked
 // lattice takes slot 3 only on a retro tier, which has no atmosphere).
 #define ATMOSPHERE_SLOT 3
+#define TERRAIN_SUN_SLOT 4  // and the terrain's shadow heights after it
 #include "scene_common.hlsl"
 
 // Instanced plants: one mesh, thousands of placements. The instance carries

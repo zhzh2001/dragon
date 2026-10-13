@@ -75,6 +75,19 @@ float3 scene_out(float3 color) { return max(color, 0.0); }
 #ifndef NO_SCENE
 ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
 
+// The modern tier's world maps (docs/FIDELITY.md), in the slots each world
+// shader reserves after its own textures and defines before including this
+// file: the atmosphere's atlas (F1) at ATMOSPHERE_SLOT, and the terrain's
+// shadow heights (F4, terrain_sun.hlsl) at TERRAIN_SUN_SLOT.
+#if defined(ATMOSPHERE) && defined(ATMOSPHERE_SLOT) && defined(FRAGMENT_STAGE)
+#define USE_ATMOSPHERE
+TEXTURE2D(atmosphere_atlas, ATMOSPHERE_SLOT);
+#ifdef TERRAIN_SUN_SLOT
+#define USE_TERRAIN_SUN
+TEXTURE2D(terrain_sun_map, TERRAIN_SUN_SLOT);
+#endif
+#endif
+
 #ifdef LDR_OUTPUT
 // A tier without a float target (gfx/render_tier.h): the world shader
 // finishes the pixel itself -- exposure, tonemap, gamma, contrast and
@@ -123,14 +136,30 @@ float3 scene_out(float3 color) { return ldr_encode(max(color, 0.0), scene.output
 #endif
 #endif
 
+#ifdef USE_TERRAIN_SUN
+// The terrain's own shadow at any distance and any height (terrain_sun.hlsl):
+// lit above the shadow's top in this column, dark below, the penumbra
+// widening with the distance to the ridge that casts it (the sun's half
+// degree, doubled for the look). Lit outside the map, and with the
+// atmosphere off (scene.atmosphere2.y's sky light then 0 too: the map's
+// owner, gfx::Atmosphere, is off).
+float terrain_sun(float3 world_position) {
+    float half_extent = scene.view_params.w;
+    float2 uv = world_position.xz / max(half_extent, 1.0) * 0.5 + 0.5;
+    if (scene.atmosphere.x <= 0.0 || any(uv < 0.0) || any(uv > 1.0)) return 1.0;
+    float2 top = terrain_sun_map.SampleLevel(terrain_sun_map_sampler, uv, 0.0).xy;
+    float penumbra = 4.0 + top.y * 0.017;
+    return smoothstep(top.x - penumbra, top.x + penumbra, world_position.y);
+}
+#endif
+
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //
 // The shadow map uses a conventional [0, 1] depth range, unlike the reversed-Z
 // main pass, so nearer-to-light means a smaller depth value.
-float sun_visibility(float3 world_position, float3 normal,
-                     Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+float sun_visibility_map(float3 world_position, float3 normal,
+                         Texture2D<float> shadow_map, SamplerState shadow_sampler) {
     float strength = scene.shadow_params.z;
-    if (strength <= 0.0) return 1.0;
 
     // Offset along the normal before projecting. This removes most acne without
     // the peter-panning a large constant depth bias would cause.
@@ -169,6 +198,21 @@ float sun_visibility(float3 world_position, float3 normal,
     return lerp(1.0, lit_taps, strength);
 }
 
+// The shadow map's term, and on the modern tier the terrain's at every
+// distance on top of it: whichever is darker.
+float sun_visibility(float3 world_position, float3 normal,
+                     Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+    float strength = scene.shadow_params.z;
+    if (strength <= 0.0) return 1.0;
+    float visibility = sun_visibility_map(world_position, normal, shadow_map, shadow_sampler);
+#ifdef USE_TERRAIN_SUN
+    // A metre and a half up the normal, so a slope does not shade itself on
+    // the map's 7 m texels.
+    visibility = min(visibility, lerp(1.0, terrain_sun(world_position + normal * 1.5), strength));
+#endif
+    return visibility;
+}
+
 // Analytic sky. Also used by the fog in the terrain shader, so distant terrain
 // dissolves into exactly the colour of the sky behind it instead of into a flat
 // grey band. The retro tiers' sky, and the modern tier's with the atmosphere
@@ -194,10 +238,7 @@ float3 sky_color_analytic(float3 ray) {
 // stages read the frame atlas (atmosphere_common.hlsl) at ATMOSPHERE_SLOT,
 // which each world shader defines before including this file -- the next
 // slot after its own textures.
-#if defined(ATMOSPHERE) && defined(ATMOSPHERE_SLOT) && defined(FRAGMENT_STAGE)
-#define USE_ATMOSPHERE
-TEXTURE2D(atmosphere_atlas, ATMOSPHERE_SLOT);
-
+#ifdef USE_ATMOSPHERE
 bool atmosphere_on() { return scene.atmosphere.x > 0.0; }
 
 float4 atmo_atlas(float2 texel) {

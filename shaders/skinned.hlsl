@@ -1,4 +1,5 @@
 #define ATMOSPHERE_SLOT 4  // the atmosphere's atlas, after the shadow map and the three material maps
+#define TERRAIN_SUN_SLOT 5  // and the terrain's shadow heights after it
 #include "model_common.hlsl"
 #include "skin_common.hlsl"
 

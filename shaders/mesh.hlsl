@@ -1,4 +1,5 @@
 #define ATMOSPHERE_SLOT 1  // the atmosphere's atlas, after the shadow map
+#define TERRAIN_SUN_SLOT 2  // and the terrain's shadow heights after it
 #include "model_common.hlsl"
 
 // Lit opaque geometry with per-vertex albedo: greybox props, rings, the

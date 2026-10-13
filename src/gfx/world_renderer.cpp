@@ -282,7 +282,7 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
     }
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     if (atmosphere_) {
-        atmosphere_->bind(device.rhi(), pass, 0);
+        atmosphere_->bind(device.rhi(), pass, 0, false);
         atmosphere_->bind_transmittance(device.rhi(), pass, 1);
     }
     device.rhi().draw(pass, 3, 1, 0, 0);
