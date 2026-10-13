@@ -113,11 +113,19 @@ private:
     // G grass, B dirt, A snow), and a mid-grey stand-in that leaves the
     // ground as it was when the file is missing.
     rhi::Texture* terrain_detail_ = nullptr;
+    rhi::Texture* terrain_rock_ = nullptr;
+    rhi::Texture* terrain_scree_ = nullptr;
     rhi::Texture* neutral_ = nullptr;
     // The baked noise lattice, on a tier that bakes it (null otherwise).
     const NoiseLattice* noise_lattice_ = nullptr;
 public:
     void set_terrain_detail(rhi::Texture* texture) { terrain_detail_ = texture; }
+    // The modern tier's scanned rock and scree (tools/build_terrain_rock.py),
+    // in the terrain's slots 4 and 5.
+    void set_terrain_scans(rhi::Texture* rock, rhi::Texture* scree) {
+        terrain_rock_ = rock;
+        terrain_scree_ = scree;
+    }
     void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
 private:
     rhi::Sampler* white_sampler_ = nullptr;

@@ -19,6 +19,12 @@ struct VertexIn {
 DEPTH2D(shadow_map, 0);
 TEXTURE2D(detail_tile, 1);
 #define NOISE_SLOT 2  // the baked lattice, on a retro tier
+#ifdef ATMOSPHERE
+// Scanned rock and scree (tools/build_terrain_rock.py: a normal map in rgb,
+// the scan's luminance in a), after the atmosphere's two maps.
+TEXTURE2D(rock_map, 4);
+TEXTURE2D(scree_map, 5);
+#endif
 #endif
 #include "noise.hlsl"
 
@@ -257,46 +263,22 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
 }
 
 #ifdef ATMOSPHERE
-// Rock as the target paints it (docs/concept/valley-target.png, its right-
-// hand cliff; docs/FIDELITY.md, F3): horizontal beds a few metres thick,
-// each a ledge whose top catches the light and whose riser falls into
-// shade, broken by vertical joints, the beds' colours wandering from grey
-// to warm. Shading only -- the mesh's 6 m cells cannot carry a 7 m bed --
-// so it bends the normal and the albedo, and fades out before it would
-// shimmer. The modern tier's alone: SM3's terrain is near its budget.
-struct RockDetail {
-    float3 normal;
-    float3 tint;  // the bed's colour times its joints' and riser's shade
-};
-
-RockDetail rock_detail(float3 p, float3 n, float amount) {
-    RockDetail r;
-    r.normal = n;
-    r.tint = (float3)1.0;
-    if (amount <= 0.001) return r;
-    // Beds: about 11 m, their lines wavering so they are not a contour map.
-    float y = (p.y + value_noise(p.xz * 0.004) * 14.0) / 11.0;
-    float bed = floor(y);
-    float f = y - bed;
-    // A ledge: the top fifth tips up toward the sky, the bottom tenth back
-    // under the bed above.
-    float tip = smoothstep(0.78, 0.98, f) - 0.7 * (1.0 - smoothstep(0.0, 0.1, f));
-    // Along the face, level: what the joints are spaced in.
-    float2 along = normalize(float2(-n.z, n.x) + float2(1e-5, 0.0));
-    float u = dot(p.xz, along);
-    float spacing = 7.0 + 8.0 * hash21(float2(bed, 3.7));
-    float j = frac((u + hash21(float2(bed, 9.1)) * 40.0) / spacing);
-    float crack = 1.0 - smoothstep(0.0, 0.05, j) * (1.0 - smoothstep(0.95, 1.0, j));
-    float3 up = float3(0.0, 1.0, 0.0);
-    float3 side = float3(along.x, 0.0, along.y);
-    float3 bent = n + up * tip * 0.85 + side * (j < 0.5 ? -1.0 : 1.0) * crack * 0.5;
-    r.normal = normalize(lerp(n, bent, amount));
-    float hue = hash21(float2(bed, 1.3));
-    float3 bed_colour = lerp(float3(0.88, 0.93, 1.0), float3(1.1, 1.0, 0.86), hue) * (0.85 + 0.3 * hash21(float2(bed, 5.9)));
-    float shade = (1.0 - 0.45 * crack) * (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.18, f)));
-    r.tint = lerp((float3)1.0, bed_colour * shade, amount);
-    return r;
+// A scanned map on the three world planes, blended by the normal: the bent
+// normal (the "whiteout" blend, each plane's tangent normal added to the
+// surface's in that plane's axes) and the luminance detail.
+float4 triplanar_scan(Texture2D<float4> map, SamplerState map_sampler, float3 p, float3 n, float scale) {
+    float3 w = pow(abs(n), (float3)4.0);
+    w /= max(w.x + w.y + w.z, 1e-4);
+    float4 sx = map.Sample(map_sampler, p.zy * scale);
+    float4 sy = map.Sample(map_sampler, p.xz * scale);
+    float4 sz = map.Sample(map_sampler, p.xy * scale);
+    float3 tx = sx.xyz * 2.0 - 1.0, ty = sy.xyz * 2.0 - 1.0, tz = sz.xyz * 2.0 - 1.0;
+    float3 nx = float3(tx.xy + n.zy, abs(tx.z) * n.x).zyx;
+    float3 ny = float3(ty.xy + n.xz, abs(ty.z) * n.y).xzy;
+    float3 nz = float3(tz.xy + n.xy, abs(tz.z) * n.z);
+    return float4(normalize(nx * w.x + ny * w.y + nz * w.z), sx.a * w.x + sy.a * w.y + sz.a * w.z);
 }
+
 #endif
 
 float4 fs_main(VertexOut input) : SV_Target {
@@ -351,27 +333,43 @@ float4 fs_main(VertexOut input) : SV_Target {
             normal = normalize(normal - bump * 0.5 * crag);
         }
     }
-    // Beds only where the rock stands as a cliff, steeper than about 52
-    // degrees: on the 35-45 degree faces most of these mountains are, beds
-    // read as contour lines, and the target has broken rock and scree there
-    // instead -- the mottling below. Near enough for a bed to be a few pixels.
-    float cliff = 1.0 - smoothstep(0.42, 0.62, saturate(normal.y));
-    RockDetail rock = rock_detail(input.world_position, normal, cliff * (1.0 - smoothstep(350.0, 1800.0, camera_distance)));
-    normal = rock.normal;
-    // Broken rock on the rest of the rocky ground: grey and warm blotches a
-    // few metres to a few tens across, so a face is not one flat colour.
+    // Broken rock: grey and warm blotches a few metres to a few tens across,
+    // so a face is not one flat colour. (Bedded cliffs -- 11 m ledges with
+    // lit tops and jointed risers -- were tried here too, after the target's
+    // right-hand cliff; this terrain has few faces steep enough to be cliffs,
+    // and on the rest the beds read as a ploughed field.)
     float rocky = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.22, saturate(normal.y));
     float2 q = input.world_position.xz;
     float blotch = value_noise(q * 0.045) * 0.6 + value_noise(q * 0.13 + 7.1) * 0.4;
     float warm = value_noise(q * 0.011 + 3.3);
     float3 broken = lerp(float3(0.9, 0.94, 1.0), float3(1.08, 1.0, 0.88), warm) * (0.78 + 0.44 * blotch);
-    rock.tint *= lerp((float3)1.0, broken, rocky * (1.0 - smoothstep(600.0, 3000.0, camera_distance)));
+    float3 rock_tint = lerp((float3)1.0, broken, rocky * (1.0 - smoothstep(600.0, 3000.0, camera_distance)));
+#endif
+#ifdef ATMOSPHERE
+    // The scans (F3): rock on the rocky ground, scree where the talus
+    // settled, each at 7 m and 26 m mixed so neither scale's repeat shows,
+    // the fine one gone by 700 m and the broad by 2.5 km.
+    float scan_rock = rocky * (1.0 - smoothstep(700.0, 2500.0, camera_distance));
+    float scan_scree = smoothstep(0.08, 0.45, input.erosion.y) * (1.0 - rocky) * (1.0 - smoothstep(400.0, 1500.0, camera_distance));
+    float scan_detail = 0.5;
+    if (scan_rock + scan_scree > 0.001) {
+        float fine = 1.0 - smoothstep(250.0, 700.0, camera_distance);
+        float4 rock_near = triplanar_scan(rock_map, rock_map_sampler, input.world_position, normal, 1.0 / 7.0);
+        float4 rock_far = triplanar_scan(rock_map, rock_map_sampler, input.world_position + 31.0, normal, 1.0 / 26.0);
+        float4 rock_scan = lerp(rock_far, lerp(rock_far, rock_near, 0.6), fine);
+        float4 scree_scan = triplanar_scan(scree_map, scree_map_sampler, input.world_position, normal, 1.0 / 5.0);
+        float total = scan_rock + scan_scree;
+        float4 scan = (rock_scan * scan_rock + scree_scan * scan_scree) / total;
+        float amount = saturate(total);
+        normal = normalize(lerp(normal, normalize(scan.xyz), amount * 0.85));
+        scan_detail = lerp(0.5, scan.a, amount);
+    }
 #endif
     const TerrainDetail detail = sample_detail(input.world_position, normal);
     const float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
     float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
 #ifdef ATMOSPHERE
-    albedo *= rock.tint;
+    albedo *= rock_tint * modulate(scan_detail, 0.9);
 #endif
 
     // The shared lighting path: same wrap, same ambient as everything else.

@@ -336,7 +336,15 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
         const rhi::TextureBinding lattice = noise_lattice_->binding();
         device.rhi().bind_fragment_textures(pass, 2, &lattice, 1);
     }
-    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 2);  // modern only, where slot 2 is free
+    if (atmosphere_ && atmosphere_->available()) {
+        atmosphere_->bind(device.rhi(), pass, 2);  // modern only, where slot 2 is free
+        // The scans after it; the mid-grey stand-in when one is missing.
+        rhi::TextureBinding scans[2] = {};
+        scans[0].texture = terrain_rock_ ? terrain_rock_ : neutral_;
+        scans[1].texture = terrain_scree_ ? terrain_scree_ : neutral_;
+        scans[0].sampler = scans[1].sampler = white_sampler_;
+        if (scans[0].texture && scans[1].texture) device.rhi().bind_fragment_textures(pass, 4, scans, 2);
+    }
 
     mesh.bind(device.rhi(), pass);
     // Chunked, the terrain behind the camera costs nothing.

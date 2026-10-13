@@ -519,6 +519,23 @@ bool App::init(const Options& options) {
             LOG_WARN("terrain detail: no terrain_detail.png; the ground stays untextured");
         }
     }
+    // The scanned rock and scree (tools/build_terrain_rock.py): the modern
+    // tier's terrain shader alone reads them.
+    if (tier_.tier == gfx::Tier::Modern) {
+        auto load_scan = [&](const char* name) -> rhi::Texture* {
+            std::ifstream file(core::paths::asset(std::string("textures/") + name + ".png"), std::ios::binary);
+            if (!file) {
+                LOG_WARN("terrain: no %s.png; the rock stays procedural", name);
+                return nullptr;
+            }
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            const gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
+            return gfx::create_texture_from_image(device_.rhi(), image, name, false);
+        };
+        terrain_rock_texture_ = load_scan("terrain_rock");
+        terrain_scree_texture_ = load_scan("terrain_scree");
+        world_.set_terrain_scans(terrain_rock_texture_, terrain_scree_texture_);
+    }
     load_rocks();
 
     regenerate_terrain();
@@ -1630,6 +1647,9 @@ void App::shutdown() {
         release_prop(grazer_prop_);
         device_.rhi().destroy(terrain_detail_texture_);
         terrain_detail_texture_ = nullptr;
+        device_.rhi().destroy(terrain_rock_texture_);
+        device_.rhi().destroy(terrain_scree_texture_);
+        terrain_rock_texture_ = terrain_scree_texture_ = nullptr;
         noise_lattice_.destroy(device_.rhi());
         device_.rhi().destroy(model_sampler_);
         foliage_.shutdown(device_);

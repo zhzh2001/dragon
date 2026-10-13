@@ -15,6 +15,7 @@ hobby project's reading, not legal advice.
 | Code, shaders, tools, tests, docs | yes, MIT | yes | yes | Ours (`LICENSE`) |
 | Original props (`assets/props/` except `grazer.glb`), terrain and leaf textures | yes, MIT | yes | yes | Procedural, made by our scripts |
 | HUD fonts (`assets/fonts/`): Barlow Condensed, Fira Sans | yes, OFL 1.1 | yes | yes | Licence text beside each, and in `THIRD_PARTY_NOTICES.md` |
+| `assets/textures/terrain_rock.png`, `terrain_scree.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03` and `gray_rocks` scans (below) |
 | Hunyuan-generated roster (`assets/<species>.glb`, about 50 MB each) | **no**, gitignored for size | **yes, labelled AI-generated** | yes | Outputs are ours (clause 5.3); the label is required (3.3); see below |
 | `assets/props/grazer.glb` (Hunyuan-derived, 3.5 MB) | yes, labelled | yes | yes | As above, and small enough to track |
 | AI concept art and renders in `artifacts/`, `docs/concept/` | yes, labelled | no (not game content) | -- | Outputs are ours under the OpenAI, Google and Tencent terms |
@@ -28,6 +29,17 @@ material, which keeps its own licence: the libraries in
 listed here. Much of the repository was written or generated with AI tools
 (`AI_DISCLOSURE.md`); where a part of it is not protected by copyright, it is
 offered on the same terms, with no claim made over it.
+
+## Poly Haven textures (2026-10-13)
+
+`assets/textures/terrain_rock.png` and `terrain_scree.png` are baked by
+`tools/build_terrain_rock.py` from two Poly Haven texture scans,
+[Rock Face 03](https://polyhaven.com/a/rock_face_03) and
+[Gray Rocks](https://polyhaven.com/a/gray_rocks), at 1K. Only each scan's
+normal map and its luminance are kept, never its colour. Poly Haven
+publishes everything under CC0: no attribution is required, and this note
+is a courtesy and a record of where they came from. They may go anywhere
+the rest of the repository goes.
 
 ## Hunyuan 3D: the generated roster
 
