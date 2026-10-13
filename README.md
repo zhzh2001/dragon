@@ -144,7 +144,8 @@ the project are directed. The detail lives in `docs/`:
 | `docs/EFFECTS.md` | Particles, breath profiles, synthesized audio |
 | `docs/MODEL_GENERATION.md` | How a creature is generated, rigged and repaired |
 | `docs/DIRECTION.md` | Where the modern build goes: genre, art direction, HUD, assets |
-| `docs/PORTING.md` | Windows, Linux, and Direct3D 9 (SM3, SM2, fixed function) |
+| `docs/PORTING.md` | Windows, Linux, Direct3D 9 (SM3, SM2, fixed function), and mobile; the index of `docs/porting/` |
+| `docs/FIDELITY.md` | The modern build's fidelity plan: sky, terrain, light, clouds, forest, water, ray tracing |
 | `docs/RELEASE.md` | How the public repository and the release packages are made |
 | `docs/STATUS.md` | Milestone history and open questions |
 

@@ -1,10 +1,34 @@
 # Status and milestone history
 
 What is built, in the order it was built. The plan these came from is
-`ROADMAP.md`; where the project goes next is `DIRECTION.md`, and the ports are
-`PORTING.md`.
+`ROADMAP.md`; where the project goes next is `DIRECTION.md` and `FIDELITY.md`,
+and the ports are `PORTING.md` (an index into `docs/porting/`).
 
-## Latest — 2026-10-03: the retro track, graphics settings, silver
+## Latest — 2026-10-13: the retro cards, and two new directions
+
+- **The retro track on real cards, 2026-10-05 to 13** (`docs/porting/CARDS.md`):
+  - The Lowest preset, below Minimal, for cards slower than the M6, plus
+    the frozen-frame ablation kit (`DRAGON_FREEZE_AT`, `DRAGON_ABLATE`).
+  - Fallbacks for the cards below the M6: power-of-two targets, no
+    render-target textures, no MODULATE2X, no 32-bit indices.
+  - A second XP machine, the Atom D525's GMA 3150. It showed that Windows
+    10's `d3d9.dll` interprets vertex shaders, which led to three vertex
+    paths for the ff tier (program, fixed function, CPU).
+  - The M6 died, and the Matrox G550 PCIe took its place. Its PCIe-to-PCI
+    bridge was throttling its DMA; three settings made it three times
+    faster, and it now runs Lowest at 55 fps and Minimal at 40.
+- **PORTING.md split** into an index and `docs/porting/`, one file per part.
+  Code comments still cite sections by name, and the index maps each name
+  to the file that holds it.
+- **Two new plans, nothing built yet:**
+  - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
+    physically based sky to hardware ray tracing on a native Metal
+    backend. The baseline captures are in `artifacts/fidelity-baseline/`.
+  - `docs/porting/MOBILE.md`: M0-M5. The two Android phones on SDL GPU's
+    Vulkan backend, the VisionFive 2, and the Raspberry Pi 1B. The Pi gets
+    `game-mcu`'s software renderer first, then a GLES 2.0 backend.
+
+## 2026-10-03: the retro track, graphics settings, silver
 
 - **The retro track, R0 to R4 and R7** (`docs/PORTING.md`; its "Where the
   port stands" table is the handoff):

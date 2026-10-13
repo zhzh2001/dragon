@@ -279,7 +279,10 @@ grey with moss on top, which is one texture and a slope-keyed tint.
 
 Not recommended: deferred shading, HDR render targets, screen-space
 reflections, volumetric fog. They fight the retro track and the look above
-does not need them.
+does not need them. *(2026-10-13: superseded for the modern tier. The retro
+tiers have had their own content path since R2, so a modern-only technique
+no longer fights them; `FIDELITY.md` is the plan for the top presets,
+starting with row 9's sky.)*
 
 ## 4. UI: a HUD kit, with the panels as its tool mode
 
