@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/math.h"
+#include "gfx/atmosphere.h"
 #include "gfx/foliage_instance.h"
 #include "gfx/mesh.h"
 #include "gfx/noise_lattice.h"
@@ -47,6 +48,8 @@ public:
     void upload_grass(Device& device, GrassKind kind, const std::vector<FoliageInstance>& grass);
     // The baked noise lattice the bark grains with, on a tier that bakes it.
     void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
+    // The atmosphere's atlas, after the cards (modern tier only).
+    void set_atmosphere(const Atmosphere* atmosphere) { atmosphere_ = atmosphere; }
 
     void draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
     void draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
@@ -138,6 +141,7 @@ private:
     Device* device_ = nullptr;
     PipelineCache* pipelines_ = nullptr;
     ShadowMap* shadow_map_ = nullptr;
+    const Atmosphere* atmosphere_ = nullptr;
     PipelineHandle pipeline_ = INVALID_PIPELINE;
     PipelineHandle depth_pipeline_ = INVALID_PIPELINE;
 

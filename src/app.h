@@ -6,6 +6,7 @@
 #include "game/maneuver.h"
 #include "ui/hud.h"
 #include "gfx/render_tier.h"
+#include "gfx/atmosphere.h"
 #include "gfx/post.h"
 #include <vector>
 
@@ -58,6 +59,11 @@ struct Options {
     int preset = -1;
     std::string open_panel;  // --open-panel graphics: expanded at start
     std::string graphics;
+    // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
+    std::string atmosphere;
+    // --sun elevation[,azimuth] in degrees, over the Lighting defaults.
+    float sun_elevation = -100.0f;
+    float sun_azimuth = -1.0f;
     // --size: the window, or the headless render target.
     int width = 1280;
     int height = 720;
@@ -272,6 +278,9 @@ private:
     gfx::PipelineCache pipelines_;
     gfx::PostProcess post_;
     gfx::PostSettings post_settings_;
+    // The physically based sky and aerial perspective (modern tier).
+    gfx::Atmosphere atmosphere_;
+    gfx::AtmosphereSettings atmosphere_settings_;
     gfx::DebugDraw debug_;
     gfx::WorldRenderer world_;
     gfx::ShadowMap shadow_;

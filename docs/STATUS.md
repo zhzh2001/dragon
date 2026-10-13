@@ -20,7 +20,13 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
 - **PORTING.md split** into an index and `docs/porting/`, one file per part.
   Code comments still cite sections by name, and the index maps each name
   to the file that holds it.
-- **Two new plans, nothing built yet:**
+- **F1, the physically based sky** (`docs/FIDELITY.md`, "F1, as built"):
+  Hillaire's atmosphere on the modern tier. The haze is now the air's own
+  in-scattering and goes blue with distance, there is a sun disc, the
+  ambient light is integrated from the sky, and the world past the terrain
+  hazes into the horizon. About 0.4 ms a frame; the retro tiers are
+  bit-identical. Renders in `artifacts/fidelity-f1/`.
+- **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal
     backend. The baseline captures are in `artifacts/fidelity-baseline/`.

@@ -34,7 +34,8 @@ sys.path.insert(0, os.path.join(ROOT, "tools", "d3d9"))
 import bake_d3d9  # noqa: E402  the define sets, the compiler wrapper, variant_suffix
 
 TIERS = {name: [d for d in defines if d != "D3D9"] for name, defines in bake_d3d9.TIERS.items()}
-TIERS["modern"] = []
+# The modern tier compiles the physically based sky (gfx/atmosphere.h).
+TIERS["modern"] = ["ATMOSPHERE"]
 PROFILES = {"sm50": ("vs_5_0", "ps_5_0"), "sm40": ("vs_4_0", "ps_4_0"),
             # Feature level 9 (docs/PORTING.md, "Feature level 9 on D3D11"):
             # fxc's level_9_1 profiles take what ps_2_0 takes, so they compile
@@ -146,6 +147,9 @@ def main():
         stems = [s for s in stems if s in args.only.split(",")]
     if "LDR_OUTPUT" in defines:
         stems = [s for s in stems if not s.startswith("post_")]
+    if "ATMOSPHERE" not in defines:
+        # The atmosphere's tables: the modern tier's alone.
+        stems = [s for s in stems if not s.startswith("atmosphere_")]
 
     work = tempfile.mkdtemp(prefix="bake_d3d11_")
     jobs = []

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "anim/skinned_mesh.h"
+#include "gfx/atmosphere.h"
 #include "gfx/device.h"
 #include "gfx/mesh.h"
 #include "gfx/noise_lattice.h"
@@ -48,6 +49,8 @@ public:
 
     // Terrain samples the shadow map, so the renderer needs to know about it.
     void set_shadow_map(ShadowMap* shadow_map) { shadow_map_ = shadow_map; }
+    // Every lit world shader reads the atmosphere's atlas on the modern tier.
+    void set_atmosphere(const Atmosphere* atmosphere) { atmosphere_ = atmosphere; }
 
     // Debug only; every map is on in normal use.
     void set_material_toggles(const MaterialToggles& toggles) { material_toggles_ = toggles; }
@@ -100,6 +103,7 @@ private:
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
+    const Atmosphere* atmosphere_ = nullptr;
     MaterialToggles material_toggles_;
     // 1x1 white, for submeshes with no base-colour texture. A sampler slot must
     // be filled, and the shadow map cannot serve: it is a depth texture and the

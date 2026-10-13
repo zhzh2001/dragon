@@ -80,8 +80,8 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 
 | | Work | Exit test | Sessions |
 |---|---|---|---|
-| **F0** groundwork | Compute in the RHI: compute pipelines, storage buffers and textures, dispatch, indirect draw, on SDL GPU and D3D11 (CS 5.0); none on D3D9. A fidelity golden set at Ultra: the vista, a cliff close, the forest floor, the river, the dragon at a low sun | The current goldens unchanged; one compute pass (the sky LUTs) on every modern backend | 1-2 |
-| **F1** sky and air | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
+| **F0** groundwork (deferred: F1 needed none of it) | Compute in the RHI: compute pipelines, storage buffers and textures, dispatch, indirect draw, on SDL GPU and D3D11 (CS 5.0); none on D3D9. A fidelity golden set at Ultra: the vista, a cliff close, the forest floor, the river, the dragon at a low sun | The current goldens unchanged; one compute pass (the sky LUTs) on every modern backend | 1-2 |
+| **F1** sky and air (**done 2026-10-13**, below) | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
 | **F2** terrain shape | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
 | **F3** terrain detail | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
 | **F4** light | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
@@ -98,6 +98,60 @@ largest difference from the target; F4 is what a low sun is for; F5 has to
 come before F6 because clouds and GTAO are only affordable with history;
 F9 is last because F1-F8 already cover the terrain, which is most of the
 frame, and its marginal gain is on the creatures alone.
+
+## F1, as built (2026-10-13)
+
+`gfx::Atmosphere` (`src/gfx/atmosphere.h`) and `shaders/atmosphere_*.hlsl`,
+on the modern tier only (the `ATMOSPHERE` define). Renders in
+`artifacts/fidelity-f1/`: the vista, toward the sun, from 2.5 km up, a 4
+degree sun, a 55 degree sun, and the run's chase view.
+
+- **No compute after all.** Every table is a fullscreen fragment pass into
+  an RGBA16F target, so it runs on SDL GPU and D3D11 with no RHI change and
+  F0 waits until something needs it. The RHI has neither 3D textures nor
+  viewports, so the per-frame tables share one 256x232 **atlas** that one
+  pass fills, branching on the row: the aerial-perspective froxels (32
+  slices of 32x32, tiled 8x4), the sky-view map (256x96), and the sky light
+  on nine normals. A world shader reads it through one texture slot, the
+  `ATMOSPHERE_SLOT` each shader defines before including
+  `scene_common.hlsl` (terrain 2, water 0, mesh 1, skinned 4, foliage 3,
+  sky 0 with the transmittance table at 1).
+- **The transmittance and multiple-scattering tables** are rebuilt only
+  when a dial that shapes them changes, or a hot reload replaces their
+  pipelines.
+- **The one lighting path holds.** `sky_color`, `apply_fog` and the sky half
+  of `ambient_light` read the atlas when `scene.atmosphere.x > 0`; with the
+  atmosphere off (the Lighting panel's "physical sky", `--atmosphere on=0`)
+  they are the analytic functions again. That frame matches the build
+  before F1 to 1/255 in one pixel. The sm3, sm2 and ff tiers render
+  bit-identically to it (checked against a build of the parent commit).
+- **Sky light is integrated, not guessed.** Row 224 holds the sky's
+  radiance averaged over the hemisphere about an upward normal and eight
+  horizontal ones (cosine-weighted, the ground below the horizon left to
+  the bounce). That replaced the zenith/horizon colour pair. Calibrated so
+  the dragon's own lighting barely moved (`tests/golden/metal/dragon-head`).
+- **The world past the terrain.** A sky-view ray below the horizon first
+  ended on nothing and drew a dark band like a sea from altitude. It ends on
+  a lit ground tinted like the valley now (`ground_tint`), hazed by the air
+  before it.
+- **Dials** (the Lighting panel's Atmosphere section, and `--atmosphere
+  key=value,...` for captures; `--sun elevation[,azimuth]` sets the time of
+  day): sky brightness 9, aerial distance 5x, haze 1.2x Earth's aerosol,
+  glow 0.7, valley fog kept 0.35, sky light 1, sun disc 60. The aerial
+  scale is the artistic lever: Earth's air over a 15 km valley is barely
+  blue, and 8x read as fog. Pushing the haze (Mie) instead greys the
+  distance rather than blueing it.
+- **Cost**: about 0.4 ms a frame at 1920x1080 on the M5 (600 frames with
+  and without it).
+- **Not checked yet**: Vulkan, D3D12 and D3D11. MoltenVK is not available
+  to SDL on this Mac, and x99 was off. Their golden sets (`vulkan`, `d3d12`,
+  `d3d11`) predate F1 and fail for the modern scenes until they are
+  recaptured there; compare them `--set metal --loose` first. All 156
+  stages bake for MSL, SPIR-V and DXIL (`bake_shaders.sh`).
+- **What it does not do**: no shadowing inside the air (no light shafts
+  behind a ridge), and no clouds (F6). The surfaces' sun colour is still the
+  Lighting panel's, not the transmittance's, so a 55 degree sun is still
+  lit late-afternoon warm.
 
 ## Budgets
 

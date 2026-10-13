@@ -1,3 +1,4 @@
+#define ATMOSPHERE_SLOT 0  // the atmosphere's atlas: water has no textures of its own
 #include "scene_common.hlsl"
 
 // A still water surface: one quad at the water line, fresnel between a deep

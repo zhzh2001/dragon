@@ -826,6 +826,9 @@ void Foliage::bind_cards(Device& device, rhi::Pass* pass, uint32_t first) const 
     bindings[1].texture = needle;
     bindings[1].sampler = card_sampler_;
     device.rhi().bind_fragment_textures(pass, first, bindings, 2);
+    // The atmosphere's atlas after the cards (foliage.hlsl, ATMOSPHERE_SLOT);
+    // the lattice there instead on a retro tier, which has no atmosphere.
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, first + 2);
     if (noise_lattice_ && noise_lattice_->valid()) {
         const rhi::TextureBinding lattice = noise_lattice_->binding();
         device.rhi().bind_fragment_textures(pass, first + 2, &lattice, 1);

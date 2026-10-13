@@ -1,3 +1,6 @@
+// The atmosphere's atlas after the shadow map and the detail tile (the baked
+// lattice takes slot 2 only on a retro tier, which has no atmosphere).
+#define ATMOSPHERE_SLOT 2
 #include "scene_common.hlsl"
 
 struct VertexIn {

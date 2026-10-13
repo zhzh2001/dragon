@@ -39,6 +39,14 @@ struct SceneUniforms {
     // x start, y end of a linear fixed-function fog (the View distance
     // setting); y 0 keeps the exp2 fog by fog_color.a. Read by ff_fog only.
     core::Vec4 fog_range = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // The atmosphere (gfx/atmosphere.h, Atmosphere::apply), read by the
+    // modern tier's world shaders: x sky luminance scale (0: the analytic
+    // sky), y km of air per world metre, z the camera's radius (km), w the
+    // valley fog's share; atmosphere2 x the aerial perspective's far
+    // distance (km), y sky-light gain, z the planet's radius (km), w the sun
+    // disc. Unread on a retro tier.
+    core::Vec4 atmosphere = core::Vec4{0.0f, 0.0f, 6360.0f, 0.0f};
+    core::Vec4 atmosphere2 = core::Vec4{1.0f, 0.0f, 6360.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

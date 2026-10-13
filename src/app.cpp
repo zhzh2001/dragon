@@ -173,6 +173,14 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--graphics" && i + 1 < argc) {
             // key=level[,key=level...], e.g. models=3,shadows=4 (gfx/graphics_settings.h).
             options.graphics = argv[++i];
+        } else if (arg == "--atmosphere" && i + 1 < argc) {
+            options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
+        } else if (arg == "--sun" && i + 1 < argc) {
+            // elevation[,azimuth] in degrees: the time of day for a capture.
+            float elevation = 0.0f, azimuth = -1.0f;
+            const int n = SDL_sscanf(argv[++i], "%f,%f", &elevation, &azimuth);
+            if (n >= 1) options.sun_elevation = elevation;
+            if (n == 2) options.sun_azimuth = azimuth;
         } else if (arg == "--size" && i + 1 < argc) {
             // WxH, e.g. 1024x768: the window, or the headless render target.
             int w = 0, h = 0;
@@ -481,6 +489,13 @@ bool App::init(const Options& options) {
     shadow_.enabled = tier_.budget.shadow_size > 0 && shadow_.available();
     world_.set_shadow_map(&shadow_);
     if (!foliage_.init(&device_, &pipelines_, &shadow_)) return false;
+    // A failed atmosphere leaves the analytic sky, not a failed start.
+    atmosphere_.init(&device_, &pipelines_);
+    world_.set_atmosphere(&atmosphere_);
+    foliage_.set_atmosphere(&atmosphere_);
+    if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
+    if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
+    if (options.sun_azimuth >= 0.0f) lighting_.sun_azimuth_deg = options.sun_azimuth;
     if (tier_.baked_noise) {
         if (!noise_lattice_.create(device_.rhi())) return false;
         world_.set_noise_lattice(&noise_lattice_);
@@ -1595,6 +1610,7 @@ void App::shutdown() {
         device_.rhi().destroy(model_sampler_);
         foliage_.shutdown(device_);
         world_.shutdown(device_);
+        atmosphere_.shutdown();
         shadow_.shutdown(device_);
         particles_.shutdown();
         debug_.shutdown();
@@ -2860,6 +2876,26 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("sun wrap", &lighting_.sun_wrap, 0.0f, 0.6f, "%.2f");
         ImGui::SliderFloat("foliage translucency", &lighting_.foliage_translucency, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
+    }
+
+    // The modern tier's sky (gfx/atmosphere.h): with it on, the zenith,
+    // horizon and fog colours above are the retro tiers' and the fallback's.
+    if (atmosphere_.available() && ImGui::CollapsingHeader("Atmosphere", ImGuiTreeNodeFlags_DefaultOpen)) {
+        gfx::AtmosphereSettings& a = atmosphere_settings_;
+        ImGui::Checkbox("physical sky", &a.enabled);
+        ImGui::SliderFloat("sky brightness", &a.sky_scale, 0.0f, 30.0f, "%.1f");
+        ImGui::SliderFloat("aerial distance", &a.aerial_scale, 0.5f, 12.0f, "%.1f x");
+        ImGui::SliderFloat("haze", &a.mie, 0.0f, 10.0f, "%.2f x");
+        ImGui::SliderFloat("haze height", &a.mie_scale_height_km, 0.1f, 4.0f, "%.2f km");
+        ImGui::SliderFloat("sun glow", &a.mie_g, 0.0f, 0.95f, "%.2f");
+        ImGui::SliderFloat("blue sky", &a.rayleigh, 0.0f, 4.0f, "%.2f x");
+        ImGui::SliderFloat("ozone", &a.ozone, 0.0f, 4.0f, "%.2f x");
+        ImGui::SliderFloat("valley fog kept", &a.valley_fog, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("sky light", &a.sky_light, 0.0f, 3.0f, "%.2f");
+        ImGui::SliderFloat("sun disc", &a.sun_disc, 0.0f, 400.0f, "%.0f");
+        ImGui::SliderFloat("ground altitude", &a.ground_altitude_km, 0.0f, 3.0f, "%.2f km");
+        ImGui::SliderFloat("ground albedo", &a.ground_albedo, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("multiple scattering", &a.multiscatter, 0.0f, 2.0f, "%.2f");
     }
 
     // The last word on the picture: bloom and the grade. One grade on
@@ -7444,6 +7480,7 @@ void App::render() {
         scene.output_grade = grade;
         particles_.set_output_grade(grade);
     }
+    atmosphere_.apply(scene, atmosphere_settings_);
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
     world_.set_material_toggles(material_toggles_);
@@ -7480,6 +7517,9 @@ void App::render() {
     }
 
     const gfx::ModelUniforms dragon_model = dragon_model_uniforms();
+
+    // The atmosphere's tables: every world shader reads the atlas.
+    if (!ablated("atmosphere")) atmosphere_.update(device_, scene, atmosphere_settings_);
 
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled && shadow_.available()) {

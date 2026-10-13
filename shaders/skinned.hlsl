@@ -1,3 +1,4 @@
+#define ATMOSPHERE_SLOT 4  // the atmosphere's atlas, after the shadow map and the three material maps
 #include "model_common.hlsl"
 #include "skin_common.hlsl"
 

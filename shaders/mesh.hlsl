@@ -1,3 +1,4 @@
+#define ATMOSPHERE_SLOT 1  // the atmosphere's atlas, after the shadow map
 #include "model_common.hlsl"
 
 // Lit opaque geometry with per-vertex albedo: greybox props, rings, the

@@ -12,6 +12,9 @@
 
 #include "common.hlsl"
 #include "palette.hlsl"
+// Included unconditionally: the pipeline cache inlines a file the first time it
+// meets it, so an include under an #if a stage skips is lost to the next one.
+#include "atmosphere_common.hlsl"
 
 struct SceneUniforms {
     float4x4 view_proj;
@@ -46,6 +49,14 @@ struct SceneUniforms {
     // tier without HDR applies here, in place of the post stack (LDR_OUTPUT).
     float4 output_grade;
     float4 fog_range;  // x start, y end of a linear fixed-function fog; y 0: exp2 by fog_color.a
+    // The atmosphere (ATMOSPHERE, the modern tier; gfx/atmosphere.h): x the
+    // sky's luminance scale (0: the analytic sky and fog instead), y km of
+    // atmosphere per world metre for the aerial perspective, z the camera's
+    // radius (km), w how much of the exp2 valley fog stays on top of it.
+    float4 atmosphere;
+    // x the aerial perspective's far distance (km), y sky-light gain,
+    // z the planet's radius (km), w the sun disc's brightness.
+    float4 atmosphere2;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -160,8 +171,9 @@ float sun_visibility(float3 world_position, float3 normal,
 
 // Analytic sky. Also used by the fog in the terrain shader, so distant terrain
 // dissolves into exactly the colour of the sky behind it instead of into a flat
-// grey band.
-float3 sky_color(float3 ray) {
+// grey band. The retro tiers' sky, and the modern tier's with the atmosphere
+// off.
+float3 sky_color_analytic(float3 ray) {
     float horizon_blend = pow(saturate(1.0 - abs(ray.y)), 4.0);
     float3 base = lerp(scene.sky_zenith.rgb, scene.sky_horizon.rgb, horizon_blend);
 
@@ -177,6 +189,83 @@ float3 sky_color(float3 ray) {
 
     return base;
 }
+
+// ---- the atmosphere (docs/FIDELITY.md, F1): the modern tier's fragment
+// stages read the frame atlas (atmosphere_common.hlsl) at ATMOSPHERE_SLOT,
+// which each world shader defines before including this file -- the next
+// slot after its own textures.
+#if defined(ATMOSPHERE) && defined(ATMOSPHERE_SLOT) && defined(FRAGMENT_STAGE)
+#define USE_ATMOSPHERE
+TEXTURE2D(atmosphere_atlas, ATMOSPHERE_SLOT);
+
+bool atmosphere_on() { return scene.atmosphere.x > 0.0; }
+
+float4 atmo_atlas(float2 texel) {
+    return atmosphere_atlas.SampleLevel(atmosphere_atlas_sampler, texel / ATMO_ATLAS_SIZE, 0.0);
+}
+
+// Sky radiance along `ray`, from the sky-view map.
+float3 atmo_sky_radiance(float3 ray) {
+    float3 sun = normalize(scene.sun.xyz);
+    float2 sun_h = length(sun.xz) > 1e-4 ? normalize(sun.xz) : float2(1.0, 0.0);
+    float2 ray_h = length(ray.xz) > 1e-4 ? normalize(ray.xz) : sun_h;
+    float2 unit = atmo_sky_view_uv(scene.atmosphere2.z, scene.atmosphere.z, ray.y, dot(ray_h, sun_h));
+    float2 texel = unit * (ATMO_SKY_VIEW_SIZE - 1.0) + 0.5 + float2(0.0, ATMO_SKY_VIEW_ROW);
+    return atmo_atlas(texel).rgb * scene.atmosphere.x;
+}
+
+// One aerial-perspective slice at a screen position: a tile of the atlas,
+// sampled inside its own edge texels so the filter never reaches the next.
+float4 atmo_slice(float slice, float2 screen_uv) {
+    float2 tile = float2(fmod(slice, 8.0), floor(slice / 8.0));
+    float2 inside = clamp(screen_uv * ATMO_SLICE_SIZE, 0.5, ATMO_SLICE_SIZE - 0.5);
+    return atmo_atlas(tile * ATMO_SLICE_SIZE + inside);
+}
+
+// The light the air adds between the camera and `world_position` (rgb,
+// scaled) and the share of the surface's own that gets through (a).
+float4 atmo_aerial(float3 world_position) {
+    float4 clip = mul(scene.view_proj, float4(world_position, 1.0));
+    float2 ndc = clip.xy / max(abs(clip.w), 1e-4);
+    float2 screen_uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    float distance_km = length(world_position - scene.camera_position.xyz) * scene.atmosphere.y;
+    float w = sqrt(saturate(distance_km / max(scene.atmosphere2.x, 1e-3)));
+    // Slice s holds the distance at w = (s + 1) / 32; before the first, the
+    // air fades in from nothing at the camera.
+    float fs = w * ATMO_SLICES - 1.0;
+    float4 result;
+    if (fs < 0.0) {
+        result = lerp(float4(0.0, 0.0, 0.0, 1.0), atmo_slice(0.0, screen_uv), saturate(w * ATMO_SLICES));
+    } else {
+        float s0 = min(floor(fs), ATMO_SLICES - 1.0);
+        float s1 = min(s0 + 1.0, ATMO_SLICES - 1.0);
+        result = lerp(atmo_slice(s0, screen_uv), atmo_slice(s1, screen_uv), saturate(fs - s0));
+    }
+    result.rgb *= scene.atmosphere.x;
+    return result;
+}
+
+// The sky's light on a surface facing `normal`: row 224's integrals over
+// the visible sky, up and on eight horizontal normals, blended by the
+// normal's elevation. What faces down sees the ground, which ambient_light's
+// bounce answers.
+float3 atmo_sky_light(float3 normal) {
+    float3 up = atmo_atlas(float2(0.5, ATMO_AMBIENT_ROW + 0.5)).rgb;
+    float a = atan2(normal.z, normal.x);
+    float f = (a < 0.0 ? a + 2.0 * ATMO_PI : a) / (ATMO_PI / 4.0);
+    float i0 = fmod(floor(f), 8.0);
+    float i1 = fmod(i0 + 1.0, 8.0);
+    float3 h0 = atmo_atlas(float2(1.5 + i0, ATMO_AMBIENT_ROW + 0.5)).rgb;
+    float3 h1 = atmo_atlas(float2(1.5 + i1, ATMO_AMBIENT_ROW + 0.5)).rgb;
+    float3 side = lerp(h0, h1, frac(f));
+    float3 sky = normal.y >= 0.0 ? lerp(side, up, normal.y) : side * (1.0 + normal.y);
+    return sky * scene.atmosphere.x * scene.atmosphere2.y;
+}
+
+float3 sky_color(float3 ray) { return atmosphere_on() ? atmo_sky_radiance(ray) : sky_color_analytic(ray); }
+#else
+float3 sky_color(float3 ray) { return sky_color_analytic(ray); }
+#endif
 
 // sky_color() without the sun disc and glow: what SM2 fogs toward (its two
 // pows are a fifth of a vs_2_0 lighting budget), and its water's reflection.
@@ -214,6 +303,11 @@ float3 ambient_light(float3 normal) {
     float3 sky = lerp(scene.sky_horizon.rgb, scene.sky_zenith.rgb, 0.6);
     float3 bounce = scene.palette[PALETTE_GROUND_BOUNCE].rgb * scene.light_params.z *
                     scene.sun_color.rgb * saturate(scene.sun.y * 4.0);
+#ifdef USE_ATMOSPHERE
+    // The sky that is there, already weighted by how much of it the normal
+    // sees: only the ground's share is left to the bounce.
+    if (atmosphere_on()) return (atmo_sky_light(normal) + bounce * (1.0 - sky_amount)) * scene.terrain_params.w;
+#endif
     return lerp(bounce, sky, sky_amount) * scene.terrain_params.w;
 }
 
@@ -230,12 +324,24 @@ float3 translucent_sun(float3 normal, float visibility, float translucency) {
 // Exponential-squared height fog toward the sky colour along the view ray, so
 // distance dissolves into exactly what is behind it and thins with altitude
 // so peaks stay legible while the valley floor still reads as far.
+//
+// With the atmosphere, the air between does that physically first -- the
+// surface dimmed by the transmittance, the in-scattered light added -- and
+// the valley fog stays on top of it at atmosphere.w of its density, toward
+// the atmosphere's own sky.
 float3 apply_fog(float3 lit_color, float3 world_position) {
     float3 to_point = world_position - scene.camera_position.xyz;
     float dist = length(to_point);
     float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
-    float fog = 1.0 - exp(-pow(dist * density, 2.0));
     float3 ray = to_point / max(dist, 1e-3);
+#ifdef USE_ATMOSPHERE
+    if (atmosphere_on()) {
+        float4 air = atmo_aerial(world_position);
+        lit_color = lit_color * air.a + air.rgb;
+        density *= scene.atmosphere.w;
+    }
+#endif
+    float fog = 1.0 - exp(-pow(dist * density, 2.0));
     return lerp(lit_color, sky_color(ray), saturate(fog));
 }
 

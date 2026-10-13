@@ -1,3 +1,5 @@
+// The atmosphere's atlas, then its transmittance table for the sun disc.
+#define ATMOSPHERE_SLOT 0
 #include "scene_common.hlsl"
 
 // Fullscreen sky, drawn after the opaque world at the far plane, so only the
@@ -82,6 +84,30 @@ VertexOut vs_main(VERTEX_ID_INPUT) {
 #endif
 
 #ifdef FRAGMENT_STAGE
+#ifdef USE_ATMOSPHERE
+TEXTURE2D(transmittance_lut, 1);
+
+// The sun's disc, through the air between: the transmittance table at the
+// camera's height toward the sun, which is what turns it orange near the
+// horizon. Larger than the real 0.27 degrees and far dimmer than the real
+// thing, so it reads as a sun and blooms without swallowing the sky; the
+// limb darkens toward the edge.
+float3 atmo_sun_disc(float3 ray) {
+    const float ANGULAR_RADIUS = 0.0105;  // 0.6 degrees
+    float3 sun = normalize(scene.sun.xyz);
+    float cos_angle = dot(ray, sun);
+    float edge = cos(ANGULAR_RADIUS);
+    float3 transmittance = transmittance_lut.SampleLevel(
+        transmittance_lut_sampler, atmo_transmittance_uv_radii(scene.atmosphere2.z, scene.atmosphere2.z + 100.0,
+                                                              scene.atmosphere.z, sun.y), 0.0).rgb;
+    if (cos_angle < edge) return (float3)0.0;
+    float centre = saturate((cos_angle - edge) / (1.0 - edge));
+    float limb = 0.6 + 0.4 * sqrt(centre);
+    float soft = smoothstep(0.0, 0.08, centre);
+    return transmittance * scene.atmosphere2.w * scene.atmosphere.x * limb * soft;
+}
+#endif
+
 float4 fs_main(VertexOut input) : SV_Target {
     // Rebuild the view ray from the camera basis rather than inverting the
     // view-projection matrix.
@@ -90,7 +116,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 ray = normalize(scene.camera_forward.xyz +
                            scene.camera_right.xyz * input.ndc.x * tan_half_fov * aspect +
                            scene.camera_up.xyz * input.ndc.y * tan_half_fov);
-    return float4(scene_out(sky_color(ray)), 1.0);
+    float3 color = sky_color(ray);
+#ifdef USE_ATMOSPHERE
+    if (atmosphere_on()) color += atmo_sun_disc(ray);
+#endif
+    return float4(scene_out(color), 1.0);
 }
 #endif
 #endif  // FIXED_FUNCTION

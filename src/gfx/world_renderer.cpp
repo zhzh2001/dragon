@@ -281,6 +281,10 @@ void WorldRenderer::draw_sky(Device& device, rhi::Pass* pass) {
         return;
     }
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+    if (atmosphere_) {
+        atmosphere_->bind(device.rhi(), pass, 0);
+        atmosphere_->bind_transmittance(device.rhi(), pass, 1);
+    }
     device.rhi().draw(pass, 3, 1, 0, 0);
 }
 
@@ -332,6 +336,7 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
         const rhi::TextureBinding lattice = noise_lattice_->binding();
         device.rhi().bind_fragment_textures(pass, 2, &lattice, 1);
     }
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 2);  // modern only, where slot 2 is free
 
     mesh.bind(device.rhi(), pass);
     // Chunked, the terrain behind the camera costs nothing.
@@ -345,6 +350,7 @@ void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 0);
     mesh.bind(device.rhi(), pass);
     draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);
 }
@@ -366,6 +372,7 @@ void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
         binding.sampler = shadow_map_->sampler();
         device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
     }
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 1);
 
     mesh.bind(device.rhi(), pass);
     device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
@@ -459,6 +466,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
         if (bindings[0].texture && bindings[1].texture) {
             device.rhi().bind_fragment_textures(pass, 0, bindings, 4);
         }
+        if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 4);
 
         if (!submesh.palette.empty()) {
             const SkinBlock palette = make_palette_block(joints, submesh.palette);
