@@ -280,7 +280,11 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
-    float3 lit_color = albedo * (direct_sun(normal, visibility) + ambient_light(normal));
+    float3 ambient = ambient_light(normal);
+#ifdef USE_TERRAIN_SUN
+    ambient *= terrain_sky(input.world_position);  // the gully sees less sky than the ridge
+#endif
+    float3 lit_color = albedo * (direct_sun(normal, visibility) + ambient);
 
     // Snow glints: a modest specular lobe only where the surface is bright and
     // cold, which reads as crust without turning the mountains to plastic.

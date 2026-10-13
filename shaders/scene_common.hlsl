@@ -155,6 +155,22 @@ float terrain_sun(float3 world_position) {
     float penumbra = 4.0 + top.y * 0.017;
     return smoothstep(top.x - penumbra, top.x + penumbra, world_position.y);
 }
+
+// The share of the sky the ground near `world_position` sees (1 on a ridge
+// or out in the open, well under it at the bottom of a gully), fading to 1
+// within 60 m above the ground: the terrain's ambient occlusion, which is
+// most of the light in a valley the ridges shade.
+float terrain_sky(float3 world_position) {
+    float half_extent = scene.view_params.w;
+    float2 uv = world_position.xz / max(half_extent, 1.0) * 0.5 + 0.5;
+    if (scene.atmosphere.x <= 0.0 || any(uv < 0.0) || any(uv > 1.0)) return 1.0;
+    float2 sky_ground = terrain_sun_map.SampleLevel(terrain_sun_map_sampler, uv, 0.0).zw;
+    float above = world_position.y - sky_ground.y;
+    // The share itself, already cosine-weighted. Squared, to make it read,
+    // it took a third of the light off a valley floor the ridges already
+    // shade, and the valley went murky.
+    return lerp(sky_ground.x, 1.0, smoothstep(0.0, 60.0, above));
+}
 #endif
 
 #ifdef USE_ATMOSPHERE

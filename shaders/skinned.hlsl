@@ -197,6 +197,9 @@ float4 fs_main(VertexOut input) : SV_Target {
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float3 direct = direct_sun(normal, visibility);
     float3 ambient = ambient_light(normal);
+#ifdef USE_TERRAIN_SUN
+    ambient *= terrain_sky(input.world_position);  // down in a gully, less sky
+#endif
 
     // The texture is sRGB, so the sample arrives already linear.
     float3 albedo = input.albedo;

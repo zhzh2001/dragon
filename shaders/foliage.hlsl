@@ -257,7 +257,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     // not: sun leaking through it from behind.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float translucency = material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y;
-    float3 light = direct_sun(normal, visibility) + ambient_light(normal) +
+    float3 ambient = ambient_light(normal);
+#ifdef USE_TERRAIN_SUN
+    ambient *= terrain_sky(input.world_position);  // a stand in a gully sees less sky
+#endif
+    float3 light = direct_sun(normal, visibility) + ambient +
                    translucent_sun(normal, visibility, translucency);
     float3 lit_color = albedo * light;
     return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);

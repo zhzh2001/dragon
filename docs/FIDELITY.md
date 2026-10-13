@@ -228,6 +228,16 @@ face, the face close, and the run's chase view.
 - **Retro tiers**: not there (no `ATMOSPHERE`). The ff tier bakes terrain
   shadows into its vertex colour already; doing the same from this map is
   the cheap way to give it the long ones too.
+- **The terrain's sky occlusion rides along** (the same pass, the map's b
+  and a channels): the horizon's elevation in eight directions out to
+  1.5 km, cos² of each, gives the share of a cosine-weighted sky each
+  column sees, and the ground's height is stored beside it. Every lit
+  shader's ambient is scaled by it near the ground (`terrain_sky`), fading
+  out 60 m above, so a gully and a valley bottom see less sky than a ridge.
+  That matters because, with the ridges' shadows, the sky's light is most
+  of what lights the valley. Squared, it read as murk, so it is the plain
+  share, and the sky light's gain went from 1 to 1.2 to keep shaded ground
+  readable.
 
 ## A first cloud layer (2026-10-13)
 

@@ -118,6 +118,9 @@ float4 fs_main(VertexOut input) : SV_Target {
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float3 direct = direct_sun(normal, visibility);
     float3 ambient = ambient_light(normal);
+#ifdef USE_TERRAIN_SUN
+    ambient *= terrain_sky(input.world_position);  // down in a gully, less sky
+#endif
 
     // Emissive is added after lighting and before fog, so a glowing checkpoint
     // still fades into the distance rather than punching through the haze.
