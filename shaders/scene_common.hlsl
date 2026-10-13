@@ -57,6 +57,9 @@ struct SceneUniforms {
     // x the aerial perspective's far distance (km), y sky-light gain,
     // z the planet's radius (km), w the sun disc's brightness.
     float4 atmosphere2;
+    // The cloud layer (modern tier): x coverage 0..1 (0: none), y its base
+    // and z its thickness in world metres, w the density.
+    float4 clouds;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -82,6 +85,7 @@ ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
 #if defined(ATMOSPHERE) && defined(ATMOSPHERE_SLOT) && defined(FRAGMENT_STAGE)
 #define USE_ATMOSPHERE
 TEXTURE2D(atmosphere_atlas, ATMOSPHERE_SLOT);
+bool atmosphere_on() { return scene.atmosphere.x > 0.0; }
 #ifdef TERRAIN_SUN_SLOT
 #define USE_TERRAIN_SUN
 TEXTURE2D(terrain_sun_map, TERRAIN_SUN_SLOT);
@@ -153,6 +157,61 @@ float terrain_sun(float3 world_position) {
 }
 #endif
 
+#ifdef USE_ATMOSPHERE
+// ---- the cloud layer (docs/FIDELITY.md): a slab of cumulus over the
+// valley, its coverage a function of the ground position alone, so the sky
+// can march it and every lit pixel can find its shadow in one lookup.
+// Its own hash, not noise.hlsl's: this file comes before a shader's
+// textures, and the clouds are the modern tier's alone.
+float cloud_hash(float2 p) {
+    p = frac(p * float2(233.34, 851.73));
+    p += dot(p, p + 23.45);
+    return frac(p.x * p.y);
+}
+float cloud_value(float2 p) {
+    float2 cell = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(cloud_hash(cell), cloud_hash(cell + float2(1.0, 0.0)), f.x),
+                lerp(cloud_hash(cell + float2(0.0, 1.0)), cloud_hash(cell + float2(1.0, 1.0)), f.x), f.y);
+}
+// The drift: 9 m/s from the west-south-west.
+float2 cloud_drift() { return float2(9.0, 3.0) * scene.view_params.z; }
+// How much cloud stands over (x, z), 0..1: four octaves of broad cells,
+// thresholded by the coverage so the gaps are sky, not thin cloud.
+float cloud_coverage(float2 xz) {
+    float2 p = (xz + cloud_drift()) / 2600.0;
+    float n = 0.0, a = 0.5;
+    for (int i = 0; i < 4; ++i) {
+        n += a * cloud_value(p);
+        p = p * 2.03 + float2(17.1, 9.7);
+        a *= 0.5;
+    }
+    float cover = scene.clouds.x;
+    return saturate((n - (1.0 - cover) * 0.85) / 0.18);
+}
+// The density at a point in the slab: the coverage, rounded at the base and
+// heaped toward the top, frayed by a finer noise.
+float cloud_density(float3 p, float coverage) {
+    float h = saturate((p.y - scene.clouds.y) / max(scene.clouds.z, 1.0));
+    float profile = smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.35 + 0.6 * coverage, 1.0, h));
+    float2 q = (p.xz + cloud_drift() * 1.3) / 420.0 + h * 1.7;
+    float detail = cloud_value(q) * 0.65 + cloud_value(q * 2.4 + 5.3) * 0.35;
+    return saturate(coverage * profile * 1.4 - detail * 0.45) * scene.clouds.w;
+}
+// The share of the sun the clouds let through to `world_position`: the
+// layer's coverage where the sun's ray crosses it.
+float cloud_shadow(float3 world_position) {
+    if (scene.clouds.x <= 0.0) return 1.0;
+    float3 sun = normalize(scene.sun.xyz);
+    float middle = scene.clouds.y + scene.clouds.z * 0.4;
+    if (world_position.y > middle || sun.y < 0.02) return 1.0;
+    float3 crossing = world_position + sun * ((middle - world_position.y) / sun.y);
+    float c = cloud_coverage(crossing.xz);
+    return lerp(1.0, 0.25, smoothstep(0.05, 0.7, c));
+}
+#endif
+
 // Fraction of the sun reaching this point: 1 fully lit, 0 fully shadowed.
 //
 // The shadow map uses a conventional [0, 1] depth range, unlike the reversed-Z
@@ -210,6 +269,9 @@ float sun_visibility(float3 world_position, float3 normal,
     // the map's 7 m texels.
     visibility = min(visibility, lerp(1.0, terrain_sun(world_position + normal * 1.5), strength));
 #endif
+#ifdef USE_ATMOSPHERE
+    if (atmosphere_on()) visibility *= cloud_shadow(world_position);
+#endif
     return visibility;
 }
 
@@ -239,7 +301,6 @@ float3 sky_color_analytic(float3 ray) {
 // which each world shader defines before including this file -- the next
 // slot after its own textures.
 #ifdef USE_ATMOSPHERE
-bool atmosphere_on() { return scene.atmosphere.x > 0.0; }
 
 float4 atmo_atlas(float2 texel) {
     return atmosphere_atlas.SampleLevel(atmosphere_atlas_sampler, texel / ATMO_ATLAS_SIZE, 0.0);

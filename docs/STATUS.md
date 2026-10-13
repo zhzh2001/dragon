@@ -34,6 +34,9 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
   terrain's shadow at every distance and height, from a heightfield
   marched toward the sun, so a low sun throws the ridges' shadows across
   the valley. Renders in `artifacts/fidelity-f4/`.
+- **Clouds and a denser forest** (`docs/FIDELITY.md`): a raymarched layer
+  of cumulus with drifting shadows on the ground, and three times the
+  trees at Ultra. Renders in `artifacts/fidelity-clouds/`.
 - **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal

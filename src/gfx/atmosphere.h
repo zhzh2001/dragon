@@ -57,9 +57,18 @@ struct AtmosphereSettings {
     float ground_tint[3] = {0.55f, 0.62f, 0.45f};
     float multiscatter = 1.0f;
 
+    // The cloud layer: a slab of cumulus over the valley, drawn in the sky
+    // and shadowing the ground as it drifts (shaders/sky.hlsl, atmo_clouds;
+    // scene_common.hlsl, cloud_shadow). Coverage 0 is a clear sky.
+    float cloud_coverage = 0.42f;
+    float cloud_base_m = 2400.0f;
+    float cloud_thickness_m = 900.0f;
+    float cloud_density = 1.0f;
+
     // key=value[,key=value...] over these (--atmosphere): on, sky, aerial,
     // far, haze, haze_height, glow, rayleigh, ozone, fog, sky_light, disc,
-    // altitude, albedo, ms. Unknown keys are logged and skipped.
+    // altitude, albedo, ms, clouds, cloud_base, cloud_thickness,
+    // cloud_density. Unknown keys are logged and skipped.
     void parse(const std::string& list);
 };
 

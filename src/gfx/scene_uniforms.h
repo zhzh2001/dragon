@@ -47,6 +47,9 @@ struct SceneUniforms {
     // disc. Unread on a retro tier.
     core::Vec4 atmosphere = core::Vec4{0.0f, 0.0f, 6360.0f, 0.0f};
     core::Vec4 atmosphere2 = core::Vec4{1.0f, 0.0f, 6360.0f, 0.0f};
+    // The cloud layer (modern tier): x coverage (0: none), y base and z
+    // thickness in metres, w density.
+    core::Vec4 clouds = core::Vec4{0.0f, 2400.0f, 900.0f, 1.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

@@ -2920,6 +2920,11 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("ground altitude", &a.ground_altitude_km, 0.0f, 3.0f, "%.2f km");
         ImGui::SliderFloat("ground albedo", &a.ground_albedo, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("multiple scattering", &a.multiscatter, 0.0f, 2.0f, "%.2f");
+        ImGui::SeparatorText("clouds");
+        ImGui::SliderFloat("cloud cover", &a.cloud_coverage, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("cloud base", &a.cloud_base_m, 1200.0f, 5000.0f, "%.0f m");
+        ImGui::SliderFloat("cloud thickness", &a.cloud_thickness_m, 100.0f, 2500.0f, "%.0f m");
+        ImGui::SliderFloat("cloud density", &a.cloud_density, 0.1f, 3.0f, "%.2f");
     }
 
     // The last word on the picture: bloom and the grade. One grade on

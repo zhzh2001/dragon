@@ -52,7 +52,10 @@ constexpr float FAR_PROP_DISTANCE[QUALITY_LEVELS] = {0.0f, 400.0f, 200.0f, 80.0f
 constexpr float FAR_DISTANCE[QUALITY_LEVELS] = {0.0f, 150.0f, 100.0f, 80.0f, 60.0f, 45.0f, 30.0f};
 constexpr float TERRAIN_SCALE[QUALITY_LEVELS] = {1.0f, 2.0f, 3.0f, 4.0f, 4.0f, 8.0f, 8.0f};
 constexpr float TREE_DISTANCE[QUALITY_LEVELS] = {0.0f, 2500.0f, 800.0f, 600.0f, 400.0f, 250.0f, 250.0f};
-constexpr float TREE_SPACING[QUALITY_LEVELS] = {1.0f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f, 3.5f};
+// Ultra plants three times the trees (2026-10-13, docs/FIDELITY.md): at 15 m
+// the forest read as an orchard against the target's masses; 1.4 ms a frame
+// at 1080p on the M5.
+constexpr float TREE_SPACING[QUALITY_LEVELS] = {0.55f, 1.0f, 1.8f, 2.2f, 2.8f, 3.5f, 3.5f};
 constexpr float GRASS_RADIUS[QUALITY_LEVELS] = {1.0f, 0.7f, 0.45f, 0.3f, 0.0f, 0.0f, 0.0f};
 constexpr uint32_t ROCK_TRIANGLES[QUALITY_LEVELS] = {0, 400, 150, 80, 40, 20, 20};
 constexpr float ROCK_DISTANCE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.5f, 0.4f, 0.3f, 0.2f, 0.2f};

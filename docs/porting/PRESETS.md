@@ -18,7 +18,7 @@ eight settings (`gfx/graphics_settings.h`). Each setting is a level, Ultra
 |---|---|---|---|---|---|---|
 | Model detail (near, far LOD) | as authored | 20K, 3K past 150 m | 10K, 1.5K past 100 m | 5K, 800 past 80 m | 2.5K, 400 past 60 m | restart |
 | Terrain grid | 6 m | 12 m | 18 m | 24 m | 24 m (36 m lost the river) | reload |
-| Trees (distance, spacing) | 4.2 km, 1× | 2.5 km, 1× | 800 m, 1.8× | 600 m, 2.2× | 400 m, 2.8× | reload |
+| Trees (distance, spacing) | 4.2 km, 0.55× (since 2026-10-13, `FIDELITY.md`) | 2.5 km, 1× | 800 m, 1.8× | 600 m, 2.2× | 400 m, 2.8× | reload |
 | Grass radius | 1× | 0.7× | 0.45× | 0.3× | off | live |
 | Rocks (triangles, distance) | scanned | 400, 1× | 150, 0.5× | 80, 0.4× | 40, 0.3× | reload |
 | Textures | as authored | 1024 | 512 | 256 | 128 | restart |

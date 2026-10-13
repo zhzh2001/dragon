@@ -106,6 +106,69 @@ float3 atmo_sun_disc(float3 ray) {
     float soft = smoothstep(0.0, 0.08, centre);
     return transmittance * scene.atmosphere2.w * scene.atmosphere.x * limb * soft;
 }
+
+// The cloud layer in front of the sky (scene_common.hlsl, cloud_density):
+// sixteen steps through the slab along the ray, each lit by the sun through
+// the cloud above it (the column from the step to the top, at the step's
+// own coverage: no second march) and by the sky's light from above, then
+// hazed by the air before it like any surface. Seen from below only.
+float3 atmo_clouds(float3 ray, float3 background, float2 pixel) {
+    if (scene.clouds.x <= 0.0 || ray.y < 0.015) return background;
+    float3 eye = scene.camera_position.xyz;
+    float base = scene.clouds.y, top = scene.clouds.y + scene.clouds.z;
+    if (eye.y > base) return background;
+    float t0 = (base - eye.y) / ray.y;
+    float t1 = (top - eye.y) / ray.y;
+    if (t0 > 60000.0) return background;
+    t1 = min(t1, t0 + 6000.0);
+    const int STEPS = 16;
+    float dt = (t1 - t0) / float(STEPS);
+    float3 sun = normalize(scene.sun.xyz);
+    float3 sun_light = scene.sun_color.rgb * scene.sun.w;
+    float3 sky_light = atmo_sky_light(float3(0.0, 1.0, 0.0));
+    float mu = dot(ray, sun);
+    // Two lobes: the silver lining toward the sun, and a little back-scatter.
+    float g = 0.6;
+    float phase = lerp((1.0 - g * g) / (4.0 * 3.14159 * pow(max(1.0 + g * g - 2.0 * g * mu, 1e-3), 1.5)), 1.0 / (4.0 * 3.14159), 0.35);
+    const float EXTINCTION = 0.012;  // per metre at density 1
+    float transmittance = 1.0;
+    float3 light = (float3)0.0;
+    float t_light = t0;  // where most of the light came from, for the haze
+    // Each pixel starts its steps at its own offset (interleaved gradient
+    // noise): sixteen slices through a heap otherwise show as contours.
+    float dither = frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
+    for (int i = 0; i < STEPS; ++i) {
+        float t = t0 + (float(i) + dither) * dt;
+        float3 p = eye + ray * t;
+        float coverage = cloud_coverage(p.xz);
+        if (coverage <= 0.001) continue;
+        float density = cloud_density(p, coverage);
+        if (density <= 0.001) continue;
+        float sigma = density * EXTINCTION;
+        // The column above toward the sun, at this coverage.
+        float above = (top - p.y) / max(sun.y, 0.05);
+        float to_sun = exp(-coverage * scene.clouds.w * EXTINCTION * 0.35 * above);
+        // Powder: the dark edges of a sunlit heap, where little has
+        // scattered in yet.
+        float powder = 1.0 - exp(-sigma * 260.0);
+        float h = saturate((p.y - base) / max(scene.clouds.z, 1.0));
+        // The sky lights a heap from above: its base is darker than its top.
+        float3 scattered = sun_light * to_sun * phase * 12.0 * lerp(0.6, 1.0, powder) + sky_light * (0.18 + 0.5 * h);
+        float step_t = exp(-sigma * dt);
+        light += transmittance * scattered * (1.0 - step_t);
+        if (transmittance > 0.5) t_light = t;
+        transmittance *= step_t;
+        if (transmittance < 0.01) break;
+    }
+    if (transmittance > 0.999) return background;
+    // The air between the eye and the cloud, as for any surface.
+    float4 air = atmo_aerial(eye + ray * t_light);
+    float3 cloud = light * air.a + air.rgb * (1.0 - transmittance);
+    // And they thin out toward the horizon, where the slab is seen edge-on
+    // through more air than the froxels reach.
+    float fade = 1.0 - smoothstep(25000.0, 60000.0, t0);
+    return lerp(background, background * transmittance + cloud, fade);
+}
 #endif
 
 float4 fs_main(VertexOut input) : SV_Target {
@@ -118,7 +181,10 @@ float4 fs_main(VertexOut input) : SV_Target {
                            scene.camera_up.xyz * input.ndc.y * tan_half_fov);
     float3 color = sky_color(ray);
 #ifdef USE_ATMOSPHERE
-    if (atmosphere_on()) color += atmo_sun_disc(ray);
+    if (atmosphere_on()) {
+        color += atmo_sun_disc(ray);
+        color = atmo_clouds(ray, color, input.clip_position.xy);
+    }
 #endif
     return float4(scene_out(color), 1.0);
 }

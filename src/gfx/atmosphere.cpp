@@ -99,7 +99,9 @@ void AtmosphereSettings::parse(const std::string& list) {
                                 {"rayleigh", &rayleigh},    {"ozone", &ozone},
                                 {"fog", &valley_fog},       {"sky_light", &sky_light},
                                 {"disc", &sun_disc},        {"altitude", &ground_altitude_km},
-                                {"albedo", &ground_albedo}, {"ms", &multiscatter}};
+                                {"albedo", &ground_albedo}, {"ms", &multiscatter},
+                                {"clouds", &cloud_coverage}, {"cloud_base", &cloud_base_m},
+                                {"cloud_thickness", &cloud_thickness_m}, {"cloud_density", &cloud_density}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;
@@ -180,8 +182,10 @@ void Atmosphere::apply(SceneUniforms& scene, const AtmosphereSettings& s) const 
     if (!available() || !s.enabled) {
         scene.atmosphere = core::Vec4{0.0f, 0.0f, PLANET_RADIUS_KM, 0.0f};
         scene.atmosphere2 = core::Vec4{1.0f, 0.0f, PLANET_RADIUS_KM, 0.0f};
+        scene.clouds = core::Vec4{0.0f, s.cloud_base_m, s.cloud_thickness_m, s.cloud_density};
         return;
     }
+    scene.clouds = core::Vec4{s.cloud_coverage, s.cloud_base_m, core::maxf(s.cloud_thickness_m, 10.0f), s.cloud_density};
     const AtmosphereUniforms u = uniforms_for(scene, s);
     scene.atmosphere = core::Vec4{s.sky_scale, u.radii.w, PLANET_RADIUS_KM + u.radii.z, s.valley_fog};
     scene.atmosphere2 = core::Vec4{u.sun_direction.w, s.sky_light, PLANET_RADIUS_KM, s.sun_disc};
