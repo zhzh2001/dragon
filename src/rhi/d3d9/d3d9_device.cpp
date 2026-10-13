@@ -664,6 +664,7 @@ public:
                      caps_.GuardBandLeft, caps_.GuardBandRight, caps_.GuardBandTop, caps_.GuardBandBottom);
         }
         if (!modulate2x_) LOG_INFO("direct3d9: no MODULATE2X; the ground's detail tile is left out");
+        choose_depth_format();
         r32f_filterable_ = SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
                                                              D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE, D3DFMT_R32F));
         LOG_INFO("direct3d9: R32F shadow map %s", r32f_filterable_ ? "filtered" : "point-sampled (not filterable)");
@@ -714,6 +715,49 @@ public:
 
     IDirect3DDevice9* device() const { return dev_; }
 
+    // The depth surfaces' format: the deepest the card offers that pairs with
+    // both colour targets (A8R8G8B8, and R5G6B5 for 16-bit colour), else with
+    // the 32-bit one. D24X8 had been assumed, and the G550's driver has none
+    // (it offers D16, D24S8 and D32 in its place): every depth surface failed
+    // with INVALIDCALL and the game ended before its first frame. A DX6-era
+    // part may also want the depth's width to match the colour's, which
+    // CheckDepthStencilMatch answers. Each candidate is logged, to learn a
+    // new card's set.
+    void choose_depth_format() {
+        struct Candidate {
+            D3DFORMAT format;
+            const char* name;
+        };
+        static const Candidate kCandidates[] = {{D3DFMT_D24X8, "D24X8"}, {D3DFMT_D24S8, "D24S8"},
+                                                {D3DFMT_D32, "D32"},     {D3DFMT_D24X4S4, "D24X4S4"},
+                                                {D3DFMT_D16, "D16"},     {D3DFMT_D15S1, "D15S1"}};
+        const auto pairs = [&](D3DFORMAT depth, D3DFORMAT color) {
+            return SUCCEEDED(
+                d3d_->CheckDepthStencilMatch(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, color, depth));
+        };
+        D3DFORMAT both = D3DFMT_UNKNOWN, color32 = D3DFMT_UNKNOWN;
+        std::string table;
+        for (const Candidate& c : kCandidates) {
+            if (FAILED(d3d_->CheckDeviceFormat(adapter_, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, D3DUSAGE_DEPTHSTENCIL,
+                                               D3DRTYPE_SURFACE, c.format))) {
+                continue;
+            }
+            const bool with32 = pairs(c.format, D3DFMT_A8R8G8B8);
+            const bool with16 = pairs(c.format, D3DFMT_R5G6B5);
+            if (with32 && with16 && both == D3DFMT_UNKNOWN) both = c.format;
+            if (with32 && color32 == D3DFMT_UNKNOWN) color32 = c.format;
+            table += std::string(table.empty() ? "" : ", ") + c.name + (with32 ? " +32" : "") + (with16 ? " +16" : "");
+        }
+        depth_format_ = both != D3DFMT_UNKNOWN ? both : color32;
+        if (depth_format_ == D3DFMT_UNKNOWN) depth_format_ = D3DFMT_D24X8;  // nothing reported: as before
+        const char* chosen = "D24X8";
+        for (const Candidate& c : kCandidates) {
+            if (c.format == depth_format_) chosen = c.name;
+        }
+        LOG_INFO("direct3d9: depth %s (offered: %s; +32/+16 pair with 32/16-bit colour)", chosen,
+                 table.empty() ? "none" : table.c_str());
+    }
+
     // What this backend sets once and a reset puts back to D3D9's defaults.
     void device_defaults() {
         if (mixed_vp_) dev_->SetSoftwareVertexProcessing(TRUE);
@@ -740,7 +784,7 @@ public:
         t->alloc_w = up(t->width);
         t->alloc_h = up(t->height);
         if (t->usage & TEXTURE_DEPTH_TARGET) {
-            HRESULT hr = dev_->CreateDepthStencilSurface(t->alloc_w, t->alloc_h, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, TRUE,
+            HRESULT hr = dev_->CreateDepthStencilSurface(t->alloc_w, t->alloc_h, depth_format_, D3DMULTISAMPLE_NONE, 0, TRUE,
                                                          &t->depth, nullptr);
             if (SUCCEEDED(hr) && t->depth_as_color) {
                 hr = dev_->CreateTexture(t->alloc_w, t->alloc_h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT,
@@ -850,8 +894,10 @@ public:
                 fmt = D3DFMT_R32F;
                 d3d_usage = D3DUSAGE_RENDERTARGET;
             } else {
-                d3d_usage = D3DUSAGE_DEPTHSTENCIL;
-                type = D3DRTYPE_SURFACE;
+                // Every depth surface is made in the one format the card
+                // pairs with its colour (choose_depth_format), whatever the
+                // format asked for.
+                return true;
             }
         } else if (usage & TEXTURE_COLOR_TARGET) {
             d3d_usage = D3DUSAGE_RENDERTARGET;
@@ -2570,6 +2616,7 @@ private:
     bool in_scene_ = false;
     bool has_depth_ = false;
     bool r32f_filterable_ = false;
+    D3DFORMAT depth_format_ = D3DFMT_D24X8;  // choose_depth_format()
     bool stretch_from_textures_ = true;  // D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES
     D9Texture backbuffer_;               // frame_target(): the back buffer's surface, this frame
     uint32_t present_w_ = 0, present_h_ = 0;

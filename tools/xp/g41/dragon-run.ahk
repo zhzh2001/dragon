@@ -45,6 +45,16 @@ if (saver_name != "")
 Sleep, 1000
 Run, "%dir%\dragon.exe" %args%, %dir%, UseErrorLevel, pid
 FileAppend, run error %ErrorLevel% pid %pid%`n, %report%
+; BENCH\dragon\sample.txt, if present: "DELAY SECONDS" -- after DELAY
+; seconds (past the load), BENCH\swvp\sampler.exe samples the game for
+; SECONDS into results\dragon-<time>-sample.txt (tools/d3d9/swvp).
+FileReadLine, sample, %dir%\sample.txt, 1
+if (!ErrorLevel && sample != "")
+{
+    StringSplit, sp, sample, %A_Space%
+    Run, %ComSpec% /c ping -n %sp1% 127.0.0.1 >nul & "%BENCH%\swvp\sampler.exe" dragon.exe %sp2% "%BENCH%\results\dragon-%stamp%-sample.txt", %BENCH%\swvp, Hide
+    FileAppend, sampler after %sp1% s for %sp2% s`n, %report%
+}
 started := A_TickCount
 Process, WaitClose, %pid%, 600
 hung := ErrorLevel

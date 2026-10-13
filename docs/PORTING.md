@@ -1395,6 +1395,57 @@ thunks' XP sides have run only when forced on a newer Windows. The tests
 link the import libraries directly and are for Wine, not XP. A Pentium III
 or Athlon XP has no SSE2, which the build requires.
 
+**The G550 on the G41 (2026-10-12).** The M6 died, and the G41's card is
+now a Matrox Millennium G550 PCIe (a PCI G550 behind its own PCIe bridge)
+on driver 5.89.004, the last package whose D3D works on that board
+(qemu-gpu's `evidence/g550/g41/g550.1-xp-driver-survey`). The caps: vs/ps
+0, no hardware T&L, power-of-two textures to 2048, three stages, no
+StretchRect from textures, no guard band, no DXT, no dynamic textures, and
+for depth D24S8, D32, D16 and D15S1 -- **no D24X8**. Two things stopped it,
+each a first-frame failure:
+
+- **Depth.** Every depth surface was D24X8, hard-coded: the G550 refused
+  it with INVALIDCALL and the game ended before its first frame. The
+  backend now takes the deepest format the card offers that
+  `CheckDepthStencilMatch` pairs with both 32- and 16-bit colour, and logs
+  the whole set (`choose_depth_format`).
+- **The HUD's glyphs drew as solid blocks.** imgui_impl_dx9 makes its font
+  atlas `D3DUSAGE_DYNAMIC` in the default pool and assumes 4096 texels; the
+  G550 has neither, so the atlas never existed. `cmake/imgui.cmake` patches
+  a managed texture in where `D3DCAPS2_DYNAMICTEXTURES` is absent, and the
+  layer caps the atlas at the device's size.
+
+Then the ff tier draws the valley as the Mac's preview does
+(`artifacts/r5-ff-preview/g550-d3d9-ff-vs-metal-ff-valley.png`), at
+**17-18 fps, Minimal, 640x480 headless** (median 54 ms). The models load
+from their glTFs (the packs carry DXT only), 25 s to the first frame.
+
+**Where the 54 ms goes: the driver, a triangle at a time.** 320x240 is no
+faster, the process is at 100% of a core, and `sampler.exe` puts 97% of the
+samples in the kernel (`KiFastSystemCall`): the display driver, not D3D9 or
+the game. `tools/d3d9/swvp/tris.cpp` takes D3D9's vertex work out
+(pre-transformed vertices, 18,050 triangles a frame) and times each way of
+sending them to the frame's end on the card:
+
+| | us a triangle |
+|---|---|
+| indexed list, uv, no fog | 10.0-10.5 |
+| indexed list, uv, vertex fog (the ff tier's case) | 6.9-7.8 |
+| plain list (three vertices a triangle) | 5.3-7.4 |
+| strips, one a row (one vertex a triangle) | 3.8-4.9 |
+
+Fill, texturing and fog barely move it: about 3 us a triangle plus 0.8 a
+vertex, some 200K triangles a second, which reads as the driver writing
+every vertex to the card itself rather than by bus-master DMA. The driver
+reads a `User.BusMastering` value (with `BusMastering2D`,
+`BusMasteringOGL`, `ForceAGP`); set to 1 on the active video key and
+rebooted, it changed nothing (same table within 3%), and it is removed
+again. So for this card the frame is a triangle budget: the game sends
+about 8,300 a frame at Minimal (terrain 4.8K, the dragon 1.2K, trees 0.7K,
+rocks 0.6K, water 0.5K, sky 0.25K), each at the indexed-and-fogged price.
+What would move it: fewer triangles (Lowest), and strips out of path `cpu`
+(`meshopt_stripify` is vendored), about a third off what is sent.
+
 ### R7, in progress: graphics settings and presets
 
 The tier is what the hardware can do: HDR, per-pixel or per-vertex

@@ -1,5 +1,6 @@
 #include "editor/imgui_layer.h"
 
+#include <algorithm>
 #include <fstream>
 #include <string>
 
@@ -152,6 +153,9 @@ bool ImGuiLayer::init(gfx::Device& device) {
         }
         rhi::d3d9::set_reset_hooks(device.rhi(), [] { ImGui_ImplDX9_InvalidateDeviceObjects(); },
                                    [] { ImGui_ImplDX9_CreateDeviceObjects(); });
+        // The renderer assumes 4096-texel textures; the G550 takes 2048.
+        ImGui::GetPlatformIO().Renderer_TextureMaxWidth = std::min(4096, int(device.rhi().max_texture_size()));
+        ImGui::GetPlatformIO().Renderer_TextureMaxHeight = std::min(4096, int(device.rhi().max_texture_size()));
         SDLXP_SetWndProcHook([](void* h, unsigned message, uintptr_t wparam, intptr_t lparam) -> intptr_t {
             return intptr_t(ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(h), message, wparam, lparam));
         });
@@ -168,6 +172,9 @@ bool ImGuiLayer::init(gfx::Device& device) {
         }
         rhi::d3d9::set_reset_hooks(device.rhi(), [] { ImGui_ImplDX9_InvalidateDeviceObjects(); },
                                    [] { ImGui_ImplDX9_CreateDeviceObjects(); });
+        // The renderer assumes 4096-texel textures; the G550 takes 2048.
+        ImGui::GetPlatformIO().Renderer_TextureMaxWidth = std::min(4096, int(device.rhi().max_texture_size()));
+        ImGui::GetPlatformIO().Renderer_TextureMaxHeight = std::min(4096, int(device.rhi().max_texture_size()));
         initialized_ = true;
         return true;
     }

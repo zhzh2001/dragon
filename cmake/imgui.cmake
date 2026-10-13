@@ -53,6 +53,17 @@ if(WIN32)
   if(NOT _imgui_dx9_src MATCHES "static D3DPOOL ImGui_ImplDX9_BufferPool")
     string(REPLACE "// DirectX\n#include <d3d9.h>\n" "// DirectX\n#include <d3d9.h>\nstatic bool ImGui_ImplDX9_SoftwareVP(LPDIRECT3DDEVICE9 device) { D3DDEVICE_CREATION_PARAMETERS p = {}; return SUCCEEDED(device->GetCreationParameters(&p)) && (p.BehaviorFlags & (D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MIXED_VERTEXPROCESSING)); }\nstatic DWORD ImGui_ImplDX9_BufferUsage(LPDIRECT3DDEVICE9 device) { return ImGui_ImplDX9_SoftwareVP(device) ? (D3DUSAGE_DYNAMIC | D3DUSAGE_SOFTWAREPROCESSING) : (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY); }\nstatic D3DPOOL ImGui_ImplDX9_BufferPool(LPDIRECT3DDEVICE9 device) { return ImGui_ImplDX9_SoftwareVP(device) ? D3DPOOL_SYSTEMMEM : D3DPOOL_DEFAULT; }\n" _imgui_dx9_src "${_imgui_dx9_src}")
   endif()
+  # And its font atlas is a D3DUSAGE_DYNAMIC texture in D3DPOOL_DEFAULT,
+  # which a driver without D3DCAPS2_DYNAMICTEXTURES refuses: the G550's
+  # (a DX6-era design) did, and every glyph drew as a solid quad. Such a
+  # device gets a managed texture, which locks just the same.
+  string(REPLACE "CreateTexture(tex->Width, tex->Height, 1, D3DUSAGE_DYNAMIC, bd->HasRgbaSupport ? D3DFMT_A8B8G8R8 : D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &dx_tex, nullptr);" "CreateTexture(tex->Width, tex->Height, 1, ImGui_ImplDX9_DynamicTextures(bd->pd3dDevice) ? D3DUSAGE_DYNAMIC : 0, bd->HasRgbaSupport ? D3DFMT_A8B8G8R8 : D3DFMT_A8R8G8B8, ImGui_ImplDX9_DynamicTextures(bd->pd3dDevice) ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, &dx_tex, nullptr);" _imgui_dx9_src "${_imgui_dx9_src}")
+  if(NOT _imgui_dx9_src MATCHES "static bool ImGui_ImplDX9_DynamicTextures")
+    string(REPLACE "// DirectX\n#include <d3d9.h>\n" "// DirectX\n#include <d3d9.h>\nstatic bool ImGui_ImplDX9_DynamicTextures(LPDIRECT3DDEVICE9 device) { D3DCAPS9 caps = {}; return SUCCEEDED(device->GetDeviceCaps(&caps)) && (caps.Caps2 & D3DCAPS2_DYNAMICTEXTURES); }\n" _imgui_dx9_src "${_imgui_dx9_src}")
+  endif()
+  if(NOT _imgui_dx9_src MATCHES "ImGui_ImplDX9_DynamicTextures\\(bd->pd3dDevice\\) \\? D3DUSAGE_DYNAMIC")
+    message(FATAL_ERROR "imgui_impl_dx9.cpp changed: the managed font texture patch no longer applies")
+  endif()
   # And a switch for the Lowest preset's Plain HUD (ui::Hud::set_plain):
   # alpha-tested instead of blended, plates opaque, glyph edges hard --
   # blending the HUD at full resolution was 2.1 ms of a G41 frame.
