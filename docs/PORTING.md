@@ -1420,24 +1420,32 @@ Then the ff tier draws the valley as the Mac's preview does
 **17-18 fps, Minimal, 640x480 headless** (median 54 ms). The models load
 from their glTFs (the packs carry DXT only), 25 s to the first frame.
 
-**Where the 54 ms goes: the driver, a triangle at a time.** 320x240 is no
+**Where the 54 ms goes: the card fetching its commands.** 320x240 is no
 faster, the process is at 100% of a core, and `sampler.exe` puts 97% of the
-samples in the kernel (`KiFastSystemCall`): the display driver, not D3D9 or
-the game. `tools/d3d9/swvp/tris.cpp` takes D3D9's vertex work out
-(pre-transformed vertices, 18,050 triangles a frame) and times each way of
-sending them to the frame's end on the card:
+samples in the kernel (`KiFastSystemCall`). This first read as the display
+driver writing every vertex to the card itself. It is not (2026-10-13, below):
+a kernel profile shows the driver's own code at a few per cent, and the
+time is the CPU *waiting* for the card. `tools/d3d9/swvp/tris.cpp` takes
+D3D9's vertex work out (pre-transformed vertices, 18,050 triangles a frame)
+and times each way of sending them to the frame's end on the card. Its
+first figures (10 us a triangle indexed, 5.3-7.4 a plain list, 3.8-4.9 in
+strips) each carried a 50 ms read-back of the whole target over PCI; ended
+by a 16x16 target's read-back instead, on the driver's defaults:
 
-| | us a triangle |
-|---|---|
-| indexed list, uv, no fog | 10.0-10.5 |
-| indexed list, uv, vertex fog (the ff tier's case) | 6.9-7.8 |
-| plain list (three vertices a triangle) | 5.3-7.4 |
-| strips, one a row (one vertex a triangle) | 3.8-4.9 |
-| the rows as one strip joined by degenerates, plain or indexed | 3.7-5.4 |
+| pre-transformed, tiny triangles | us a triangle | us a vertex |
+|---|---|---|
+| plain list, position + colour (20 bytes) | 2.74 | 0.91 |
+| plain list, + uv (28 bytes) | 3.60 | 1.20 |
+| plain list, + specular and uv (32 bytes) | 4.11 | 1.37 |
+| strips, one a row, + uv | 1.38 | 1.37 |
+| indexed list, + uv, no fog | 7.10 | -- |
+| indexed list, + specular and uv, vertex fog | 4.09 | -- |
+| the plain list in 1,024 draws, + uv | 4.93 | -- |
 
-Fill, texturing and fog barely move it: about 3 us a triangle plus 0.8 a
-vertex, some 200K triangles a second, which reads as the driver writing
-every vertex to the card itself rather than by bus-master DMA.
+The cost follows the bytes sent -- about 27 MB/s, almost nothing a
+triangle -- while texturing costs nothing and filling the whole target
+adds about 10%. An indexed list with a uv and no fog is a slow path at
+twice a plain list; a draw call costs about 23 us.
 
 **The driver's own settings did not change it.** The miniport
 (`g550dhm.sys`) defines its registry values as category-prefixed names
@@ -1480,6 +1488,67 @@ Lowest is the G550's preset. More would have to come from fewer
 triangles -- the game sends about 4,900 a frame at Lowest (terrain 2.9K,
 rocks 0.6K, water 0.5K, trees 0.5K, sky 0.25K, the dragon 0.1K), each at
 the price above.
+
+**The bottleneck was the bridge, and it tunes (2026-10-13).** The G550
+PCIe is a PCI G550 behind a TI XIO2000A PCIe-to-PCI bridge (`104c:8231`,
+x1 gen1). Three probes in `tools/d3d9/swvp/` found it:
+
+- `pcicfg.exe` reads configuration space through `NtSystemDebugControl`:
+  bus mastering is on for the card and the bridge (command `0007` and
+  `0117`).
+- `kprof.exe` profiles the kernel the way `kernrate` does
+  (`NtCreateProfile`). Under OpenGL the busy core is 100% in one 16-byte
+  bucket of `G550DHD.dll`, a loop reading the chip's STATUS register
+  (`0x1e14`) until the primary DMA list has ended. Under D3D9 it is d3d9's
+  user-mode loop and the kernel's locks around its calls into the driver,
+  with the driver's own code at 2-5%. Both wait for the card.
+- `gltris.exe` draws the same grid through Matrox's OpenGL driver: 4.2 us
+  a textured triangle in a list, 2.3 in strips -- slow too, so not D3D's
+  driver alone.
+
+The card reads its DMA list from system memory through the bridge, which
+answers an upstream Memory Read Multiple by prefetching 2 cache lines of
+its cache-line-size register (8 DWORDs here): 64 bytes a round trip. Two
+settings lengthen that, and a third lets the chip ask for it:
+
+| µs a triangle, pos+col+uv | driver default | `Engine.EnableMemAccess=1` | + bridge `PREFETCH_4X` | + bridge cache line 16 DWORDs |
+|---|---|---|---|---|
+| D3D9 plain list | 3.70 | 2.21 | 1.53 | **1.20** |
+| D3D9 strips | 1.42 | 0.87 | 0.63 | **0.57** |
+| D3D9 indexed list | 7.24 | 4.32 | 2.98 | **2.35** |
+| OpenGL arrays, textured | 4.26 | 2.49 | 1.77 | **1.38** |
+
+- `Engine.EnableMemAccess=1` (a REG_DWORD on the video key, default -1,
+  "auto", which left it off) sets bit 22 of the chip's OPTION register
+  (`480a1520` -> `484a1520`), as far as can be told the enhanced memory
+  access that lets it burst. It survives a reboot; `CPU.BridgeBMControl`
+  was set with it and made no difference.
+- `PREFETCH_4X` is bit 6 of the bridge's Control and Diagnostic Register 0
+  (`C0h`): `pcicfg.exe OUT set 1:0.0 C0 40`.
+- The cache line size (`0Ch`) the HAL refuses to write, so `pcicfg.exe OUT
+  port 1:0.0 0C 00010010` writes it through ports CF8h/CFCh; 32 DWORDs is
+  no faster than 16. `FORCE_MRM` (bit 24 at `D4h`) changes nothing. Both
+  bridge values reset at boot and have to be written again.
+
+What did not help: `Engine.BusMastering=0` turns the driver's 3D off
+altogether (`CreateDevice` returns D3DERR_NOTAVAILABLE and OpenGL falls to
+Microsoft's GDI Generic, which on the Celeron draws this grid 4-13x faster
+than the card did); `Engine.SynchronizeEngine=0` moves nothing; vertex
+buffers in the default pool cost what user pointers do.
+
+The same run as the table above, tuned:
+
+| G550, XP, tuned | Average | Median | 1% low |
+|---|---|---|---|
+| ff, Lowest, path `cpu` | **54.9 fps** (29.6) | 16.6 ms | 33.2 ms |
+| ff, Lowest, programs | 40.1 fps (23.9) | 16.6 ms | 33.2 ms |
+| ff, Minimal, path `cpu` | **40.4 fps** (15.7) | 16.6 ms | 33.2 ms |
+| ff, Minimal, programs | 40.2 fps | 16.6 ms | 49.8 ms |
+
+Path `cpu` stays the Matrox default. With the card fed three times faster,
+Minimal is now playable and Lowest is at the refresh most of the time. A
+PCI card behind such a bridge is worth this check before its triangle
+budget is cut: the bridge's prefetch, not the chip, set the G550's.
 
 ### R7, in progress: graphics settings and presets
 

@@ -1,6 +1,8 @@
 // tris: what a triangle costs the driver and the card, with no vertex work.
 //
 //   tris.exe [OUT.txt]
+//   tris.exe OUT.txt PRIM SECONDS   one case (pos+col+uv, tiny, textured)
+//                                   drawn over and over, to profile it
 //
 // swvp.exe found the G550 under XP drawing a 128x128 grid at 5.6 us a
 // triangle with only 0.5 ms of the 180 ms frame inside the draw calls:
@@ -12,19 +14,30 @@
 //     triangle), strips one per row (one vertex a triangle), the rows as
 //     one strip joined by degenerate triangles ("joined"), and that strip
 //     indexed ("ix-strp");
+//   - where the vertices come from: user pointers (the *UP calls) or
+//     default-pool vertex and index buffers ("vb-"), which a DX7 driver may
+//     allocate where the card can fetch them itself;
+//   - how many draws carry them: one, 64 or 1,024 ("/64", "/1k"), the
+//     latter about 18 triangles a draw, as a Unity scene's are;
 //   - the vertex: position and colour (20 bytes), plus a uv (28), plus the
 //     specular whose alpha is vertex fog (32);
 //   - fog and the texture stage on or off;
 //   - tiny triangles (fill costs nothing) or ones covering the target.
-// Each case is timed to the end of the frame on the card (an event query,
-// or a read back of the target where the driver has none) and printed as
-// microseconds a triangle and a vertex sent. Built with the XP toolchain
-// beside swvp.exe (build.sh).
+// Each case is timed to the end of the frame on the card and printed as
+// microseconds a triangle and a vertex sent. The end of the frame is an
+// event query, or where the driver has none (the G550) a clear of a 16x16
+// render target read back after the draws: the card finishes in order, so
+// that waits for every triangle. Reading back the whole target instead, as
+// this did first, cost the G550 about 50 ms a frame of uncached reads over
+// PCI, which went into every figure. "none" draws nothing: the frame's
+// fixed cost, to subtract. REPEAT=N in the environment draws the grid N
+// times a frame. Built with the XP toolchain beside swvp.exe (build.sh).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
 
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -73,8 +86,24 @@ struct Format {
 
 }  // namespace
 
+const char* const kPrimNames[] = {"indexed", "list",     "strips",   "joined",  "ix-strp", "vb-ix",
+                                   "vb-list", "vb-ix/64", "vb-ix/1k", "list/1k", "none"};
+const int kPrims = 11;
+
 int main(int argc, char** argv) {
     g_out = fopen(argc > 1 ? argv[1] : "tris.txt", "w");
+    // Loop mode: one case for SECONDS, for a profiler to watch.
+    int loop_prim = -1;
+    double loop_seconds = 0;
+    if (argc > 3) {
+        for (int i = 0; i < kPrims; ++i)
+            if (!std::strcmp(argv[2], kPrimNames[i])) loop_prim = i;
+        loop_seconds = std::atof(argv[3]);
+        if (loop_prim < 0) {
+            say("unknown primitive %s\n", argv[2]);
+            return 1;
+        }
+    }
     WNDCLASSA wc = {};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = GetModuleHandleA(nullptr);
@@ -125,12 +154,29 @@ int main(int argc, char** argv) {
     D3DSURFACE_DESC bd = {};
     back->GetDesc(&bd);
     dev->CreateOffscreenPlainSurface(W, H, bd.Format, D3DPOOL_SYSTEMMEM, &readback, nullptr);
-    say("frame end: %s\n", done ? "event query" : "back buffer readback");
+    IDirect3DSurface9* marker = nullptr;
+    IDirect3DSurface9* marker_sys = nullptr;
+    if (!done && SUCCEEDED(dev->CreateRenderTarget(16, 16, bd.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &marker, nullptr)))
+        dev->CreateOffscreenPlainSurface(16, 16, bd.Format, D3DPOOL_SYSTEMMEM, &marker_sys, nullptr);
+    const bool full_readback = getenv("FULL_READBACK") != nullptr;
+    say("frame end: %s\n", done                       ? "event query"
+                            : marker_sys && !full_readback ? "a 16x16 target cleared and read back"
+                                                          : "back buffer readback");
+    const char* repeat_env = getenv("REPEAT");
+    const int repeat = repeat_env && atoi(repeat_env) > 0 ? atoi(repeat_env) : 1;
+    if (repeat > 1) say("the grid drawn %d times a frame\n", repeat);
     auto finish = [&] {
         if (done) {
             done->Issue(D3DISSUE_END);
             while (done->GetData(nullptr, 0, D3DGETDATA_FLUSH) == S_FALSE) {
             }
+        } else if (marker_sys && !full_readback) {
+            dev->SetRenderTarget(0, marker);
+            dev->Clear(0, nullptr, D3DCLEAR_TARGET, 0xFF00FF, 1, 0);
+            dev->GetRenderTargetData(marker, marker_sys);
+            D3DLOCKED_RECT r;
+            if (SUCCEEDED(marker_sys->LockRect(&r, nullptr, D3DLOCK_READONLY))) marker_sys->UnlockRect();
+            dev->SetRenderTarget(0, back);
         } else if (readback) {
             dev->GetRenderTargetData(back, readback);
             D3DLOCKED_RECT r;
@@ -183,7 +229,7 @@ int main(int argc, char** argv) {
     const Format formats[] = {{"pos+col", D3DFVF_XYZRHW | D3DFVF_DIFFUSE},
                               {"pos+col+uv", D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1},
                               {"pos+col+spec+uv", D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1}};
-    say("%-6s %-16s %-7s %-4s %-4s %9s %8s %8s %8s\n", "size", "vertex", "prim", "tex", "fog", "ms/frame", "tris",
+    say("%-6s %-16s %-9s %-4s %-4s %9s %8s %8s %8s\n", "size", "vertex", "prim", "tex", "fog", "ms/frame", "tris",
         "us/tri", "us/vert");
     for (int large = 0; large < 2; ++large) {
         const std::vector<Vertex> verts = grid(large != 0);
@@ -228,8 +274,62 @@ int main(int argc, char** argv) {
             }
             for (WORD i : strip_indices) pack(verts[i], joined);
             const UINT joined_prims = UINT(strip_indices.size()) - 2;
-            for (int prim = 0; prim < 5; ++prim) {
+            // The same vertices and indices in default-pool buffers.
+            IDirect3DVertexBuffer9* vb_indexed = nullptr;
+            IDirect3DVertexBuffer9* vb_flat = nullptr;
+            IDirect3DIndexBuffer9* ib = nullptr;
+            auto fill_vb = [&](const std::vector<BYTE>& from, IDirect3DVertexBuffer9** to) {
+                if (FAILED(dev->CreateVertexBuffer(UINT(from.size()), D3DUSAGE_WRITEONLY, f.fvf, D3DPOOL_DEFAULT, to,
+                                                   nullptr)))
+                    return;
+                void* p = nullptr;
+                if (SUCCEEDED((*to)->Lock(0, 0, &p, 0))) {
+                    std::memcpy(p, from.data(), from.size());
+                    (*to)->Unlock();
+                }
+            };
+            fill_vb(indexed, &vb_indexed);
+            fill_vb(flat, &vb_flat);
+            if (SUCCEEDED(dev->CreateIndexBuffer(UINT(list.size() * 2), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_DEFAULT,
+                                                 &ib, nullptr))) {
+                void* p = nullptr;
+                if (SUCCEEDED(ib->Lock(0, 0, &p, 0))) {
+                    std::memcpy(p, list.data(), list.size() * 2);
+                    ib->Unlock();
+                }
+            }
+            // The indexed list cut into N runs of whole triangles, each with
+            // the vertex range it reaches (what software vertex processing
+            // would touch).
+            struct Run {
+                UINT first_index, prims, min_vertex, vertices;
+            };
+            auto cut = [&](UINT n) {
+                std::vector<Run> runs;
+                for (UINT i = 0; i < n; ++i) {
+                    const UINT t0 = tris * i / n, t1 = tris * (i + 1) / n;
+                    if (t1 == t0) continue;
+                    WORD lo = 0xFFFF, hi = 0;
+                    for (UINT k = t0 * 3; k < t1 * 3; ++k) {
+                        lo = list[k] < lo ? list[k] : lo;
+                        hi = list[k] > hi ? list[k] : hi;
+                    }
+                    runs.push_back({t0 * 3, t1 - t0, lo, UINT(hi - lo + 1)});
+                }
+                return runs;
+            };
+            const std::vector<Run> runs64 = cut(64), runs1k = cut(1024);
+            auto run_vertices = [](const std::vector<Run>& runs) {
+                double n = 0;
+                for (const Run& r : runs) n += r.vertices;
+                return n;
+            };
+            const int prim_count = loop_prim >= 0 ? 1 : kPrims;
+            for (int prim_at = 0; prim_at < prim_count; ++prim_at) {
+                const int prim = loop_prim >= 0 ? loop_prim : prim_at;
+                if (loop_prim >= 0 && (large || f.fvf != formats[1].fvf)) continue;
                 for (int tex_on = 0; tex_on < (has_uv ? 2 : 1); ++tex_on) {
+                    if (loop_prim >= 0 && !tex_on) continue;
                     for (int fog_on = 0; fog_on < (has_spec ? 2 : 1); ++fog_on) {
                         dev->SetFVF(f.fvf);
                         dev->SetRenderState(D3DRS_LIGHTING, FALSE);
@@ -249,11 +349,16 @@ int main(int argc, char** argv) {
                         dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
                         double total = 0;
                         HRESULT drawn = S_OK;
-                        for (int frame = -1; frame < FRAMES; ++frame) {
+                        int frames = FRAMES;
+                        const double loop_start = now_us();
+                        for (int frame = -1; frame < frames; ++frame) {
+                            if (loop_prim >= 0) frames = now_us() - loop_start < loop_seconds * 1e6 ? frame + 2 : frame + 1;
                             const double t0 = now_us();
                             dev->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0x203040, 1, 0);
                             dev->BeginScene();
-                            if (prim == 0) {
+                            for (int pass = 0; pass < repeat; ++pass) {
+                            if (prim == 10) {
+                            } else if (prim == 0) {
                                 drawn = dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, GRID * GRID, tris, list.data(),
                                                                     D3DFMT_INDEX16, indexed.data(), stride);
                             } else if (prim == 1) {
@@ -264,29 +369,62 @@ int main(int argc, char** argv) {
                                 drawn = dev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLESTRIP, 0, GRID * GRID, joined_prims,
                                                                     strip_indices.data(), D3DFMT_INDEX16, indexed.data(),
                                                                     stride);
+                            } else if (prim == 5 || prim == 7 || prim == 8) {
+                                if (!vb_indexed || !ib) {
+                                    drawn = E_FAIL;
+                                } else {
+                                    dev->SetStreamSource(0, vb_indexed, 0, stride);
+                                    dev->SetIndices(ib);
+                                    if (prim == 5) {
+                                        drawn = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, GRID * GRID, 0, tris);
+                                    } else {
+                                        for (const Run& r : prim == 7 ? runs64 : runs1k)
+                                            drawn = dev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.min_vertex, r.vertices,
+                                                                              r.first_index, r.prims);
+                                    }
+                                }
+                            } else if (prim == 6) {
+                                if (!vb_flat) {
+                                    drawn = E_FAIL;
+                                } else {
+                                    dev->SetStreamSource(0, vb_flat, 0, stride);
+                                    drawn = dev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, tris);
+                                }
+                            } else if (prim == 9) {
+                                for (const Run& r : runs1k)
+                                    drawn = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, r.prims, flat.data() + r.first_index * stride,
+                                                                 stride);
                             } else {
                                 for (const auto& s : strips) {
                                     drawn = dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, UINT(s.size() / stride) - 2, s.data(),
                                                                  stride);
                                 }
                             }
+                            }
                             dev->EndScene();
                             finish();
                             if (frame >= 0) total += now_us() - t0;
                             dev->Present(nullptr, nullptr, nullptr, nullptr);
                         }
-                        const double ms = total / FRAMES / 1000.0;
-                        const double sent = prim == 0 || prim == 4 ? double(GRID * GRID)
-                                            : prim == 1           ? tris * 3.0
-                                            : prim == 2           ? (GRID - 1) * GRID * 2.0
-                                                                  : double(strip_indices.size());
-                        const char* prim_names[] = {"indexed", "list", "strips", "joined", "ix-strp"};
-                        say("%-6s %-16s %-7s %-4s %-4s %9.2f %8u %8.3f %8.3f%s\n", large ? "large" : "tiny", f.name,
-                            prim_names[prim], tex_on ? "on" : "off", fog_on ? "on" : "off", ms, tris, ms * 1000 / tris,
-                            ms * 1000 / sent, FAILED(drawn) ? "  (draw failed)" : "");
+                        const double ms = total / frames / 1000.0;
+                        const UINT drawn_tris = prim == 10 ? 0 : tris * repeat;
+                        const double sent = repeat * (prim == 0 || prim == 4 || prim == 5 ? double(GRID * GRID)
+                                            : prim == 1 || prim == 6 || prim == 9 ? tris * 3.0
+                                            : prim == 2                           ? (GRID - 1) * GRID * 2.0
+                                            : prim == 7                           ? run_vertices(runs64)
+                                            : prim == 8                           ? run_vertices(runs1k)
+                                                                                  : double(strip_indices.size()));
+                        say("%-6s %-16s %-9s %-4s %-4s %9.2f %8u %8.3f %8.3f%s", large ? "large" : "tiny", f.name,
+                            kPrimNames[prim], tex_on ? "on" : "off", fog_on ? "on" : "off", ms, drawn_tris,
+                            drawn_tris ? ms * 1000 / drawn_tris : 0.0, drawn_tris ? ms * 1000 / sent : 0.0, FAILED(drawn) ? "  (draw failed)" : "");
+                        if (loop_prim >= 0) say("  (%d frames)", frames);
+                        say("\n");
                     }
                 }
             }
+            if (vb_indexed) vb_indexed->Release();
+            if (vb_flat) vb_flat->Release();
+            if (ib) ib->Release();
         }
     }
     if (g_out) fclose(g_out);

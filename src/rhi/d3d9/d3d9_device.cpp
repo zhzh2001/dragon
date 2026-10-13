@@ -649,11 +649,14 @@ public:
         // that exports Direct3DCreate9On12 -- and a Windows 7 d3d9.dll placed
         // beside the exe does not, so it keeps its programs. Windows 8 and
         // 8.1 have not been measured and keep theirs.
-        // A Matrox card takes path "cpu" everywhere: the G550's driver feeds
-        // the card a triangle at a time, and the triangles path "cpu" culls
-        // and batches itself cost it less than the runtime's own clipping
-        // into the same driver (13% off the median frame under XP, Lowest
-        // and Minimal alike, against the Atom's 70% the other way).
+        // A Matrox card takes path "cpu" everywhere: the G550 is limited by
+        // how fast it fetches its commands (through a PCIe-to-PCI bridge,
+        // docs/PORTING.md "The G550 on the G41"), so every vertex sent
+        // costs, and the triangles path "cpu" culls and batches itself
+        // cost it less than the runtime's own clipping into the same driver
+        // (13% off the median frame under XP, Lowest and Minimal alike,
+        // against the Atom's 70% the other way; 54.9 fps against 40.1 at
+        // Lowest with the bridge tuned).
         if (ff_ && software_vp_) {
             HMODULE runtime = GetModuleHandleA("d3d9.dll");
             if ((runtime && GetProcAddress(runtime, "Direct3DCreate9On12")) || vendor_id_ == 0x102B)
