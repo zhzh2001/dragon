@@ -42,7 +42,7 @@ struct ErosionSettings {
     int route_every = 4;
     // Thermal passes after each fluvial one, the talus slope (rise over
     // run) past which material slides, and how much of the excess moves.
-    int thermal_iterations = 2;
+    int thermal_iterations = 3;
     float talus = 0.9f;
     float thermal_rate = 0.25f;
     // Metres of fixed, per-cell noise the routing sees (and the heights do

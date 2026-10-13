@@ -196,7 +196,11 @@ face, the face close, and the run's chase view.
   enough to magnify an ulp: a seed may differ in detail between the Mac
   and Windows. If that matters, terrain.cpp and core/noise.cpp join the
   no-contract list.
-- **Cost**: 0.9 s on the M5 (12 m), 0.2 s at 24 m, and paid twice on a
+- **Cuts are eased past 150 m** (`CUT_LIMIT`, with a third talus pass):
+  the biggest catchments carved slots near 400 m deep and a few cells
+  wide, a trench rather than a valley, seen first behind the dragon in the
+  close inspection view.
+- **Cost**: 1.0 s on the M5 (12 m), 0.2 s at 24 m, and paid twice on a
   `--run` start, which generates the arena's default terrain before the
   run's seed. On the G41 it wants measuring before the next XP package.
 
@@ -270,7 +274,8 @@ terms now, all fading out with distance before they would shimmer:
 
 Up close it now reads as broken rock rather than sand. At a kilometre,
 the shape (F2) and the crags do the work. Next for F3 is the CDLOD mesh.
-Cost: about 0.6 ms a frame at 1080p on the M5.
+Cost: about 1 ms a frame at 1080p on the M5 for the crags, the mottling
+and the scans together (600 frames: 6.80 s before, 7.39 s after).
 
 ## A first cloud layer (2026-10-13)
 

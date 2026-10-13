@@ -50,6 +50,7 @@ void Terrain::run_erosion() {
     // (gameplay flies, lands and swims there, and the corridor is the
     // generator's, not the water's), and fading out over the outer sixth of
     // the grid so the skirt beyond meets it without a step.
+    constexpr float CUT_LIMIT = 150.0f;
     // Drainage area on a log scale: 1 cell is a ridge, a few thousand a
     // stream bed.
     const float flow_scale = 1.0f / std::log(3000.0f);
@@ -65,7 +66,12 @@ void Terrain::run_erosion() {
                                     : 1.0f;
             const float keep = core::smoothstep(0.02f, 0.35f, valley_mask(x, z)) * river *
                                (1.0f - core::smoothstep(0.83f, 0.98f, edge)) * settings_.erosion_strength;
-            erosion_.delta[i] = (eroded.heights[i] - base[i]) * keep;
+            // A cut deeper than ~150 m is eased toward that: the biggest
+            // catchments carved slots near 400 m deep and a few cells wide,
+            // which no talus pass widens enough to read as a valley.
+            float change = eroded.heights[i] - base[i];
+            if (change < 0.0f) change = -CUT_LIMIT * (1.0f - std::exp(change / CUT_LIMIT));
+            erosion_.delta[i] = change * keep;
             erosion_.flow[i] = core::clampf(std::log(core::maxf(eroded.flow[i], 1.0f)) * flow_scale, 0.0f, 1.0f) *
                                core::minf(keep, 1.0f);
             erosion_.deposit[i] = core::clampf(eroded.deposit[i] / 6.0f, 0.0f, 1.0f) * core::minf(keep, 1.0f);
