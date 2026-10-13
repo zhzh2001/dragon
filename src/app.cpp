@@ -1404,6 +1404,10 @@ void App::regenerate_terrain() {
     }
     // Minimal's skirt coarser again: the far horizon, under the fog.
     if (tier_.fixed_function && tier_.budget.terrain_cell_scale >= 8.0f) settings.skirt_cell_size *= 2.0f;
+    // The vertex-lit tiers erode on a grid twice as coarse: a quarter of the
+    // work on CPUs that are a tenth of the M5's, for the same valleys at the
+    // scale their coarser meshes can show (game/erosion.h).
+    if (tier_.vertex_lighting || tier_.fixed_function) settings.erosion_cell *= 2.0f;
     terrain_.generate(settings);
     // The material follows the terrain that came out -- before the meshes are
     // built, since the fixed-function tier bakes it into their colours.
@@ -1438,6 +1442,10 @@ void App::regenerate_terrain() {
     auto with_patches = [&](gfx::MeshData mesh) {
         for (gfx::MeshVertex& v : mesh.vertices) {
             v.uv.x = gfx::fbm(v.position.x * 0.0055f, v.position.z * 0.0055f);
+            // The colour carries what erosion left (game::Terrain), which
+            // only the per-pixel terrain reads; the vertex-lit tiers tint by
+            // it, so theirs is white as before.
+            if (tier_.vertex_lighting || tier_.fixed_function) v.color = core::Vec3::one();
             if (tier_.fixed_function) {
                 v.color = gfx::prelit::terrain_diffuse(prelit_scene, v.position, v.normal, v.uv.x, v.color);
             }

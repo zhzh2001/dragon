@@ -137,7 +137,10 @@ struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
     float3 normal : TEXCOORD1;
-    float3 tint : TEXCOORD2;
+    // What erosion left (game::Terrain::erosion_at): x where the water ran,
+    // y where sediment settled. The per-pixel tiers' vertex colour carries
+    // it instead of a tint, which only the vertex-lit ones use.
+    float2 erosion : TEXCOORD2;
 };
 
 #ifdef VERTEX_STAGE
@@ -146,7 +149,7 @@ VertexOut vs_main(VertexIn input) {
     o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
     o.world_position = input.position;
     o.normal = input.normal;
-    o.tint = input.color;
+    o.erosion = input.color.xy;
     return o;
 }
 #endif
@@ -181,7 +184,7 @@ TerrainDetail sample_detail(float3 p, float3 normal) {
 
 float modulate(float d, float strength) { return 1.0 + (d - 0.5) * 2.0 * strength; }
 
-float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail, float strength) {
+float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail, float strength, float2 erosion) {
     // Colours come from the shared palette, so the ground is graded together
     // with the plants standing on it.
     const float3 SAND       = scene.palette[PALETTE_SAND].rgb;
@@ -228,7 +231,18 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     // less soil to hold on.
     float slope_blend = 1.0 - smoothstep(rock_slope, rock_slope + 0.22, flatness);
     float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, height) * 0.6;
-    albedo = lerp(albedo, rock, saturate(slope_blend + altitude_rockiness));
+    // Where the water ran, the soil went with it: gullies are bare rock a
+    // little further down the slope than their banks.
+    float gully = smoothstep(0.45, 0.85, erosion.x);
+    albedo = lerp(albedo, rock, saturate(slope_blend + altitude_rockiness + gully * 0.6 * (1.0 - flatness * 0.5)));
+
+    // Where the sediment settled: scree and gravel fans, paler and greyer
+    // than the face above them, the grain of the dirt channel on them.
+    float scree = smoothstep(0.08, 0.5, erosion.y) * (1.0 - smoothstep(0.9, 0.98, flatness) * 0.5);
+    float3 scree_colour = lerp(ROCK, SAND, 0.35) * 1.08 * modulate(detail.ground.b, strength);
+    albedo = lerp(albedo, scree_colour, scree * 0.85);
+    // The stream beds stay darker and damper than what drained into them.
+    albedo *= 1.0 - 0.22 * smoothstep(0.6, 0.95, erosion.x);
 
     // Snow only settles where it is both high and not too steep. The noise makes
     // the snow line ragged instead of a perfect contour.
@@ -261,7 +275,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     const TerrainDetail detail = sample_detail(input.world_position, normal);
     const float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
-    float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength) * input.tint;
+    float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);

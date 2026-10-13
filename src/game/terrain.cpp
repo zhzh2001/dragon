@@ -2,13 +2,127 @@
 
 #include "core/log.h"
 
+#include <algorithm>
+#include <chrono>
+
 using core::Vec3;
 
 namespace game {
 void Terrain::generate(const TerrainSettings& settings) {
     settings_ = settings;
     noise_.reseed(settings.seed);
+    run_erosion();
     build_mesh();
+}
+
+void Terrain::run_erosion() {
+    erosion_ = ErosionGrid{};
+    if (!settings_.erosion || settings_.erosion_strength <= 0.0f) return;
+    const auto start = std::chrono::steady_clock::now();
+    const float cell = core::maxf(settings_.erosion_cell, 2.0f);
+    const float half = settings_.half_extent * core::maxf(settings_.erosion_extent_factor, 1.0f);
+    const int n = int(std::lround(half * 2.0f / cell)) + 1;
+    std::vector<float> base(size_t(n) * size_t(n));
+    // The valley floor is the base level the mountains drain to, and is
+    // never changed: the corridor is gameplay's.
+    std::vector<uint8_t> fixed(base.size());
+    // Rock hardness: broad patches of soft and hard ground, so gullies
+    // crowd some faces and spare others.
+    std::vector<float> softness(base.size());
+    for (int iz = 0; iz < n; ++iz) {
+        for (int ix = 0; ix < n; ++ix) {
+            const float x = -half + float(ix) * cell, z = -half + float(iz) * cell;
+            const size_t i = size_t(iz) * size_t(n) + size_t(ix);
+            base[i] = base_height_at(x, z);
+            fixed[i] = valley_mask(x, z) < 0.02f ? 1 : 0;
+            softness[i] = 0.35f + 1.3f * core::saturate(noise_.fbm(x / 650.0f + 41.0f, z / 650.0f - 13.0f, 3) * 1.4f - 0.2f);
+        }
+    }
+    const ErosionResult eroded = erode(base, fixed, n, cell, settings_.erosion_params, softness);
+
+    erosion_.n = n;
+    erosion_.half = half;
+    erosion_.cell = cell;
+    erosion_.delta.resize(base.size());
+    erosion_.flow.resize(base.size());
+    erosion_.deposit.resize(base.size());
+    // Where the change is kept: off the valley floor and out of the river
+    // (gameplay flies, lands and swims there, and the corridor is the
+    // generator's, not the water's), and fading out over the outer sixth of
+    // the grid so the skirt beyond meets it without a step.
+    // Drainage area on a log scale: 1 cell is a ridge, a few thousand a
+    // stream bed.
+    const float flow_scale = 1.0f / std::log(3000.0f);
+    for (int iz = 0; iz < n; ++iz) {
+        for (int ix = 0; ix < n; ++ix) {
+            const size_t i = size_t(iz) * size_t(n) + size_t(ix);
+            const float x = -half + float(ix) * cell, z = -half + float(iz) * cell;
+            const float edge = core::maxf(std::fabs(x), std::fabs(z)) / half;
+            const float river = settings_.river_half_width > 0.0f
+                                    ? core::smoothstep(settings_.river_half_width * 2.6f,
+                                                       settings_.river_half_width * 5.0f,
+                                                       std::fabs(x - river_center_x(z)))
+                                    : 1.0f;
+            const float keep = core::smoothstep(0.02f, 0.35f, valley_mask(x, z)) * river *
+                               (1.0f - core::smoothstep(0.83f, 0.98f, edge)) * settings_.erosion_strength;
+            erosion_.delta[i] = (eroded.heights[i] - base[i]) * keep;
+            erosion_.flow[i] = core::clampf(std::log(core::maxf(eroded.flow[i], 1.0f)) * flow_scale, 0.0f, 1.0f) *
+                               core::minf(keep, 1.0f);
+            erosion_.deposit[i] = core::clampf(eroded.deposit[i] / 6.0f, 0.0f, 1.0f) * core::minf(keep, 1.0f);
+        }
+    }
+    // A 1-2-1 blur on each layer. A channel one cell wide, sampled
+    // bilinearly by a finer mesh, is a string of beads wherever it runs
+    // diagonally; softened over its neighbours it is a groove.
+    auto blur = [n](std::vector<float>& layer) {
+        std::vector<float> tmp(layer.size());
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool along_x = pass == 0;
+            for (int iz = 0; iz < n; ++iz) {
+                for (int ix = 0; ix < n; ++ix) {
+                    const int a = along_x ? std::max(ix - 1, 0) : std::max(iz - 1, 0);
+                    const int b = along_x ? std::min(ix + 1, n - 1) : std::min(iz + 1, n - 1);
+                    const size_t i = size_t(iz) * size_t(n) + size_t(ix);
+                    const size_t ia = along_x ? size_t(iz) * size_t(n) + size_t(a) : size_t(a) * size_t(n) + size_t(ix);
+                    const size_t ib = along_x ? size_t(iz) * size_t(n) + size_t(b) : size_t(b) * size_t(n) + size_t(ix);
+                    tmp[i] = (layer[ia] + 2.0f * layer[i] + layer[ib]) * 0.25f;
+                }
+            }
+            layer.swap(tmp);
+        }
+    };
+    blur(erosion_.delta);
+    blur(erosion_.flow);
+    blur(erosion_.deposit);
+
+    float cut = 0.0f, fill = 0.0f, flow_max = 0.0f;
+    for (size_t i = 0; i < base.size(); ++i) {
+        cut = core::minf(cut, erosion_.delta[i]);
+        fill = core::maxf(fill, erosion_.delta[i]);
+        flow_max = core::maxf(flow_max, eroded.flow[i]);
+    }
+    LOG_INFO("terrain erosion: %d x %d cells of %.0f m, %d passes, cut %.0f m, fill %.0f m, widest catchment %.0f cells, %.0f ms",
+             n - 1, n - 1, cell, settings_.erosion_params.iterations, double(cut), double(fill), double(flow_max),
+             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+}
+
+float Terrain::erosion_sample(const std::vector<float>& layer, float x, float z) const {
+    if (erosion_.n < 2 || layer.empty()) return 0.0f;
+    const float fx = (x + erosion_.half) / erosion_.cell;
+    const float fz = (z + erosion_.half) / erosion_.cell;
+    const int cells = erosion_.n - 1;
+    if (!(fx >= 0.0f && fz >= 0.0f && fx <= float(cells) && fz <= float(cells))) return 0.0f;
+    const int ix = fx >= float(cells) ? cells - 1 : int(fx);
+    const int iz = fz >= float(cells) ? cells - 1 : int(fz);
+    const float u = fx - float(ix), v = fz - float(iz);
+    const size_t i = size_t(iz) * size_t(erosion_.n) + size_t(ix);
+    const size_t n = size_t(erosion_.n);
+    return layer[i] * (1.0f - u) * (1.0f - v) + layer[i + 1] * u * (1.0f - v) + layer[i + n] * (1.0f - u) * v +
+           layer[i + n + 1] * u * v;
+}
+
+core::Vec2 Terrain::erosion_at(float x, float z) const {
+    return core::Vec2{erosion_sample(erosion_.flow, x, z), erosion_sample(erosion_.deposit, x, z)};
 }
 
 float Terrain::valley_center_x(float z) const {
@@ -73,6 +187,10 @@ float Terrain::height_at(float x, float z) const {
 }
 
 float Terrain::analytic_height_at(float x, float z) const {
+    return base_height_at(x, z) + erosion_sample(erosion_.delta, x, z);
+}
+
+float Terrain::base_height_at(float x, float z) const {
     const float mask = valley_mask(x, z);
 
     float mountains = noise_.ridged(x / settings_.mountain_scale, z / settings_.mountain_scale,
@@ -155,8 +273,11 @@ void Terrain::build_mesh() {
             vertex.position = Vec3{x, y, z};
             vertex.normal = Vec3::up();  // replaced by recompute_normals
             // Material is decided in the shader from height and slope, so it
-            // stays hot-reloadable. White here means "no vertex tint".
-            vertex.color = Vec3::one();
+            // stays hot-reloadable; the colour carries what erosion left
+            // (x flow, y deposit), which a tier that tints by the vertex
+            // colour resets to white (App::regenerate_terrain).
+            const core::Vec2 eroded = erosion_at(x, z);
+            vertex.color = Vec3{eroded.x, eroded.y, 1.0f};
             mesh_.vertices.push_back(vertex);
         }
     }
@@ -218,7 +339,8 @@ void Terrain::build_skirt() {
             gfx::MeshVertex vertex;
             vertex.position = Vec3{x, analytic_height_at(x, z), z};
             vertex.normal = Vec3::up();
-            vertex.color = Vec3::one();
+            const core::Vec2 eroded = erosion_at(x, z);
+            vertex.color = Vec3{eroded.x, eroded.y, 1.0f};
             skirt_.vertices.push_back(vertex);
         }
     }

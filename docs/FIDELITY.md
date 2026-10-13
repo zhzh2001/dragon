@@ -82,7 +82,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 |---|---|---|---|
 | **F0** groundwork (deferred: F1 needed none of it) | Compute in the RHI: compute pipelines, storage buffers and textures, dispatch, indirect draw, on SDL GPU and D3D11 (CS 5.0); none on D3D9. A fidelity golden set at Ultra: the vista, a cliff close, the forest floor, the river, the dragon at a low sun | The current goldens unchanged; one compute pass (the sky LUTs) on every modern backend | 1-2 |
 | **F1** sky and air (**done 2026-10-13**, below) | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
-| **F2** terrain shape | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
+| **F2** terrain shape (**done 2026-10-13**, below) | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
 | **F3** terrain detail | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
 | **F4** light | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
@@ -152,6 +152,53 @@ degree sun, a 55 degree sun, and the run's chase view.
   behind a ridge), and no clouds (F6). The surfaces' sun colour is still the
   Lighting panel's, not the transmittance's, so a 55 degree sun is still
   lit late-afternoon warm.
+
+## F2, as built (2026-10-13)
+
+`game/erosion.h` and `Terrain::run_erosion`. Renders in
+`artifacts/fidelity-f2/`: the vista, from altitude, top-down on the gullied
+face, the face close, and the run's chase view.
+
+- **Stream power, not droplets.** The first version ran Beyer's droplet
+  erosion. On faces this steep it left ripples across the flow, fish
+  scales from above, and no channels. The stream power law, solved
+  implicitly (Braun and Willett 2013), cuts in proportion to the area
+  draining through a cell, so it carves valleys where the drainage
+  gathers. A talus pass softens the cuts and lays the scree.
+- **Three things made it read as mountains rather than combed clay:**
+  - Priority-flood routing (Barnes 2014): the ridged noise is full of
+    closed basins that split the drainage. Before the flood, the widest
+    catchment was 2,400 cells (0.35 km²); after it, 66,000 (9.5 km²).
+  - A^0.75 instead of sqrt(A): big catchments cut far more than rills, so
+    valleys form between faces that keep their shape. With sqrt(A), every
+    slope combed into the same parallel grooves.
+  - A 1-2-1 blur on the result: a one-cell channel upsampled onto the 6 m
+    mesh was a string of beads wherever it ran diagonally.
+- **One eroded valley on every tier.** The grid is its own: 12 m cells over
+  1.6 times the playable extent, sampled by each tier's mesh whatever its
+  cell, so `analytic_height_at` is the noise plus the erosion's change and
+  `height_at` still reads the rendered triangle. The vertex-lit tiers erode
+  on a 24 m grid, a quarter of the work, for CPUs a tenth of the M5's.
+- **Gameplay's ground is kept.** The valley floor is the base level the
+  mountains drain to and is never changed; the river's banks are masked;
+  the change fades out over the grid's outer sixth, where the uneroded
+  skirt carries on.
+- **What it leaves for the materials**: drainage area and scree depth, in
+  the terrain's vertex colour on the per-pixel tiers (the vertex-lit ones
+  tint by that colour, so theirs stays white). The terrain shader bares
+  rock in the gullies, darkens the stream beds, and lays paler scree where
+  the talus settled. With the rock still one flat colour (F3), they read
+  more as shape than as material.
+- **Deterministic**: no random numbers, the traversal fixed by grid order,
+  only sqrt, and `-ffp-contract=off` (`tests/test_erosion.cpp` checks that
+  two runs agree, and that the base levels are untouched). The noise it
+  starts from is *not* built FMA-free, though, and erosion is chaotic
+  enough to magnify an ulp: a seed may differ in detail between the Mac
+  and Windows. If that matters, terrain.cpp and core/noise.cpp join the
+  no-contract list.
+- **Cost**: 0.9 s on the M5 (12 m), 0.2 s at 24 m, and paid twice on a
+  `--run` start, which generates the arena's default terrain before the
+  run's seed. On the G41 it wants measuring before the next XP package.
 
 ## Budgets
 

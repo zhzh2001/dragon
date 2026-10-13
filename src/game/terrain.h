@@ -4,6 +4,7 @@
 
 #include "core/math.h"
 #include "core/noise.h"
+#include "game/erosion.h"
 #include "gfx/mesh.h"
 
 namespace game {
@@ -76,6 +77,19 @@ struct TerrainSettings {
     // range you could land on.
     float skirt_extent_factor = 3.0f;
     float skirt_cell_size = 36.0f;
+
+    // Hydraulic erosion (game/erosion.h, docs/FIDELITY.md F2): run once per
+    // generation on a grid of its own, `erosion_cell` metres, over
+    // `erosion_extent_factor` times the playable extent, so every tier's
+    // mesh -- whatever its cell -- samples the same eroded valley. The
+    // valley floor and the river are left as they were; the change fades
+    // out toward the grid's edge, where the skirt carries on uneroded.
+    bool erosion = true;
+    float erosion_cell = 12.0f;
+    float erosion_extent_factor = 1.6f;
+    // Scales what the droplets did, 0 to off.
+    float erosion_strength = 1.0f;
+    ErosionSettings erosion_params;
 };
 
 // Procedural valley. Height is defined by an analytic function of (x, z), so
@@ -90,8 +104,15 @@ public:
     // from what they can see. Before generation, and outside the mesh, it is
     // the analytic function the mesh was built from.
     float height_at(float x, float z) const;
-    // The generating function itself, for building the mesh and for tests.
+    // The generating function itself, for building the mesh and for tests:
+    // the noise (base_height_at) plus the erosion's change.
     float analytic_height_at(float x, float z) const;
+    // The noise alone, before erosion.
+    float base_height_at(float x, float z) const;
+    // What erosion left at (x, z), each 0..1: x where water ran (gullies,
+    // stream beds), y where sediment settled (scree fans). Zero where it did
+    // not run. The terrain mesh carries them in its vertex colour.
+    core::Vec2 erosion_at(float x, float z) const;
     core::Vec3 normal_at(float x, float z) const;
 
     // The surface you can stand on or splash into: the ground, or the water
@@ -127,6 +148,19 @@ private:
 
     TerrainSettings settings_;
     core::Noise noise_;
+    // The erosion grid: n vertices a side from -half, every `cell` metres.
+    struct ErosionGrid {
+        int n = 0;
+        float half = 0.0f;
+        float cell = 1.0f;
+        std::vector<float> delta;    // metres, masked
+        std::vector<float> flow;     // 0..1
+        std::vector<float> deposit;  // 0..1
+    };
+    ErosionGrid erosion_;
+    void run_erosion();
+    // Bilinear on one of the grid's layers; 0 outside it.
+    float erosion_sample(const std::vector<float>& layer, float x, float z) const;
     gfx::MeshData mesh_;
     gfx::MeshData skirt_;
     bool grid_ready_ = false;

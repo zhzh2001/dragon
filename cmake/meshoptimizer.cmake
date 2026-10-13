@@ -19,6 +19,8 @@ if(NOT MSVC)
   # The texture chain too (gfx/texture.cpp: the box filter and stb_dxt's
   # float refinement), since a model pack baked on the Mac is loaded on
   # Windows and must match what the glTF route computes there.
-  set_source_files_properties(src/anim/skin_lod.cpp src/gfx/mesh_lod.cpp src/gfx/texture.cpp
+  # And the terrain's erosion (game/erosion.h): a seed's valley, eroded the
+  # same on every compiler.
+  set_source_files_properties(src/anim/skin_lod.cpp src/gfx/mesh_lod.cpp src/gfx/texture.cpp src/game/erosion.cpp
     DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTIES COMPILE_OPTIONS -ffp-contract=off)
 endif()

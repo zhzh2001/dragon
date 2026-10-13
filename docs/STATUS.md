@@ -26,6 +26,10 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
   ambient light is integrated from the sky, and the world past the terrain
   hazes into the horizon. About 0.4 ms a frame; the retro tiers are
   bit-identical. Renders in `artifacts/fidelity-f1/`.
+- **F2, erosion** (`docs/FIDELITY.md`, "F2, as built"): stream-power
+  erosion carves the mountains into branching valleys and gullies, with
+  scree at their feet. One eroded valley on every tier. 0.9 s at
+  generation on the M5. Renders in `artifacts/fidelity-f2/`.
 - **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal

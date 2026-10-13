@@ -67,6 +67,7 @@ add_executable(dragon
   src/core/noise.cpp
   src/game/debug_camera.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/game/flight.cpp
   src/game/maneuver.cpp
   src/game/chase_camera.cpp
@@ -158,6 +159,11 @@ target_compile_options(dragon PRIVATE -Wall -Wextra -Wno-missing-field-initializ
 
 # Tests are a plain executable rather than a framework: `ctest` or just run it.
 enable_testing()
+add_executable(test_erosion tests/test_erosion.cpp src/game/erosion.cpp)
+target_include_directories(test_erosion PRIVATE src)
+target_compile_options(test_erosion PRIVATE -Wall -Wextra)
+add_test(NAME erosion COMMAND test_erosion)
+
 add_executable(test_breath tests/test_breath.cpp src/game/breath.cpp src/game/element.cpp)
 target_include_directories(test_breath PRIVATE src)
 target_link_libraries(test_breath PRIVATE SDL3::SDL3)
@@ -180,6 +186,7 @@ add_executable(test_flight
   src/game/flight.cpp
   src/game/maneuver.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -198,6 +205,7 @@ add_executable(test_camera_rig
   src/game/chase_camera.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -218,6 +226,7 @@ add_executable(test_rally
   src/game/autopilot.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
 )
@@ -239,6 +248,7 @@ add_executable(test_anim
   src/anim/dragon_rig.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
 )
@@ -327,6 +337,7 @@ add_executable(test_combat
   src/game/bot.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -343,6 +354,7 @@ add_executable(test_element
   src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -361,6 +373,7 @@ add_executable(test_bot
   src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -378,6 +391,7 @@ add_executable(test_match
   src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -393,6 +407,7 @@ add_executable(test_hoard_run
   src/game/course.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -412,6 +427,7 @@ add_executable(test_prey
   src/game/course.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -432,6 +448,7 @@ add_executable(test_demo_pilot
   src/game/element.cpp
   src/game/flight.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
   src/gfx/primitives.cpp
@@ -444,6 +461,7 @@ add_test(NAME demo_pilot COMMAND test_demo_pilot)
 add_executable(test_vegetation
   tests/test_vegetation.cpp
   src/game/terrain.cpp
+  src/game/erosion.cpp
   src/game/vegetation.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
