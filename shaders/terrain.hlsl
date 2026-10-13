@@ -256,6 +256,49 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     return albedo * (0.88 + 0.24 * grain);
 }
 
+#ifdef ATMOSPHERE
+// Rock as the target paints it (docs/concept/valley-target.png, its right-
+// hand cliff; docs/FIDELITY.md, F3): horizontal beds a few metres thick,
+// each a ledge whose top catches the light and whose riser falls into
+// shade, broken by vertical joints, the beds' colours wandering from grey
+// to warm. Shading only -- the mesh's 6 m cells cannot carry a 7 m bed --
+// so it bends the normal and the albedo, and fades out before it would
+// shimmer. The modern tier's alone: SM3's terrain is near its budget.
+struct RockDetail {
+    float3 normal;
+    float3 tint;  // the bed's colour times its joints' and riser's shade
+};
+
+RockDetail rock_detail(float3 p, float3 n, float amount) {
+    RockDetail r;
+    r.normal = n;
+    r.tint = (float3)1.0;
+    if (amount <= 0.001) return r;
+    // Beds: about 11 m, their lines wavering so they are not a contour map.
+    float y = (p.y + value_noise(p.xz * 0.004) * 14.0) / 11.0;
+    float bed = floor(y);
+    float f = y - bed;
+    // A ledge: the top fifth tips up toward the sky, the bottom tenth back
+    // under the bed above.
+    float tip = smoothstep(0.78, 0.98, f) - 0.7 * (1.0 - smoothstep(0.0, 0.1, f));
+    // Along the face, level: what the joints are spaced in.
+    float2 along = normalize(float2(-n.z, n.x) + float2(1e-5, 0.0));
+    float u = dot(p.xz, along);
+    float spacing = 7.0 + 8.0 * hash21(float2(bed, 3.7));
+    float j = frac((u + hash21(float2(bed, 9.1)) * 40.0) / spacing);
+    float crack = 1.0 - smoothstep(0.0, 0.05, j) * (1.0 - smoothstep(0.95, 1.0, j));
+    float3 up = float3(0.0, 1.0, 0.0);
+    float3 side = float3(along.x, 0.0, along.y);
+    float3 bent = n + up * tip * 0.85 + side * (j < 0.5 ? -1.0 : 1.0) * crack * 0.5;
+    r.normal = normalize(lerp(n, bent, amount));
+    float hue = hash21(float2(bed, 1.3));
+    float3 bed_colour = lerp(float3(0.88, 0.93, 1.0), float3(1.1, 1.0, 0.86), hue) * (0.85 + 0.3 * hash21(float2(bed, 5.9)));
+    float shade = (1.0 - 0.45 * crack) * (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.18, f)));
+    r.tint = lerp((float3)1.0, bed_colour * shade, amount);
+    return r;
+}
+#endif
+
 float4 fs_main(VertexOut input) : SV_Target {
     float3 normal = normalize(input.normal);
     float3 to_sun = normalize(scene.sun.xyz);
@@ -274,9 +317,62 @@ float4 fs_main(VertexOut input) : SV_Target {
         normal = normalize(normal + float3(-gx, 0.0, -gz) * (0.55 * detail_fade));
     }
 
+#ifdef ATMOSPHERE
+    // Crags: rock is rough at every scale the mesh is too coarse for, and a
+    // face that bends the light smoothly reads as sand. A bump of two value
+    // noise octaves (24 m and 9 m) on the two vertical world planes, blended
+    // by the normal like a triplanar map, out to 3.5 km. (Ridged noise in
+    // the face's own frame was tried first: its ridge lines ring like
+    // contours and the frame turns with the normal, and the faces came out
+    // as wood grain.)
+    {
+        float rocky_ground = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.25, saturate(normal.y));
+        float crag = rocky_ground * (1.0 - smoothstep(900.0, 3500.0, camera_distance));
+        if (crag > 0.001) {
+            float3 p = input.world_position;
+            float3 bump = (float3)0.0;
+            float2 w = abs(normal.xz) + 1e-3;
+            w /= w.x + w.y;
+            float scale = 1.0 / 24.0, weight = 1.0;
+            for (int o = 0; o < 2; ++o) {
+                const float e = 0.3;
+                // The x-facing plane: (z, y). The z-facing plane: (x, y).
+                float2 a = float2(p.z, p.y) * scale + float(o) * 11.3;
+                float2 b = float2(p.x, p.y) * scale + float(o) * 5.9;
+                float a0 = value_noise(a), b0 = value_noise(b);
+                float2 ga = float2(value_noise(a + float2(e, 0.0)) - a0, value_noise(a + float2(0.0, e)) - a0) / e;
+                float2 gb = float2(value_noise(b + float2(e, 0.0)) - b0, value_noise(b + float2(0.0, e)) - b0) / e;
+                bump += (float3(0.0, ga.y, ga.x) * w.x + float3(gb.x, gb.y, 0.0) * w.y) * weight;
+                scale *= 2.6;
+                weight *= 0.6;
+            }
+            // Only the part of the bump along the face bends it.
+            bump -= normal * dot(bump, normal);
+            normal = normalize(normal - bump * 0.5 * crag);
+        }
+    }
+    // Beds only where the rock stands as a cliff, steeper than about 52
+    // degrees: on the 35-45 degree faces most of these mountains are, beds
+    // read as contour lines, and the target has broken rock and scree there
+    // instead -- the mottling below. Near enough for a bed to be a few pixels.
+    float cliff = 1.0 - smoothstep(0.42, 0.62, saturate(normal.y));
+    RockDetail rock = rock_detail(input.world_position, normal, cliff * (1.0 - smoothstep(350.0, 1800.0, camera_distance)));
+    normal = rock.normal;
+    // Broken rock on the rest of the rocky ground: grey and warm blotches a
+    // few metres to a few tens across, so a face is not one flat colour.
+    float rocky = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.22, saturate(normal.y));
+    float2 q = input.world_position.xz;
+    float blotch = value_noise(q * 0.045) * 0.6 + value_noise(q * 0.13 + 7.1) * 0.4;
+    float warm = value_noise(q * 0.011 + 3.3);
+    float3 broken = lerp(float3(0.9, 0.94, 1.0), float3(1.08, 1.0, 0.88), warm) * (0.78 + 0.44 * blotch);
+    rock.tint *= lerp((float3)1.0, broken, rocky * (1.0 - smoothstep(600.0, 3000.0, camera_distance)));
+#endif
     const TerrainDetail detail = sample_detail(input.world_position, normal);
     const float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
     float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
+#ifdef ATMOSPHERE
+    albedo *= rock.tint;
+#endif
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);

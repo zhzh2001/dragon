@@ -83,7 +83,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F0** groundwork (deferred: F1 needed none of it) | Compute in the RHI: compute pipelines, storage buffers and textures, dispatch, indirect draw, on SDL GPU and D3D11 (CS 5.0); none on D3D9. A fidelity golden set at Ultra: the vista, a cliff close, the forest floor, the river, the dragon at a low sun | The current goldens unchanged; one compute pass (the sky LUTs) on every modern backend | 1-2 |
 | **F1** sky and air (**done 2026-10-13**, below) | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
 | **F2** terrain shape (**done 2026-10-13**, below) | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
-| **F3** terrain detail | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
+| **F3** terrain detail (procedural rock, a first step, 2026-10-13, below) | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
 | **F4** light (**heightfield shadows done 2026-10-13**, below; cascades and sky light to come) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO (a first cloud layer done 2026-10-13, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
@@ -238,6 +238,33 @@ face, the face close, and the run's chase view.
   of what lights the valley. Squared, it read as murk, so it is the plain
   share, and the sky light's gain went from 1 to 1.2 to keep shaded ground
   readable.
+
+## F3, first step (2026-10-13): procedural rock
+
+In the modern tier's terrain shader (`shaders/terrain.hlsl`, under
+`ATMOSPHERE`, so SM3's budget is untouched). Renders in
+`artifacts/fidelity-f3/`. After erosion, the faces had the right shape and
+read as sand: one flat warm beige, bent smoothly by a 6 m mesh. Three
+terms now, all fading out with distance before they would shimmer:
+
+- **Crags**: two octaves of value-noise bumps (24 m and 9 m) on the
+  vertical world planes, blended like a triplanar map, bend the normal on
+  rocky ground out to 3.5 km. Ridged noise in the face's own frame came
+  first and drew wood grain: its ridges ring like contours, and the frame
+  turns with the normal.
+- **Beds**: 11 m ledges, a lit top and a shaded riser, broken by
+  vertical joints, each bed's colour between grey and warm. Only on cliffs
+  steeper than about 52 degrees: on the 35-45 degree faces most of these
+  mountains are, beds read as contour lines.
+- **Broken rock**: grey and warm blotches over the rest of the rocky
+  ground.
+
+It is an improvement, not the target: rock that reads as rock wants
+scanned textures with normal maps (PolyHaven's CC0 rock and scree sets,
+`DIRECTION.md` section 5's policy), in the terrain's slots after the
+detail tile, blended by these same slope and erosion rules. That is F3's
+next step, with the CDLOD mesh after it. Cost so far: 0.4 ms a frame at
+1080p on the M5.
 
 ## A first cloud layer (2026-10-13)
 
