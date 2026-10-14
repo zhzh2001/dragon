@@ -148,8 +148,8 @@ degree sun, a 55 degree sun, and the run's chase view.
   `d3d11`) predate F1 and fail for the modern scenes until they are
   recaptured there; compare them `--set metal --loose` first. All 156
   stages bake for MSL, SPIR-V and DXIL (`bake_shaders.sh`).
-- **What it does not do**: no shadowing inside the air (no light shafts
-  behind a ridge), and no clouds (F6). The surfaces' sun colour is still the
+- **What it did not do at first**: shadow the air. It does now (F4, "The
+  shadow in the air"). No volumetric clouds either (F6). The surfaces' sun colour is still the
   Lighting panel's, not the transmittance's, so a 55 degree sun is still
   lit late-afternoon warm.
 
@@ -279,6 +279,19 @@ Up close it now reads as broken rock rather than sand. At a kilometre,
 the shape (F2) and the crags do the work. Next for F3 is the CDLOD mesh.
 Cost: about 1 ms a frame at 1080p on the M5 for the crags, the mottling
 and the scans together (600 frames: 6.80 s before, 7.39 s after).
+
+## F4, second part (2026-10-13): the shadow in the air
+
+Every metre of haze was sunlit, so the air over a valley the ridges shade
+glowed as brightly as the air in the sun, and the shade read as fog. The
+aerial perspective's integral (`atmosphere_common.hlsl`, `atmo_integrate`)
+now looks up the terrain-sun map at each step of a froxel's ray and cuts
+the sun's single scattering where a ridge blocks it. The multiple
+scattering stays. The air over shade goes dark and blue, and toward the sun
+the haze is lit only where it is in sun. The froxels are 32 across the
+screen, so it is soft, as shafts in haze are. Only the froxels: the
+sky-view map looks over the ridges, and the sky light is the whole sky's.
+Cost: within the noise of the 600-frame timing.
 
 ## F5, as built (2026-10-13): temporal anti-aliasing
 

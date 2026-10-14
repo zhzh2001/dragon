@@ -82,6 +82,7 @@ struct AtmosphereUniforms {
     core::Vec4 ground;         // rgb albedo, a multiple-scattering factor
     core::Vec4 radii;          // x planet, y top (km), z camera altitude (km), w km per world metre
     core::Vec4 sun_direction;  // xyz toward the sun, w aerial-perspective far distance (km)
+    core::Vec4 world;          // xyz the camera in world metres, w the terrain-sun map's half extent (m)
 };
 
 class Atmosphere {

@@ -4,6 +4,7 @@
 // three depend on the camera and the sun, so it runs every frame, before the
 // main pass: 57K texels, a few dozen steps each.
 #define ATMO_TABLE_PASS
+#define ATMO_TERRAIN_SHADOW  // the froxels' sun light, cut by the terrain (atmosphere_common.hlsl)
 #include "scene_common.hlsl"
 #include "atmosphere_common.hlsl"
 
@@ -61,6 +62,7 @@ float4 fs_main(AtmoVertex input) : SV_Target {
                                scene.camera_up.xyz * ndc.y * tan_half_fov);
         float w = (slice + 1.0) / ATMO_SLICES;
         float distance_km = w * w * atmosphere.sun_direction.w;
+        atmo_shadow_air = true;
         AtmoIntegral it = atmo_integrate(atmosphere, origin, ray, sun, distance_km, 16, false, true, false,
                                          transmittance_lut, transmittance_lut_sampler,
                                          multiscatter_lut, multiscatter_lut_sampler);

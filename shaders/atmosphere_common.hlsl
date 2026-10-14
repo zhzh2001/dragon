@@ -34,6 +34,7 @@ struct AtmosphereUniforms {
     float4 ground;        // rgb albedo, a multiple-scattering factor
     float4 radii;         // x planet, y top of the atmosphere (km), z camera altitude (km), w km per world metre
     float4 sun_direction; // xyz toward the sun, w aerial-perspective far distance (km)
+    float4 world;         // xyz the camera in world metres, w the terrain-sun map's half extent (m)
 };
 
 #define ATMO_TRANSMITTANCE_SIZE float2(256.0, 64.0)
@@ -187,6 +188,27 @@ AtmoVertex vs_main(VERTEX_ID_INPUT) {
 }
 #endif
 
+#if defined(FRAGMENT_STAGE) && defined(ATMO_TERRAIN_SHADOW)
+// The terrain's shadow in the air (atmosphere_frame.hlsl defines this and
+// binds the map): the aerial perspective's sun light is cut where a ridge
+// blocks it, so a low sun throws shafts of light and shade down the valley
+// instead of lighting every metre of haze. Set per ray: the froxels want
+// it, the sky-view map (above the ridges) and the sky light do not.
+TEXTURE2D(air_shadow_map, 2);
+static bool atmo_shadow_air = false;
+float atmo_air_shadow(AtmosphereUniforms a, float3 dir, float t_km) {
+    if (!atmo_shadow_air) return 1.0;
+    float3 p = a.world.xyz + dir * (t_km / max(a.radii.w, 1e-6));
+    float2 uv = p.xz / max(a.world.w, 1.0) * 0.5 + 0.5;
+    if (any(uv < 0.0) || any(uv > 1.0)) return 1.0;
+    float2 top = air_shadow_map.SampleLevel(air_shadow_map_sampler, uv, 0.0).xy;
+    float penumbra = 6.0 + top.y * 0.02;
+    return smoothstep(top.x - penumbra, top.x + penumbra, p.y);
+}
+#else
+float atmo_air_shadow(AtmosphereUniforms a, float3 dir, float t_km) { return 1.0; }
+#endif
+
 #ifdef FRAGMENT_STAGE
 // The scattered light along a ray, and how much of what lies behind it gets
 // through: the integral every table but the first is made of. `sun` is the
@@ -243,7 +265,7 @@ AtmoIntegral atmo_integrate(AtmosphereUniforms a, float3 origin, float3 dir, flo
         if (multiscatter) {
             ms = multiscatter_lut.SampleLevel(multiscatter_sampler, atmo_multiscatter_uv(a, r, sun_cos), 0.0).rgb;
         }
-        float3 s = earth_shadow * to_sun * phase_scattering + ms * m.scattering;
+        float3 s = earth_shadow * atmo_air_shadow(a, dir, t) * to_sun * phase_scattering + ms * m.scattering;
         float3 extinction = max(m.extinction, (float3)1e-7);
         // Hillaire's energy-conserving step: the light scattered in over the
         // step, attenuated within it.

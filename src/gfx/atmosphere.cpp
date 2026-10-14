@@ -71,6 +71,8 @@ struct TerrainSunUniforms {
 constexpr uint32_t TERRAIN_SUN_SIZE = 2048;
 
 // Whether the inputs of the static tables differ (not the camera or the sun).
+// The world block (the camera, the map's extent) is per frame and shapes no
+// table.
 bool tables_differ(const AtmosphereUniforms& a, const AtmosphereUniforms& b) {
     return std::memcmp(&a.rayleigh, &b.rayleigh, sizeof(core::Vec4) * 4) != 0 || a.radii.x != b.radii.x ||
            a.radii.y != b.radii.y;
@@ -175,6 +177,7 @@ AtmosphereUniforms Atmosphere::uniforms_for(const SceneUniforms& scene, const At
     const float km_per_metre = 0.001f * s.aerial_scale;
     u.radii = core::Vec4{PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, altitude_km, km_per_metre};
     u.sun_direction = core::Vec4{scene.sun.x, scene.sun.y, scene.sun.z, s.aerial_far_m * km_per_metre};
+    u.world = core::Vec4{scene.camera_position.x, scene.camera_position.y, scene.camera_position.z, heights_half_};
     return u;
 }
 
@@ -257,6 +260,7 @@ void Atmosphere::update(Device& device, const SceneUniforms& scene, const Atmosp
     rhi.push_uniforms(rhi::Stage::Fragment, 1, &u, sizeof(u));
     bind(pass, transmittance_, 0);
     bind(pass, multiscatter_, 1);
+    bind(pass, terrain_sun_, 2);  // the shadows in the air
     rhi.draw(pass, 3, 1, 0, 0);
     device.end_pass(pass);
 }
