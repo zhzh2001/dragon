@@ -40,9 +40,9 @@ struct AtmosphereSettings {
     // The share of the old exp2 valley fog kept on top of the air.
     float valley_fog = 0.35f;
     // Gain on the sky light (the ambient term's sky half). Above 1 since the
-    // terrain's shadows and occlusion (F4): a valley the ridges shade most of
-    // the afternoon is lit by this alone.
-    float sky_light = 1.2f;
+    // terrain's shadows and occlusion (F4): what the ridges shade is lit by
+    // this alone. 1.4 after the first playtest found the valley too dark.
+    float sky_light = 1.4f;
     // The sun disc's radiance, in sky_scale units.
     float sun_disc = 60.0f;
     // Where the world's y = 0 sits above the sea, in km.

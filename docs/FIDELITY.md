@@ -226,9 +226,12 @@ face, the face close, and the run's chase view.
   sweeps the shadows live.
 - **What it shows.** With erosion (F2), this is the frame the target is
   about: lit crests, faces banded light and dark, the valley floor in the
-  ridges' shadow with patches of sun. **It is darker to play in.** The
-  dragon flies in shade more of the time, lit by the sky alone. That is a
-  playtest call: the sun's elevation is the dial.
+  ridges' shadow with patches of sun. **It was darker to play in**, and
+  the first playtest (2026-10-13) said so: the modern tier's sun now
+  stands at 19 degrees rather than 14, the sky light's gain is 1.4, and
+  exposure is 1.18 (the retro tiers, without long shadows, keep theirs).
+  The run's lower frame went from a mean of 60 to 73 of 255, against 91
+  before any of this.
 - **Retro tiers**: not there (no `ATMOSPHERE`). The ff tier bakes terrain
   shadows into its vertex colour already; doing the same from this map is
   the cheap way to give it the long ones too.

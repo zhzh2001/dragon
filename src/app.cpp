@@ -493,6 +493,15 @@ bool App::init(const Options& options) {
     atmosphere_.init(&device_, &pipelines_);
     world_.set_atmosphere(&atmosphere_);
     foliage_.set_atmosphere(&atmosphere_);
+    // The modern tier's afternoon is a little later in the day: with the
+    // terrain's long shadows (docs/FIDELITY.md, F4) a 14 degree sun left the
+    // valley floor in shade most of the run, and the first playtest found it
+    // too dark. 19 degrees still rakes every ridge's shadow across the
+    // valley. The retro tiers have no long shadows and keep 14.
+    if (atmosphere_.available()) {
+        lighting_.sun_elevation_deg = 19.0f;
+        post_settings_.exposure = 1.18f;
+    }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
     if (options.sun_azimuth >= 0.0f) lighting_.sun_azimuth_deg = options.sun_azimuth;
