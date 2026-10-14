@@ -120,7 +120,11 @@ rhi::Pass* Taa::begin_velocity(Device& device, uint32_t width, uint32_t height) 
     if (!active() || !device.depth() || !ensure_history(device, width, height)) return nullptr;
     rhi::PassDesc pass;
     pass.color = velocity_;
-    pass.clear_color = true;  // rgba 0: no creature, reproject by depth
+    pass.clear_color = true;
+    // rgba 0: no creature, reproject by depth. The pass's default clear has
+    // an alpha of 1, which marked every pixel a creature standing still: the
+    // history was never reprojected, and everything smeared in motion.
+    pass.clear_rgba[3] = 0.0f;
     pass.depth = device.depth();
     pass.clear_depth = false;
     pass.keep_depth = true;   // the resolve reads it next

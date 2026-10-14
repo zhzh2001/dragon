@@ -7,3 +7,4 @@ with.
 |---|---|
 | `flight-off-vs-on.png` | `--frames 700 --hide-ui --run 7 --autopilot`, cropped about the dragon, left off, right on: the dragon clean (its own motion vectors), the background smoother and a little softer |
 | `static-edges-off-vs-on.png` | `--frames 40 --hide-ui --cam 600,70,260,7,38,-200`, a crop of the rings and the tree line, top off, bottom on |
+| `aa-off-fxaa-taa.png` | `--frames 560 --hide-ui --run 7 --autopilot` with `--aa off`, `fxaa`, `taa`, top to bottom, after the velocity-clear fix: FXAA the default |

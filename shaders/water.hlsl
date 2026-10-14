@@ -82,6 +82,11 @@ float4 fs_main(VertexOut input) : SV_Target {
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
+#ifdef ATMOSPHERE
+    // Which way the river runs here (App::regenerate_terrain packs it into
+    // the vertex colour), unit xz.
+    float2 flow : TEXCOORD1;
+#endif
 };
 
 #ifdef VERTEX_STAGE
@@ -89,6 +94,9 @@ VertexOut vs_main(VertexIn input) {
     VertexOut o;
     o.world_position = input.position;
     o.clip_position = mul(scene.view_proj, float4(input.position, 1.0));
+#ifdef ATMOSPHERE
+    o.flow = input.color.xy * 2.0 - 1.0;
+#endif
     return o;
 }
 #endif
@@ -107,22 +115,44 @@ float water_ground(float2 xz) {
     return terrain_sun_map.SampleLevel(terrain_sun_map_sampler, saturate(uv), 0.0).w;
 }
 
-// Ripples: three octaves of the clouds' value noise, two drifting with the
-// current down the valley (-z) and one across, as a height whose gradient
-// bends the normal; calmer far away, where they would only shimmer.
-float3 water_normal(float2 p, float t, float distance) {
-    float calm = 1.0 - smoothstep(150.0, 900.0, distance);
+// The current's surface: three octaves of the clouds' value noise in the
+// river's own frame, stretched along the flow so they read as the streaks
+// and boils of moving water, and carried downstream at RIVER_SPEED by a
+// flow map's two phases -- each pattern drifts for four seconds and fades
+// out while the other, half a cycle behind, fades in, so nothing stretches
+// without end. Returns the height's gradient in world xz.
+static const float RIVER_SPEED = 2.4;  // m/s
+float2 river_gradient(float2 p, float2 flow, float t) {
+    float2 across = float2(-flow.y, flow.x);
+    const float CYCLE = 4.0;
     float2 g = (float2)0.0;
-    const float e = 0.25;
-    float2 drift[3] = {float2(0.15, -1.2), float2(-0.4, -0.7), float2(0.9, 0.2)};
-    float scale[3] = {1.0 / 9.0, 1.0 / 3.5, 1.0 / 1.3};
-    float weight[3] = {0.55, 0.3, 0.15};
-    for (int i = 0; i < 3; ++i) {
-        float2 q = (p + drift[i] * t) * scale[i] + float(i) * 7.3;
-        float h0 = cloud_value(q);
-        g += float2(cloud_value(q + float2(e, 0.0)) - h0, cloud_value(q + float2(0.0, e)) - h0) / e * weight[i];
+    for (int phase = 0; phase < 2; ++phase) {
+        float age = frac(t / CYCLE + float(phase) * 0.5);
+        float fade = 1.0 - abs(age * 2.0 - 1.0);  // 0 at a phase's ends, 1 at its middle
+        float2 moved = p - flow * (RIVER_SPEED * CYCLE * age) + float(phase) * 37.0;
+        // The river's frame: across, then along, squeezed so features run
+        // with the current.
+        float2 r = float2(dot(moved, across), dot(moved, flow) * 0.4);
+        float2 gr = (float2)0.0;
+        float scale = 1.0 / 6.0, weight = 0.6;
+        const float e = 0.25;
+        for (int i = 0; i < 3; ++i) {
+            float2 q = r * scale + float(i) * 7.3;
+            float h0 = cloud_value(q);
+            gr += float2(cloud_value(q + float2(e, 0.0)) - h0, cloud_value(q + float2(0.0, e)) - h0) / e * weight;
+            scale *= 2.6;
+            weight *= 0.5;
+        }
+        // Back from the river's frame into the world's.
+        g += (across * gr.x + flow * (gr.y * 0.4)) * fade;
     }
-    return normalize(float3(-g.x * 0.22 * calm, 1.0, -g.y * 0.22 * calm));
+    return g;
+}
+
+float3 water_normal(float2 p, float2 flow, float t, float distance) {
+    float calm = 1.0 - smoothstep(200.0, 1200.0, distance);
+    float2 g = river_gradient(p, flow, t);
+    return normalize(float3(-g.x * 0.35 * calm, 1.0, -g.y * 0.35 * calm));
 }
 
 // The ground as a reflection sees it: no textures, no trees as such -- a
@@ -190,7 +220,8 @@ float4 fs_main(VertexOut input) : SV_Target {
         float3 to_camera_m = scene.camera_position.xyz - input.world_position;
         float distance = length(to_camera_m);
         float3 view = -to_camera_m / max(distance, 1e-3);
-        float3 n = water_normal(p, t, distance);
+        float2 flow = length(input.flow) > 0.1 ? normalize(input.flow) : float2(0.0, -1.0);
+        float3 n = water_normal(p, flow, t, distance);
         float3 reflected = reflect(view, n);
         reflected.y = abs(reflected.y);
         float3 reflection = water_reflection(input.world_position + float3(0.0, 0.3, 0.0), reflected);
@@ -209,14 +240,27 @@ float4 fs_main(VertexOut input) : SV_Target {
         float fresnel = 0.02 + 0.98 * pow(1.0 - cosine, 5.0);
         float3 color = lerp(under, reflection, fresnel);
 
-        // Froth at the edge, where the water is a hand deep, broken by the
-        // ripples' own noise and drifting with them.
-        float froth = (1.0 - smoothstep(0.1, 0.7, depth)) * smoothstep(0.45, 0.75, cloud_value(p * 0.6 + float2(0.0, -t * 0.8)));
+        // Froth at the edge, where the water is a hand deep, and in streaks
+        // where the current boils, both carried downstream.
+        float2 carried = p - flow * (t * RIVER_SPEED);
+        float2 along = float2(dot(carried, float2(-flow.y, flow.x)), dot(carried, flow) * 0.25);
+        float streak = smoothstep(0.62, 0.85, cloud_value(along * 0.35 + 3.1)) * 0.5;
+        float froth = max((1.0 - smoothstep(0.1, 0.7, depth)) * smoothstep(0.45, 0.75, cloud_value(carried * 0.6)),
+                          streak * (1.0 - smoothstep(150.0, 600.0, distance)));
         color = lerp(color, scene.palette[PALETTE_SNOW].rgb * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + ambient_light(float3(0.0, 1.0, 0.0))), froth * 0.55);
 
         float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 220.0);
         color += scene.sun_color.rgb * scene.sun.w * glint * 1.2 * visibility;
-        return float4(scene_out(apply_fog(color, input.world_position)), 1.0);
+        // The shore, soft: the water thins out over its last metre of depth,
+        // read from the heightfield, so the edge follows the smooth bank and
+        // not the 6 m mesh's facets where the water plane crosses them, which
+        // read as stair-steps at a distance however the pixels were averaged.
+        float shore = smoothstep(0.05, 1.0, depth);
+        // Where there is no water at all (the plane stands half a metre
+        // above the line, over the bank's lowest facets), nothing: not even
+        // depth, or it would hide a dragon's feet on the bank.
+        if (shore < 0.01) discard;
+        return float4(scene_out(apply_fog(color, input.world_position)), shore);
     }
 #endif
     // Two crossed ripple trains; small, so the reflection stays readable.

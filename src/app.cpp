@@ -194,7 +194,11 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--gpu-driver" && i + 1 < argc) {
             options.gpu_driver = argv[++i];
         } else if (arg == "--no-taa") {
-            options.no_taa = true;
+            options.aa = 0;
+        } else if (arg == "--aa" && i + 1 < argc) {
+            const std::string mode = argv[++i];
+            options.aa = mode == "off" ? 0 : mode == "fxaa" ? 1 : mode == "taa" ? 2 : -1;
+            if (options.aa < 0) LOG_WARN("--aa expects off, fxaa or taa");
         } else if (arg == "--no-post") {
             options.no_post = true;
         } else if (arg == "--bake-packs") {
@@ -498,7 +502,8 @@ bool App::init(const Options& options) {
     world_.set_atmosphere(&atmosphere_);
     foliage_.set_atmosphere(&atmosphere_);
     taa_.init(&device_, &pipelines_);
-    if (options.no_taa) taa_.enabled = false;
+    if (options.aa >= 0) aa_mode_ = options.aa;
+    taa_.enabled = aa_mode_ == 2;
     // The modern tier's afternoon is a little later in the day: with the
     // terrain's long shadows (docs/FIDELITY.md, F4) a 14 degree sun left the
     // valley floor in shade most of the run, and the first playtest found it
@@ -1561,14 +1566,24 @@ void App::regenerate_terrain() {
     {
         gfx::MeshData quad;
         const float half = terrain_settings_.half_extent * terrain_settings_.skirt_extent_factor;
-        const float y = terrain_settings_.water_level;
+        // The modern river's plane stands half a metre proud of the water
+        // line: where the bank's 6 m facets rise just above the line, the
+        // plane still covers them, and the shader decides from the smooth
+        // heightfield where water shows (water.hlsl, the shore). Drawn at the
+        // line itself, the visible shore was the facets' outline, which
+        // stair-stepped at a distance however the pixels were averaged.
+        const float y = terrain_settings_.water_level + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
         // Fixed function: only the cells where the ground dips below the
         // line (sampled nine times a cell, and grown by a cell so a bank
         // is never short of water), not a plane under the whole valley
         // that every terrain pixel then depth-tested against -- on the
         // G41's M6, a card that pays per pixel and per triangle, the plane
         // was 0.8 ms of the slowest frame. 96 cells of 156 m.
-        const int n = tier_.fixed_function ? 96 : 1;
+        // The modern tier: a 128-cell grid, so each vertex can carry which
+        // way the river runs there (its colour; water.hlsl advects the
+        // ripples along it). The meanders are kilometres long; 117 m cells
+        // follow them.
+        const int n = tier_.fixed_function ? 96 : tier_.tier == gfx::Tier::Modern ? 128 : 1;
         std::vector<uint8_t> wet(size_t(n) * size_t(n), tier_.fixed_function ? 0 : 1);
         const float cell = 2.0f * half / float(n);
         if (tier_.fixed_function) {
@@ -1601,6 +1616,15 @@ void App::regenerate_terrain() {
                 v.position = core::Vec3{-half + cell * float(i), y, -half + cell * float(j)};
                 v.normal = core::Vec3::up();
                 v.color = core::Vec3::one();
+                if (tier_.tier == gfx::Tier::Modern) {
+                    // Downstream: toward -z, along the course the generator
+                    // carved (Terrain::river_center_x), as a unit xz vector
+                    // packed into 0..1.
+                    const float z = v.position.z;
+                    const float slope = (terrain_.river_center_x(z - 20.0f) - terrain_.river_center_x(z + 20.0f)) / 40.0f;
+                    const float length = std::sqrt(slope * slope + 1.0f);
+                    v.color = core::Vec3{slope / length * 0.5f + 0.5f, -1.0f / length * 0.5f + 0.5f, 1.0f};
+                }
                 at = uint32_t(quad.vertices.size());
                 quad.vertices.push_back(v);
             }
@@ -2978,10 +3002,13 @@ void App::build_ui(float dt) {
         gfx::PostSettings& g = post_settings_;
         ImGui::Checkbox("enabled", &g.enabled);
         if (taa_.available()) {
-            // The temporal resolve (gfx/taa.h): smooth edges and calm crowns,
-            // at the price of a softer moving picture the sharpening offsets.
-            ImGui::Checkbox("temporal AA", &taa_.enabled);
-            ImGui::SliderFloat("sharpen", &g.sharpen, 0.0f, 1.5f, "%.2f");
+            // FXAA: crisp foliage, smooth long edges, some shimmer left in
+            // motion. TAA: everything calm, a softer moving picture the
+            // sharpening offsets.
+            const char* modes[] = {"off", "FXAA", "TAA"};
+            ImGui::Combo("anti-aliasing", &aa_mode_, modes, 3);
+            taa_.enabled = aa_mode_ == 2;
+            if (aa_mode_ == 2) ImGui::SliderFloat("sharpen", &g.sharpen, 0.0f, 1.5f, "%.2f");
         }
         ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");
         ImGui::SliderFloat("contrast", &g.contrast, 0.6f, 1.6f, "%.2f");
@@ -7894,6 +7921,7 @@ void App::render() {
         if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
         rhi::Texture* resolved = taa_.resolve(device_, device_.scene_hdr(), device_.world_width(), device_.world_height());
         if (!taa_.active()) post.sharpen = 0.0f;
+        post.fxaa = aa_mode_ == 1;
         post_.run(device_, post, resolved);
     }
 

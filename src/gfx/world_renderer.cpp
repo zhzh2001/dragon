@@ -72,6 +72,8 @@ PipelineDesc make_water_desc() {
     desc.vertex_buffers = Mesh::buffer_descriptions();
     desc.vertex_attributes = Mesh::attributes();
     desc.cull = rhi::Cull::None;
+    // The modern river's shore thins out (water.hlsl, its alpha).
+    desc.alpha_blend = active_tier().tier == Tier::Modern;
     return desc;
 }
 

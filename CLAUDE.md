@@ -88,7 +88,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--hide-ui` | Hide the ImGui panels AND the HUD, for world-only captures. |
 | `--hide-panels` | Hide the panels but keep the HUD: a capture of what the player sees. |
 | `--hide-vegetation` | Hide trees, grass, and tree shadows for unobstructed asset inspection. Terrain and gameplay remain active. |
-| `--no-taa` | The modern tier without its temporal anti-aliasing (`gfx/taa.h`): the frame as rendered, jitter-free, for a before/after or a pixel comparison. |
+| `--aa off\|fxaa\|taa` | The modern tier's anti-aliasing (the Engine panel's "anti-aliasing"): FXAA in the composite by default, or the temporal resolve (`gfx/taa.h`), or none. `--no-taa` is `--aa off`: the frame as rendered, jitter-free, for a pixel comparison. |
 | `--no-post` | Skip the grade and the bloom: the same frame as it was before the post stack, for a before/after. |
 | `--telemetry [N]` | Log one line of flight state every N frames (default 60), plus a combat line (health, kills, bites swung/landed/taken) when combat is on. A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |

@@ -118,10 +118,10 @@ float4 fs_main(TaaVertex input) : SV_Target {
 
     float weight = taa.camera_delta.w;
     if (before.w <= 0.0 || any(history_uv < 0.0) || any(history_uv > 1.0)) weight = 0.0;
-    // Fast motion keeps less history: there is less to gain from it, and
-    // more to smear.
+    // Motion keeps less history: each frame's resampling softens it, and
+    // there is less to gain from frames that saw something else.
     float moved = length((history_uv - uv) / taa.texel.xy);
-    weight *= lerp(1.0, 0.8, saturate(moved / 12.0));
+    weight *= lerp(1.0, 0.75, saturate(moved / 8.0));
 
     // The history, clipped toward the neighbourhood's mean until it lies
     // inside one standard deviation of it.
@@ -129,7 +129,9 @@ float4 fs_main(TaaVertex input) : SV_Target {
     float3 sigma = sqrt(max(m2 / 9.0 - mean * mean, 0.0));
     float3 past = to_ycocg(compress(sample_history(history_uv)));
     float3 offset = past - mean;
-    float3 extent = max(sigma * 1.25, 1e-4);
+    // Tighter as it moves: a crown against the ground spans both colours,
+    // and a loose box lets the ground's history through around a tree.
+    float3 extent = max(sigma * lerp(1.1, 0.8, saturate(moved / 6.0)), 1e-4);
     float3 units = abs(offset / extent);
     float worst = max(units.x, max(units.y, units.z));
     if (worst > 1.0) past = mean + offset / worst;

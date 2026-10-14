@@ -33,8 +33,40 @@ float3 tonemap(float3 color, float hue_preserve) {
 TEXTURE2D(scene_color, 0);
 TEXTURE2D(bloom, 1);
 
+// FXAA, the spatial alternative to the temporal resolve (gfx/taa.h): Lottes'
+// original filter, on the luminance as the eye will see it (the tonemapped
+// and gamma-encoded luma, estimated here before the grade). It finds the
+// edge's direction from four diagonal taps and blends along it, so a river's
+// edge against the bank stops stair-stepping without the softness the
+// temporal resolve gives a moving forest. post.texel.w turns it on.
+float fxaa_luma(float3 c) {
+    float l = dot(c, float3(0.2126, 0.7152, 0.0722));
+    return sqrt(l / (1.0 + l));
+}
+float3 fxaa(float2 uv, float2 t) {
+    float3 rgb_m = scene_color.SampleLevel(scene_color_sampler, uv, 0.0).rgb;
+    float l_nw = fxaa_luma(scene_color.SampleLevel(scene_color_sampler, uv + float2(-0.5, -0.5) * t, 0.0).rgb);
+    float l_ne = fxaa_luma(scene_color.SampleLevel(scene_color_sampler, uv + float2(0.5, -0.5) * t, 0.0).rgb);
+    float l_sw = fxaa_luma(scene_color.SampleLevel(scene_color_sampler, uv + float2(-0.5, 0.5) * t, 0.0).rgb);
+    float l_se = fxaa_luma(scene_color.SampleLevel(scene_color_sampler, uv + float2(0.5, 0.5) * t, 0.0).rgb);
+    float l_m = fxaa_luma(rgb_m);
+    float l_min = min(l_m, min(min(l_nw, l_ne), min(l_sw, l_se)));
+    float l_max = max(l_m, max(max(l_nw, l_ne), max(l_sw, l_se)));
+    if (l_max - l_min < max(0.0312, l_max * 0.125)) return rgb_m;  // no edge worth it
+    float2 dir = float2(-((l_nw + l_ne) - (l_sw + l_se)), (l_nw + l_sw) - (l_ne + l_se));
+    float reduce = max((l_nw + l_ne + l_sw + l_se) * 0.25 * (1.0 / 8.0), 1.0 / 128.0);
+    float scale = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+    dir = clamp(dir * scale, -8.0, 8.0) * t;
+    float3 a = 0.5 * (scene_color.SampleLevel(scene_color_sampler, uv + dir * (1.0 / 3.0 - 0.5), 0.0).rgb +
+                      scene_color.SampleLevel(scene_color_sampler, uv + dir * (2.0 / 3.0 - 0.5), 0.0).rgb);
+    float3 b = a * 0.5 + 0.25 * (scene_color.SampleLevel(scene_color_sampler, uv - dir * 0.5, 0.0).rgb +
+                                 scene_color.SampleLevel(scene_color_sampler, uv + dir * 0.5, 0.0).rgb);
+    float l_b = fxaa_luma(b);
+    return (l_b < l_min || l_b > l_max) ? a : b;
+}
+
 float4 fs_main(PostVertex input) : SV_Target {
-    float3 c = scene_color.Sample(scene_color_sampler, input.uv).rgb;
+    float3 c = post.texel.w > 0.5 ? fxaa(input.uv, post.texel.xy) : scene_color.Sample(scene_color_sampler, input.uv).rgb;
     // Sharpening, for a picture the temporal resolve softened (gfx/taa.h):
     // the pixel pushed away from its four neighbours' mean, on its luminance
     // so edges gain no colour fringe. texel.z is the amount (0: none).

@@ -63,8 +63,9 @@ struct Options {
     std::string graphics;
     // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
     std::string atmosphere;
-    // --no-taa: the modern tier without its temporal resolve.
-    bool no_taa = false;
+    // --aa off|fxaa|taa (--no-taa is off): the modern tier's anti-aliasing,
+    // -1 for the default (FXAA).
+    int aa = -1;
     // --sun elevation[,azimuth] in degrees, over the Lighting defaults.
     float sun_elevation = -100.0f;
     float sun_azimuth = -1.0f;
@@ -287,6 +288,11 @@ private:
     gfx::AtmosphereSettings atmosphere_settings_;
     // Temporal anti-aliasing (modern tier).
     gfx::Taa taa_;
+    // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
+    // 2 the temporal resolve. FXAA by default since the first TAA playtest
+    // found the moving forest "very smeared": the smear was a bug (fixed),
+    // but TAA still softens thin crowns, and FXAA keeps them crisp.
+    int aa_mode_ = 1;
     // Each creature's model matrix and pose of last frame, for its motion
     // vectors (gfx/taa.h).
     struct PreviousPose {

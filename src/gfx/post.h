@@ -51,6 +51,9 @@ struct PostSettings {
     // Sharpening after the temporal resolve (gfx/taa.h), which softens a
     // moving picture; 0 when the resolve is off.
     float sharpen = 0.6f;
+    // FXAA in the composite (post_composite.hlsl): the spatial anti-aliasing,
+    // for when the temporal resolve is off.
+    bool fxaa = false;
 };
 
 // Renders the HDR scene target to the 8-bit scene colour target through the

@@ -333,6 +333,37 @@ modern tier only. Renders in `artifacts/fidelity-f5/`.
 - Cost: 1.2 ms a frame at 1080p on the M5, the depth store and the
   velocity pass included.
 
+## After the first TAA playtest (2026-10-13)
+
+"Very smeared on trees, increasing sharpness doesn't help, kind of remind
+me of Witcher 3 vegetation". It doesn't solve the distant river edges
+either. And the river seems static. What was found:
+
+- **The smear was a bug.** The velocity target was cleared with the
+  pass's default colour, whose alpha is 1, which marked every pixel a
+  creature standing still. The history was never reprojected, and in
+  motion the whole frame dragged. Cleared to 0, the forest holds its
+  shape in flight. TAA still softens thin, sub-pixel crowns: averaging
+  their coverage is what anti-aliasing them means.
+- **FXAA is the default now** (`--aa off|fxaa|taa`, the panel's
+  "anti-aliasing"). Lottes' filter in the composite, on the tonemapped
+  luma: crisp crowns, smooth long edges, some shimmer left in motion. TAA
+  stays a click away.
+- **The river's edge was geometry, not pixels.** Where the bank's 6 m
+  facets rise just above the water line, the plane was not drawn, so the
+  visible shore was the facets' outline, a few pixels a segment at 1.5 km.
+  No AA rounds a polygon. The modern plane now stands half a metre proud,
+  and the shader shows water by the smooth heightfield's depth,
+  feathering the last metre and discarding where there is none, so no
+  depth is written there.
+- **The river flows.** The water grid carries the downstream direction at
+  each vertex (from the generator's course), and the ripples, stretched
+  along it, drift at 2.4 m/s with a two-phase flow map. Foam streaks
+  follow.
+- Debugging lessons, twice over: a debug return that leaves one texture
+  unread shifts every later slot (`common.hlsl`), and debug colours pass
+  through the tonemap.
+
 ## F8, as built (2026-10-13): the river
 
 `shaders/water.hlsl`, the modern path. Renders in `artifacts/fidelity-f8/`.
