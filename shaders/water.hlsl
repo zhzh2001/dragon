@@ -129,11 +129,18 @@ float2 river_slope(float2 p, float2 flow, float t, float footprint) {
     float2 across = float2(-flow.y, flow.x);
     float2 carried = p - flow * (RIVER_SPEED * t);
     float rough = 0.45 + 0.9 * cloud_value(carried / 45.0 + 11.0) * cloud_value(carried / 17.0 - 3.0);
+    // The waves' domain, warped by a slow noise drifting with the current:
+    // summed straight, the long trains interfered into a regular diamond
+    // lattice that the sun's glitter drew across the river.
+    float2 warp = float2(cloud_value(carried / 23.0 + 5.0), cloud_value(carried / 23.0 - 9.0)) - 0.5;
+    float2 q = p + warp * 9.0;
     float2 slope = (float2)0.0;
     const int WAVES = 12;
     for (int i = 0; i < WAVES; ++i) {
         float fi = float(i);
-        float wavelength = 14.0 * pow(0.72, fi);  // 14 m down to 0.4 m
+        // 14 m down to 0.4 m, each length detuned from the geometric series
+        // so none is a multiple of another.
+        float wavelength = 14.0 * pow(0.72, fi) * (1.0 + 0.13 * sin(fi * 3.7 + 1.1));
         float fade = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.5, footprint);
         if (fade <= 0.0) break;
         // Spread about downstream, wider for the short ones, golden-angle
@@ -142,7 +149,7 @@ float2 river_slope(float2 p, float2 flow, float t, float footprint) {
         float2 dir = normalize(flow * cos(spread) + across * sin(spread));
         float k = 6.2831853 / wavelength;
         float omega = sqrt(9.81 * k);
-        float phase = dot(p, dir) * k - omega * t - dot(flow, dir) * RIVER_SPEED * k * t + fi * 1.7;
+        float phase = dot(q, dir) * k - omega * t - dot(flow, dir) * RIVER_SPEED * k * t + fi * 1.7;
         // Steepness falls with length, so short chop does not dwarf the swell.
         float amplitude = wavelength * 0.018;
         slope += dir * (amplitude * k * cos(phase) * fade);
@@ -151,7 +158,9 @@ float2 river_slope(float2 p, float2 flow, float t, float footprint) {
 }
 
 float3 water_normal(float2 p, float2 flow, float t, float footprint) {
-    float2 s = river_slope(p, flow, t, footprint);
+    // Flatter where a pixel covers a metre or more: the waves there are
+    // only what the glint makes of them, and full slopes lit it in patches.
+    float2 s = river_slope(p, flow, t, footprint) * lerp(1.0, 0.45, smoothstep(0.3, 2.0, footprint));
     return normalize(float3(-s.x, 1.0, -s.y));
 }
 
@@ -253,7 +262,12 @@ float4 fs_main(VertexOut input) : SV_Target {
                           streak);
         color = lerp(color, scene.palette[PALETTE_SNOW].rgb * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + ambient_light(float3(0.0, 1.0, 0.0))), froth * 0.55);
 
-        float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 220.0);
+        // The sun's glint, broader and dimmer where a pixel spans more water
+        // (the waves under it, unresolved, are a rougher mirror), its energy
+        // kept about the same: a sharp lobe at a distance drew hard white
+        // patches.
+        float sharpness = lerp(220.0, 30.0, smoothstep(0.1, 1.5, footprint));
+        float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), sharpness) * (sharpness + 8.0) / 228.0;
         color += scene.sun_color.rgb * scene.sun.w * glint * 1.2 * visibility;
         // The shore, soft: the water thins out over its last metre of depth,
         // read from the heightfield, so the edge follows the smooth bank and

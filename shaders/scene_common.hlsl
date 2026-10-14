@@ -60,6 +60,10 @@ struct SceneUniforms {
     // The cloud layer (modern tier): x coverage 0..1 (0: none), y its base
     // and z its thickness in world metres, w the density.
     float4 clouds;
+    // The shadow cascades (modern tier, gfx/shadow_map.h): each one's light
+    // matrix; x their count (0: light_view_proj alone), yzw their texels (m).
+    float4x4 cascade_view_proj[3];
+    float4 cascade_params;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -232,9 +236,50 @@ float cloud_shadow(float3 world_position) {
 //
 // The shadow map uses a conventional [0, 1] depth range, unlike the reversed-Z
 // main pass, so nearer-to-light means a smaller depth value.
+#ifdef ATMOSPHERE
+// The cascaded map (the modern tier): the finest of the three boxes the
+// point is inside, each a quadrant of the atlas. The bias and the normal
+// offset follow the cascade's texel, so a 7 cm texel near is not biased like
+// a 2 m one far; with the light 4.4 box-widths deep in every cascade, the
+// depth bias is then the same in each.
+float cascade_visibility(float3 world_position, float3 normal, Texture2D<float> shadow_map, SamplerState shadow_sampler) {
+    float slope = saturate(1.0 - abs(dot(normal, normalize(scene.sun.xyz))));
+    float texels[3] = {scene.cascade_params.y, scene.cascade_params.z, scene.cascade_params.w};
+    for (int c = 0; c < 3; ++c) {
+        if (float(c) >= scene.cascade_params.x) break;
+        float3 offset_position = world_position + normal * texels[c] * 1.5;
+        float4 light_clip = mul(scene.cascade_view_proj[c], float4(offset_position, 1.0));
+        float3 ndc = light_clip.xyz / light_clip.w;
+        // Inside, with a margin the 3x3 taps cannot cross into the next
+        // quadrant from.
+        if (any(abs(ndc.xy) > 0.97) || ndc.z < 0.0 || ndc.z > 1.0) continue;
+        float2 uv = (ndc.xy * float2(0.5, -0.5) + 0.5) * 0.5 + float2(float(c % 2), float(c / 2)) * 0.5;
+        // The light's depth span in metres (gfx/shadow_map.cpp): 4.4 box
+        // half-widths, at least 3 km; the half-width from the texel and the
+        // quadrant's size, half the atlas's.
+        float half_width = texels[c] * (0.5 / scene.shadow_params.w) * 0.5;
+        float range = max(half_width * 4.4, 3000.0);
+        float bias = texels[c] * (1.5 + slope * 4.0) / range;
+        float step_uv = scene.shadow_params.w * 0.5;  // one atlas texel
+        float lit = 0.0;
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                float stored = shadow_map.SampleLevel(shadow_sampler, uv + float2(float(x), float(y)) * step_uv, 0.0);
+                lit += (ndc.z - bias <= stored) ? 1.0 : 0.0;
+            }
+        }
+        return lerp(1.0, lit / 9.0, scene.shadow_params.z);
+    }
+    return 1.0;
+}
+#endif
+
 float sun_visibility_map(float3 world_position, float3 normal,
                          Texture2D<float> shadow_map, SamplerState shadow_sampler) {
     float strength = scene.shadow_params.z;
+#ifdef ATMOSPHERE
+    if (scene.cascade_params.x > 0.5 && strength > 0.0) return cascade_visibility(world_position, normal, shadow_map, shadow_sampler);
+#endif
 
     // Offset along the normal before projecting. This removes most acne without
     // the peter-panning a large constant depth bias would cause.

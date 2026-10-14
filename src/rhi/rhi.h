@@ -314,6 +314,13 @@ public:
     virtual void bind_index_buffer(Pass* pass, const BufferBinding& binding, IndexSize size) = 0;
     virtual void bind_fragment_textures(Pass* pass, uint32_t first_slot,
                                         const TextureBinding* bindings, uint32_t count) = 0;
+    // The rectangle of the pass's target the draws that follow land in, in
+    // pixels from the top left (a pass starts on the whole target). Geometry
+    // is clipped to it, as to the whole target. How the shadow cascades share
+    // one atlas (gfx/shadow_map.h). D3D9 has no use for it yet: no-op.
+    virtual void set_viewport(Pass* pass, float x, float y, float width, float height) {
+        (void)pass, (void)x, (void)y, (void)width, (void)height;
+    }
     // Uniform block `slot` of `stage`, for the draws that follow.
     virtual void push_uniforms(Stage stage, uint32_t slot, const void* data, uint32_t size) = 0;
     virtual void draw(Pass* pass, uint32_t vertex_count, uint32_t instance_count = 1,

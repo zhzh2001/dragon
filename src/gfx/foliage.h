@@ -53,9 +53,12 @@ public:
 
     void draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
     void draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
+    // `coarse`: only each crown's coarse cards, for a shadow cascade whose
+    // texels are metres across (gfx/shadow_map.h): the full crown there cost
+    // 2 ms a frame for detail no texel could hold.
     void draw_trees_depth(Device& device, rhi::Pass* pass,
                           const core::Mat4& light_view_proj, float time,
-                          core::Vec3 eye = core::Vec3::zero());
+                          core::Vec3 eye = core::Vec3::zero(), bool coarse = false);
 
     uint32_t tree_count() const;
     // Trees drawn in the last main pass, after the cell culling.

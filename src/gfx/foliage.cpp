@@ -757,7 +757,7 @@ void Foliage::draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& s
 }
 
 void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
-                               const core::Mat4& light_view_proj, float time, core::Vec3 eye) {
+                               const core::Mat4& light_view_proj, float time, core::Vec3 eye, bool coarse) {
     if (!pass) return;
     rhi::Pipeline* pipeline = pipelines_->get(depth_pipeline_);
     if (!pipeline) return;
@@ -778,10 +778,10 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
         // The light's box is the shadow map's extent about the camera; a
         // cell outside it cannot shadow anything that is drawn.
         const Frustum light(light_view_proj);
+        const uint32_t indices = coarse && set.coarse_indices > 0 ? set.coarse_indices : set.mesh.index_count();
         for (const Cell& cell : set.cells) {
             if (!light.sees(cell.centre, cell.radius)) continue;
-            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0,
-                                         cell.first);
+            device.rhi().draw_indexed(pass, indices, cell.count, 0, 0, cell.first);
         }
     }
     for (int k = 0; k < ROCK_KINDS; ++k) {

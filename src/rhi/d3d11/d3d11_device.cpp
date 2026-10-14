@@ -929,6 +929,11 @@ public:
         set_constant_buffer(s, slot, buffer);
     }
 
+    void set_viewport(Pass*, float x, float y, float width, float height) override {
+        const D3D11_VIEWPORT viewport = {x, y, width, height, 0.0f, 1.0f};
+        context_->RSSetViewports(1, &viewport);
+    }
+
     void draw(Pass*, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
               uint32_t first_instance) override {
         if (!pipeline_ || !vertex_count) return;

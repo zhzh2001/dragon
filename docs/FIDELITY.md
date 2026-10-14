@@ -84,7 +84,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F1** sky and air (**done 2026-10-13**, below) | Hillaire's sky (EGSR 2020): transmittance, multiple-scattering and sky-view LUTs, and an aerial-perspective volume the world shaders sample in `apply_fog`, so haze is the atmosphere's in-scattering and blue-shifts with distance. A sun disc with limb darkening; a sun-elevation dial (late afternoon by default). The valley's height fog stays as an artistic layer on top. The retro tiers get the new sky for free: the ff dome bakes whatever the sky function returns | The vista against the target: blue depth, a warm low sun, a horizon that reads as distance | 2 |
 | **F2** terrain shape (**done 2026-10-13**, below) | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
 | **F3** terrain detail (procedural and scanned rock, 2026-10-13, below; the CDLOD mesh to come) | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
-| **F4** light (**heightfield shadows done 2026-10-13**, below; cascades and sky light to come) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
+| **F4** light (**heightfield shadows and cascades done 2026-10-13/14**, below; sky light done in F1) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal (**TAA done 2026-10-13**, below; upscaling to come) | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO (a first cloud layer done 2026-10-13, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
 | **F7** forest (Ultra's density tripled 2026-10-13, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
@@ -293,6 +293,25 @@ screen, so it is soft, as shafts in haze are. Only the froxels: the
 sky-view map looks over the ridges, and the sky light is the whole sky's.
 Cost: within the noise of the 600-frame timing.
 
+## F4, third part (2026-10-14): cascaded shadows
+
+`gfx/shadow_map.h`. Renders in `artifacts/fidelity-f4/cascades-*`. One
+4096 map over 1.8 km gave 44 cm texels near the dragon and no shadows
+past 1.8 km, so the forest stopped casting halfway across the valley.
+Now the modern tier has three boxes, 75 m, 380 m and 1.9 km in half-width,
+each a quadrant of the same 4096 atlas, drawn through a viewport (the new
+`rhi::Device::set_viewport`, on SDL GPU and D3D11). Their texels are 7 cm,
+37 cm and 1.9 m. The shaders take the finest box a point is in, with the
+normal offset and the bias scaled to its texel. The far box draws the
+crowns' coarse cards only, and no terrain (the heightfield shadow covers
+the terrain there): the full set into all three cost 3 ms a frame, and
+this costs about 1.3 ms. The retro tiers keep their single map.
+
+The shadow map's texel snap had never worked: the light view it snapped
+in was anchored at the map's own centre, so the centre rounded from zero
+to zero, and shadows shimmered in flight at every height (the playtest).
+Anchored at the world origin, the snap holds, on every tier.
+
 ## F5, as built (2026-10-13): temporal anti-aliasing
 
 `gfx/taa.h`, `shaders/post_taa.hlsl`, `shaders/velocity_skinned.hlsl`; the
@@ -369,6 +388,11 @@ either. And the river seems static. What was found:
   rough and calm patches drifting over them. Each train fades once it is
   shorter than a few pixels (the fragment's metres per pixel), and the foam
   streaks keep to where they are wider than one.
+- **Third round**: the long trains summed into a regular diamond lattice,
+  which the sun's glitter drew across the far river. The waves' domain is
+  now warped by a slow noise drifting with the current, the wavelengths
+  are detuned, the slopes flatten where a pixel covers a metre or more,
+  and the glint broadens there to a sheen.
 - **The tree shadows' shimmer** was the shadow map's texel snap, which did
   nothing: the snapping view was anchored at the map's own centre, so the
   centre always rounded from zero to zero. Anchored at the world origin,

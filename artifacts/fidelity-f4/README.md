@@ -10,3 +10,4 @@
 | `run-600.png` | `--frames 600 --hide-panels --run 7 --autopilot`: ten seconds down the valley |
 | `air-shadow-sun.png`, `air-shadow-vista.png` | the terrain's shadow in the air: `--cam 0,300,0,-8200,2000,-5700` and the vista |
 | `ao-vista.png`, `ao-top.png`, `ao-run.png` | the same views with the terrain's sky occlusion, the clouds and the Ultra forest (`ao-top` is `--cam 900,2600,-300,900,0,-320 --hide-vegetation`) |
+| `cascades-dragon-side.png`, `cascades-run.png` | the cascaded shadow map: `--studio 0 --inspect 90 14 6` and `--run 7`, tree shadows across the valley |

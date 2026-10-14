@@ -3039,9 +3039,20 @@ void App::build_ui(float dt) {
 
     if (ImGui::CollapsingHeader("Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("enabled", &shadow_.enabled);
-        ImGui::Text("%ux%u, %.2f m/texel", shadow_.resolution(), shadow_.resolution(),
-                    shadow_.extent * 2.0f / float(shadow_.resolution()));
-        ImGui::SliderFloat("extent", &shadow_.extent, 200.0f, 3000.0f, "%.0f m");
+        if (shadow_.cascades() > 1) {
+            // Three boxes, each a quadrant of the atlas (gfx/shadow_map.h).
+            ImGui::Text("%ux%u atlas: %.2f / %.2f / %.2f m a texel", shadow_.resolution(), shadow_.resolution(),
+                        shadow_.cascade_extent[0] * 4.0f / float(shadow_.resolution()),
+                        shadow_.cascade_extent[1] * 4.0f / float(shadow_.resolution()),
+                        shadow_.cascade_extent[2] * 4.0f / float(shadow_.resolution()));
+            ImGui::SliderFloat("near box", &shadow_.cascade_extent[0], 20.0f, 300.0f, "%.0f m");
+            ImGui::SliderFloat("middle box", &shadow_.cascade_extent[1], 150.0f, 1500.0f, "%.0f m");
+            ImGui::SliderFloat("far box", &shadow_.cascade_extent[2], 600.0f, 5000.0f, "%.0f m");
+        } else {
+            ImGui::Text("%ux%u, %.2f m/texel", shadow_.resolution(), shadow_.resolution(),
+                        shadow_.extent * 2.0f / float(shadow_.resolution()));
+            ImGui::SliderFloat("extent", &shadow_.extent, 200.0f, 3000.0f, "%.0f m");
+        }
         ImGui::SliderFloat("bias", &shadow_.depth_bias, 0.0f, 0.01f, "%.5f");
         ImGui::SliderFloat("strength", &shadow_.strength, 0.0f, 1.0f);
     }
@@ -7593,6 +7604,7 @@ void App::render() {
         particles_.set_output_grade(grade);
     }
     atmosphere_.apply(scene, atmosphere_settings_);
+    shadow_.apply(scene);
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
     world_.set_material_toggles(material_toggles_);
@@ -7636,72 +7648,82 @@ void App::render() {
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled && shadow_.available()) {
         rhi::Pass* shadow_pass = shadow_.begin_pass(device_);
-        if (!options_.hide_vegetation) {
-            foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
-                                      world_.scene().view_params.z, active_camera().position);
-        }
-        if (tier_.budget.terrain_casts_shadows) {
-            world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
-                                   gfx::ModelUniforms(), &terrain_chunks_);
-        }
-        world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
-                                  dragon_model, dragon_rig_.skinning_matrices());
-        for (const auto& bot : bots_) {
-            if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
-            const game::FlightState& s = bot->flight.state();
-            const LoadedModel& worn = model_at(bot->model);
-            gfx::ModelUniforms bot_model;
-            bot_model.model =
-                core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
-            world_.draw_skinned_depth(device_, shadow_pass, worn.mesh,
-                                      shadow_.light_view_proj(), bot_model,
-                                      bot->rig.skinning_matrices());
-        }
-        // The run's props cast shadows: a tower's shadow on the slope is how
-        // its height reads from the air.
-        if (run_mode_) {
-            if (tower_prop_.ok) {
-                for (size_t d = 0; d < run_defence_slots_.size(); ++d) {
-                    const int slot = run_defence_slots_[d];
-                    if (slot < 0 || size_t(slot) >= combat_.sentinels().size()) continue;
-                    const game::Sentinel& s = combat_.sentinels()[size_t(slot)];
-                    if (!s.alive || !s.ground) continue;
-                    const bool spire = defence_is_spire(int(d));
-                    const PropModel& prop = spire ? spire_prop_ : tower_prop_;
-                    gfx::ModelUniforms m;
-                    m.model = core::Mat4::trs(
-                        s.position - core::Vec3{0.0f, spire ? SPIRE_MIDDLE : KEEP_MIDDLE, 0.0f},
-                        core::Quat::identity(), core::Vec3::one());
-                    world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
-                                              shadow_.light_view_proj(), m, prop.joints);
-                }
+        // Each cascade in its quadrant of the atlas (gfx/shadow_map.h); one
+        // pass of it on a retro tier.
+        for (int cascade = 0; cascade < shadow_.cascades(); ++cascade) {
+            shadow_.begin_cascade(device_.rhi(), shadow_pass, cascade);
+            if (!options_.hide_vegetation) {
+                // The far cascade's 2 m texels take the crowns' coarse cards.
+                foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
+                                          world_.scene().view_params.z, active_camera().position,
+                                          shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1);
             }
-            if (hoard_prop_.ok) {
-                const auto& caches = hoard_run_.layout().caches;
-                for (size_t i = 0; i < caches.size(); ++i) {
-                    const game::RunCache& cache = caches[i];
-                    if (cache.collected) continue;
-                    const PropModel& prop = (i % 2 == 1 && trove_prop_.ok) ? trove_prop_ : hoard_prop_;
-                    gfx::ModelUniforms m;
-                    m.model = core::Mat4::trs(
-                        cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
-                        core::Quat::from_axis_angle(core::Vec3::up(), float(i) * 2.3f),
-                        core::Vec3{1.0f, 1.0f - 0.85f * cache.progress, 1.0f});
-                    world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
-                                              shadow_.light_view_proj(), m, prop.joints);
-                }
+            // Not into the far cascade: past the middle box the terrain's
+            // shadow on itself comes from the heightfield (terrain_sun.hlsl),
+            // and the ground there was most of the map, drawn a third time.
+            if (tier_.budget.terrain_casts_shadows && !(shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1)) {
+                world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
+                                       gfx::ModelUniforms(), &terrain_chunks_);
             }
-            draw_prey_shadows(shadow_pass);
-        }
-        // Only the live checkpoint casts a shadow. Shadowing all of them costs
-        // little but reads as clutter, and the shadow's job here is to tell you
-        // where the next ring is relative to the ground.
-        if (const game::Ring* next = run_mode_ ? nullptr : rally_.next_ring()) {
-            gfx::ModelUniforms model;
-            model.model = core::Mat4::trs(next->position, next->orientation,
-                                          core::Vec3(next->radius / RING_MESH_RADIUS));
-            world_.draw_mesh_depth(device_, shadow_pass, ring_mesh_, shadow_.light_view_proj(),
-                                   model);
+            world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
+                                      dragon_model, dragon_rig_.skinning_matrices());
+            for (const auto& bot : bots_) {
+                if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
+                const game::FlightState& s = bot->flight.state();
+                const LoadedModel& worn = model_at(bot->model);
+                gfx::ModelUniforms bot_model;
+                bot_model.model =
+                    core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
+                world_.draw_skinned_depth(device_, shadow_pass, worn.mesh,
+                                          shadow_.light_view_proj(), bot_model,
+                                          bot->rig.skinning_matrices());
+            }
+            // The run's props cast shadows: a tower's shadow on the slope is how
+            // its height reads from the air.
+            if (run_mode_) {
+                if (tower_prop_.ok) {
+                    for (size_t d = 0; d < run_defence_slots_.size(); ++d) {
+                        const int slot = run_defence_slots_[d];
+                        if (slot < 0 || size_t(slot) >= combat_.sentinels().size()) continue;
+                        const game::Sentinel& s = combat_.sentinels()[size_t(slot)];
+                        if (!s.alive || !s.ground) continue;
+                        const bool spire = defence_is_spire(int(d));
+                        const PropModel& prop = spire ? spire_prop_ : tower_prop_;
+                        gfx::ModelUniforms m;
+                        m.model = core::Mat4::trs(
+                            s.position - core::Vec3{0.0f, spire ? SPIRE_MIDDLE : KEEP_MIDDLE, 0.0f},
+                            core::Quat::identity(), core::Vec3::one());
+                        world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
+                                                  shadow_.light_view_proj(), m, prop.joints);
+                    }
+                }
+                if (hoard_prop_.ok) {
+                    const auto& caches = hoard_run_.layout().caches;
+                    for (size_t i = 0; i < caches.size(); ++i) {
+                        const game::RunCache& cache = caches[i];
+                        if (cache.collected) continue;
+                        const PropModel& prop = (i % 2 == 1 && trove_prop_.ok) ? trove_prop_ : hoard_prop_;
+                        gfx::ModelUniforms m;
+                        m.model = core::Mat4::trs(
+                            cache.position + core::Vec3{0.0f, 0.1f, 0.0f},
+                            core::Quat::from_axis_angle(core::Vec3::up(), float(i) * 2.3f),
+                            core::Vec3{1.0f, 1.0f - 0.85f * cache.progress, 1.0f});
+                        world_.draw_skinned_depth(device_, shadow_pass, prop.mesh,
+                                                  shadow_.light_view_proj(), m, prop.joints);
+                    }
+                }
+                draw_prey_shadows(shadow_pass);
+            }
+            // Only the live checkpoint casts a shadow. Shadowing all of them costs
+            // little but reads as clutter, and the shadow's job here is to tell you
+            // where the next ring is relative to the ground.
+            if (const game::Ring* next = run_mode_ ? nullptr : rally_.next_ring()) {
+                gfx::ModelUniforms model;
+                model.model = core::Mat4::trs(next->position, next->orientation,
+                                              core::Vec3(next->radius / RING_MESH_RADIUS));
+                world_.draw_mesh_depth(device_, shadow_pass, ring_mesh_, shadow_.light_view_proj(),
+                                       model);
+            }
         }
         device_.end_pass(shadow_pass);
     }

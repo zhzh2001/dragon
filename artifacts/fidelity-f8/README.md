@@ -9,3 +9,4 @@
 | `run.png` | `--frames 120 --hide-panels --run 7` |
 | `flow-1.5s-apart.png` | the low river view at frames 40 and 130: the current's streaks have moved downstream |
 | `waves.png` | the travelling waves: from 400 m up behind the spawn (`--cam -207,420,-1300,250,40,-1900`, cropped) and the low view |
+| `waves-distance.png` | the river from the dragon-side inspection and the low view, after the waves' lattice and the far glint were softened |

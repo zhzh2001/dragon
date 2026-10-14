@@ -768,6 +768,11 @@ public:
         else SDL_PushGPUFragmentUniformData(cmd_, slot, data, size);
     }
 
+    void set_viewport(Pass* pass, float x, float y, float width, float height) override {
+        SDL_GPUViewport viewport = {x, y, width, height, 0.0f, 1.0f};
+        SDL_SetGPUViewport(sdl(pass), &viewport);
+    }
+
     void draw(Pass* pass, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
               uint32_t first_instance) override {
         SDL_DrawGPUPrimitives(sdl(pass), vertex_count, instance_count, first_vertex, first_instance);

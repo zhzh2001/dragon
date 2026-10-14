@@ -508,7 +508,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     {
         const core::Vec4 c = light_view_proj * core::Vec4{model.model.col[3].x, model.model.col[3].y,
                                                           model.model.col[3].z, 1.0f};
-        const float reach = 1.0f + CASTER_RADIUS / core::maxf(shadow_map_->extent, 1.0f);
+        const float reach = 1.0f + CASTER_RADIUS / core::maxf(shadow_map_->active_extent(), 1.0f);
         if (std::fabs(c.x) > reach * c.w || std::fabs(c.y) > reach * c.w) return;
     }
     // Created lazily: it needs the shadow map's depth format, which is not known

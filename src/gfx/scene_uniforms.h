@@ -50,6 +50,11 @@ struct SceneUniforms {
     // The cloud layer (modern tier): x coverage (0: none), y base and z
     // thickness in metres, w density.
     core::Vec4 clouds = core::Vec4{0.0f, 2400.0f, 900.0f, 1.0f};
+    // The shadow cascades (gfx/shadow_map.h, modern tier): each one's light
+    // matrix, and x their count (0: the single light_view_proj above),
+    // y z w each one's texel in metres.
+    core::Mat4 cascade_view_proj[3];
+    core::Vec4 cascade_params = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.
