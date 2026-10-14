@@ -7921,7 +7921,8 @@ void App::render() {
         if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
         rhi::Texture* resolved = taa_.resolve(device_, device_.scene_hdr(), device_.world_width(), device_.world_height());
         if (!taa_.active()) post.sharpen = 0.0f;
-        post.fxaa = aa_mode_ == 1;
+        // The modern tier's (SM3 runs this composite too, and keeps its picture).
+        post.fxaa = aa_mode_ == 1 && taa_.available();
         post_.run(device_, post, resolved);
     }
 
