@@ -37,6 +37,10 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
 - **Clouds and a denser forest** (`docs/FIDELITY.md`): a raymarched layer
   of cumulus with drifting shadows on the ground, and three times the
   trees at Ultra. Renders in `artifacts/fidelity-clouds/`.
+- **The river** (`docs/FIDELITY.md`, "F8, as built"): reflections of the
+  banks and mountains traced through the heightfield, ripples, depth,
+  foam and shadows. And the afternoon is brighter after the first
+  playtest: a 19 degree sun on the modern tier.
 - **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal

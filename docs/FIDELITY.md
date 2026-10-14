@@ -88,7 +88,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F5** temporal | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO (a first cloud layer done 2026-10-13, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
 | **F7** forest (Ultra's density tripled 2026-10-13, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
-| **F8** water | Flow-mapped normals along the river from F2's flow, depth colour and absorption, shoreline foam, screen-space reflections with the F4 sky cube as their fallback | The river golden: gravel bars, braids, reflections of the banks | 1-2 |
+| **F8** water (**done 2026-10-13**, below, by heightfield rather than screen space) | Flow-mapped normals along the river from F2's flow, depth colour and absorption, shoreline foam, screen-space reflections with the F4 sky cube as their fallback | The river golden: gravel bars, braids, reflections of the banks | 1-2 |
 | **F9** hardware ray tracing | A native Metal backend (`src/rhi/metal/`, the size of the D3D11 one), then ray-traced soft shadows, occlusion and water reflections against the creatures and trees, on top of F4's heightfield work. A native backend also brings MetalFX upscaling to the Mac. Vulkan ray queries on x99's 5060 Ti would be a second native backend | The wings' shadow soft on the ground; dragons in the river | 3-5 |
 
 About twenty sessions in all. **The order is by what each buys**: F1
@@ -279,6 +279,35 @@ Up close it now reads as broken rock rather than sand. At a kilometre,
 the shape (F2) and the crags do the work. Next for F3 is the CDLOD mesh.
 Cost: about 1 ms a frame at 1080p on the M5 for the crags, the mottling
 and the scans together (600 frames: 6.80 s before, 7.39 s after).
+
+## F8, as built (2026-10-13): the river
+
+`shaders/water.hlsl`, the modern path. Renders in `artifacts/fidelity-f8/`.
+The river was a flat mirror of the sky, the one colour of the sky at
+every angle. Everything new reads the heightfield the sun is marched over
+(the terrain-sun map keeps the ground's height in its alpha, under the
+water too), so none of it needs a second view or a copy of the screen:
+
+- **Reflections by heightfield tracing**: the reflected ray marches the
+  ground in 40 steps out to 3 km. Where it hits, the reflection is that
+  ground, roughly shaded (dark forest low, grass and rock and snow above),
+  lit by the sun where the terrain lets it through, and hazed. Where it
+  escapes, it reflects the sky. A ray that only just clears the ground
+  takes some of it, by how narrowly. Hit-or-miss alone left hard dark
+  flecks wherever a ripple tipped a ray onto the bank.
+- **Ripples**: three drifting octaves of value noise, two flowing down
+  the valley, calming with distance.
+- **Depth**: the bed seen through the water in the shallows, fading to
+  the deep colour, reds first; foam where the water is a hand deep.
+- **Shadows**: the shadow map is bound to the water now, so trees, banks
+  and the dragon shade it, and the glint.
+- **Not reflected**: trees and creatures (a screen-space pass would add
+  them), and the river does not yet follow its course: the ripples drift
+  down -z, not along the bends.
+- A bug found on the way: the heightfield had been filled with the
+  water's surface where there is water, which made the river zero deep
+  everywhere. It holds the ground now.
+- Cost: 0.5 ms a frame at 1080p on the M5, with the river in view.
 
 ## A first cloud layer (2026-10-13)
 

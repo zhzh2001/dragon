@@ -358,7 +358,15 @@ void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
-    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 0);
+    if (atmosphere_ && atmosphere_->available() && shadow_map_ && shadow_map_->texture()) {
+        // The modern water's slots (water.hlsl): the shadow map, then the
+        // atmosphere's two maps.
+        rhi::TextureBinding shadow = {};
+        shadow.texture = shadow_map_->texture();
+        shadow.sampler = shadow_map_->sampler();
+        device.rhi().bind_fragment_textures(pass, 0, &shadow, 1);
+        atmosphere_->bind(device.rhi(), pass, 1);
+    }
     mesh.bind(device.rhi(), pass);
     draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);
 }

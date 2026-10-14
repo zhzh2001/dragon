@@ -1460,7 +1460,10 @@ void App::regenerate_terrain() {
             for (int i = 0; i < SUN_GRID; ++i) {
                 const float x = -half + (float(i) + 0.5f) * (2.0f * half / float(SUN_GRID));
                 const float z = -half + (float(j) + 0.5f) * (2.0f * half / float(SUN_GRID));
-                heights[size_t(j) * size_t(SUN_GRID) + size_t(i)] = terrain_.surface_at(x, z);
+                // The ground, under the water too: the river's depth, bed
+                // and shore are read from it (water.hlsl). surface_at gave
+                // the water's own height there, and the whole river frothed.
+                heights[size_t(j) * size_t(SUN_GRID) + size_t(i)] = terrain_.height_at(x, z);
             }
         }
         atmosphere_.set_heightfield(heights, SUN_GRID, half);

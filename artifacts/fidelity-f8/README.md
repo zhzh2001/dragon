@@ -1,0 +1,9 @@
+# F8: the river, 2026-10-13
+
+`docs/FIDELITY.md`, "F8, as built".
+
+| File | Command (`./build/dragon --headless ... --screenshot OUT`) |
+|---|---|
+| `river-low.png` | `--frames 40 --hide-ui --cam 600,70,260,7,38,-200`: along the river, 30 m up |
+| `river-high.png` | `--frames 40 --hide-ui --cam 700,220,420,100,30,-100` |
+| `run.png` | `--frames 120 --hide-panels --run 7` |
