@@ -115,9 +115,13 @@ void ShadowMap::update(const Camera& camera, Vec3 sun_direction) {
 
     // Snap the centre to the shadow map's texel grid in light space. Without
     // this, the map jitters as the camera moves and shadow edges crawl.
+    // The light space must be anchored at a fixed point (the world origin):
+    // anchored at the centre itself, as it first was, the centre always sat
+    // at its own origin, the snap rounded zero to zero, and every tree's
+    // shadow shimmered in flight (the playtest of 2026-10-13).
     const float texels_per_metre = float(resolution_) / (extent * 2.0f);
     Vec3 light_up = std::fabs(to_sun.y) > 0.99f ? Vec3::unit_z() : Vec3::up();
-    Mat4 snap_view = core::look_at(centre, centre - to_sun, light_up);
+    Mat4 snap_view = core::look_at(Vec3{}, -to_sun, light_up);
     Vec3 centre_in_light = core::transform_point(snap_view, centre);
     centre_in_light.x = std::floor(centre_in_light.x * texels_per_metre) / texels_per_metre;
     centre_in_light.y = std::floor(centre_in_light.y * texels_per_metre) / texels_per_metre;

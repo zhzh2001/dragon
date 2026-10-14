@@ -360,6 +360,19 @@ either. And the river seems static. What was found:
   each vertex (from the generator's course), and the ripples, stretched
   along it, drift at 2.4 m/s with a two-phase flow map. Foam streaks
   follow.
+- **Second round (the same day): "full of lines with enough height",
+  "still a bit unnatural and still".** The value-noise ripples, stretched
+  along the current, drew lines at a distance, finer than a pixel and
+  crawling, which broke the anti-aliasing. The surface is now twelve
+  travelling wave trains about the downstream direction, 14 m down to
+  0.4 m, each at deep water's speed for its length plus the current's, with
+  rough and calm patches drifting over them. Each train fades once it is
+  shorter than a few pixels (the fragment's metres per pixel), and the foam
+  streaks keep to where they are wider than one.
+- **The tree shadows' shimmer** was the shadow map's texel snap, which did
+  nothing: the snapping view was anchored at the map's own centre, so the
+  centre always rounded from zero to zero. Anchored at the world origin,
+  shadow edges hold still as the camera moves.
 - Debugging lessons, twice over: a debug return that leaves one texture
   unread shifts every later slot (`common.hlsl`), and debug colours pass
   through the tonemap.

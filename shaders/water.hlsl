@@ -115,44 +115,44 @@ float water_ground(float2 xz) {
     return terrain_sun_map.SampleLevel(terrain_sun_map_sampler, saturate(uv), 0.0).w;
 }
 
-// The current's surface: three octaves of the clouds' value noise in the
-// river's own frame, stretched along the flow so they read as the streaks
-// and boils of moving water, and carried downstream at RIVER_SPEED by a
-// flow map's two phases -- each pattern drifts for four seconds and fades
-// out while the other, half a cycle behind, fades in, so nothing stretches
-// without end. Returns the height's gradient in world xz.
+// The current's surface: twelve travelling wave trains, the long ones
+// running with the current and the short ones spread wider about it, each
+// moving at deep water's own speed for its length plus the current's
+// (RIVER_SPEED), their heights summed as slopes. Over them, rough and calm
+// patches drift downstream (value noise), as the wind and the bed make on a
+// real river. And each train fades out once it is shorter than a few pixels
+// on screen (`footprint`, metres a pixel): finer than that a wave only
+// aliases, and the earlier noise ripples drew crawling lines from altitude
+// that no anti-aliasing could hold.
 static const float RIVER_SPEED = 2.4;  // m/s
-float2 river_gradient(float2 p, float2 flow, float t) {
+float2 river_slope(float2 p, float2 flow, float t, float footprint) {
     float2 across = float2(-flow.y, flow.x);
-    const float CYCLE = 4.0;
-    float2 g = (float2)0.0;
-    for (int phase = 0; phase < 2; ++phase) {
-        float age = frac(t / CYCLE + float(phase) * 0.5);
-        float fade = 1.0 - abs(age * 2.0 - 1.0);  // 0 at a phase's ends, 1 at its middle
-        float2 moved = p - flow * (RIVER_SPEED * CYCLE * age) + float(phase) * 37.0;
-        // The river's frame: across, then along, squeezed so features run
-        // with the current.
-        float2 r = float2(dot(moved, across), dot(moved, flow) * 0.4);
-        float2 gr = (float2)0.0;
-        float scale = 1.0 / 6.0, weight = 0.6;
-        const float e = 0.25;
-        for (int i = 0; i < 3; ++i) {
-            float2 q = r * scale + float(i) * 7.3;
-            float h0 = cloud_value(q);
-            gr += float2(cloud_value(q + float2(e, 0.0)) - h0, cloud_value(q + float2(0.0, e)) - h0) / e * weight;
-            scale *= 2.6;
-            weight *= 0.5;
-        }
-        // Back from the river's frame into the world's.
-        g += (across * gr.x + flow * (gr.y * 0.4)) * fade;
+    float2 carried = p - flow * (RIVER_SPEED * t);
+    float rough = 0.45 + 0.9 * cloud_value(carried / 45.0 + 11.0) * cloud_value(carried / 17.0 - 3.0);
+    float2 slope = (float2)0.0;
+    const int WAVES = 12;
+    for (int i = 0; i < WAVES; ++i) {
+        float fi = float(i);
+        float wavelength = 14.0 * pow(0.72, fi);  // 14 m down to 0.4 m
+        float fade = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.5, footprint);
+        if (fade <= 0.0) break;
+        // Spread about downstream, wider for the short ones, golden-angle
+        // offsets so no two trains line up.
+        float spread = (0.35 + 0.08 * fi) * sin(fi * 2.39996 + 0.7);
+        float2 dir = normalize(flow * cos(spread) + across * sin(spread));
+        float k = 6.2831853 / wavelength;
+        float omega = sqrt(9.81 * k);
+        float phase = dot(p, dir) * k - omega * t - dot(flow, dir) * RIVER_SPEED * k * t + fi * 1.7;
+        // Steepness falls with length, so short chop does not dwarf the swell.
+        float amplitude = wavelength * 0.018;
+        slope += dir * (amplitude * k * cos(phase) * fade);
     }
-    return g;
+    return slope * rough;
 }
 
-float3 water_normal(float2 p, float2 flow, float t, float distance) {
-    float calm = 1.0 - smoothstep(200.0, 1200.0, distance);
-    float2 g = river_gradient(p, flow, t);
-    return normalize(float3(-g.x * 0.35 * calm, 1.0, -g.y * 0.35 * calm));
+float3 water_normal(float2 p, float2 flow, float t, float footprint) {
+    float2 s = river_slope(p, flow, t, footprint);
+    return normalize(float3(-s.x, 1.0, -s.y));
 }
 
 // The ground as a reflection sees it: no textures, no trees as such -- a
@@ -221,7 +221,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         float distance = length(to_camera_m);
         float3 view = -to_camera_m / max(distance, 1e-3);
         float2 flow = length(input.flow) > 0.1 ? normalize(input.flow) : float2(0.0, -1.0);
-        float3 n = water_normal(p, flow, t, distance);
+        // Metres a pixel here: what the waves fade by.
+        float footprint = max(length(ddx(input.world_position)), length(ddy(input.world_position)));
+        float3 n = water_normal(p, flow, t, footprint);
         float3 reflected = reflect(view, n);
         reflected.y = abs(reflected.y);
         float3 reflection = water_reflection(input.world_position + float3(0.0, 0.3, 0.0), reflected);
@@ -244,9 +246,11 @@ float4 fs_main(VertexOut input) : SV_Target {
         // where the current boils, both carried downstream.
         float2 carried = p - flow * (t * RIVER_SPEED);
         float2 along = float2(dot(carried, float2(-flow.y, flow.x)), dot(carried, flow) * 0.25);
-        float streak = smoothstep(0.62, 0.85, cloud_value(along * 0.35 + 3.1)) * 0.5;
-        float froth = max((1.0 - smoothstep(0.1, 0.7, depth)) * smoothstep(0.45, 0.75, cloud_value(carried * 0.6)),
-                          streak * (1.0 - smoothstep(150.0, 600.0, distance)));
+        // Streaks only near, where they are wider than a pixel or two.
+        float streak = smoothstep(0.62, 0.85, cloud_value(along * 0.35 + 3.1)) * 0.5 * (1.0 - smoothstep(0.08, 0.25, footprint));
+        float froth = max((1.0 - smoothstep(0.1, 0.7, depth)) * smoothstep(0.45, 0.75, cloud_value(carried * 0.6)) *
+                              (1.0 - smoothstep(0.3, 1.0, footprint)),
+                          streak);
         color = lerp(color, scene.palette[PALETTE_SNOW].rgb * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + ambient_light(float3(0.0, 1.0, 0.0))), froth * 0.55);
 
         float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), 220.0);
