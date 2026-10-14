@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "gfx/device.h"
+#include "gfx/render_tier.h"
 
 namespace gfx {
 
@@ -71,7 +72,8 @@ PostUniforms PostProcess::uniforms_for(const PostSettings& s, float w, float h,
     return u;
 }
 
-void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture* scene) {
+void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture* scene, rhi::Texture* occlusion,
+                      float occlusion_strength) {
     rhi::Pipeline* bright = pipelines_->get(bright_);
     rhi::Pipeline* blur = pipelines_->get(blur_);
     rhi::Pipeline* composite = pipelines_->get(composite_);
@@ -133,9 +135,13 @@ void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture
     PostUniforms u = uniforms_for(settings, w, h, core::Vec2{0.0f, 0.0f});
     u.texel.z = settings.enabled ? settings.sharpen : 0.0f;  // the composite's sharpening
     u.texel.w = settings.fxaa ? 1.0f : 0.0f;
+    u.occlusion = core::Vec4{occlusion && settings.enabled ? occlusion_strength : 0.0f, 0.0f, 0.0f, 0.0f};
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &u, sizeof(u));
     bind(pass, scene, 0);
     bind(pass, device.bloom_a(), 1);
+    // The modern composite's occlusion slot (post_composite.hlsl, under
+    // ATMOSPHERE): something is always bound, at strength 0 when there is none.
+    if (active_tier().tier == Tier::Modern) bind(pass, occlusion ? occlusion : device.bloom_b(), 2);
     device.rhi().draw(pass, 3, 1, 0, 0);
     device.end_pass(pass);
 }

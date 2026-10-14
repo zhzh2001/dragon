@@ -64,6 +64,7 @@ add_executable(dragon
   src/gfx/post.cpp
   src/gfx/atmosphere.cpp
   src/gfx/taa.cpp
+  src/gfx/ssao.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp

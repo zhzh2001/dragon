@@ -32,6 +32,9 @@ float3 tonemap(float3 color, float hue_preserve) {
 
 TEXTURE2D(scene_color, 0);
 TEXTURE2D(bloom, 1);
+#ifdef ATMOSPHERE
+TEXTURE2D(occlusion, 2);  // gfx/ssao.h: r the ambient occlusion, half resolution
+#endif
 
 // FXAA, the spatial alternative to the temporal resolve (gfx/taa.h): Lottes'
 // original filter, on the luminance as the eye will see it (the tonemapped
@@ -84,6 +87,11 @@ float4 fs_main(PostVertex input) : SV_Target {
         float gain = clamp(detail * post.texel.z / max(l, 1e-3), -0.35, 0.35);
         c *= 1.0 + gain;
     }
+#ifdef ATMOSPHERE
+    // The ambient occlusion, before the bloom: a darkened crevice does not
+    // glow less, but it is the scene's own light that it takes away.
+    c *= lerp(1.0, occlusion.Sample(occlusion_sampler, input.uv).r, post.occlusion.x);
+#endif
     float3 glow = bloom.Sample(bloom_sampler, input.uv).rgb;
     c += glow * post.grade.w;
     c *= post.grade.x;  // exposure

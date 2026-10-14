@@ -502,6 +502,7 @@ bool App::init(const Options& options) {
     world_.set_atmosphere(&atmosphere_);
     foliage_.set_atmosphere(&atmosphere_);
     taa_.init(&device_, &pipelines_);
+    ssao_.init(&device_, &pipelines_);
     if (options.aa >= 0) aa_mode_ = options.aa;
     taa_.enabled = aa_mode_ == 2;
     // The modern tier's afternoon is a little later in the day: with the
@@ -1701,6 +1702,7 @@ void App::shutdown() {
         world_.shutdown(device_);
         atmosphere_.shutdown();
         taa_.shutdown();
+        ssao_.shutdown();
         shadow_.shutdown(device_);
         particles_.shutdown();
         debug_.shutdown();
@@ -3009,6 +3011,15 @@ void App::build_ui(float dt) {
             ImGui::Combo("anti-aliasing", &aa_mode_, modes, 3);
             taa_.enabled = aa_mode_ == 2;
             if (aa_mode_ == 2) ImGui::SliderFloat("sharpen", &g.sharpen, 0.0f, 1.5f, "%.2f");
+        }
+        if (ssao_.available()) {
+            gfx::SsaoSettings& a = ssao_settings_;
+            ImGui::Checkbox("ambient occlusion", &a.enabled);
+            if (a.enabled) {
+                ImGui::SliderFloat("AO radius", &a.radius, 0.5f, 10.0f, "%.1f m");
+                ImGui::SliderFloat("AO intensity", &a.intensity, 0.2f, 4.0f, "%.2f");
+                ImGui::SliderFloat("AO strength", &a.strength, 0.0f, 1.0f, "%.2f");
+            }
         }
         ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");
         ImGui::SliderFloat("contrast", &g.contrast, 0.6f, 1.6f, "%.2f");
@@ -7941,11 +7952,12 @@ void App::render() {
         // The Bloom setting (gfx/graphics_settings.h) over the panel's dial.
         gfx::PostSettings post = post_settings_;
         if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
+        rhi::Texture* occlusion = ablated("ssao") ? nullptr : ssao_.run(device_, active_camera(), aspect, ssao_settings_);
         rhi::Texture* resolved = taa_.resolve(device_, device_.scene_hdr(), device_.world_width(), device_.world_height());
         if (!taa_.active()) post.sharpen = 0.0f;
         // The modern tier's (SM3 runs this composite too, and keeps its picture).
         post.fxaa = aa_mode_ == 1 && taa_.available();
-        post_.run(device_, post, resolved);
+        post_.run(device_, post, resolved, occlusion, ssao_settings_.strength);
     }
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();

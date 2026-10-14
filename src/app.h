@@ -8,6 +8,7 @@
 #include "gfx/render_tier.h"
 #include "gfx/atmosphere.h"
 #include "gfx/taa.h"
+#include "gfx/ssao.h"
 #include "gfx/post.h"
 #include <unordered_map>
 #include <vector>
@@ -288,6 +289,9 @@ private:
     gfx::AtmosphereSettings atmosphere_settings_;
     // Temporal anti-aliasing (modern tier).
     gfx::Taa taa_;
+    // Screen-space ambient occlusion (modern tier).
+    gfx::Ssao ssao_;
+    gfx::SsaoSettings ssao_settings_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),

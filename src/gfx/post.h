@@ -15,6 +15,7 @@ struct PostUniforms {
     core::Vec4 highlights;  // rgb multiplier, a strength
     core::Vec4 balance;     // temperature, tint, lift, gamma
     core::Vec4 texel;       // 1/w, 1/h, blur dir x, blur dir y
+    core::Vec4 occlusion;   // x the ambient occlusion's strength (0: off)
 };
 
 // The grade and the bloom, as dials. Everything a person would drag while
@@ -67,7 +68,10 @@ public:
     // Between the main pass ending and the UI pass beginning.
     // `scene`: the linear world to bloom and grade -- the device's HDR
     // target, or the temporal resolve's output (gfx/taa.h).
-    void run(Device& device, const PostSettings& settings, rhi::Texture* scene);
+    // `occlusion`: the ambient occlusion to multiply in (gfx/ssao.h), with
+    // its strength; null for none.
+    void run(Device& device, const PostSettings& settings, rhi::Texture* scene, rhi::Texture* occlusion = nullptr,
+             float occlusion_strength = 0.0f);
 
 private:
     PostUniforms uniforms_for(const PostSettings& settings, float w, float h,

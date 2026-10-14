@@ -149,7 +149,7 @@ def main():
         stems = [s for s in stems if not s.startswith("post_")]
     if "ATMOSPHERE" not in defines:
         # The atmosphere's tables: the modern tier's alone.
-        stems = [s for s in stems if not s.startswith("atmosphere_") and s not in ("terrain_sun", "post_taa", "velocity_skinned")]
+        stems = [s for s in stems if not s.startswith("atmosphere_") and s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned")]
 
     work = tempfile.mkdtemp(prefix="bake_d3d11_")
     jobs = []
