@@ -41,6 +41,11 @@ and the ports are `PORTING.md` (an index into `docs/porting/`).
   banks and mountains traced through the heightfield, ripples, depth,
   foam and shadows. And the afternoon is brighter after the first
   playtest: a 19 degree sun on the modern tier.
+- **Temporal anti-aliasing and the shadow in the air** (`docs/FIDELITY.md`,
+  F5 and F4 second part): jittered frames resolved against a reprojected
+  history, with motion vectors for the creatures, and haze that the ridges
+  shade. **Awaiting a playtest**: TAA's softness and any ghosting can only
+  be judged in motion, in a window.
 - **Two new plans:**
   - `docs/FIDELITY.md`: the modern build at Ultra and High, F0-F9, from a
     physically based sky to hardware ray tracing on a native Metal
