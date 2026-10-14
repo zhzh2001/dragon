@@ -109,7 +109,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--course N` | Select a generated course. |
 | `--studio N` | Animation studio, scenario N: 0 glide, 1 flap, 2/3 turns, 4 s-turns, 5 dive, 6 pull-out, 7 brake, 8 attack (spit, breath, spit, bite at 7.2 s), 9 grounded, 10 melee (bite, claw, tail in turn at a close mark), 11 claw (still body, sides alternate; look from the front-below `--inspect 0 14 -25`), 12 tail (still body; look from above `--inspect 90 14 85`), 13 walk (grounded at a walking pace on the spot; the stride). |
 | `--studio-speed N` | Studio playback speed, 0.05 to 2; scales both the scenario and the rig. |
-| `--combat` | Arm the dragon and spawn a wave of sentinels. |
+| `--combat` | Spawn a wave of sentinels. The dragon is armed by default (since 2026-10-13: breath, fireballs, bites and the rest work in the empty valley); this is what gives it targets, and what makes `--autopilot` the demo pilot instead of the course flyer. The Combat panel's "sentinel wave" does the same in play. |
 | `--training` | Arm the dragon and lay out the training room instead: six passive dummies ahead of the spawn, no return fire, back in 2.5 s. With `--attack`, the melee reach on a screenshot; `R` flies the line again. |
 | `--attack` | Also hold breath, fire, boost and bite -- how flame, projectiles, boost and the lunge get onto a screenshot. |
 | `--bots N` | Spawn N bot dragons instead of sentinels. |

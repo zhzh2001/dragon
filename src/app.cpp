@@ -677,9 +677,12 @@ bool App::init(const Options& options) {
         // top of each other.
         bot_spawn_jitter_ = options.bot_range * 0.25f;
     }
+    // Armed from the start; sentinels only when asked for.
+    combat_enabled_ = true;
+    arena_wave_ = options.combat ? 5 : 0;
+    arena_hostile_ = options.combat;
+    combat_.reset(&terrain_, flight_.state().position, 20260824u, arena_wave_);
     if (options.combat) {
-        combat_enabled_ = true;
-        combat_.reset(&terrain_, flight_.state().position, 20260824u);
         if (options.training) spawn_training_room();
         if (options.bots > 0) spawn_bots(options.bots);
         if (options.match) {
@@ -1904,6 +1907,7 @@ void App::feed_first_person_head(float dt) {
 }
 
 void App::spawn_training_room() {
+    arena_hostile_ = true;
     bots_.clear();
     const game::FlightState& s = flight_.state();
     combat_.spawn_training(s.position, s.forward(), s.right());
@@ -4184,6 +4188,7 @@ std::unique_ptr<App::BotShip> App::make_bot(int index) {
 }
 
 void App::spawn_bots(int count) {
+    arena_hostile_ = true;
     combat_.clear_hostiles();
     bots_.clear();
     for (int i = 0; i < count; ++i) {
@@ -5088,7 +5093,7 @@ void App::end_run() {
         select_course(current_course_);
         terrain_run_seed_ = 0;
     }
-    combat_.reset(&terrain_, flight_.state().position, 20260824u);
+    combat_.reset(&terrain_, flight_.state().position, 20260824u, arena_wave_);
     respawn_dragon();
 }
 
@@ -6958,10 +6963,10 @@ void App::build_combat_ui() {
         // pointing at freshly spawned drones -- driving them around while their
         // own dragons rendered on top. Both halves of that bug shipped once.
         bots_.clear();
-        combat_.reset(&terrain_, flight_.state().position, 20260824u);
+        combat_.reset(&terrain_, flight_.state().position, 20260824u, arena_wave_);
     }
     if (!combat_enabled_) {
-        ImGui::TextDisabled("switch on to spawn sentinels and arm the dragon");
+        ImGui::TextDisabled("switch on to arm the dragon");
         ImGui::End();
         return;
     }
@@ -7188,7 +7193,9 @@ void App::build_combat_ui() {
     ImGui::SameLine();
     if (ImGui::Button("sentinel wave")) {
         bots_.clear();
-        combat_.reset(&terrain_, flight_.state().position, 20260824u);
+        arena_wave_ = 5;
+        arena_hostile_ = true;
+        combat_.reset(&terrain_, flight_.state().position, 20260824u, arena_wave_);
     }
     ImGui::SliderFloat("bite range", &t.bite_range, 5.0f, 60.0f, "%.0f m");
     ImGui::SliderFloat("bite cone", &t.bite_half_angle_deg, 10.0f, 90.0f, "%.0f deg half");

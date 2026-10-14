@@ -338,7 +338,16 @@ private:
     bool first_person_offsets_valid_ = false;
 
     game::Combat combat_;
-    bool combat_enabled_ = false;
+    // The dragon is armed by default: breath, fireballs, bites and the rest
+    // work in the open valley with nothing spawned. --combat (and the panel's
+    // "sentinel wave") is what fills the sky.
+    bool combat_enabled_ = true;
+    // Sentinels a reset of the arena spawns: 0 by default, 5 with --combat.
+    int arena_wave_ = 0;
+    // Whether the arena has something to fight (sentinels, bots, the
+    // training room): what turns the autopilot into the demo pilot. Without
+    // it the autopilot flies the course, as the course soak expects.
+    bool arena_hostile_ = false;
     // Melee bookkeeping for the telemetry line: a capture cannot show whether
     // a bite connected, the counters can.
     int bites_landed_ = 0;
@@ -495,7 +504,7 @@ private:
     game::DemoDecision demo_decision_;
     float demo_restart_timer_ = 0.0f;
     float patrol_sign_ = 1.0f;
-    bool demo_active() const { return autopilot_ && (run_mode_ || combat_enabled_); }
+    bool demo_active() const { return autopilot_ && (run_mode_ || arena_hostile_); }
     void build_demo_world(game::DemoWorld& world);
     void set_autopilot(bool on);
     game::RunRecords run_records_;
