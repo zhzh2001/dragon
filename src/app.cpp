@@ -193,6 +193,8 @@ Options parse_options(int argc, char** argv) {
             }
         } else if (arg == "--gpu-driver" && i + 1 < argc) {
             options.gpu_driver = argv[++i];
+        } else if (arg == "--no-taa") {
+            options.no_taa = true;
         } else if (arg == "--no-post") {
             options.no_post = true;
         } else if (arg == "--bake-packs") {
@@ -441,6 +443,8 @@ bool App::init(const Options& options) {
     vsync_pending_ = vsync_;
     fullscreen_pending_ = fullscreen_;
     color16_pending_ = color16_;
+    // The modern tier keeps its depth for the temporal resolve (gfx/taa.h).
+    device_.set_depth_sampled(tier_.tier == gfx::Tier::Modern);
     if (!device_.init(config)) return false;
 
     // The graphics settings: the tier's default preset, then what was saved,
@@ -493,6 +497,8 @@ bool App::init(const Options& options) {
     atmosphere_.init(&device_, &pipelines_);
     world_.set_atmosphere(&atmosphere_);
     foliage_.set_atmosphere(&atmosphere_);
+    taa_.init(&device_, &pipelines_);
+    if (options.no_taa) taa_.enabled = false;
     // The modern tier's afternoon is a little later in the day: with the
     // terrain's long shadows (docs/FIDELITY.md, F4) a 14 degree sun left the
     // valley floor in shade most of the run, and the first playtest found it
@@ -1667,6 +1673,7 @@ void App::shutdown() {
         foliage_.shutdown(device_);
         world_.shutdown(device_);
         atmosphere_.shutdown();
+        taa_.shutdown();
         shadow_.shutdown(device_);
         particles_.shutdown();
         debug_.shutdown();
@@ -2966,6 +2973,12 @@ void App::build_ui(float dt) {
     if (ImGui::CollapsingHeader("Grade & bloom", ImGuiTreeNodeFlags_DefaultOpen)) {
         gfx::PostSettings& g = post_settings_;
         ImGui::Checkbox("enabled", &g.enabled);
+        if (taa_.available()) {
+            // The temporal resolve (gfx/taa.h): smooth edges and calm crowns,
+            // at the price of a softer moving picture the sharpening offsets.
+            ImGui::Checkbox("temporal AA", &taa_.enabled);
+            ImGui::SliderFloat("sharpen", &g.sharpen, 0.0f, 1.5f, "%.2f");
+        }
         ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");
         ImGui::SliderFloat("contrast", &g.contrast, 0.6f, 1.6f, "%.2f");
         ImGui::SliderFloat("saturation", &g.saturation, 0.0f, 1.8f, "%.2f");
@@ -7516,9 +7529,13 @@ void App::render() {
     const gfx::Camera& camera = active_camera();
 
     shadow_.update(camera, lighting_.sun_direction());
+    taa_.begin_frame(camera, aspect, device_.world_width(), device_.world_height());
 
     gfx::SceneUniforms scene =
         gfx::make_scene_uniforms(camera, aspect, lighting_, material_, time_seconds_);
+    // The temporal resolve's sub-pixel jitter (gfx/taa.h): every world draw
+    // projects through it; identity when the resolve is off.
+    scene.view_proj = taa_.jitter() * scene.view_proj;
     scene.light_view_proj = shadow_.light_view_proj();
     // A short view (the View distance setting): the fog thickened to hide
     // everything past it, exp(-(d k)^2) at 2% there, k = 1.98 / distance.
@@ -7553,7 +7570,7 @@ void App::render() {
         debug_.upload(device_);
         // Copy passes cannot open inside a render pass, so particle staging rides
         // alongside the debug-line upload.
-        particles_.upload(device_, camera.view_projection(aspect), camera.right(), camera.up());
+        particles_.upload(device_, taa_.jitter() * camera.view_projection(aspect), camera.right(), camera.up());
     }
     // Grass is re-placed around the camera every frame, deterministically from
     // the ground cell, and streamed like the particles.
@@ -7831,6 +7848,31 @@ void App::render() {
         debug_.draw(device_, pass, camera.view_projection(aspect));
     }
     device_.end_pass(pass);
+
+    // The creatures' motion for the temporal resolve (gfx/taa.h): the
+    // player and the rivals, each against its model matrix of last frame.
+    if (rhi::Pass* velocity = taa_.begin_velocity(device_, device_.world_width(), device_.world_height())) {
+        const gfx::Taa::VelocityMatrices matrices = taa_.velocity_matrices();
+        // Last frame's model matrix and pose for `key`, swapped for this
+        // frame's; this frame's again for a creature first seen.
+        auto draw = [&](const void* key, const anim::SkinnedMesh& mesh, const gfx::ModelUniforms& model,
+                        const std::vector<core::Mat4>& joints) {
+            auto [it, fresh] = previous_models_.try_emplace(key, PreviousPose{model.model, joints});
+            const PreviousPose before = fresh ? PreviousPose{model.model, joints} : it->second;
+            it->second = PreviousPose{model.model, joints};
+            world_.draw_skinned_velocity(device_, velocity, mesh, model, before.model, joints, before.joints, matrices);
+        };
+        draw(&dragon_rig_, player_model().mesh, dragon_model, dragon_rig_.skinning_matrices());
+        for (const auto& bot : bots_) {
+            if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
+            const game::FlightState& s = bot->flight.state();
+            const LoadedModel& worn = model_at(bot->model);
+            gfx::ModelUniforms bot_model;
+            bot_model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
+            draw(bot.get(), worn.mesh, bot_model, bot->rig.skinning_matrices());
+        }
+        device_.end_pass(velocity);
+    }
     {
         CORE_PROFILE("finish world");
         device_.finish_world();
@@ -7843,7 +7885,9 @@ void App::render() {
         // The Bloom setting (gfx/graphics_settings.h) over the panel's dial.
         gfx::PostSettings post = post_settings_;
         if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
-        post_.run(device_, post);
+        rhi::Texture* resolved = taa_.resolve(device_, device_.scene_hdr(), device_.world_width(), device_.world_height());
+        if (!taa_.active()) post.sharpen = 0.0f;
+        post_.run(device_, post, resolved);
     }
 
     rhi::Pass* ui_pass = device_.begin_ui_pass();

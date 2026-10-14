@@ -8,6 +8,7 @@
 #include "gfx/pipeline.h"
 #include "gfx/scene_uniforms.h"
 #include "gfx/shadow_map.h"
+#include "gfx/taa.h"
 
 namespace gfx {
 
@@ -79,6 +80,12 @@ public:
                       const ModelUniforms& model, const std::vector<core::Mat4>& joints,
                       const std::vector<rhi::Texture*>& textures = {},
                       rhi::Sampler* sampler = nullptr);
+    // Into the temporal resolve's velocity pass (gfx/taa.h): the creature's
+    // screen motion since last frame, from `prev_model` and the matrices.
+    void draw_skinned_velocity(Device& device, rhi::Pass* pass, const anim::SkinnedMesh& mesh,
+                               const ModelUniforms& model, const core::Mat4& prev_model,
+                               const std::vector<core::Mat4>& joints, const std::vector<core::Mat4>& prev_joints,
+                               const Taa::VelocityMatrices& matrices);
     void draw_skinned_depth(Device& device, rhi::Pass* pass,
                             const anim::SkinnedMesh& mesh, const core::Mat4& light_view_proj,
                             const ModelUniforms& model, const std::vector<core::Mat4>& joints);
@@ -102,6 +109,7 @@ private:
     PipelineHandle mesh_ = INVALID_PIPELINE;
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;
+    PipelineHandle skinned_velocity_ = INVALID_PIPELINE;
     ShadowMap* shadow_map_ = nullptr;
     const Atmosphere* atmosphere_ = nullptr;
     MaterialToggles material_toggles_;

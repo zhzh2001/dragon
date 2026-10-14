@@ -35,6 +35,23 @@ TEXTURE2D(bloom, 1);
 
 float4 fs_main(PostVertex input) : SV_Target {
     float3 c = scene_color.Sample(scene_color_sampler, input.uv).rgb;
+    // Sharpening, for a picture the temporal resolve softened (gfx/taa.h):
+    // the pixel pushed away from its four neighbours' mean, on its luminance
+    // so edges gain no colour fringe. texel.z is the amount (0: none).
+    if (post.texel.z > 0.0) {
+        float2 t = post.texel.xy;
+        float3 around = scene_color.Sample(scene_color_sampler, input.uv + float2(t.x, 0.0)).rgb +
+                        scene_color.Sample(scene_color_sampler, input.uv - float2(t.x, 0.0)).rgb +
+                        scene_color.Sample(scene_color_sampler, input.uv + float2(0.0, t.y)).rgb +
+                        scene_color.Sample(scene_color_sampler, input.uv - float2(0.0, t.y)).rgb;
+        const float3 L = float3(0.2126, 0.7152, 0.0722);
+        float l = dot(c, L);
+        float detail = l - dot(around, L) * 0.25;
+        // Relative to the pixel's own brightness, and limited, so a sun
+        // glint or a dark crevice does not ring.
+        float gain = clamp(detail * post.texel.z / max(l, 1e-3), -0.35, 0.35);
+        c *= 1.0 + gain;
+    }
     float3 glow = bloom.Sample(bloom_sampler, input.uv).rgb;
     c += glow * post.grade.w;
     c *= post.grade.x;  // exposure

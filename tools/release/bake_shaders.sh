@@ -46,8 +46,8 @@ for src in "$root"/shaders/*.hlsl; do
   grep -q '#pragma once' "$src" && continue
   stem=$(basename "$src" .hlsl)
   for variant in $variants; do
-    # The atmosphere's tables are the modern tier's alone.
-    case $stem in atmosphere_*) [ "$variant" = ATMOSPHERE ] || continue ;; esac
+    # The atmosphere's tables and the temporal resolve are the modern tier's alone.
+    case $stem in atmosphere_*|terrain_sun|post_taa|velocity_skinned) [ "$variant" = ATMOSPHERE ] || continue ;; esac
     flags=""; suffix=""
     if [ "$variant" != - ]; then
       for d in $(echo "$variant" | tr ',' ' '); do

@@ -48,6 +48,9 @@ struct PostSettings {
     float highlights_rgb[3] = {1.04f, 0.98f, 0.90f};
     float highlights_strength = 0.35f;
     bool enabled = true;
+    // Sharpening after the temporal resolve (gfx/taa.h), which softens a
+    // moving picture; 0 when the resolve is off.
+    float sharpen = 0.6f;
 };
 
 // Renders the HDR scene target to the 8-bit scene colour target through the
@@ -59,7 +62,9 @@ public:
     bool init(Device* device, PipelineCache* pipelines);
     void shutdown();
     // Between the main pass ending and the UI pass beginning.
-    void run(Device& device, const PostSettings& settings);
+    // `scene`: the linear world to bloom and grade -- the device's HDR
+    // target, or the temporal resolve's output (gfx/taa.h).
+    void run(Device& device, const PostSettings& settings, rhi::Texture* scene);
 
 private:
     PostUniforms uniforms_for(const PostSettings& settings, float w, float h,

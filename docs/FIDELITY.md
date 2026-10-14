@@ -85,7 +85,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F2** terrain shape (**done 2026-10-13**, below) | Hydraulic and thermal erosion in the generator, on the CPU, deterministic (the "same content on every compiler" rules), cached per seed under `paths::user`. It writes the heightfield and three maps the materials need: flow (gullies, the braided river bed), sediment (scree fans, gravel bars) and wetness. The heightfield stays the one source of truth: `height_at` keeps querying the rendered triangle | Mountains read as rock with gullies from the vista; the E3300 generates a valley in an acceptable time, or the cache covers it | 2-3 |
 | **F3** terrain detail (procedural and scanned rock, 2026-10-13, below; the CDLOD mesh to come) | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
 | **F4** light (**heightfield shadows done 2026-10-13**, below; cascades and sky light to come) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
-| **F5** temporal | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
+| **F5** temporal (**TAA done 2026-10-13**, below; upscaling to come) | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO (a first cloud layer done 2026-10-13, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
 | **F7** forest (Ultra's density tripled 2026-10-13, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
 | **F8** water (**done 2026-10-13**, below, by heightfield rather than screen space) | Flow-mapped normals along the river from F2's flow, depth colour and absorption, shoreline foam, screen-space reflections with the F4 sky cube as their fallback | The river golden: gravel bars, braids, reflections of the banks | 1-2 |
@@ -279,6 +279,46 @@ Up close it now reads as broken rock rather than sand. At a kilometre,
 the shape (F2) and the crags do the work. Next for F3 is the CDLOD mesh.
 Cost: about 1 ms a frame at 1080p on the M5 for the crags, the mottling
 and the scans together (600 frames: 6.80 s before, 7.39 s after).
+
+## F5, as built (2026-10-13): temporal anti-aliasing
+
+`gfx/taa.h`, `shaders/post_taa.hlsl`, `shaders/velocity_skinned.hlsl`; the
+modern tier only. Renders in `artifacts/fidelity-f5/`.
+
+- **Jitter, depth, resolve.** The world draws through an eight-phase
+  Halton sub-pixel jitter. The main pass keeps its depth (now sampleable,
+  `Device::set_depth_sampled`), and a resolve pass before the bloom blends
+  each frame into a ping-ponged history: reprojected through the depth,
+  sampled bicubic (Catmull-Rom in five taps), and clipped toward the
+  current 3x3 neighbourhood's mean in YCoCg within 1.25 standard
+  deviations. The matrices are camera-relative, and the sky, at infinite
+  depth, reprojects as directions. Fast motion keeps less history. A
+  camera cut, a resize or switching it back on starts afresh.
+- **Creatures carry their own motion.** Depth reprojection takes every
+  pixel for a fixed point of the world. The chase camera's dragon is not
+  one, and it smeared and darkened into the ground behind it. After the
+  main pass, the player and the rivals are drawn again into a velocity
+  target, depth-tested against what the main pass left and not writing
+  it. Each pixel there gets the screen motion of its surface point from
+  this frame's pose, model and camera against last frame's, both skin
+  palettes included, so the wingbeat moves too. The resolve uses that
+  motion wherever a creature was drawn.
+- **Sharpening** in the composite (`PostSettings::sharpen`, 0.6, on the
+  luminance, limited) offsets the softness TAA brings to a moving picture.
+  It is on only while the resolve is.
+- **Bugs on the way**, for the next temporal pass:
+  - A debug return that skipped a texture shrank the shader's reflected
+    sampler count, so the depth in the slot after it was never bound and
+    read as zero (`common.hlsl` warns of exactly this).
+  - Debug colours go through the tonemap, so read them inverted.
+- **Dials**: the Grade & bloom panel's "temporal AA" and "sharpen";
+  `--no-taa`; `DRAGON_TAA_WEIGHT` sets the history weight (0.9).
+- **Not covered**: prey, props and projectiles reproject by depth, with
+  the clamp as their only guard; particles too. Vulkan, D3D12 and D3D11
+  are unchecked: the main depth is now sampled there, and D3D11's depth
+  views want checking first.
+- Cost: 1.2 ms a frame at 1080p on the M5, the depth store and the
+  velocity pass included.
 
 ## F8, as built (2026-10-13): the river
 

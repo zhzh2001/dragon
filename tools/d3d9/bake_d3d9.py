@@ -244,8 +244,9 @@ def main():
     if "LDR_OUTPUT" in defines:
         # No HDR, no post stack: the app never creates those pipelines.
         stems = [s for s in stems if not s.startswith("post_")]
-    # Nor the atmosphere's tables, which only the modern tier has.
-    stems = [s for s in stems if not s.startswith("atmosphere_")]
+    # Nor the atmosphere's tables or the temporal resolve, which only the
+    # modern tier has.
+    stems = [s for s in stems if not s.startswith("atmosphere_") and s not in ("terrain_sun", "post_taa", "velocity_skinned")]
     jobs = []      # (profile, hlsl path, out path)
     layouts = {}   # stem -> {stage: layout}
     expected = {}  # (stem, stage) -> members

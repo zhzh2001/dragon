@@ -537,6 +537,55 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     }
 }
 
+void WorldRenderer::draw_skinned_velocity(Device& device, rhi::Pass* pass, const anim::SkinnedMesh& full_mesh,
+                                          const ModelUniforms& model, const core::Mat4& prev_model,
+                                          const std::vector<core::Mat4>& joints,
+                                          const std::vector<core::Mat4>& prev_joints,
+                                          const Taa::VelocityMatrices& matrices) {
+    // The same LOD the main pass drew, or the depth test misses it.
+    const anim::SkinnedMesh& mesh = full_mesh.for_distance(camera_distance(model));
+    if (!pass || !mesh.valid()) return;
+    if (skinned_velocity_ == INVALID_PIPELINE) {
+        PipelineDesc desc;
+        desc.name = "velocity_skinned";
+        desc.shader = "velocity_skinned";
+        desc.vertex_buffers = anim::SkinnedMesh::buffer_descriptions();
+        desc.vertex_attributes = anim::SkinnedMesh::attributes();
+        desc.cull = rhi::Cull::None;
+        desc.depth_test = true;
+        desc.depth_write = false;
+        desc.depth_compare = rhi::Compare::GreaterEqual;
+        desc.color_format = device.scene_hdr_format();
+        skinned_velocity_ = pipelines_->create(desc);
+    }
+    rhi::Pipeline* pipeline = pipelines_->get(skinned_velocity_);
+    if (!pipeline) return;
+    struct {
+        core::Mat4 jittered_view_proj, view_proj, prev_view_proj, prev_model;
+    } u = {matrices.jittered_view_proj, matrices.view_proj, matrices.prev_view_proj, prev_model};
+    const std::vector<core::Mat4>& before = prev_joints.size() == joints.size() ? prev_joints : joints;
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &u, sizeof(u));
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
+    // The two palettes, this frame's in slot 2 and the last in slot 3.
+    auto push_both = [&](const SkinBlock& now, const SkinBlock& then) {
+        push_skin(device, now);
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 3, &then, sizeof(SkinBlock));
+    };
+    mesh.bind(device.rhi(), pass);
+    const bool split = !mesh.submeshes().empty() && !mesh.submeshes().front().palette.empty();
+    if (!split) {
+        push_both(make_skin_block(joints), make_skin_block(before));
+        device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+        return;
+    }
+    for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
+        if (submesh.index_count == 0) continue;
+        push_both(make_palette_block(joints, submesh.palette), make_palette_block(before, submesh.palette));
+        device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
+    }
+}
+
 void WorldRenderer::draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
                                     const core::Mat4& light_view_proj, const ModelUniforms& model,
                                     const std::vector<MeshChunk>* chunks) {

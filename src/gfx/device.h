@@ -94,6 +94,12 @@ public:
     // directly, finished by the world shaders themselves.
     rhi::Format main_color_format() const { return hdr_ ? scene_hdr_format() : scene_color_format(); }
     bool hdr() const { return hdr_; }
+    // The main pass's depth, kept after it and sampleable, for a pass that
+    // reprojects through it (gfx/taa.h). Set before the first frame; the
+    // targets are made with it from then on. Null depth() when not kept.
+    void set_depth_sampled(bool sampled) { depth_sampled_ = sampled; }
+    bool depth_sampled() const { return depth_sampled_; }
+    rhi::Texture* depth() const { return depth_sampled_ ? depth_ : nullptr; }
     rhi::Format depth_format() const { return depth_format_; }
     rhi::Texture* scene_hdr() const { return scene_hdr_; }
     rhi::Texture* scene_color() const { return scene_color_; }
@@ -130,6 +136,7 @@ private:
     SDL_Window* window_ = nullptr;
     std::unique_ptr<rhi::Device> rhi_;
     bool headless_ = false;
+    bool depth_sampled_ = false;
     bool in_frame_ = false;
     bool hdr_ = true;
     bool color16_ = false;

@@ -180,7 +180,7 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     depth.width = scene_world_ ? ww : w;
     depth.height = scene_world_ ? wh : h;
     depth.format = depth_format_;
-    depth.usage = rhi::TEXTURE_DEPTH_TARGET;
+    depth.usage = rhi::TEXTURE_DEPTH_TARGET | (depth_sampled_ ? rhi::TEXTURE_SAMPLED : 0);
     depth_ = rhi_->create_texture(depth, "scene_depth");
     if (!depth_) {
         release_targets();
@@ -225,6 +225,7 @@ rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     // The far plane: 0 under reversed-Z, 1 in the conventional layout a
     // retro tier uses (gfx/render_tier.h).
     pass.clear_depth_value = depth_convention().reversed ? 0.0f : 1.0f;
+    pass.keep_depth = depth_sampled_;
     return rhi_->begin_pass(pass);
 }
 

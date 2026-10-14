@@ -7,7 +7,9 @@
 #include "ui/hud.h"
 #include "gfx/render_tier.h"
 #include "gfx/atmosphere.h"
+#include "gfx/taa.h"
 #include "gfx/post.h"
+#include <unordered_map>
 #include <vector>
 
 #include "core/input.h"
@@ -61,6 +63,8 @@ struct Options {
     std::string graphics;
     // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
     std::string atmosphere;
+    // --no-taa: the modern tier without its temporal resolve.
+    bool no_taa = false;
     // --sun elevation[,azimuth] in degrees, over the Lighting defaults.
     float sun_elevation = -100.0f;
     float sun_azimuth = -1.0f;
@@ -281,6 +285,15 @@ private:
     // The physically based sky and aerial perspective (modern tier).
     gfx::Atmosphere atmosphere_;
     gfx::AtmosphereSettings atmosphere_settings_;
+    // Temporal anti-aliasing (modern tier).
+    gfx::Taa taa_;
+    // Each creature's model matrix and pose of last frame, for its motion
+    // vectors (gfx/taa.h).
+    struct PreviousPose {
+        core::Mat4 model;
+        std::vector<core::Mat4> joints;
+    };
+    std::unordered_map<const void*, PreviousPose> previous_models_;
     gfx::DebugDraw debug_;
     gfx::WorldRenderer world_;
     gfx::ShadowMap shadow_;

@@ -71,11 +71,12 @@ PostUniforms PostProcess::uniforms_for(const PostSettings& s, float w, float h,
     return u;
 }
 
-void PostProcess::run(Device& device, const PostSettings& settings) {
+void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture* scene) {
     rhi::Pipeline* bright = pipelines_->get(bright_);
     rhi::Pipeline* blur = pipelines_->get(blur_);
     rhi::Pipeline* composite = pipelines_->get(composite_);
-    if (!composite || !device.scene_hdr()) return;
+    if (!scene) scene = device.scene_hdr();
+    if (!composite || !scene) return;
 
     // The scene's own size, which the world scale makes smaller than the
     // composite's target; the composite samples it by UV and stretches it.
@@ -99,7 +100,7 @@ void PostProcess::run(Device& device, const PostSettings& settings) {
             device.rhi().bind_pipeline(pass, bright);
             const PostUniforms u = uniforms_for(settings, w, h, core::Vec2{0.0f, 0.0f});
             device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &u, sizeof(u));
-            bind(pass, device.scene_hdr(), 0);
+            bind(pass, scene, 0);
             device.rhi().draw(pass, 3, 1, 0, 0);
             device.end_pass(pass);
         }
@@ -129,9 +130,10 @@ void PostProcess::run(Device& device, const PostSettings& settings) {
 
     rhi::Pass* pass = device.begin_color_pass(device.scene_color(), true);
     device.rhi().bind_pipeline(pass, composite);
-    const PostUniforms u = uniforms_for(settings, w, h, core::Vec2{0.0f, 0.0f});
+    PostUniforms u = uniforms_for(settings, w, h, core::Vec2{0.0f, 0.0f});
+    u.texel.z = settings.enabled ? settings.sharpen : 0.0f;  // the composite's sharpening
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &u, sizeof(u));
-    bind(pass, device.scene_hdr(), 0);
+    bind(pass, scene, 0);
     bind(pass, device.bloom_a(), 1);
     device.rhi().draw(pass, 3, 1, 0, 0);
     device.end_pass(pass);
