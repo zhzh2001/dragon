@@ -77,12 +77,32 @@ int main() {
     CHECK(allowed(Setting::Resolution, 4, Tier::Modern, big));   // 50%: offered, not preset
     CHECK(!allowed(Setting::Resolution, 1, Tier::Modern, big));
 
+    int level = -1;
+    // Phone: Low's content with the clouds painted, no occlusion, the frame
+    // at 720 lines; every level preset keeps all three whole.
+    const GraphicsSettings phone = GraphicsSettings::preset(PHONE_PRESET, Tier::Modern, big);
+    const ContentBudget pb = budget_for(phone);
+    CHECK(phone.preset_level(Tier::Modern, big) == PHONE_PRESET);
+    CHECK(!pb.volumetric_clouds && !pb.ambient_occlusion && pb.frame_height == 720);
+    const GraphicsSettings low_modern = GraphicsSettings::preset(3, Tier::Modern, big);
+    for (int s = 0; s < SETTING_COUNT; ++s) {
+        const Setting setting = Setting(s);
+        if (setting != Setting::Clouds && setting != Setting::Ambient && setting != Setting::Frame &&
+            setting != Setting::Resolution)
+            CHECK(phone[setting] == low_modern[setting]);  // Low's content, every setting of it
+    }
+    CHECK(pb.terrain_lite && pb.world_scale == 0.7f);
+    for (int p = 0; p < QUALITY_LEVELS; ++p) {
+        const ContentBudget b = budget_for(GraphicsSettings::preset(p, Tier::Modern, big));
+        CHECK(b.volumetric_clouds && b.ambient_occlusion && b.frame_height == 0);
+    }
+    CHECK(parse_preset("phone", &level) && level == PHONE_PRESET);
+
     // Saved and read back; unknown keys and bad values are ignored.
     GraphicsSettings g = GraphicsSettings::preset(3, Tier::SM3, big);
     GraphicsSettings back;
     back.parse(g.serialize() + "colour=7\nmodels=99\n");
     CHECK(back == g);
-    int level = -1;
     CHECK(parse_preset("very-low", &level) && level == 4);
     CHECK(!parse_preset("insane", &level));
 

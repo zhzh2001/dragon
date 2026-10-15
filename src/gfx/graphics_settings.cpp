@@ -40,6 +40,12 @@ const SettingInfo INFO[SETTING_COUNT] = {
     {"view", "View distance", {"Full", nullptr, nullptr, nullptr, nullptr, nullptr, "2.5 km"}, Applies::Live},
     {"hud", "HUD", {"Smooth", nullptr, nullptr, nullptr, nullptr, nullptr, "Plain"}, Applies::Live},
     {"particles", "Particles", {"Full", nullptr, nullptr, nullptr, nullptr, nullptr, "Half"}, Applies::Live},
+    // Phone's three (docs/porting/MOBILE.md): on the K30's Adreno 620 the
+    // cloud march was 15 ms and the SSAO 4 at 2400x1080, and the post stack
+    // and the HUD cost by the frame's pixels whatever the world's scale.
+    {"clouds", "Clouds", {"Volumetric", nullptr, nullptr, nullptr, "Painted", nullptr, nullptr}, Applies::Live},
+    {"ao", "Ambient occlusion", {"On", nullptr, nullptr, nullptr, "Off", nullptr, nullptr}, Applies::Live},
+    {"frame", "Frame height", {"Native", nullptr, "1080", "900", "720", "540", nullptr}, Applies::Live},
 };
 
 // The seventh column is Lowest's; where a setting offers no Lowest option
@@ -63,8 +69,9 @@ constexpr uint32_t TEXTURE_SIZE[QUALITY_LEVELS] = {0, 1024, 512, 256, 128, 64, 6
 constexpr uint32_t SHADOW_SIZE[QUALITY_LEVELS] = {4096, 2048, 1024, 512, 0, 0, 0};
 constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f, 0.5f, 0.5f};
 constexpr float VIEW_DISTANCE[QUALITY_LEVELS] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2500.0f};
+constexpr uint32_t FRAME_HEIGHT[QUALITY_LEVELS] = {0, 0, 1080, 900, 720, 540, 0};
 
-const char* const PRESET_NAMES[QUALITY_LEVELS] = {"ultra", "high", "medium", "low", "very-low", "minimal", "lowest"};
+const char* const PRESET_NAMES[PRESET_COUNT] = {"ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone"};
 
 // The cheapest level a tier is offered, per setting. Above it the tier's
 // cards run out of memory or vertex constants long before the budget
@@ -86,6 +93,14 @@ int tier_floor(Setting setting, Tier tier) {
 // the terrain, whose Very low is Low; and the resolution, whole through
 // Medium, 85% at Low and 70% at Very low (50% is offered, not preset).
 int preset_to_level(Setting setting, int preset) {
+    // Phone's own three: whole in every level preset.
+    if (setting == Setting::Clouds || setting == Setting::Ambient || setting == Setting::Frame) {
+        return preset == PHONE_PRESET ? 4 : 0;  // painted; off; 720 lines
+    }
+    // The world at 70% of the 720-line frame: live on the K30, 85% was 24
+    // fps and 70% 36 (docs/porting/MOBILE.md).
+    if (preset == PHONE_PRESET && setting == Setting::Resolution) return 3;
+    if (preset == PHONE_PRESET) return preset_to_level(setting, 3);  // Low's content
     if (setting == Setting::Bloom) return preset <= 2 ? 0 : 4;                              // off from Low
     if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
     if (setting == Setting::Resolution) return preset <= 2 ? 0 : std::min(preset - 1, 4);  // 85, 70, 50, 50%
@@ -101,11 +116,11 @@ int preset_to_level(Setting setting, int preset) {
 const SettingInfo& setting_info(Setting setting) { return INFO[int(setting)]; }
 
 const char* preset_name(int level) {
-    return level >= 0 && level < QUALITY_LEVELS ? PRESET_NAMES[level] : "custom";
+    return level >= 0 && level < PRESET_COUNT ? PRESET_NAMES[level] : "custom";
 }
 
 bool parse_preset(const std::string& name, int* level) {
-    for (int i = 0; i < QUALITY_LEVELS; ++i) {
+    for (int i = 0; i < PRESET_COUNT; ++i) {
         if (name == PRESET_NAMES[i]) {
             *level = i;
             return true;
@@ -142,7 +157,11 @@ int clamp_level(Setting setting, int level, Tier tier, const DeviceLimits& devic
 
 int default_preset(Tier tier) {
     switch (tier) {
+#ifdef __ANDROID__
+        case Tier::Modern: return PHONE_PRESET;
+#else
         case Tier::Modern: return 0;
+#endif
         case Tier::SM3: return 1;
         case Tier::SM2: return 2;
         // Minimal, the preset made for these cards: the tier is what a card
@@ -165,7 +184,7 @@ GraphicsSettings GraphicsSettings::preset(int level, Tier tier, const DeviceLimi
 int GraphicsSettings::preset_level(Tier tier, const DeviceLimits& device) const {
     // Compared after clamping: on SM2, Ultra is Ultra with the textures and
     // shadows the tier allows, not a custom mix.
-    for (int p = 0; p < QUALITY_LEVELS; ++p) {
+    for (int p = 0; p < PRESET_COUNT; ++p) {
         if (*this == preset(p, tier, device)) return p;
     }
     return -1;
@@ -217,6 +236,9 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     b.view_distance = VIEW_DISTANCE[g[Setting::View]];
     b.plain_hud = g[Setting::Hud] == 6;
     b.particle_density = g[Setting::Particles] == 6 ? 0.5f : 1.0f;
+    b.volumetric_clouds = g[Setting::Clouds] == 0;
+    b.ambient_occlusion = g[Setting::Ambient] == 0;
+    b.frame_height = FRAME_HEIGHT[g[Setting::Frame]];
     return b;
 }
 

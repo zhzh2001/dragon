@@ -75,7 +75,13 @@ bool Device::init(const Config& config) {
     color16_ = config.color16 && !hdr_ && rhi_->supports_format(rhi::Format::RGB565, rhi::TEXTURE_COLOR_TARGET);
 
     // Headless never presents, so nothing else establishes the render size.
-    if (headless_ && !ensure_targets(uint32_t(config.width), uint32_t(config.height))) return false;
+    requested_w_ = uint32_t(config.width);
+    requested_h_ = uint32_t(config.height);
+    if (headless_) {
+        uint32_t w = requested_w_, h = requested_h_;
+        capped(w, h);
+        if (!ensure_targets(w, h)) return false;
+    }
 
     LOG_INFO("GPU device: %s%s", rhi_->driver_name(), headless_ ? " (headless)" : "");
     return true;
@@ -130,6 +136,8 @@ rhi::Texture* Device::frame_target() const {
     // a third of the frame on the M6. Not on a frame that is read back:
     // the back buffer cannot be.
     if (hdr_ || (!screenshot_path_.empty() && scene_color_)) return nullptr;
+    // Nor on a capped frame, which is smaller than the image it stretches to.
+    if (!headless_ && (render_w_ != present_w_ || render_h_ != present_h_)) return nullptr;
     return rhi_->frame_target();
 }
 
@@ -200,10 +208,31 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     return true;
 }
 
+void Device::capped(uint32_t& w, uint32_t& h) const {
+    if (frame_height_ == 0 || h <= frame_height_) return;
+    w = std::max(1u, uint32_t(uint64_t(w) * frame_height_ / h));
+    h = frame_height_;
+}
+
+void Device::set_frame_height(uint32_t lines) {
+    if (lines == frame_height_) return;
+    frame_height_ = lines;
+    // A window's frame is sized at the next begin_frame; a headless one now.
+    if (!headless_ || !rhi_ || render_w_ == 0) return;
+    uint32_t w = requested_w_, h = requested_h_;
+    capped(w, h);
+    rhi_->wait_idle();
+    release_targets();
+    ensure_targets(w, h);
+}
+
 bool Device::begin_frame() {
     uint32_t w = 0, h = 0;
     const rhi::FrameStatus status = rhi_->begin_frame(&w, &h);
     if (status != rhi::FrameStatus::Ready) return false;
+    present_w_ = w;
+    present_h_ = h;
+    capped(w, h);
     if (!headless_ && !ensure_targets(w, h)) {
         rhi_->end_frame(nullptr, 0, 0, nullptr);  // submit what little there is
         return false;

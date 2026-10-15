@@ -132,8 +132,16 @@ public:
     // After the world's last pass, before the UI's.
     void finish_world();
 
+    // The whole frame's height at most, the HUD's included (the Frame
+    // height setting; 0: the window's). A taller window gets the frame
+    // stretched to it by the present's blit: on a phone's 2400x1080 the post
+    // stack and the HUD cost by the frame's pixels however small the world.
+    void set_frame_height(uint32_t lines);
+
 private:
     bool ensure_targets(uint32_t w, uint32_t h);
+    // The window's size, or `frame_height_` lines of the same shape.
+    void capped(uint32_t& w, uint32_t& h) const;
     void release_targets();
     void save_screenshot(const std::vector<uint8_t>& rgba);
     // The backend's frame image when this frame may draw into it, else null.
@@ -161,6 +169,9 @@ private:
     rhi::Texture* scene_world_ = nullptr;
     uint32_t render_w_ = 0, render_h_ = 0;
     uint32_t world_w_ = 0, world_h_ = 0;
+    uint32_t frame_height_ = 0;
+    uint32_t present_w_ = 0, present_h_ = 0;      // the swapchain's, this frame
+    uint32_t requested_w_ = 0, requested_h_ = 0;  // a headless run's --size
     float world_scale_ = 1.0f;
     rhi::Format depth_format_ = rhi::Format::D32F;
 

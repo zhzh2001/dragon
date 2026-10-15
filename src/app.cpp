@@ -473,6 +473,7 @@ bool App::init(const Options& options) {
     tier_.apply(graphics_);
     gfx::set_active_tier(tier_);
     device_.set_world_scale(tier_.budget.world_scale);
+    device_.set_frame_height(tier_.budget.frame_height);
     loaded_graphics_ = graphics_;
     graphics_pending_ = graphics_;
     LOG_INFO("graphics: %s (%s)", gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)), [&] {
@@ -1203,6 +1204,7 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
     tier_.apply(graphics_);
     gfx::set_active_tier(tier_);
     device_.set_world_scale(tier_.budget.world_scale);
+    device_.set_frame_height(tier_.budget.frame_height);
     if (old[Setting::Terrain] != next[Setting::Terrain]) {
         // Low and below shade the ground with the terrain's light variant.
         if ((old[Setting::Terrain] >= 3) != (next[Setting::Terrain] >= 3)) pipelines_.rebuild_all();
@@ -1354,7 +1356,7 @@ void App::build_graphics_ui() {
     // device can do. The pending edit applies on Apply.
     const int preset = graphics_pending_.preset_level(tier_.tier, device_limits_);
     if (ImGui::BeginCombo("preset", preset >= 0 ? gfx::preset_name(preset) : "custom")) {
-        for (int p = 0; p < gfx::QUALITY_LEVELS; ++p) {
+        for (int p = 0; p < gfx::PRESET_COUNT; ++p) {
             if (ImGui::Selectable(gfx::preset_name(p), preset == p)) {
                 graphics_pending_ = gfx::GraphicsSettings::preset(p, tier_.tier, device_limits_);
             }
@@ -7707,7 +7709,8 @@ void App::render() {
     }
     atmosphere_.apply(scene, atmosphere_settings_);
     // The volumetric clouds replace the sky's slab (gfx/clouds.h).
-    scene.clouds2.x = clouds_.active(scene, cloud_settings_) && !ablated("clouds") ? 1.0f : 0.0f;
+    scene.clouds2.x =
+        clouds_.active(scene, cloud_settings_) && tier_.budget.volumetric_clouds && !ablated("clouds") ? 1.0f : 0.0f;
     shadow_.apply(scene);
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
@@ -8058,7 +8061,9 @@ void App::render() {
         // The Bloom setting (gfx/graphics_settings.h) over the panel's dial.
         gfx::PostSettings post = post_settings_;
         if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
-        rhi::Texture* occlusion = ablated("ssao") ? nullptr : ssao_.run(device_, active_camera(), aspect, ssao_settings_);
+        rhi::Texture* occlusion = ablated("ssao") || !tier_.budget.ambient_occlusion
+                                      ? nullptr
+                                      : ssao_.run(device_, active_camera(), aspect, ssao_settings_);
         rhi::Texture* resolved = taa_.resolve(device_, device_.scene_hdr(), device_.world_width(), device_.world_height());
         if (!taa_.active()) post.sharpen = 0.0f;
         // The modern tier's (SM3 runs this composite too, and keeps its picture).

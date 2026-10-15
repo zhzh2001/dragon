@@ -276,11 +276,34 @@ half the world's resolution, no volumetric clouds, no SSAO -- or an sm3
 one at native, which plays at 43-50 fps. The device table's "Modern, Low
 to Medium" was the published-figure estimate and is wrong by about 3x.
 
-**Next**, in order: a phone preset (Low, 50% world, painted clouds, no
-SSAO) and a default tier picked from the GPU, measured live; the cloud
-march and the composite, the two fixed costs left; touch controls through
-the HUD kit; lifecycle (pause on background, the swapchain on return); the
-safe area; the assets inside a release APK.
+**The Phone preset** (`--preset phone`, the default on Android) is Low's
+content plus three settings the level presets all keep whole: Clouds
+(volumetric or the painted slab), Ambient occlusion (on, off) and Frame
+height (native, 1080, 900, 720 or 540 lines). The frame cap sizes every
+target, the HUD's included, to that many lines in the window's shape, and
+the present's blit stretches it to the screen (`gfx::Device::
+set_frame_height`); ImGui lays out in the window's points and draws at the
+frame's scale, so the HUD keeps its layout. A capped frame never draws
+into the backbuffer directly (`frame_target`), which is the screen's size.
+Phone takes 720 lines and a 70% world in them: on the K30 a 1600x720
+frame and a 1120x504 world. Live, the demo pilot, by world scale:
+
+| World scale in the 720-line frame | Live fps | Median |
+|---|---|---|
+| 100% | 18.2 | 51.7 ms |
+| 85% (Low's) | 24.4 | 39.0 ms |
+| **70% (Phone)** | **35.7** | **28.0 ms** |
+
+and the shipped default over 3,600 frames (106 s of the demo): 33.8 fps,
+median 29.9 ms, 1% low 35.1 ms. M1's exit test asks 30 fps or better
+over ten minutes; this is the first two.
+
+**Next**, in order: a ten-minute live soak for the thermal curve; a
+default tier picked from the GPU (the Ace 3V should start higher); the
+cloud march and the composite, the two fixed costs left for the presets
+above Phone; touch controls through the HUD kit; lifecycle (pause on
+background, the swapchain on return); the safe area; the assets inside a
+release APK.
 
 ## What every mobile target needs
 

@@ -24,12 +24,20 @@ namespace gfx {
 enum class Tier : uint8_t;
 
 enum class Setting : uint8_t {
-    Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, View, Hud, Particles, Count
+    Models, Terrain, Trees, Grass, Rocks, Textures, Shadows, Bloom, Resolution, View, Hud, Particles,
+    Clouds, Ambient, Frame, Count
 };
 constexpr int SETTING_COUNT = int(Setting::Count);
 // Ultra to Minimal, and Lowest below it: for a card slower than the G41's
 // M6 (a Rage XL), with the quality it costs set apart from Minimal's.
 constexpr int QUALITY_LEVELS = 7;
+// And one preset that is not a level: Phone (docs/porting/MOBILE.md), Low's
+// content with the modern tier's fixed costs cut -- the painted cloud slab,
+// no ambient occlusion -- and the whole frame, HUD included, capped at 720
+// lines and stretched to the screen, the world at 70% of it. The default on
+// Android.
+constexpr int PHONE_PRESET = QUALITY_LEVELS;
+constexpr int PRESET_COUNT = QUALITY_LEVELS + 1;
 
 // What a setting needs to change: drawn next frame, re-planted or re-meshed
 // at once, or loaded again at start-up.
@@ -43,7 +51,7 @@ struct SettingInfo {
 };
 const SettingInfo& setting_info(Setting setting);
 
-const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low", "minimal"
+const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone"
 bool parse_preset(const std::string& name, int* level);
 
 // What the device offers beyond its tier.
@@ -111,6 +119,13 @@ struct ContentBudget {
     // chunks, the skirt and models are culled, and the fog is thickened to
     // reach it (App::render).
     float view_distance = 0.0f;
+    // The modern tier's volumetric clouds (gfx/clouds.h), or its painted
+    // slab; and its screen-space ambient occlusion (gfx/ssao.h).
+    bool volumetric_clouds = true;
+    bool ambient_occlusion = true;
+    // The frame's height at most, the HUD's included (0: the window's): a
+    // taller window gets the frame stretched to it (gfx::Device).
+    uint32_t frame_height = 0;
     // The HUD's shapes without their anti-aliasing fringe, which is half the
     // triangles of a plate on a card that pays per triangle.
     bool plain_hud = false;
