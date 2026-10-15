@@ -333,6 +333,7 @@ public:
         SDL_GL_MakeCurrent(window, context_);
         SDL_GL_SetSwapInterval(config.vsync ? 1 : 0);
         LOG_INFO("gles: %s | %s | %s", glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION));
+        stats_ = SDL_getenv("DRAGON_GLES_STATS") != nullptr;
         index32_ = has_extension("GL_OES_element_index_uint");
         depth24_ = has_extension("GL_OES_depth24");
         discard_ = has_extension("GL_EXT_discard_framebuffer");
@@ -432,6 +433,14 @@ public:
     }
 
     void end_frame(Texture* source, uint32_t width, uint32_t height, std::vector<uint8_t>* readback) override {
+        // DRAGON_GLES_STATS: what a frame asks of the driver, every 300 frames
+        // -- on the Pi 1B, Mesa's per-draw cost is most of the frame.
+        if (stats_ && ++stat_frames_ % 300 == 0) {
+            LOG_INFO("gles stats: %.0f draws a frame (%.0f of them instances), %.0f uniform uploads, %.0f programs",
+                     double(stat_draws_) / 300.0, double(stat_instances_) / 300.0, double(stat_uniforms_) / 300.0,
+                     double(stat_programs_) / 300.0);
+            stat_draws_ = stat_instances_ = stat_uniforms_ = stat_programs_ = 0;
+        }
         if (readback && source) download(source, width, height, *readback);
         if (!headless_ && source) {
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -699,6 +708,7 @@ public:
         if (program_ != p->program) {
             glUseProgram(p->program);
             program_ = p->program;
+            ++stat_programs_;
         }
         const PipelineDesc& d = p->desc;
         set_enabled(GL_DEPTH_TEST, d.depth_format != Format::Invalid && d.depth_test, depth_test_);
@@ -765,6 +775,8 @@ public:
         for (uint32_t i = 0; i < std::max(1u, instance_count); ++i) {
             if (!setup_attributes(p, 0, first_instance + i)) return;
             glDrawArrays(mode, GLint(first_vertex), GLsizei(vertex_count));
+            ++stat_draws_;
+            if (instance_count > 1) ++stat_instances_;
         }
     }
 
@@ -783,6 +795,8 @@ public:
         for (uint32_t i = 0; i < std::max(1u, instance_count); ++i) {
             if (!setup_attributes(p, vertex_offset, first_instance + i)) return;
             glDrawElements(mode, GLsizei(index_count), type, reinterpret_cast<const void*>(offset));
+            ++stat_draws_;
+            if (instance_count > 1) ++stat_instances_;
         }
     }
 
@@ -908,6 +922,7 @@ private:
                 if (block.generation == a.uploaded || block.data.empty()) continue;
                 const int vec4s = std::min(a.vec4s, int(block.data.size() / 4));
                 glUniform4fv(a.location, vec4s, block.data.data());
+                ++stat_uniforms_;
                 a.uploaded = block.generation;
             }
         }
@@ -1066,6 +1081,8 @@ private:
     int depth_test_ = -1, cull_ = -1, blend_ = -1;
     AttributeKey attribute_key_;
     bool attributes_valid_ = false;
+    bool stats_ = false;
+    uint64_t stat_frames_ = 0, stat_draws_ = 0, stat_instances_ = 0, stat_uniforms_ = 0, stat_programs_ = 0;
 
 };
 

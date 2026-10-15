@@ -586,7 +586,7 @@ private:
     void update_prey(float dt, const game::CombatEvents& events);
     void draw_prey(rhi::Pass* pass);
     void draw_prey_shadows(rhi::Pass* shadow_pass);
-    bool pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin);
+    bool pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin, bool main_view = false);
     // Which tower silhouette a defence wears: the keep guards caches, the
     // spire stands on the slopes. Hit sphere and brazier follow the model.
     bool defence_is_spire(int defence) const;

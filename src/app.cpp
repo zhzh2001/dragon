@@ -389,8 +389,11 @@ bool App::init(const Options& options) {
         options_.tier = gfx::Tier::SM3;
     }
 #ifdef DRAGON_GLES_DEFAULT
-    // A build for a GPU with no Vulkan (the Pi 1B, tools/pi/build.sh).
+    // A build for a GPU with no Vulkan (the Pi 1B, tools/pi/build.sh): GLES,
+    // and the fixed-function tier unless another is asked for -- at Minimal,
+    // the tier's default, it is the one the ARM11 holds at 25 fps.
     if (options_.gpu_driver.empty()) options_.gpu_driver = "gles";
+    if (options_.tier == gfx::Tier::Modern) options_.tier = gfx::Tier::FixedFunction;
 #endif
     // GLES 2.0 the LDR ones (rhi/gles): no float targets for sm3's HDR.
     if (options_.gpu_driver == "gles" && (options_.tier == gfx::Tier::Modern || options_.tier == gfx::Tier::SM3)) {
@@ -432,6 +435,11 @@ bool App::init(const Options& options) {
     }
 #endif
     tier_ = gfx::RenderTier::make(options_.tier);
+    // GLES pays per draw, not per vertex: on the Pi 1B, Mesa's vc4 cost about
+    // 100 us a terrain draw, and 624 m chunks took a run from 245 draws a
+    // frame to 105 and 25.8 fps to 31 (docs/porting/MOBILE.md). D3D9's
+    // fixed-function cards are the other way round (PORTING.md, R6).
+    if (options_.gpu_driver == "gles" && tier_.fixed_function) tier_.terrain_chunk_metres *= 2.0f;
     // DRAGON_TERRAIN_CHUNK=metres: the terrain's draw granularity, for
     // measuring what a draw costs on a slow machine (PORTING.md, R6).
     if (const char* chunk = SDL_getenv("DRAGON_TERRAIN_CHUNK")) tier_.terrain_chunk_metres = float(SDL_atof(chunk));
@@ -467,6 +475,11 @@ bool App::init(const Options& options) {
     device_limits_.max_texture_size = device_.rhi().max_texture_size();
     device_limits_.sampled_depth = device_.rhi().supports_format(rhi::Format::D16, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED);
     graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
+#ifdef DRAGON_GLES_DEFAULT
+    // On the Pi the frame at 540 lines, whatever the monitor's mode: VC4
+    // fills a 1080p frame's post and HUD at a fraction of the frame rate.
+    graphics_[gfx::Setting::Frame] = 5;
+#endif
     if (!saved.empty()) graphics_.parse(saved);
     if (options.preset >= 0) graphics_ = gfx::GraphicsSettings::preset(options.preset, tier_.tier, device_limits_);
     if (!options.graphics.empty()) {
@@ -1529,6 +1542,10 @@ void App::regenerate_terrain() {
     // work on CPUs that are a tenth of the M5's, for the same valleys at the
     // scale their coarser meshes can show (game/erosion.h).
     if (tier_.vertex_lighting || tier_.fixed_function) settings.erosion_cell *= 2.0f;
+    // And Minimal's 48 m ground on one as coarse as its mesh: a quarter of the
+    // work again. The Pi 1B eroded each valley for 24 s, a stall at every
+    // valley of a run (docs/porting/MOBILE.md).
+    if (tier_.fixed_function && tier_.budget.terrain_cell_scale >= 8.0f) settings.erosion_cell *= 2.0f;
     terrain_.generate(settings);
     // The material follows the terrain that came out -- before the meshes are
     // built, since the fixed-function tier bakes it into their colours.
@@ -5658,7 +5675,7 @@ void App::update_prey(float dt, const game::CombatEvents& events) {
 
 // One grazer's pose: its gait's clip at its own phase, a carcass lying on its
 // side at the bind pose. Returns false for one that is not drawn.
-bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin) {
+bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin, bool main_view) {
     if (prey.state == game::PreyState::Eaten) return false;
     const game::PreyClip clip = game::prey_clip(prey, prey_.tuning);
     // The grazer faces +Z; the engine's forward is -Z.
@@ -5670,6 +5687,14 @@ bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core:
     const float scale = prey_.tuning.scale;
     model = core::Mat4::trs(prey.position + core::Vec3{0.0f, clip == game::PreyClip::Dead ? 0.8f * scale : 0.0f, 0.0f},
                             facing, core::Vec3(scale));
+    // Not posed for nothing: a grazer behind the camera, or too small to draw,
+    // skipped before its 37 joints are (a twelfth of the Pi 1B's frame went
+    // on animals it then culled).
+    if (main_view) {
+        gfx::ModelUniforms at;
+        at.model = model;
+        if (!world_.skinned_in_view(grazer_prop_.mesh, at)) return false;
+    }
     const anim::Skeleton& skeleton = grazer_prop_.skeleton;
     grazer_pose_.reset_to_bind(skeleton);
     const int which = clip == game::PreyClip::Run ? grazer_clip_[2]
@@ -5689,7 +5714,7 @@ void App::draw_prey(rhi::Pass* pass) {
         if (core::distance(eye, prey.position) > 2200.0f) continue;
         core::Mat4 model;
         if (grazer_prop_.ok) {
-            if (!pose_prey(prey, model, grazer_skin_)) continue;
+            if (!pose_prey(prey, model, grazer_skin_, true)) continue;
             gfx::ModelUniforms m;
             m.model = model;
             // Lifted like the towers: the hide is dark, and a herd in a valley read as black.

@@ -142,6 +142,11 @@ public:
         ground_scans_[2] = gravel;
     }
     void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
+    // Whether draw_skinned would draw `mesh` at `model` in the main view:
+    // asked before posing a skeleton nobody will see.
+    bool skinned_in_view(const anim::SkinnedMesh& mesh, const ModelUniforms& model) const {
+        return in_view(model, mesh.bound_centre(), mesh.bound_radius(), 1.5f);
+    }
 private:
     rhi::Sampler* white_sampler_ = nullptr;
     float camera_distance(const ModelUniforms& model) const;

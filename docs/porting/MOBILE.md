@@ -356,10 +356,31 @@ measured-first estimate was 15-40 ms. Start-up is 96 s, half of it the
 terrain's erosion (24 s) run twice: once before the preset applies and
 once after.
 
-**Next on the Pi**: generate the terrain once; batch the terrain's chunk
-draws as D3D9's CPU path does; a Pi preset and default (the sm2 tier's
-default Medium is far too much); keyboard and pad through KMSDRM's evdev;
-audio through miniaudio's ALSA; a playtest on a monitor.
+**Optimised the same day** (`perf` 5.10 works on the Pi's 6.1 kernel with
+`-e cpu-clock`; the ARM11's counters cannot sample; `DRAGON_GLES_STATS=1`
+logs draws, uniform uploads and programs a frame):
+
+| Change | Run, 640x480, ff Minimal |
+|---|---|
+| As first built | 22.9 fps, median 43.0 ms |
+| The GLES backend no longer re-points unchanged vertex attributes (vc4 revalidated its vertex state every draw) | 24.4 fps |
+| Grazers posed only when the main view will draw them | 25.8 fps |
+| 624 m terrain chunks on GLES ff (312 on D3D9, whose cards pay per vertex): 245 draws a frame to 105, 0.017/255 mean change in the frame | **31-34 fps**, median 30-31 ms |
+
+And start-up: the erosion ran for an arena valley a start into a run never
+shows (a launch with no arguments is one), and the fixed-function far
+ground ran it again on identical inputs; now once. At Minimal it erodes on
+48 m cells, its mesh's size, not 24: 24 s to 5.6 s, which was also a stall
+at every valley of a run.
+
+The Pi build's defaults: the ff tier (whose default is Minimal) and the
+frame at 540 lines whatever the monitor's mode (Frame height); 30.7 fps
+headless at a 1920x1080 window size. A saved configuration or `--tier` and
+`--preset` win.
+
+**Next on the Pi**: keyboard and pad through KMSDRM's evdev; audio through
+miniaudio's ALSA; a playtest on a monitor; the rest of Mesa's per-draw
+cost (vegetation's per-instance draws, 5.5 ms).
 
 ## What every mobile target needs
 
