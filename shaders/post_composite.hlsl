@@ -89,8 +89,12 @@ float4 fs_main(PostVertex input) : SV_Target {
     }
 #ifdef ATMOSPHERE
     // The ambient occlusion, before the bloom: a darkened crevice does not
-    // glow less, but it is the scene's own light that it takes away.
-    c *= lerp(1.0, occlusion.Sample(occlusion_sampler, input.uv).r, post.occlusion.x);
+    // glow less, but it is the scene's own light that it takes away -- the
+    // ambient part of it, which the world shaders leave in the alpha
+    // (occlusion_share): the sun reaching a field beside a tree is not
+    // occluded by the tree.
+    float share = scene_color.Sample(scene_color_sampler, input.uv).a;
+    c *= lerp(1.0, occlusion.Sample(occlusion_sampler, input.uv).r, post.occlusion.x * share);
 #endif
     float3 glow = bloom.Sample(bloom_sampler, input.uv).rgb;
     c += glow * post.grade.w;

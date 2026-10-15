@@ -810,6 +810,10 @@ private:
     gfx::Foliage foliage_;
     std::vector<game::PlantInstance> grass_scratch_[gfx::GRASS_KINDS];
     void replant();
+    void upload_canopy();
+    // The terrain's grid as the sun and the river see it (gfx::Atmosphere):
+    // heights, then the forest's canopy on the same texels.
+    static constexpr int SUN_GRID = 1024;
     // The coarse ground beyond the playable extent.
     gfx::Mesh terrain_skirt_mesh_;
     std::vector<gfx::MeshChunk> terrain_chunks_;

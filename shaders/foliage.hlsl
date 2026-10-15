@@ -10,7 +10,7 @@
 
 struct FoliageParams {
     float4 wind_time_fade;  // x wind, y time, z fade start, w fade end
-    float4 extra;           // x nominal height at scale 1, y LOD distance
+    float4 extra;           // x nominal height at scale 1, y LOD distance, z the LOD band (a fraction of it)
 };
 
 struct VertexIn {
@@ -72,6 +72,15 @@ struct VertexOut {
 // Both stages read it: the vertex stage the wind and the fade, the fragment
 // stage the LOD distance.
 ConstantBuffer<FoliageParams> params : UNIFORM_SLOT(1);
+
+// How far through the LOD band a plant at `distance` is, 0 before it and 1
+// past it: the detail cards are gone by 1 and the coarse ones carry the
+// crown alone, cut out a little less and darker, for the cards inside the
+// crown they stand in for (the per-pixel path; gfx::Foliage::lod_band).
+float crown_thicken(float distance) {
+    float lod = params.extra.y;
+    return saturate((distance - lod) / max(lod * params.extra.z, 1.0));
+}
 
 #ifdef VERTEX_STAGE
 // The placed, swaying vertex in world space. foliage_depth.hlsl repeats the
@@ -174,6 +183,12 @@ VertexOut vs_main(VertexIn input) {
     o.material = float4(float(material), tag >= FOLIAGE_DETAIL ? 1.0 : 0.0,
                         length(input.position_scale.xyz - scene.camera_position.xyz),
                         frac(input.params.z * 0.15915494));  // the sway phase, reused as a hash
+#ifdef ATMOSPHERE
+    // The modern tier's LOD goes card by card (the per-pixel path): each
+    // detail card its own threshold, the plant's hash plus its shade, which
+    // card_crown draws per card.
+    o.material.w = frac(o.material.w + input.color.y * 913.7);
+#endif
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     return o;
 }
@@ -218,11 +233,26 @@ float4 fs_main(VertexOut input) : SV_Target {
     // ones carry the crown. Dithered per instance over a 30% band with the
     // instance's own hash, so a forest thins tree by tree instead of popping
     // at a line.
+    float thicken = 0.0;
+#ifdef ATMOSPHERE
+    // The modern tier's: card by card over a band as wide as the LOD
+    // distance (900 m there, gfx::Foliage::init), while the coarse cards
+    // thicken a little to hold the crown's cover. Each tree went from its
+    // full crown to its impostor at once at 240 m, and the impostor -- a
+    // few large cards, the trunk showing through, a spruce turned into a
+    // square blob -- was so unlike it that a tree changed as it crossed.
+    if (input.material.y > 0.5) {
+        if (crown_thicken(input.material.z) > input.material.w) discard;
+    } else {
+        thicken = crown_thicken(input.material.z);
+    }
+#else
     if (input.material.y > 0.5) {
         float lod = params.extra.y;
         float t = (input.material.z - lod) / max(lod * 0.3, 1.0);
         if (t > input.material.w) discard;
     }
+#endif
 
     float3 albedo = input.albedo;
     float3 geometric_normal = normalize(input.world_normal);
@@ -233,7 +263,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         float4 card = material == FOLIAGE_MAT_LEAF
                           ? leaf_card.Sample(leaf_card_sampler, input.uv)
                           : needle_card.Sample(needle_card_sampler, input.uv);
-        if (card.a < 0.45) discard;
+        if (card.a < 0.45 - 0.08 * thicken) discard;
         // The map's greys average about 0.45; normalised so the palette entry
         // is the crown's mean colour, with the map's mottle around it.
         albedo *= card.r * 2.2;
@@ -241,6 +271,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         // shade. Judged on the geometric normal before the facing flip.
         float under = saturate(-geometric_normal.y);
         albedo *= 1.0 - 0.35 * under;
+        // A thickened impostor stands in for the cards inside the crown
+        // too, which are darker than its shell.
+        albedo *= 1.0 - 0.15 * thicken;
     } else if (material == FOLIAGE_MAT_BARK) {
         // Bark: vertical streaks, in u around the trunk and stretched along
         // v, from the same value noise the ground grains with.
@@ -264,7 +297,8 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 light = direct_sun(normal, visibility) + ambient +
                    translucent_sun(normal, visibility, translucency);
     float3 lit_color = albedo * light;
-    return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);
+    float3 fogged = apply_fog(lit_color, input.world_position);
+    return float4(scene_out(fogged), occlusion_share(ambient, light));
 }
 
 #endif

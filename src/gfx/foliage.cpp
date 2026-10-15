@@ -447,6 +447,12 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     device_ = device;
     pipelines_ = pipelines;
     shadow_map_ = shadow_map;
+    // The modern tier keeps whole crowns to 900 m and dissolves them to the
+    // impostor by 1800, where a tree is a few pixels tall: measured at
+    // 1080p on the M5, whole crowns at every distance cost 1.3 ms over the
+    // 240 m the retro tiers keep, and the impostor up close was what read
+    // as trees popping.
+    if (active_tier().tier == Tier::Modern) lod_distance = 900.0f;
     pipeline_ = pipelines_->create(make_foliage_desc());
     depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
 
@@ -659,7 +665,7 @@ void Foliage::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene,
 
     Params params;
     params.wind_time_fade = core::Vec4{wind, scene.view_params.z, fade_start, fade_end};
-    params.extra = core::Vec4{height, lod_distance, 0.0f, 0.0f};
+    params.extra = core::Vec4{height, lod_distance, lod_band_for_tier(), 0.0f};
 
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
@@ -678,6 +684,10 @@ void Foliage::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene,
     instance_binding.buffer = instances;
     device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
     device.rhi().draw_indexed(pass, mesh.index_count(), count, 0, 0, 0);
+}
+
+float Foliage::lod_band_for_tier() const {
+    return active_tier().tier == Tier::Modern ? lod_band : 0.3f;
 }
 
 void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
@@ -699,12 +709,16 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
     }
     bind_cards(device, pass, 1);
+    const float band = lod_band_for_tier();
+    const float reach = tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap) : tree_draw_distance;
+    const bool modern = active_tier().tier == Tier::Modern;
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
         Params params;
-        params.wind_time_fade = core::Vec4{wind, scene.view_params.z, 1e8f, 2e8f};
-        params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, 0.0f, 0.0f};
+        params.wind_time_fade = modern ? core::Vec4{wind, scene.view_params.z, reach * (1.0f - tree_fade_band), reach}
+                                       : core::Vec4{wind, scene.view_params.z, 1e8f, 2e8f};
+        params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, band, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
         set.mesh.bind(device.rhi(), pass);
@@ -713,13 +727,12 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         for (const Cell& cell : set.cells) {
             const float nearest = core::distance(eye, cell.centre) - cell.radius;
-            if (nearest > (tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap)
-                                                    : tree_draw_distance)) continue;
+            if (nearest > reach) continue;
             if (!frustum.sees(cell.centre, cell.radius)) continue;
-            // Wholly past the dither band (lod_distance * 1.3, foliage.hlsl):
-            // the coarse cards only. Fixed function has no dither, so its
-            // crowns are the coarse cards everywhere.
-            const bool coarse = set.coarse_indices > 0 && (active_tier().fixed_function || nearest > lod_distance * 1.3f);
+            // Wholly past the dither band (foliage.hlsl): the coarse cards
+            // only. Fixed function has no dither, so its crowns are the
+            // coarse cards everywhere.
+            const bool coarse = set.coarse_indices > 0 && (active_tier().fixed_function || nearest > lod_distance * (1.0f + band));
             device.rhi().draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
                                          cell.first);
             trees_drawn_ += cell.count;
@@ -769,7 +782,11 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
         Params params;
         params.wind_time_fade = core::Vec4{wind, time, 1e8f, 2e8f};
-        params.extra = core::Vec4{tree_height(TreeKind(k)), 0.0f, 0.0f, 0.0f};
+        // The far cascade's coarse crowns thickened as the colour pass's are
+        // past the LOD band (foliage_depth.hlsl), so a tree's shadow keeps
+        // its weight there.
+        const float thicken = coarse && active_tier().tier == Tier::Modern ? 1.0f : 0.0f;
+        params.extra = core::Vec4{tree_height(TreeKind(k)), 0.0f, thicken, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         set.mesh.bind(device.rhi(), pass);
         rhi::BufferBinding instance_binding = {};

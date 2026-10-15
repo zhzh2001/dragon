@@ -599,13 +599,17 @@ public:
             return nullptr;
         }
 
+        // A blended draw leaves the target's alpha alone: in the modern
+        // tier's scene target it is the share of each pixel the ambient
+        // occlusion may darken (scene_common.hlsl, occlusion_share), written
+        // by the opaque surface the water or the fire is drawn over.
         SDL_GPUColorTargetBlendState blend = {};
         if (d.blend == Blend::Additive) {
             blend.enable_blend = true;
             blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
-            blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
             blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
         } else if (d.blend == Blend::Alpha) {
@@ -613,8 +617,8 @@ public:
             blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
             blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
             blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
-            blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-            blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+            blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
         }
         SDL_GPUColorTargetDescription color_target = {};

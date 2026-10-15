@@ -278,11 +278,31 @@ void Atmosphere::set_heightfield(const std::vector<float>& heights, int n, float
         heights_size_ = uint32_t(n);
     }
     if (!heights_) return;
-    std::vector<uint16_t> texels(heights.size() * 4, 0);
-    for (size_t i = 0; i < heights.size(); ++i) texels[i * 4] = to_half(heights[i]);
-    rhi.upload_texture(heights_, texels.data(), uint32_t(n), uint32_t(n), false);
+    height_texels_.assign(heights.size() * 4, 0);
+    for (size_t i = 0; i < heights.size(); ++i) height_texels_[i * 4] = to_half(heights[i]);
+    rhi.upload_texture(heights_, height_texels_.data(), uint32_t(n), uint32_t(n), false);
     heights_half_ = half;
     terrain_sun_dirty_ = true;
+}
+
+void Atmosphere::set_canopy(const std::vector<float>& cover, const std::vector<float>& top, int n) {
+    if (!device_ || !heights_ || heights_size_ != uint32_t(n) || cover.size() != size_t(n) * size_t(n) ||
+        top.size() != cover.size() || height_texels_.size() != cover.size() * 4) {
+        return;
+    }
+    for (size_t i = 0; i < cover.size(); ++i) {
+        height_texels_[i * 4 + 1] = to_half(cover[i]);
+        height_texels_[i * 4 + 2] = to_half(top[i]);
+    }
+    device_->rhi().upload_texture(heights_, height_texels_.data(), uint32_t(n), uint32_t(n), false);
+}
+
+void Atmosphere::bind_heights(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const {
+    if (!available() || !heights_) return;
+    rhi::TextureBinding binding = {};
+    binding.texture = heights_;
+    binding.sampler = sampler_;
+    rhi.bind_fragment_textures(pass, slot, &binding, 1);
 }
 
 void Atmosphere::bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot, bool terrain_sun) const {

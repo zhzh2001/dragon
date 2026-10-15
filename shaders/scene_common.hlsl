@@ -492,20 +492,48 @@ float3 translucent_sun(float3 normal, float visibility, float translucency) {
 // surface dimmed by the transmittance, the in-scattered light added -- and
 // the valley fog stays on top of it at atmosphere.w of its density, toward
 // the atmosphere's own sky.
+#ifdef USE_ATMOSPHERE
+// How much of the pixel is the surface's own light, after the air in front
+// of it has dimmed it and added its glow (apply_fog sets it): the ambient
+// occlusion darkens that part only (occlusion_share).
+static float g_surface_share = 1.0;
+#endif
 float3 apply_fog(float3 lit_color, float3 world_position) {
     float3 to_point = world_position - scene.camera_position.xyz;
     float dist = length(to_point);
     float density = scene.fog_color.a * exp(-max(world_position.y, 0.0) * 0.0018);
     float3 ray = to_point / max(dist, 1e-3);
 #ifdef USE_ATMOSPHERE
+    float3 surface = lit_color;
     if (atmosphere_on()) {
         float4 air = atmo_aerial(world_position);
         lit_color = lit_color * air.a + air.rgb;
+        surface *= air.a;
         density *= scene.atmosphere.w;
     }
 #endif
     float fog = 1.0 - exp(-pow(dist * density, 2.0));
-    return lerp(lit_color, sky_color(ray), saturate(fog));
+    float3 result = lerp(lit_color, sky_color(ray), saturate(fog));
+#ifdef USE_ATMOSPHERE
+    const float3 L = float3(0.2126, 0.7152, 0.0722);
+    g_surface_share = saturate(dot(surface, L) * (1.0 - saturate(fog)) / max(dot(result, L), 1e-5));
+#endif
+    return result;
+}
+
+// What a world shader writes in the scene target's alpha (docs/FIDELITY.md,
+// F6): the share of the pixel the ambient occlusion may darken -- the
+// ambient light's part of the light that reached it, times the surface's
+// share after the fog. Screen-space occlusion knows only the depth, so the
+// composite multiplied it into the sun as well, and a sunlit field went grey
+// in a blot around every tree. 1 on the retro tiers, which have no occlusion.
+float occlusion_share(float3 ambient, float3 light) {
+#ifdef USE_ATMOSPHERE
+    const float3 L = float3(0.2126, 0.7152, 0.0722);
+    return saturate(dot(ambient, L) / max(dot(light, L), 1e-5)) * g_surface_share;
+#else
+    return 1.0;
+#endif
 }
 
 #ifdef FIXED_FUNCTION

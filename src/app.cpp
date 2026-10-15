@@ -1429,6 +1429,53 @@ void App::replant() {
     for (int k = 0; k < gfx::ROCK_KINDS; ++k) foliage_.set_rocks(device_, k, vegetation_.rocks(k));
     LOG_INFO("rocks: %zu placed", vegetation_.rock_count());
     foliage_.wind = vegetation_settings_.wind;
+    upload_canopy();
+}
+
+// The forest as the river reflects it (water.hlsl, docs/FIDELITY.md F8):
+// each tree's crown splatted onto the heightfield's grid as cover, with the
+// height of the tops, then softened over three texels. The reflection
+// traced only the ground, so a river lined with trees mirrored the bare
+// bank and the sky behind where they stood.
+void App::upload_canopy() {
+    if (!atmosphere_.available()) return;
+    const int n = SUN_GRID;
+    const float half = material_.half_extent;
+    const float texel = 2.0f * half / float(n);
+    std::vector<float> cover(size_t(n) * size_t(n), 0.0f), top(cover.size(), 0.0f);
+    for (int k = 0; k < gfx::TREE_KINDS; ++k) {
+        const float height = gfx::Foliage::tree_height(gfx::TreeKind(k));
+        for (const game::PlantInstance& tree : vegetation_.trees(gfx::TreeKind(k))) {
+            const int i = int((tree.position_scale.x + half) / texel);
+            const int j = int((tree.position_scale.z + half) / texel);
+            if (i < 0 || j < 0 || i >= n || j >= n) continue;
+            const float scale = tree.position_scale.w;
+            // A crown about a third as wide as the tree is tall.
+            const float radius = 0.17f * height * scale;
+            const size_t at = size_t(j) * size_t(n) + size_t(i);
+            cover[at] += 3.14159f * radius * radius / (texel * texel);
+            top[at] = core::maxf(top[at], height * scale);
+        }
+    }
+    std::vector<float> soft_cover(cover.size(), 0.0f), soft_top(cover.size(), 0.0f);
+    for (int j = 0; j < n; ++j) {
+        for (int i = 0; i < n; ++i) {
+            float c = 0.0f, t = 0.0f, w = 0.0f;
+            for (int dj = -1; dj <= 1; ++dj) {
+                for (int di = -1; di <= 1; ++di) {
+                    const int x = std::clamp(i + di, 0, n - 1), z = std::clamp(j + dj, 0, n - 1);
+                    const size_t at = size_t(z) * size_t(n) + size_t(x);
+                    c += cover[at];
+                    t += top[at] * cover[at];
+                    w += cover[at];
+                }
+            }
+            const size_t at = size_t(j) * size_t(n) + size_t(i);
+            soft_cover[at] = core::minf(c / 9.0f, 1.0f);
+            soft_top[at] = w > 0.0f ? t / w : 0.0f;
+        }
+    }
+    atmosphere_.set_canopy(soft_cover, soft_top, n);
 }
 
 void App::regenerate_terrain() {
@@ -1468,7 +1515,6 @@ void App::regenerate_terrain() {
     // out at (gfx::Atmosphere::set_heightfield): 7 m a texel. Rendered
     // heights, so the shadows fall from the ground that is drawn.
     if (atmosphere_.available()) {
-        constexpr int SUN_GRID = 1024;
         const float half = material_.half_extent;
         std::vector<float> heights(size_t(SUN_GRID) * size_t(SUN_GRID));
         for (int j = 0; j < SUN_GRID; ++j) {
@@ -2929,6 +2975,10 @@ void App::build_ui(float dt) {
             ImGui::SliderFloat("wind", &vegetation_settings_.wind, 0.0f, 3.0f);
             ImGui::SliderFloat("crown detail distance", &foliage_.lod_distance, 40.0f, 800.0f,
                                "%.0f m");
+            if (tier_.tier == gfx::Tier::Modern) {
+                ImGui::SliderFloat("crown detail band", &foliage_.lod_band, 0.1f, 2.0f, "%.2f x distance");
+                ImGui::SliderFloat("tree fade band", &foliage_.tree_fade_band, 0.0f, 0.5f, "%.2f x draw distance");
+            }
             ImGui::TextDisabled("%u trees (%u drawn), %u grass tufts near the camera", foliage_.tree_count(),
                                 foliage_.trees_drawn(),
                                 foliage_.grass_count());
@@ -3019,6 +3069,7 @@ void App::build_ui(float dt) {
                 ImGui::SliderFloat("AO radius", &a.radius, 0.5f, 10.0f, "%.1f m");
                 ImGui::SliderFloat("AO intensity", &a.intensity, 0.2f, 4.0f, "%.2f");
                 ImGui::SliderFloat("AO strength", &a.strength, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("AO angle bias", &a.bias, 0.0f, 0.6f, "%.2f");
             }
         }
         ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");

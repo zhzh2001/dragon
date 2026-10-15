@@ -88,7 +88,17 @@ public:
     // Past this camera distance a crown's detail cards are dropped and its
     // coarse cards carry it: the impostor, without a second mesh or a second
     // draw. Dithered over a band so trees do not pop.
-    float lod_distance = 240.0f;
+    float lod_distance = 240.0f;  // 900 on the modern tier (init)
+    // How wide that band is, as a fraction of the distance. The modern tier
+    // dissolves the detail card by card over a wide one while the coarse
+    // cards thicken (foliage.hlsl, crown_thicken); a retro tier keeps its
+    // 30%, tree by tree.
+    float lod_band = 1.0f;
+    float lod_band_for_tier() const;
+    // The modern tier's trees shrink into the ground over this last fraction
+    // of their draw distance, rather than whole ground cells appearing at
+    // its edge.
+    float tree_fade_band = 0.15f;
 
     // Nominal height of each kind at scale 1, for the sway's height fraction.
     static float tree_height(TreeKind kind);

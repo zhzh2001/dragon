@@ -48,6 +48,11 @@ DepthOut vs_main(VertexIn input) {
     o.uv = input.uv;
     int tag = int(input.color.z + 0.5);
     o.material = float(tag >= 10 ? tag - 10 : tag);
+    // A thickened crown (extra.z, the far cascade on the modern tier): its
+    // coarse cards cut out a little less, as the colour pass draws them past
+    // the LOD band (foliage.hlsl). Carried to the pixel stage in the
+    // material's fraction.
+    if (params.extra.z > 0.0 && tag < 10) o.material += 0.25 * params.extra.z;
     WRITE_DEPTH_VARYING(o);
     return o;
 }
@@ -64,7 +69,7 @@ DEPTH_FRAGMENT_RETURN fs_main(DepthOut input) DEPTH_FRAGMENT_SEMANTIC {
     if (material == 1 || material == 2) {
         float alpha = material == 1 ? leaf_card.Sample(leaf_card_sampler, input.uv).a
                                     : needle_card.Sample(needle_card_sampler, input.uv).a;
-        if (alpha < 0.45) discard;
+        if (alpha < 0.45 - 0.08 * frac(input.material) * 4.0) discard;
     }
     DEPTH_FRAGMENT_END(input);
 }

@@ -1,10 +1,12 @@
 // The modern tier's slots: the shadow map (trees, creatures and the banks
-// on the water), the atmosphere's atlas, the terrain's shadow heights.
+// on the water), the atmosphere's atlas, the terrain's shadow heights, and
+// the heights texture with the forest's canopy (gfx::Atmosphere::set_canopy).
 #define ATMOSPHERE_SLOT 1
 #define TERRAIN_SUN_SLOT 2
 #include "scene_common.hlsl"
 #if defined(FRAGMENT_STAGE) && defined(ATMOSPHERE)
 DEPTH2D(shadow_map, 0);
+TEXTURE2D(canopy_map, 3);
 #endif
 
 // A still water surface: one quad at the water line, fresnel between a deep
@@ -114,9 +116,15 @@ float water_ground(float2 xz) {
     float2 uv = xz / max(half_extent, 1.0) * 0.5 + 0.5;
     return terrain_sun_map.SampleLevel(terrain_sun_map_sampler, saturate(uv), 0.0).w;
 }
+// The forest there: x its crown cover (0..1), y the height of its tops
+// above the ground (m).
+float2 water_canopy(float2 xz) {
+    float half_extent = scene.view_params.w;
+    float2 uv = xz / max(half_extent, 1.0) * 0.5 + 0.5;
+    return canopy_map.SampleLevel(canopy_map_sampler, saturate(uv), 0.0).yz;
+}
 
-// The current's surface: twelve travelling wave trains, the long ones
-// running with the current and the short ones spread wider about it, each
+// The current's surface: twelve travelling wave trains, each
 // moving at deep water's own speed for its length plus the current's
 // (RIVER_SPEED), their heights summed as slopes. Over them, rough and calm
 // patches drift downstream (value noise), as the wind and the bed make on a
@@ -125,27 +133,35 @@ float water_ground(float2 xz) {
 // aliases, and the earlier noise ripples drew crawling lines from altitude
 // that no anti-aliasing could hold.
 static const float RIVER_SPEED = 2.4;  // m/s
-float2 river_slope(float2 p, float2 flow, float t, float footprint) {
+float2 river_slope(float2 p, float2 flow, float t, float footprint, float calm) {
     float2 across = float2(-flow.y, flow.x);
     float2 carried = p - flow * (RIVER_SPEED * t);
-    float rough = 0.45 + 0.9 * cloud_value(carried / 45.0 + 11.0) * cloud_value(carried / 17.0 - 3.0);
+    // Glassy stretches between the rough ones, and slack water along the
+    // banks (`calm`): a surface rough everywhere alike read as a material,
+    // not as water, and the mirror patches are where the banks reflect.
+    float rough = 0.12 + 1.3 * smoothstep(0.15, 0.75, cloud_value(carried / 45.0 + 11.0) * cloud_value(carried / 17.0 - 3.0) * 1.6);
+    rough *= calm;
     // The waves' domain, warped by a slow noise drifting with the current:
     // summed straight, the long trains interfered into a regular diamond
     // lattice that the sun's glitter drew across the river.
     float2 warp = float2(cloud_value(carried / 23.0 + 5.0), cloud_value(carried / 23.0 - 9.0)) - 0.5;
-    float2 q = p + warp * 9.0;
+    float2 q = p + warp * 6.0;
     float2 slope = (float2)0.0;
     const int WAVES = 12;
     for (int i = 0; i < WAVES; ++i) {
         float fi = float(i);
-        // 14 m down to 0.4 m, each length detuned from the geometric series
-        // so none is a multiple of another.
-        float wavelength = 14.0 * pow(0.72, fi) * (1.0 + 0.13 * sin(fi * 3.7 + 1.1));
+        // 5 m down to 0.15 m, each length detuned from the geometric series
+        // so none is a multiple of another. A river's surface is chop, not
+        // swell: trains from 14 m drew long parallel crests bank to bank,
+        // a wave pool that the sun's glitter hid and any shade showed.
+        float wavelength = 5.0 * pow(0.72, fi) * (1.0 + 0.13 * sin(fi * 3.7 + 1.1));
         float fade = 1.0 - smoothstep(wavelength * 0.25, wavelength * 0.5, footprint);
         if (fade <= 0.0) break;
-        // Spread about downstream, wider for the short ones, golden-angle
-        // offsets so no two trains line up.
-        float spread = (0.35 + 0.08 * fi) * sin(fi * 2.39996 + 0.7);
+        // Every way round, a golden angle apart, so no two trains line up:
+        // a river's chop is the bed's turbulence and the wind's, not a swell
+        // from upstream, and trains spread about downstream alone summed to
+        // crests across the river from bank to bank.
+        float spread = fi * 2.39996 + 0.7;
         float2 dir = normalize(flow * cos(spread) + across * sin(spread));
         float k = 6.2831853 / wavelength;
         float omega = sqrt(9.81 * k);
@@ -157,10 +173,10 @@ float2 river_slope(float2 p, float2 flow, float t, float footprint) {
     return slope * rough;
 }
 
-float3 water_normal(float2 p, float2 flow, float t, float footprint) {
+float3 water_normal(float2 p, float2 flow, float t, float footprint, float calm) {
     // Flatter where a pixel covers a metre or more: the waves there are
     // only what the glint makes of them, and full slopes lit it in patches.
-    float2 s = river_slope(p, flow, t, footprint) * lerp(1.0, 0.45, smoothstep(0.3, 2.0, footprint));
+    float2 s = river_slope(p, flow, t, footprint, calm) * lerp(1.0, 0.45, smoothstep(0.3, 2.0, footprint));
     return normalize(float3(-s.x, 1.0, -s.y));
 }
 
@@ -190,20 +206,53 @@ float3 water_reflected_ground(float3 p) {
 // takes some of it, by how narrowly (the soft-shadow trick, the clearance
 // over a cone widening with the distance): hit or miss alone left hard
 // dark flecks wherever a ripple tipped a ray onto the bank.
+// The forest's crowns, seen from the water: their shaded and sunlit sides
+// both, the green of the stand, under the same air as everything else.
+float3 water_reflected_canopy(float3 p, float3 dir) {
+    float3 n = normalize(float3(-dir.x, 0.5, -dir.z));  // the side of the stand facing the river
+    float3 albedo = lerp(scene.palette[PALETTE_SPRUCE].rgb, scene.palette[PALETTE_BROADLEAF].rgb, 0.35);
+    float3 lit = albedo * (direct_sun(n, terrain_sun(p)) * 0.6 + ambient_light(n) * terrain_sky(p));
+    return apply_fog(lit, p);
+}
+
+// The reflected ray traced through the heightfield, 40 steps growing to
+// 3 km; the sky where it escapes. A ray that only just clears the ground
+// takes some of it, by how narrowly (the soft-shadow trick, the clearance
+// over a cone widening with the distance): hit or miss alone left hard
+// dark flecks wherever a ripple tipped a ray onto the bank. On its way it
+// passes through the forest's crowns (water_canopy) as through a haze as
+// thick as their cover, so a wooded bank mirrors as a dark band of trees.
 float3 water_reflection(float3 origin, float3 dir) {
     float s = 3.0;
     float last = 0.0;
     float clear = 1.0;
     float3 nearest = origin;
+    float through = 1.0;          // light still coming from beyond the crowns
+    float3 in_crowns = (float3)0.0;  // where the crowns took it, weighted
+    float taken = 0.0;
+    float3 behind = (float3)0.0;
+    bool hit = false;
     for (int i = 0; i < 40; ++i) {
         float3 q = origin + dir * s;
-        float above = q.y - water_ground(q.xz);
+        float ground = water_ground(q.xz);
+        float above = q.y - ground;
         if (above < 0.0) {
             // One halving between the last step above and this one below.
             float mid = (last + s) * 0.5;
             float3 m = origin + dir * mid;
             if (m.y < water_ground(m.xz)) q = m;
-            return water_reflected_ground(q);
+            behind = water_reflected_ground(q);
+            hit = true;
+            break;
+        }
+        // The crown band: from a quarter of the tops' height to the tops.
+        float2 canopy = water_canopy(q.xz);
+        if (canopy.x > 0.01 && above < canopy.y && above > canopy.y * 0.25) {
+            float lost = through * (1.0 - exp(-canopy.x * (s - last) / 4.0));
+            in_crowns += q * lost;
+            taken += lost;
+            through -= lost;
+            if (through < 0.02) break;
         }
         float c = above / (2.0 + 0.12 * s);
         if (c < clear) {
@@ -214,10 +263,15 @@ float3 water_reflection(float3 origin, float3 dir) {
         s *= 1.14;
         if (s > 3000.0) break;
     }
-    float3 sky = sky_color(dir);
-    if (clear >= 1.0) return sky;
-    return lerp(water_reflected_ground(nearest - float3(0.0, 1.0, 0.0) * (nearest.y - water_ground(nearest.xz))), sky,
-                smoothstep(0.0, 1.0, clear));
+    if (!hit) {
+        float3 sky = sky_color(dir);
+        behind = clear >= 1.0 ? sky
+                              : lerp(water_reflected_ground(nearest - float3(0.0, 1.0, 0.0) * (nearest.y - water_ground(nearest.xz))),
+                                     sky, smoothstep(0.0, 1.0, clear));
+    }
+    if (taken <= 0.0) return behind;
+    float3 crowns = water_reflected_canopy(in_crowns / taken, dir);
+    return crowns * (1.0 - through) + behind * through;
 }
 #endif
 
@@ -232,19 +286,24 @@ float4 fs_main(VertexOut input) : SV_Target {
         float2 flow = length(input.flow) > 0.1 ? normalize(input.flow) : float2(0.0, -1.0);
         // Metres a pixel here: what the waves fade by.
         float footprint = max(length(ddx(input.world_position)), length(ddy(input.world_position)));
-        float3 n = water_normal(p, flow, t, footprint);
+        float depth = max(scene.terrain_params.x - water_ground(p), 0.0);
+        float3 n = water_normal(p, flow, t, footprint, lerp(0.3, 1.0, smoothstep(0.3, 2.5, depth)));
         float3 reflected = reflect(view, n);
         reflected.y = abs(reflected.y);
         float3 reflection = water_reflection(input.world_position + float3(0.0, 0.3, 0.0), reflected);
 
-        // Under the surface: the bed (gravel, lit through the water) fading
-        // into the deep colour with depth, reds first.
-        float depth = max(scene.terrain_params.x - water_ground(p), 0.0);
+        // Under the surface: the bed (wet gravel, lit through the water)
+        // fading into the water's own colour with depth, reds first. A
+        // mountain river carries silt: with the clear-water extinction it
+        // had, the bed lit by the open sky showed through two metres of
+        // water, and in a mountain's shadow the river glowed a pool's teal,
+        // brighter than the shaded valley around it. The sky there is the
+        // valley's, as for the ground (terrain_sky).
         float visibility = sun_visibility(input.world_position, float3(0.0, 1.0, 0.0), shadow_map, shadow_map_sampler);
-        float3 bed = scene.palette[PALETTE_SAND].rgb * 0.8 *
-                     (direct_sun(float3(0.0, 1.0, 0.0), visibility) + ambient_light(float3(0.0, 1.0, 0.0)));
-        float3 through = exp(-depth * float3(0.55, 0.22, 0.16));
-        const float3 DEEP_M = scene.palette[PALETTE_WATER_DEEP].rgb * (ambient_light(float3(0.0, 1.0, 0.0)) + 0.3 * visibility);
+        float3 sky_in = ambient_light(float3(0.0, 1.0, 0.0)) * terrain_sky(input.world_position);
+        float3 bed = scene.palette[PALETTE_SAND].rgb * 0.5 * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + sky_in);
+        float3 through = exp(-depth * float3(1.2, 0.75, 0.65));
+        const float3 DEEP_M = scene.palette[PALETTE_WATER_DEEP].rgb * (sky_in + 0.3 * visibility);
         float3 under = lerp(DEEP_M, bed, through);
 
         float cosine = saturate(dot(-view, n));
@@ -255,8 +314,13 @@ float4 fs_main(VertexOut input) : SV_Target {
         // where the current boils, both carried downstream.
         float2 carried = p - flow * (t * RIVER_SPEED);
         float2 along = float2(dot(carried, float2(-flow.y, flow.x)), dot(carried, flow) * 0.25);
-        // Streaks only near, where they are wider than a pixel or two.
-        float streak = smoothstep(0.62, 0.85, cloud_value(along * 0.35 + 3.1)) * 0.5 * (1.0 - smoothstep(0.08, 0.25, footprint));
+        // Streaks only near, where they are wider than a pixel or two: thin
+        // wandering lines of bubbles, a noise's contour stretched along the
+        // current. Its bands of high value were soft grey blots metres
+        // across, which in shade read as fog lying on the water.
+        float line_noise = cloud_value(along * 0.35 + 3.1);
+        float streak = (1.0 - smoothstep(0.0, 0.035, abs(line_noise - 0.62))) * 0.4 *
+                       smoothstep(0.35, 0.6, cloud_value(carried / 30.0 + 7.0)) * (1.0 - smoothstep(0.04, 0.12, footprint));
         float froth = max((1.0 - smoothstep(0.1, 0.7, depth)) * smoothstep(0.45, 0.75, cloud_value(carried * 0.6)) *
                               (1.0 - smoothstep(0.3, 1.0, footprint)),
                           streak);

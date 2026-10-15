@@ -7,7 +7,7 @@
 #include "common.hlsl"
 
 struct SsaoUniforms {
-    float4 projection;  // x tan(fov/2), y aspect, z the near plane (m), w unused
+    float4 projection;  // x tan(fov/2), y aspect, z the near plane (m), w the angle bias
     float4 params;      // x radius (m), y intensity, z fade start, w fade end (m)
     float4 texel;       // xy one full-resolution depth texel in uv
 };
@@ -79,7 +79,8 @@ float4 fs_main(SsaoVertex input) : SV_Target {
         float vv = dot(v, v);
         float range = radius * radius;
         // How far above the surface the sample stands, times its nearness.
-        occlusion += saturate(dot(v, n) * rsqrt(max(vv, 1e-6)) - 0.06) * saturate(1.0 - vv / range);
+        occlusion += saturate((dot(v, n) * rsqrt(max(vv, 1e-6)) - ssao.projection.w) / (1.0 - ssao.projection.w)) *
+                     saturate(1.0 - vv / range);
     }
     float ao = saturate(1.0 - occlusion / float(SAMPLES) * ssao.params.y);
     ao = lerp(ao, 1.0, smoothstep(ssao.params.z, ssao.params.w, d));

@@ -131,7 +131,8 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 lit_color = input.albedo * input.emissive;
     if (input.unlit < 0.5) lit_color += input.albedo * (direct + ambient);
 
-    return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);
+    float3 fogged = apply_fog(lit_color, input.world_position);
+    return float4(scene_out(fogged), input.unlit < 0.5 ? occlusion_share(ambient, direct + ambient) : 0.0);
 }
 #endif
 #endif  // SM2

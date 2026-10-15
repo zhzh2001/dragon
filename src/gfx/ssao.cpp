@@ -83,7 +83,7 @@ rhi::Texture* Ssao::run(Device& device, const Camera& camera, float aspect, cons
     struct {
         core::Vec4 projection, params, texel;
     } u;
-    u.projection = core::Vec4{std::tan(core::radians(camera.fov_y_deg) * 0.5f), aspect, camera.z_near, 0.0f};
+    u.projection = core::Vec4{std::tan(core::radians(camera.fov_y_deg) * 0.5f), aspect, camera.z_near, s.bias};
     u.params = core::Vec4{s.radius, s.intensity, s.fade_start, s.fade_end};
     u.texel = core::Vec4{1.0f / float(device.world_width()), 1.0f / float(device.world_height()), 0.0f, 0.0f};
     {

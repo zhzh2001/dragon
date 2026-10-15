@@ -378,7 +378,8 @@ float4 fs_main(VertexOut input) : SV_Target {
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // the gully sees less sky than the ridge
 #endif
-    float3 lit_color = albedo * (direct_sun(normal, visibility) + ambient);
+    float3 direct = direct_sun(normal, visibility);
+    float3 lit_color = albedo * (direct + ambient);
 
     // Snow glints: a modest specular lobe only where the surface is bright and
     // cold, which reads as crust without turning the mountains to plastic.
@@ -404,7 +405,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         fogged = lerp(fogged, sky_color(ray), smoothstep(0.80, 0.99, edge));
     }
 
-    return float4(scene_out(fogged), 1.0);
+    return float4(scene_out(fogged), occlusion_share(ambient, direct + ambient));
 }
 #endif
 #endif  // SM2

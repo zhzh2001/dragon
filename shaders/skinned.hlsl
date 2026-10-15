@@ -234,7 +234,8 @@ float4 fs_main(VertexOut input) : SV_Target {
                        specular * scene.sun_color.rgb * scene.sun.w * visibility +
                        albedo * input.emissive;
 
-    return float4(scene_out(apply_fog(lit_color, input.world_position)), 1.0);
+    float3 fogged = apply_fog(lit_color, input.world_position);
+    return float4(scene_out(fogged), occlusion_share(ambient * occlusion, direct + ambient * occlusion));
 }
 #endif
 #endif  // SM2

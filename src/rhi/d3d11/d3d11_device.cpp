@@ -1210,15 +1210,19 @@ private:
         D3D11_RENDER_TARGET_BLEND_DESC& rt = bd.RenderTarget[0];
         rt.BlendEnable = d.blend != Blend::Opaque;
         rt.BlendOp = rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        // A blended draw leaves the target's alpha alone, as on SDL GPU
+        // (the share the ambient occlusion may darken, occlusion_share). 9_1
+        // blends alpha as it blends colour; it runs the sm2 tier, which
+        // reads no alpha, so only the stored value differs there.
         if (d.blend == Blend::Additive) {
-            rt.SrcBlend = rt.DestBlend = rt.SrcBlendAlpha = rt.DestBlendAlpha = D3D11_BLEND_ONE;
+            rt.SrcBlend = rt.DestBlend = D3D11_BLEND_ONE;
+            rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_ONE : D3D11_BLEND_ZERO;
+            rt.DestBlendAlpha = D3D11_BLEND_ONE;
         } else {
             rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
             rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-            // 9_1 blends alpha as it blends colour; nothing reads the
-            // target's alpha afterwards, so only the stored value differs.
-            rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_SRC_ALPHA : D3D11_BLEND_ONE;
-            rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+            rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_SRC_ALPHA : D3D11_BLEND_ZERO;
+            rt.DestBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_INV_SRC_ALPHA : D3D11_BLEND_ONE;
         }
         rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         return SUCCEEDED(device_->CreateBlendState(&bd, &p.blend));

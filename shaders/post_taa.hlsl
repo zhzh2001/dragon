@@ -137,6 +137,8 @@ float4 fs_main(TaaVertex input) : SV_Target {
     if (worst > 1.0) past = mean + offset / worst;
 
     float3 result = lerp(centre, past, weight);
-    return float4(expand(from_ycocg(result)), 1.0);
+    // The alpha passes through: it is the share the ambient occlusion may
+    // darken (occlusion_share), this frame's.
+    return float4(expand(from_ycocg(result)), current.SampleLevel(current_sampler, uv, 0.0).a);
 }
 #endif

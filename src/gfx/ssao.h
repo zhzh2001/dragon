@@ -17,6 +17,10 @@ struct SsaoSettings {
     float radius = 3.0f;      // metres
     float intensity = 3.0f;
     float strength = 0.85f;   // how far the composite darkens toward it
+    // How far above a surface's tangent plane (as a sine) a sample must
+    // stand to occlude it: the terrain's 6 m facets meet at shallow folds,
+    // and at 0.06 every fold read as a crease, a grid over each far slope.
+    float bias = 0.25f;
     float fade_start = 350.0f;
     float fade_end = 900.0f;
 };

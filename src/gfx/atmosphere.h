@@ -105,10 +105,18 @@ public:
     // terrain's whole extent. Marched toward the sun into a map of shadow
     // heights on the next update(), and again whenever the sun moves.
     void set_heightfield(const std::vector<float>& heights, int n, float half);
+    // The forest over that heightfield, on the same grid: each texel's
+    // crown cover (0..1) and the height of its tops above the ground (m).
+    // Into the heights texture's g and b, for the river to reflect
+    // (water.hlsl); the shadow march does not read them.
+    void set_canopy(const std::vector<float>& cover, const std::vector<float>& top, int n);
 
     // The atlas into fragment slot `slot`, and with `terrain_sun` the
     // terrain's shadow heights into `slot + 1`; nothing on a retro tier.
     void bind(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot, bool terrain_sun = true) const;
+    // The heights texture itself (r the ground, g the canopy's cover, b its
+    // top), for the river's reflection.
+    void bind_heights(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
     // The transmittance table, for the sky's sun disc.
     void bind_transmittance(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
 
@@ -121,7 +129,8 @@ private:
     PipelineHandle multiscatter_pipeline_ = INVALID_PIPELINE;
     PipelineHandle frame_pipeline_ = INVALID_PIPELINE;
     PipelineHandle terrain_sun_pipeline_ = INVALID_PIPELINE;
-    rhi::Texture* heights_ = nullptr;      // RGBA16F, height in r
+    rhi::Texture* heights_ = nullptr;      // RGBA16F: height, canopy cover, canopy top
+    std::vector<uint16_t> height_texels_;  // what it holds, so the canopy can be added after
     rhi::Texture* terrain_sun_ = nullptr;  // RGBA16F: shadow top, ridge distance
     uint32_t heights_size_ = 1;
     float heights_half_ = 1.0f;

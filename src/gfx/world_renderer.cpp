@@ -362,12 +362,13 @@ void WorldRenderer::draw_water(Device& device, rhi::Pass* pass, const Mesh& mesh
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     if (atmosphere_ && atmosphere_->available() && shadow_map_ && shadow_map_->texture()) {
         // The modern water's slots (water.hlsl): the shadow map, then the
-        // atmosphere's two maps.
+        // atmosphere's two maps, then the heights with the forest's canopy.
         rhi::TextureBinding shadow = {};
         shadow.texture = shadow_map_->texture();
         shadow.sampler = shadow_map_->sampler();
         device.rhi().bind_fragment_textures(pass, 0, &shadow, 1);
         atmosphere_->bind(device.rhi(), pass, 1);
+        atmosphere_->bind_heights(device.rhi(), pass, 3);
     }
     mesh.bind(device.rhi(), pass);
     draw_chunks(device.rhi(), pass, mesh, chunks, scene_.view_proj);

@@ -322,12 +322,12 @@ neighbours, twelve samples on a per-pixel-rotated Vogel spiral within
 composite multiplies it in before the bloom (`ATMOSPHERE` only, so SM3's
 composite is untouched). It shows inside the crowns, where the dragon
 meets the ground, and at the grass bases: up to 20 levels, subtle by
-design. Applied to the whole light, not the ambient alone, because there
-is no depth before the main pass to compute it from; on sunlit contact
-that over-darkens a little. A depth prepass would fix that and cost a
-second pass of the forest. Dials: the Grade & bloom panel's "ambient
-occlusion" and its radius, intensity and strength; `DRAGON_ABLATE=ssao`.
-Cost: within the timing's noise at 1080p.
+design. Applied to the whole light at first, which the playtest found
+wrong (below, "After the second playtest"): it now darkens only the
+ambient share each world shader leaves in the scene target's alpha.
+Dials: the Grade & bloom panel's "ambient occlusion" and its radius,
+intensity, strength and angle bias; `DRAGON_ABLATE=ssao`. Cost: within
+the timing's noise at 1080p.
 
 ## F5, as built (2026-10-13): temporal anti-aliasing
 
@@ -417,6 +417,59 @@ either. And the river seems static. What was found:
 - Debugging lessons, twice over: a debug return that leaves one texture
   unread shifts every later slot (`common.hlsl`), and debug colours pass
   through the tonemap.
+
+## After the second playtest (2026-10-14)
+
+Renders in `artifacts/fidelity-playtest2/`. Three complaints, each fixed:
+
+- **"Ambient occlusion leaves unintended shadows over the image."** Two
+  causes. The composite multiplied the occlusion into the whole light, so
+  sunlit ground beside a tree went grey in a blot the sun had not cast;
+  and the 6 m terrain facets meet at shallow folds that a 0.06 angle bias
+  counted as creases, a grid over every far slope. Now each world shader
+  writes, in the scene target's alpha, the share of its pixel the
+  occlusion may darken (`occlusion_share` in `scene_common.hlsl`): the
+  ambient light's part of the light it received, times what is left of
+  the surface after the fog (`apply_fog` keeps it). The composite scales
+  the occlusion by it, so the AO falls on ambient light alone, where it
+  belongs. Blended draws (the water, the particles) leave the alpha alone
+  on SDL GPU and D3D11 (D3D11's level 9_1 cannot, and runs no AO), and
+  TAA passes it through. The angle bias is 0.25 and a dial. What is left
+  is the contact: under the dragon, inside the crowns, at the base of the
+  bushes, and nothing in the sun.
+- **"The river looks off in mountain shadows."** Several things the sun's
+  glitter had hidden. The bed showed through two metres of clear water lit
+  by the whole sky, so from altitude a shaded river glowed a pool's teal,
+  brighter than the valley around it; the extinction is now a silty
+  mountain river's (1.2, 0.75, 0.65 per metre), the bed is wet and darker,
+  and the light under the surface sees only the valley's sky
+  (`terrain_sky`). The wave trains started at 14 m and ran within 35
+  degrees of downstream, so they summed into long crests from bank to bank,
+  a wave pool; they now run from 5 m down to 0.15 m in every direction (a
+  river's chop is the bed's turbulence and the wind's, not a swell), with
+  glassy stretches between rough ones and slack water along the banks.
+  The foam streaks were a noise's high band, soft grey blots metres
+  across that read as fog lying on the water; they are thin contour lines
+  now. And the reflection traced only the ground, so a wooded bank
+  mirrored as bare: `App::upload_canopy` splats each tree's crown onto the
+  heightfield's grid as cover and top height (the heights texture's g and
+  b), and the reflected ray passes through the crowns as through a haze
+  as thick as their cover.
+- **"Tree LOD pop-in is quite obvious."** At 240 m each tree switched from
+  its whole crown to its impostor, dithered tree by tree over 30%, and the
+  impostor -- a few large cards with the trunk showing -- turned a slender
+  spruce into a square blob (`tree-lod-ref-old-first.png`). Making the
+  impostor thicker made the blobs worse. Whole crowns cost only 1.3 ms at
+  every distance on the M5 at 1080p, so the modern tier keeps them to
+  900 m and dissolves them card by card (each card its own threshold, the
+  tree's hash plus the card's shade) to the impostor by 1800 m, where a
+  tree is a few pixels tall; the coarse cards cut out slightly less and
+  darken as the band passes, and the far shadow cascade's coarse crowns
+  match. Trees also shrink into the ground over the last 15% of the draw
+  distance, rather than whole ground cells appearing at its edge. 0.6 ms
+  over the old LOD. Dials: Terrain > Vegetation's "crown detail
+  distance", "crown detail band" and "tree fade band". The retro tiers keep
+  240 m and their 30% band.
 
 ## F8, as built (2026-10-13): the river
 
