@@ -15,6 +15,25 @@ void Terrain::generate(const TerrainSettings& settings) {
     build_mesh();
 }
 
+void Terrain::generate(const TerrainSettings& settings, const Terrain& eroded) {
+    // The erosion's own inputs must agree; the shape around them is the
+    // caller's to keep (a copy of the settings with another cell size).
+    const TerrainSettings& theirs = eroded.settings_;
+    if (settings.seed != theirs.seed || settings.half_extent != theirs.half_extent ||
+        settings.erosion != theirs.erosion || settings.erosion_cell != theirs.erosion_cell ||
+        settings.erosion_extent_factor != theirs.erosion_extent_factor ||
+        settings.erosion_strength != theirs.erosion_strength ||
+        settings.river_half_width != theirs.river_half_width ||
+        settings.erosion_params.iterations != theirs.erosion_params.iterations) {
+        generate(settings);
+        return;
+    }
+    settings_ = settings;
+    noise_.reseed(settings.seed);
+    erosion_ = eroded.erosion_;
+    build_mesh();
+}
+
 void Terrain::run_erosion() {
     erosion_ = ErosionGrid{};
     if (!settings_.erosion || settings_.erosion_strength <= 0.0f) return;

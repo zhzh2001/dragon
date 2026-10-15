@@ -581,6 +581,13 @@ bool App::init(const Options& options) {
     }
     load_rocks();
 
+    if (options.run) {
+        initial_run_seed_ = options.seed ? options.seed : fresh_seed();
+        arena_terrain_ = terrain_settings_;
+        arena_saved_at_init_ = true;
+        terrain_settings_ = run_terrain(initial_run_seed_);
+        terrain_run_seed_ = initial_run_seed_;
+    }
     regenerate_terrain();
 
     // The model roster. --models gives the whole list and --model a roster of
@@ -720,7 +727,7 @@ bool App::init(const Options& options) {
     }
     if (options.run) {
         if (options.hunters_after > 0.0f) run_dials_.pressure_after = options.hunters_after;
-        start_run(options.seed ? options.seed : fresh_seed());
+        start_run(initial_run_seed_);
         for (int v = 0; v < options.valley; ++v) {
             if (hoard_run_.skip_valley()) advance_valley();
         }
@@ -1618,7 +1625,7 @@ void App::regenerate_terrain() {
         // in a sawtooth at the boundary; this width breaks into dashes past a
         // kilometre instead, which is the lesser sight.
         game::Terrain far;
-        far.generate(far_settings);
+        far.generate(far_settings, terrain_);  // the same erosion, not run again
         gfx::MeshData far_ground = with_patches(far.mesh_data());
         terrain_far_chunks_ = gfx::chunk_mesh(far_ground, terrain_chunk_size_, flange, terrain_chunk_origin_);
         terrain_far_mesh_.upload(device_.rhi(), far_ground, "terrain_far");
@@ -4621,10 +4628,20 @@ uint32_t App::fresh_seed() const {
     return (uint32_t(SDL_GetTicksNS() / 1000000ull) * 2654435761u) | 1u;
 }
 
+game::TerrainSettings App::run_terrain(uint32_t seed) const {
+    game::HoardRunSettings settings = run_dials_;
+    settings.seed = seed;
+    game::TerrainSettings terrain = arena_terrain_;
+    game::apply_valley_kind(seed, terrain, settings);
+    return terrain;
+}
+
 void App::start_run(uint32_t seed) {
     if (!run_mode_) {
-        // Entering from the arena: remember what to restore.
-        arena_terrain_ = terrain_settings_;
+        // Entering from the arena: remember what to restore (done already
+        // when the game started into a run).
+        if (!arena_saved_at_init_) arena_terrain_ = terrain_settings_;
+        arena_saved_at_init_ = false;
         capture_growth_base();
     }
     run_mode_ = true;

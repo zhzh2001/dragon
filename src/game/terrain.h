@@ -98,6 +98,12 @@ struct TerrainSettings {
 class Terrain {
 public:
     void generate(const TerrainSettings& settings);
+    // The same, taking the erosion `eroded` already ran when the two agree on
+    // everything it reads -- the seed, the extent, the erosion grid and
+    // parameters, the corridor -- as a mesh at another cell size does (the
+    // fixed-function tier's far ground). The erosion is half a minute of the
+    // Pi 1B's start-up; it ran twice there.
+    void generate(const TerrainSettings& settings, const Terrain& eroded);
 
     // Height of the RENDERED surface: once the mesh exists, this interpolates
     // the exact triangle under (x, z), so nothing the player can touch differs

@@ -87,6 +87,7 @@ struct GlPipeline {
     std::vector<UniformArray> uniforms[2];  // vertex, fragment
     uint32_t attributes = 0;                // bit n: a<n> is read
     bool vertex_id = false;                 // a0 with no attribute declared: the vertex index
+    bool instanced = false;                 // reads a per-instance buffer
     std::string name;
 };
 
@@ -393,6 +394,7 @@ public:
         for (auto& t : bound_textures_) t = 0;
         active_unit_ = -1;
         state_known_ = false;
+        attributes_valid_ = false;
     }
 
     Backend backend() const override { return Backend::OpenGLES2; }
@@ -469,6 +471,7 @@ public:
         if (!buffer) return;
         GlBuffer* b = gl(buffer);
         if (array_buffer_ == b->id) array_buffer_ = 0;
+        attributes_valid_ = false;  // a new buffer may take its address
         glDeleteBuffers(1, &b->id);
         untrack(b);
         delete b;
@@ -489,6 +492,7 @@ public:
         glBufferData(target, b->size, nullptr, GL_STREAM_DRAW);
         glBufferSubData(target, 0, size, b->staging.data());
         if (b->usage == BufferUsage::Vertex) std::memcpy(b->shadow.data(), b->staging.data(), size);
+        attributes_valid_ = false;  // an instance's values may have changed with it
     }
 
     Texture* create_texture(const TextureDesc& desc, const char* debug_name) override {
@@ -615,6 +619,7 @@ public:
             return nullptr;
         }
         p->vertex_id = d.vertex_attributes.empty() && (p->attributes & 1u);
+        for (const VertexBufferLayout& l : d.vertex_buffers) p->instanced |= l.rate == InputRate::Instance;
         glUseProgram(p->program);
         program_ = p->program;
         for (int stage = 0; stage < 2; ++stage) {
@@ -642,6 +647,7 @@ public:
         GlPipeline* p = gl(pipeline);
         if (program_ == p->program) program_ = 0;
         if (bound_pipeline_ == p) bound_pipeline_ = nullptr;
+        attributes_valid_ = false;
         glDeleteProgram(p->program);
         untrack(p);
         delete p;
@@ -909,7 +915,16 @@ private:
 
     // Points each attribute the program reads at its buffer, `vertex_offset`
     // vertices in (the base vertex), or sets it to `instance`'s values.
+    // Skipped when nothing it reads changed since the last draw: pointing
+    // them again made vc4 revalidate its vertex state every draw, and the
+    // terrain alone is hundreds of draws of one mesh.
     bool setup_attributes(GlPipeline* p, int32_t vertex_offset, uint32_t instance) {
+        AttributeKey key;
+        key.pipeline = p;
+        key.vertex_offset = vertex_offset;
+        key.instance = p->instanced ? instance : 0;
+        for (int i = 0; i < kMaxSlots; ++i) key.buffers[i] = vertex_buffers_[i];
+        if (attributes_valid_ && key == attribute_key_) return true;
         uint32_t wanted = 0;
         if (p->vertex_id) {
             bind_buffer(GL_ARRAY_BUFFER, vertex_ids_);
@@ -956,8 +971,24 @@ private:
             if (!(wanted & bit) && (enabled_attributes_ & bit)) glDisableVertexAttribArray(GLuint(i));
         }
         enabled_attributes_ = (enabled_attributes_ & ~((1u << max_attributes_) - 1)) | wanted;
+        attribute_key_ = key;
+        attributes_valid_ = true;
         return true;
     }
+
+    struct AttributeKey {
+        const GlPipeline* pipeline = nullptr;
+        int32_t vertex_offset = 0;
+        uint32_t instance = 0;
+        BufferBinding buffers[kMaxSlots] = {};
+        bool operator==(const AttributeKey& o) const {
+            if (pipeline != o.pipeline || vertex_offset != o.vertex_offset || instance != o.instance) return false;
+            for (int i = 0; i < kMaxSlots; ++i) {
+                if (buffers[i].buffer != o.buffers[i].buffer || buffers[i].offset != o.buffers[i].offset) return false;
+            }
+            return true;
+        }
+    };
 
     // `source`'s top-left sw x sh over the bound framebuffer's dw x dh.
     void draw_quad(GlTexture* source, uint32_t sw, uint32_t sh, int dw, int dh, bool flip) {
@@ -985,6 +1016,7 @@ private:
             if (i != 0 && (enabled_attributes_ & bit)) glDisableVertexAttribArray(GLuint(i));
         }
         enabled_attributes_ = 1u;
+        attributes_valid_ = false;
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         state_known_ = false;
     }
@@ -1032,6 +1064,8 @@ private:
     int active_unit_ = -1;
     bool state_known_ = false;
     int depth_test_ = -1, cull_ = -1, blend_ = -1;
+    AttributeKey attribute_key_;
+    bool attributes_valid_ = false;
 
 };
 

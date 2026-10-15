@@ -530,6 +530,12 @@ private:
     // terrain currently belongs to (0 = the arena's).
     game::TerrainSettings arena_terrain_;
     uint32_t terrain_run_seed_ = 0;
+    // Start-up into a run (no arguments, --run): the arena's terrain is saved
+    // and the run's valley generated at once, rather than the arena's first
+    // and the run's over it -- the erosion is 4 s of the M5's start-up and
+    // 24 s of the Pi 1B's. start_run then finds the arena already saved.
+    bool arena_saved_at_init_ = false;
+    uint32_t initial_run_seed_ = 0;
     // Growth: the player's tuning as it was before the run, which every stage
     // scales from and which leaving the run restores.
     // Growth made visible: the player's whole body scales toward the stage's
@@ -649,6 +655,8 @@ private:
     float collect_flash_ = 0.0f;
     float hunter_flash_ = 0.0f;
     void start_run(uint32_t seed);
+    // The terrain of the run on `seed`: the arena's, reshaped by its valley kind.
+    game::TerrainSettings run_terrain(uint32_t seed) const;
     void end_run();
     uint32_t fresh_seed() const;
     void update_run(float dt, const game::CombatEvents& events);
