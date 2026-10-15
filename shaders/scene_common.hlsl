@@ -42,7 +42,7 @@ struct SceneUniforms {
     float4 shadow_params;
     // x = sun wrap (how far past the terminator direct light reaches),
     // y = foliage translucency, z = ground bounce strength, w unused
-    float4 light_params;
+    float4 light_params;    // x sun wrap, y foliage translucency, z ground bounce, w sky reflection (skinned)
     // The world's named colours; see palette.hlsl for the indices.
     float4 palette[PALETTE_COUNT];
     // x exposure, y contrast, z saturation, w hue preservation: the grade a

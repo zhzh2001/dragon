@@ -116,6 +116,9 @@ struct Lighting {
     float sun_wrap = 0.22f;
     float foliage_translucency = 0.30f;
     float ground_bounce = 1.0f;
+    // How much of the sky a creature's glossy hide reflects (skinned.hlsl;
+    // the modern tier's).
+    float sky_reflection = 1.0f;
 
     Palette palette;
 

@@ -233,6 +233,27 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 lit_color = diffuse * (direct + ambient * occlusion) +
                        specular * scene.sun_color.rgb * scene.sun.w * visibility +
                        albedo * input.emissive;
+#ifdef USE_ATMOSPHERE
+    // The sky in the hide (F4): what the reflected ray sees -- the sky above
+    // the horizon, the lit ground's bounce below -- through a Fresnel that
+    // roughness flattens (Schlick's, with Lagarde's roughness term), dimmed
+    // where the hide's own occlusion and the valley's walls hide the sky.
+    // With the sun's lobe alone, horn and wet scale read matte from every
+    // side but the sun's.
+    if (atmosphere_on()) {
+        float3 r = reflect(-to_camera, normal);
+        float3 ground_seen = scene.palette[PALETTE_GROUND_BOUNCE].rgb * (scene.sun_color.rgb * scene.sun.w * 0.25 + ambient);
+        float3 environment = lerp(ground_seen, sky_color(normalize(float3(r.x, max(r.y, 0.0), r.z))), smoothstep(-0.15, 0.1, r.y));
+        float n_dot_v = saturate(dot(normal, to_camera));
+        float3 env_fresnel = f0 + (max((float3)(1.0 - roughness), f0) - f0) * pow(1.0 - n_dot_v, 5.0);
+        float gloss = (1.0 - roughness) * (1.0 - roughness);
+        float sky_seen = occlusion;
+#ifdef USE_TERRAIN_SUN
+        sky_seen *= terrain_sky(input.world_position);
+#endif
+        lit_color += environment * env_fresnel * gloss * sky_seen * scene.light_params.w;
+    }
+#endif
 
     float3 fogged = apply_fog(lit_color, input.world_position);
     return float4(scene_out(fogged), occlusion_share(ambient * occlusion, direct + ambient * occlusion));

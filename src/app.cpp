@@ -3036,6 +3036,7 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("sun wrap", &lighting_.sun_wrap, 0.0f, 0.6f, "%.2f");
         ImGui::SliderFloat("foliage translucency", &lighting_.foliage_translucency, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
+        if (atmosphere_.available()) ImGui::SliderFloat("sky in the hide", &lighting_.sky_reflection, 0.0f, 3.0f, "%.2f");
     }
 
     // The modern tier's sky (gfx/atmosphere.h): with it on, the zenith,

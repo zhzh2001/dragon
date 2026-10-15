@@ -591,6 +591,16 @@ crowns takes a litter tint and less sky, and past the shadow cascades
 in for the shade (`terrain.hlsl`). Subtle in this valley, whose trees
 are sparse; the density is F7's.
 
+## The sky in the hide (2026-10-15)
+
+A first piece of F4's specular sky, on the creatures: `skinned.hlsl`
+adds what the reflected ray sees (the sky above the horizon, the lit
+ground's bounce below) through Schlick's Fresnel with Lagarde's roughness
+term, scaled by gloss and dimmed by the hide's occlusion and the valley's
+sky (`terrain_sky`). With the sun's lobe alone, horn and wet scale read
+matte from every side but the sun's. Subtle on the roster's rough hides;
+the Lighting panel's "sky in the hide" scales it.
+
 ## F7, first part (2026-10-15): stands, not a sprinkle
 
 Renders in `artifacts/fidelity-f7-stands/`. The cover gathered trees by

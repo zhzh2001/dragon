@@ -34,7 +34,7 @@ SceneUniforms make_scene_uniforms(const Camera& camera, float aspect, const Ligh
     // Overwritten by the caller once the shadow map has been updated.
     uniforms.shadow_params = Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     uniforms.light_params =
-        Vec4{lighting.sun_wrap, lighting.foliage_translucency, lighting.ground_bounce, 0.0f};
+        Vec4{lighting.sun_wrap, lighting.foliage_translucency, lighting.ground_bounce, lighting.sky_reflection};
     for (int i = 0; i < PALETTE_COUNT; ++i) uniforms.palette[i] = lighting.palette.colors[i];
     return uniforms;
 }
