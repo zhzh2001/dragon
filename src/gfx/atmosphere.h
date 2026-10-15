@@ -64,7 +64,7 @@ struct AtmosphereSettings {
     // scene_common.hlsl, cloud_shadow). Coverage 0 is a clear sky.
     float cloud_coverage = 0.42f;
     float cloud_base_m = 2400.0f;
-    float cloud_thickness_m = 900.0f;
+    float cloud_thickness_m = 1400.0f;
     float cloud_density = 1.0f;
 
     // key=value[,key=value...] over these (--atmosphere): on, sky, aerial,

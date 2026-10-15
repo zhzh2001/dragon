@@ -201,11 +201,6 @@ float3 water_reflected_ground(float3 p) {
     return apply_fog(lit, p);
 }
 
-// The reflected ray traced through the heightfield, 40 steps growing to
-// 3 km; the sky where it escapes. A ray that only just clears the ground
-// takes some of it, by how narrowly (the soft-shadow trick, the clearance
-// over a cone widening with the distance): hit or miss alone left hard
-// dark flecks wherever a ripple tipped a ray onto the bank.
 // The forest's crowns, seen from the water: their shaded and sunlit sides
 // both, the green of the stand, under the same air as everything else.
 float3 water_reflected_canopy(float3 p, float3 dir) {
@@ -213,6 +208,26 @@ float3 water_reflected_canopy(float3 p, float3 dir) {
     float3 albedo = lerp(scene.palette[PALETTE_SPRUCE].rgb, scene.palette[PALETTE_BROADLEAF].rgb, 0.35);
     float3 lit = albedo * (direct_sun(n, terrain_sun(p)) * 0.6 + ambient_light(n) * terrain_sky(p));
     return apply_fog(lit, p);
+}
+
+// The sky in the reflection, with the cloud layer in it: the layer's
+// coverage where the ray crosses its middle, lit by the sun and the sky,
+// hazed by the air between. One lookup, not the clouds' march
+// (gfx/clouds.h); a river is a rough mirror anyway.
+float3 water_reflected_sky(float3 origin, float3 dir) {
+    float3 sky = sky_color(dir);
+    if (scene.clouds.x <= 0.0 || dir.y < 0.02) return sky;
+    float middle = scene.clouds.y + scene.clouds.z * 0.3;
+    float t = (middle - origin.y) / dir.y;
+    if (t <= 0.0 || t > 40000.0) return sky;
+    float3 at = origin + dir * t;
+    float cover = smoothstep(0.1, 0.8, cloud_coverage(at.xz));
+    float3 sun = normalize(scene.sun.xyz);
+    float3 lit = scene.sun_color.rgb * scene.sun.w * (0.25 + 0.35 * saturate(dot(dir, sun))) +
+                 atmo_sky_light(float3(0.0, 1.0, 0.0)) * 0.5;
+    float4 air = atmo_aerial(at);
+    float3 cloud = lit * air.a + air.rgb;
+    return lerp(sky, cloud, cover * 0.8 * (1.0 - smoothstep(20000.0, 40000.0, t)));
 }
 
 // The reflected ray traced through the heightfield, 40 steps growing to
@@ -264,7 +279,7 @@ float3 water_reflection(float3 origin, float3 dir) {
         if (s > 3000.0) break;
     }
     if (!hit) {
-        float3 sky = sky_color(dir);
+        float3 sky = water_reflected_sky(origin, dir);
         behind = clear >= 1.0 ? sky
                               : lerp(water_reflected_ground(nearest - float3(0.0, 1.0, 0.0) * (nearest.y - water_ground(nearest.xz))),
                                      sky, smoothstep(0.0, 1.0, clear));

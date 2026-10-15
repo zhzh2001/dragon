@@ -8,6 +8,7 @@
 #include "gfx/render_tier.h"
 #include "gfx/atmosphere.h"
 #include "gfx/taa.h"
+#include "gfx/clouds.h"
 #include "gfx/ssao.h"
 #include "gfx/post.h"
 #include <unordered_map>
@@ -64,6 +65,7 @@ struct Options {
     std::string graphics;
     // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
     std::string atmosphere;
+    std::string clouds;  // --clouds key=value,... (gfx/clouds.h)
     // --aa off|fxaa|taa (--no-taa is off): the modern tier's anti-aliasing,
     // -1 for the default (FXAA).
     int aa = -1;
@@ -292,6 +294,8 @@ private:
     // Screen-space ambient occlusion (modern tier).
     gfx::Ssao ssao_;
     gfx::SsaoSettings ssao_settings_;
+    gfx::Clouds clouds_;
+    gfx::CloudSettings cloud_settings_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),

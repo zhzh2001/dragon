@@ -246,7 +246,7 @@ def main():
         stems = [s for s in stems if not s.startswith("post_")]
     # Nor the atmosphere's tables or the temporal resolve, which only the
     # modern tier has.
-    stems = [s for s in stems if not s.startswith("atmosphere_") and s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned")]
+    stems = [s for s in stems if not s.startswith(("atmosphere_", "clouds_")) and s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned")]
     jobs = []      # (profile, hlsl path, out path)
     layouts = {}   # stem -> {stage: layout}
     expected = {}  # (stem, stage) -> members

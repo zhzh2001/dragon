@@ -64,6 +64,9 @@ struct SceneUniforms {
     // matrix; x their count (0: light_view_proj alone), yzw their texels (m).
     float4x4 cascade_view_proj[3];
     float4 cascade_params;
+    // The volumetric clouds (modern tier, gfx/clouds.h): x 1 when they are
+    // drawn, so the sky leaves its own slab out; yzw unused.
+    float4 clouds2;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -177,7 +180,7 @@ float terrain_sky(float3 world_position) {
 }
 #endif
 
-#ifdef USE_ATMOSPHERE
+#if defined(ATMOSPHERE) && defined(FRAGMENT_STAGE)
 // ---- the cloud layer (docs/FIDELITY.md): a slab of cumulus over the
 // valley, its coverage a function of the ground position alone, so the sky
 // can march it and every lit pixel can find its shadow in one lookup.
@@ -197,9 +200,8 @@ float cloud_value(float2 p) {
 }
 // The drift: 9 m/s from the west-south-west.
 float2 cloud_drift() { return float2(9.0, 3.0) * scene.view_params.z; }
-// How much cloud stands over (x, z), 0..1: four octaves of broad cells,
-// thresholded by the coverage so the gaps are sky, not thin cloud.
-float cloud_coverage(float2 xz) {
+// The field the layer's coverage is cut from: four octaves of broad cells.
+float cloud_field(float2 xz) {
     float2 p = (xz + cloud_drift()) / 2600.0;
     float n = 0.0, a = 0.5;
     for (int i = 0; i < 4; ++i) {
@@ -207,8 +209,13 @@ float cloud_coverage(float2 xz) {
         p = p * 2.03 + float2(17.1, 9.7);
         a *= 0.5;
     }
+    return n;
+}
+// How much cloud stands over (x, z), 0..1: the field thresholded by the
+// coverage so the gaps are sky, not thin cloud.
+float cloud_coverage(float2 xz) {
     float cover = scene.clouds.x;
-    return saturate((n - (1.0 - cover) * 0.85) / 0.18);
+    return saturate((cloud_field(xz) - (1.0 - cover) * 0.85) / 0.18);
 }
 // The density at a point in the slab: the coverage, rounded at the base and
 // heaped toward the top, frayed by a finer noise.

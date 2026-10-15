@@ -229,6 +229,19 @@ rhi::Pass* Device::begin_main_pass(float r, float g, float b) {
     return rhi_->begin_pass(pass);
 }
 
+rhi::Texture* Device::scene_target() const {
+    if (hdr_) return scene_hdr_;
+    return scene_world_ ? scene_world_ : scene_color_;
+}
+
+rhi::Pass* Device::resume_main_pass() {
+    rhi::PassDesc pass;
+    pass.color = scene_target();
+    pass.depth = depth_;
+    pass.keep_depth = depth_sampled_;
+    return rhi_->begin_pass(pass);
+}
+
 rhi::Pass* Device::begin_color_pass(rhi::Texture* target, bool clear) {
     rhi::PassDesc pass;
     pass.color = target;

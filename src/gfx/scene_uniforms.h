@@ -55,6 +55,9 @@ struct SceneUniforms {
     // y z w each one's texel in metres.
     core::Mat4 cascade_view_proj[3];
     core::Vec4 cascade_params = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // The volumetric clouds (gfx/clouds.h): x 1 when they are drawn, so the
+    // sky leaves its own slab out (sky.hlsl); yzw unused.
+    core::Vec4 clouds2 = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

@@ -24,6 +24,9 @@ TEXTURE2D(detail_tile, 1);
 // the scan's luminance in a), after the atmosphere's two maps.
 TEXTURE2D(rock_map, 4);
 TEXTURE2D(scree_map, 5);
+// The heights texture with the forest's canopy in g and b
+// (gfx::Atmosphere::set_canopy).
+TEXTURE2D(canopy_map, 6);
 #endif
 #endif
 #include "noise.hlsl"
@@ -370,6 +373,15 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
 #ifdef ATMOSPHERE
     albedo *= rock_tint * modulate(scan_detail, 0.9);
+    // The forest floor (F7): where the canopy covers the ground, needles and
+    // litter instead of lawn, and less sky through the crowns. Up close the
+    // trees' own shadows and the occlusion do this tree by tree; the canopy
+    // map's 7 m texels would only paint blots there, so it fades in past
+    // 150 m. A forest read as trees standing on a lawn.
+    float2 canopy_uv = input.world_position.xz / max(scene.view_params.w, 1.0) * 0.5 + 0.5;
+    float canopy = canopy_map.SampleLevel(canopy_map_sampler, saturate(canopy_uv), 0.0).g *
+                   smoothstep(150.0, 500.0, camera_distance) * (1.0 - rocky);
+    albedo = lerp(albedo, albedo * float3(0.62, 0.58, 0.48), canopy * 0.8);
 #endif
 
     // The shared lighting path: same wrap, same ambient as everything else.
@@ -377,6 +389,12 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 ambient = ambient_light(normal);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // the gully sees less sky than the ridge
+#endif
+#ifdef ATMOSPHERE
+    ambient *= 1.0 - 0.45 * canopy;
+    // Past the shadow cascades no crown shades the ground: the canopy's
+    // cover stands in for the shade under it.
+    visibility *= 1.0 - 0.7 * canopy * smoothstep(1400.0, 2000.0, camera_distance);
 #endif
     float3 direct = direct_sun(normal, visibility);
     float3 lit_color = albedo * (direct + ambient);

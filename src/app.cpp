@@ -175,6 +175,8 @@ Options parse_options(int argc, char** argv) {
             options.graphics = argv[++i];
         } else if (arg == "--atmosphere" && i + 1 < argc) {
             options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
+        } else if (arg == "--clouds" && i + 1 < argc) {
+            options.clouds = argv[++i];  // key=value,... (gfx/clouds.h)
         } else if (arg == "--sun" && i + 1 < argc) {
             // elevation[,azimuth] in degrees: the time of day for a capture.
             float elevation = 0.0f, azimuth = -1.0f;
@@ -503,6 +505,7 @@ bool App::init(const Options& options) {
     foliage_.set_atmosphere(&atmosphere_);
     taa_.init(&device_, &pipelines_);
     ssao_.init(&device_, &pipelines_);
+    clouds_.init(&device_, &pipelines_);
     if (options.aa >= 0) aa_mode_ = options.aa;
     taa_.enabled = aa_mode_ == 2;
     // The modern tier's afternoon is a little later in the day: with the
@@ -515,6 +518,7 @@ bool App::init(const Options& options) {
         post_settings_.exposure = 1.18f;
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
+    if (!options.clouds.empty()) cloud_settings_.parse(options.clouds);
     if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
     if (options.sun_azimuth >= 0.0f) lighting_.sun_azimuth_deg = options.sun_azimuth;
     if (tier_.baked_noise) {
@@ -1749,6 +1753,7 @@ void App::shutdown() {
         atmosphere_.shutdown();
         taa_.shutdown();
         ssao_.shutdown();
+        clouds_.shutdown();
         shadow_.shutdown(device_);
         particles_.shutdown();
         debug_.shutdown();
@@ -3044,6 +3049,21 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("cloud base", &a.cloud_base_m, 1200.0f, 5000.0f, "%.0f m");
         ImGui::SliderFloat("cloud thickness", &a.cloud_thickness_m, 100.0f, 2500.0f, "%.0f m");
         ImGui::SliderFloat("cloud density", &a.cloud_density, 0.1f, 3.0f, "%.2f");
+        if (clouds_.available()) {
+            gfx::CloudSettings& c = cloud_settings_;
+            ImGui::Checkbox("volumetric clouds", &c.enabled);
+            if (c.enabled) {
+                ImGui::SliderInt("cloud steps", &c.steps, 8, 128);
+                ImGui::SliderFloat("cloud extinction", &c.extinction, 0.005f, 0.15f, "%.3f /m");
+                ImGui::SliderFloat("cloud shape scale", &c.base_scale, 800.0f, 12000.0f, "%.0f m");
+                ImGui::SliderFloat("cloud detail scale", &c.detail_scale, 100.0f, 3000.0f, "%.0f m");
+                ImGui::SliderFloat("cloud erosion", &c.detail, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("cloud softness", &c.softness, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("cloud sun", &c.sun_gain, 0.0f, 3.0f, "%.2f");
+                ImGui::SliderFloat("cloud sky", &c.sky_gain, 0.0f, 3.0f, "%.2f");
+                ImGui::SliderFloat("cloud history", &c.history, 0.0f, 0.97f, "%.2f");
+            }
+        }
     }
 
     // The last word on the picture: bloom and the grade. One grade on
@@ -7666,6 +7686,8 @@ void App::render() {
         particles_.set_output_grade(grade);
     }
     atmosphere_.apply(scene, atmosphere_settings_);
+    // The volumetric clouds replace the sky's slab (gfx/clouds.h).
+    scene.clouds2.x = clouds_.active(scene, cloud_settings_) && !ablated("clouds") ? 1.0f : 0.0f;
     shadow_.apply(scene);
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
@@ -7938,6 +7960,19 @@ void App::render() {
     {
         CORE_PROFILE("sky");
         if (!ablated("sky")) world_.draw_sky(device_, pass);
+    }
+
+    // The volumetric clouds (gfx/clouds.h) read the depth of everything
+    // opaque, so the main pass pauses for them and resumes for what is
+    // blended over them: the breath, the particles.
+    if (world_.scene().clouds2.x > 0.5f) {
+        CORE_PROFILE("clouds");
+        device_.end_pass(pass);
+        clouds_.render(device_, camera, aspect, world_.scene(), atmosphere_, cloud_settings_);
+        rhi::Pass* over = device_.begin_color_pass(device_.scene_target(), false);
+        clouds_.apply(device_, over, camera, world_.scene());
+        device_.end_pass(over);
+        pass = device_.resume_main_pass();
     }
 
     {

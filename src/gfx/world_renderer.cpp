@@ -346,6 +346,7 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
         scans[1].texture = terrain_scree_ ? terrain_scree_ : neutral_;
         scans[0].sampler = scans[1].sampler = white_sampler_;
         if (scans[0].texture && scans[1].texture) device.rhi().bind_fragment_textures(pass, 4, scans, 2);
+        atmosphere_->bind_heights(device.rhi(), pass, 6);  // the canopy (terrain.hlsl)
     }
 
     mesh.bind(device.rhi(), pass);

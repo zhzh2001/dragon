@@ -62,6 +62,12 @@ public:
     // Starts the main render pass into the HDR scene target with depth.
     rhi::Pass* begin_main_pass(float r, float g, float b);
 
+    // The main pass again after a pause (the volumetric clouds read its
+    // depth between): the same targets, loaded.
+    rhi::Pass* resume_main_pass();
+    // The main pass's colour target.
+    rhi::Texture* scene_target() const;
+
     // Starts an overlay pass on the scene colour target: loads existing colour
     // and binds no depth attachment. UI needs its own pass because Dear
     // ImGui's pipelines declare no depth target, and a pipeline can only be

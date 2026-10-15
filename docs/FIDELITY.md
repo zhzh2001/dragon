@@ -86,7 +86,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F3** terrain detail (procedural and scanned rock, 2026-10-13, below; the CDLOD mesh to come) | A CDLOD quadtree of instanced patches displaced from the height texture, morphing between levels, so the ground near the dragon has 1 m triangles and the view stays 16 km. Material layers in texture arrays (albedo, normal, roughness, height; PolyHaven CC0: grass, forest floor, scree, gravel, rock with strata, snow), splatted by slope, altitude and F2's maps, height-blended, triplanar on cliffs, parallax on rock at Ultra. A macro colour map so far slopes read painted. Rocks and scree placed from F2's sediment, not from slope alone | The cliff golden against the target's right-hand cliff; the foot-plant still on the floor (`--inspect 60 11 3`) | 3 |
 | **F4** light (**heightfield shadows and cascades done 2026-10-13/14**, below; sky light done in F1) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal (**TAA done 2026-10-13**, below; upscaling to come) | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
-| **F6** clouds and AO (a first cloud layer 2026-10-13, SSAO 2026-10-14, below; volumetric clouds to come) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
+| **F6** clouds and AO (**volumetric clouds and SSAO done 2026-10-14**, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
 | **F7** forest (Ultra's density tripled 2026-10-13, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
 | **F8** water (**done 2026-10-13**, below, by heightfield rather than screen space) | Flow-mapped normals along the river from F2's flow, depth colour and absorption, shoreline foam, screen-space reflections with the F4 sky cube as their fallback | The river golden: gravel bars, braids, reflections of the banks | 1-2 |
 | **F9** hardware ray tracing | A native Metal backend (`src/rhi/metal/`, the size of the D3D11 one), then ray-traced soft shadows, occlusion and water reflections against the creatures and trees, on top of F4's heightfield work. A native backend also brings MetalFX upscaling to the Mac. Vulkan ray queries on x99's 5060 Ti would be a second native backend | The wings' shadow soft on the ground; dragons in the river | 3-5 |
@@ -524,6 +524,61 @@ its coverage a function of the ground position (`scene_common.hlsl`,
 - **Dials** in the Atmosphere section (cover 0.42, base, thickness,
   density), and `--atmosphere clouds=0,...`. Cost: 0.6 ms a frame at
   1080p on the M5.
+
+## F6, second part (2026-10-14): volumetric clouds
+
+`gfx/clouds.h`, `shaders/clouds_*.hlsl`. Renders in
+`artifacts/fidelity-f6-clouds/`. The slab the sky painted is now a volume
+marched after the opaque world, so clouds stand in front of mountains, are
+seen from above as a floor, and are flown into and out of. Between the
+opaque draws and the blended ones the main pass pauses (the clouds read
+its depth) and resumes for the breath and the particles, so fire in front
+of a cloud stays in front. Four passes, no compute:
+
+- **The weather map**, 512² over 80 km about the camera: the coverage the
+  sky and the ground shadows already cut (`cloud_field`, with a softer
+  ramp), and a broad "how tall" noise, so the march reads one texel a step
+  instead of four octaves.
+- **The march**, at half resolution, from the slab's entry to its exit or
+  the nearest surface of the four pixels (so a ridge never lets cloud past
+  its edge), up to 48 steps with a per-frame dither. Density is
+  Schneider's Nubis arrangement: the coverage cut into billows by a tiling
+  64³ Perlin-Worley volume (built on the CPU at init in 14 ms, in a 2D
+  atlas of slices with wrapped borders, since the RHI has no 3D textures),
+  under a domed height profile the weather raises, frayed by a finer
+  cellular volume -- wisps at the base, billows above. Each step is lit by
+  a six-step march toward the sun starting 15 m out (the face a heap shows
+  is its outer twenty metres; starting at 40 m every sunlit face read as
+  shadowed), three octaves of fainter, wider scattering for the light that
+  bounces inside (Wrenninge), powder on the sunward edges, and the sky's
+  light from above, darker toward the flat base. The phase is scaled by
+  4π so that a thick cloud returns what a white wall would in the world
+  shaders' units; normalised per steradian, the heaps were a fifth as
+  bright as the snow under them. The air in front hazes the result at the
+  cloud's light-weighted depth (`atmo_aerial`).
+- **The resolve** blends it into a history reprojected through where the
+  ray enters the slab (a plane, so that depth needs no storage), clamped
+  to the new frame's neighbourhood.
+- **The apply** blends it over the scene at full resolution, except where
+  a surface is nearer than the slab -- the whole valley under the layer --
+  so the half-resolution clouds never bleed over anything in front.
+
+The layer is thicker (1.4 km) so heaps can tower. Cost against no clouds
+at 1080p on the M5: 1.4 ms from the start, 2.1 ms from above the layer
+(the old slab: 0.6). Dials under Atmosphere > clouds ("volumetric clouds",
+steps, extinction, shape and detail scales, erosion, softness, sun, sky,
+history) and `--clouds key=value,...`; `DRAGON_ABLATE=clouds` falls back
+to the sky's slab. The river reflects the layer too, cheaply: the
+coverage where the reflected ray crosses its middle, lit and hazed
+(`water_reflected_sky`). Not yet: the clouds' shadows in the air (the
+froxels carry the terrain's only), a cheaper path for High.
+
+**The forest floor** came with it, from the canopy map the river's
+reflection reads (`App::upload_canopy`): past 150 m, the ground under the
+crowns takes a litter tint and less sky, and past the shadow cascades
+(1.4-2 km), where no crown shades the ground any more, the cover stands
+in for the shade (`terrain.hlsl`). Subtle in this valley, whose trees
+are sparse; the density is F7's.
 
 ## The Ultra forest (2026-10-13)
 

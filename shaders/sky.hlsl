@@ -183,7 +183,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 #ifdef USE_ATMOSPHERE
     if (atmosphere_on()) {
         color += atmo_sun_disc(ray);
-        color = atmo_clouds(ray, color, input.clip_position.xy);
+        if (scene.clouds2.x < 0.5) color = atmo_clouds(ray, color, input.clip_position.xy);
     }
 #endif
     return float4(scene_out(color), 1.0);
