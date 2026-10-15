@@ -27,6 +27,11 @@ TEXTURE2D(scree_map, 5);
 // The heights texture with the forest's canopy in g and b
 // (gfx::Atmosphere::set_canopy).
 TEXTURE2D(canopy_map, 6);
+// The ground's scans, as the rock's: meadow grass, pine litter, river
+// gravel (tools/build_terrain_rock.py).
+TEXTURE2D(grass_map, 7);
+TEXTURE2D(forest_map, 8);
+TEXTURE2D(gravel_map, 9);
 #endif
 #endif
 #include "noise.hlsl"
@@ -282,6 +287,19 @@ float4 triplanar_scan(Texture2D<float4> map, SamplerState map_sampler, float3 p,
     return float4(normalize(nx * w.x + ny * w.y + nz * w.z), sx.a * w.x + sy.a * w.y + sz.a * w.z);
 }
 
+// The same on the ground plane alone, for the scans of what lies on gentle
+// slopes: one fetch where the triplanar takes three, two scales mixed (the
+// fine one gone by `fine`) so neither's repeat shows.
+// Fetched only where it shows: on the ground's grazing angles the
+// sampler's anisotropy makes every fetch several, and six a pixel cost
+// 1.5 ms at 1080p.
+float4 ground_scan(Texture2D<float4> map, SamplerState map_sampler, float3 p, float3 n, float scale, float fine) {
+    float4 s = map.Sample(map_sampler, p.xz * scale * 0.29 + 0.37);
+    if (fine > 0.0) s = lerp(s, lerp(s, map.Sample(map_sampler, p.xz * scale), 0.6), fine);
+    float3 t = s.xyz * 2.0 - 1.0;
+    return float4(normalize(float3(t.xy + n.xz, abs(t.z) * n.y).xzy), s.a);
+}
+
 #endif
 
 float4 fs_main(VertexOut input) : SV_Target {
@@ -367,9 +385,37 @@ float4 fs_main(VertexOut input) : SV_Target {
         normal = normalize(lerp(normal, normalize(scan.xyz), amount * 0.85));
         scan_detail = lerp(0.5, scan.a, amount);
     }
+    // And the ground's (F3): meadow grass, pine litter where the canopy
+    // covers it, gravel on the bars at the waterline. The
+    // grass was the palette's green over one detail tile, and a landed
+    // dragon stood on what read as a lawn. Out to 500 m, past which their
+    // grain is under a pixel. The canopy map is coarse (7 m),
+    // which suits where litter lies: about each stand, soft-edged.
+    float2 canopy_uv = input.world_position.xz / max(scene.view_params.w, 1.0) * 0.5 + 0.5;
+    float canopy_cover = canopy_map.SampleLevel(canopy_map_sampler, saturate(canopy_uv), 0.0).g;
+    float ground_scans = (1.0 - rocky) * (1.0 - saturate(scan_scree * 2.0)) * (1.0 - smoothstep(200.0, 500.0, camera_distance));
+    if (ground_scans > 0.001) {
+        float fine = 1.0 - smoothstep(40.0, 150.0, camera_distance);
+        float water = scene.terrain_params.x;
+        float bar = 1.0 - smoothstep(water + 0.6, water + 3.5, input.world_position.y);
+        float litter = saturate(canopy_cover * 1.6) * (1.0 - bar);
+        float meadow = (1.0 - bar) * (1.0 - litter);
+        float4 scan = (float4)0.0;
+        if (meadow > 0.01) scan += ground_scan(grass_map, grass_map_sampler, input.world_position, normal, 1.0 / 3.0, fine) * meadow;
+        if (litter > 0.01) scan += ground_scan(forest_map, forest_map_sampler, input.world_position, normal, 1.0 / 2.5, fine) * litter;
+        if (bar > 0.01) scan += ground_scan(gravel_map, gravel_map_sampler, input.world_position, normal, 1.0 / 2.0, fine) * bar;
+        scan /= max(meadow + litter + bar, 1e-3);
+        normal = normalize(lerp(normal, normalize(scan.xyz), ground_scans * 0.7));
+        scan_detail = lerp(scan_detail, scan.a, ground_scans);
+    }
 #endif
     const TerrainDetail detail = sample_detail(input.world_position, normal);
-    const float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
+    float detail_strength = 1.0 - smoothstep(500.0, 2600.0, camera_distance);
+#ifdef ATMOSPHERE
+    // Where a scan carries the fine grain, the tile keeps only its broad
+    // mottle: at 0.3 of it the ground went flat as a carpet.
+    detail_strength *= 1.0 - 0.35 * ground_scans;
+#endif
     float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
 #ifdef ATMOSPHERE
     albedo *= rock_tint * modulate(scan_detail, 0.9);
@@ -378,9 +424,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     // trees' own shadows and the occlusion do this tree by tree; the canopy
     // map's 7 m texels would only paint blots there, so it fades in past
     // 150 m. A forest read as trees standing on a lawn.
-    float2 canopy_uv = input.world_position.xz / max(scene.view_params.w, 1.0) * 0.5 + 0.5;
-    float canopy = canopy_map.SampleLevel(canopy_map_sampler, saturate(canopy_uv), 0.0).g *
-                   smoothstep(150.0, 500.0, camera_distance) * (1.0 - rocky);
+    float canopy = canopy_cover * smoothstep(150.0, 500.0, camera_distance) * (1.0 - rocky);
     albedo = lerp(albedo, albedo * float3(0.62, 0.58, 0.48), canopy * 0.8);
 #endif
 

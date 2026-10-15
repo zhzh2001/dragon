@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Bake the terrain's rock and scree detail maps from Poly Haven scans.
+"""Bake the terrain's scanned detail maps from Poly Haven scans.
 
     tools/build_terrain_rock.py CACHE_DIR
 
-Writes assets/textures/terrain_rock.png (from Poly Haven's rock_face_03)
-and terrain_scree.png (gray_rocks), both CC0 (ATTRIBUTION.md, "Poly Haven
-textures"). Each is 1024x1024 RGBA: the scan's OpenGL normal map in RGB
+Writes assets/textures/terrain_rock.png (from Poly Haven's rock_face_03),
+terrain_scree.png (gray_rocks), terrain_grass.png (leafy_grass),
+terrain_forest.png (forest_leaves_04, pine litter) and terrain_gravel.png
+(dry_river_pebbles), all CC0 (ATTRIBUTION.md, "Poly Haven textures").
+Each is 1024x1024 RGBA: the scan's OpenGL normal map in RGB
 and its luminance in A, normalised to a mean of 0.5 and a fixed spread.
 Only the detail is taken, never the colour: the palette colours the ground
 (gfx/palette.h), so the grade stays in one place, as the detail tile does
@@ -23,7 +25,13 @@ from PIL import Image, ImageStat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k"
-SETS = {"terrain_rock.png": "rock_face_03", "terrain_scree.png": "gray_rocks"}
+SETS = {
+    "terrain_rock.png": "rock_face_03",
+    "terrain_scree.png": "gray_rocks",
+    "terrain_grass.png": "leafy_grass",
+    "terrain_forest.png": "forest_leaves_04",
+    "terrain_gravel.png": "dry_river_pebbles",
+}
 SPREAD = 0.16  # the luminance's standard deviation, as a fraction of full scale
 
 

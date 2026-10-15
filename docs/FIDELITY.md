@@ -280,6 +280,17 @@ the shape (F2) and the crags do the work. Next for F3 is the CDLOD mesh.
 Cost: about 1 ms a frame at 1080p on the M5 for the crags, the mottling
 and the scans together (600 frames: 6.80 s before, 7.39 s after).
 
+
+**The ground's scans (2026-10-15).** Three more Poly Haven scans baked the
+same way (`terrain_grass`, `terrain_forest`, `terrain_gravel`: Leafy
+Grass, Forest Leaves 04's pine litter, Dry River Pebbles): meadow on the
+gentle ground, litter where the canopy map covers it, gravel on the bars
+within three metres of the water, each at two scales on the ground plane
+alone, out to 500 m. The detail tile keeps its broad mottle under them
+(at 0.3 of its strength the ground went flat as a carpet). Each is
+fetched only where it shows: on the ground's grazing angles the
+sampler's 8x anisotropy made six fetches a pixel cost 1.5 ms at 1080p;
+branching and the shorter reach brought it to 0.45.
 ## F4, second part (2026-10-13): the shadow in the air
 
 Every metre of haze was sunlit, so the air over a valley the ridges shade

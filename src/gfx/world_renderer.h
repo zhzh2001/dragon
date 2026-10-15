@@ -123,6 +123,7 @@ private:
     rhi::Texture* terrain_detail_ = nullptr;
     rhi::Texture* terrain_rock_ = nullptr;
     rhi::Texture* terrain_scree_ = nullptr;
+    rhi::Texture* ground_scans_[3] = {nullptr, nullptr, nullptr};
     rhi::Texture* neutral_ = nullptr;
     // The baked noise lattice, on a tier that bakes it (null otherwise).
     const NoiseLattice* noise_lattice_ = nullptr;
@@ -133,6 +134,12 @@ public:
     void set_terrain_scans(rhi::Texture* rock, rhi::Texture* scree) {
         terrain_rock_ = rock;
         terrain_scree_ = scree;
+    }
+    // The ground's scans (terrain.hlsl): meadow grass, pine litter, gravel.
+    void set_ground_scans(rhi::Texture* grass, rhi::Texture* forest, rhi::Texture* gravel) {
+        ground_scans_[0] = grass;
+        ground_scans_[1] = forest;
+        ground_scans_[2] = gravel;
     }
     void set_noise_lattice(const NoiseLattice* lattice) { noise_lattice_ = lattice; }
 private:

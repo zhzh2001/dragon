@@ -15,7 +15,7 @@ hobby project's reading, not legal advice.
 | Code, shaders, tools, tests, docs | yes, MIT | yes | yes | Ours (`LICENSE`) |
 | Original props (`assets/props/` except `grazer.glb`), terrain and leaf textures | yes, MIT | yes | yes | Procedural, made by our scripts |
 | HUD fonts (`assets/fonts/`): Barlow Condensed, Fira Sans | yes, OFL 1.1 | yes | yes | Licence text beside each, and in `THIRD_PARTY_NOTICES.md` |
-| `assets/textures/terrain_rock.png`, `terrain_scree.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03` and `gray_rocks` scans (below) |
+| `assets/textures/terrain_rock.png`, `terrain_scree.png`, `terrain_grass.png`, `terrain_forest.png`, `terrain_gravel.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03`, `gray_rocks`, `leafy_grass`, `forest_leaves_04` and `dry_river_pebbles` scans (below) |
 | Hunyuan-generated roster (`assets/<species>.glb`, about 50 MB each) | **no**, gitignored for size | **yes, labelled AI-generated** | yes | Outputs are ours (clause 5.3); the label is required (3.3); see below |
 | `assets/props/grazer.glb` (Hunyuan-derived, 3.5 MB) | yes, labelled | yes | yes | As above, and small enough to track |
 | AI concept art and renders in `artifacts/`, `docs/concept/` | yes, labelled | no (not game content) | -- | Outputs are ours under the OpenAI, Google and Tencent terms |
@@ -32,10 +32,15 @@ offered on the same terms, with no claim made over it.
 
 ## Poly Haven textures (2026-10-13)
 
-`assets/textures/terrain_rock.png` and `terrain_scree.png` are baked by
-`tools/build_terrain_rock.py` from two Poly Haven texture scans,
-[Rock Face 03](https://polyhaven.com/a/rock_face_03) and
-[Gray Rocks](https://polyhaven.com/a/gray_rocks), at 1K. Only each scan's
+`assets/textures/terrain_rock.png`, `terrain_scree.png`,
+`terrain_grass.png`, `terrain_forest.png` and `terrain_gravel.png` are
+baked by `tools/build_terrain_rock.py` from five Poly Haven texture scans,
+[Rock Face 03](https://polyhaven.com/a/rock_face_03),
+[Gray Rocks](https://polyhaven.com/a/gray_rocks),
+[Leafy Grass](https://polyhaven.com/a/leafy_grass),
+[Forest Leaves 04](https://polyhaven.com/a/forest_leaves_04) and
+[Dry River Pebbles](https://polyhaven.com/a/dry_river_pebbles) (the last
+three added 2026-10-15), at 1K. Only each scan's
 normal map and its luminance are kept, never its colour. Poly Haven
 publishes everything under CC0: no attribution is required, and this note
 is a courtesy and a record of where they came from. They may go anywhere

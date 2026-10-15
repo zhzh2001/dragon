@@ -560,6 +560,10 @@ bool App::init(const Options& options) {
         terrain_rock_texture_ = load_scan("terrain_rock");
         terrain_scree_texture_ = load_scan("terrain_scree");
         world_.set_terrain_scans(terrain_rock_texture_, terrain_scree_texture_);
+        ground_scan_textures_[0] = load_scan("terrain_grass");
+        ground_scan_textures_[1] = load_scan("terrain_forest");
+        ground_scan_textures_[2] = load_scan("terrain_gravel");
+        world_.set_ground_scans(ground_scan_textures_[0], ground_scan_textures_[1], ground_scan_textures_[2]);
     }
     load_rocks();
 
@@ -1746,6 +1750,10 @@ void App::shutdown() {
         device_.rhi().destroy(terrain_rock_texture_);
         device_.rhi().destroy(terrain_scree_texture_);
         terrain_rock_texture_ = terrain_scree_texture_ = nullptr;
+        for (rhi::Texture*& t : ground_scan_textures_) {
+            device_.rhi().destroy(t);
+            t = nullptr;
+        }
         noise_lattice_.destroy(device_.rhi());
         device_.rhi().destroy(model_sampler_);
         foliage_.shutdown(device_);

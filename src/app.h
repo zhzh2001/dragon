@@ -453,6 +453,7 @@ private:
     rhi::Texture* terrain_detail_texture_ = nullptr;
     rhi::Texture* terrain_rock_texture_ = nullptr;
     rhi::Texture* terrain_scree_texture_ = nullptr;
+    rhi::Texture* ground_scan_textures_[3] = {nullptr, nullptr, nullptr};  // grass, forest, gravel
     gfx::NoiseLattice noise_lattice_;  // made only on a tier that bakes noise
     std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
     int grazer_clip_[3] = {-1, -1, -1};
