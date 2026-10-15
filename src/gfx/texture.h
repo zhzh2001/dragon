@@ -55,6 +55,10 @@ std::vector<ImageData> build_mips(const ImageData& image, bool srgb, bool block_
 // 4x4 blocks, row by row: 8 bytes each for BC1, 16 for BC3. Edges must be
 // multiples of four.
 std::vector<uint8_t> encode_bc(const ImageData& image, bool bc3);
+// And back: `width` x `height` texels (multiples of four) of BC1 or BC3
+// blocks as 8-bit RGBA. For a device that cannot sample block formats (GLES
+// 2.0 on the Pi 1B), so a model pack's LODs still load there.
+ImageData decode_bc(const uint8_t* blocks, int width, int height, bool bc3);
 bool has_alpha(const ImageData& image);
 // The DXT5nm layout, in place: (x, y, z, a) -> (0, y, 0, x).
 void swizzle_normal_map(ImageData& image);

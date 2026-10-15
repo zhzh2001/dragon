@@ -381,6 +381,13 @@ frame at 540 lines whatever the monitor's mode (Frame height); 30.7 fps
 headless at a 1920x1080 window size. A saved configuration or `--tier` and
 `--preset` win.
 
+Start-up after that was 49.5 s, 34 of it meshoptimizer simplifying the
+dragon's and the props' LODs, which is what the model packs bake (R2b): but
+a device without block formats refused a pack outright. Packs now load on
+GLES with their DXT textures decoded at upload (`gfx::decode_bc`, tested
+against the reference decoder), and `tools/pi/deploy.sh` bakes them:
+**14.9 s** to the first frame, the erosion's 5.7 s the largest part left.
+
 The update is now profiled in parts (`update: bots`, `bots: rig`,
 `update: player rig` and the rest, under `DRAGON_FRAME_PROFILE`). The
 Lowest preset's Plain HUD saves only 0.7 ms on the Pi, not worth its look.

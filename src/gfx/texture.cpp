@@ -298,6 +298,73 @@ PreparedTexture prepare_texture(const ImageData& image, TextureKind kind, const 
     return out;
 }
 
+namespace {
+
+void decode_colour_block(const uint8_t* b, bool four_colour_only, uint8_t out[16][4]) {
+    const uint16_t c0 = uint16_t(b[0] | (b[1] << 8)), c1 = uint16_t(b[2] | (b[3] << 8));
+    const auto expand = [](uint16_t c, uint8_t rgba[4]) {
+        const int r = (c >> 11) & 31, g = (c >> 5) & 63, bl = c & 31;
+        rgba[0] = uint8_t((r << 3) | (r >> 2));
+        rgba[1] = uint8_t((g << 2) | (g >> 4));
+        rgba[2] = uint8_t((bl << 3) | (bl >> 2));
+        rgba[3] = 255;
+    };
+    uint8_t palette[4][4];
+    expand(c0, palette[0]);
+    expand(c1, palette[1]);
+    const bool four = four_colour_only || c0 > c1;
+    for (int ch = 0; ch < 3; ++ch) {
+        const int a = palette[0][ch], c = palette[1][ch];
+        palette[2][ch] = uint8_t(four ? (2 * a + c) / 3 : (a + c) / 2);
+        palette[3][ch] = uint8_t(four ? (a + 2 * c) / 3 : 0);
+    }
+    palette[2][3] = 255;
+    palette[3][3] = four ? 255 : 0;  // three-colour mode: transparent black
+    const uint32_t indices = uint32_t(b[4]) | (uint32_t(b[5]) << 8) | (uint32_t(b[6]) << 16) | (uint32_t(b[7]) << 24);
+    for (int t = 0; t < 16; ++t) {
+        const uint8_t* c = palette[(indices >> (2 * t)) & 3];
+        for (int ch = 0; ch < 4; ++ch) out[t][ch] = c[ch];
+    }
+}
+
+void decode_alpha_block(const uint8_t* b, uint8_t out[16][4]) {
+    const int a0 = b[0], a1 = b[1];
+    int alpha[8] = {a0, a1};
+    if (a0 > a1) {
+        for (int i = 1; i <= 6; ++i) alpha[i + 1] = ((7 - i) * a0 + i * a1) / 7;
+    } else {
+        for (int i = 1; i <= 4; ++i) alpha[i + 1] = ((5 - i) * a0 + i * a1) / 5;
+        alpha[6] = 0;
+        alpha[7] = 255;
+    }
+    uint64_t bits = 0;
+    for (int i = 0; i < 6; ++i) bits |= uint64_t(b[2 + i]) << (8 * i);
+    for (int t = 0; t < 16; ++t) out[t][3] = uint8_t(alpha[(bits >> (3 * t)) & 7]);
+}
+
+}  // namespace
+
+ImageData decode_bc(const uint8_t* blocks, int width, int height, bool bc3) {
+    ImageData image;
+    image.width = width;
+    image.height = height;
+    image.rgba.resize(size_t(width) * size_t(height) * 4);
+    const size_t block_bytes = bc3 ? 16 : 8;
+    for (int by = 0; by < height / 4; ++by) {
+        for (int bx = 0; bx < width / 4; ++bx) {
+            const uint8_t* b = blocks + (size_t(by) * size_t(width / 4) + size_t(bx)) * block_bytes;
+            uint8_t texels[16][4];
+            decode_colour_block(bc3 ? b + 8 : b, bc3, texels);
+            if (bc3) decode_alpha_block(b, texels);
+            for (int t = 0; t < 16; ++t) {
+                const size_t at = (size_t(by * 4 + t / 4) * size_t(width) + size_t(bx * 4 + t % 4)) * 4;
+                for (int ch = 0; ch < 4; ++ch) image.rgba[at + size_t(ch)] = texels[t][ch];
+            }
+        }
+    }
+    return image;
+}
+
 rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared, const char* debug_name) {
     if (!prepared.valid()) return nullptr;
     rhi::TextureDesc desc;
@@ -314,12 +381,26 @@ rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared,
         if (desc.format == rhi::Format::BC3_SRGB) desc.format = rhi::Format::BC3;
     }
     desc.usage = rhi::TEXTURE_SAMPLED;
+    // Blocks a device cannot sample are decoded here, level by level (a model
+    // pack's textures on GLES 2.0).
+    const bool bc3 = prepared.format == rhi::Format::BC3 || prepared.format == rhi::Format::BC3_SRGB;
+    const bool decode = prepared.compressed() && !rhi.supports_format(desc.format, rhi::TEXTURE_SAMPLED);
+    if (decode) {
+        const bool srgb = desc.format == rhi::Format::BC1_SRGB || desc.format == rhi::Format::BC3_SRGB;
+        desc.format = srgb ? rhi::Format::RGBA8_SRGB : rhi::Format::RGBA8;
+    }
     rhi::Texture* texture = rhi.create_texture(desc, debug_name);
     if (!texture) return nullptr;
     size_t bytes = 0;
     uint32_t w = prepared.width, h = prepared.height;
     for (size_t level = 0; level < prepared.levels.size(); ++level) {
-        const std::vector<uint8_t>& data = prepared.levels[level];
+        const std::vector<uint8_t>* level_data = &prepared.levels[level];
+        ImageData decoded;
+        if (decode) {
+            decoded = decode_bc(level_data->data(), int(w), int(h), bc3);
+            level_data = &decoded.rgba;
+        }
+        const std::vector<uint8_t>& data = *level_data;
         if (!rhi.upload_texture_level(texture, uint32_t(level), data.data(), uint32_t(data.size()), w, h)) {
             rhi.destroy(texture);
             return nullptr;
@@ -328,10 +409,10 @@ rhi::Texture* upload_prepared(rhi::Device& rhi, const PreparedTexture& prepared,
         w = w > 1 ? w / 2 : 1;
         h = h > 1 ? h / 2 : 1;
     }
-    const bool bc3 = prepared.format == rhi::Format::BC3 || prepared.format == rhi::Format::BC3_SRGB;
-    LOG_INFO("texture '%s': %dx%d -> %ux%u %s, %zu mips, %.1f MB", debug_name, prepared.source_width,
+    LOG_INFO("texture '%s': %dx%d -> %ux%u %s%s, %zu mips, %.1f MB", debug_name, prepared.source_width,
              prepared.source_height, prepared.width, prepared.height,
-             prepared.compressed() ? (bc3 ? "BC3" : "BC1") : "RGBA8", prepared.levels.size(),
+             prepared.compressed() ? (bc3 ? "BC3" : "BC1") : "RGBA8", decode ? " decoded to RGBA8" : "",
+             prepared.levels.size(),
              double(bytes) / (1024.0 * 1024.0));
     return texture;
 }

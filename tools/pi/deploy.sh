@@ -4,7 +4,7 @@
 # (tools/gles/bake_gles.py: sm2, sm2 without shadows, ff) and the assets the
 # Windows package carries, one species unless named, its glTF's textures
 # shrunk to 1024 (the tiers cap at 512; the decode is what the Pi's 429 MB
-# feels).
+# feels), and the model packs.
 #
 #   tools/pi/deploy.sh [SPECIES...]
 set -euo pipefail
@@ -26,5 +26,14 @@ for s in $species; do
     [ -f "assets/$s.glb.$kind.cfg" ] && cp "assets/$s.glb.$kind.cfg" "$stage/assets/"
   done
 done
+# The model packs (anim/model_pack.h): the LODs baked here, which the Pi
+# spent 34 s of its start-up simplifying. Their DXT textures are decoded at
+# upload there (GLES 2.0 has no block formats). Props' packs land beside the
+# source props, as tools/release/package_windows.sh has them.
+models=""
+for s in $species; do models="$models${models:+,}$stage/assets/$s.glb"; done
+[ -x build/dragon ] || { echo "build/dragon is needed to bake the model packs" >&2; exit 1; }
+./build/dragon --bake-packs --models "$models" >/dev/null 2>&1
+cp assets/props/*.glb.pack "$stage/assets/props/"
 rsync -a --delete "$stage/" rpi:dragon/
 ssh rpi 'du -sh dragon'

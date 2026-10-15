@@ -119,6 +119,30 @@ int main() {
         err /= 64.0 * 64.0 * 3.0;
         std::printf("  BC1 gradient: mean error %.2f code values\n", err);
         CHECK(err < 3.0);
+        // decode_bc, for a device without block formats (GLES 2.0): the
+        // reference decoder's texels within one code value (it expands 5 and
+        // 6 bits by c * 255 / 31, the hardware by bit replication), every
+        // texel opaque, and BC3's alpha through.
+        const gfx::ImageData back = gfx::decode_bc(bc1.data(), 64, 64, false);
+        bool same = back.width == 64 && back.height == 64;
+        for (int by = 0; by < 16 && same; ++by) {
+            for (int bx = 0; bx < 16; ++bx) {
+                uint8_t texels[16][3];
+                decode_bc1_colour(&bc1[size_t(by * 16 + bx) * 8], texels);
+                for (int i = 0; i < 16; ++i) {
+                    const size_t at = (size_t(by * 4 + i / 4) * 64 + size_t(bx * 4 + i % 4)) * 4;
+                    for (int k = 0; k < 3; ++k) same = same && std::abs(back.rgba[at + size_t(k)] - texels[i][k]) <= 1;
+                    same = same && back.rgba[at + 3] == 255;
+                }
+            }
+        }
+        CHECK(same);
+        gfx::ImageData holes = ramp;
+        for (size_t i = 0; i < holes.rgba.size(); i += 4) holes.rgba[i + 3] = uint8_t((i / 4) % 64 < 32 ? 0 : 255);
+        const gfx::ImageData holes_back = gfx::decode_bc(gfx::encode_bc(holes, true).data(), 64, 64, true);
+        bool alpha_kept = true;
+        for (size_t i = 0; i < holes.rgba.size(); i += 4) alpha_kept = alpha_kept && holes_back.rgba[i + 3] == holes.rgba[i + 3];
+        CHECK(alpha_kept);
         gfx::ImageData cut = ramp;
         cut.rgba[3] = 0;
         CHECK(gfx::has_alpha(cut));

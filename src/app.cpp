@@ -4423,14 +4423,10 @@ std::unique_ptr<anim::ModelPack> App::open_model_pack(const std::string& path) c
         LOG_WARN("%s: older than its model; loading the glTF instead (re-run --bake-packs)", pack_path.c_str());
         return nullptr;
     }
-    // Its textures are block-compressed; a device without BC takes the
-    // glTF route, which encodes nothing.
-    for (const anim::ModelPackTexture& t : pack->textures) {
-        if (t.prepared.compressed() && !device_.rhi().supports_format(t.prepared.format, rhi::TEXTURE_SAMPLED)) {
-            LOG_WARN("%s: this device has no BC formats; loading the glTF instead", pack_path.c_str());
-            return nullptr;
-        }
-    }
+    // Its textures are block-compressed; a device without BC formats (GLES
+    // 2.0) has them decoded at upload (gfx::upload_prepared) and keeps the
+    // LODs, which are what the pack saves: 34 of the Pi 1B's 50 s start-up
+    // went on simplifying meshes.
     LOG_INFO("%s: %zu triangles, %zu texture(s), %zu LOD(s)", pack_path.c_str(), pack->mesh.indices.size() / 3,
              pack->textures.size(), pack->lods.size());
     return pack;
