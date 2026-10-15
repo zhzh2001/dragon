@@ -404,6 +404,7 @@ private:
         // The run's rivals hold a post until the run wakes them; hunters are
         // the dragonslayers loosed behind the player on the clock.
         bool dormant = false;
+        float rig_dt = 0.0f;  // time owed to the rig, when it is stepped less often (update_bots)
         bool hunter = false;
         int rival = -1;
         core::Vec3 post = core::Vec3::zero();

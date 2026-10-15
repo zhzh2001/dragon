@@ -367,7 +367,8 @@ pipeline spends in the driver's draw calls):
 | The GLES backend no longer re-points unchanged vertex attributes (vc4 revalidated its vertex state every draw) | 24.4 fps |
 | Grazers posed only when the main view will draw them | 25.8 fps |
 | 624 m terrain chunks on GLES ff (312 on D3D9, whose cards pay per vertex): 245 draws a frame to 105. The frame changes by 0.118/255 mean, 0.2% of pixels past 8, where the fine mesh now reaches further (first recorded as 0.017, against a capture made with `DRAGON_TERRAIN_CHUNK` set empty, which is 0) | 31-34 fps, median 30-31 ms |
-| 32-bit index buffers kept as 16-bit copies when every index fits: VC4 fetches only 16-bit indices, and Mesa converted a 32-bit buffer on the CPU at every draw, reading it back out of GPU memory (terrain draws 3.95 -> 1.84 ms, skinned 2.3 -> 1.5; frames byte-identical) | **37.0 fps**, median 26.3 ms, 1% low 30.2 |
+| 32-bit index buffers kept as 16-bit copies when every index fits: VC4 fetches only 16-bit indices, and Mesa converted a 32-bit buffer on the CPU at every draw, reading it back out of GPU memory (terrain draws 3.95 -> 1.84 ms, skinned 2.3 -> 1.5; frames byte-identical) | 37.0 fps, median 26.3 ms, 1% low 30.2 |
+| Bots' rigs past 300 m stepped at most 20 times a second on the time owed, staggered (five rigs were 4.5 of the update's 6.5 ms; now 1.8). A rival at 291 m after 1,500 frames poses as before; within 300 m every frame, so the goldens are unchanged | **43.0 fps**, median 22.6 ms, 1% low 26.3 |
 
 And start-up: the erosion ran for an arena valley a start into a run never
 shows (a launch with no arguments is one), and the fixed-function far
@@ -379,6 +380,10 @@ The Pi build's defaults: the ff tier (whose default is Minimal) and the
 frame at 540 lines whatever the monitor's mode (Frame height); 30.7 fps
 headless at a 1920x1080 window size. A saved configuration or `--tier` and
 `--preset` win.
+
+The update is now profiled in parts (`update: bots`, `bots: rig`,
+`update: player rig` and the rest, under `DRAGON_FRAME_PROFILE`). The
+Lowest preset's Plain HUD saves only 0.7 ms on the Pi, not worth its look.
 
 **Next on the Pi**: keyboard and pad through KMSDRM's evdev; audio through
 miniaudio's ALSA; a playtest on a monitor; the rest of Mesa's per-draw

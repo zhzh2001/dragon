@@ -982,7 +982,10 @@ game::FlightInput App::read_flight_input(float dt) {
         demo_.fight_tuning.reaction_interval = 0.16f;
         demo_.fight_tuning.aim_spread_deg = 1.2f;
         demo_.fight_tuning.aggression = 0.7f;
-        demo_decision_ = demo_.update(dt, flight_.state(), world);
+        {
+            CORE_PROFILE("update: demo pilot");
+            demo_decision_ = demo_.update(dt, flight_.state(), world);
+        }
         in = demo_decision_.flight;
         // This branch returns before the human input's boost mapping below.
         // Read the ability's active state, including its ordinary cooldown;
@@ -2178,10 +2181,20 @@ void App::update(float dt) {
             }
         }
         update_abilities();
-        update_bots(dt);
-        const game::CombatEvents events = combat_.update(dt, flight_.state(), read_combat_input());
+        {
+            CORE_PROFILE("update: bots");
+            update_bots(dt);
+        }
+        game::CombatEvents events;
+        {
+            CORE_PROFILE("update: combat");
+            events = combat_.update(dt, flight_.state(), read_combat_input());
+        }
         match_.update(dt, events);
-        if (run_mode_) update_run(dt, events);
+        if (run_mode_) {
+            CORE_PROFILE("update: run + prey");
+            update_run(dt, events);
+        }
         for (const game::Impact& impact : combat_.impacts()) {
             emit_impact(impact.position, impact.team == game::Team::Hostile, impact.on_terrain,
                         impact.element);
@@ -2593,7 +2606,10 @@ void App::update(float dt) {
     chase_.tuning.fov_base_deg = base_fov_ + boost_fov_;
     was_boosting_ = boosting;
 
-    particles_.update(dt);
+    {
+        CORE_PROFILE("update: particles");
+        particles_.update(dt);
+    }
 
     // ---- ears ----
     if (audio_.ready()) {
@@ -2682,8 +2698,10 @@ void App::update(float dt) {
     }
     // The scenario and rig must share a clock: otherwise slow motion spaces
     // attacks farther apart but every actual swing still runs at full speed.
-    if (!options_.bind_pose) dragon_rig_.update(dragon_state(),
-                                               dt * (studio_active_ ? studio_time_scale_ : 1.0f));
+    if (!options_.bind_pose) {
+        CORE_PROFILE("update: player rig");
+        dragon_rig_.update(dragon_state(), dt * (studio_active_ ? studio_time_scale_ : 1.0f));
+    }
     // Re-place the first-person eye on THIS frame's head. The camera ran
     // before the rig, so it was holding last frame's head while the mesh
     // draws this one; the gap is one frame of neck motion, invisible at a
@@ -4327,6 +4345,9 @@ std::unique_ptr<App::BotShip> App::make_bot(int index) {
                      : player_model_;
     LoadedModel& worn = model_at(bot->model);
     bot->rig.init(worn.skeleton, worn.joints);
+    // Far rigs step every 50 ms (update_bots); staggered, so they do not all
+    // step on the same frame.
+    bot->rig_dt = 0.0167f * float(bots_.size() % 3);
     bot->rig.set_model_scale(worn.asset.scale);
     apply_idle_clip(worn, bot->rig);
     // Pose and handling both follow the species, not the player.
@@ -6162,6 +6183,7 @@ void App::update_bots(float dt) {
             decision.flight = game::steer_through(self, aim, core::Vec3::zero(),
                                                   bot->pilot.tuning.steering, ground);
         } else {
+            CORE_PROFILE("bots: pilot");
             decision = bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground,
                                          health_fraction);
         }
@@ -6201,7 +6223,10 @@ void App::update_bots(float dt) {
             decision.flight.flap *= 1.0f - slow;
         }
         const float sink_before = bot->flight.state().climb_rate;
-        bot->flight.update(decision.flight, &terrain_, dt);
+        {
+            CORE_PROFILE("bots: flight");
+            bot->flight.update(decision.flight, &terrain_, dt);
+        }
         if (slow > 0.0f && !bot->flight.state().grounded) {
             bot->flight.state().velocity =
                 bot->flight.state().velocity * std::exp(-0.35f * slow * dt);
@@ -6351,7 +6376,21 @@ void App::update_bots(float dt) {
                                     model_at(bot->model).asset.matrix(),
                                 [this](float x, float z) { return terrain_.surface_at(x, z); });
         }
-        bot->rig.update(bot->flight.state(), dt);
+        {
+            // A rig's level of detail: past 300 m a dragon is a couple of
+            // dozen pixels, and its rig steps at most 20 times a second on
+            // the time owed -- the step a 20 fps machine takes every frame.
+            // Five bots' rigs were 4.5 ms of the Pi 1B's 25 ms frame.
+            CORE_PROFILE("bots: rig");
+            bot->rig_dt += dt;
+            const float far = core::distance(active_camera().position, bot->flight.state().position) > 300.0f
+                                  ? 0.05f
+                                  : 0.0f;
+            if (bot->rig_dt >= far) {
+                bot->rig.update(bot->flight.state(), bot->rig_dt);
+                bot->rig_dt = 0.0f;
+            }
+        }
         bot->was_alive = true;
     }
 }
