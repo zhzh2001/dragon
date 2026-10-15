@@ -56,6 +56,14 @@ struct GlBuffer {
     // per-instance attributes from here (no divisors in GLES 2.0).
     std::vector<uint8_t> shadow;
     std::vector<uint8_t> staging;  // map_upload's
+    // An index buffer's contents as 16-bit indices, when every index fits:
+    // VC4 fetches only 16-bit indices, and Mesa meets OES_element_index_uint
+    // by converting a 32-bit buffer on the CPU at every draw -- reading it
+    // back out of GPU memory -- which was most of a terrain draw's cost on
+    // the Pi 1B. Built at the first 32-bit draw; 0 when it cannot be.
+    std::vector<uint32_t> indices;  // the 32-bit contents, until narrowed
+    GLuint narrow = 0;
+    int narrow_state = -1;  // -1 not tried, 0 does not fit, 1 built
 };
 
 struct GlTexture {
@@ -88,6 +96,7 @@ struct GlPipeline {
     uint32_t attributes = 0;                // bit n: a<n> is read
     bool vertex_id = false;                 // a0 with no attribute declared: the vertex index
     bool instanced = false;                 // reads a per-instance buffer
+    uint64_t stat_ns = 0, stat_draws = 0;   // DRAGON_GLES_STATS: time in the driver's draw calls
     std::string name;
 };
 
@@ -440,6 +449,13 @@ public:
                      double(stat_draws_) / 300.0, double(stat_instances_) / 300.0, double(stat_uniforms_) / 300.0,
                      double(stat_programs_) / 300.0);
             stat_draws_ = stat_instances_ = stat_uniforms_ = stat_programs_ = 0;
+            std::vector<GlPipeline*> by_time(timed_.begin(), timed_.end());
+            std::sort(by_time.begin(), by_time.end(), [](auto* a, auto* b) { return a->stat_ns > b->stat_ns; });
+            for (size_t i = 0; i < by_time.size() && i < 8; ++i) {
+                LOG_INFO("gles stats:   %-18s %6.2f ms a frame in %5.1f draws", by_time[i]->name.c_str(),
+                         double(by_time[i]->stat_ns) * 1e-6 / 300.0, double(by_time[i]->stat_draws) / 300.0);
+            }
+            for (GlPipeline* p : timed_) p->stat_ns = p->stat_draws = 0;
         }
         if (readback && source) download(source, width, height, *readback);
         if (!headless_ && source) {
@@ -471,6 +487,8 @@ public:
         if (usage == BufferUsage::Vertex) {
             b->shadow.assign(size, 0);
             if (data) std::memcpy(b->shadow.data(), data, size);
+        } else if (data && size % 4 == 0) {
+            b->indices.assign(static_cast<const uint32_t*>(data), static_cast<const uint32_t*>(data) + size / 4);
         }
         track(b, Kind::Buffer, size);
         return reinterpret_cast<Buffer*>(b);
@@ -482,6 +500,7 @@ public:
         if (array_buffer_ == b->id) array_buffer_ = 0;
         attributes_valid_ = false;  // a new buffer may take its address
         glDeleteBuffers(1, &b->id);
+        if (b->narrow) glDeleteBuffers(1, &b->narrow);
         untrack(b);
         delete b;
     }
@@ -501,6 +520,12 @@ public:
         glBufferData(target, b->size, nullptr, GL_STREAM_DRAW);
         glBufferSubData(target, 0, size, b->staging.data());
         if (b->usage == BufferUsage::Vertex) std::memcpy(b->shadow.data(), b->staging.data(), size);
+        if (b->usage == BufferUsage::Index) {
+            // Rewritten: the 16-bit copy is stale.
+            b->indices.assign(reinterpret_cast<const uint32_t*>(b->staging.data()),
+                              reinterpret_cast<const uint32_t*>(b->staging.data()) + size / 4);
+            b->narrow_state = -1;
+        }
         attributes_valid_ = false;  // an instance's values may have changed with it
     }
 
@@ -657,6 +682,7 @@ public:
         if (program_ == p->program) program_ = 0;
         if (bound_pipeline_ == p) bound_pipeline_ = nullptr;
         attributes_valid_ = false;
+        timed_.erase(std::remove(timed_.begin(), timed_.end(), p), timed_.end());
         glDeleteProgram(p->program);
         untrack(p);
         delete p;
@@ -770,6 +796,7 @@ public:
               uint32_t first_instance) override {
         GlPipeline* p = bound_pipeline_;
         if (!p) return;
+        const uint64_t t0 = stats_ ? SDL_GetTicksNS() : 0;
         flush_uniforms(p);
         const GLenum mode = gl_primitive(p->desc.primitive);
         for (uint32_t i = 0; i < std::max(1u, instance_count); ++i) {
@@ -778,6 +805,7 @@ public:
             ++stat_draws_;
             if (instance_count > 1) ++stat_instances_;
         }
+        if (stats_) time_draw(p, t0, instance_count);
     }
 
     void draw_indexed(Pass*, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
@@ -785,12 +813,17 @@ public:
         GlPipeline* p = bound_pipeline_;
         GlBuffer* ib = gl(index_buffer_.buffer);
         if (!p || !ib) return;
-        if (index_size_ == IndexSize::U32 && !index32_) return;
+        const uint64_t t0 = stats_ ? SDL_GetTicksNS() : 0;
+        bool narrow = index_size_ == IndexSize::U16;
+        if (!narrow && narrow_indices(ib)) narrow = true;
+        if (!narrow && !index32_) return;
         flush_uniforms(p);
-        bind_buffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
-        const GLenum type = index_size_ == IndexSize::U16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
-        const uintptr_t offset =
-            index_buffer_.offset + uintptr_t(first_index) * (index_size_ == IndexSize::U16 ? 2 : 4);
+        const bool narrowed = index_size_ == IndexSize::U32 && narrow;
+        bind_buffer(GL_ELEMENT_ARRAY_BUFFER, narrowed ? ib->narrow : ib->id);
+        const GLenum type = narrow ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        // A narrowed buffer holds the same indices at half the width.
+        const uintptr_t offset = (narrowed ? index_buffer_.offset / 2 : index_buffer_.offset) +
+                                 uintptr_t(first_index) * (narrow ? 2 : 4);
         const GLenum mode = gl_primitive(p->desc.primitive);
         for (uint32_t i = 0; i < std::max(1u, instance_count); ++i) {
             if (!setup_attributes(p, vertex_offset, first_instance + i)) return;
@@ -798,6 +831,7 @@ public:
             ++stat_draws_;
             if (instance_count > 1) ++stat_instances_;
         }
+        if (stats_) time_draw(p, t0, instance_count);
     }
 
 private:
@@ -991,6 +1025,30 @@ private:
         return true;
     }
 
+    // Builds `b`'s 16-bit copy if every index fits; whether it has one.
+    bool narrow_indices(GlBuffer* b) {
+        if (b->narrow_state < 0) {
+            b->narrow_state = 0;
+            if (!b->indices.empty() &&
+                *std::max_element(b->indices.begin(), b->indices.end()) <= 0xFFFFu) {
+                std::vector<uint16_t> narrow(b->indices.begin(), b->indices.end());
+                if (!b->narrow) glGenBuffers(1, &b->narrow);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, b->narrow);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(narrow.size() * 2), narrow.data(), GL_STATIC_DRAW);
+                b->narrow_state = 1;
+                b->indices.clear();
+                b->indices.shrink_to_fit();
+            }
+        }
+        return b->narrow_state == 1;
+    }
+
+    void time_draw(GlPipeline* p, uint64_t t0, uint32_t instances) {
+        p->stat_ns += SDL_GetTicksNS() - t0;
+        p->stat_draws += std::max(1u, instances);
+        if (std::find(timed_.begin(), timed_.end(), p) == timed_.end()) timed_.push_back(p);
+    }
+
     struct AttributeKey {
         const GlPipeline* pipeline = nullptr;
         int32_t vertex_offset = 0;
@@ -1083,6 +1141,7 @@ private:
     bool attributes_valid_ = false;
     bool stats_ = false;
     uint64_t stat_frames_ = 0, stat_draws_ = 0, stat_instances_ = 0, stat_uniforms_ = 0, stat_programs_ = 0;
+    std::vector<GlPipeline*> timed_;
 
 };
 

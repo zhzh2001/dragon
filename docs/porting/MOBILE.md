@@ -358,14 +358,16 @@ once after.
 
 **Optimised the same day** (`perf` 5.10 works on the Pi's 6.1 kernel with
 `-e cpu-clock`; the ARM11's counters cannot sample; `DRAGON_GLES_STATS=1`
-logs draws, uniform uploads and programs a frame):
+logs draws, uniform uploads and programs a frame, and the time each
+pipeline spends in the driver's draw calls):
 
 | Change | Run, 640x480, ff Minimal |
 |---|---|
 | As first built | 22.9 fps, median 43.0 ms |
 | The GLES backend no longer re-points unchanged vertex attributes (vc4 revalidated its vertex state every draw) | 24.4 fps |
 | Grazers posed only when the main view will draw them | 25.8 fps |
-| 624 m terrain chunks on GLES ff (312 on D3D9, whose cards pay per vertex): 245 draws a frame to 105, 0.017/255 mean change in the frame | **31-34 fps**, median 30-31 ms |
+| 624 m terrain chunks on GLES ff (312 on D3D9, whose cards pay per vertex): 245 draws a frame to 105. The frame changes by 0.118/255 mean, 0.2% of pixels past 8, where the fine mesh now reaches further (first recorded as 0.017, against a capture made with `DRAGON_TERRAIN_CHUNK` set empty, which is 0) | 31-34 fps, median 30-31 ms |
+| 32-bit index buffers kept as 16-bit copies when every index fits: VC4 fetches only 16-bit indices, and Mesa converted a 32-bit buffer on the CPU at every draw, reading it back out of GPU memory (terrain draws 3.95 -> 1.84 ms, skinned 2.3 -> 1.5; frames byte-identical) | **37.0 fps**, median 26.3 ms, 1% low 30.2 |
 
 And start-up: the erosion ran for an arena valley a start into a run never
 shows (a launch with no arguments is one), and the fixed-function far
@@ -380,7 +382,9 @@ headless at a 1920x1080 window size. A saved configuration or `--tier` and
 
 **Next on the Pi**: keyboard and pad through KMSDRM's evdev; audio through
 miniaudio's ALSA; a playtest on a monitor; the rest of Mesa's per-draw
-cost (vegetation's per-instance draws, 5.5 ms).
+cost (foliage, 190 us a per-instance draw, is the most expensive left; a
+constant palette index in its vertex stage changed nothing, so indexed
+uniforms are not it).
 
 ## What every mobile target needs
 
