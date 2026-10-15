@@ -812,6 +812,9 @@ private:
     // Trees and grass: placed by the terrain rules, drawn instanced.
     game::Vegetation vegetation_;
     game::VegetationSettings vegetation_settings_;
+    // The modern tier's gathering of the forest into stands
+    // (VegetationSettings::stand_contrast); the retro tiers keep 0.
+    float stand_contrast_ = 1.0f;
     gfx::Foliage foliage_;
     std::vector<game::PlantInstance> grass_scratch_[gfx::GRASS_KINDS];
     void replant();

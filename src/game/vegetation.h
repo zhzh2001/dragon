@@ -27,6 +27,11 @@ struct VegetationSettings {
     float treeline_above_floor = 330.0f;
     // 0..1: how much of the eligible ground is forest rather than clearing.
     float forest_cover = 0.5f;
+    // 0..1: how far the cover gathers into closed stands with open meadow
+    // between, rather than trees sprinkled everywhere at varying density.
+    // The modern tier's (App::vegetation_for_tier); 0 is the retro tiers'
+    // forest, unchanged.
+    float stand_contrast = 0.0f;
     // Steepest ground a tree will stand on, as the surface normal's y.
     float tree_max_slope = 0.78f;
     // A plant on a slope sinks this many metres per unit of (1 - normal.y), so

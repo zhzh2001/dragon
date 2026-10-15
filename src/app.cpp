@@ -1424,6 +1424,7 @@ void App::build_graphics_ui() {
 game::VegetationSettings App::vegetation_for_tier() const {
     game::VegetationSettings v = vegetation_settings_;
     v.tree_spacing *= tier_.budget.tree_spacing_scale;
+    v.stand_contrast = tier_.tier == gfx::Tier::Modern ? stand_contrast_ : 0.0f;
     v.grass_radius *= tier_.budget.grass_radius_scale;
     v.grass = v.grass && tier_.budget.grass_radius_scale > 0.0f;
     return v;
@@ -2966,6 +2967,9 @@ void App::build_ui(float dt) {
             ImGui::Checkbox("grass", &vegetation_settings_.grass);
             replant_now |= ImGui::SliderFloat("tree spacing", &vegetation_settings_.tree_spacing,
                                               6.0f, 40.0f, "%.0f m");
+            if (tier_.tier == gfx::Tier::Modern) {
+                replant_now |= ImGui::SliderFloat("forest stands", &stand_contrast_, 0.0f, 1.0f, "%.2f");
+            }
             replant_now |= ImGui::SliderFloat("forest cover", &vegetation_settings_.forest_cover,
                                               0.0f, 1.0f);
             replant_now |= ImGui::SliderFloat("treeline above floor",

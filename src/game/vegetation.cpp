@@ -112,9 +112,15 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
     const float treeline = floor + settings.treeline_above_floor;
     const int cells = int((2.0f * extent) / spacing);
 
+    // In a gathered stand's core (stand_contrast) a site can take a second
+    // tree, so the stand closes; the sprinkle never asks for one, and the
+    // second's draws come after the first's, so the retro tiers' forest is
+    // unchanged draw for draw.
+    const int sites = settings.stand_contrast > 0.0f ? 2 : 1;
     for (int iz = 0; iz < cells; ++iz) {
         for (int ix = 0; ix < cells; ++ix) {
             CellHash hash(ix, iz, settings.seed);
+            for (int site = 0; site < sites; ++site) {
             const float x = -extent + (float(ix) + hash.next()) * spacing;
             const float z = -extent + (float(iz) + hash.next()) * spacing;
 
@@ -127,10 +133,17 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
             // a band wide enough that the edge is not a ruler line.
             const float outside =
                 core::saturate((core::maxf(std::fabs(x), std::fabs(z)) - t.half_extent) / 150.0f);
-            const float density = core::saturate((stands + 0.55f) * 0.95f) *
-                                  core::saturate(0.55f + clumps * 1.4f) * settings.forest_cover * 2.0f *
+            const float sprinkled = core::saturate((stands + 0.55f) * 0.95f) * core::saturate(0.55f + clumps * 1.4f);
+            // Gathered: a stand is closed forest to its edge and a clearing
+            // is open, the groves inside a stand thinning but never to bare
+            // ground. Seen from the air, the sprinkle read as single trees on
+            // a lawn everywhere; the target's forests are masses.
+            const float gathered = core::smoothstep(-0.1f, 0.12f, stands) *
+                                   core::lerpf(0.45f, 1.6f, core::smoothstep(-0.25f, 0.25f, clumps));
+            const float density = core::lerpf(sprinkled, gathered, core::saturate(settings.stand_contrast)) *
+                                  settings.forest_cover * 2.0f *
                                   core::lerpf(1.0f, core::saturate(settings.skirt_cover), outside);
-            if (hash.next() > density) continue;
+            if (hash.next() > density - float(site)) continue;
 
             const float height = terrain.height_at(x, z);
             if (height < t.water_level + 2.0f || height > treeline) continue;
@@ -176,6 +189,7 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
             tree.params = Vec4{core::TWO_PI * hash.next(), 0.7f + 0.6f * hash.next(),
                                core::TWO_PI * hash.next(), warm_range * hash.next()};
             trees_[int(kind)].push_back(tree);
+            }
         }
     }
     LOG_INFO("vegetation: %zu trees (%zu spruce, %zu pine, %zu broadleaf, %zu dead; spacing %.0f m, "

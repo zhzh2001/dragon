@@ -87,7 +87,7 @@ modern tier offers, so the sm3, sm2 and ff goldens do not move.
 | **F4** light (**heightfield shadows and cascades done 2026-10-13/14**, below; sky light done in F1) | Cascaded shadows (four cascades to about 3 km) at Ultra and High. **Heightfield shadows**: a compute pass marches the height texture toward the sun into a top-down shadow map for the whole valley, recomputed when the sun moves, for shadows past the last cascade. Sky light from the F1 LUTs into a small cube map, prefiltered, replacing the two-colour hemispheric ambient with the sky that is there, and giving the scales and the water a specular reflection. Horizon occlusion baked from the heightfield | Long mountain shadows across the valley at a low sun; shadow sides lit by the sky's colour | 2-3 |
 | **F5** temporal (**TAA done 2026-10-13**, below; upscaling to come) | TAA: a jittered projection, motion vectors (the skinned meshes need last frame's joints, the foliage last frame's wind), history with neighbourhood clamping. It is what makes the noisy techniques after it affordable, and it calms the alpha-tested crowns' shimmer. A temporal upscale on top once it holds | Crowns and fine rock stable in motion; no ghosting behind the dragon in a turn | 2 |
 | **F6** clouds and AO (**volumetric clouds and SSAO done 2026-10-14**, below) | Volumetric clouds: raymarched at quarter resolution with temporal reprojection, from a weather map, lit by the F1 sun and sky, shadowing the ground through a cloud shadow map; flown through, not painted on -- the altitude cue `DIRECTION.md` row 9 asks for. GTAO at half resolution, and screen-space contact shadows for the creatures | The dragon flies into a cloud and out; it sits on the ground when landed | 3 |
-| **F7** forest (Ultra's density tripled 2026-10-13, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
+| **F7** forest (Ultra's density tripled 2026-10-13, stands 2026-10-15, below) | GPU-driven vegetation: compute culling into indirect draws, five to twenty times the trees so forests are masses, octahedral impostors past the card LOD at Ultra, per-tree colour variety from the palette, grass to a longer distance | The forest golden against the target's middle ground | 2 |
 | **F8** water (**done 2026-10-13**, below, by heightfield rather than screen space) | Flow-mapped normals along the river from F2's flow, depth colour and absorption, shoreline foam, screen-space reflections with the F4 sky cube as their fallback | The river golden: gravel bars, braids, reflections of the banks | 1-2 |
 | **F9** hardware ray tracing | A native Metal backend (`src/rhi/metal/`, the size of the D3D11 one), then ray-traced soft shadows, occlusion and water reflections against the creatures and trees, on top of F4's heightfield work. A native backend also brings MetalFX upscaling to the Mac. Vulkan ray queries on x99's 5060 Ti would be a second native backend | The wings' shadow soft on the ground; dragons in the river | 3-5 |
 
@@ -590,6 +590,22 @@ crowns takes a litter tint and less sky, and past the shadow cascades
 (1.4-2 km), where no crown shades the ground any more, the cover stands
 in for the shade (`terrain.hlsl`). Subtle in this valley, whose trees
 are sparse; the density is F7's.
+
+## F7, first part (2026-10-15): stands, not a sprinkle
+
+Renders in `artifacts/fidelity-f7-stands/`. The cover gathered trees by
+two noises but only modulated their density, so from the air every slope
+was single trees on a lawn at varying spacing. The modern tier now
+gathers them (`VegetationSettings::stand_contrast`, the Vegetation
+panel's "forest stands"): a stand is closed forest to its edge, its
+groves thinning inside but never to bare ground, and between stands is
+open meadow. In a stand's core a site takes a second tree, so the stand
+closes. 51 k trees against 32 k; +0.9 ms at 1080p on the M5 (doubling
+the old sprinkle instead cost 3.3 ms and still read as a lawn). The
+retro tiers keep 0: the second site is never asked for and its draws
+come after the first's, so their forest is unchanged draw for draw. The
+GPU-driven culling and the impostors past the card LOD are still to
+come; they are what would let the stands be denser again.
 
 ## The Ultra forest (2026-10-13)
 
