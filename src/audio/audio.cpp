@@ -17,6 +17,32 @@ namespace {
 constexpr uint32_t SAMPLE_RATE = 48000;
 constexpr float TWO_PI = 6.28318530718f;
 
+// A phase kept within one turn (it only ever grows by less than one).
+inline void wrap(float& phase) {
+    if (phase >= TWO_PI) phase -= TWO_PI;
+}
+
+// The slosh is also read at 1.7 times its phase (the blight's gurgle): ten
+// turns of it are seventeen of that, so it wraps there without a jump.
+inline void wrap_slosh(float& phase) {
+    if (phase >= 10.0f * TWO_PI) phase -= 10.0f * TWO_PI;
+}
+
+// tanh, the soft clip, as Lambert's continued fraction: within 1e-7 of it
+// below 3, and saturated where tanh is 1 to float precision. std::tanh's
+// expm1f was a tenth of the Pi 1B's mixer.
+inline float soft_clip(float x) {
+    if (x > 4.97f) return 1.0f;
+    if (x < -4.97f) return -1.0f;
+    const float x2 = x * x;
+    return x * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2))) /
+           (135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f)));
+}
+
+// The gust LFO moves at 0.23 Hz: stepped every 32 samples (0.7 ms) it is
+// the same curve, at a thirty-second of the sines.
+constexpr uint32_t kGustStep = 32;
+
 // One shared xorshift for synthesis (init-time only; the mixer has its own).
 uint32_t g_synth_rng = 0x9e3779b9u;
 float synth_noise() {
@@ -27,6 +53,7 @@ float synth_noise() {
 }
 
 void data_callback(ma_device* device, void* output, const void*, ma_uint32 frames) {
+    core::flush_denormals();  // the device's own thread
     static_cast<Audio*>(device->pUserData)->mix(static_cast<float*>(output), frames);
 }
 
@@ -294,6 +321,18 @@ bool Audio::init() {
     config.playback.channels = 2;
     config.sampleRate = SAMPLE_RATE;
     config.dataCallback = data_callback;
+    // The device's own sample format, converted to by miniaudio rather than
+    // by ALSA's plug: on the Pi 1B's HDMI that generic float converter (into
+    // IEC958 frames) was a third of the audio thread.
+    config.alsa.noAutoFormat = MA_TRUE;
+#if defined(__arm__)
+    // A single 700 MHz core (the Pi 1B) shares its time with a main thread
+    // that spends whole milliseconds inside the GL driver: longer periods,
+    // so a late callback does not run the 30 ms default buffer dry. Three
+    // 20 ms periods: 60 ms, where the conservative profile's are 300.
+    config.periodSizeInMilliseconds = 20;
+    config.periods = 3;
+#endif
     config.pUserData = this;
 
     ma_device* device = new ma_device;
@@ -344,6 +383,15 @@ void Audio::mix(float* out, uint32_t frames) {
     const float master = master_.load(std::memory_order_relaxed);
     const float wind_target = wind_target_.load(std::memory_order_relaxed);
     const float flame_target = flame_target_.load(std::memory_order_relaxed);
+    const int style = flame_style_.load(std::memory_order_relaxed);
+    // The playing voices, read once a buffer: an acquire per voice per
+    // sample was a memory barrier each on the Pi 1B's ARMv6, 1.2 million a
+    // second. A voice started now waits for the next buffer (10 ms).
+    Voice* live[MAX_VOICES];
+    int live_count = 0;
+    for (Voice& voice : voices_) {
+        if (voice.active.load(std::memory_order_acquire)) live[live_count++] = &voice;
+    }
 
     for (uint32_t i = 0; i < frames; ++i) {
         wind_level_ += (wind_target - wind_level_) * 0.0004f;
@@ -351,10 +399,19 @@ void Audio::mix(float* out, uint32_t frames) {
 
         // A slow gust LFO on top of the commanded level: steady wind sounds
         // like a fan, gusting wind sounds like weather.
-        gust_phase_ += TWO_PI * 0.23f / SAMPLE_RATE;
-        const float gust = 1.0f + 0.22f * std::sin(gust_phase_) *
-                                      std::sin(gust_phase_ * 2.7f + 1.3f);
+        if (gust_countdown_ == 0) {
+            gust_countdown_ = kGustStep;
+            gust_phase_ += TWO_PI * 0.23f * kGustStep / SAMPLE_RATE;
+            gust2_phase_ += TWO_PI * 0.23f * 2.7f * kGustStep / SAMPLE_RATE;
+            wrap(gust_phase_);
+            wrap(gust2_phase_);
+            gust_ = 1.0f + 0.22f * std::sin(gust_phase_) * std::sin(gust2_phase_);
+        }
+        --gust_countdown_;
+        const float gust = gust_;
         flame_phase_ += TWO_PI * 31.0f / SAMPLE_RATE;
+        wrap(flame_phase_);
+        const float wobble = 0.7f + 0.3f * std::sin(flame_phase_);
 
         // Flame crackle: sparse random pops held for a few samples, gated by
         // the flame level. This is what separates fire from filtered static.
@@ -364,11 +421,13 @@ void Audio::mix(float* out, uint32_t frames) {
 
         // One-shots are mono, mixed to both ears.
         float voices = 0.0f;
-        for (Voice& voice : voices_) {
-            if (!voice.active.load(std::memory_order_acquire)) continue;
+        for (int v = 0; v < live_count; ++v) {
+            Voice& voice = *live[v];
+            if (!voice.samples) continue;  // finished earlier in this buffer
             voices += (*voice.samples)[uint32_t(voice.cursor)] * voice.gain;
             voice.cursor += voice.rate;
             if (uint32_t(voice.cursor) >= voice.samples->size()) {
+                voice.samples = nullptr;
                 voice.active.store(false, std::memory_order_release);
             }
         }
@@ -378,7 +437,7 @@ void Audio::mix(float* out, uint32_t frames) {
             rng ^= rng << 13;
             rng ^= rng >> 17;
             rng ^= rng << 5;
-            const float noise = float(rng & 0xffffffu) / float(0x7fffff) - 1.0f;
+            const float noise = float(rng & 0xffffffu) * (1.0f / float(0x7fffff)) - 1.0f;  // a multiply: a divide is 19 cycles on the Pi 1B
 
             // Wind, two layers per ear: a bright hiss whose cutoff opens with
             // speed (a dive gets brighter, not merely louder) over a low
@@ -393,7 +452,6 @@ void Audio::mix(float* out, uint32_t frames) {
 
             // The held breath, voiced by its element. Fire: dark roaring
             // noise with a slow wobble and crackle pops.
-            const int style = flame_style_.load(std::memory_order_relaxed);
             float flame = 0.0f;
             switch (style) {
                 case 1: {  // frost: a bright hiss with glassy glints
@@ -407,6 +465,7 @@ void Audio::mix(float* out, uint32_t frames) {
                 case 2: {  // blight: a bubbling gurgle
                     flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.03f;
                     slosh_phase_ += TWO_PI * 7.0f / SAMPLE_RATE / 2.0f;
+                    wrap_slosh(slosh_phase_);
                     flame = flame_lp_[channel] * 1.3f * (0.5f + 0.5f * std::sin(slosh_phase_)) +
                             0.15f * std::sin(TWO_PI * (160.0f + 60.0f * std::sin(slosh_phase_ * 1.7f)) *
                                              float(i) / SAMPLE_RATE);
@@ -423,6 +482,7 @@ void Audio::mix(float* out, uint32_t frames) {
                 case 4: {  // tide: rushing water that sloshes
                     flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.12f;
                     slosh_phase_ += TWO_PI * 2.6f / SAMPLE_RATE / 2.0f;
+                    wrap_slosh(slosh_phase_);
                     flame = flame_lp_[channel] * (0.55f + 0.45f * std::sin(slosh_phase_));
                     break;
                 }
@@ -435,7 +495,7 @@ void Audio::mix(float* out, uint32_t frames) {
                 }
                 default: {
                     flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.05f;
-                    flame = flame_lp_[channel] * (0.7f + 0.3f * std::sin(flame_phase_));
+                    flame = flame_lp_[channel] * wobble;
                     if (channel == 0 && flame_level_ > 0.05f && (rng & 0x3ffu) == 0u) {
                         crackle_hold_ = 90.0f;  // ~2 ms pop
                     }
@@ -445,7 +505,7 @@ void Audio::mix(float* out, uint32_t frames) {
             }
             sample += flame * flame_level_ * 0.9f;
 
-            out[i * 2 + channel] = std::tanh((sample + voices) * master);
+            out[i * 2 + channel] = soft_clip((sample + voices) * master);
         }
     }
 }

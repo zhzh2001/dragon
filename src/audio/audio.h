@@ -92,7 +92,13 @@ private:
     float wind_lp_[2] = {0.0f, 0.0f};
     float wind_rumble_[2] = {0.0f, 0.0f};
     float flame_lp_[2] = {0.0f, 0.0f};
+    // The phases are kept within a turn: sinf of an argument that grew for
+    // minutes takes the slow range reduction (the Pi 1B's mixer spent a
+    // third of its time there) and loses precision as it grows.
     float gust_phase_ = 0.0f;
+    float gust2_phase_ = 1.3f;  // the gust's second sine, 2.7 times as fast
+    float gust_ = 1.0f;         // the gust, stepped every kGustStep samples
+    uint32_t gust_countdown_ = 0;
     float flame_phase_ = 0.0f;
     float crackle_hold_ = 0.0f;
     uint32_t noise_state_[2] = {0x1234567u, 0x89abcdefu};

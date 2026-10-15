@@ -377,8 +377,9 @@ ground ran it again on identical inputs; now once. At Minimal it erodes on
 at every valley of a run.
 
 The Pi build's defaults: the ff tier (whose default is Minimal) and the
-frame at 540 lines whatever the monitor's mode (Frame height); 30.7 fps
-headless at a 1920x1080 window size. A saved configuration or `--tier` and
+frame at 540 lines whatever the monitor's mode (Frame height; on a monitor
+the display mode follows it, below); 30.7 fps headless at a 1920x1080
+window size. A saved configuration or `--tier` and
 `--preset` win.
 
 Start-up after that was 49.5 s, 34 of it meshoptimizer simplifying the
@@ -392,8 +393,50 @@ The update is now profiled in parts (`update: bots`, `bots: rig`,
 `update: player rig` and the rest, under `DRAGON_FRAME_PROFILE`). The
 Lowest preset's Plain HUD saves only 0.7 ms on the Pi, not worth its look.
 
-**Next on the Pi**: keyboard and pad through KMSDRM's evdev; audio through
-miniaudio's ALSA; a playtest on a monitor; the rest of Mesa's per-draw
+**On a monitor** (the first playtest, the same evening): no keyboard, no
+mouse, no sound, and **8.2 fps**. The Pi is now watched through the
+bench's HDMI capture card in OBS (`obsctl.py shot OUT "Capture Card
+Device"`, sound included) and driven through its ESP32-S3 USB HID
+(`kvm.py`; its absolute mouse reports are refused by the Pi's USB now and
+then, so a script retries each until the HID says `ok`, and the pointer
+lands about 33 px left of the asked capture pixel):
+
+- **Input.** `libudev.h` reached the game's own compile (in the GL include
+  directory) but not SDL's configure, so SDL built without udev and its
+  evdev enumerated no device at all: the keys went to the console under
+  the game, and only the pad, which the joystick code finds by its own
+  scan, worked. `tools/pi/build.sh` now hands SDL's C the header alone.
+  Keyboard and mouse verified through the HID: F1, a panel opened by its
+  arrow.
+- **Sound.** The Pi's `~/.asoundrc` (root's, from April, before this port)
+  named an empty card; it is `~/.asoundrc.broken-backup` now, and the new
+  one sends the default device to HDMI (delete it for the headphone jack).
+  Not the repository's to fix, but the first thing a fresh Pi image needs
+  checked.
+- **Speed.** Live, the frame cost twice what it did headless, and
+  everything in it, CPU work included. A headless run with the monitor
+  attached (the console's 1080p framebuffer being scanned out of the
+  shared memory) already falls from 43 to 30.5 fps. Taken apart with
+  `perf` on the live run (`--run 7 --autopilot`, 1,200 frames, Minimal,
+  the 540-line frame):
+
+| Change | Live, 1080p monitor |
+|---|---|
+| As played: the 960x540 frame stretched to a 1920x1080 32-bit desktop mode | 11.6 fps, median 83 ms |
+| On a console (SDL's kmsdrm) the display mode is the smallest of the desktop's shape that holds the frame, 1280x720 here (`gfx::Device::fit_display_mode`): the stretch moves into the monitor | 12.3 fps |
+| RunFast on the main and audio threads (`core::flush_denormals`): the ARM11's VFP traps on every denormal and the kernel emulates the instruction -- a quarter of the CPU was `VFP_bounce` and its helpers, mostly the mixer's decaying filters | 14.6 fps |
+| The mixer: phases kept within a turn (`sinf` of a phase that grew for minutes took the slow range reduction, a third of the mixer), the 0.23 Hz gust stepped every 32 samples, tanh as Lambert's continued fraction | 17.8 fps |
+| The voices' flags read once a buffer (an acquire is a barrier on ARMv6), miniaudio converting to the device's format instead of ALSA's generic float converter, 3x20 ms periods on 32-bit ARM | **18-19 fps**, median 49-55 ms |
+
+The audio thread is still about a fifth of the CPU (the mixer a tenth,
+alsa-lib's IEC958 framing for HDMI most of the rest); no underrun was seen
+(ALSA's state stayed RUNNING, and an OBS recording of the wind has no gap).
+Tried and not kept: 1280x720 at 30 Hz halves the scanout and gives 20.7
+fps, but a ~45 ms frame then alternates one and two refreshes, where at 60
+it holds three. A 640x480 mode with its 640x480 frame is 24.2 fps.
+
+**Next on the Pi**: the rest of the live frame (render submission ~27 ms,
+the present's ~6 ms wait on the GPU, the audio thread); Mesa's per-draw
 cost (foliage, 190 us a per-instance draw, is the most expensive left; a
 constant palette index in its vertex stage changed nothing, so indexed
 uniforms are not it).

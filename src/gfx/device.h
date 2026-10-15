@@ -142,6 +142,9 @@ private:
     bool ensure_targets(uint32_t w, uint32_t h);
     // The window's size, or `frame_height_` lines of the same shape.
     void capped(uint32_t& w, uint32_t& h) const;
+    // On a console (SDL's kmsdrm driver) the window is the display: the
+    // smallest mode of the desktop's shape that holds the frame.
+    void fit_display_mode();
     void release_targets();
     void save_screenshot(const std::vector<uint8_t>& rgba);
     // The backend's frame image when this frame may draw into it, else null.

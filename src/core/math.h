@@ -535,4 +535,22 @@ inline Transform combine(const Transform& parent, const Transform& child) {
     return r;
 }
 
+// Denormals flushed to zero on the calling thread, where they are slow.
+// The Pi 1B's ARM11 does not compute them at all: its VFP traps to the
+// kernel, which emulates the instruction in software (VFP_bounce), and a
+// decaying filter tail or a damped spring makes them by the million -- a
+// quarter of its CPU, the audio mixer missing its deadlines (the sound
+// stretched) and the frame rate a third of what it was without sound.
+// RunFast mode is flush-to-zero plus default NaN. Each thread has its own
+// FPSCR, so the main thread and the audio callback each call it. Elsewhere a
+// no-op: the frame must stay bit-identical where it is compared (goldens).
+inline void flush_denormals() {
+#if defined(__arm__) && defined(__ARM_FP)
+    uint32_t fpscr;
+    __asm__ volatile("vmrs %0, fpscr" : "=r"(fpscr));
+    fpscr |= (1u << 24) | (1u << 25);  // FZ, DN
+    __asm__ volatile("vmsr fpscr, %0" : : "r"(fpscr));
+#endif
+}
+
 }  // namespace core

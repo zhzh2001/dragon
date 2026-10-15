@@ -1,6 +1,7 @@
 #include "gfx/device.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 #include "core/log.h"
@@ -227,9 +228,46 @@ void Device::capped(uint32_t& w, uint32_t& h) const {
     h = frame_height_;
 }
 
+void Device::fit_display_mode() {
+    // On a desktop or a phone the window is a guest of the display and its
+    // frame is stretched by the present's blit. On a console the window IS
+    // the display, at the desktop mode until told otherwise: the Pi 1B
+    // scanned a 1920x1080 32-bit buffer out of the memory its CPU and GPU
+    // share (500 MB/s at 60 Hz) and the blit filled all of it each frame --
+    // a 960x540 frame ran at 8-12 fps there against 30 headless. A mode the
+    // frame's size moves the stretch into the monitor.
+    const char* video = SDL_GetCurrentVideoDriver();
+    if (!window_ || !video || SDL_strcmp(video, "kmsdrm") != 0) return;
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(display);
+    if (!desktop) return;
+    const SDL_DisplayMode* best = desktop;
+    int count = 0;
+    SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(display, &count);
+    for (int i = 0; modes && i < count; ++i) {
+        const SDL_DisplayMode* m = modes[i];
+        // The desktop's shape (the monitor's panel), within a percent.
+        const bool shape = std::abs(m->w * desktop->h - m->h * desktop->w) * 100 <= desktop->w * desktop->h;
+        const bool holds = frame_height_ == 0 ? m->h >= desktop->h : m->h >= int(frame_height_);
+        if (shape && holds && m->h <= best->h && m->refresh_rate <= desktop->refresh_rate + 1.0f &&
+            (m->h < best->h || m->refresh_rate > best->refresh_rate))
+            best = m;
+    }
+    SDL_DisplayMode chosen = *best;
+    SDL_free(modes);
+    if (!SDL_SetWindowFullscreenMode(window_, &chosen) || !SDL_SetWindowFullscreen(window_, true)) {
+        LOG_WARN("display mode %dx%d: %s", chosen.w, chosen.h, SDL_GetError());
+        return;
+    }
+    SDL_SyncWindow(window_);
+    LOG_INFO("display mode %dx%d @ %.0f Hz (desktop %dx%d)", chosen.w, chosen.h, chosen.refresh_rate,
+             desktop->w, desktop->h);
+}
+
 void Device::set_frame_height(uint32_t lines) {
     if (lines == frame_height_) return;
     frame_height_ = lines;
+    if (!headless_) fit_display_mode();
     // A window's frame is sized at the next begin_frame; a headless one now.
     if (!headless_ || !rhi_ || render_w_ == 0) return;
     uint32_t w = requested_w_, h = requested_h_;

@@ -16,6 +16,7 @@
 #endif
 
 #include "app.h"
+#include "core/math.h"
 #include "core/paths.h"
 
 namespace {
@@ -61,6 +62,7 @@ void relaunch(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+    core::flush_denormals();
 #ifdef _WIN32
     // A package is a GUI-subsystem program, so a double-click opens no
     // console window. Started from a terminal it borrows that terminal for

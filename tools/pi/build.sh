@@ -26,6 +26,13 @@ if [ ! -f "$sysroot/usr/include/gbm.h" ]; then
       usr/lib/arm-linux-gnueabihf/pkgconfig/libudev.pc)' | tar xf - -C "$sysroot"
 fi
 abs_sysroot=$(cd "$sysroot" && pwd)
+# libudev.h the same way, for SDL's C alone: without it SDL's check fails,
+# SDL builds without udev, and its evdev input never enumerates a device --
+# the keyboard and mouse went to the console underneath, and only the
+# gamepad (found by the joystick code's own scan) reached the game.
+udev_include=$root/$build/udev-include
+mkdir -p "$udev_include"
+cp "$sysroot/usr/include/libudev.h" "$udev_include/"
 # The GL headers alone, in a directory of their own: -I on the sysroot's
 # /usr/include would put Bullseye's glibc headers ahead of Zig's.
 gl_include=$root/$build/gles-include
@@ -36,6 +43,7 @@ export PKG_CONFIG_SYSROOT_DIR=$abs_sysroot
 export PKG_CONFIG_LIBDIR=$abs_sysroot/usr/lib/arm-linux-gnueabihf/pkgconfig:$abs_sysroot/usr/share/pkgconfig
 export ZIG_GLOBAL_CACHE_DIR=$root/$build/zig-cache
 cmake -S . -B "$build" -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/zig-armv6-pi.cmake -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_FLAGS="-U_TIME_BITS -isystem $udev_include" -UHAVE_LIBUDEV_HEADER \
   -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF -DDRAGON_DEV_ROOTS=OFF -DDRAGON_GLES=ON -DDRAGON_GLES_DEFAULT=ON -DDRAGON_GLES_INCLUDE="$gl_include" \
   -DDRAGON_GLES_LIBRARY="$abs_sysroot/usr/lib/arm-linux-gnueabihf/libGLESv2.so" \
   -DSDL_UNIX_CONSOLE_BUILD=ON -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_KMSDRM=ON -DSDL_OPENGL=OFF -DSDL_OPENGLES=ON -DSDL_VULKAN=OFF \
