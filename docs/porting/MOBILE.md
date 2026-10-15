@@ -31,6 +31,148 @@ and probably the VisionFive 2 have Vulkan, which SDL GPU already drives;
 the Pi has only GLES 2.0, which nothing in the engine drives today -- SDL
 GPU has no GL backend.
 
+## Measured first: the Pi 1B against the K30 5G (2026-10-15)
+
+Before any porting, the two ends of the phone-and-board range were put on
+the same two benches, each built from one source for every device
+(`tools/mobile_bench/`, `build.sh mac|pi|android`, nothing installed on the
+devices). The M5 Mac is the third column, as the anchor that the engine's
+own frame profile can be scaled from.
+
+- `cpu_bench`: single-threaded. The game's simulation compiled through
+  `game-mcu`'s overlay (exactly what `dragon_sim` runs: a hoard run flown
+  by the demo pilot, then an arena match against four bots, 3600 frames at
+  60 Hz), its 320x240 software renderer drawing those frames, CPU skinning,
+  and scalar float and memory. Pi: a static armv6 musl binary from Zig.
+  Phone: the NDK's clang, run under `adb shell`, pinned with `taskset`.
+- `gles_bench`: GLES 2.0 only, offscreen into an RGBA8 + depth16
+  framebuffer from a 1x1 pbuffer context, so no display is involved. Fill
+  tests are 32 blended full-screen layers (blended because a GPU with
+  hidden-surface removal -- Apple's, and the VisionFive 2's PowerVR --
+  shades only the top opaque layer and read 131 Gpix/s; blending is free
+  on VC4 and on the Adreno). Vertex tests are a 128x128-vertex grid four
+  times a frame (`--grid 128`). The Pi ran it twice: Broadcom's firmware
+  driver (`/opt/vc`, as the board is set up for the QPU LLM work) and
+  Mesa's vc4 (the KMS overlay switched on for the run, then the original
+  `config.txt` restored; `libegl1`, `libgles2` and their `-dev` packages
+  stay installed). Mesa's run predates the blended layers; its opaque fill
+  rows stand because its blended row matched them. The Mac ran it through
+  VS Code's bundled ANGLE (GLES on Apple's GL-over-Metal).
+
+**CPU** (ms a frame unless marked; the phone's A76 is the 2.4 GHz prime
+core, cpu 7; the A55 is cpu 0):
+
+| | Pi 1B (ARM11, 700 MHz) | K30 A55 | K30 A76 | Mac M5 | K30 A76 / Pi |
+|---|---|---|---|---|---|
+| game sim, hoard run | 0.520 | 0.063 | 0.011 | 0.002 | **47x** |
+| game sim, arena, 4 bots | 0.405 | 0.042 | 0.007 | 0.002 | 58x |
+| software raster 320x240, run | 17.3 | 2.31 | 0.73 | 0.21 | **24x** |
+| CPU skinning, ms per 1000 vertices (4 bones) | 0.90 | 0.058 | 0.017 | 0.004 | 53x |
+| scalar mul+add, Mflop/s | 338 | 3,538 | 4,704 | 7,436 | 14x |
+| 4x4 transform, M vertices/s | 5.0 | 115 | 355 | 931 | 71x (NEON) |
+| memcpy, MB/s (musl's on the Pi) | 103 | 4,597 | 6,104 | 52,270 | 59x |
+| dependent load, ns | 339 | 221 | 135 | 20 | 2.5x |
+
+The game's own code is **25 to 60 times** faster on one K30 big core than
+on the Pi; the geometric mean over the five compute rows is 36x. Against
+the M5 the Pi is 80x (raster) to 260x (sim) slower. In the units of
+`~/.codex`'s device comparison (S = the RP2350's 22.7 ms render at 252 MHz
+over the device's), the Pi is S of about 1.3 and the K30's A76 about 31,
+both inside the ranges guessed there (1-3 and 15-35).
+
+**GPU** at 640x480 (rates in Mpix/s, Mtri/s or thousand draws/s; `scene`
+is a 32K-triangle fogged terrain, 400 alpha-tested cards and a 6K-triangle
+skinned creature, in ms):
+
+| | Pi, Broadcom | Pi, Mesa vc4 | K30, Adreno 620 | Mac M5 (ANGLE) | K30 / Pi (Mesa) |
+|---|---|---|---|---|---|
+| clear, ms | 1.16 | 0.98 | 0.26 | 0.07 | 3.8x |
+| fill_flat | 628 | 786 | 4,151 | 75,487 | 5.3x |
+| fill_tex | 305 | 319 | 3,942 | 55,853 | 12.4x |
+| fill_ff (the ff tier's pixel) | 287 | 316 | 4,070 | 38,630 | **12.9x** |
+| fill_heavy (3 textures, specular, exp fog) | 112 | 106 | 2,023 | 20,775 | 19x |
+| tris (lit, 32K a draw) | 11.5 | 8.5 | 120 | 995 | 14x |
+| skinned, 4 bones from 24 | **does not link** (2 bones: 5.1) | 3.4 | 30.6 | 939 | 9x |
+| draws (one small quad each) | 17.3 (58 us each) | 25.8 (39 us) | 261 (3.8 us) | 1,917 | **10x** |
+| scene, ms | 5.39 | 7.10 | 0.96 | 0.09 | 7.4x |
+
+The Adreno 620 is **about 11 times the VC4** (the geometric mean of the
+nine throughput rows), 5x on flat fill and up to 19x on arithmetic. So on
+the codex comparison's GPU scale (K30 = 100) the Pi is about 9, not the
+2-6 it guessed. The resolution undoes most of it: the K30's native
+2400x1080 is 8.4 times 640x480's pixels, so per frame a fill-bound phone
+at native resolution is barely faster than the Pi at 640x480. At
+2400x1080 the Adreno held 4,665 Mpix/s textured and 2,693 heavy, and its
+draw-call cost did not change with resolution.
+
+**What the Pi's driver choice decides.** Both drivers run the same
+silicon and fill identically. They differ where M5 lives:
+
+- **Broadcom's firmware driver refuses the creatures' vertex shader.**
+  Indexed uniform reads go through the texture unit, and four bones from
+  a palette fail to link ("Too many texture accesses: caused by uniform
+  array access"); two bones link. The skinned path on it is CPU skinning,
+  as the ff tier already does on D3D9: 0.9 ms per 1000 vertices on the
+  ARM11, so a 1.2K-triangle creature (Minimal) is about half a
+  millisecond each.
+- **Mesa vc4 links the 4-bone shader, and calls are cheaper** (39 us
+  against 58): Broadcom's client library marshals every call over VCHIQ
+  to the driver on the VPU.
+- **Mesa vc4 hangs the GPU on big, dense draws.** Four draws of 51K
+  triangles (a 160x160-vertex grid) in a tenth of the screen wedged V3D:
+  the kernel reset it every second, and it stayed wedged for every later
+  process until a reboot. 128x128 (16K vertices, 32K triangles a draw)
+  is fine. The runs do not separate the two candidates -- triangles a
+  draw, or triangles a 64x64 tile, which overflows the binner's lists --
+  so M5 should cap a draw near 32K triangles and keep the far terrain
+  from packing tiles until a test does.
+- Bullseye still has `/opt/vc`; Bookworm does not. Mesa is the driver
+  with a future, and the one the plan already names.
+
+**What it means for the real game.** The engine's own frame profile
+(`DRAGON_FRAME_PROFILE`, `--run 7 --autopilot`, frames 3180-3600, the
+stretch `CARDS.md` used) on the M5:
+
+| | update | ui build | render (CPU) | GPU wait | frame |
+|---|---|---|---|---|---|
+| `--tier ff --preset lowest`, 640x480, one species | 0.03 | 0.02 | 0.04 | 0.23 | 0.3 ms |
+| modern, `--preset low`, 1280x720, the roster | 0.05 | 0.02 | 0.10 | 1.75 | 2.0 ms |
+
+- **The K30 is GPU-bound and CPU-rich.** The engine's 0.2 ms of CPU is
+  about 1 ms on its A76 (the 5x of the sim row; 3.4x on the raster). The
+  M5's GPU is 10-15 times the Adreno's on these tests (fill_tex 15.5x,
+  fill_ff 9.4x, fill_heavy 10.7x at 720p), so Low's 1.75 ms of GPU is
+  roughly **18-27 ms on the K30 at 1280x720**, before the costs a desktop
+  GPU hides and a tiler does not (the 16-bit HDR targets' bandwidth, the
+  4096² shadow map, the bloom's passes). Expect Low at 720p at 30 fps,
+  Medium needing the world resolution setting, and the native 2400x1080
+  out of reach of anything but Very low -- consistent with M1's plan.
+- **The Pi is CPU-bound, and closer than `BEYOND.md` feared.** That study
+  took the 0.5 ms median frame as the simulation; the CPU part of it is
+  0.1 ms, and the rest was the GPU wait. At the measured 80-260x, the
+  engine's CPU is **roughly 8-26 ms on the ARM11**, plus Mesa's 39 us a
+  draw (100-250 draws after the ff tier's batching, 4-10 ms) and CPU
+  skinning if the driver is Broadcom's. The GPU's share at 320x240 to
+  480x272 is a few ms (the scene row is 7 ms at 640x480). So **15-40 ms
+  of CPU a frame, 25 fps as a working figure**, against the "10-15 fps at
+  best" estimated before. The wide range is the honest part: the engine
+  was never compiled for a core with 16 KB of L1 and no L2 of its own,
+  and nothing short of running it will narrow it. Memory (429 MB to the
+  ARM with `gpu_mem=64`) remains the first wall, as `BEYOND.md` said.
+- **Per device class**: the K30's one big core does in 1 ms what the Pi
+  does in 25-50, and its GPU fills 12x faster at the ff tier's pixel. The
+  Pi at 320x240 is a M3/M5 target for the ff tier's content; the K30 is a
+  modern-tier device at reduced resolution. The VisionFive 2 is the one
+  device in the house expected between them (unmeasured; `gles_bench`
+  builds for it with `GB_MESA` or IMG's EGL).
+
+Sustained: three minutes of `fill_heavy` at 2400x1080 on the K30 held
+2,696-2,718 Mpix/s in every 15-second window, so its GPU alone does not
+throttle in that time (the CPU was idle; a game loads both). The Pi
+stayed at 700 MHz, 42 C and `throttled=0x0` throughout. Not measured: the
+phones' Vulkan (GLES was the common API; the port uses SDL GPU's Vulkan),
+the Ace 3V and the VisionFive 2.
+
 ## What every mobile target needs
 
 These are shared, and most of the M0 work is here, not in a renderer.
@@ -169,12 +311,16 @@ video driver, and nothing else.
 
 ## Open questions
 
-- **Do the phones have USB debugging on**, and is either rooted? `adb
-  devices` listed nothing on 2026-10-13. Root is not needed; developer mode
-  is.
+- **Does the Ace 3V have USB debugging on**, and is either phone rooted?
+  The K30 5G is on `adb` (2026-10-15, `picasso`, Android 12, unrooted):
+  native binaries run from `/data/local/tmp`, which is enough for every
+  bench and for a first headless boot before any APK. Root is not needed.
 - **Which image is on the VisionFive 2**, StarFive's Debian with IMG's
   driver, or a mainline distribution with Mesa? It decides M2's first step.
 - **Can the Pi have a second SD card** for the game, so the QPU LLM setup
-  stays as it is?
+  stays as it is? Not needed to measure: the KMS overlay toggles with one
+  line of `config.txt` and a reboot each way (done 2026-10-15, restored).
+  M5's development will want it on for days, though, and that is the
+  case for the second card.
 - **Touch or tilt as the default** on a phone is a feel question, settled
   by playing both, like every other control in this game.

@@ -60,7 +60,7 @@ local.
 | R7 (presets) | Seven presets, Ultra to Lowest; the Graphics panel; `tools/bench/presets.py` | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
 | D3D11 | Done at feature levels 11, 10 and 9 (`porting/D3D11.md`) | The HD 5450 and Bay Trail boards; the shaders in the package |
-| **M0-M5 (mobile)** | Planned 2026-10-13 (`porting/MOBILE.md`) | Everything: start with M0, Android on the OnePlus Ace 3V |
+| **M0-M5 (mobile)** | Planned 2026-10-13; the Pi 1B and the K30 5G benched 2026-10-15 (`porting/MOBILE.md`, "Measured first") | Everything: start with M0, Android on the OnePlus Ace 3V |
 
 **Loose ends a new session should know:**
 
