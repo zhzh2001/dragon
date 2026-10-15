@@ -120,7 +120,7 @@ VertexOut vs_main(VertexIn input) {
     float3 normal;
     float3 world = place_vertex(input, scene.camera_position.xyz, normal);
     normal = normalize(normal);
-    int entry = clamp(int(input.color.x + 0.5), 0, PALETTE_COUNT - 1);
+    int entry = int(clamp(input.color.x, 0.0, float(PALETTE_COUNT - 1)) + 0.5);  // a float clamp: GLSL ES 1.00 has no integer one
     float3 base = scene.palette[entry].rgb * input.color.y * input.params.y;
     float3 albedo = lerp(base, base * scene.palette[PALETTE_PLANT_WARM].rgb, input.params.w);
     int tag = int(input.color.z + 0.5);
@@ -140,7 +140,7 @@ VertexOut vs_main(VertexIn input) {
     float3 normal;
     float3 world = place_vertex(input, scene.camera_position.xyz, normal);
     normal = normalize(normal);
-    int entry = clamp(int(input.color.x + 0.5), 0, PALETTE_COUNT - 1);
+    int entry = int(clamp(input.color.x, 0.0, float(PALETTE_COUNT - 1)) + 0.5);  // a float clamp: GLSL ES 1.00 has no integer one
     float3 base = scene.palette[entry].rgb * input.color.y * input.params.y;
     float3 albedo = lerp(base, base * scene.palette[PALETTE_PLANT_WARM].rgb, input.params.w);
     int tag = int(input.color.z + 0.5);
@@ -174,7 +174,7 @@ VertexOut vs_main(VertexIn input) {
     // darkens or lightens the whole plant; the warm push (params.w) shifts a
     // crown toward yellow, which is what makes a forest read as many trees
     // rather than one green stamped a thousand times.
-    int entry = clamp(int(input.color.x + 0.5), 0, PALETTE_COUNT - 1);
+    int entry = int(clamp(input.color.x, 0.0, float(PALETTE_COUNT - 1)) + 0.5);  // a float clamp: GLSL ES 1.00 has no integer one
     float3 base = scene.palette[entry].rgb * input.color.y * input.params.y;
     o.albedo = lerp(base, base * scene.palette[PALETTE_PLANT_WARM].rgb, input.params.w);
     o.uv = input.uv;

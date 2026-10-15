@@ -44,6 +44,13 @@
 #define VERTEX_ID int(vertex_id_input)
 #endif
 
+// The fullscreen triangle's corner for vertex 0, 1 or 2: (-1, -1), (3, -1),
+// (-1, 3). Worked out rather than read from a constant array, which GLSL ES
+// 1.00 (rhi/gles) cannot initialise.
+float2 fullscreen_corner(int vertex_id) {
+    return float2(vertex_id == 1 ? 3.0 : -1.0, vertex_id == 2 ? 3.0 : -1.0);
+}
+
 // No portable way to sample a depth buffer: the shadow map is an R32F colour
 // target there, so the depth-only passes write depth as a colour (z / w, the
 // same value a depth buffer would hold) and the shaders that read the map read

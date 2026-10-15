@@ -587,11 +587,13 @@ static Mesh make_cards(void) {
 int main(int argc, char** argv) {
     const char* only = NULL;
     const char* skin_name = "";
-    int grid = 256;
+    int grid = 256, info = 0;
     int pos = 0;
     for (int i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--seconds") && i + 1 < argc)
             g_seconds = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--info"))
+            info = 1;
         else if (!strcmp(argv[i], "--grid") && i + 1 < argc)
             grid = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--only") && i + 1 < argc)
@@ -602,6 +604,26 @@ int main(int argc, char** argv) {
             H = atoi(argv[i]), ++pos;
     }
     init_egl();
+    if (info) {
+        // What a GLES 2.0 backend can count on (docs/porting/MOBILE.md, M4).
+        static const struct { GLenum e; const char* name; } kLimits[] = {
+            {GL_MAX_TEXTURE_SIZE, "max texture size"},
+            {GL_MAX_VERTEX_ATTRIBS, "vertex attributes"},
+            {GL_MAX_VERTEX_UNIFORM_VECTORS, "vertex uniform vectors"},
+            {GL_MAX_FRAGMENT_UNIFORM_VECTORS, "fragment uniform vectors"},
+            {GL_MAX_VARYING_VECTORS, "varying vectors"},
+            {GL_MAX_TEXTURE_IMAGE_UNITS, "fragment texture units"},
+            {GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, "vertex texture units"},
+            {GL_MAX_RENDERBUFFER_SIZE, "max renderbuffer size"},
+        };
+        for (size_t i = 0; i < sizeof kLimits / sizeof kLimits[0]; ++i) {
+            GLint v = 0;
+            glGetIntegerv(kLimits[i].e, &v);
+            printf("%-26s %d\n", kLimits[i].name, v);
+        }
+        printf("extensions: %s\n", glGetString(GL_EXTENSIONS));
+        return 0;
+    }
     init_target();
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     printf("target %dx%d, %.1f s a test\n", W, H, g_seconds);

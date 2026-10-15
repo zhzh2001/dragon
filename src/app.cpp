@@ -388,6 +388,10 @@ bool App::init(const Options& options) {
     if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
         options_.tier = gfx::Tier::SM3;
     }
+    // GLES 2.0 the LDR ones (rhi/gles): no float targets for sm3's HDR.
+    if (options_.gpu_driver == "gles" && (options_.tier == gfx::Tier::Modern || options_.tier == gfx::Tier::SM3)) {
+        options_.tier = gfx::Tier::SM2;
+    }
 #ifdef _WIN32
     // And only those the card's shader models reach: sm3 wants vs/ps 3.0,
     // sm2 ps 2.0 (its vertex programs run in software where the card has

@@ -15,10 +15,10 @@ struct BlurVertex {
 #ifdef VERTEX_STAGE
 BlurVertex vs_main(VERTEX_ID_INPUT) {
     const int vertex_id = VERTEX_ID;
-    const float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
+    const float2 corner = fullscreen_corner(vertex_id);
     BlurVertex o;
-    o.clip_position = float4(positions[vertex_id], 0.0, 1.0);
-    o.uv = float2(positions[vertex_id].x * 0.5 + 0.5, 1.0 - (positions[vertex_id].y * 0.5 + 0.5));
+    o.clip_position = float4(corner, 0.0, 1.0);
+    o.uv = float2(corner.x * 0.5 + 0.5, 1.0 - (corner.y * 0.5 + 0.5));
     return o;
 }
 #endif

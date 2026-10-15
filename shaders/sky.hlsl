@@ -69,15 +69,15 @@ struct VertexOut {
 VertexOut vs_main(VERTEX_ID_INPUT) {
     const int vertex_id = VERTEX_ID;
     // A triangle large enough to cover the whole clip volume.
-    const float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
+    const float2 corner = fullscreen_corner(vertex_id);
     VertexOut o;
-    o.ndc = positions[vertex_id];
+    o.ndc = corner;
     // On the far plane, which is where sky belongs: z = 0 under reversed-Z,
     // z = w in a retro tier's conventional depth (gfx/render_tier.h).
 #ifdef CONVENTIONAL_DEPTH
-    o.clip_position = float4(positions[vertex_id], 1.0, 1.0);
+    o.clip_position = float4(corner, 1.0, 1.0);
 #else
-    o.clip_position = float4(positions[vertex_id], 0.0, 1.0);
+    o.clip_position = float4(corner, 0.0, 1.0);
 #endif
     return o;
 }

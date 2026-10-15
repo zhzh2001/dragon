@@ -3,6 +3,9 @@
 #ifndef DRAGON_XP
 #include "rhi/sdlgpu/sdlgpu.h"
 #endif
+#ifdef DRAGON_GLES
+#include "rhi/gles/gles_backend.h"
+#endif
 #ifdef _WIN32
 #ifndef DRAGON_XP
 #include "rhi/d3d11/d3d11_backend.h"
@@ -13,6 +16,11 @@
 namespace rhi {
 
 std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& config) {
+#ifdef DRAGON_GLES
+    // "gles": OpenGL ES 2.0 (rhi/gles), the retro tiers on a GPU with no
+    // Vulkan -- the Pi 1B's VideoCore IV, ANGLE on the Mac.
+    if (config.driver == "gles") return gles::create(window, config);
+#endif
 #ifdef _WIN32
     // "direct3d9", or "direct3d9:N" for D3D9 adapter N -- one per display
     // output with a desktop, as tools/r0's spike lists them.

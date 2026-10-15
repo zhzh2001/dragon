@@ -5,6 +5,9 @@
 
 #include "core/log.h"
 #include "gfx/render_tier.h"
+#ifdef DRAGON_GLES
+#include "rhi/gles/gles_backend.h"
+#endif
 
 namespace gfx {
 
@@ -27,7 +30,16 @@ bool Device::init(const Config& config) {
     const bool offscreen = headless_ && !SDL_getenv("DISPLAY") && !SDL_getenv("WAYLAND_DISPLAY");
     if (offscreen) SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
 #endif
+    // GLES 2.0 (rhi/gles): an OpenGL window, ES attributes, and on the Mac
+    // SDL's EGL pointed at ANGLE.
+    const bool gles = config.gpu_driver == "gles";
+#ifdef DRAGON_GLES
+    if (gles) rhi::gles::prepare_video();
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) return SDL_FAIL("SDL_Init");
+#ifdef DRAGON_GLES
+    if (gles) rhi::gles::prepare_window();
+#endif
 
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (headless_) flags |= SDL_WINDOW_HIDDEN;
@@ -40,8 +52,9 @@ bool Device::init(const Config& config) {
     if (!headless_) flags |= SDL_WINDOW_FULLSCREEN;
 #endif
 #if !defined(__APPLE__) && !defined(_WIN32) && !defined(__ANDROID__)
-    if (offscreen) flags |= SDL_WINDOW_VULKAN;
+    if (offscreen && !gles) flags |= SDL_WINDOW_VULKAN;
 #endif
+    if (gles) flags |= SDL_WINDOW_OPENGL;
 
     window_ = SDL_CreateWindow(config.title, config.width, config.height, flags);
     if (!window_) return SDL_FAIL("SDL_CreateWindow");

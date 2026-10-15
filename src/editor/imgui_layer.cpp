@@ -19,6 +19,13 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
 #include "rhi/sdlgpu/sdlgpu.h"
+#ifdef DRAGON_GLES
+#include "imgui_impl_opengl3.h"
+#include "rhi/gles/gles_backend.h"
+// cmake/imgui.cmake's patch: the projection and scissor turned over for the
+// GLES backend's upside-down targets (rhi/gles).
+extern bool ImGui_ImplOpenGL3_FlipY;
+#endif
 #ifdef _WIN32
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_dx9.h"
@@ -144,6 +151,7 @@ bool ImGuiLayer::init(gfx::Device& device) {
     // changes.
     d3d9_ = device.rhi().backend() == rhi::Backend::Direct3D9;
     d3d11_ = device.rhi().backend() == rhi::Backend::Direct3D11;
+    gles_ = device.rhi().backend() == rhi::Backend::OpenGLES2;
 #ifdef DRAGON_XP
     {
         HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(device.window()),
@@ -194,6 +202,22 @@ bool ImGuiLayer::init(gfx::Device& device) {
         return true;
     }
 #endif
+#ifdef DRAGON_GLES
+    if (gles_) {
+        // Drawn into the pass's target like everything else, which the GLES
+        // backend keeps upside down in GL's terms (rhi/gles).
+        ImGui_ImplOpenGL3_FlipY = true;
+        if (!ImGui_ImplSDL3_InitForOpenGL(device.window(), SDL_GL_GetCurrentContext()) ||
+            !ImGui_ImplOpenGL3_Init("#version 100")) {
+            LOG_ERROR("ImGui OpenGL ES 2 init failed");
+            return false;
+        }
+        ImGui::GetPlatformIO().Renderer_TextureMaxWidth = int(device.rhi().max_texture_size());
+        ImGui::GetPlatformIO().Renderer_TextureMaxHeight = int(device.rhi().max_texture_size());
+        initialized_ = true;
+        return true;
+    }
+#endif
     if (!ImGui_ImplSDL3_InitForSDLGPU(device.window())) {
         LOG_ERROR("ImGui_ImplSDL3_InitForSDLGPU failed");
         return false;
@@ -226,6 +250,10 @@ void ImGuiLayer::shutdown() {
 #ifdef _WIN32
     if (d3d9_) ImGui_ImplDX9_Shutdown();
     else if (d3d11_) ImGui_ImplDX11_Shutdown();
+    else
+#endif
+#ifdef DRAGON_GLES
+    if (gles_) ImGui_ImplOpenGL3_Shutdown();
     else
 #endif
         ImGui_ImplSDLGPU3_Shutdown();
@@ -268,6 +296,10 @@ void ImGuiLayer::begin_frame(float target_width, float target_height) {
     else if (d3d11_) ImGui_ImplDX11_NewFrame();
     else
 #endif
+#ifdef DRAGON_GLES
+    if (gles_) ImGui_ImplOpenGL3_NewFrame();
+    else
+#endif
         ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
 #endif
@@ -297,7 +329,7 @@ void ImGuiLayer::prepare_draw_data(gfx::Device& device) {
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (!draw_data) return;
     has_draw_data_ = true;
-    if (d3d9_ || d3d11_) return;  // D3D9 and D3D11 record nothing ahead of the pass
+    if (d3d9_ || d3d11_ || gles_) return;  // D3D9, D3D11 and GLES record nothing ahead of the pass
 #ifndef DRAGON_XP
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, rhi::sdlgpu::native_command_buffer(device.rhi()));
 #endif
@@ -345,6 +377,13 @@ void ImGuiLayer::render(gfx::Device& device, rhi::Pass* pass) {
         return;
     }
 #endif
+#endif
+#ifdef DRAGON_GLES
+    if (gles_) {
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        rhi::gles::forget_state(&device.rhi());
+        return;
+    }
 #endif
 #ifndef DRAGON_XP
     ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), rhi::sdlgpu::native_command_buffer(device.rhi()),
