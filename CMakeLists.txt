@@ -185,6 +185,12 @@ endif()
 if(DRAGON_GLES)
   target_sources(dragon PRIVATE src/rhi/gles/gles_device.cpp)
   target_compile_definitions(dragon PRIVATE DRAGON_GLES)
+  # GLES unless --gpu-driver says otherwise: a build for a GPU with no
+  # Vulkan (the Pi 1B, tools/pi/build.sh).
+  option(DRAGON_GLES_DEFAULT "Make gles the default --gpu-driver" OFF)
+  if(DRAGON_GLES_DEFAULT)
+    target_compile_definitions(dragon PRIVATE DRAGON_GLES_DEFAULT)
+  endif()
   target_include_directories(dragon PRIVATE ${DRAGON_GLES_INCLUDE})
   target_link_libraries(dragon PRIVATE ${DRAGON_GLES_LIBRARY})
   if(APPLE)

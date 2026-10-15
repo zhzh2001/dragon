@@ -305,6 +305,62 @@ above Phone; touch controls through the HUD kit; lifecycle (pause on
 background, the swapchain on return); the safe area; the assets inside a
 release APK.
 
+## M4 and M5, as built so far (2026-10-15): the Pi 1B runs the game
+
+**The GLES 2.0 backend** (`src/rhi/gles`, `--gpu-driver gles`) is the
+fourth `rhi::Device`, for the LDR tiers only (VC4 has no float targets, so
+`gles` brings the tier down to sm2). What GLES 2.0 lacks is done in it:
+
+- **Shaders** are GLSL ES 1.00 baked by `tools/gles/bake_gles.py`:
+  shadercross to SPIR-V with the D3D9 define sets (GLES 2.0 shares D3D9's
+  gaps: no `SV_VertexID`, byte joint indices read as floats), then
+  SPIRV-Cross with the uniform blocks flattened to vec4 arrays, the
+  interface named by location, each stage's uniforms prefixed so the two
+  never clash on precision, and a JSON of which array takes which pushed
+  slot and which sampler which texture slot. Two idioms ES 1.00 cannot
+  compile left the HLSL: the fullscreen triangle's constant array
+  (`fullscreen_corner`) and foliage's integer clamp.
+- **The y flip.** The bake flips the vertex stage's y, so every pass lands
+  upside down in GL's terms, which is the D3D layout in memory: textures
+  sample, viewports place and readbacks come out top row first as on every
+  other backend; only the present turns over, and the winding with it.
+- **No instancing, sampler objects or sRGB**: one draw per instance with
+  its attributes set as constants from a CPU copy of the buffer (D3D9's
+  Loop mode); sampler state written into the texture's parameters when
+  the binding changes; sRGB texels converted to linear at upload.
+- **ImGui** through `imgui_impl_opengl3` in ES2 mode, patched
+  (`cmake/imgui.cmake`) to turn its projection and scissor over.
+
+On the Mac it runs on ANGLE (`tools/gles/setup_angle_mac.sh` copies it out
+of an Electron app; `-DDRAGON_GLES=ON`): the sm2 and ff tiers are within
+**0.52/255 mean of Metal's** frame at the same preset.
+
+**The Pi build** (`tools/pi/build.sh`, `tools/pi/deploy.sh`): Zig's clang
+for ARMv6 hard-float against a Bullseye sysroot (glibc 2.31) with Zig's own
+libc++ linked in, SDL3 from source with KMSDRM and GLES only
+(`SDL_UNIX_CONSOLE_BUILD`), `gles` the default driver
+(`DRAGON_GLES_DEFAULT`). Two traps: CMake's C++20 module scan wants a
+`clang-scan-deps` Zig does not ship (off in `cmake/zig-armv6-pi.cmake`),
+and SDL asks 32-bit glibc for a 64-bit `time_t`, which Zig's generic glibc
+headers honour although 2.31 has none of its symbols (`-U_TIME_BITS`).
+The executable needs only libGLESv2, libc, libm, libpthread and libdl; SDL
+opens DRM, GBM and EGL itself. The KMS overlay stays on the Pi's card
+(the LLM setup's `config.txt` is `/boot/config.txt.llm-backup`).
+
+**First runs** on the Pi 1B (700 MHz, Mesa vc4, headless, 640x480, ff
+tier at Minimal, one species, `--run 7 --autopilot`): **22.9 fps over 900
+frames, median 43 ms, 1% low 46 ms**, peak resident memory 86 MB. It is
+CPU-bound, 99% of the one core: render submission 33.5 ms (the terrain's
+chunk draws alone 12.6, at Mesa's ~39 us a draw), update 6.4, UI 2.1. The
+measured-first estimate was 15-40 ms. Start-up is 96 s, half of it the
+terrain's erosion (24 s) run twice: once before the preset applies and
+once after.
+
+**Next on the Pi**: generate the terrain once; batch the terrain's chunk
+draws as D3D9's CPU path does; a Pi preset and default (the sm2 tier's
+default Medium is far too much); keyboard and pad through KMSDRM's evdev;
+audio through miniaudio's ALSA; a playtest on a monitor.
+
 ## What every mobile target needs
 
 These are shared, and most of the M0 work is here, not in a renderer.

@@ -78,3 +78,5 @@ assets/silver-dragon-raw.glb.*.cfg
 __pycache__/
 build-mobile-bench/
 build-android/
+build-gles/
+build-pi/

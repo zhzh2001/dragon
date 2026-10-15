@@ -388,6 +388,10 @@ bool App::init(const Options& options) {
     if (options_.gpu_driver.rfind("direct3d9", 0) == 0 && options_.tier == gfx::Tier::Modern) {
         options_.tier = gfx::Tier::SM3;
     }
+#ifdef DRAGON_GLES_DEFAULT
+    // A build for a GPU with no Vulkan (the Pi 1B, tools/pi/build.sh).
+    if (options_.gpu_driver.empty()) options_.gpu_driver = "gles";
+#endif
     // GLES 2.0 the LDR ones (rhi/gles): no float targets for sm3's HDR.
     if (options_.gpu_driver == "gles" && (options_.tier == gfx::Tier::Modern || options_.tier == gfx::Tier::SM3)) {
         options_.tier = gfx::Tier::SM2;

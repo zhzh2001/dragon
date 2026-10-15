@@ -1,0 +1,6 @@
+#!/bin/bash
+# Zig's clang for the Raspberry Pi 1B (ARMv6, hard-float VFP, glibc 2.31 --
+# Raspberry Pi OS Bullseye), against build-pi/sysroot (tools/pi/build.sh).
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+sysroot=${DRAGON_PI_SYSROOT:-$here/../../build-pi/sysroot}
+exec zig cc -target arm-linux-gnueabihf.2.31 --sysroot="$sysroot" -mcpu=arm1176jzf_s -mfpu=vfp -mfloat-abi=hard "$@"
