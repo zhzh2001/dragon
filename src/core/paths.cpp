@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_system.h>
 
 #include "core/log.h"
 
@@ -45,7 +46,14 @@ std::string pick(std::initializer_list<std::string> candidates) {
 
 void init() {
     const char* base_c = SDL_GetBasePath();
-    const std::string base = base_c ? base_c : "";
+    std::string base = base_c ? base_c : "";
+#ifdef SDL_PLATFORM_ANDROID
+    // Android: the data is not read out of the APK but pushed beside it, to
+    // the app's external files directory (tools/android/push_assets.sh),
+    // where fopen and std::ifstream read it as on every other platform
+    // (docs/porting/MOBILE.md).
+    if (const char* external = SDL_GetAndroidExternalStoragePath()) base = external;
+#endif
 
 #ifdef ASSET_ROOT
     const std::string dev_assets = ASSET_ROOT;

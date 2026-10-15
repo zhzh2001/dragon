@@ -1,6 +1,7 @@
 #include "editor/imgui_layer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <string>
 
@@ -271,6 +272,16 @@ void ImGuiLayer::begin_frame(float target_width, float target_height) {
     ImGui_ImplSDL3_NewFrame();
 #endif
     ImGuiIO& io = ImGui::GetIO();
+    // A window whose shape is not the target's is not what is being drawn:
+    // Android sizes every window to the screen itself, so a headless
+    // 1280x720 capture on a 2261x1080 phone laid the UI out for the screen
+    // and squeezed it into the target, stretched and its text resampled.
+    // Lay out in the target's own pixels then.
+    if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f && target_height > 0.0f &&
+        std::fabs(io.DisplaySize.x * target_height - io.DisplaySize.y * target_width) >
+            0.01f * io.DisplaySize.y * target_width) {
+        io.DisplaySize = ImVec2(target_width, target_height);
+    }
     if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f &&
         target_height > 0.0f) {
         io.DisplayFramebufferScale =

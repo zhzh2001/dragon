@@ -18,7 +18,7 @@ bool Device::init(const Config& config) {
     // would remove that, but on macOS it fails creating the window (it wants
     // OpenGL), and "dummy" leaves SDL GPU with no backend. Which driver
     // Linux-over-SSH needs is a P2 question (docs/PORTING.md), settled on x99.
-#if !defined(__APPLE__) && !defined(_WIN32)
+#if !defined(__APPLE__) && !defined(_WIN32) && !defined(__ANDROID__)
     // On Linux a headless run needs no display server at all: SDL's
     // offscreen video driver makes the window, and it creates Vulkan
     // surfaces through VK_EXT_headless_surface. That is what lets a render
@@ -34,7 +34,12 @@ bool Device::init(const Config& config) {
     // D3D9 takes the display mode itself, on an ordinary window.
     const bool d3d9 = config.gpu_driver.rfind("direct3d9", 0) == 0;
     if (config.fullscreen && !headless_ && !d3d9) flags |= SDL_WINDOW_FULLSCREEN;
-#if !defined(__APPLE__) && !defined(_WIN32)
+#ifdef SDL_PLATFORM_ANDROID
+    // A phone's game is the whole screen: SDL's fullscreen on Android hides
+    // the status and navigation bars (immersive mode).
+    if (!headless_) flags |= SDL_WINDOW_FULLSCREEN;
+#endif
+#if !defined(__APPLE__) && !defined(_WIN32) && !defined(__ANDROID__)
     if (offscreen) flags |= SDL_WINDOW_VULKAN;
 #endif
 

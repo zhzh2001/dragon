@@ -173,6 +173,88 @@ stayed at 700 MHz, 42 C and `throttled=0x0` throughout. Not measured: the
 phones' Vulkan (GLES was the common API; the port uses SDL GPU's Vulkan),
 the Ace 3V and the VisionFive 2.
 
+## M1 on the K30, as built so far (2026-10-15)
+
+M1 came first instead of M0 (the K30 is the phone on `adb`), so it took
+M0's shared work with it. What exists:
+
+- **No Gradle.** `tools/android/build_apk.sh` builds `libmain.so` through
+  the NDK's CMake toolchain (`build-android/`: arm64-v8a, API 29, SDL
+  3.4.16 fetched and linked statically, `DRAGON_SHADERCROSS=OFF`), compiles
+  SDL's Java activity and ours (`android/src`, `DragonActivity`) with
+  `javac` and `d8`, links the manifest with `aapt2`, and signs with the
+  debug key: a 2.4 MB APK in about ten seconds after a C++ change. Tools:
+  `brew install --cask android-ndk android-commandlinetools`, `brew
+  install openjdk@17` (the Temurin cask wants sudo), then `sdkmanager
+  "platforms;android-35" "build-tools;35.0.0"`.
+- **The data is beside the APK, not in it.** `tools/android/push_assets.sh`
+  stages what the Windows package carries (SPIR-V baked by
+  `bake_shaders.sh`, textures, fonts, species, props, each species shrunk
+  to 2048 textures by `shrink_glb.py`) and `adb push --sync`es it to
+  `/sdcard/Android/data/com.paleshell.dragon/files`, which
+  `core/paths.cpp` takes as the root on Android. fopen and ifstream read it
+  unchanged, so no file access was rewritten. A release APK will still
+  need the assets inside it (the open item from "What every mobile target
+  needs").
+- **Driven from the Mac.** `tools/android/run.sh -- ARGS` launches with a
+  command line (the intent's `args` extra; leading `NAME=value` words are
+  set as environment variables first), waits for SDL_main to return, and
+  pulls back the log and the screenshot as PNG. A launch with arguments
+  shows over the lock screen (`setShowWhenLocked`), because the K30 has a
+  PIN and SDL never starts the game behind the keyguard; a launch from the
+  launcher does not.
+- **Fixed on the way:** a headless capture's UI was laid out for the
+  window, which Android sizes to the screen (2261x1080), and squeezed into
+  the 1280x720 target, so `ImGuiLayer::begin_frame` now lays out in the
+  target's pixels when the two shapes differ. The window is fullscreen
+  (immersive) and landscape either way up (`SDL_HINT_ORIENTATIONS`), and
+  the panels start hidden on Android, which has no F1.
+- **`DRAGON_GPU_PASS_PROFILE=N`** (headless, SDL GPU): from frame N every
+  render pass ends in a submit and a wait, and each pass's GPU time is
+  logged at exit, labelled by its first pipeline. SDL GPU has no timestamp
+  queries and this Adreno driver gives Perfetto no render stages, so it is
+  the only per-pass timing on the phone. The waits add about 0.3 ms a pass
+  there.
+
+The first boot rendered the valley at Ultra identically to the Metal
+capture, HUD and panels included, at 4 fps. A hoard run under the demo
+pilot, 600 frames, 1280x720, headless (the GPU is about 83% busy
+throughout, per `/sys/class/kgsl/kgsl-3d0/gpubusy`):
+
+| Tier, preset | Median frame | fps |
+|---|---|---|
+| modern Ultra | 258 ms | 3.9 |
+| modern High | 132 ms | 7.6 |
+| modern Medium | 92 ms | 10.8 |
+| modern Low | 58 ms | 17.0 |
+| modern Very low | 47 ms | 21.1 |
+| sm3 Low | 26 ms | 39 |
+| sm2 Low | 14 ms | 70 |
+
+Played live (swapchain, `--demo`): sm3 Low runs at 43-50 fps on the full
+2400x1080 screen (a 2040x918 world).
+
+**Why the modern tier is slow here: the terrain's pixels.** The pass
+profile at modern Low puts 36.6 ms of 70 (serialised) in the main pass,
+and removing every drawable from it made it *slower* (48.6 ms), because
+the terrain is drawn by a branch the ablation does not cover (no far
+terrain mesh below Medium) and then covers the whole screen. It is
+86K triangles, so it is not the vertices: it is the terrain fragment
+shader's per-pixel hashed value noise -- `fbm` patches, strata, the
+two-octave noise-gradient micro-relief (sixteen noise evaluations) and
+the triplanar scans -- which the M5 shrugs off and the Adreno 620 fills at
+about 9 Mpix/s, against 2,000 Mpix/s for the bench's three-texture shader.
+The rest of modern Low: atmosphere 4.3 ms, clouds 10.7 (march 6.9), the
+frame's uploads 5.5, the composite 3.1, SSAO 3.4. The sm3 and sm2 tiers
+replace exactly that shading (BAKED_NOISE, the simpler terrain), which is
+why they run 2-4x faster.
+
+**Next**, in order: a mobile terrain (the modern pipeline with the
+retro tiers' noise: baked lattice, no micro-relief) so the modern look
+reaches 30 fps at Low; touch controls through the HUD kit; lifecycle
+(pause on background, the swapchain on return); the safe area; the
+assets inside a release APK.
+
 ## What every mobile target needs
 
 These are shared, and most of the M0 work is here, not in a renderer.

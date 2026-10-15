@@ -14,7 +14,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "core/log.h"
 #include "rhi/sdlgpu/sdlgpu.h"
@@ -242,6 +244,16 @@ public:
     bool init(SDL_Window* window, const DeviceConfig& config) {
         window_ = window;
         headless_ = config.headless;
+        // DRAGON_GPU_PASS_PROFILE=N (headless): from frame N, end every
+        // render pass with a submit and a wait, so each pass's GPU time reads
+        // off the CPU clock -- the only per-pass timing on a GPU with no
+        // timestamp queries reachable (SDL GPU has none; the K30's Adreno
+        // gives Perfetto nothing). The waits serialise the frame and cost a
+        // little each, and uniforms pushed before a pass do not survive the
+        // fresh command buffer, so it times passes, not pictures.
+        if (const char* from = SDL_getenv("DRAGON_GPU_PASS_PROFILE"); from && headless_) {
+            pass_profile_from_ = std::max(1, std::atoi(from));
+        }
 #ifdef DRAGON_SHADERCROSS
         if (!SDL_ShaderCross_Init()) LOG_ERROR("SDL_ShaderCross_Init failed: %s", SDL_GetError());
 #endif
@@ -292,6 +304,7 @@ public:
     }
 
     ~SdlGpuDevice() override {
+        report_pass_profile();
         if (gpu_) {
             SDL_WaitForGPUIdle(gpu_);
             for (auto& [buffer, staging] : staging_) SDL_ReleaseGPUTransferBuffer(gpu_, staging.transfer);
@@ -385,6 +398,8 @@ public:
             return;
         }
 
+        if (profiling()) pass_sync("(end of frame)");
+        if (pass_profile_from_ && ++pass_frame_ > uint64_t(pass_profile_from_)) ++pass_profiled_frames_;
         if (!SDL_SubmitGPUCommandBuffer(cmd_)) LOG_ERROR("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
         cmd_ = nullptr;
         swapchain_ = nullptr;
@@ -676,6 +691,7 @@ public:
             return nullptr;
         }
         track(pipeline, Kind::Pipeline, 0);
+        if (pass_profile_from_) pipeline_names_[pipeline] = d.name;
         return reinterpret_cast<Pipeline*>(pipeline);
     }
 
@@ -707,6 +723,8 @@ public:
     // ---- passes
     Pass* begin_pass(const PassDesc& desc) override {
         if (!cmd_) return nullptr;
+        if (profiling()) pass_sync("(copies, blits)");
+        pass_label_.clear();
         SDL_GPUColorTargetInfo color = {};
         if (desc.color) {
             color.texture = sdl(desc.color);
@@ -734,9 +752,14 @@ public:
 
     void end_pass(Pass* pass) override {
         if (pass) SDL_EndGPURenderPass(sdl(pass));
+        if (profiling()) pass_sync(pass_label_.empty() ? "(clear only)" : pass_label_);
     }
 
     void bind_pipeline(Pass* pass, Pipeline* pipeline) override {
+        if (pass_profile_from_ && pass_label_.empty()) {
+            const auto it = pipeline_names_.find(sdl(pipeline));
+            pass_label_ = it != pipeline_names_.end() ? it->second : "?";
+        }
         SDL_BindGPUGraphicsPipeline(sdl(pass), sdl(pipeline));
     }
 
@@ -873,6 +896,56 @@ private:
         }
         SDL_ReleaseGPUTransferBuffer(gpu_, transfer);
     }
+
+    // ---- DRAGON_GPU_PASS_PROFILE
+    bool profiling() const { return pass_profile_from_ && pass_frame_ >= uint64_t(pass_profile_from_) && cmd_; }
+
+    // Submits what is recorded, waits for it, and charges the time since the
+    // last sync to `label`; the frame goes on in a fresh command buffer.
+    void pass_sync(const std::string& label) {
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_);
+        if (fence) {
+            SDL_WaitForGPUFences(gpu_, true, &fence, 1);
+            SDL_ReleaseGPUFence(gpu_, fence);
+        }
+        cmd_ = SDL_AcquireGPUCommandBuffer(gpu_);
+        const uint64_t now = SDL_GetTicksNS();
+        if (pass_mark_ && pass_frame_ > uint64_t(pass_profile_from_)) {
+            // Keyed by the pass's place in the frame as well, so the same
+            // pipeline in two passes stays two rows.
+            const std::string key = std::to_string(pass_index_) + " " + label;
+            auto it = std::find_if(pass_times_.begin(), pass_times_.end(),
+                                   [&](const PassTime& t) { return t.label == key; });
+            if (it == pass_times_.end()) it = pass_times_.insert(pass_times_.end(), PassTime{key, 0.0});
+            it->ns += double(now - pass_mark_);
+        }
+        pass_mark_ = now;
+        ++pass_index_;
+        if (label == "(end of frame)") pass_index_ = 0;
+    }
+
+    void report_pass_profile() {
+        if (!pass_profiled_frames_) return;
+        double total = 0.0;
+        for (const PassTime& t : pass_times_) total += t.ns;
+        const double n = double(pass_profiled_frames_);
+        LOG_INFO("gpu pass profile, %llu frames, %.2f ms a frame in all:", (unsigned long long)pass_profiled_frames_,
+                 total * 1e-6 / n);
+        for (const PassTime& t : pass_times_) LOG_INFO("  gpu pass %7.3f ms  %s", t.ns * 1e-6 / n, t.label.c_str());
+    }
+
+    struct PassTime {
+        std::string label;
+        double ns = 0.0;
+    };
+    int pass_profile_from_ = 0;
+    uint64_t pass_frame_ = 0;
+    uint64_t pass_profiled_frames_ = 0;
+    uint64_t pass_mark_ = 0;
+    int pass_index_ = 0;
+    std::string pass_label_;
+    std::vector<PassTime> pass_times_;
+    std::unordered_map<const void*, std::string> pipeline_names_;
 
     SDL_Window* window_ = nullptr;
     SDL_GPUDevice* gpu_ = nullptr;

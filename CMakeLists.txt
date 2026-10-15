@@ -29,7 +29,16 @@ include(cmake/stb.cmake)
 include(cmake/meshoptimizer.cmake)
 include(cmake/miniaudio.cmake)
 
-add_executable(dragon
+if(ANDROID)
+  # Android: the game is libmain.so, which SDL's Java activity loads and
+  # calls SDL_main in (android/, tools/android/build_apk.sh;
+  # docs/porting/MOBILE.md).
+  add_library(dragon SHARED)
+  set_target_properties(dragon PROPERTIES OUTPUT_NAME main)
+else()
+  add_executable(dragon)
+endif()
+target_sources(dragon PRIVATE
   src/main.cpp
   src/app.cpp
   src/core/input.cpp

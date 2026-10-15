@@ -73,6 +73,11 @@ int main(int argc, char** argv) {
     }
 #endif
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
+#ifdef SDL_PLATFORM_ANDROID
+    // SDL asks Android for any orientation when the window is resizable;
+    // a flight game is played in landscape, either way up.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
     if (const char* path = SDL_getenv("DRAGON_LOG_FILE")) {
         g_log_file.file = std::fopen(path, "w");
         if (g_log_file.file) {

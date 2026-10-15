@@ -486,6 +486,11 @@ bool App::init(const Options& options) {
     if (!ui_.init(device_)) return false;
     hud_.set_fonts(ui_.numeral_font(), ui_.label_font());
     if (options.hide_panels) show_panels_ = false;
+#ifdef SDL_PLATFORM_ANDROID
+    // A phone has no F1 to put them away, and they cover a third of a
+    // landscape screen; there is no touch layout for them yet.
+    show_panels_ = false;
+#endif
     if (options.no_post) post_settings_.enabled = false;
 
     pipelines_.init(&device_, core::paths::shader_root());
