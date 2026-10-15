@@ -128,6 +128,10 @@ bool PipelineCache::build(Entry& entry) {
     if (!active_tier().depth.reversed) shaders.defines.push_back("CONVENTIONAL_DEPTH");
     // The physically based sky and aerial perspective (gfx/atmosphere.h).
     if (active_tier().tier == Tier::Modern) shaders.defines.push_back("ATMOSPHERE");
+    // The terrain's light shading, a modern-tier variant of the one shader
+    // (terrain.hlsl; tools/release/bake_shaders.sh bakes it).
+    if (active_tier().tier == Tier::Modern && active_tier().budget.terrain_lite && d.shader == "terrain")
+        shaders.defines.push_back("TERRAIN_LITE");
     // SM2 cannot branch past a shadow lookup, so shadows off is a variant
     // (scene_common.hlsl, sm2_finish); the other tiers branch on strength.
     if (active_tier().vertex_lighting && active_tier().budget.shadow_size == 0) shaders.defines.push_back("NO_SHADOWS");

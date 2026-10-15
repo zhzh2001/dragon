@@ -33,11 +33,13 @@ sc=${SHADERCROSS:-$(command -v shadercross || echo "$HOME/.local/opt/shadercross
 [ -x "$sc" ] || { echo "no shadercross at $sc (docs/PORTING.md, P1)" >&2; exit 1; }
 mkdir -p "$out"
 # The define sets, sorted. The modern tier's is ATMOSPHERE alone (the
-# physically based sky, gfx/atmosphere.h). sm3: BAKED_NOISE CONVENTIONAL_DEPTH
+# physically based sky, gfx/atmosphere.h), and for the terrain alone
+# ATMOSPHERE,TERRAIN_LITE (its light shading, the Terrain setting at Low and
+# below). sm3: BAKED_NOISE CONVENTIONAL_DEPTH
 # PACKED_JOINTS SWIZZLED_NORMALS. sm2 adds LDR_OUTPUT and SM2, and
 # NO_SHADOWS with the Shadows setting at Off; ff adds FIXED_FUNCTION to
 # that, and always has NO_SHADOWS (gfx/pipeline.cpp).
-variants="ATMOSPHERE BAKED_NOISE,CONVENTIONAL_DEPTH,PACKED_JOINTS,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,LDR_OUTPUT,PACKED_JOINTS,SM2,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,LDR_OUTPUT,NO_SHADOWS,PACKED_JOINTS,SM2,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,FIXED_FUNCTION,LDR_OUTPUT,NO_SHADOWS,PACKED_JOINTS,SM2,SWIZZLED_NORMALS"
+variants="ATMOSPHERE ATMOSPHERE,TERRAIN_LITE BAKED_NOISE,CONVENTIONAL_DEPTH,PACKED_JOINTS,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,LDR_OUTPUT,PACKED_JOINTS,SM2,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,LDR_OUTPUT,NO_SHADOWS,PACKED_JOINTS,SM2,SWIZZLED_NORMALS BAKED_NOISE,CONVENTIONAL_DEPTH,FIXED_FUNCTION,LDR_OUTPUT,NO_SHADOWS,PACKED_JOINTS,SM2,SWIZZLED_NORMALS"
 count=0
 for src in "$root"/shaders/*.hlsl; do
   # Every shader file is a pipeline except the headers, which say #pragma
@@ -48,6 +50,8 @@ for src in "$root"/shaders/*.hlsl; do
   for variant in $variants; do
     # The atmosphere's tables and the temporal resolve are the modern tier's alone.
     case $stem in atmosphere_*|clouds_*|terrain_sun|post_taa|post_ssao|post_ssao_blur|velocity_skinned) [ "$variant" = ATMOSPHERE ] || continue ;; esac
+    # The terrain's light shading is a modern variant alone (gfx/pipeline.cpp).
+    case $variant in *TERRAIN_LITE*) [ "$stem" = terrain ] || continue ;; esac
     flags=""; suffix=""
     if [ "$variant" != - ]; then
       for d in $(echo "$variant" | tr ',' ' '); do

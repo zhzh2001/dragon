@@ -201,6 +201,7 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     b.far_skinned_triangles = FAR_TRIANGLES[models];
     b.far_skinned_distance = FAR_DISTANCE[models];
     b.terrain_cell_scale = TERRAIN_SCALE[g[Setting::Terrain]];
+    b.terrain_lite = g[Setting::Terrain] >= 3;
     b.tree_draw_distance = TREE_DISTANCE[g[Setting::Trees]];
     b.tree_spacing_scale = TREE_SPACING[g[Setting::Trees]];
     b.grass_radius_scale = GRASS_RADIUS[g[Setting::Grass]];

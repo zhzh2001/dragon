@@ -1204,6 +1204,8 @@ void App::apply_graphics(const gfx::GraphicsSettings& next) {
     gfx::set_active_tier(tier_);
     device_.set_world_scale(tier_.budget.world_scale);
     if (old[Setting::Terrain] != next[Setting::Terrain]) {
+        // Low and below shade the ground with the terrain's light variant.
+        if ((old[Setting::Terrain] >= 3) != (next[Setting::Terrain] >= 3)) pipelines_.rebuild_all();
         regenerate_terrain();  // replants too
         rebuild_courses();
         select_course(current_course_);

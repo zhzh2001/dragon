@@ -151,23 +151,30 @@ def main():
         # The atmosphere's tables: the modern tier's alone.
         stems = [s for s in stems if not s.startswith(("atmosphere_", "clouds_")) and s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned")]
 
+    units = [(stem, defines, suffix) for stem in stems]
+    # The modern tier's terrain also comes in its light shading, the Terrain
+    # setting at Low and below (gfx/pipeline.cpp, TERRAIN_LITE).
+    if "ATMOSPHERE" in defines and "terrain" in stems:
+        lite = sorted(defines + ["TERRAIN_LITE"])
+        units.append(("terrain", lite, bake_d3d9.variant_suffix(lite)))
+
     work = tempfile.mkdtemp(prefix="bake_d3d11_")
     jobs = []
-    for stem in stems:
+    for stem, unit_defines, unit_suffix in units:
         for stage, entry, define in (("vertex", "vs_main", "VERTEX_STAGE"), ("fragment", "fs_main", "FRAGMENT_STAGE")):
-            spv = os.path.join(work, f"{stem}.{stage}.spv")
-            flags = [f"-D{d}" for d in defines + [define]]
+            spv = os.path.join(work, f"{stem}{unit_suffix}.{stage}.spv")
+            flags = [f"-D{d}" for d in unit_defines + [define]]
             run([bake_d3d9.SHADERCROSS, os.path.join(SHADERS, stem + ".hlsl"), "-s", "HLSL", "-d", "SPIRV", "-t", stage,
                  "-e", entry, "-I", SHADERS, "-o", spv] + flags)
             hlsl = run(["spirv-cross", spv, "--hlsl", "--shader-model", model])
             copies = None
             if all(level9):
                 hlsl, copies = compact_cbuffers(hlsl)
-            src = os.path.join(work, f"{stem}.{stage}.hlsl")
+            src = os.path.join(work, f"{stem}{unit_suffix}.{stage}.hlsl")
             open(src, "w").write(hlsl)
             # The backend's own stretch (rhi::Device::blit) is the same in
             # every tier, and loaded without a variant suffix.
-            stem_suffix = "" if stem == "blit" else suffix
+            stem_suffix = "" if stem == "blit" else unit_suffix
             for profile in profiles:
                 vs, ps = PROFILES[profile]
                 base = os.path.join(args.out, f"{stem}{stem_suffix}.{stage}.{profile}")

@@ -20,7 +20,7 @@ Part of the porting record; [`../PORTING.md`](../PORTING.md) is the index.
 | Texture formats | ASTC, ETC2 (no BC/DXT) | ASTC, ETC2 (no BC/DXT) | ETC2, ASTC per driver; no BC expected | ETC1 only (no alpha), else uncompressed |
 | Memory | 12-16 GB | 6-8 GB | 2/4/8 GB | 512 MB, shared with the GPU |
 | OS | Android 14 (ColorOS) | Android 11-12 (MIUI) | Debian riscv64 | Raspberry Pi OS Legacy (Bullseye, 32-bit armhf); see `~/src/rpi` |
-| Tier it can carry | **Modern**, Medium to High | Modern, Low to Medium | Modern at Low to Very low, or sm2-class content | ff-class content at Lowest, or the MCU demake's renderer |
+| Tier it can carry | **Modern**, Medium to High | sm3 at native (measured, 43-50 fps); modern only at a phone preset, about 30 fps | Modern at Low to Very low, or sm2-class content | ff-class content at Lowest, or the MCU demake's renderer |
 
 Two facts frame all four. **The simulation is portable**: `src/` has no SIMD
 intrinsics and no x86 assumption apart from the XP build's `-msse2`, and
@@ -234,26 +234,53 @@ throughout, per `/sys/class/kgsl/kgsl-3d0/gpubusy`):
 Played live (swapchain, `--demo`): sm3 Low runs at 43-50 fps on the full
 2400x1080 screen (a 2040x918 world).
 
-**Why the modern tier is slow here: the terrain's pixels.** The pass
-profile at modern Low puts 36.6 ms of 70 (serialised) in the main pass,
-and removing every drawable from it made it *slower* (48.6 ms), because
-the terrain is drawn by a branch the ablation does not cover (no far
-terrain mesh below Medium) and then covers the whole screen. It is
-86K triangles, so it is not the vertices: it is the terrain fragment
-shader's per-pixel hashed value noise -- `fbm` patches, strata, the
-two-octave noise-gradient micro-relief (sixteen noise evaluations) and
-the triplanar scans -- which the M5 shrugs off and the Adreno 620 fills at
-about 9 Mpix/s, against 2,000 Mpix/s for the bench's three-texture shader.
-The rest of modern Low: atmosphere 4.3 ms, clouds 10.7 (march 6.9), the
-frame's uploads 5.5, the composite 3.1, SSAO 3.4. The sm3 and sm2 tiers
-replace exactly that shading (BAKED_NOISE, the simpler terrain), which is
-why they run 2-4x faster.
+**The terrain.** The pass profile at modern Low (1280x720) puts 36 of a
+50 ms GPU frame in the main pass, and the terrain's fragment shader is 22
+of them: alone on screen (every other draw ablated) it is 46 ms, more than
+with the rest drawn, because the Adreno's low-resolution depth test then
+no longer rejects the ground hidden behind trees and water. (Ablation
+first missed it entirely: below Medium there is no far terrain mesh, and
+the branch that draws the whole mesh had no ablation check.) No single
+effect in it is the cost. Removing the micro-relief, the crags, the rock
+blotches, the strata, the rock and scree scans, the ground scans or the
+fog one at a time each moved the frame by a millisecond or two; removing
+the noise and the scans together moved it by 17. It is register pressure:
+the 62 KB shader holds too many values for the GPU to keep many pixels in
+flight, and it speeds up only once it is small enough. Even the map-edge
+sky blend, in a branch and run only at the edge, cost 5 ms of a 45 ms
+frame by being in the shader at all (`[branch]` did not change that).
 
-**Next**, in order: a mobile terrain (the modern pipeline with the
-retro tiers' noise: baked lattice, no micro-relief) so the modern look
-reaches 30 fps at Low; touch controls through the HUD kit; lifecycle
-(pause on background, the swapchain on return); the safe area; the
-assets inside a release APK.
+So `TERRAIN_LITE`, the Terrain setting at Low and below on the modern tier
+(`gfx/pipeline.cpp`; baked by `bake_shaders.sh` and `bake_d3d11.py`):
+no micro-relief, crags, blotches or strata, the patches in two octaves, the
+rock's broad scan alone (one triplanar, not three; without it a slope
+read as smooth clay) and the ground's meadow scan in one fetch. The three
+maps it no longer reads are touched behind a branch that is never taken:
+unread, the compiler stripped them, the reflection counted 7 samplers for
+slots up to 9, and the K30's Vulkan refused the pipeline -- the terrain
+was simply missing, which Metal, binding by index, never shows. Modern Low
+at 1280x720 went from 58.5 to 46.1 ms a frame, headless. The goldens
+(Ultra) are unchanged.
+
+**At the phone's own resolution** the picture is harsher: 2400x1080 at
+Low's 70% world is 2.8 times 720p's pixels, and the modern tier is
+pixel-bound. Live, modern Low ran 6.5 fps before the light terrain;
+headless at native it is now 91 ms (world pass 53, cloud march 15,
+composite 7, uploads 5.6, atmosphere 4.4, SSAO 4.2). With a 50% world,
+the painted cloud slab (`--clouds on=0`) and no SSAO it is 44.6 ms
+headless, against the sm3 tier's 38.9 at Low; headless frames carry about
+9 ms of CPU that a live frame overlaps, so both are near 30 fps live.
+
+So the K30 is **a modern-tier device only at a phone preset** -- Low,
+half the world's resolution, no volumetric clouds, no SSAO -- or an sm3
+one at native, which plays at 43-50 fps. The device table's "Modern, Low
+to Medium" was the published-figure estimate and is wrong by about 3x.
+
+**Next**, in order: a phone preset (Low, 50% world, painted clouds, no
+SSAO) and a default tier picked from the GPU, measured live; the cloud
+march and the composite, the two fixed costs left; touch controls through
+the HUD kit; lifecycle (pause on background, the swapchain on return); the
+safe area; the assets inside a release APK.
 
 ## What every mobile target needs
 

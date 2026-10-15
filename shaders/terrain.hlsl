@@ -34,6 +34,11 @@ TEXTURE2D(forest_map, 8);
 TEXTURE2D(gravel_map, 9);
 #endif
 #endif
+#ifdef TERRAIN_LITE
+// The patches in two octaves: the third is 33 m blotches the ground scan's
+// grain covers at the distances it shows.
+#define FBM_OCTAVES 2
+#endif
 #include "noise.hlsl"
 
 #ifdef SM2
@@ -229,10 +234,12 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     // Strata: near-horizontal bands on steep faces, the single strongest cue
     // that a cliff is rock and not grey clay. Height-keyed noise, squeezed by
     // steepness so flat ground shows none of it.
+#ifndef TERRAIN_LITE
     float strata = value_noise(float2(world_position.y * 0.11,
                                       dot(world_position.xz, float2(0.013, 0.017))));
     float steepness = 1.0 - flatness;
     rock *= 1.0 + (strata - 0.5) * 0.55 * smoothstep(0.25, 0.7, steepness);
+#endif
 
     // A narrow gravel bar right at the waterline, then grass above it. The
     // valley floor sits only a few metres above the river, so a 10 m band
@@ -311,6 +318,14 @@ float4 fs_main(VertexOut input) : SV_Target {
     // Micro-relief: a noise-gradient normal perturbation that fades out by
     // 400 m. Up close the ground gets shape the mesh does not carry; far away
     // it vanishes before it can shimmer.
+    // TERRAIN_LITE (the Terrain setting at Low and below, gfx/pipeline.cpp):
+    // the per-pixel shape and the scans go -- the micro-relief, the crags,
+    // the rock's blotches and strata, the triplanar rock and scree -- and the
+    // ground keeps one scan fetch. Each of those alone costs a phone's Adreno
+    // little; together they keep the shader too big for the GPU to hold many
+    // pixels in flight, and the terrain took 23 of a 50 ms frame on the K30
+    // at Low; lite, 6 (docs/porting/MOBILE.md, "The terrain").
+#ifndef TERRAIN_LITE
     float detail_fade = 1.0 - smoothstep(80.0, 400.0, camera_distance);
     if (detail_fade > 0.0) {
         float2 p = input.world_position.xz * 0.35;
@@ -319,8 +334,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         float gz = value_noise(p + float2(0.0, h)) - value_noise(p - float2(0.0, h));
         normal = normalize(normal + float3(-gx, 0.0, -gz) * (0.55 * detail_fade));
     }
+#endif
 
-#ifdef ATMOSPHERE
+#if defined(ATMOSPHERE) && !defined(TERRAIN_LITE)
     // Crags: rock is rough at every scale the mesh is too coarse for, and a
     // face that bends the light smoothly reads as sand. A bump of two value
     // noise octaves (24 m and 9 m) on the two vertical world planes, blended
@@ -365,6 +381,9 @@ float4 fs_main(VertexOut input) : SV_Target {
     float warm = value_noise(q * 0.011 + 3.3);
     float3 broken = lerp(float3(0.9, 0.94, 1.0), float3(1.08, 1.0, 0.88), warm) * (0.78 + 0.44 * blotch);
     float3 rock_tint = lerp((float3)1.0, broken, rocky * (1.0 - smoothstep(600.0, 3000.0, camera_distance)));
+#elif defined(ATMOSPHERE)
+    float rocky = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.22, saturate(normal.y));
+    float3 rock_tint = (float3)1.0;
 #endif
 #ifdef ATMOSPHERE
     // The scans (F3): rock on the rocky ground, scree where the talus
@@ -373,6 +392,16 @@ float4 fs_main(VertexOut input) : SV_Target {
     float scan_rock = rocky * (1.0 - smoothstep(700.0, 2500.0, camera_distance));
     float scan_scree = smoothstep(0.08, 0.45, input.erosion.y) * (1.0 - rocky) * (1.0 - smoothstep(400.0, 1500.0, camera_distance));
     float scan_detail = 0.5;
+#ifdef TERRAIN_LITE
+    // The rock keeps its broad scan (one triplanar, not three), or a slope
+    // reads as smooth clay; the scree goes.
+    if (scan_rock > 0.001) {
+        float4 scan = triplanar_scan(rock_map, rock_map_sampler, input.world_position + 31.0, normal, 1.0 / 26.0);
+        float amount = saturate(scan_rock);
+        normal = normalize(lerp(normal, normalize(scan.xyz), amount * 0.85));
+        scan_detail = lerp(0.5, scan.a, amount);
+    }
+#else
     if (scan_rock + scan_scree > 0.001) {
         float fine = 1.0 - smoothstep(250.0, 700.0, camera_distance);
         float4 rock_near = triplanar_scan(rock_map, rock_map_sampler, input.world_position, normal, 1.0 / 7.0);
@@ -385,6 +414,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         normal = normalize(lerp(normal, normalize(scan.xyz), amount * 0.85));
         scan_detail = lerp(0.5, scan.a, amount);
     }
+#endif
     // And the ground's (F3): meadow grass, pine litter where the canopy
     // covers it, gravel on the bars at the waterline. The
     // grass was the palette's green over one detail tile, and a landed
@@ -401,9 +431,25 @@ float4 fs_main(VertexOut input) : SV_Target {
         float litter = saturate(canopy_cover * 1.6) * (1.0 - bar);
         float meadow = (1.0 - bar) * (1.0 - litter);
         float4 scan = (float4)0.0;
+#ifdef TERRAIN_LITE
+        // One fetch: the meadow's broad scale, which is most of the ground.
+        scan = ground_scan(grass_map, grass_map_sampler, input.world_position, normal, 1.0 / 3.0, 0.0);
+        meadow = 1.0, litter = 0.0, bar = 0.0;
+        // The maps this variant leaves alone must still be bound where the
+        // renderer binds them: unread, the compiler strips them, the
+        // reflection counts 7 samplers for slots up to 9, and Vulkan refused
+        // the pipeline on the K30 (Metal binds by index and never noticed).
+        // Never true, and not provably so.
+        [branch] if (input.world_position.y < -1e30) {
+            scan += scree_map.SampleLevel(scree_map_sampler, (float2)0.0, 0.0) +
+                    forest_map.SampleLevel(forest_map_sampler, (float2)0.0, 0.0) +
+                    gravel_map.SampleLevel(gravel_map_sampler, (float2)0.0, 0.0);
+        }
+#else
         if (meadow > 0.01) scan += ground_scan(grass_map, grass_map_sampler, input.world_position, normal, 1.0 / 3.0, fine) * meadow;
         if (litter > 0.01) scan += ground_scan(forest_map, forest_map_sampler, input.world_position, normal, 1.0 / 2.5, fine) * litter;
         if (bar > 0.01) scan += ground_scan(gravel_map, gravel_map_sampler, input.world_position, normal, 1.0 / 2.0, fine) * bar;
+#endif
         scan /= max(meadow + litter + bar, 1e-3);
         normal = normalize(lerp(normal, normalize(scan.xyz), ground_scans * 0.7));
         scan_detail = lerp(scan_detail, scan.a, ground_scans);

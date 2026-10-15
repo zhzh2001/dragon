@@ -40,12 +40,18 @@ mkdir -p "$out"
 adb shell am force-stop $pkg
 adb logcat -c
 adb shell am start -W -n $pkg/.DragonActivity --es args "'${args[*]}'" >/dev/null
+# Only this process's lines: a clear of the log is not always done by the
+# time the next run starts, and an earlier run's "Finished" was once read as
+# this one's, with its numbers.
+pid=$(adb shell pidof $pkg | tr -d '\r')
+[ -n "$pid" ] || { echo "the game did not start" >&2; exit 1; }
 # The game is done when SDL's thread returns from SDL_main.
-while ! adb logcat -d -s SDL:V | grep -q "Finished main function"; do
+while ! adb logcat -d --pid="$pid" | grep -q "Finished main function"; do
   adb shell pidof $pkg >/dev/null || { echo "the game died" >&2; break; }
   sleep 1
 done
-adb logcat -d | grep -E " (SDL/[A-Z]+|DEBUG|AndroidRuntime) |F libc|Finished main" > "$out/run.log" || true
+adb logcat -d --pid="$pid" | grep -E " (SDL/[A-Z]+|DEBUG|AndroidRuntime) |F libc|Finished main" > "$out/run.log" || true
+adb logcat -d | grep -E " (DEBUG|AndroidRuntime) |F libc" >> "$out/run.log" || true
 grep -E "frames:|ERROR|error|FAILED|DEBUG|Fatal" "$out/run.log" || true
 if [ -n "$shot" ]; then
   name=$(basename "$shot")

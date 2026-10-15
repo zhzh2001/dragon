@@ -94,6 +94,9 @@ struct ContentBudget {
     uint32_t far_skinned_triangles = 0;  // 0: no distance LOD
     float far_skinned_distance = 0.0f;
     float terrain_cell_scale = 1.0f;
+    // The terrain's light shading (terrain.hlsl, TERRAIN_LITE) on the modern
+    // tier: the Terrain setting at Low and below.
+    bool terrain_lite = false;
     float tree_draw_distance = 0.0f;     // 0: the setting's own
     float tree_spacing_scale = 1.0f;
     float grass_radius_scale = 1.0f;     // 0: no grass
