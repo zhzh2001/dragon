@@ -241,17 +241,29 @@ void Device::fit_display_mode() {
     const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
     const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(display);
     if (!desktop) return;
+    // Frame height caps the mode itself: the largest mode no taller than
+    // it (any shape: on the Pi 1B a 16:9 1280x720 was 19 fps where 4:3
+    // 640x480 is 24), or the smallest if every mode is taller.
     const SDL_DisplayMode* best = desktop;
     int count = 0;
     SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(display, &count);
-    for (int i = 0; modes && i < count; ++i) {
-        const SDL_DisplayMode* m = modes[i];
-        // The desktop's shape (the monitor's panel), within a percent.
-        const bool shape = std::abs(m->w * desktop->h - m->h * desktop->w) * 100 <= desktop->w * desktop->h;
-        const bool holds = frame_height_ == 0 ? m->h >= desktop->h : m->h >= int(frame_height_);
-        if (shape && holds && m->h <= best->h && m->refresh_rate <= desktop->refresh_rate + 1.0f &&
-            (m->h < best->h || m->refresh_rate > best->refresh_rate))
-            best = m;
+    if (frame_height_ > 0) {
+        const auto area = [](const SDL_DisplayMode* m) { return m->w * m->h; };
+        const SDL_DisplayMode* fits = nullptr;
+        const SDL_DisplayMode* smallest = nullptr;
+        for (int i = 0; modes && i < count; ++i) {
+            const SDL_DisplayMode* m = modes[i];
+            if (m->refresh_rate > desktop->refresh_rate + 1.0f) continue;
+            const auto better = [&](const SDL_DisplayMode* than, bool larger) {
+                if (!than) return true;
+                if (area(m) != area(than)) return larger ? area(m) > area(than) : area(m) < area(than);
+                return m->refresh_rate > than->refresh_rate;
+            };
+            if (m->h <= int(frame_height_) && better(fits, true)) fits = m;
+            if (better(smallest, false)) smallest = m;
+        }
+        if (fits) best = fits;
+        else if (smallest) best = smallest;
     }
     SDL_DisplayMode chosen = *best;
     SDL_free(modes);

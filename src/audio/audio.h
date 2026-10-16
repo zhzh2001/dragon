@@ -102,6 +102,11 @@ private:
     float flame_phase_ = 0.0f;
     float crackle_hold_ = 0.0f;
     uint32_t noise_state_[2] = {0x1234567u, 0x89abcdefu};
+    // The ambience's last and next steps where it is drawn every other
+    // sample (kAmbienceStep), and where between them this sample is.
+    float ambience_from_[2] = {0.0f, 0.0f};
+    float ambience_to_[2] = {0.0f, 0.0f};
+    uint32_t ambience_count_ = 0;
 
     void* device_ = nullptr;  // ma_device*, kept opaque to spare every includer
     bool ready_ = false;

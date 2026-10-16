@@ -39,6 +39,43 @@ inline float soft_clip(float x) {
            (135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f)));
 }
 
+// The ambience (the wind and the held breath: filtered noise, nothing in
+// it above a few kHz) is synthesized every kAmbienceStep samples and drawn
+// as a straight line between; the one-shots and the soft clip stay at the
+// full rate. Two on 32-bit ARM: the Pi 1B's audio thread was a sixth of its
+// one core, all of the gap between a headless frame and one on a monitor.
+// One elsewhere, where every expression below is exactly the per-sample one.
+#if defined(__arm__)
+constexpr uint32_t kAmbienceStep = 2;
+#else
+constexpr uint32_t kAmbienceStep = 1;
+#endif
+
+// A one-pole coefficient per sample as one per step: what is left, (1-c),
+// compounds.
+constexpr float per_step(float c) {
+    if (kAmbienceStep == 1) return c;
+    float keep = 1.0f;
+    for (uint32_t k = 0; k < kAmbienceStep; ++k) keep *= 1.0f - c;
+    return 1.0f - keep;
+}
+inline float per_step_live(float c) {
+    if constexpr (kAmbienceStep == 1) return c;
+    float keep = 1.0f;
+    for (uint32_t k = 0; k < kAmbienceStep; ++k) keep *= 1.0f - c;
+    return 1.0f - keep;
+}
+// The frost's high-pass pole, compounded the same way.
+constexpr float kFrostPole = kAmbienceStep == 1 ? 0.9f : 0.81f;
+static_assert(kAmbienceStep == 1 || kAmbienceStep == 2, "kFrostPole and odds() assume a step of 1 or 2");
+// White noise drawn once a step has all its power below the step's Nyquist:
+// scaled so the power in each hertz is the same, or the low-passed layers
+// come out louder by the square root of the step.
+constexpr float kNoiseScale = kAmbienceStep == 1 ? 1.0f : 0.70710678f;
+// A crackle's odds per sample (a mask of the noise's bits), the same per
+// second when drawn once a step.
+constexpr uint32_t odds(uint32_t mask) { return kAmbienceStep == 2 ? mask >> 1 : mask; }
+
 // The gust LFO moves at 0.23 Hz: stepped every 32 samples (0.7 ms) it is
 // the same curve, at a thirty-second of the sines.
 constexpr uint32_t kGustStep = 32;
@@ -393,33 +430,130 @@ void Audio::mix(float* out, uint32_t frames) {
         if (voice.active.load(std::memory_order_acquire)) live[live_count++] = &voice;
     }
 
-    for (uint32_t i = 0; i < frames; ++i) {
-        wind_level_ += (wind_target - wind_level_) * 0.0004f;
-        flame_level_ += (flame_target - flame_level_) * 0.002f;
+    // The state in locals for the buffer: kept in members, every store to
+    // `out` (a float that might be one of them) made the compiler reload
+    // all of it, sample by sample. Written back at the end.
+    float wind_level = wind_level_;
+    float flame_level = flame_level_;
+    float gust_phase = gust_phase_;
+    float gust2_phase = gust2_phase_;
+    float gust_now = gust_;
+    uint32_t gust_countdown = gust_countdown_;
+    float flame_phase = flame_phase_;
+    float crackle_hold = crackle_hold_;
+    float buzz_phase = buzz_phase_;
+    float slosh_phase = slosh_phase_;
+    float wind_lp[2] = {wind_lp_[0], wind_lp_[1]};
+    float wind_rumble[2] = {wind_rumble_[0], wind_rumble_[1]};
+    float flame_lp[2] = {flame_lp_[0], flame_lp_[1]};
+    float flame_hp[2] = {flame_hp_[0], flame_hp_[1]};
+    uint32_t noise_state[2] = {noise_state_[0], noise_state_[1]};
+
+    // One step of the ambience (wind and breath), both ears, into amb[].
+    const auto ambience_step = [&](uint32_t i, float amb[2]) {
+        wind_level += (wind_target - wind_level) * per_step(0.0004f);
+        flame_level += (flame_target - flame_level) * per_step(0.002f);
 
         // A slow gust LFO on top of the commanded level: steady wind sounds
         // like a fan, gusting wind sounds like weather.
-        if (gust_countdown_ == 0) {
-            gust_countdown_ = kGustStep;
-            gust_phase_ += TWO_PI * 0.23f * kGustStep / SAMPLE_RATE;
-            gust2_phase_ += TWO_PI * 0.23f * 2.7f * kGustStep / SAMPLE_RATE;
-            wrap(gust_phase_);
-            wrap(gust2_phase_);
-            gust_ = 1.0f + 0.22f * std::sin(gust_phase_) * std::sin(gust2_phase_);
+        if (gust_countdown == 0) {
+            gust_countdown = kGustStep / kAmbienceStep;
+            gust_phase += TWO_PI * 0.23f * kGustStep / SAMPLE_RATE;
+            gust2_phase += TWO_PI * 0.23f * 2.7f * kGustStep / SAMPLE_RATE;
+            wrap(gust_phase);
+            wrap(gust2_phase);
+            gust_now = 1.0f + 0.22f * std::sin(gust_phase) * std::sin(gust2_phase);
         }
-        --gust_countdown_;
-        const float gust = gust_;
-        flame_phase_ += TWO_PI * 31.0f / SAMPLE_RATE;
-        wrap(flame_phase_);
-        const float wobble = 0.7f + 0.3f * std::sin(flame_phase_);
+        --gust_countdown;
+        const float gust = gust_now;
+        flame_phase += TWO_PI * 31.0f * kAmbienceStep / SAMPLE_RATE;
+        wrap(flame_phase);
+        const float wobble = 0.7f + 0.3f * std::sin(flame_phase);
 
         // Flame crackle: sparse random pops held for a few samples, gated by
         // the flame level. This is what separates fire from filtered static.
-        if (crackle_hold_ > 0.0f) {
-            crackle_hold_ -= 1.0f;
+        if (crackle_hold > 0.0f) {
+            crackle_hold -= float(kAmbienceStep);
         }
 
-        // One-shots are mono, mixed to both ears.
+        for (int channel = 0; channel < 2; ++channel) {
+            uint32_t& rng = noise_state[channel];
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            // (A multiply, not a divide: 19 cycles on the Pi 1B.)
+            const float noise = (float(rng & 0xffffffu) * (1.0f / float(0x7fffff)) - 1.0f) * kNoiseScale;
+
+            // Wind, two layers per ear: a bright hiss whose cutoff opens with
+            // speed (a dive gets brighter, not merely louder) over a low
+            // buffet rumble. Independent noise per channel is what makes it
+            // wide; identical channels collapse to mono in the head.
+            const float wind = wind_level * gust;
+            const float hiss_cutoff = per_step_live(0.02f + 0.13f * wind);
+            wind_lp[channel] += (noise - wind_lp[channel]) * hiss_cutoff;
+            wind_rumble[channel] += (noise - wind_rumble[channel]) * per_step(0.006f);
+            float sample = wind_lp[channel] * wind * wind * 1.5f +
+                           wind_rumble[channel] * wind * 2.2f;
+
+            // The held breath, voiced by its element. Fire: dark roaring
+            // noise with a slow wobble and crackle pops.
+            float flame = 0.0f;
+            switch (style) {
+                case 1: {  // frost: a bright hiss with glassy glints
+                    flame_hp[channel] = kFrostPole * (flame_hp[channel] + noise - flame_lp[channel]);
+                    flame_lp[channel] = noise;
+                    flame = flame_hp[channel] * 0.45f;
+                    if ((rng & odds(0x7ffu)) == 0u) crackle_hold = 30.0f;
+                    if (crackle_hold > 0.0f) flame += std::sin(TWO_PI * 5200.0f * float(i) / SAMPLE_RATE) * 0.4f;
+                    break;
+                }
+                case 2: {  // blight: a bubbling gurgle
+                    flame_lp[channel] += (noise - flame_lp[channel]) * per_step(0.03f);
+                    slosh_phase += TWO_PI * 7.0f * kAmbienceStep / SAMPLE_RATE / 2.0f;
+                    wrap_slosh(slosh_phase);
+                    flame = flame_lp[channel] * 1.3f * (0.5f + 0.5f * std::sin(slosh_phase)) +
+                            0.15f * std::sin(TWO_PI * (160.0f + 60.0f * std::sin(slosh_phase * 1.7f)) *
+                                             float(i) / SAMPLE_RATE);
+                    break;
+                }
+                case 3: {  // storm: an electric buzz with crackle
+                    buzz_phase += 118.0f * kAmbienceStep / SAMPLE_RATE / 2.0f;
+                    const float saw = 2.0f * (buzz_phase - std::floor(buzz_phase)) - 1.0f;
+                    flame = 0.35f * saw * (0.7f + 0.3f * noise);
+                    if (channel == 0 && (rng & odds(0xffu)) == 0u) crackle_hold = 60.0f;
+                    if (crackle_hold > 0.0f) flame += noise * 0.7f;
+                    break;
+                }
+                case 4: {  // tide: rushing water that sloshes
+                    flame_lp[channel] += (noise - flame_lp[channel]) * per_step(0.12f);
+                    slosh_phase += TWO_PI * 2.6f * kAmbienceStep / SAMPLE_RATE / 2.0f;
+                    wrap_slosh(slosh_phase);
+                    flame = flame_lp[channel] * (0.55f + 0.45f * std::sin(slosh_phase));
+                    break;
+                }
+                case 5: {  // stone: a gritty low rumble, thick with grit
+                    flame_lp[channel] += (noise - flame_lp[channel]) * per_step(0.015f);
+                    flame = flame_lp[channel] * 2.0f;
+                    if ((rng & odds(0x7fu)) == 0u) crackle_hold = 25.0f;
+                    if (crackle_hold > 0.0f) flame += noise * 0.35f;
+                    break;
+                }
+                default: {
+                    flame_lp[channel] += (noise - flame_lp[channel]) * per_step(0.05f);
+                    flame = flame_lp[channel] * wobble;
+                    if (channel == 0 && flame_level > 0.05f && (rng & odds(0x3ffu)) == 0u) {
+                        crackle_hold = 90.0f;  // ~2 ms pop
+                    }
+                    if (crackle_hold > 0.0f) flame += noise * 0.6f;
+                    break;
+                }
+            }
+            amb[channel] = sample + flame * flame_level * 0.9f;
+        }
+    };
+
+    for (uint32_t i = 0; i < frames; ++i) {
+        // One-shots are mono, mixed to both ears, at the full rate.
         float voices = 0.0f;
         for (int v = 0; v < live_count; ++v) {
             Voice& voice = *live[v];
@@ -432,82 +566,44 @@ void Audio::mix(float* out, uint32_t frames) {
             }
         }
 
-        for (int channel = 0; channel < 2; ++channel) {
-            uint32_t& rng = noise_state_[channel];
-            rng ^= rng << 13;
-            rng ^= rng >> 17;
-            rng ^= rng << 5;
-            const float noise = float(rng & 0xffffffu) * (1.0f / float(0x7fffff)) - 1.0f;  // a multiply: a divide is 19 cycles on the Pi 1B
-
-            // Wind, two layers per ear: a bright hiss whose cutoff opens with
-            // speed (a dive gets brighter, not merely louder) over a low
-            // buffet rumble. Independent noise per channel is what makes it
-            // wide; identical channels collapse to mono in the head.
-            const float wind = wind_level_ * gust;
-            const float hiss_cutoff = 0.02f + 0.13f * wind;
-            wind_lp_[channel] += (noise - wind_lp_[channel]) * hiss_cutoff;
-            wind_rumble_[channel] += (noise - wind_rumble_[channel]) * 0.006f;
-            float sample = wind_lp_[channel] * wind * wind * 1.5f +
-                           wind_rumble_[channel] * wind * 2.2f;
-
-            // The held breath, voiced by its element. Fire: dark roaring
-            // noise with a slow wobble and crackle pops.
-            float flame = 0.0f;
-            switch (style) {
-                case 1: {  // frost: a bright hiss with glassy glints
-                    flame_hp_[channel] = 0.9f * (flame_hp_[channel] + noise - flame_lp_[channel]);
-                    flame_lp_[channel] = noise;
-                    flame = flame_hp_[channel] * 0.45f;
-                    if ((rng & 0x7ffu) == 0u) crackle_hold_ = 30.0f;
-                    if (crackle_hold_ > 0.0f) flame += std::sin(TWO_PI * 5200.0f * float(i) / SAMPLE_RATE) * 0.4f;
-                    break;
-                }
-                case 2: {  // blight: a bubbling gurgle
-                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.03f;
-                    slosh_phase_ += TWO_PI * 7.0f / SAMPLE_RATE / 2.0f;
-                    wrap_slosh(slosh_phase_);
-                    flame = flame_lp_[channel] * 1.3f * (0.5f + 0.5f * std::sin(slosh_phase_)) +
-                            0.15f * std::sin(TWO_PI * (160.0f + 60.0f * std::sin(slosh_phase_ * 1.7f)) *
-                                             float(i) / SAMPLE_RATE);
-                    break;
-                }
-                case 3: {  // storm: an electric buzz with crackle
-                    buzz_phase_ += 118.0f / SAMPLE_RATE / 2.0f;
-                    const float saw = 2.0f * (buzz_phase_ - std::floor(buzz_phase_)) - 1.0f;
-                    flame = 0.35f * saw * (0.7f + 0.3f * noise);
-                    if (channel == 0 && (rng & 0xffu) == 0u) crackle_hold_ = 60.0f;
-                    if (crackle_hold_ > 0.0f) flame += noise * 0.7f;
-                    break;
-                }
-                case 4: {  // tide: rushing water that sloshes
-                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.12f;
-                    slosh_phase_ += TWO_PI * 2.6f / SAMPLE_RATE / 2.0f;
-                    wrap_slosh(slosh_phase_);
-                    flame = flame_lp_[channel] * (0.55f + 0.45f * std::sin(slosh_phase_));
-                    break;
-                }
-                case 5: {  // stone: a gritty low rumble, thick with grit
-                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.015f;
-                    flame = flame_lp_[channel] * 2.0f;
-                    if ((rng & 0x7fu) == 0u) crackle_hold_ = 25.0f;
-                    if (crackle_hold_ > 0.0f) flame += noise * 0.35f;
-                    break;
-                }
-                default: {
-                    flame_lp_[channel] += (noise - flame_lp_[channel]) * 0.05f;
-                    flame = flame_lp_[channel] * wobble;
-                    if (channel == 0 && flame_level_ > 0.05f && (rng & 0x3ffu) == 0u) {
-                        crackle_hold_ = 90.0f;  // ~2 ms pop
-                    }
-                    if (crackle_hold_ > 0.0f) flame += noise * 0.6f;
-                    break;
-                }
+        float amb[2];
+        if constexpr (kAmbienceStep == 1) {
+            ambience_step(i, amb);
+        } else {
+            // Between steps, a straight line from the last to the next.
+            if (ambience_count_ == 0) {
+                ambience_from_[0] = ambience_to_[0];
+                ambience_from_[1] = ambience_to_[1];
+                ambience_step(i, ambience_to_);
             }
-            sample += flame * flame_level_ * 0.9f;
-
-            out[i * 2 + channel] = soft_clip((sample + voices) * master);
+            const float t = float(ambience_count_) * (1.0f / float(kAmbienceStep));
+            amb[0] = ambience_from_[0] + (ambience_to_[0] - ambience_from_[0]) * t;
+            amb[1] = ambience_from_[1] + (ambience_to_[1] - ambience_from_[1]) * t;
+            ambience_count_ = (ambience_count_ + 1) % kAmbienceStep;
         }
+        out[i * 2 + 0] = soft_clip((amb[0] + voices) * master);
+        out[i * 2 + 1] = soft_clip((amb[1] + voices) * master);
     }
+    wind_level_ = wind_level;
+    flame_level_ = flame_level;
+    gust_phase_ = gust_phase;
+    gust2_phase_ = gust2_phase;
+    gust_ = gust_now;
+    gust_countdown_ = gust_countdown;
+    flame_phase_ = flame_phase;
+    crackle_hold_ = crackle_hold;
+    buzz_phase_ = buzz_phase;
+    slosh_phase_ = slosh_phase;
+    wind_lp_[0] = wind_lp[0];
+    wind_lp_[1] = wind_lp[1];
+    wind_rumble_[0] = wind_rumble[0];
+    wind_rumble_[1] = wind_rumble[1];
+    flame_lp_[0] = flame_lp[0];
+    flame_lp_[1] = flame_lp[1];
+    flame_hp_[0] = flame_hp[0];
+    flame_hp_[1] = flame_hp[1];
+    noise_state_[0] = noise_state[0];
+    noise_state_[1] = noise_state[1];
 }
 
 }  // namespace audio

@@ -476,9 +476,14 @@ bool App::init(const Options& options) {
     device_limits_.sampled_depth = device_.rhi().supports_format(rhi::Format::D16, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED);
     graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
 #ifdef DRAGON_GLES_DEFAULT
-    // On the Pi the frame at 540 lines, whatever the monitor's mode: VC4
-    // fills a 1080p frame's post and HUD at a fraction of the frame rate.
+    // On the Pi the frame at 540 lines at most, whatever the monitor's mode:
+    // VC4 fills a 1080p frame's post and HUD at a fraction of the frame
+    // rate. On a console the display mode follows (640x480 on a 1080p
+    // monitor, gfx::Device::fit_display_mode), and the world is drawn at
+    // that size, not half of it: 24.3 fps against 25.3, for four times the
+    // pixels.
     graphics_[gfx::Setting::Frame] = 5;
+    graphics_[gfx::Setting::Resolution] = 0;
 #endif
     if (!saved.empty()) graphics_.parse(saved);
     if (options.preset >= 0) graphics_ = gfx::GraphicsSettings::preset(options.preset, tier_.tier, device_limits_);
@@ -6377,11 +6382,23 @@ void App::update_bots(float dt) {
             // dozen pixels, and its rig steps at most 20 times a second on
             // the time owed -- the step a 20 fps machine takes every frame.
             // Five bots' rigs were 4.5 ms of the Pi 1B's 25 ms frame.
+            // Past 600 m, or out of the view when no shadow pass will draw
+            // it, 10 times: a 20 fps machine steps a 20 Hz rig every frame,
+            // and the Pi 1B on a monitor runs at 18 (its rivals at their
+            // posts are 900 m out). Never a step past the frame's own 0.1 s
+            // clamp, so a rig that comes back into view catches up in one.
             CORE_PROFILE("bots: rig");
             bot->rig_dt += dt;
-            const float far = core::distance(active_camera().position, bot->flight.state().position) > 300.0f
-                                  ? 0.05f
-                                  : 0.0f;
+            const core::Vec3 at = bot->flight.state().position;
+            const float range = core::distance(active_camera().position, at);
+            float far = range > 600.0f ? 0.1f : range > 300.0f ? 0.05f : 0.0f;
+            if (far < 0.1f && !(shadow_.enabled && shadow_.available())) {
+                const game::FlightState& bs = bot->flight.state();
+                gfx::ModelUniforms placed;
+                placed.model = core::Mat4::trs(bs.position, bs.orientation, core::Vec3::one()) *
+                               model_at(bot->model).asset.matrix();
+                if (!world_.skinned_in_view(model_at(bot->model).mesh, placed)) far = 0.1f;
+            }
             if (bot->rig_dt >= far) {
                 bot->rig.update(bot->flight.state(), bot->rig_dt);
                 bot->rig_dt = 0.0f;

@@ -423,7 +423,7 @@ lands about 33 px left of the asked capture pixel):
 | Change | Live, 1080p monitor |
 |---|---|
 | As played: the 960x540 frame stretched to a 1920x1080 32-bit desktop mode | 11.6 fps, median 83 ms |
-| On a console (SDL's kmsdrm) the display mode is the smallest of the desktop's shape that holds the frame, 1280x720 here (`gfx::Device::fit_display_mode`): the stretch moves into the monitor | 12.3 fps |
+| On a console (SDL's kmsdrm) the display mode is the smallest of the desktop's shape that holds the frame, 1280x720 here (`gfx::Device::fit_display_mode`; later the largest mode under Frame height, below): the stretch moves into the monitor | 12.3 fps |
 | RunFast on the main and audio threads (`core::flush_denormals`): the ARM11's VFP traps on every denormal and the kernel emulates the instruction -- a quarter of the CPU was `VFP_bounce` and its helpers, mostly the mixer's decaying filters | 14.6 fps |
 | The mixer: phases kept within a turn (`sinf` of a phase that grew for minutes took the slow range reduction, a third of the mixer), the 0.23 Hz gust stepped every 32 samples, tanh as Lambert's continued fraction | 17.8 fps |
 | The voices' flags read once a buffer (an acquire is a barrier on ARMv6), miniaudio converting to the device's format instead of ALSA's generic float converter, 3x20 ms periods on 32-bit ARM | **18-19 fps**, median 49-55 ms |
@@ -435,11 +435,30 @@ Tried and not kept: 1280x720 at 30 Hz halves the scanout and gives 20.7
 fps, but a ~45 ms frame then alternates one and two refreshes, where at 60
 it holds three. A 640x480 mode with its 640x480 frame is 24.2 fps.
 
-**Next on the Pi**: the rest of the live frame (render submission ~27 ms,
-the present's ~6 ms wait on the GPU, the audio thread); Mesa's per-draw
-cost (foliage, 190 us a per-instance draw, is the most expensive left; a
-constant palette index in its vertex stage changed nothing, so indexed
-uniforms are not it).
+Then, still on the monitor:
+
+| Change | Live, 1080p monitor |
+|---|---|
+| Bots' rigs past 600 m, or out of the view when no shadow pass draws them, at 10 Hz (20 Hz past 300 m was every frame at 18 fps): `bots: rig` 6.2 -> 3.4 ms; run-hud's golden moves 26/255 on a few pixels | 19.3 fps |
+| GLES: per-instance attributes rewritten into uniforms at link (`attribute` -> `uniform`, set with `glUniform` per instance). As constant attributes every instance re-pointed the vertex arrays, and Mesa revalidated them and uploaded the constants as a stride-0 vertex buffer (`vbo_exec_*`, `st_update_array` in the profile, with `libgl1-mesa-dri-dbgsym` installed): a tree's draw 300 -> 210 us. ANGLE frames byte-identical at ff and sm2 | 19.5 fps |
+| Frame height caps the display mode itself: the largest mode no taller than it, any shape -- 640x480 on the 1080p monitor at 540 lines -- and the Pi's world at 100% of it (50%: 25.3 fps, a quarter of the pixels) | **24.3 fps** |
+| The mixer's ambience (wind and breath) synthesized every other sample on 32-bit ARM and drawn as a line between, the one-shots and the soft clip at 48 kHz; the noise scaled by 1/sqrt 2 so each band below 4 kHz keeps its energy (what is lost is above ~8 kHz: frost's top, the crackles' edge). Bit-identical elsewhere (a harness rendering every style before and after). The mixer alone, timed on the Pi: 8.7% -> 5.7% of a core; the audio thread in the game 17% -> 12% | not measured live: the monitor left the Pi |
+
+640x480 is 4:3, and the monitor (and the bench's capture) stretches it to
+16:9, so the picture is a third too wide. Not fixed yet: a projection and
+HUD at the panel's shape, squeezed into the mode's pixels, would let the
+stretch undo itself.
+
+**The gap between a headless run and the monitor** was, by then, the audio
+thread and nothing else: a headless run never opens the device. At the
+same 640x480, headless 31.1 fps; on the monitor 25.1 with sound and 30.3
+with the device left closed. The present's swap and blit (3.9 + 1.6 ms)
+are mostly the audio thread's turn on the one core.
+
+**Next on the Pi**: a live number for the mixer change; the panel-shaped
+projection; alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
+a frame at 100-200 us; foliage is the most expensive left).
 
 ## What every mobile target needs
 

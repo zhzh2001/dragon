@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "core/profile.h"
 
 namespace rhi {
 namespace gles {
@@ -96,6 +97,14 @@ struct GlPipeline {
     uint32_t attributes = 0;                // bit n: a<n> is read
     bool vertex_id = false;                 // a0 with no attribute declared: the vertex index
     bool instanced = false;                 // reads a per-instance buffer
+    // The per-instance attributes, declared uniforms instead (create_pipeline):
+    // set per instance with glUniform, the vertex arrays left alone.
+    struct InstanceUniform {
+        GLint location = -1;
+        int components = 4;
+        VertexAttribute attribute;
+    };
+    std::vector<InstanceUniform> instance_uniforms;
     uint64_t stat_ns = 0, stat_draws = 0;   // DRAGON_GLES_STATS: time in the driver's draw calls
     std::string name;
 };
@@ -121,6 +130,20 @@ bool has_extension(const char* name) {
         if ((p == all || p[-1] == ' ') && (p[n] == ' ' || p[n] == '\0')) return true;
     }
     return false;
+}
+
+// Where a line of GLSL `src` starting with `keyword` declares `name`
+// ("attribute highp vec4 a5;"): the keyword's offset, or npos.
+size_t find_declaration(const std::string& src, const std::string& keyword, const std::string& name) {
+    for (size_t at = src.find(keyword); at != std::string::npos; at = src.find(keyword, at + 1)) {
+        if (at > 0 && src[at - 1] != '\n') continue;
+        const size_t end = src.find(';', at);
+        if (end == std::string::npos) break;
+        const size_t space = src.rfind(' ', end);
+        if (space != std::string::npos && space > at && src.compare(space + 1, end - space - 1, name) == 0)
+            return at;
+    }
+    return std::string::npos;
 }
 
 std::string read_file(const std::string& path) {
@@ -459,8 +482,12 @@ public:
         }
         if (readback && source) download(source, width, height, *readback);
         if (!headless_ && source) {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            draw_quad(gl(source), width, height, window_w_, window_h_, true);
+            {
+                CORE_PROFILE("present: blit");
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                draw_quad(gl(source), width, height, window_w_, window_h_, true);
+            }
+            CORE_PROFILE("present: swap");
             SDL_GL_SwapWindow(window_);
         } else {
             glFlush();
@@ -619,7 +646,34 @@ public:
             return nullptr;
         }
         const StageMeta vmeta = parse_stage(json, "vertex"), fmeta = parse_stage(json, "fragment");
-        const GLuint vs = compile(GL_VERTEX_SHADER, vs_src, d.name);
+        // A per-instance attribute becomes a uniform of the same name and
+        // type. GLES 2.0 has no divisors, so each instance is a draw of its
+        // own; set as a constant attribute, every one of them re-pointed
+        // the vertex arrays and Mesa revalidated them and uploaded the
+        // constants as a vertex buffer -- most of a tree's 300 us draw on
+        // the Pi 1B. A uniform leaves the arrays as they were.
+        std::string vs_text = vs_src;
+        std::vector<GlPipeline::InstanceUniform> instance_uniforms;
+        uint32_t instance_locations = 0;
+        for (const VertexAttribute& a : d.vertex_attributes) {
+            bool per_instance = false;
+            for (const VertexBufferLayout& l : d.vertex_buffers) {
+                if (l.slot == a.buffer_slot) per_instance = l.rate == InputRate::Instance;
+            }
+            if (!per_instance) continue;
+            const std::string name = "a" + std::to_string(a.location);
+            const size_t at = find_declaration(vs_text, "attribute", name);
+            if (at == std::string::npos) continue;  // the stage does not read it
+            vs_text.replace(at, 9, "uniform  ");    // same length: the line stays
+            GlPipeline::InstanceUniform u;
+            u.attribute = a;
+            const size_t type = vs_text.find("vec", at);
+            const size_t end = vs_text.find(';', at);
+            u.components = type < end && type + 3 < vs_text.size() ? vs_text[type + 3] - '0' : 1;
+            instance_uniforms.push_back(u);
+            instance_locations |= 1u << a.location;
+        }
+        const GLuint vs = compile(GL_VERTEX_SHADER, vs_text, d.name);
         const GLuint fs = vs ? compile(GL_FRAGMENT_SHADER, fs_src, d.name) : 0;
         if (!vs || !fs) {
             if (vs) glDeleteShader(vs);
@@ -632,6 +686,7 @@ public:
         glAttachShader(p->program, vs);
         glAttachShader(p->program, fs);
         for (const auto& [location, name] : vmeta.attributes) {
+            if (location < 32 && (instance_locations & (1u << location))) continue;
             if (location >= max_attributes_) {
                 LOG_ERROR("[%s] attribute %d past the GPU's %d", d.name.c_str(), location, max_attributes_);
                 continue;
@@ -654,6 +709,10 @@ public:
         }
         p->vertex_id = d.vertex_attributes.empty() && (p->attributes & 1u);
         for (const VertexBufferLayout& l : d.vertex_buffers) p->instanced |= l.rate == InputRate::Instance;
+        for (GlPipeline::InstanceUniform& u : instance_uniforms) {
+            u.location = glGetUniformLocation(p->program, ("a" + std::to_string(u.attribute.location)).c_str());
+            if (u.location >= 0) p->instance_uniforms.push_back(u);
+        }
         glUseProgram(p->program);
         program_ = p->program;
         for (int stage = 0; stage < 2; ++stage) {
@@ -963,15 +1022,55 @@ private:
     }
 
     // Points each attribute the program reads at its buffer, `vertex_offset`
-    // vertices in (the base vertex), or sets it to `instance`'s values.
-    // Skipped when nothing it reads changed since the last draw: pointing
-    // them again made vc4 revalidate its vertex state every draw, and the
-    // terrain alone is hundreds of draws of one mesh.
+    // vertices in (the base vertex), and sets the per-instance ones to
+    // `instance`'s values.
     bool setup_attributes(GlPipeline* p, int32_t vertex_offset, uint32_t instance) {
+        return setup_arrays(p, vertex_offset) && set_instance(p, instance);
+    }
+
+    // `instance`'s values into the per-instance uniforms.
+    bool set_instance(GlPipeline* p, uint32_t instance) {
+        for (const GlPipeline::InstanceUniform& u : p->instance_uniforms) {
+            const VertexAttribute& a = u.attribute;
+            const VertexBufferLayout* layout = nullptr;
+            for (const VertexBufferLayout& l : p->desc.vertex_buffers) {
+                if (l.slot == a.buffer_slot) layout = &l;
+            }
+            if (!layout || a.buffer_slot >= kMaxSlots) continue;
+            const BufferBinding& binding = vertex_buffers_[a.buffer_slot];
+            GlBuffer* b = gl(binding.buffer);
+            if (!b) return false;
+            const AttribFormat f = attrib_format(a.format);
+            const size_t at = binding.offset + size_t(instance) * layout->pitch + a.offset;
+            if (at + f.bytes > b->shadow.size()) return false;
+            float v[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+            const uint8_t* src = b->shadow.data() + at;
+            for (int c = 0; c < f.components; ++c) {
+                if (f.type == GL_FLOAT) {
+                    std::memcpy(&v[c], src + c * 4, 4);
+                } else {
+                    v[c] = f.normalized ? float(src[c]) / 255.0f : float(src[c]);
+                }
+            }
+            switch (u.components) {
+                case 1: glUniform1fv(u.location, 1, v); break;
+                case 2: glUniform2fv(u.location, 1, v); break;
+                case 3: glUniform3fv(u.location, 1, v); break;
+                default: glUniform4fv(u.location, 1, v); break;
+            }
+        }
+        return true;
+    }
+
+    // Points each per-vertex attribute the program reads at its buffer,
+    // `vertex_offset` vertices in (the base vertex). Skipped when nothing it
+    // reads changed since the last draw: pointing them again made vc4
+    // revalidate its vertex state every draw, and the terrain alone is
+    // hundreds of draws of one mesh.
+    bool setup_arrays(GlPipeline* p, int32_t vertex_offset) {
         AttributeKey key;
         key.pipeline = p;
         key.vertex_offset = vertex_offset;
-        key.instance = p->instanced ? instance : 0;
         for (int i = 0; i < kMaxSlots; ++i) key.buffers[i] = vertex_buffers_[i];
         if (attributes_valid_ && key == attribute_key_) return true;
         uint32_t wanted = 0;
@@ -991,23 +1090,7 @@ private:
             GlBuffer* b = gl(binding.buffer);
             if (!b) return false;
             const AttribFormat f = attrib_format(a.format);
-            if (layout->rate == InputRate::Instance) {
-                const size_t at = binding.offset + size_t(instance) * layout->pitch + a.offset;
-                if (at + f.bytes > b->shadow.size()) return false;
-                float v[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-                const uint8_t* src = b->shadow.data() + at;
-                for (int c = 0; c < f.components; ++c) {
-                    if (f.type == GL_FLOAT) {
-                        std::memcpy(&v[c], src + c * 4, 4);
-                    } else {
-                        v[c] = f.normalized ? float(src[c]) / 255.0f : float(src[c]);
-                    }
-                }
-                if (enabled_attributes_ & (1u << a.location)) glDisableVertexAttribArray(a.location);
-                enabled_attributes_ &= ~(1u << a.location);
-                glVertexAttrib4fv(a.location, v);
-                continue;
-            }
+            if (layout->rate == InputRate::Instance) continue;  // a uniform (set_instance)
             bind_buffer(GL_ARRAY_BUFFER, b->id);
             const intptr_t offset = intptr_t(binding.offset) + intptr_t(vertex_offset) * layout->pitch + a.offset;
             glVertexAttribPointer(a.location, f.components, f.type, f.normalized, GLsizei(layout->pitch),
@@ -1052,10 +1135,9 @@ private:
     struct AttributeKey {
         const GlPipeline* pipeline = nullptr;
         int32_t vertex_offset = 0;
-        uint32_t instance = 0;
         BufferBinding buffers[kMaxSlots] = {};
         bool operator==(const AttributeKey& o) const {
-            if (pipeline != o.pipeline || vertex_offset != o.vertex_offset || instance != o.instance) return false;
+            if (pipeline != o.pipeline || vertex_offset != o.vertex_offset) return false;
             for (int i = 0; i < kMaxSlots; ++i) {
                 if (buffers[i].buffer != o.buffers[i].buffer || buffers[i].offset != o.buffers[i].offset) return false;
             }
