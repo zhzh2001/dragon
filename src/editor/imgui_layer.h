@@ -32,8 +32,10 @@ public:
     // The render target ImGui draws into, in pixels: the framebuffer scale is
     // taken from it rather than from the window, which on a display with a
     // pixel density of 2 reported twice the target and drew every panel and
-    // readout at double size, cropped.
-    void begin_frame(float target_width, float target_height);
+    // readout at double size, cropped. `pixel_aspect` is how wide a pixel
+    // is on the screen (gfx::Device::pixel_aspect): the UI is laid out that
+    // much wider in points and drawn squeezed, and the mouse scaled to match.
+    void begin_frame(float target_width, float target_height, float pixel_aspect = 1.0f);
 
     // Must be called after all UI is built and before Device::begin_main_pass,
     // because the backend issues copy passes to upload vertex data.
@@ -51,7 +53,8 @@ private:
     bool initialized_ = false;
     bool d3d9_ = false;   // drawing through imgui_impl_dx9
     bool d3d11_ = false;  // ... or imgui_impl_dx11
-    bool gles_ = false;   // ... or imgui_impl_opengl3, GLES 2.0
+    bool gles_ = false;
+    float pixel_aspect_ = 1.0f;   // ... or imgui_impl_opengl3, GLES 2.0
     ImFont* numeral_font_ = nullptr;
     ImFont* label_font_ = nullptr;
     bool has_draw_data_ = false;

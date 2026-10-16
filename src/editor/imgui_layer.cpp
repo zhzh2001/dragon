@@ -267,7 +267,17 @@ bool ImGuiLayer::process_event(const SDL_Event& event) {
     if (!initialized_) return false;
 #ifndef DRAGON_XP
     // (The XP build feeds ImGui from the window procedure instead.)
-    ImGui_ImplSDL3_ProcessEvent(&event);
+    if (pixel_aspect_ != 1.0f) {
+        // The mouse in points, as the layout is (begin_frame).
+        SDL_Event scaled = event;
+        if (event.type == SDL_EVENT_MOUSE_MOTION) scaled.motion.x *= pixel_aspect_;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+            scaled.button.x *= pixel_aspect_;
+        if (event.type == SDL_EVENT_MOUSE_WHEEL) scaled.wheel.mouse_x *= pixel_aspect_;
+        ImGui_ImplSDL3_ProcessEvent(&scaled);
+    } else {
+        ImGui_ImplSDL3_ProcessEvent(&event);
+    }
 #endif
     const ImGuiIO& io = ImGui::GetIO();
     switch (event.type) {
@@ -285,8 +295,9 @@ bool ImGuiLayer::process_event(const SDL_Event& event) {
     }
 }
 
-void ImGuiLayer::begin_frame(float target_width, float target_height) {
+void ImGuiLayer::begin_frame(float target_width, float target_height, float pixel_aspect) {
     if (!initialized_) return;
+    pixel_aspect_ = pixel_aspect;
 #ifdef DRAGON_XP
     ImGui_ImplDX9_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -314,6 +325,8 @@ void ImGuiLayer::begin_frame(float target_width, float target_height) {
             0.01f * io.DisplaySize.y * target_width) {
         io.DisplaySize = ImVec2(target_width, target_height);
     }
+    // Wide pixels: more points across than pixels, drawn squeezed.
+    if (pixel_aspect_ != 1.0f) io.DisplaySize.x = std::round(io.DisplaySize.x * pixel_aspect_);
     if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f && target_width > 0.0f &&
         target_height > 0.0f) {
         io.DisplayFramebufferScale =

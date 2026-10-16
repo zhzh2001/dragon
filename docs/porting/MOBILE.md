@@ -446,9 +446,14 @@ Then, still on the monitor:
 | 2496 m terrain chunks on GLES ff (624 before): 47 terrain draws a frame to 12. The fine mesh reaches further, so the far slopes change (0.25/255 mean, 0.3% of pixels past 8, all on one distant ridge, in a 640x480 ANGLE capture) | 30.5-31.5 fps against 29.9-30.0 back to back |
 
 640x480 is 4:3, and the monitor (and the bench's capture) stretches it to
-16:9, so the picture is a third too wide. Not fixed yet: a projection and
-HUD at the panel's shape, squeezed into the mode's pixels, would let the
-stretch undo itself.
+16:9: the picture was a third too wide. On a console the device now knows
+how wide its pixels are on the screen (`gfx::Device::pixel_aspect`, the
+desktop mode's shape over the chosen mode's, 1.333 here): the projection
+takes it, ImGui lays out 853 points across 640 pixels and draws them
+squeezed, and the mouse is scaled into points, so the stretch undoes
+itself. `DRAGON_PIXEL_ASPECT=1` for a monitor that keeps 4:3 (bars at the
+sides). Checked through the capture: the HUD's plates and the dragon in
+proportion, a click on a panel's arrow opens it.
 
 **The gap between a headless run and the monitor** was, by then, the audio
 thread and nothing else: a headless run never opens the device. At the
@@ -456,8 +461,7 @@ same 640x480, headless 31.1 fps; on the monitor 25.1 with sound and 30.3
 with the device left closed. The present's swap and blit (3.9 + 1.6 ms)
 are mostly the audio thread's turn on the one core.
 
-**Next on the Pi**: the panel-shaped
-projection; alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+**Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 

@@ -272,8 +272,15 @@ void Device::fit_display_mode() {
         return;
     }
     SDL_SyncWindow(window_);
-    LOG_INFO("display mode %dx%d @ %.0f Hz (desktop %dx%d)", chosen.w, chosen.h, chosen.refresh_rate,
-             desktop->w, desktop->h);
+    // The monitor stretches the mode over its panel (the desktop mode's
+    // shape), so the frame is drawn squeezed by as much and comes out
+    // right. DRAGON_PIXEL_ASPECT=1 for a monitor that keeps the mode's
+    // shape (bars at the sides), or any other value it needs.
+    pixel_aspect_ = float(desktop->w) * float(chosen.h) / (float(desktop->h) * float(chosen.w));
+    if (const char* forced = SDL_getenv("DRAGON_PIXEL_ASPECT")) pixel_aspect_ = float(SDL_atof(forced));
+    if (!(pixel_aspect_ > 0.1f && pixel_aspect_ < 10.0f)) pixel_aspect_ = 1.0f;
+    LOG_INFO("display mode %dx%d @ %.0f Hz (desktop %dx%d), pixels %.3f wide", chosen.w, chosen.h,
+             chosen.refresh_rate, desktop->w, desktop->h, pixel_aspect_);
 }
 
 void Device::set_frame_height(uint32_t lines) {

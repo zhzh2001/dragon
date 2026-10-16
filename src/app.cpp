@@ -8317,7 +8317,7 @@ void App::run() {
 
         mark = SDL_GetTicksNS();
         if (device_.begin_frame()) {
-            ui_.begin_frame(float(device_.width()), float(device_.height()));
+            ui_.begin_frame(float(device_.width()), float(device_.height()), device_.pixel_aspect());
             build_ui(dt);
             // The HUD goes on the foreground draw list, so it must be built
             // inside the ImGui frame but layers above every panel.

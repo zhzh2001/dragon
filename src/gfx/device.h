@@ -118,7 +118,13 @@ public:
     // The UI's size: scene_color, the present and the screenshot.
     uint32_t width() const { return render_w_; }
     uint32_t height() const { return render_h_; }
-    float aspect() const { return render_h_ > 0 ? float(render_w_) / float(render_h_) : 1.0f; }
+    // The frame's shape as it is seen: its pixels' times how wide each one
+    // is on the screen (pixel_aspect).
+    float aspect() const { return render_h_ > 0 ? float(render_w_) / float(render_h_) * pixel_aspect_ : 1.0f; }
+    // How wide a pixel is on the screen against how tall: 1 but on a
+    // console whose display mode is not the panel's shape, which the
+    // monitor stretches to fill (640x480 on a 16:9 panel: 4/3).
+    float pixel_aspect() const { return pixel_aspect_; }
 
     // The world renders at a fraction of that (the Resolution setting,
     // gfx/graphics_settings.h): a fill-bound card's pixel work falls with the
@@ -176,6 +182,7 @@ private:
     uint32_t present_w_ = 0, present_h_ = 0;      // the swapchain's, this frame
     uint32_t requested_w_ = 0, requested_h_ = 0;  // a headless run's --size
     float world_scale_ = 1.0f;
+    float pixel_aspect_ = 1.0f;
     rhi::Format depth_format_ = rhi::Format::D32F;
 
     std::string screenshot_path_;
