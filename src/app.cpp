@@ -437,9 +437,11 @@ bool App::init(const Options& options) {
     tier_ = gfx::RenderTier::make(options_.tier);
     // GLES pays per draw, not per vertex: on the Pi 1B, Mesa's vc4 cost about
     // 100 us a terrain draw, and 624 m chunks took a run from 245 draws a
-    // frame to 105 and 25.8 fps to 31 (docs/porting/MOBILE.md). D3D9's
-    // fixed-function cards are the other way round (PORTING.md, R6).
-    if (options_.gpu_driver == "gles" && tier_.fixed_function) tier_.terrain_chunk_metres *= 2.0f;
+    // frame to 105 and 25.8 fps to 31 (docs/porting/MOBILE.md); 2496 m on
+    // a monitor, 47 draws to 12, was another millisecond, and the fine mesh
+    // reaching further changes only the far slopes. D3D9's fixed-function
+    // cards are the other way round (PORTING.md, R6).
+    if (options_.gpu_driver == "gles" && tier_.fixed_function) tier_.terrain_chunk_metres *= 8.0f;
     // DRAGON_TERRAIN_CHUNK=metres: the terrain's draw granularity, for
     // measuring what a draw costs on a slow machine (PORTING.md, R6).
     if (const char* chunk = SDL_getenv("DRAGON_TERRAIN_CHUNK")) tier_.terrain_chunk_metres = float(SDL_atof(chunk));

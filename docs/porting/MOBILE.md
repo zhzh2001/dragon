@@ -442,7 +442,8 @@ Then, still on the monitor:
 | Bots' rigs past 600 m, or out of the view when no shadow pass draws them, at 10 Hz (20 Hz past 300 m was every frame at 18 fps): `bots: rig` 6.2 -> 3.4 ms; run-hud's golden moves 26/255 on a few pixels | 19.3 fps |
 | GLES: per-instance attributes rewritten into uniforms at link (`attribute` -> `uniform`, set with `glUniform` per instance). As constant attributes every instance re-pointed the vertex arrays, and Mesa revalidated them and uploaded the constants as a stride-0 vertex buffer (`vbo_exec_*`, `st_update_array` in the profile, with `libgl1-mesa-dri-dbgsym` installed): a tree's draw 300 -> 210 us. ANGLE frames byte-identical at ff and sm2 | 19.5 fps |
 | Frame height caps the display mode itself: the largest mode no taller than it, any shape -- 640x480 on the 1080p monitor at 540 lines -- and the Pi's world at 100% of it (50%: 25.3 fps, a quarter of the pixels) | **24.3 fps** |
-| The mixer's ambience (wind and breath) synthesized every other sample on 32-bit ARM and drawn as a line between, the one-shots and the soft clip at 48 kHz; the noise scaled by 1/sqrt 2 so each band below 4 kHz keeps its energy (what is lost is above ~8 kHz: frost's top, the crackles' edge). Bit-identical elsewhere (a harness rendering every style before and after). The mixer alone, timed on the Pi: 8.7% -> 5.7% of a core; the audio thread in the game 17% -> 12% | not measured live: the monitor left the Pi |
+| The mixer's ambience (wind and breath) synthesized every other sample on 32-bit ARM and drawn as a line between, the one-shots and the soft clip at 48 kHz; the noise scaled by 1/sqrt 2 so each band below 4 kHz keeps its energy (what is lost is above ~8 kHz: frost's top, the crackles' edge). Bit-identical elsewhere (a harness rendering every style before and after). The mixer alone, timed on the Pi: 8.7% -> 5.7% of a core; the audio thread in the game 17% -> 12% | **28.8-29.1 fps**, median 33.5 ms, 1% low 45 |
+| 2496 m terrain chunks on GLES ff (624 before): 47 terrain draws a frame to 12. The fine mesh reaches further, so the far slopes change (0.25/255 mean, 0.3% of pixels past 8, all on one distant ridge, in a 640x480 ANGLE capture) | 30.5-31.5 fps against 29.9-30.0 back to back |
 
 640x480 is 4:3, and the monitor (and the bench's capture) stretches it to
 16:9, so the picture is a third too wide. Not fixed yet: a projection and
@@ -455,7 +456,7 @@ same 640x480, headless 31.1 fps; on the monitor 25.1 with sound and 30.3
 with the device left closed. The present's swap and blit (3.9 + 1.6 ms)
 are mostly the audio thread's turn on the one core.
 
-**Next on the Pi**: a live number for the mixer change; the panel-shaped
+**Next on the Pi**: the panel-shaped
 projection; alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
