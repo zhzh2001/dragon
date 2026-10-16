@@ -23,8 +23,9 @@ struct VertexIn {
 #ifdef FIXED_FUNCTION
 // Fixed function (docs/PORTING.md R5): the vertex colour and the tint, lit
 // and finished per vertex (ff_lit), the emissive added; stage 0 modulates
-// by the base colour (MODULATE). No recolour (a stage cannot replace a hue
-// at constant luminance) and no facing flip (D3D9 lights one side).
+// by the base colour (MODULATE). No recolour on D3D9 (a stage cannot replace
+// a hue at constant luminance; GLES does it in the fragment shader) and no
+// facing flip (D3D9 lights one side).
 struct VertexOut {
     float4 clip_position : SV_Position;
     FF_VARYINGS
@@ -78,6 +79,13 @@ float4 fs_main(VertexOut input) : SV_Target {
     // none) MODULATE the diffuse.
     float3 color = saturate(input.diffuse.rgb * base_colour.Sample(base_colour_sampler, input.uv.xy).rgb) *
                    FF_KEEP_SHADOW_SLOT;
+#ifdef GLES
+    // The rivals' hue, which D3D9's stages cannot replace but a GLES
+    // fragment shader can: applied to the lit colour, at its luminance.
+    // Without it every rival on the Pi wore the player's hide.
+    float luminance = dot(color, float3(0.30, 0.59, 0.11));
+    color = lerp(color, luminance * model.recolour.rgb, model.recolour.a);
+#endif
     return float4(ff_finish(color, input.fog), 1.0);
 }
 #else

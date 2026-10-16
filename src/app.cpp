@@ -4409,8 +4409,13 @@ void App::upload_far_lod(anim::SkinnedMesh& mesh, const anim::SkinnedMeshData& d
                          const anim::ModelPack* pack, const std::vector<gfx::ImageData>* textures) {
     const gfx::ContentBudget& b = tier_.budget;
     if (b.far_skinned_triangles == 0 || data.indices.size() / 3 <= b.far_skinned_triangles) return;
+    // On GLES a triangle costs next to nothing beside the draw itself: the
+    // far mesh only past four times the distance. At Minimal's 45 m a rival
+    // still 150 pixels across on the Pi's 640x480 wore its 246 triangles,
+    // and read as torn.
+    const float distance = b.far_skinned_distance * (options_.gpu_driver == "gles" ? 4.0f : 1.0f);
     mesh.upload_far(device_.rhi(), shape_for_tier(data, tag, b.far_skinned_triangles, pack, textures),
-                    b.far_skinned_distance, tag);
+                    distance, tag);
 }
 
 std::unique_ptr<anim::ModelPack> App::open_model_pack(const std::string& path) const {

@@ -121,8 +121,10 @@ def main():
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
-    defines = TIERS[args.tier]
-    suffix = bake_d3d9.variant_suffix([d for d in defines if d != "D3D9"])
+    # GLES: what GLSL can do that D3D9's fixed-function stages cannot (the
+    # rivals' recolour). Like D3D9, not part of the variant's name.
+    defines = TIERS[args.tier] + ["GLES"]
+    suffix = bake_d3d9.variant_suffix([d for d in defines if d not in ("D3D9", "GLES")])
 
     def is_pipeline(f):
         return f.endswith(".hlsl") and "#pragma once" not in open(os.path.join(SHADERS, f)).read()

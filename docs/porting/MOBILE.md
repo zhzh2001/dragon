@@ -461,7 +461,21 @@ same 640x480, headless 31.1 fps; on the monitor 25.1 with sound and 30.3
 with the device left closed. The present's swap and blit (3.9 + 1.6 ms)
 are mostly the audio thread's turn on the one core.
 
-**Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+**The first playtest's reports** (valley 2 of a run, grown to elder):
+"some terrains are broken" -- a canyon wall in shade as one dark plane,
+reproduced exactly from the run's seed and the same frame on ANGLE: not
+the Pi, but Minimal's 48 m terrain lit per vertex at the fixed-function
+tier, whose shade is flat ambient (the sm2 tier's lighting costs 40% more
+a frame on the Pi; not taken). "The dragon model sometimes": Minimal's far
+mesh, 246 triangles from 45 m, where a rival is still 150 pixels across --
+on GLES the far meshes now start at four times the distance, triangles
+being nearly free beside the draw. "Enemy colour lost": the fixed-function
+tier has no recolour, since D3D9's stages cannot replace a hue at constant
+luminance; the GLES bake defines `GLES` (left out of the variant's name,
+like `D3D9`) and the fixed-function skinned shader recolours the lit
+colour there.
+
+**Next on the Pi**: the dips under 20 fps the playtest saw; alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 
