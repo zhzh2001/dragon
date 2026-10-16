@@ -52,6 +52,8 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
         }
     }
     auto is_base = [&](size_t i) { return base[i] != 0; };
+    ptrdiff_t offset[NEIGHBOURS];  // a neighbour's index from a cell's
+    for (int k = 0; k < NEIGHBOURS; ++k) offset[k] = ptrdiff_t(DZ[k]) * n + DX[k];
 
     std::vector<uint32_t> receiver(count);
     std::vector<float> receiver_distance(count, cell);
@@ -200,9 +202,12 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             std::fill(change.begin(), change.end(), 0.0f);
             for (size_t i = 0; i < count; ++i) {
                 if (is_base(i)) continue;
-                const int x = column[i], z = row[i];
+                // (A base cell rings the grid, so i's neighbours are in it.)
                 for (int k = 0; k < NEIGHBOURS; ++k) {
-                    const size_t j = size_t(z + DZ[k]) * size_t(n) + size_t(x + DX[k]);
+                    const size_t j = size_t(ptrdiff_t(i) + offset[k]);
+                    // The expression as it always was: compilers that fuse
+                    // a multiply-add fuse this one, and a hoisted product
+                    // would round differently.
                     const float excess = (h[i] - h[j]) - s.talus * distance[k];
                     if (excess <= 0.0f) continue;
                     // An eighth each way at most, so a cell never gives away

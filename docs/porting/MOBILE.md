@@ -491,12 +491,32 @@ path. The same run: median 40.8 -> 34.9 ms, p90 50.1 -> 43.4, frames past
 50 ms 10.2% -> 0.9%, at most 63 draws a frame.
 
 The same log found a 9-11 s frame at each valley of a run: the erosion
-(7.1 s) and the placement. The erosion took the cell's column and row by
-integer division everywhere, a library call on ARMv6: precomputed, 7.1 ->
-5.4 s, bit-identical (the goldens erode). Still a stall; next.
+(7.1 s) and the meshes and placement after it. Now (the worst frame logged
+as `worst frame:` after the frames line, which the bench scripts parse):
 
-**Next on the Pi**: the valley stall (the next valley could be generated
-while the current one is flown); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+- The erosion took each cell's column and row by integer division
+  everywhere, a library call on ARMv6, and its talus sweep (27 M
+  neighbour checks a valley) the neighbour's index the same way: tables
+  and offsets, 7.1 -> 4.7 s, bit-identical (the goldens erode).
+- The next valley's terrain is generated while the current one is flown
+  (`App::prefetch_valley`, `std::async` at nice 15, the main thread's
+  floating-point mode; `DRAGON_PREFETCH=0` to compare; not on XP). Its
+  settings come from the same functions as at the pass, and a run through
+  a pass is byte-identical either way. At nice 19 it took 141 s on the Pi,
+  longer than the autopilot's valley; at 10, 61 s at a tenth of the frame
+  rate meanwhile.
+- After the terrain: the ff sky was baked again for every valley though
+  nothing it reads had changed (cached, 0.6 s); `gfx::chunk_mesh` found
+  the border edges for the flanges through two `std::map`s, a node a
+  edge (a sorted list, the same mesh, 0.43 -> 0.16 s); and the tree
+  batches carried the detail cards fixed function never draws (0.56 ->
+  0.17 s).
+
+A pass with the next valley ready: 9-11 s -> **1.0 s** (`valley N built
+in` in the log says which). A new run after a death still generates its
+valley then, since its seed is drawn at that moment.
+
+**Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 

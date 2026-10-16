@@ -102,6 +102,7 @@ private:
     // ... and the sky baked into a lat-long map the dome wears (16 x 8
     // vertices carry it; the texture carries the gradient and the sun).
     rhi::Texture* sky_map_ = nullptr;
+    core::Vec4 sky_inputs_[6] = {};  // what the sky was last baked from (bake_sky_dome)
     rhi::Sampler* sky_sampler_ = nullptr;
     PipelineHandle terrain_ = INVALID_PIPELINE;
     PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;

@@ -147,32 +147,42 @@ std::vector<MeshChunk> chunk_mesh(MeshData& mesh, float chunk_size, float flange
             // Border edges are the ones only one of the chunk's triangles
             // uses. Each grows a quad down to a copy of its vertices
             // `flange` lower, wound to face outward like the edge's triangle.
-            std::map<std::pair<uint32_t, uint32_t>, int> edges;
-            std::map<std::pair<uint32_t, uint32_t>, std::pair<uint32_t, uint32_t>> directed;
+            // As a sorted list rather than maps: the same edges in the same
+            // (lowest, highest) order, without a node allocated per edge --
+            // 0.4 s of the Pi 1B's stall at each valley's pass.
+            struct Edge {
+                uint32_t lo, hi, a, b;
+            };
+            std::vector<Edge> edges;
+            edges.reserve(indices.size() - chunk.first_index);
             for (size_t t = chunk.first_index; t + 2 < indices.size(); t += 3) {
                 for (int e = 0; e < 3; ++e) {
                     const uint32_t a = indices[t + size_t(e)], b = indices[t + size_t((e + 1) % 3)];
-                    const auto key = std::make_pair(std::min(a, b), std::max(a, b));
-                    ++edges[key];
-                    directed[key] = {a, b};
+                    edges.push_back(Edge{std::min(a, b), std::max(a, b), a, b});
                 }
             }
+            std::stable_sort(edges.begin(), edges.end(), [](const Edge& l, const Edge& r) {
+                return l.lo != r.lo ? l.lo < r.lo : l.hi < r.hi;
+            });
             chunk.body_count = uint32_t(indices.size()) - chunk.first_index;
             const float x0 = origin + float(key.first) * chunk_size, z0 = origin + float(key.second) * chunk_size;
             std::vector<uint32_t> sides[4];
-            std::map<uint32_t, uint32_t> lowered;
+            std::vector<uint32_t> lowered(vertices.size(), UINT32_MAX);  // the chunk's vertices all precede
             const auto lower = [&](uint32_t v) {
-                auto it = lowered.find(v);
-                if (it != lowered.end()) return it->second;
+                if (lowered[v] != UINT32_MAX) return lowered[v];
                 MeshVertex copy = vertices[v];
                 copy.position.y -= flange;
                 lowered[v] = uint32_t(vertices.size());
                 vertices.push_back(copy);
                 return lowered[v];
             };
-            for (const auto& [key, count] : edges) {
-                if (count != 1) continue;
-                const auto [a, b] = directed[key];
+            for (size_t e = 0; e < edges.size();) {
+                size_t end = e + 1;
+                while (end < edges.size() && edges[end].lo == edges[e].lo && edges[end].hi == edges[e].hi) ++end;
+                const bool border = end - e == 1;
+                const uint32_t a = edges[e].a, b = edges[e].b;
+                e = end;
+                if (!border) continue;
                 const uint32_t a2 = lower(a), b2 = lower(b);
                 // Which side of the square the edge lies on: the nearest to
                 // its midpoint.

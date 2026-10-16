@@ -645,12 +645,28 @@ void Foliage::release_batches(rhi::Device& rhi, StaticSet& set) {
 }
 
 void Foliage::build_batches(Device& device, StaticSet& set, const std::vector<FoliageInstance>& sorted) {
-    const MeshData& src = set.source;
+    // Fixed function draws only the crowns' coarse cards (draw_static), so
+    // its batches carry only what those reach: the trees' batches were half
+    // of the Pi 1B's 1.8 s at each valley's pass, most of it detail cards.
+    MeshData coarse_only;
+    if (active_tier().fixed_function && set.coarse_indices > 0) {
+        std::vector<int64_t> remap(set.source.vertices.size(), -1);
+        for (uint32_t k = 0; k < set.coarse_indices; ++k) {
+            const uint32_t v = set.source.indices[k];
+            if (remap[v] < 0) {
+                remap[v] = int64_t(coarse_only.vertices.size());
+                coarse_only.vertices.push_back(set.source.vertices[v]);
+            }
+            coarse_only.indices.push_back(uint32_t(remap[v]));
+        }
+    }
+    const MeshData& src = coarse_only.indices.empty() ? set.source : coarse_only;
     const size_t nv = src.vertices.size();
     if (nv == 0 || nv > 0xFFFF) return;
     // The coarse cards first for every instance, then the detail: a cell
     // past the LOD band draws the first `coarse` indices alone.
-    const size_t coarse = set.coarse_indices > 0 ? set.coarse_indices : src.indices.size();
+    const size_t coarse = set.coarse_indices > 0 ? std::min<size_t>(set.coarse_indices, src.indices.size())
+                                                 : src.indices.size();
     const size_t per_batch = 0x10000 / nv;  // 16-bit indices, from the batch's first vertex
     std::vector<MeshVertex> vertices;
     std::vector<FoliageInstance> instances;

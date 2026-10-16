@@ -1,6 +1,8 @@
 #pragma once
 
+#include <future>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "game/maneuver.h"
@@ -573,6 +575,17 @@ private:
     // valley and says so.
     void advance_valley();
     void populate_valley(uint32_t seed, int depth);
+    // The next valley's terrain, generated on a thread of its own while this
+    // one is flown (the erosion was a 5-11 s frozen frame at every pass on
+    // the Pi 1B): started once a valley is laid out, taken by advance_valley,
+    // adopted by regenerate_terrain in place of generating.
+    void prefetch_valley(int depth);
+    std::future<game::Terrain> terrain_prefetch_;
+    int terrain_prefetch_depth_ = -1;
+    uint32_t terrain_prefetch_run_ = 0;
+    std::optional<game::Terrain> adopt_terrain_;
+    // The tier's version of a valley's terrain settings (regenerate_terrain).
+    game::TerrainSettings tier_terrain(const game::TerrainSettings& base) const;
     // The tower models' measurements (tools/props.md), in metres above the
     // base: where each is hit (its middle) and where it fires from.
     static constexpr float KEEP_MIDDLE = 18.0f, KEEP_BRAZIER_Y = 35.2f;

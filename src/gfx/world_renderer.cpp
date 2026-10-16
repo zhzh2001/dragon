@@ -204,6 +204,13 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
 
 void WorldRenderer::bake_sky_dome(Device& device, const SceneUniforms& scene) {
     if (!active_tier().fixed_function) return;
+    // What prelit::sky_diffuse reads, and nothing about the valley: at every
+    // valley of a run the same sky was baked again, 0.6 s of the Pi 1B's
+    // stall at the pass.
+    const core::Vec4 inputs[6] = {scene.sky_zenith, scene.sky_horizon, scene.fog_color,
+                                  scene.sun,        scene.sun_color,   scene.output_grade};
+    if (sky_map_ && sky_dome_.valid() && std::memcmp(inputs, sky_inputs_, sizeof(inputs)) == 0) return;
+    std::memcpy(sky_inputs_, inputs, sizeof(inputs));
     // The dome: few vertices (a card without T&L transforms each one on the
     // CPU every frame), lat-long uvs from make_sphere's layout (rings of
     // segments + 1 vertices, the seam duplicated).

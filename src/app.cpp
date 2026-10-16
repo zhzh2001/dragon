@@ -1,5 +1,11 @@
 #include "app.h"
 
+#include <chrono>
+
+#ifdef __linux__
+#include <sys/resource.h>  // setpriority: the next valley's thread
+#endif
+
 #include "gfx/prelit.h"
 #include "anim/skin_lod.h"
 #include "gfx/mesh_lod.h"
@@ -1534,9 +1540,9 @@ void App::upload_canopy() {
     atmosphere_.set_canopy(soft_cover, soft_top, n);
 }
 
-void App::regenerate_terrain() {
+game::TerrainSettings App::tier_terrain(const game::TerrainSettings& base) const {
     // The tier's grid (gfx/render_tier.h); the settings keep the modern one.
-    game::TerrainSettings settings = terrain_settings_;
+    game::TerrainSettings settings = base;
     settings.cell_size *= tier_.budget.terrain_cell_scale;
     settings.skirt_cell_size *= tier_.budget.terrain_cell_scale * tier_.skirt_cell_scale;
     // A coarse grid misses the river: a 52 m channel is one 48 m cell, and
@@ -1556,7 +1562,17 @@ void App::regenerate_terrain() {
     // work again. The Pi 1B eroded each valley for 24 s, a stall at every
     // valley of a run (docs/porting/MOBILE.md).
     if (tier_.fixed_function && tier_.budget.terrain_cell_scale >= 8.0f) settings.erosion_cell *= 2.0f;
-    terrain_.generate(settings);
+    return settings;
+}
+
+void App::regenerate_terrain() {
+    const game::TerrainSettings settings = tier_terrain(terrain_settings_);
+    if (adopt_terrain_) {
+        terrain_ = std::move(*adopt_terrain_);  // generated while the last valley was flown
+        adopt_terrain_.reset();
+    } else {
+        terrain_.generate(settings);
+    }
     // The material follows the terrain that came out -- before the meshes are
     // built, since the fixed-function tier bakes it into their colours.
     // Snow should sit sensibly relative to whatever the peaks came out at.
@@ -4725,6 +4741,7 @@ void App::start_run(uint32_t seed) {
     }
     hoard_run_.settings = settings;
     hoard_run_.start(terrain_, terrain_settings_.half_extent);
+    prefetch_valley(1);
     const game::RunLayout& layout = hoard_run_.layout();
 
     // Every run starts as a drake -- at a drake's size at once, not shrinking
@@ -4816,6 +4833,41 @@ bool App::defence_is_spire(int defence) const {
     return spire_prop_.ok && defences[size_t(defence)].guards < 0 && defence % 2 == 1;
 }
 
+void App::prefetch_valley(int depth) {
+#ifndef DRAGON_XP  // (XP's thunks have no condition variables for std::async)
+    if (depth >= hoard_run_.settings.valleys) return;
+    // DRAGON_PREFETCH=0: every valley generated at its pass, to compare.
+    if (const char* off = SDL_getenv("DRAGON_PREFETCH"); off && off[0] == '0') return;
+    if (terrain_prefetch_.valid() && terrain_prefetch_depth_ == depth && terrain_prefetch_run_ == run_seed_) return;
+    // The settings advance_valley will derive, through the same functions.
+    const uint32_t seed = game::valley_seed(run_seed_, depth);
+    game::HoardRunSettings run = run_dials_;
+    run.seed = seed;
+    game::TerrainSettings terrain = arena_terrain_;
+    game::apply_valley_kind(seed, terrain, run);
+    const game::TerrainSettings settings = tier_terrain(terrain);
+    terrain_prefetch_depth_ = depth;
+    terrain_prefetch_run_ = run_seed_;
+    terrain_prefetch_ = std::async(std::launch::async, [settings] {
+#ifdef __linux__
+        // A low priority, so the frame rate barely feels it on the Pi's one
+        // core: at nice 19 a valley's erosion took 141 s there, longer than
+        // the autopilot spends in a valley, and at 10, 61 s at a tenth of
+        // the frame rate.
+        setpriority(PRIO_PROCESS, 0, 15);
+#endif
+        // The main thread's floating-point mode (core/math.h), or the
+        // valley could round differently from one generated there.
+        core::flush_denormals();
+        game::Terrain terrain;
+        terrain.generate(settings);
+        return terrain;
+    });
+#else
+    (void)depth;
+#endif
+}
+
 // Across a pass that is not the last: the next valley of the descent, a
 // different kind, deeper and harder, the dragon as grown as it was.
 void App::advance_valley() {
@@ -4834,11 +4886,28 @@ void App::advance_valley() {
         settings.max_hunters = 0;
     }
     terrain_settings_ = terrain;
+    // Generated while the last valley was flown, if it was this one; what is
+    // left of it is waited for here.
+    const uint64_t started = SDL_GetTicksNS();
+    bool ready = false;
+    if (terrain_prefetch_.valid()) {
+        ready = terrain_prefetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        game::Terrain prefetched = terrain_prefetch_.get();
+        if (terrain_prefetch_depth_ == depth && terrain_prefetch_run_ == run_seed_) adopt_terrain_ = std::move(prefetched);
+    }
+    const uint64_t waited = SDL_GetTicksNS();
+    const bool adopted = adopt_terrain_.has_value();
     regenerate_terrain();
     terrain_run_seed_ = seed;
     hoard_run_.settings = settings;
     hoard_run_.next_valley(terrain_, terrain_settings_.half_extent);
     populate_valley(seed, depth);
+    const uint64_t built = SDL_GetTicksNS();
+    LOG_INFO("valley %d built in %.0f ms: the terrain %s (%.0f ms), the meshes and the layout %.0f ms", depth + 1,
+             double(built - started) * 1e-6,
+             !adopted ? "generated now" : ready ? "ready ahead" : "waited for",
+             double(waited - started) * 1e-6, double(built - waited) * 1e-6);
+    prefetch_valley(depth + 1);
     if (autopilot_) demo_.reset(seed * 3u + 1u);
     valley_flash_ = 5.0f;
     audio_.play(audio::Clip::Boost, 1.0f, 0.6f);
@@ -8387,6 +8456,10 @@ void App::run() {
              static_cast<unsigned long long>(frame_index_), seconds,
              seconds > 0.0 ? double(frame_index_) / seconds : 0.0, median, p99, device_.rhi().driver_name(),
              tier_.name(), gfx::preset_name(graphics_.preset_level(tier_.tier, device_limits_)));
+    // A line of its own (the frames line is parsed by the bench scripts):
+    // the longest frame, which is where a stall shows -- a valley's
+    // generation at a pass was one 9-11 s frame on the Pi 1B.
+    LOG_INFO("worst frame: %.1f ms", settled.empty() ? 0.0 : double(settled.back()));
 }
 
 }  // namespace app
