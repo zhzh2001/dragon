@@ -31,16 +31,27 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
     out.heights = heights;
     out.flow.assign(count, 0.0f);
     out.deposit.assign(count, 0.0f);
-    if (n < 3 || heights.size() != count || fixed.size() != count) return out;
+    if (n < 3 || n > 65535 || heights.size() != count || fixed.size() != count) return out;
 
     std::vector<float>& h = out.heights;
     const float diagonal = cell * std::sqrt(2.0f);
     float distance[NEIGHBOURS];
     for (int k = 0; k < NEIGHBOURS; ++k) distance[k] = k < 4 ? cell : diagonal;
-    auto is_base = [&](size_t i) {
-        const int x = int(i % size_t(n)), z = int(i / size_t(n));
-        return fixed[i] != 0 || x == 0 || z == 0 || x == n - 1 || z == n - 1;
-    };
+    // The base levels and every cell's column and row, once: worked out
+    // from the index each time they were integer divisions, which the Pi
+    // 1B's ARMv6 does in a library call -- most of a valley's 7 s erosion
+    // there, at every valley of a run.
+    std::vector<uint8_t> base(count);
+    std::vector<uint16_t> column(count), row(count);
+    for (int z = 0; z < n; ++z) {
+        for (int x = 0; x < n; ++x) {
+            const size_t i = size_t(z) * size_t(n) + size_t(x);
+            base[i] = fixed[i] != 0 || x == 0 || z == 0 || x == n - 1 || z == n - 1;
+            column[i] = uint16_t(x);
+            row[i] = uint16_t(z);
+        }
+    }
+    auto is_base = [&](size_t i) { return base[i] != 0; };
 
     std::vector<uint32_t> receiver(count);
     std::vector<float> receiver_distance(count, cell);
@@ -88,7 +99,7 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
                     const Entry e = open.top();
                     open.pop();
                     const size_t c = e.second;
-                    const int x = int(c % size_t(n)), z = int(c / size_t(n));
+                    const int x = column[c], z = row[c];
                     for (int k = 0; k < NEIGHBOURS; ++k) {
                         const int nx = x + DX[k], nz = z + DZ[k];
                         if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
@@ -103,7 +114,7 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             for (size_t i = 0; i < count; ++i) {
                 receiver[i] = uint32_t(i);
                 if (is_base(i)) continue;
-                const int x = int(i % size_t(n)), z = int(i / size_t(n));
+                const int x = column[i], z = row[i];
                 float best_slope = 0.0f;
                 int best = -1;
                 float lowest = 0.0f;
@@ -189,7 +200,7 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             std::fill(change.begin(), change.end(), 0.0f);
             for (size_t i = 0; i < count; ++i) {
                 if (is_base(i)) continue;
-                const int x = int(i % size_t(n)), z = int(i / size_t(n));
+                const int x = column[i], z = row[i];
                 for (int k = 0; k < NEIGHBOURS; ++k) {
                     const size_t j = size_t(z + DZ[k]) * size_t(n) + size_t(x + DX[k]);
                     const float excess = (h[i] - h[j]) - s.talus * distance[k];

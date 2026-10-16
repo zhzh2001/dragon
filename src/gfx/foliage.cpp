@@ -25,12 +25,13 @@ namespace gfx {
 
 namespace {
 
-std::vector<rhi::VertexBufferLayout> foliage_buffers() {
+// `batched`: the instance data per vertex (Foliage::batch_), the same shader.
+std::vector<rhi::VertexBufferLayout> foliage_buffers(bool batched = false) {
     std::vector<rhi::VertexBufferLayout> buffers = Mesh::buffer_descriptions();
     rhi::VertexBufferLayout instances = {};
     instances.slot = 1;
     instances.pitch = sizeof(FoliageInstance);
-    instances.rate = rhi::InputRate::Instance;  // reserved by SDL; anything else fails creation
+    instances.rate = batched ? rhi::InputRate::Vertex : rhi::InputRate::Instance;  // reserved by SDL; anything else fails creation
     buffers.push_back(instances);
     return buffers;
 }
@@ -50,11 +51,11 @@ std::vector<rhi::VertexAttribute> foliage_attributes() {
     return attributes;
 }
 
-PipelineDesc make_foliage_desc() {
+PipelineDesc make_foliage_desc(bool batched = false) {
     PipelineDesc desc;
-    desc.name = "foliage";
+    desc.name = batched ? "foliage_batched" : "foliage";
     desc.shader = "foliage";
-    desc.vertex_buffers = foliage_buffers();
+    desc.vertex_buffers = foliage_buffers(batched);
     desc.vertex_attributes = foliage_attributes();
     // Blades and cone skirts are seen from both sides.
     desc.cull = rhi::Cull::None;
@@ -455,6 +456,10 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     if (active_tier().tier == Tier::Modern) lod_distance = 900.0f;
     pipeline_ = pipelines_->create(make_foliage_desc());
     depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
+    // DRAGON_FOLIAGE_BATCH=0: the per-instance draws regardless, to compare.
+    const char* batch_env = SDL_getenv("DRAGON_FOLIAGE_BATCH");
+    batch_ = !device->rhi().instances_in_one_draw() && !(batch_env && batch_env[0] == '0');
+    if (batch_) batched_pipeline_ = pipelines_->create(make_foliage_desc(true));
 
     // The two card textures: grey detail maps with the leaves cut out in
     // alpha, rendered in Blender (tools: the concept-art skill's notes) and
@@ -521,6 +526,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         mesh.indices = coarse;
         mesh.indices.insert(mesh.indices.end(), detail.begin(), detail.end());
         if (!trees_[k].mesh.upload(device->rhi(), mesh, tree_names[k])) return false;
+        if (batch_) trees_[k].source = mesh;
     }
     for (int k = 0; k < GRASS_KINDS; ++k) {
         if (!grass_[k].mesh.upload(device->rhi(), make_grass_mesh(GrassKind(k)), grass_names[k])) {
@@ -542,11 +548,13 @@ void Foliage::shutdown(Device& device) {
         set.mesh.release(rhi);
         rhi.destroy(set.instances);
         set.instances = nullptr;
+        release_batches(rhi, set);
     }
     for (StaticSet& set : rocks_) {
         set.mesh.release(rhi);
         rhi.destroy(set.instances);
         set.instances = nullptr;
+        release_batches(rhi, set);
     }
     for (StreamSet& set : grass_) {
         set.mesh.release(rhi);
@@ -563,6 +571,7 @@ void Foliage::set_rock_mesh(Device& device, int kind, const MeshData& mesh, floa
     if (kind < 0 || kind >= ROCK_KINDS) return;
     rocks_[kind].mesh.release(device.rhi());
     rocks_[kind].mesh.upload(device.rhi(), mesh, "rock");
+    if (batch_) rocks_[kind].source = mesh;
     rock_height_[kind] = height;
 }
 
@@ -583,6 +592,7 @@ void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<Foli
     set.instances = nullptr;
     set.count = 0;
     set.cells.clear();
+    release_batches(device.rhi(), set);
     if (items.empty()) return;
 
     // Sort into ground cells so each cell is one contiguous instance range.
@@ -623,6 +633,110 @@ void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<Foli
                                                uint32_t(sorted.size() * sizeof(FoliageInstance)),
                                                sorted.data(), name);
     if (set.instances) set.count = uint32_t(sorted.size());
+    if (batch_) build_batches(device, set, sorted);
+}
+
+void Foliage::release_batches(rhi::Device& rhi, StaticSet& set) {
+    rhi.destroy(set.batch_vertices);
+    rhi.destroy(set.batch_instances);
+    rhi.destroy(set.batch_indices);
+    set.batch_vertices = set.batch_instances = set.batch_indices = nullptr;
+    set.batches.clear();
+}
+
+void Foliage::build_batches(Device& device, StaticSet& set, const std::vector<FoliageInstance>& sorted) {
+    const MeshData& src = set.source;
+    const size_t nv = src.vertices.size();
+    if (nv == 0 || nv > 0xFFFF) return;
+    // The coarse cards first for every instance, then the detail: a cell
+    // past the LOD band draws the first `coarse` indices alone.
+    const size_t coarse = set.coarse_indices > 0 ? set.coarse_indices : src.indices.size();
+    const size_t per_batch = 0x10000 / nv;  // 16-bit indices, from the batch's first vertex
+    std::vector<MeshVertex> vertices;
+    std::vector<FoliageInstance> instances;
+    std::vector<uint16_t> indices;
+    vertices.reserve(sorted.size() * nv);
+    instances.reserve(sorted.size() * nv);
+    indices.reserve(sorted.size() * src.indices.size());
+    for (Cell& cell : set.cells) {
+        cell.batch_first = uint32_t(set.batches.size());
+        for (uint32_t first = cell.first; first < cell.first + cell.count; first += uint32_t(per_batch)) {
+            const uint32_t n = std::min(uint32_t(per_batch), cell.first + cell.count - first);
+            Batch b;
+            b.first_vertex = uint32_t(vertices.size());
+            b.first_index = uint32_t(indices.size());
+            for (uint32_t i = 0; i < n; ++i) {
+                vertices.insert(vertices.end(), src.vertices.begin(), src.vertices.end());
+                instances.insert(instances.end(), nv, sorted[first + i]);
+            }
+            for (int part = 0; part < 2; ++part) {
+                const size_t from = part == 0 ? 0 : coarse, to = part == 0 ? coarse : src.indices.size();
+                for (uint32_t i = 0; i < n; ++i) {
+                    for (size_t k = from; k < to; ++k) indices.push_back(uint16_t(src.indices[k] + i * nv));
+                }
+            }
+            b.coarse = uint32_t(n * coarse);
+            b.full = uint32_t(indices.size()) - b.first_index;
+            set.batches.push_back(b);
+        }
+        cell.batch_count = uint32_t(set.batches.size()) - cell.batch_first;
+    }
+    rhi::Device& rhi = device.rhi();
+    set.batch_vertices = rhi.create_buffer(rhi::BufferUsage::Vertex, uint32_t(vertices.size() * sizeof(MeshVertex)),
+                                           vertices.data(), "foliage batches");
+    set.batch_instances = rhi.create_buffer(rhi::BufferUsage::Vertex,
+                                            uint32_t(instances.size() * sizeof(FoliageInstance)), instances.data(),
+                                            "foliage batch instances");
+    set.batch_indices = rhi.create_buffer(rhi::BufferUsage::Index, uint32_t(indices.size() * 2), indices.data(),
+                                          "foliage batch indices");
+    if (!set.batch_vertices || !set.batch_instances || !set.batch_indices) release_batches(rhi, set);
+}
+
+// The cells of `set` the frustum and `reach` admit: one instanced draw each,
+// or each of its batches; how many instances. `coarse_cut`: past
+// `coarse_from` metres (always, at fixed function) only the coarse cards.
+uint32_t Foliage::draw_static(Device& device, rhi::Pass* pass, const StaticSet& set, const Frustum& frustum,
+                              core::Vec3 eye, float reach, bool coarse_cut, float coarse_from) {
+    rhi::Device& rhi = device.rhi();
+    const bool batched = batch_ && !set.batches.empty();
+    if (batch_) {
+        // The uniforms are pushed per slot, not per pipeline, so either takes them.
+        rhi::Pipeline* pipeline = pipelines_->get(batched ? batched_pipeline_ : pipeline_);
+        if (!pipeline) return 0;
+        rhi.bind_pipeline(pass, pipeline);
+    }
+    uint32_t drawn = 0;
+    if (batched) rhi.bind_index_buffer(pass, rhi::BufferBinding{set.batch_indices, 0}, rhi::IndexSize::U16);
+    if (!batched) {
+        set.mesh.bind(rhi, pass);
+        rhi::BufferBinding instance_binding = {};
+        instance_binding.buffer = set.instances;
+        rhi.bind_vertex_buffers(pass, 1, &instance_binding, 1);
+    }
+    for (const Cell& cell : set.cells) {
+        const float nearest = core::distance(eye, cell.centre) - cell.radius;
+        if (nearest > reach) continue;
+        if (!frustum.sees(cell.centre, cell.radius)) continue;
+        const bool coarse = coarse_cut && set.coarse_indices > 0 &&
+                            (active_tier().fixed_function || nearest > coarse_from);
+        if (batched) {
+            for (uint32_t i = 0; i < cell.batch_count; ++i) {
+                const Batch& b = set.batches[cell.batch_first + i];
+                rhi::BufferBinding vb[2] = {};
+                vb[0].buffer = set.batch_vertices;
+                vb[0].offset = b.first_vertex * uint32_t(sizeof(MeshVertex));
+                vb[1].buffer = set.batch_instances;
+                vb[1].offset = b.first_vertex * uint32_t(sizeof(FoliageInstance));
+                rhi.bind_vertex_buffers(pass, 0, vb, 2);
+                rhi.draw_indexed(pass, coarse ? b.coarse : b.full, 1, b.first_index, 0, 0);
+            }
+        } else {
+            rhi.draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
+                             cell.first);
+        }
+        drawn += cell.count;
+    }
+    return drawn;
 }
 
 namespace {
@@ -721,22 +835,10 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, band, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
-        set.mesh.bind(device.rhi(), pass);
-        rhi::BufferBinding instance_binding = {};
-        instance_binding.buffer = set.instances;
-        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
-        for (const Cell& cell : set.cells) {
-            const float nearest = core::distance(eye, cell.centre) - cell.radius;
-            if (nearest > reach) continue;
-            if (!frustum.sees(cell.centre, cell.radius)) continue;
-            // Wholly past the dither band (foliage.hlsl): the coarse cards
-            // only. Fixed function has no dither, so its crowns are the
-            // coarse cards everywhere.
-            const bool coarse = set.coarse_indices > 0 && (active_tier().fixed_function || nearest > lod_distance * (1.0f + band));
-            device.rhi().draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
-                                         cell.first);
-            trees_drawn_ += cell.count;
-        }
+        // Wholly past the dither band (foliage.hlsl): the coarse cards only.
+        // Fixed function has no dither, so its crowns are the coarse cards
+        // everywhere.
+        trees_drawn_ += draw_static(device, pass, set, frustum, eye, reach, true, lod_distance * (1.0f + band));
     }
     // The rocks: the same shader, no sway (a nominal height no rock reaches
     // makes the sway's height fraction nothing), no card LOD.
@@ -748,17 +850,9 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         params.extra = core::Vec4{1e6f, 1e8f, 0.0f, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
-        set.mesh.bind(device.rhi(), pass);
-        rhi::BufferBinding instance_binding = {};
-        instance_binding.buffer = set.instances;
-        device.rhi().bind_vertex_buffers(pass, 1, &instance_binding, 1);
         const bool big = k == 1 || k == 3 || k == 5;
         const float reach = (big ? big_rock_draw_distance : rock_draw_distance) * rock_distance_scale;
-        for (const Cell& cell : set.cells) {
-            if (core::distance(eye, cell.centre) - cell.radius > reach) continue;
-            if (!frustum.sees(cell.centre, cell.radius)) continue;
-            device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
-        }
+        draw_static(device, pass, set, frustum, eye, reach, false, 0.0f);
     }
 }
 

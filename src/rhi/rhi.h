@@ -244,6 +244,11 @@ public:
     // The largest texture edge the device takes: 2048 on an X550, which the
     // graphics settings respect (gfx/graphics_settings.h).
     virtual uint32_t max_texture_size() const { return 16384; }
+    // Whether an instanced draw is one draw to the driver. GLES 2.0 has no
+    // divisors and loops, a draw per instance (rhi/gles), so the renderers
+    // batch static instances themselves there (gfx::Foliage). D3D9 loops too,
+    // but its cards pay per vertex, which a batch would multiply.
+    virtual bool instances_in_one_draw() const { return true; }
 
     // ---- the frame
     // Starts recording. Windowed, it also waits for a presentable image and

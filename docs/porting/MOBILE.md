@@ -475,7 +475,28 @@ luminance; the GLES bake defines `GLES` (left out of the variant's name,
 like `D3D9`) and the fixed-function skinned shader recolours the lit
 colour there.
 
-**Next on the Pi**: the dips under 20 fps the playtest saw; alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+**The dips under 20 fps** ("when more objects are on screen") were the
+trees and rocks: GLES 2.0 has no divisors, so every instance was its own
+draw, and a 6,000-frame run on the monitor logged up to 175 draws a frame,
+139 of them foliage at ~140 us each -- frames of 40-59 draws took a median
+33 ms, frames of 160-179 took 52. Static instances are now baked per ground
+cell into one mesh (`gfx::Foliage`, where `rhi::Device::instances_in_one_draw`
+is false: the kind's vertices once per instance, the instance's data per
+vertex, 16-bit indices with every crown's coarse cards first), drawn by the
+same shader through a pipeline whose instance slot is per vertex; all of a
+kind's batches share three buffers, since a buffer each was hundreds of
+contiguous allocations and a quarter of start-up in the kernel's CMA. ANGLE
+frames byte-identical at ff and sm2; `DRAGON_FOLIAGE_BATCH=0` for the old
+path. The same run: median 40.8 -> 34.9 ms, p90 50.1 -> 43.4, frames past
+50 ms 10.2% -> 0.9%, at most 63 draws a frame.
+
+The same log found a 9-11 s frame at each valley of a run: the erosion
+(7.1 s) and the placement. The erosion took the cell's column and row by
+integer division everywhere, a library call on ARMv6: precomputed, 7.1 ->
+5.4 s, bit-identical (the goldens erode). Still a stall; next.
+
+**Next on the Pi**: the valley stall (the next valley could be generated
+while the current one is flown); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 

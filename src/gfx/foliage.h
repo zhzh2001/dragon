@@ -6,6 +6,7 @@
 #include "core/math.h"
 #include "gfx/atmosphere.h"
 #include "gfx/foliage_instance.h"
+#include "gfx/frustum.h"
 #include "gfx/mesh.h"
 #include "gfx/noise_lattice.h"
 #include "gfx/pipeline.h"
@@ -129,6 +130,18 @@ private:
         float radius = 0.0f;
         uint32_t first = 0;
         uint32_t count = 0;
+        uint32_t batch_first = 0, batch_count = 0;  // in StaticSet::batches
+    };
+    // A cell's instances baked into one mesh (batch_): the kind's vertices
+    // once per instance, each with its instance's data beside it, and 16-bit
+    // indices with every instance's coarse cards first. Every batch of a
+    // kind lives in the same three buffers (StaticSet::batch_*): a buffer
+    // each was hundreds of contiguous allocations, a quarter of the Pi 1B's
+    // start-up in the kernel.
+    struct Batch {
+        uint32_t first_vertex = 0;      // where its vertices start in both vertex buffers
+        uint32_t first_index = 0;       // and its indices in the index buffer
+        uint32_t coarse = 0, full = 0;  // index counts
     };
     struct StaticSet {
         Mesh mesh;
@@ -137,6 +150,11 @@ private:
         rhi::Buffer* instances = nullptr;
         uint32_t count = 0;
         std::vector<Cell> cells;
+        MeshData source;             // the mesh on the CPU, where batch_ needs it
+        std::vector<Batch> batches;  // a cell's run of them (Cell::batch_first), where batch_
+        rhi::Buffer* batch_vertices = nullptr;   // MeshVertex, slot 0
+        rhi::Buffer* batch_instances = nullptr;  // FoliageInstance per vertex, slot 1
+        rhi::Buffer* batch_indices = nullptr;    // uint16
     };
     static constexpr float CELL_SIZE = 320.0f;
     uint32_t trees_drawn_ = 0;
@@ -157,6 +175,16 @@ private:
     const Atmosphere* atmosphere_ = nullptr;
     PipelineHandle pipeline_ = INVALID_PIPELINE;
     PipelineHandle depth_pipeline_ = INVALID_PIPELINE;
+    // Where an instanced draw is a draw per instance (GLES 2.0): each cell's
+    // static instances are baked into one mesh and drawn by batched_pipeline_,
+    // the same shader with the instance data per vertex. On the Pi 1B a frame
+    // with 139 tree and rock draws at ~140 us each was the dips under 20 fps.
+    bool batch_ = false;
+    PipelineHandle batched_pipeline_ = INVALID_PIPELINE;
+    void build_batches(Device& device, StaticSet& set, const std::vector<FoliageInstance>& sorted);
+    void release_batches(rhi::Device& rhi, StaticSet& set);
+    uint32_t draw_static(Device& device, rhi::Pass* pass, const StaticSet& set, const Frustum& frustum,
+                         core::Vec3 eye, float reach, bool coarse_cut, float coarse_from);
 
     StaticSet trees_[TREE_KINDS];
     StaticSet rocks_[ROCK_KINDS];

@@ -434,6 +434,8 @@ public:
     const char* driver_name() const override { return "gles"; }
     uint32_t max_texture_size() const override { return max_texture_; }
 
+    bool instances_in_one_draw() const override { return false; }
+
     bool supports_format(Format format, uint8_t usage) const override {
         switch (format) {
             case Format::RGBA8:
