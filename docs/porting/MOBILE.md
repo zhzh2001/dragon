@@ -564,7 +564,18 @@ skeleton's block only to push each submesh's palette over it. Live 25.7
 skinned draw (~450 us) is Mesa's: with no palette sent at all it costs
 the same.
 
-**Next on the Pi**: the HUD (4.2 ms to build, 3.5 to draw); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+The HUD on the Pi is one ImGui draw of ~2,000 vertices and 7,000 16-bit
+indices (the atlas re-uploaded ~25 times in 600 frames): 2.1 ms to build
+(`draw_hud`; the panels, hidden, cost nothing). Its 3.3 ms "ui render" is
+mostly not the HUD: the framebuffer switch into the UI pass is where vc4
+submits the world's job, so the kernel's validation of the whole world's
+command list is counted there (as the blit and the swap carry the UI's).
+
+**Next on the Pi**: the HUD's 2.1 ms build; Mesa's ~450 us skinned draw
+(towers and caches are one-joint skinned props: a rigid path would draw
+them as static meshes); the UI drawn in the world's pass so vc4 keeps one
+job; start-up (25 s with three valleys: the erosion 3.3-3.9 s each, the
+sound synthesis 1.4 s, EGL and the display 2.6 s); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 
