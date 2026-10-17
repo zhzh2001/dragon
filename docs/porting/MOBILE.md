@@ -555,7 +555,16 @@ byte-identical at ff and sm2), 0.9 s; and the files read whole
 (`core::paths::read_bytes`) rather than a byte at a time. The modern
 tier's ground scans no longer go to the Pi (73 -> 57 MB).
 
-**Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
+Uniforms: the GLES backend re-sent a block whenever it was pushed, and the
+renderers push the scene block to both stages before every draw; a push
+of the bytes a slot already holds is now dropped (63-69 uploads a frame
+to 40), and a palette-split mesh no longer builds and pushes the whole
+skeleton's block only to push each submesh's palette over it. Live 25.7
+-> 27.7 fps over 2,400 frames, frames byte-identical. What is left of a
+skinned draw (~450 us) is Mesa's: with no palette sent at all it costs
+the same.
+
+**Next on the Pi**: the HUD (4.2 ms to build, 3.5 to draw); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).
 

@@ -451,11 +451,13 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
     // Padded: a pose reaches past the bind pose's sphere (a wing, a tail).
     if (!in_view(model, full_mesh.bound_centre(), full_mesh.bound_radius(), 1.5f)) return;
 
-    const SkinBlock block = make_skin_block(joints);
-
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
-    push_skin(device, block);
+    // The whole skeleton's block only where a submesh reads it: a split mesh
+    // pushes each submesh's palette instead (below), over this.
+    bool whole = false;
+    for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) whole |= submesh.index_count && submesh.palette.empty();
+    if (whole) push_skin(device, make_skin_block(joints));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(device.rhi(), pass);
 

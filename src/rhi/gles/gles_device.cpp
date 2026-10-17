@@ -849,6 +849,10 @@ public:
     void push_uniforms(Stage stage, uint32_t slot, const void* data, uint32_t size) override {
         if (slot >= kMaxSlots) return;
         auto& block = uniforms_[stage == Stage::Vertex ? 0 : 1][slot];
+        // The same bytes as the slot holds: nothing to send again. The scene
+        // block went to both stages before every draw, and each push re-sent
+        // it through glUniform and Mesa's uniform path.
+        if (block.data.size() == size / 4 && std::memcmp(block.data.data(), data, size) == 0) return;
         block.data.assign(static_cast<const float*>(data), static_cast<const float*>(data) + size / 4);
         block.generation = ++generation_;
     }
