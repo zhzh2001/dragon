@@ -467,13 +467,11 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     // the shader falls back to a solid card -- but they are logged.
     ImageData leaf_image, needle_image;
     const auto load = [&](const char* path, const char* name, ImageData& image) -> rhi::Texture* {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
+        const std::vector<uint8_t> bytes = core::paths::read_bytes(path);
+        if (bytes.empty()) {
             LOG_WARN("foliage: no %s at %s; cards will be solid", name, path);
             return nullptr;
         }
-        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
-                                   std::istreambuf_iterator<char>());
         image = decode_image(bytes.data(), bytes.size());
         return create_texture_from_image(device->rhi(), image, name, false);
     };

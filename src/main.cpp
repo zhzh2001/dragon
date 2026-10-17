@@ -75,6 +75,21 @@ int main(int argc, char** argv) {
     }
 #endif
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
+#ifndef DRAGON_XP
+    // DRAGON_LOG_TIME=1: every line prefixed with the seconds since launch,
+    // so a slow start-up says where its time goes on a machine with no
+    // profiler that unwinds (the Pi 1B).
+    if (const char* t = SDL_getenv("DRAGON_LOG_TIME"); t && t[0] == '1') {
+        static SDL_LogOutputFunction plain = SDL_GetDefaultLogOutputFunction();
+        SDL_SetLogOutputFunction(
+            [](void* userdata, int category, SDL_LogPriority priority, const char* message) {
+                char line[1024];
+                SDL_snprintf(line, sizeof(line), "[%7.3f] %s", double(SDL_GetTicksNS()) * 1e-9, message);
+                plain(userdata, category, priority, line);
+            },
+            nullptr);
+    }
+#endif
 #ifdef SDL_PLATFORM_ANDROID
     // SDL asks Android for any orientation when the window is resizable;
     // a flight game is played in landscape, either way up.

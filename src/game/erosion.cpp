@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <queue>
 
 namespace game {
@@ -87,20 +88,32 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             // a receiver above them, and the implicit step raises them toward it
             // -- the basin silts up while its rim is cut.
             {
-                using Entry = std::pair<float, uint32_t>;  // height, then index: a fixed order
+                // Height, then index -- a fixed order -- as one integer: the
+                // height's bits made to sort as the float does (-0 as +0;
+                // no NaN), the index below them. The same order as the
+                // (float, index) pairs it replaces, without a float compare
+                // per heap step, which stalls the Pi 1B's VFP.
+                using Entry = uint64_t;
+                const auto entry = [](float height, uint32_t index) {
+                    if (height == 0.0f) height = 0.0f;
+                    uint32_t bits;
+                    std::memcpy(&bits, &height, sizeof bits);
+                    bits = (bits & 0x80000000u) ? ~bits : (bits | 0x80000000u);
+                    return (uint64_t(bits) << 32) | index;
+                };
                 std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> open;
                 std::fill(done.begin(), done.end(), uint8_t(0));
                 for (size_t i = 0; i < count; ++i) {
                     if (is_base(i)) {
                         route[i] = h[i] + noise[i];
                         done[i] = 1;
-                        open.push(Entry{route[i], uint32_t(i)});
+                        open.push(entry(route[i], uint32_t(i)));
                     }
                 }
                 while (!open.empty()) {
                     const Entry e = open.top();
                     open.pop();
-                    const size_t c = e.second;
+                    const size_t c = uint32_t(e);
                     const int x = column[c], z = row[c];
                     for (int k = 0; k < NEIGHBOURS; ++k) {
                         const int nx = x + DX[k], nz = z + DZ[k];
@@ -109,7 +122,7 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
                         if (done[j]) continue;
                         done[j] = 1;
                         route[j] = std::max(h[j] + noise[j], route[c] + 0.001f);
-                        open.push(Entry{route[j], uint32_t(j)});
+                        open.push(entry(route[j], uint32_t(j)));
                     }
                 }
             }
@@ -185,7 +198,6 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
                 power[i] = s.area_exponent_075 ? root * std::sqrt(root) : root;
             }
         }
-
         // The implicit stream-power step, receivers first.
         for (const uint32_t i : stack) {
             const uint32_t r = receiver[i];
@@ -194,7 +206,6 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             const float f = k * power[i] / receiver_distance[i];
             h[i] = (h[i] + f * h[r]) / (1.0f + f);
         }
-
         // Talus: what stands steeper than the talus slope above a neighbour
         // slides a share of the excess onto it. Gathered, then applied, so
         // the order of the cells does not matter.
@@ -203,13 +214,32 @@ ErosionResult erode(const std::vector<float>& heights, const std::vector<uint8_t
             for (size_t i = 0; i < count; ++i) {
                 if (is_base(i)) continue;
                 // (A base cell rings the grid, so i's neighbours are in it.)
+                // The eight excesses first, then what they move, in the same
+                // order: apart they pipeline, where each compare-and-branch
+                // stalled the ARM11's VFP on the one before -- the talus
+                // was over half of a valley's erosion on the Pi 1B.
+                const float hi = h[i];
+                float excesses[NEIGHBOURS];
                 for (int k = 0; k < NEIGHBOURS; ++k) {
-                    const size_t j = size_t(ptrdiff_t(i) + offset[k]);
                     // The expression as it always was: compilers that fuse
                     // a multiply-add fuse this one, and a hoisted product
                     // would round differently.
-                    const float excess = (h[i] - h[j]) - s.talus * distance[k];
-                    if (excess <= 0.0f) continue;
+                    excesses[k] = (hi - h[size_t(ptrdiff_t(i) + offset[k])]) - s.talus * distance[k];
+                }
+                // Which are above nothing, by their bits: a float above zero
+                // is a positive integer bit for bit (no NaN reaches here),
+                // and a float compare's flags cost the VFP a stall apiece.
+                uint32_t steeper = 0;
+                for (int k = 0; k < NEIGHBOURS; ++k) {
+                    int32_t bits;
+                    std::memcpy(&bits, &excesses[k], sizeof bits);
+                    steeper |= uint32_t(bits > 0) << k;
+                }
+                if (steeper == 0) continue;
+                for (int k = 0; k < NEIGHBOURS; ++k) {
+                    if (!(steeper & (1u << k))) continue;
+                    const size_t j = size_t(ptrdiff_t(i) + offset[k]);
+                    const float excess = excesses[k];
                     // An eighth each way at most, so a cell never gives away
                     // more than its excess over all its neighbours together.
                     const float moved = excess * s.thermal_rate * 0.125f;

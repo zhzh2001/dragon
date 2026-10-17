@@ -1,6 +1,7 @@
 #pragma once
 
 #include <future>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -575,14 +576,19 @@ private:
     // valley and says so.
     void advance_valley();
     void populate_valley(uint32_t seed, int depth);
-    // The next valley's terrain, generated on a thread of its own while this
-    // one is flown (the erosion was a 5-11 s frozen frame at every pass on
-    // the Pi 1B): started once a valley is laid out, taken by advance_valley,
-    // adopted by regenerate_terrain in place of generating.
+    // The run's later valleys' terrain, generated ahead (the erosion was a
+    // 5-11 s frozen frame at every pass on the Pi 1B): with one core, all
+    // of them while the run loads (terrain_loaded_); with more, the next on
+    // a thread of its own while this one is flown (terrain_prefetch_).
+    // Taken by advance_valley, adopted by regenerate_terrain in place of
+    // generating.
     void prefetch_valley(int depth);
+    game::TerrainSettings valley_terrain(int depth) const;  // what advance_valley derives
     std::future<game::Terrain> terrain_prefetch_;
     int terrain_prefetch_depth_ = -1;
     uint32_t terrain_prefetch_run_ = 0;
+    std::map<int, game::Terrain> terrain_loaded_;
+    uint32_t terrain_loaded_run_ = 0;
     std::optional<game::Terrain> adopt_terrain_;
     // The tier's version of a valley's terrain settings (regenerate_terrain).
     game::TerrainSettings tier_terrain(const game::TerrainSettings& base) const;

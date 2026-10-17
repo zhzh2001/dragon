@@ -6,6 +6,9 @@
 
 #include "core/log.h"
 
+#include <cstdint>
+#include <fstream>
+
 namespace core::paths {
 namespace {
 
@@ -100,6 +103,17 @@ std::string resolve_cli(const std::string& path) {
     if (slash == std::string::npos) return path;
     const std::string candidate = join(parent.substr(0, slash), path);
     return is_file(candidate) ? candidate : path;
+}
+
+std::vector<uint8_t> read_bytes(const std::string& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return {};
+    const std::streamsize size = file.tellg();
+    if (size <= 0) return {};
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    file.seekg(0);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), size)) return {};
+    return bytes;
 }
 
 }  // namespace core::paths

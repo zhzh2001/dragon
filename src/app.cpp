@@ -565,9 +565,8 @@ bool App::init(const Options& options) {
     }
     // The terrain's detail tile (tools/rocks.md): linear data, not colour.
     {
-        std::ifstream file(core::paths::asset("textures/terrain_detail.png"), std::ios::binary);
-        if (file) {
-            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        const std::vector<uint8_t> bytes = core::paths::read_bytes(core::paths::asset("textures/terrain_detail.png"));
+        if (!bytes.empty()) {
             gfx::ImageData image = gfx::decode_image(bytes.data(), bytes.size());
             if (tier_.fixed_function) {
                 // One stage modulates by the whole texture (terrain.hlsl,
@@ -4849,27 +4848,56 @@ bool App::defence_is_spire(int defence) const {
     return spire_prop_.ok && defences[size_t(defence)].guards < 0 && defence % 2 == 1;
 }
 
-void App::prefetch_valley(int depth) {
-#ifndef DRAGON_XP  // (XP's thunks have no condition variables for std::async)
-    if (depth >= hoard_run_.settings.valleys) return;
-    // DRAGON_PREFETCH=0: every valley generated at its pass, to compare.
-    if (const char* off = SDL_getenv("DRAGON_PREFETCH"); off && off[0] == '0') return;
-    if (terrain_prefetch_.valid() && terrain_prefetch_depth_ == depth && terrain_prefetch_run_ == run_seed_) return;
-    // The settings advance_valley will derive, through the same functions.
+game::TerrainSettings App::valley_terrain(int depth) const {
     const uint32_t seed = game::valley_seed(run_seed_, depth);
     game::HoardRunSettings run = run_dials_;
     run.seed = seed;
     game::TerrainSettings terrain = arena_terrain_;
     game::apply_valley_kind(seed, terrain, run);
-    const game::TerrainSettings settings = tier_terrain(terrain);
+    return tier_terrain(terrain);
+}
+
+void App::prefetch_valley(int depth) {
+    if (depth >= hoard_run_.settings.valleys) return;
+    // DRAGON_PREFETCH=0: every valley generated at its pass, to compare;
+    // =load or =thread: the one way or the other whatever the cores.
+    const char* mode = SDL_getenv("DRAGON_PREFETCH");
+    if (mode && mode[0] == '0') return;
+    if (terrain_loaded_run_ != run_seed_) {
+        terrain_loaded_.clear();
+        terrain_loaded_run_ = run_seed_;
+    }
+    if (terrain_loaded_.count(depth)) return;
+    // One core (the Pi 1B): a thread there is taken out of the frames --
+    // about 2 fps for the first three minutes of every valley, the memory
+    // the erosion streams through -- so the run's every valley is built
+    // while it loads instead, 4.7 s a valley there.
+    bool at_load = SDL_GetNumLogicalCPUCores() <= 1;
+#ifdef DRAGON_XP
+    at_load = true;  // (XP's thunks have no condition variables for std::async)
+#endif
+    if (mode && SDL_strcmp(mode, "load") == 0) at_load = true;
+    if (mode && SDL_strcmp(mode, "thread") == 0) at_load = false;
+    if (at_load) {
+        const uint64_t started = SDL_GetTicksNS();
+        for (int d = depth; d < hoard_run_.settings.valleys; ++d) {
+            if (terrain_loaded_.count(d)) continue;
+            game::Terrain terrain;
+            terrain.generate(valley_terrain(d));
+            terrain_loaded_.emplace(d, std::move(terrain));
+        }
+        LOG_INFO("run: valleys %d to %d built while loading, %.0f ms", depth + 1, hoard_run_.settings.valleys,
+                 double(SDL_GetTicksNS() - started) * 1e-6);
+        return;
+    }
+#ifndef DRAGON_XP
+    if (terrain_prefetch_.valid() && terrain_prefetch_depth_ == depth && terrain_prefetch_run_ == run_seed_) return;
+    const game::TerrainSettings settings = valley_terrain(depth);
     terrain_prefetch_depth_ = depth;
     terrain_prefetch_run_ = run_seed_;
     terrain_prefetch_ = std::async(std::launch::async, [settings] {
 #ifdef __linux__
-        // A low priority, so the frame rate barely feels it on the Pi's one
-        // core: at nice 19 a valley's erosion took 141 s there, longer than
-        // the autopilot spends in a valley, and at 10, 61 s at a tenth of
-        // the frame rate.
+        // A low priority, where the frames have other cores anyway.
         setpriority(PRIO_PROCESS, 0, 15);
 #endif
         // The main thread's floating-point mode (core/math.h), or the
@@ -4879,8 +4907,6 @@ void App::prefetch_valley(int depth) {
         terrain.generate(settings);
         return terrain;
     });
-#else
-    (void)depth;
 #endif
 }
 
@@ -4906,7 +4932,11 @@ void App::advance_valley() {
     // left of it is waited for here.
     const uint64_t started = SDL_GetTicksNS();
     bool ready = false;
-    if (terrain_prefetch_.valid()) {
+    if (auto loaded = terrain_loaded_.find(depth); terrain_loaded_run_ == run_seed_ && loaded != terrain_loaded_.end()) {
+        adopt_terrain_ = std::move(loaded->second);  // built while the run loaded
+        terrain_loaded_.erase(loaded);
+        ready = true;
+    } else if (terrain_prefetch_.valid()) {
         ready = terrain_prefetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
         game::Terrain prefetched = terrain_prefetch_.get();
         if (terrain_prefetch_depth_ == depth && terrain_prefetch_run_ == run_seed_) adopt_terrain_ = std::move(prefetched);

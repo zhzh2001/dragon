@@ -528,11 +528,32 @@ in the renderer list), and on a console the window list is a line saying
 which mode is in force. The Pi's saved file from the buggy panel is
 `graphics.cfg.before-panel-fix` beside the new one.
 
-The prefetch of the next valley costs about 2 fps while it runs, the first
+The prefetch of the next valley cost about 2 fps while it ran, the first
 three minutes or so of a valley (27.6 against 25.6 over a run's first
 1,200 frames); at nice 19 about as much, so it is the memory the erosion
-streams through, not the CPU it is given. Against a 4.7 s frozen frame at
-the pass, kept; `DRAGON_PREFETCH=0` turns it off.
+streams through, not the CPU it is given. On one core (the Pi) a run now
+builds all of its valleys while it loads instead (`App::prefetch_valley`;
+with more cores the thread stays, where it costs the frames nothing;
+`DRAGON_PREFETCH=0|load|thread` to choose). A three-valley run's loading
+is 8 s longer on the Pi; a pass 1.4 s, and flying 29.1 fps over 6,000
+frames. Frames byte-identical in all three modes on ANGLE.
+
+The erosion, three times a load now, again bit-identical (the goldens):
+the talus sweep computes a cell's eight excesses before acting on them,
+so they pipeline instead of each compare stalling the VFP on the one
+before, and tests them by their sign bits, which costs no VFP flag
+transfer (2.62 -> 1.31 s of a valley); the priority flood keys its heap
+by the height's bits and the index in one integer (0.83 -> 0.69 s).
+4.7 -> 3.2 s a valley.
+
+Start-up, timed by `DRAGON_LOG_TIME=1` (each log line stamped with the
+seconds since launch): the ground's detail texture was a 1024x1024 PNG
+decoded and halved four times on the Pi to reach 64 texels -- 2.1 s;
+`tools/pi/deploy.sh` now ships it at 512, the most any tier there uses,
+halved as the engine halves (`tools/pi/halve_texture.py`, frames
+byte-identical at ff and sm2), 0.9 s; and the files read whole
+(`core::paths::read_bytes`) rather than a byte at a time. The modern
+tier's ground scans no longer go to the Pi (73 -> 57 MB).
 
 **Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws

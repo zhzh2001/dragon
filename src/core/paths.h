@@ -10,6 +10,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace core::paths {
 
@@ -36,5 +37,9 @@ std::string user_or_asset(std::string_view rel);
 // else relative to the data root's parent, so the `assets/<name>.glb` spelling
 // every doc uses works from any working directory and inside a package.
 std::string resolve_cli(const std::string& path);
+
+// A whole file's bytes, in one read (empty if it cannot be read). Through
+// istreambuf_iterator a file came in a byte at a time, which the Pi 1B felt.
+std::vector<uint8_t> read_bytes(const std::string& path);
 
 }  // namespace core::paths

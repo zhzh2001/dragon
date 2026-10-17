@@ -16,7 +16,14 @@ mkdir -p "$stage/assets/props" "$stage/shaders"
 "$(ls /opt/homebrew/share/android-ndk/toolchains/llvm/prebuilt/*/bin/llvm-strip | head -1)" \
   -o "$stage/dragon" build-pi/dragon
 for tier in sm2 sm2-noshadows ff; do python3 tools/gles/bake_gles.py "$stage/shaders" --tier $tier >/dev/null; done
-rsync -a assets/textures assets/fonts assets/species "$stage/assets/"
+# Not the modern tier's ground scans (terrain_rock and the rest), which only
+# it reads; terrain_detail at 512, the most any tier here uses -- decoding
+# the 1024 one and halving it was 2 s of the Pi's start-up -- halved as the
+# engine halves, so the same mips (tools/pi/halve_texture.py).
+rsync -a --exclude='terrain_rock.png' --exclude='terrain_scree.png' --exclude='terrain_grass.png' \
+  --exclude='terrain_forest.png' --exclude='terrain_gravel.png' assets/textures assets/fonts assets/species "$stage/assets/"
+python3 tools/pi/halve_texture.py assets/textures/terrain_detail.png "$stage/assets/textures/terrain_detail.png" --max 512
+rm -f "$stage"/assets/textures/terrain_{rock,scree,grass,forest,gravel}.png  # from a stage made before
 rsync -a --include='*.glb' --exclude='*' assets/props/ "$stage/assets/props/"
 for s in $species; do
   if [ ! "$stage/assets/$s.glb" -nt "assets/$s.glb" ]; then
