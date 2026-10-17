@@ -71,7 +71,7 @@ constexpr float WORLD_SCALE[QUALITY_LEVELS] = {1.0f, 1.0f, 0.85f, 0.7f, 0.5f, 0.
 constexpr float VIEW_DISTANCE[QUALITY_LEVELS] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2500.0f};
 constexpr uint32_t FRAME_HEIGHT[QUALITY_LEVELS] = {0, 0, 1080, 900, 720, 540, 0};
 
-const char* const PRESET_NAMES[PRESET_COUNT] = {"ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone"};
+const char* const PRESET_NAMES[PRESET_COUNT] = {"ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone", "pi"};
 
 // The cheapest level a tier is offered, per setting. Above it the tier's
 // cards run out of memory or vertex constants long before the budget
@@ -93,6 +93,12 @@ int tier_floor(Setting setting, Tier tier) {
 // the terrain, whose Very low is Low; and the resolution, whole through
 // Medium, 85% at Low and 70% at Very low (50% is offered, not preset).
 int preset_to_level(Setting setting, int preset) {
+    if (preset == PI_PRESET) {
+        if (setting == Setting::Frame) return 5;       // 540 lines
+        if (setting == Setting::Resolution) return 0;  // the world whole: 24.3 fps against 25.3 at 50%
+        if (setting == Setting::Clouds || setting == Setting::Ambient) return 4;  // painted; off
+        return preset_to_level(setting, 5);            // Minimal's content
+    }
     // Phone's own three: whole in every level preset.
     if (setting == Setting::Clouds || setting == Setting::Ambient || setting == Setting::Frame) {
         return preset == PHONE_PRESET ? 4 : 0;  // painted; off; 720 lines

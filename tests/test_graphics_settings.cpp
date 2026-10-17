@@ -97,6 +97,18 @@ int main() {
         CHECK(b.volumetric_clouds && b.ambient_occlusion && b.frame_height == 0);
     }
     CHECK(parse_preset("phone", &level) && level == PHONE_PRESET);
+    // Pi: Minimal's content, the frame at 540 lines with the world whole in it.
+    {
+        const GraphicsSettings pi = GraphicsSettings::preset(PI_PRESET, Tier::FixedFunction, big);
+        const GraphicsSettings minimal = GraphicsSettings::preset(5, Tier::FixedFunction, big);
+        CHECK(pi.preset_level(Tier::FixedFunction, big) == PI_PRESET);
+        CHECK(pi[Setting::Frame] == 5);
+        CHECK(pi[Setting::Resolution] == 0);
+        CHECK(pi[Setting::Models] == minimal[Setting::Models]);
+        CHECK(pi[Setting::Terrain] == minimal[Setting::Terrain]);
+        CHECK(pi[Setting::Trees] == minimal[Setting::Trees]);
+        CHECK(parse_preset("pi", &level) && level == PI_PRESET);
+    }
 
     // Saved and read back; unknown keys and bad values are ignored.
     GraphicsSettings g = GraphicsSettings::preset(3, Tier::SM3, big);

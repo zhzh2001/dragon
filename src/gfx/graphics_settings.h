@@ -37,7 +37,14 @@ constexpr int QUALITY_LEVELS = 7;
 // lines and stretched to the screen, the world at 70% of it. The default on
 // Android.
 constexpr int PHONE_PRESET = QUALITY_LEVELS;
-constexpr int PRESET_COUNT = QUALITY_LEVELS + 1;
+// And Pi (docs/porting/MOBILE.md, M5): Minimal's content, the frame at 540
+// lines (on a console the display mode follows: 640x480 on a 1080p
+// monitor) with the world whole in it, the painted slab and no ambient
+// occlusion. The default of the Pi build (DRAGON_GLES_DEFAULT): as a patch
+// over Minimal at start-up, picking any preset in the panel dropped it, and
+// the Pi came back at 1080p.
+constexpr int PI_PRESET = QUALITY_LEVELS + 1;
+constexpr int PRESET_COUNT = QUALITY_LEVELS + 2;
 
 // What a setting needs to change: drawn next frame, re-planted or re-meshed
 // at once, or loaded again at start-up.
@@ -51,7 +58,7 @@ struct SettingInfo {
 };
 const SettingInfo& setting_info(Setting setting);
 
-const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone"
+const char* preset_name(int level);  // "ultra", "high", "medium", "low", "very-low", "minimal", "lowest", "phone", "pi"
 bool parse_preset(const std::string& name, int* level);
 
 // What the device offers beyond its tier.

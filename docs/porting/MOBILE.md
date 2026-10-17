@@ -516,6 +516,24 @@ A pass with the next valley ready: 9-11 s -> **1.0 s** (`valley N built
 in` in the log says which). A new run after a death still generates its
 valley then, since its seed is drawn at that moment.
 
+**The second playtest** ran at 20 fps from the start of a run, and the
+Graphics panel was the cause: its tier list had no fixed function, so any
+edit saved `tier=sm2` (40% slower on the Pi); the Pi's 540-line frame and
+whole world were a patch over Minimal at start-up, so picking a preset
+dropped them (Native: a 1920x1080 mode); and its window list cannot set a
+console's mode, which follows Frame height. Now the Pi's settings are a
+preset of their own, `pi` (`gfx::PI_PRESET`, the build's default), the
+tier list has fixed function (GLES offers sm2 and ff alone, and `gles` is
+in the renderer list), and on a console the window list is a line saying
+which mode is in force. The Pi's saved file from the buggy panel is
+`graphics.cfg.before-panel-fix` beside the new one.
+
+The prefetch of the next valley costs about 2 fps while it runs, the first
+three minutes or so of a valley (27.6 against 25.6 over a run's first
+1,200 frames); at nice 19 about as much, so it is the memory the erosion
+streams through, not the CPU it is given. Against a 4.7 s frozen frame at
+the pass, kept; `DRAGON_PREFETCH=0` turns it off.
+
 **Next on the Pi**: alsa-lib's IEC958 framing and miniaudio's copies (the rest of
 the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
 a frame at 100-200 us; foliage is the most expensive left).

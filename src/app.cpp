@@ -174,7 +174,8 @@ Options parse_options(int argc, char** argv) {
             options.open_panel = argv[++i];  // e.g. graphics: starts expanded, for a capture
         } else if (arg == "--preset" && i + 1 < argc) {
             if (!gfx::parse_preset(argv[++i], &options.preset)) {
-                SDL_Log("--preset: expected ultra, high, medium, low or very-low, got '%s'", argv[i]);
+                SDL_Log("--preset: expected ultra, high, medium, low, very-low, minimal, lowest, phone or pi, got '%s'",
+                        argv[i]);
             }
         } else if (arg == "--graphics" && i + 1 < argc) {
             // key=level[,key=level...], e.g. models=3,shadows=4 (gfx/graphics_settings.h).
@@ -482,16 +483,12 @@ bool App::init(const Options& options) {
     // device can do (gfx/graphics_settings.h).
     device_limits_.max_texture_size = device_.rhi().max_texture_size();
     device_limits_.sampled_depth = device_.rhi().supports_format(rhi::Format::D16, rhi::TEXTURE_DEPTH_TARGET | rhi::TEXTURE_SAMPLED);
-    graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
 #ifdef DRAGON_GLES_DEFAULT
-    // On the Pi the frame at 540 lines at most, whatever the monitor's mode:
-    // VC4 fills a 1080p frame's post and HUD at a fraction of the frame
-    // rate. On a console the display mode follows (640x480 on a 1080p
-    // monitor, gfx::Device::fit_display_mode), and the world is drawn at
-    // that size, not half of it: 24.3 fps against 25.3, for four times the
-    // pixels.
-    graphics_[gfx::Setting::Frame] = 5;
-    graphics_[gfx::Setting::Resolution] = 0;
+    // The Pi's own preset (gfx/graphics_settings.h): VC4 fills a 1080p
+    // frame's post and HUD at a fraction of the frame rate.
+    graphics_ = gfx::GraphicsSettings::preset(gfx::PI_PRESET, tier_.tier, device_limits_);
+#else
+    graphics_ = gfx::GraphicsSettings::preset(gfx::default_preset(tier_.tier), tier_.tier, device_limits_);
 #endif
     if (!saved.empty()) graphics_.parse(saved);
     if (options.preset >= 0) graphics_ = gfx::GraphicsSettings::preset(options.preset, tier_.tier, device_limits_);
@@ -1338,8 +1335,17 @@ void App::build_graphics_ui() {
     ImGui::Text("%s, tier %s   %.1f ms (%.0f fps)", device_.rhi().driver_name(), tier_.name(), ms,
                 ms > 0.0f ? 1000.0f / ms : 0.0f);
 
-    // The window and the readout: in force at once, and remembered.
-    if (!options_.headless && device_.window()) {
+    // The window and the readout: in force at once, and remembered. On a
+    // console the window is the display, whose mode follows Frame height
+    // (gfx::Device::fit_display_mode): a size chosen here could not stick.
+    const char* video = SDL_GetCurrentVideoDriver();
+    const bool console = video && SDL_strcmp(video, "kmsdrm") == 0;
+    if (console && device_.window()) {
+        int w = 0, h = 0;
+        SDL_GetWindowSize(device_.window(), &w, &h);
+        ImGui::TextDisabled("display %dx%d: the mode follows Frame height", w, h);
+    }
+    if (!options_.headless && device_.window() && !console) {
         static const int SIZES[][2] = {{640, 480},   {800, 600},   {1024, 768},  {1280, 720},
                                        {1280, 1024}, {1600, 900},  {1920, 1080}, {2560, 1440}};
         int w = 0, h = 0;
@@ -1374,6 +1380,8 @@ void App::build_graphics_ui() {
     static const char* const DRIVERS[] = {"direct3d12", "vulkan", "direct3d11", "direct3d9"};
 #elif defined(__APPLE__)
     static const char* const DRIVERS[] = {"metal"};
+#elif defined(DRAGON_GLES_DEFAULT)
+    static const char* const DRIVERS[] = {"gles"};
 #else
     static const char* const DRIVERS[] = {"vulkan"};
 #endif
@@ -1383,14 +1391,22 @@ void App::build_graphics_ui() {
         for (const char* d : DRIVERS) {
             if (ImGui::Selectable(d, driver_pending_ == d)) driver_pending_ = d;
         }
+#if defined(DRAGON_GLES) && !defined(DRAGON_GLES_DEFAULT)
+        if (ImGui::Selectable("gles", driver_pending_ == "gles")) driver_pending_ = "gles";
+#endif
         ImGui::EndCombo();
     }
-    // Every tier previews on the modern backends; D3D9 runs the retro ones.
-    const gfx::Tier tiers[] = {gfx::Tier::Modern, gfx::Tier::SM3, gfx::Tier::SM2};
+    // Every tier previews on the modern backends; D3D9 runs the retro ones,
+    // GLES the LDR ones. Fixed function was missing from the list, so any
+    // edit on the Pi saved its tier as sm2, 40% slower there.
+    const gfx::Tier tiers[] = {gfx::Tier::Modern, gfx::Tier::SM3, gfx::Tier::SM2, gfx::Tier::FixedFunction};
+    const bool gles = driver_pending_ == "gles";
     if (d3d9 && tier_pending_ == gfx::Tier::Modern) tier_pending_ = gfx::Tier::SM3;
+    if (gles && (tier_pending_ == gfx::Tier::Modern || tier_pending_ == gfx::Tier::SM3)) tier_pending_ = gfx::Tier::SM2;
     if (ImGui::BeginCombo("tier *", gfx::RenderTier::make(tier_pending_).name())) {
         for (gfx::Tier t : tiers) {
             if (d3d9 && t == gfx::Tier::Modern) continue;
+            if (gles && (t == gfx::Tier::Modern || t == gfx::Tier::SM3)) continue;
             if (ImGui::Selectable(gfx::RenderTier::make(t).name(), tier_pending_ == t)) tier_pending_ = t;
         }
         ImGui::EndCombo();
