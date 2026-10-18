@@ -2,6 +2,8 @@
 
 #include <SDL3/SDL_filesystem.h>
 
+#include <bit>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -84,6 +86,7 @@ public:
     core::Vec4 vec4() { core::Vec4 v; v.x = f32(); v.y = f32(); v.z = f32(); v.w = f32(); return v; }
     core::Quat quat() { core::Quat q; q.x = f32(); q.y = f32(); q.z = f32(); q.w = f32(); return q; }
     core::Mat4 mat4() { core::Mat4 m; for (core::Vec4& c : m.col) c = vec4(); return m; }
+    void block(void* out, size_t size) { raw(out, size); }
     // A count that must leave room for `each` bytes per element.
     uint32_t count(size_t each) {
         const uint32_t n = u32();
@@ -139,18 +142,19 @@ void write_mesh(Writer& w, const SkinnedMeshData& mesh) {
 
 void read_mesh(Reader& r, SkinnedMeshData& mesh) {
     constexpr size_t VERTEX_BYTES = 12 + 12 + 12 + 8 + 16 + 4 + 16;
+    // A packed vertex is SkinnedVertex's own bytes, field for field, and
+    // every target is little-endian: the vertices and the indices are read
+    // as one copy each. Field by field, the packs were 0.3 s of the Pi 1B's
+    // start-up.
+    static_assert(sizeof(SkinnedVertex) == VERTEX_BYTES && offsetof(SkinnedVertex, normal) == 12 &&
+                  offsetof(SkinnedVertex, color) == 24 && offsetof(SkinnedVertex, uv) == 36 &&
+                  offsetof(SkinnedVertex, tangent) == 44 && offsetof(SkinnedVertex, joints) == 60 &&
+                  offsetof(SkinnedVertex, weights) == 64);
+    static_assert(std::endian::native == std::endian::little);
     mesh.vertices.resize(r.count(VERTEX_BYTES));
-    for (SkinnedVertex& v : mesh.vertices) {
-        v.position = r.vec3();
-        v.normal = r.vec3();
-        v.color = r.vec3();
-        v.uv = r.vec2();
-        v.tangent = r.vec4();
-        for (uint8_t& j : v.joints) j = r.u8();
-        for (float& weight : v.weights) weight = r.f32();
-    }
+    r.block(mesh.vertices.data(), mesh.vertices.size() * VERTEX_BYTES);
     mesh.indices.resize(r.count(4));
-    for (uint32_t& i : mesh.indices) i = r.u32();
+    r.block(mesh.indices.data(), mesh.indices.size() * 4);
     mesh.submeshes.resize(r.count(6 * 4));
     for (SkinnedSubmesh& s : mesh.submeshes) {
         s.index_offset = r.u32();
