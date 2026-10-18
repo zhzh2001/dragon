@@ -583,7 +583,17 @@ private:
     // Taken by advance_valley, adopted by regenerate_terrain in place of
     // generating.
     void prefetch_valley(int depth);
-    game::TerrainSettings valley_terrain(int depth) const;  // what advance_valley derives
+    // What advance_valley derives for a valley `depth` into the run of
+    // `run_seed` (0: this one).
+    game::TerrainSettings valley_terrain(int depth, uint32_t run_seed = 0) const;
+    // The next run's valleys, built behind the results of the one that
+    // ended (on its own thread; one core gives it most of that core), and
+    // taken by start_run when it starts that run: a new run on the Pi 1B
+    // waited 11 s for its three valleys after Enter.
+    void prebuild_next_run();
+    uint32_t next_run_seed();  // the seed they were built for, or a fresh one
+    uint32_t next_run_seed_ = 0;
+    std::future<std::vector<game::Terrain>> next_run_build_;
     std::future<game::Terrain> terrain_prefetch_;
     int terrain_prefetch_depth_ = -1;
     uint32_t terrain_prefetch_run_ = 0;

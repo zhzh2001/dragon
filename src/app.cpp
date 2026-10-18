@@ -1799,6 +1799,12 @@ void App::frame_camera_on_valley() {
 }
 
 void App::shutdown() {
+    // A build still running is left to the process's exit, not waited for:
+    // the next run's valleys, behind the results on the Pi 1B, were up to
+    // 12 s of it after Esc.
+    if (next_run_build_.valid() && next_run_build_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        new std::future<std::vector<game::Terrain>>(std::move(next_run_build_));
+    }
     audio_.shutdown();
     // A window dragged to a new size opens at it next time.
     if (!options_.headless && device_.window() && !relaunch_ && !fullscreen_) {
@@ -2406,7 +2412,7 @@ void App::update(float dt) {
         if (run_mode_ && input_.pressed(SDL_SCANCODE_RETURN) &&
             (hoard_run_.phase() == game::HoardPhase::Banked ||
              hoard_run_.phase() == game::HoardPhase::Lost)) {
-            start_run(fresh_seed());
+            start_run(next_run_seed());
         }
 
         // The head turns toward whatever is locked, so the dragon visibly looks
@@ -2711,11 +2717,12 @@ void App::update(float dt) {
         const bool run_over = run_mode_ && (hoard_run_.phase() == game::HoardPhase::Banked ||
                                             hoard_run_.phase() == game::HoardPhase::Lost);
         const bool match_over = match_.phase() == game::MatchPhase::Results;
+        if (run_over) prebuild_next_run();
         if (autopilot_ && (run_over || match_over)) {
             demo_restart_timer_ += dt;
             if (demo_restart_timer_ > 6.0f) {
                 demo_restart_timer_ = 0.0f;
-                if (run_over) start_run(fresh_seed());
+                if (run_over) start_run(next_run_seed());
                 else start_match();
                 demo_.reset(uint32_t(frame_index_) * 2654435761u + 7u);
                 for (float& t : demo_.time_in) t = 0.0f;
@@ -4735,6 +4742,18 @@ void App::start_run(uint32_t seed) {
     // Back to the dragon's own breath: clearing the flags alone left the
     // last run's second element in combat -- a fire dragon restarted as frost.
     refresh_player_element();
+    // The valleys built behind the last run's results, if this is the run
+    // they were built for: what is left of them is waited for here.
+    std::vector<game::Terrain> prebuilt;
+    if (seed == next_run_seed_) {
+        if (next_run_build_.valid()) {
+            const uint64_t waited = SDL_GetTicksNS();
+            prebuilt = next_run_build_.get();
+            LOG_INFO("run: %zu valleys built behind the results, %.0f ms more waited for", prebuilt.size(),
+                     double(SDL_GetTicksNS() - waited) * 1e-6);
+        }
+        next_run_seed_ = 0;
+    }
     run_seed_ = seed;
     run_seed_input_ = int(seed & 0x7fffffffu);
     last_run_record_ = false;
@@ -4754,8 +4773,16 @@ void App::start_run(uint32_t seed) {
     }
     if (terrain_run_seed_ != seed) {
         terrain_settings_ = terrain;
+        if (!prebuilt.empty()) adopt_terrain_ = std::move(prebuilt[0]);
         regenerate_terrain();
         terrain_run_seed_ = seed;
+    }
+    if (prebuilt.size() > 1) {
+        terrain_loaded_.clear();
+        terrain_loaded_run_ = seed;
+        for (size_t depth = 1; depth < prebuilt.size(); ++depth) {
+            terrain_loaded_.emplace(int(depth), std::move(prebuilt[depth]));
+        }
     }
     hoard_run_.settings = settings;
     hoard_run_.start(terrain_, terrain_settings_.half_extent);
@@ -4851,8 +4878,8 @@ bool App::defence_is_spire(int defence) const {
     return spire_prop_.ok && defences[size_t(defence)].guards < 0 && defence % 2 == 1;
 }
 
-game::TerrainSettings App::valley_terrain(int depth) const {
-    const uint32_t seed = game::valley_seed(run_seed_, depth);
+game::TerrainSettings App::valley_terrain(int depth, uint32_t run_seed) const {
+    const uint32_t seed = game::valley_seed(run_seed ? run_seed : run_seed_, depth);
     game::HoardRunSettings run = run_dials_;
     run.seed = seed;
     game::TerrainSettings terrain = arena_terrain_;
@@ -4909,6 +4936,26 @@ void App::prefetch_valley(int depth) {
         game::Terrain terrain;
         terrain.generate(settings);
         return terrain;
+    });
+#endif
+}
+
+uint32_t App::next_run_seed() {
+    return next_run_seed_ ? next_run_seed_ : fresh_seed();
+}
+
+void App::prebuild_next_run() {
+#ifndef DRAGON_XP
+    const char* mode = SDL_getenv("DRAGON_PREFETCH");
+    if (next_run_seed_ || (mode && mode[0] == '0')) return;
+    next_run_seed_ = fresh_seed();
+    std::vector<game::TerrainSettings> valleys;
+    for (int depth = 0; depth < run_dials_.valleys; ++depth) valleys.push_back(valley_terrain(depth, next_run_seed_));
+    next_run_build_ = std::async(std::launch::async, [valleys] {
+        core::flush_denormals();  // the main thread's rounding (prefetch_valley)
+        std::vector<game::Terrain> built(valleys.size());
+        for (size_t i = 0; i < valleys.size(); ++i) built[i].generate(valleys[i]);
+        return built;
     });
 #endif
 }
@@ -7419,7 +7466,7 @@ void App::build_combat_ui() {
                     hoard_run_.kills(), hoard_run_.hunters_loosed(), hoard_run_.elapsed());
         if (ImGui::Button("retry (R)")) start_run(run_seed_);
         ImGui::SameLine();
-        if (ImGui::Button("new valley (enter)")) start_run(fresh_seed());
+        if (ImGui::Button("new valley (enter)")) start_run(next_run_seed());
         ImGui::SameLine();
         if (ImGui::Button("leave run")) end_run();
         ImGui::SameLine();
@@ -8378,6 +8425,7 @@ void App::run() {
     // DRAGON_FRAME_PROFILE=N (past 1): from frame N, so one stretch of a
     // headless run (the same frames every time) can be profiled alone.
     const uint64_t profile_from = phase_profile ? std::max<uint64_t>(60, uint64_t(SDL_atoi(SDL_getenv("DRAGON_FRAME_PROFILE")))) : 60;
+    const bool single_core = SDL_GetNumLogicalCPUCores() <= 1;
     enum Phase { PH_EVENTS, PH_UPDATE, PH_UI, PH_RENDER, PH_PRESENT, PH_COUNT };
     static const char* const PHASE_NAMES[PH_COUNT] = {"events", "update", "ui build", "render", "present"};
     double phase_ns[PH_COUNT] = {};
@@ -8450,6 +8498,12 @@ void App::run() {
             lap(PH_RENDER);
             device_.end_frame();
             lap(PH_PRESENT);
+        }
+        // One core, the next run building behind the results: the results
+        // at a few frames a second, the build with most of the core.
+        if (single_core && next_run_build_.valid() &&
+            next_run_build_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            SDL_Delay(100);
         }
         if (frame_index_ >= profile_from) ++phase_frames;
         if (frame_index_ + 1 == profile_from) {
