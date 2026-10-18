@@ -362,6 +362,13 @@ bool Audio::init() {
     // by ALSA's plug: on the Pi 1B's HDMI that generic float converter (into
     // IEC958 frames) was a third of the audio thread.
     config.alsa.noAutoFormat = MA_TRUE;
+    // The mix ends in soft_clip, inside +-1 already: miniaudio's clip pass
+    // was a second one. And the mixer takes any number of frames, so
+    // miniaudio need not gather fixed-size periods through a buffer of its
+    // own -- a copy of every sample. Both were a tenth of the Pi 1B's
+    // audio thread.
+    config.noClip = MA_TRUE;
+    config.noFixedSizedCallback = MA_TRUE;
 #if defined(__arm__)
     // A single 700 MHz core (the Pi 1B) shares its time with a main thread
     // that spends whole milliseconds inside the GL driver: longer periods,
