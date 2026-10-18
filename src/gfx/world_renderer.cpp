@@ -172,6 +172,28 @@ SkinBlock make_skin_block(const std::vector<core::Mat4>& joints) {
     return block;
 }
 
+// A draw's joints pushed in the tier's layout: `palette`'s (null, the
+// skeleton's own order), as make_palette_block or make_skin_block would
+// give them. A packed block is filled straight from the joints: built
+// through the full block, every skinned draw on the Pi 1B zeroed, filled
+// and read back 16 KB to send 3.
+void push_joints(Device& device, const std::vector<core::Mat4>& joints, const std::vector<uint16_t>* palette) {
+    if (!active_tier().packed_joints) {
+        push_skin(device, palette ? make_palette_block(joints, *palette) : make_skin_block(joints));
+        return;
+    }
+    static const core::Mat4 identity = core::Mat4::identity();
+    PackedSkinBlock packed;
+    for (size_t j = 0; j < PACKED_JOINT_LIMIT; ++j) {
+        const size_t index = palette ? (j < palette->size() ? size_t((*palette)[j]) : joints.size()) : j;
+        const core::Mat4& m = index < joints.size() ? joints[index] : identity;
+        for (int r = 0; r < 3; ++r) {
+            packed.rows[j * 3 + size_t(r)] = core::Vec4{m.col[0][r], m.col[1][r], m.col[2][r], m.col[3][r]};
+        }
+    }
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 2, &packed, sizeof(PackedSkinBlock));
+}
+
 }  // namespace
 
 // The largest skinned caster's reach from its origin, in metres: a dragon's
@@ -457,7 +479,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
     // pushes each submesh's palette instead (below), over this.
     bool whole = false;
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) whole |= submesh.index_count && submesh.palette.empty();
-    if (whole) push_skin(device, make_skin_block(joints));
+    if (whole) push_joints(device, joints, nullptr);
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(device.rhi(), pass);
 
@@ -503,10 +525,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
         }
         if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 4);
 
-        if (!submesh.palette.empty()) {
-            const SkinBlock palette = make_palette_block(joints, submesh.palette);
-            push_skin(device, palette);
-        }
+        if (!submesh.palette.empty()) push_joints(device, joints, &submesh.palette);
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }
@@ -536,11 +555,10 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     rhi::Pipeline* pipeline = pipelines_->get(skinned_depth_);
     if (!pipeline) return;
 
-    const SkinBlock block = make_skin_block(joints);
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
-    push_skin(device, block);
+    push_joints(device, joints, nullptr);
     mesh.bind(device.rhi(), pass);
     const bool split = !mesh.submeshes().empty() && !mesh.submeshes().front().palette.empty();
     if (!split) {
@@ -550,8 +568,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     // A palette-split mesh draws batch by batch, each with its own joints.
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
         if (submesh.index_count == 0) continue;
-        const SkinBlock palette = make_palette_block(joints, submesh.palette);
-        push_skin(device, palette);
+        push_joints(device, joints, &submesh.palette);
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }

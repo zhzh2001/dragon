@@ -57,6 +57,10 @@ struct GlBuffer {
     // per-instance attributes from here (no divisors in GLES 2.0).
     std::vector<uint8_t> shadow;
     std::vector<uint8_t> staging;  // map_upload's
+    // A vertex buffer filled each frame: the GL buffers it rotates through
+    // (commit_upload), `id` the one last filled.
+    std::vector<GLuint> ring;
+    size_t ring_next = 0;
     // An index buffer's contents as 16-bit indices, when every index fits:
     // VC4 fetches only 16-bit indices, and Mesa meets OES_element_index_uint
     // by converting a 32-bit buffer on the CPU at every draw -- reading it
@@ -349,6 +353,7 @@ const char* kBlitFragment =
 constexpr int kMaxSlots = 8;
 constexpr int kMaxTextures = 16;
 constexpr int kMaxAttributes = 16;
+constexpr size_t kUploadRing = 3;  // frames a per-frame vertex buffer rotates through
 
 // ---- the device --------------------------------------------------------------
 
@@ -526,9 +531,12 @@ public:
     void destroy(Buffer* buffer) override {
         if (!buffer) return;
         GlBuffer* b = gl(buffer);
-        if (array_buffer_ == b->id) array_buffer_ = 0;
+        if (b->ring.empty()) b->ring.push_back(b->id);
+        for (GLuint id : b->ring) {
+            if (array_buffer_ == id) array_buffer_ = 0;
+            glDeleteBuffers(1, &id);
+        }
         attributes_valid_ = false;  // a new buffer may take its address
-        glDeleteBuffers(1, &b->id);
         if (b->narrow) glDeleteBuffers(1, &b->narrow);
         untrack(b);
         delete b;
@@ -544,11 +552,35 @@ public:
         GlBuffer* b = gl(buffer);
         size = std::min(size, b->size);
         const GLenum target = b->usage == BufferUsage::Index ? GL_ELEMENT_ARRAY_BUFFER : GL_ARRAY_BUFFER;
+        if (b->usage == BufferUsage::Vertex) {
+            // A vertex buffer filled each frame writes into the oldest of
+            // kUploadRing buffers, which the GPU is done with. Orphaning one
+            // buffer gave vc4 new memory each frame, and the particles'
+            // 16-35 KB took 0.7-1.5 ms of the Pi 1B's frame; 0.5 ms this way.
+            if (b->ring.empty()) b->ring.push_back(b->id);
+            if (b->ring.size() < kUploadRing) {
+                GLuint id = 0;
+                glGenBuffers(1, &id);
+                bind_buffer(target, id);
+                glBufferData(target, b->size, nullptr, GL_STREAM_DRAW);
+                b->ring.push_back(id);
+                b->ring_next = b->ring.size() - 1;
+            } else {
+                b->ring_next = (b->ring_next + 1) % b->ring.size();
+            }
+            b->id = b->ring[b->ring_next];
+            bind_buffer(target, b->id);
+            glBufferSubData(target, 0, size, b->staging.data());
+            // The staging copy becomes the shadow, rather than copied into it.
+            if (b->staging.size() < b->size) b->staging.resize(b->size);
+            b->shadow.swap(b->staging);
+            attributes_valid_ = false;  // the buffer behind the handle changed
+            return;
+        }
         bind_buffer(target, b->id);
         // Orphan, then fill: the previous contents may still be in flight.
         glBufferData(target, b->size, nullptr, GL_STREAM_DRAW);
         glBufferSubData(target, 0, size, b->staging.data());
-        if (b->usage == BufferUsage::Vertex) std::memcpy(b->shadow.data(), b->staging.data(), size);
         if (b->usage == BufferUsage::Index) {
             // Rewritten: the 16-bit copy is stale.
             b->indices.assign(reinterpret_cast<const uint32_t*>(b->staging.data()),
@@ -606,6 +638,7 @@ public:
     void destroy(Texture* texture) override {
         if (!texture) return;
         GlTexture* t = gl(texture);
+        if (last_color_ == t || last_depth_ == t) last_color_ = last_depth_ = nullptr;
         for (auto it = framebuffers_.begin(); it != framebuffers_.end();) {
             if (it->first.first == t || it->first.second == t) {
                 glDeleteFramebuffers(1, &it->second);
@@ -755,6 +788,16 @@ public:
         GlTexture* depth = gl(desc.depth);
         pass_ = GlPass{};
         pass_.framebuffer = framebuffer(color, depth);
+        // A pass without depth onto the colour the last pass drew with
+        // depth (the UI onto the world) draws in that pass's framebuffer,
+        // its depth attached and unused. vc4 keeps one job per framebuffer:
+        // a second one ended the world's job, stored the frame and loaded
+        // it back into the tiles for the HUD, 0.6 ms of the Pi 1B's frame.
+        if (color && !depth && !desc.clear_color && color == last_color_ && last_depth_) {
+            pass_.framebuffer = framebuffer(color, last_depth_);
+        }
+        last_color_ = color;
+        last_depth_ = depth;
         pass_.width = color ? color->desc.width : depth ? depth->desc.width : 0;
         pass_.height = color ? color->desc.height : depth ? depth->desc.height : 0;
         pass_.discard_depth = depth && !desc.keep_depth && discard_;
@@ -1206,6 +1249,8 @@ private:
     std::vector<std::pair<std::pair<GlTexture*, GlTexture*>, GLuint>> framebuffers_;
 
     GlPass pass_;
+    GlTexture* last_color_ = nullptr;  // the last pass's attachments (begin_pass)
+    GlTexture* last_depth_ = nullptr;
     GlPipeline* bound_pipeline_ = nullptr;
     BufferBinding vertex_buffers_[kMaxSlots] = {};
     BufferBinding index_buffer_;
