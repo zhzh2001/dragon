@@ -47,9 +47,19 @@ float Noise::gradient_dot(int ix, int iy, float dx, float dy) const {
     }
 }
 
+namespace {
+// int(std::floor(x)) for any x an int holds, without the call: the Pi 1B's
+// VFP has no rounding instruction, and floorf in software was 2% of its
+// start-up, most of it here.
+inline int floor_int(float x) {
+    const int i = int(x);
+    return i - int(x < float(i));
+}
+}  // namespace
+
 float Noise::perlin(float x, float y) const {
-    const int ix = int(std::floor(x));
-    const int iy = int(std::floor(y));
+    const int ix = floor_int(x);
+    const int iy = floor_int(y);
     const float fx = x - float(ix);
     const float fy = y - float(iy);
 
