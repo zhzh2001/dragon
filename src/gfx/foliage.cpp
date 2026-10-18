@@ -666,6 +666,10 @@ void Foliage::build_batches(Device& device, StaticSet& set, const std::vector<Fo
     const size_t coarse = set.coarse_indices > 0 ? std::min<size_t>(set.coarse_indices, src.indices.size())
                                                  : src.indices.size();
     const size_t per_batch = 0x10000 / nv;  // 16-bit indices, from the batch's first vertex
+    // Batches share a vertex base -- a page -- while their vertices fit
+    // 16-bit indices from it, so the draw can join neighbouring cells'
+    // batches (draw_static).
+    size_t page = 0;
     std::vector<MeshVertex> vertices;
     std::vector<FoliageInstance> instances;
     std::vector<uint16_t> indices;
@@ -676,8 +680,10 @@ void Foliage::build_batches(Device& device, StaticSet& set, const std::vector<Fo
         cell.batch_first = uint32_t(set.batches.size());
         for (uint32_t first = cell.first; first < cell.first + cell.count; first += uint32_t(per_batch)) {
             const uint32_t n = std::min(uint32_t(per_batch), cell.first + cell.count - first);
+            if (vertices.size() - page + size_t(n) * nv > 0x10000) page = vertices.size();
+            const size_t base = vertices.size() - page;
             Batch b;
-            b.first_vertex = uint32_t(vertices.size());
+            b.first_vertex = uint32_t(page);
             b.first_index = uint32_t(indices.size());
             for (uint32_t i = 0; i < n; ++i) {
                 vertices.insert(vertices.end(), src.vertices.begin(), src.vertices.end());
@@ -686,7 +692,7 @@ void Foliage::build_batches(Device& device, StaticSet& set, const std::vector<Fo
             for (int part = 0; part < 2; ++part) {
                 const size_t from = part == 0 ? 0 : coarse, to = part == 0 ? coarse : src.indices.size();
                 for (uint32_t i = 0; i < n; ++i) {
-                    for (size_t k = from; k < to; ++k) indices.push_back(uint16_t(src.indices[k] + i * nv));
+                    for (size_t k = from; k < to; ++k) indices.push_back(uint16_t(base + src.indices[k] + i * nv));
                 }
             }
             b.coarse = uint32_t(n * coarse);
@@ -720,6 +726,23 @@ uint32_t Foliage::draw_static(Device& device, rhi::Pass* pass, const StaticSet& 
         rhi.bind_pipeline(pass, pipeline);
     }
     uint32_t drawn = 0;
+    // Batches on one page whose indices run on, cell after visible cell,
+    // are one draw (at fixed function a batch is only coarse cards, so they
+    // do): the same triangles in the same order. Mesa's vc4 charges the Pi
+    // 1B by the draw, not by its size.
+    Batch pending;
+    uint32_t pending_count = 0;
+    const auto flush = [&] {
+        if (pending_count == 0) return;
+        rhi::BufferBinding vb[2] = {};
+        vb[0].buffer = set.batch_vertices;
+        vb[0].offset = pending.first_vertex * uint32_t(sizeof(MeshVertex));
+        vb[1].buffer = set.batch_instances;
+        vb[1].offset = pending.first_vertex * uint32_t(sizeof(FoliageInstance));
+        rhi.bind_vertex_buffers(pass, 0, vb, 2);
+        rhi.draw_indexed(pass, pending_count, 1, pending.first_index, 0, 0);
+        pending_count = 0;
+    };
     if (batched) rhi.bind_index_buffer(pass, rhi::BufferBinding{set.batch_indices, 0}, rhi::IndexSize::U16);
     if (!batched) {
         set.mesh.bind(rhi, pass);
@@ -736,13 +759,13 @@ uint32_t Foliage::draw_static(Device& device, rhi::Pass* pass, const StaticSet& 
         if (batched) {
             for (uint32_t i = 0; i < cell.batch_count; ++i) {
                 const Batch& b = set.batches[cell.batch_first + i];
-                rhi::BufferBinding vb[2] = {};
-                vb[0].buffer = set.batch_vertices;
-                vb[0].offset = b.first_vertex * uint32_t(sizeof(MeshVertex));
-                vb[1].buffer = set.batch_instances;
-                vb[1].offset = b.first_vertex * uint32_t(sizeof(FoliageInstance));
-                rhi.bind_vertex_buffers(pass, 0, vb, 2);
-                rhi.draw_indexed(pass, coarse ? b.coarse : b.full, 1, b.first_index, 0, 0);
+                const uint32_t count = coarse ? b.coarse : b.full;
+                if (pending_count && (b.first_vertex != pending.first_vertex ||
+                                      b.first_index != pending.first_index + pending_count)) {
+                    flush();
+                }
+                if (pending_count == 0) pending = b;
+                pending_count += count;
             }
         } else {
             rhi.draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
@@ -750,6 +773,7 @@ uint32_t Foliage::draw_static(Device& device, rhi::Pass* pass, const StaticSet& 
         }
         drawn += cell.count;
     }
+    flush();
     return drawn;
 }
 
