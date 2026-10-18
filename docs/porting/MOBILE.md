@@ -571,13 +571,73 @@ mostly not the HUD: the framebuffer switch into the UI pass is where vc4
 submits the world's job, so the kernel's validation of the whole world's
 command list is counted there (as the blit and the swap carry the UI's).
 
-**Next on the Pi**: the HUD's 2.1 ms build; Mesa's ~450 us skinned draw
-(towers and caches are one-joint skinned props: a rigid path would draw
-them as static meshes); the UI drawn in the world's pass so vc4 keeps one
-job; start-up (25 s with three valleys: the erosion 3.3-3.9 s each, the
-sound synthesis 1.4 s, EGL and the display 2.6 s); alsa-lib's IEC958 framing and miniaudio's copies (the rest of
-the audio thread, about 7% of the core); Mesa's per-draw cost (~90 draws
-a frame at 100-200 us; foliage is the most expensive left).
+The third pass, measured on a frozen frame (`DRAGON_FREEZE_AT=600`, run
+7, headless at 640x480: the same frame every run, where a live run's
+autopilot flies a different path each time) and confirmed live:
+
+- The UI pass reuses the world's framebuffer when it draws onto the
+  world's colour, so vc4 keeps one job: the world is no longer stored
+  and loaded back into the tiles for the HUD (0.6 ms). The job's
+  submission moved to the blit, which is where it is now counted.
+- A vertex buffer filled each frame rotates through three GL buffers
+  instead of being orphaned: the particles' 16-35 KB went from 0.7-1.5
+  ms to 0.5. The cost left is per call, not per byte: in a tight loop the
+  Pi writes 64 KB into a buffer in 167 us, mid-frame 15 KB took 200 us.
+- A skinned draw packs its joints straight into the 3 KB block the sm2
+  and ff shaders read, instead of through a zeroed 16 KB one.
+- Unsorted chunk lists (the water, the shadow pass) draw neighbours whose
+  indices run on as one draw: the water's 13 draws to 1. The
+  depth-sorted terrain is left alone: merged, its depth ties resolved
+  otherwise and Metal changed 174 pixels, for one draw saved of 14.
+- Foliage batches share a vertex base while 16-bit indices reach, so
+  neighbouring cells join into one draw (2.13 -> 1.52 ms).
+
+Frozen frame 21.7 -> 18.0 ms; live, 3,000 frames, 38.0 fps (median
+26.2 ms, worst 44.8). Frames byte-identical on Metal and ANGLE throughout.
+
+What a draw costs on vc4 is Mesa's state validation, spread over dozens
+of functions: a `mesh` draw of 576 indices costs what a skinned draw
+does. The skinned shader's joint array, indexed per vertex, makes vc4
+upload the shader's whole uniform storage each draw; read at a constant
+index it saved 75 us a draw, which is all a rigid path for the
+one-joint props could gain (about 0.2 ms), so there is none.
+
+Leaving things out of the frozen frame (`DRAGON_ABLATE`): the HUD 2.2 ms
+(the combat readouts 1.2, the run's 0.7), the trees 2.2, the run's
+gate, caches and piles 1.9, the rivals 1.5, the player 1.0. glibc's
+float formatting of the HUD's numbers was 0.8% of the main thread; they
+are integers through `lrint` now.
+
+The audio thread is 12.6% of the process (13.4 before miniaudio's second
+clip and its fixed-size callback buffer were turned off): the mixer about
+5.5%, alsa-lib's IEC958 framing 3.5, the kernel and context switches the
+rest.
+
+A new run after a death built its valleys after Enter, about 11 s. The
+next run's seed is now drawn when a run ends and its valleys are built
+on a thread behind the results screen, which on one core drops to a few
+frames a second so the build has most of the core. Enter six seconds
+into the results waited 3.1 s.
+
+Start-up is CPU-bound (21.1 s of wall clock, 20.8 s of CPU), so nothing
+can hide behind a wait. Its pieces: valleys 2 and 3 7.1 s, valley 1 with
+its meshes and sky 4.2, the pipelines 1.5 (vc4 links each in 30-340 ms),
+SDL and the display 1.4, the sound synthesis 1.2, the roster and props
+2.5, the first frame 1. The pipelines that cannot be drawn (the shadow
+pass with no shadow map, the debug wireframe) are no longer built; the
+sky map's trig is taken per row and per column, the packs' vertices are
+read as one copy, and Perlin noise floors without a call.
+
+The Pi build links Zig's compiler_rt, whose memset, memcmp and bcmp are
+byte-at-a-time loops exported weak, and they took the place of glibc's
+in the executable: memset was 6.7% of start-up and 2.6% of a frame.
+`src/platform/pi/memory.c` defines word-at-a-time ones over them.
+
+**Next on the Pi**: the erosion (7 s of start-up for valleys 2 and 3;
+bit-identical tricks are used up, so fewer passes on the Pi would be a
+change of terrain); the HUD's 2 ms; Mesa's per-draw cost (36 draws a
+frame; the trees are one draw per kind, which only a per-instance height
+in the foliage shader would merge).
 
 ## What every mobile target needs
 

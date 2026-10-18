@@ -182,6 +182,12 @@ if(DRAGON_SHADERCROSS)
   set_target_properties(dragon PROPERTIES BUILD_RPATH "${_shadercross_lib_dir}")
 endif()
 
+# The Pi 1B build's memset, memcmp and bcmp, over Zig compiler_rt's
+# byte-at-a-time ones (src/platform/pi/memory.c).
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv6l")
+  target_sources(dragon PRIVATE src/platform/pi/memory.c)
+endif()
+
 if(DRAGON_GLES)
   target_sources(dragon PRIVATE src/rhi/gles/gles_device.cpp)
   target_compile_definitions(dragon PRIVATE DRAGON_GLES)
