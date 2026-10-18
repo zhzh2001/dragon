@@ -3332,7 +3332,10 @@ void App::draw_hud() {
         const float plate_h = hud_.px(56.0f);
         const ImVec2 min(width * 0.5f - plate_w * 0.5f, height - margin - plate_h);
         hud_.plate(min, ImVec2(min.x + plate_w, min.y + plate_h));
-        std::snprintf(line, sizeof(line), "%.0f", flight_.state().airspeed);
+        // Whole numbers on the HUD through lrint (to nearest, ties to even, as
+        // %.0f rounds): glibc's float formatting, a dozen calls a frame, was
+        // 0.8% of the Pi 1B's main thread.
+        std::snprintf(line, sizeof(line), "%ld", std::lrint(flight_.state().airspeed));
         const float numeral_size = 40.0f;
         const float w = hud_.numeral_width(line, numeral_size);
         const float unit_w = hud_.label_width("m/s", 14.0f);
@@ -3358,7 +3361,7 @@ void App::draw_hud() {
                                screen.x > 0.0f && screen.x < width && screen.y > 0.0f &&
                                screen.y < height;
         const float range = core::distance(flight_.state().position, next->position);
-        std::snprintf(line, sizeof(line), "%.0f m", range);
+        std::snprintf(line, sizeof(line), "%ld m", std::lrint(range));
 
         if (on_screen) {
             // A reticle scaled to the ring's apparent size, so it frames the
@@ -5973,7 +5976,7 @@ void App::draw_run_hud() {
             x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(18.0f);
         }
         hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "HOARD", tk.text_dim, 10.0f);
-        std::snprintf(line, sizeof(line), "%.0f", hoard_run_.hoard());
+        std::snprintf(line, sizeof(line), "%ld", std::lrint(hoard_run_.hoard()));
         hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line,
                      collect_flash_ > 0.0f || award_flash_ > 0.0f ? tk.accent : tk.text, 28.0f);
         if (hoard_run_.banked() > 0.0f) {
@@ -6061,20 +6064,20 @@ void App::draw_run_hud() {
             if (hoard_run_.collecting() == nearest) {
                 std::snprintf(line, sizeof(line), "TAKING THE HOARD");
             } else if (range < 160.0f) {
-                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "LAND HERE  %.0f  (GUARDED)"
-                                                                          : "LAND HERE  %.0f",
-                              double(cache.value));
+                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "LAND HERE  %ld  (GUARDED)"
+                                                                          : "LAND HERE  %ld",
+                              std::lrint(cache.value));
             } else {
-                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "HOARD  %.0f m  (guarded)"
-                                                                          : "HOARD  %.0f m",
-                              double(range));
+                std::snprintf(line, sizeof(line), cache_guarded(nearest) ? "HOARD  %ld m  (guarded)"
+                                                                          : "HOARD  %ld m",
+                              std::lrint(range));
             }
             marker(cache.position + core::Vec3{0.0f, 3.0f, 0.0f}, hoard_run_.settings.cache_radius, line,
                    tk.accent, hoard_run_.collecting() == nearest ? hoard_run_.collect_progress() : 0.0f);
         }
         const bool all_taken = hoard_run_.caches_collected() == int(layout.caches.size());
-        std::snprintf(line, sizeof(line), "THE PASS  %.0f m",
-                      double(core::distance(player.position, layout.gate.position)));
+        std::snprintf(line, sizeof(line), "THE PASS  %ld m",
+                      std::lrint(core::distance(player.position, layout.gate.position)));
         marker(layout.gate.position, layout.gate.radius, line, all_taken ? tk.accent : tk.text_dim, 0.0f);
 
         if (hoard_run_.elapsed() < 9.0f) {
@@ -6169,7 +6172,7 @@ void App::draw_run_hud() {
             const float r = hud_.px(7.0f);
             draw->AddQuad(ImVec2(screen.x, screen.y - r), ImVec2(screen.x + r, screen.y),
                           ImVec2(screen.x, screen.y + r), ImVec2(screen.x - r, screen.y), green, hud_.px(1.8f));
-            std::snprintf(line, sizeof(line), "HERD x%d  %.0f m", n, double(range));
+            std::snprintf(line, sizeof(line), "HERD x%d  %ld m", n, std::lrint(range));
             hud_.label(ImVec2(screen.x + r + hud_.px(6.0f), screen.y - hud_.px(7.0f)), line, green, 12.0f);
         }
         for (const game::Prey& p : animals) {
@@ -7198,7 +7201,7 @@ void App::draw_combat_hud() {
             // do not obscure what they surround.
             const float half = core::clampf(2600.0f / core::maxf(range, 1.0f), hud_.px(10.0f), hud_.px(60.0f));
             hud_.bracket(screen, half, colour, hud_.px(1.8f));
-            std::snprintf(line, sizeof(line), flaming ? "%s%.0f m  FLAME" : "%s%.0f m", tag, range);
+            std::snprintf(line, sizeof(line), flaming ? "%s%ld m  FLAME" : "%s%ld m", tag, std::lrint(range));
             hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
                        flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
             // A rival's health under the bracket: whether to press the attack.
