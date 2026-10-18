@@ -63,6 +63,8 @@ public:
 
 private:
     void synthesize_clips();
+    bool load_clip_cache();  // the clips from the user directory, if this build wrote them
+    void save_clip_cache() const;
 
     struct Voice {
         std::atomic<bool> active{false};

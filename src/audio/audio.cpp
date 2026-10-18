@@ -5,10 +5,20 @@
 
 #include "audio/audio.h"
 
+#include <SDL3/SDL.h>
+
+#ifdef __linux__
+#include <sys/stat.h>
+#endif
+
 #include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <string>
 
 #include "core/log.h"
 #include "core/math.h"
+#include "core/paths.h"
 
 namespace audio {
 
@@ -350,8 +360,85 @@ void Audio::synthesize_clips() {
     }
 }
 
+// The synthesized clips kept in the user directory, where synthesis is slow:
+// 1.2 s of the Pi 1B's start-up. Keyed by the executable's size and
+// modification time, so a rebuild, which could synthesize anything
+// differently, never reads another build's clips. Linux only (where the
+// Pi is): elsewhere synthesis is fast and nothing is cached.
+namespace {
+constexpr float kClipCacheAbove = 0.25f;  // seconds of synthesis worth caching
+constexpr size_t kClipCacheKeySize = 64;
+
+bool clip_cache_key(char (&key)[kClipCacheKeySize]) {
+    std::memset(key, 0, sizeof(key));
+#ifdef __linux__
+    struct stat exe = {};
+    if (stat("/proc/self/exe", &exe) != 0) return false;
+    std::snprintf(key, sizeof(key), "dragon sfx 1 %lld %lld.%09ld", static_cast<long long>(exe.st_size),
+                  static_cast<long long>(exe.st_mtim.tv_sec), static_cast<long>(exe.st_mtim.tv_nsec));
+    return true;
+#else
+    return false;
+#endif
+}
+}  // namespace
+
+bool Audio::load_clip_cache() {
+    const std::vector<uint8_t> bytes = core::paths::read_bytes(core::paths::user("sfx_cache.bin"));
+    size_t at = 0;
+    const auto take = [&](void* out, size_t size) {
+        if (bytes.size() - at < size) return false;
+        std::memcpy(out, bytes.data() + at, size);
+        at += size;
+        return true;
+    };
+    char expected[kClipCacheKeySize], key[kClipCacheKeySize];
+    uint32_t rate = 0, count = 0;
+    if (!clip_cache_key(expected)) return false;
+    if (!take(key, sizeof(key)) || std::memcmp(key, expected, sizeof(key)) != 0) return false;
+    if (!take(&rate, 4) || !take(&count, 4) || rate != SAMPLE_RATE || count != uint32_t(Clip::Count)) return false;
+    std::vector<float> clips[int(Clip::Count)];
+    for (std::vector<float>& clip : clips) {
+        uint32_t n = 0;
+        if (!take(&n, 4) || (bytes.size() - at) / sizeof(float) < n) return false;
+        clip.resize(n);
+        take(clip.data(), size_t(n) * sizeof(float));
+    }
+    for (int i = 0; i < int(Clip::Count); ++i) clips_[i] = std::move(clips[i]);
+    return true;
+}
+
+void Audio::save_clip_cache() const {
+    char key[kClipCacheKeySize];
+    if (!clip_cache_key(key)) return;
+    std::vector<uint8_t> bytes;
+    const auto put = [&](const void* data, size_t size) {
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        bytes.insert(bytes.end(), p, p + size);
+    };
+    const uint32_t rate = SAMPLE_RATE, count = uint32_t(Clip::Count);
+    put(key, sizeof(key));
+    put(&rate, 4);
+    put(&count, 4);
+    for (const std::vector<float>& clip : clips_) {
+        const uint32_t n = uint32_t(clip.size());
+        put(&n, 4);
+        put(clip.data(), clip.size() * sizeof(float));
+    }
+    const std::string path = core::paths::user("sfx_cache.bin");
+    if (FILE* f = std::fopen(path.c_str(), "wb")) {
+        const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+        if (std::fclose(f) != 0 || !ok) std::remove(path.c_str());
+    }
+}
+
 bool Audio::init() {
-    synthesize_clips();
+    if (!load_clip_cache()) {
+        const uint64_t started = SDL_GetTicksNS();
+        synthesize_clips();
+        const float took = float(double(SDL_GetTicksNS() - started) * 1e-9);
+        if (took > kClipCacheAbove) save_clip_cache();
+    }
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format = ma_format_f32;
