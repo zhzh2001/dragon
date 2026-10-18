@@ -455,7 +455,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     // as trees popping.
     if (active_tier().tier == Tier::Modern) lod_distance = 900.0f;
     pipeline_ = pipelines_->create(make_foliage_desc());
-    depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
+    if (shadow_map->available()) depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
     // DRAGON_FOLIAGE_BATCH=0: the per-instance draws regardless, to compare.
     const char* batch_env = SDL_getenv("DRAGON_FOLIAGE_BATCH");
     batch_ = !device->rhi().instances_in_one_draw() && !(batch_env && batch_env[0] == '0');

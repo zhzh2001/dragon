@@ -105,7 +105,8 @@ private:
     core::Vec4 sky_inputs_[6] = {};  // what the sky was last baked from (bake_sky_dome)
     rhi::Sampler* sky_sampler_ = nullptr;
     PipelineHandle terrain_ = INVALID_PIPELINE;
-    PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;
+    PipelineHandle terrain_wireframe_ = INVALID_PIPELINE;  // built the first time it is drawn
+    PipelineHandle terrain_wireframe();
     PipelineHandle water_ = INVALID_PIPELINE;
     PipelineHandle mesh_ = INVALID_PIPELINE;
     PipelineHandle skinned_ = INVALID_PIPELINE;

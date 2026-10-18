@@ -96,7 +96,9 @@ bool ShadowMap::init(Device* device, PipelineCache* pipelines, uint32_t resoluti
         return false;
     }
 
-    mesh_pipeline_ = pipelines_->create(make_shadow_mesh_desc(format_));
+    // Not built where the map cannot be: on the Pi 1B each pipeline is a
+    // tenth of a second of its start-up.
+    if (!unavailable_) mesh_pipeline_ = pipelines_->create(make_shadow_mesh_desc(format_));
     if (!unavailable_) {
         LOG_INFO("shadow map: %ux%u %s", resolution_, resolution_, format_ == rhi::Format::D32F ? "D32F" : "D16");
     }

@@ -216,7 +216,6 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     // The dome's colours are baked by the app once the lighting is known
     // (bake_sky_dome); it is not drawn before that.
     terrain_ = pipelines_->create(make_terrain_desc(false));
-    terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
     water_ = pipelines_->create(make_water_desc());
     mesh_ = pipelines_->create(make_mesh_desc());
     skinned_ = pipelines_->create(make_skinned_desc());
@@ -352,10 +351,15 @@ void draw_chunks(rhi::Device& rhi, rhi::Pass* pass, const Mesh& mesh, const std:
     }
 }
 
+PipelineHandle WorldRenderer::terrain_wireframe() {
+    if (terrain_wireframe_ == INVALID_PIPELINE) terrain_wireframe_ = pipelines_->create(make_terrain_desc(true));
+    return terrain_wireframe_;
+}
+
 void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
                                  const std::vector<MeshChunk>* chunks) {
     rhi::Pipeline* pipeline =
-        pipelines_->get(wireframe ? terrain_wireframe_ : terrain_);
+        pipelines_->get(wireframe ? terrain_wireframe() : terrain_);
     if (!pipeline || !pass || !mesh.valid()) return;
 
     device.rhi().bind_pipeline(pass, pipeline);
