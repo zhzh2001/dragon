@@ -337,7 +337,19 @@ void draw_chunks(rhi::Device& rhi, rhi::Pass* pass, const Mesh& mesh, const std:
         }
     }
     if (eye) std::sort(visible.begin(), visible.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    for (const auto& v : visible) rhi.draw_indexed(pass, v.second->index_count, 1, v.second->first_index, 0, 0);
+    // Unsorted, neighbours whose indices run on are one draw: the same
+    // triangles in the same order, at one draw's cost (Mesa's vc4 pays
+    // ~50-150 us a draw on the Pi 1B, whatever its size) -- the water's 13
+    // draws to one or two. Sorted, it changed pixels on Metal (depth ties
+    // between chunks resolved otherwise in one draw) and saved one draw.
+    for (size_t i = 0; i < visible.size();) {
+        const uint32_t first = visible[i].second->first_index;
+        uint32_t count = visible[i].second->index_count;
+        for (++i; !eye && i < visible.size() && visible[i].second->first_index == first + count; ++i) {
+            count += visible[i].second->index_count;
+        }
+        rhi.draw_indexed(pass, count, 1, first, 0, 0);
+    }
 }
 
 void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& mesh,
