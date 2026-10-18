@@ -631,7 +631,17 @@ read as one copy, and Perlin noise floors without a call.
 The Pi build links Zig's compiler_rt, whose memset, memcmp and bcmp are
 byte-at-a-time loops exported weak, and they took the place of glibc's
 in the executable: memset was 6.7% of start-up and 2.6% of a frame.
-`src/platform/pi/memory.c` defines word-at-a-time ones over them.
+`src/platform/pi/memory.c` defines word-at-a-time ones over them: the
+frozen frame 18.0 -> 17.6 ms, and live over 3,000 frames 38.0 -> 40.2 fps
+(median 24.8 ms). The synthesized sounds are cached in the user
+directory where synthesis is slow (`sfx_cache.bin`, keyed by the
+executable's size and time, every clip identical to a fresh synthesis).
+With both, start-up is 16.9 s of CPU against 19.4, 19.1 s of wall clock
+once the files are in the page cache.
+
+`perf record --call-graph dwarf` panicked the Pi's kernel (perf copying
+a user stack in the timer interrupt while the process exited): profile
+it flat (`-e cpu-clock`) only.
 
 **Next on the Pi**: the erosion (7 s of start-up for valleys 2 and 3;
 bit-identical tricks are used up, so fewer passes on the Pi would be a
