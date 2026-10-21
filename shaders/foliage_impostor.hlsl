@@ -1,7 +1,9 @@
 // A far tree as its impostor (gfx::Foliage, docs/FIDELITY.md F7): one quad
-// facing the camera, showing the frame of the kind's baked atlas
-// (foliage_impostor_bake.hlsl) whose direction is nearest the camera's,
-// lit in the scene through the shared path with the baked normal. Each
+// facing the camera, showing the four frames of the kind's baked atlas
+// (foliage_impostor_bake.hlsl) about the camera's direction, blended by
+// how near each is -- the nearest alone snapped a frame, 20 degrees, as
+// the camera circled -- lit in the scene through the shared path with the
+// baked normal. Each
 // tree hands over from its crown at its own distance between `lod.x` and
 // `lod.y`, by its hash, the crown's vertex stage (foliage.hlsl) taking the
 // complementary share, so a tree is never both and never neither. The
@@ -29,8 +31,10 @@ struct VertexIn {
 struct VertexOut {
     float4 clip_position : SV_Position;
     float3 world_position : TEXCOORD0;
-    float2 uv : TEXCOORD1;
-    float4 tint : TEXCOORD2;  // x shade, y warm push, zw the yaw's cos and sin
+    float4 uv01 : TEXCOORD1;  // the four frames' uv, two a varying
+    float4 uv23 : TEXCOORD2;
+    float4 weights : TEXCOORD3;
+    float4 tint : TEXCOORD4;  // x shade, y warm push, zw the yaw's cos and sin
 };
 
 // The upper hemisphere folded onto a square, -1..1 each way
@@ -55,7 +59,11 @@ VertexOut vs_main(VertexIn input) {
     float3 local = float3(c * view.x - s * view.z, view.y, s * view.x + c * view.z);
     float2 e = hemi_octahedral(local);
     float frames = impostor.lod.z;
-    float2 frame = clamp(floor((e * 0.5 + 0.5) * frames), 0.0, frames - 1.0);
+    // The frame grid, frame centres on whole numbers: the four about the
+    // direction and how far it lies between them.
+    float2 grid = clamp((e * 0.5 + 0.5) * frames - 0.5, 0.0, frames - 1.0);
+    float2 f0 = min(floor(grid), frames - 2.0);
+    float2 w = saturate(grid - f0);
 
     // Facing the camera, upright (from straight above, any way round).
     float3 right = normalize(cross(abs(view.y) > 0.999 ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0), view));
@@ -73,7 +81,11 @@ VertexOut vs_main(VertexIn input) {
     o.world_position = world;
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     float2 corner = float2(input.position.x * 0.5 + 0.5, 0.5 - input.position.y * 0.5);
-    o.uv = impostor.kind.xy + (frame + corner) / frames * impostor.lod.w;
+    float2 base = impostor.kind.xy + corner / frames * impostor.lod.w;
+    float step = impostor.lod.w / frames;
+    o.uv01 = float4(base + f0 * step, base + (f0 + float2(1.0, 0.0)) * step);
+    o.uv23 = float4(base + (f0 + float2(0.0, 1.0)) * step, base + (f0 + 1.0) * step);
+    o.weights = float4((1.0 - w.x) * (1.0 - w.y), w.x * (1.0 - w.y), (1.0 - w.x) * w.y, w.x * w.y);
     o.tint = float4(input.params.y, input.params.w, c, s);
     return o;
 }
@@ -85,8 +97,14 @@ TEXTURE2D(albedo_atlas, 1);
 TEXTURE2D(normal_atlas, 2);
 
 float4 fs_main(VertexOut input) : SV_Target {
-    float4 albedo = albedo_atlas.Sample(albedo_atlas_sampler, input.uv);
-    float4 baked = normal_atlas.Sample(normal_atlas_sampler, input.uv);
+    float4 albedo = albedo_atlas.Sample(albedo_atlas_sampler, input.uv01.xy) * input.weights.x +
+                    albedo_atlas.Sample(albedo_atlas_sampler, input.uv01.zw) * input.weights.y +
+                    albedo_atlas.Sample(albedo_atlas_sampler, input.uv23.xy) * input.weights.z +
+                    albedo_atlas.Sample(albedo_atlas_sampler, input.uv23.zw) * input.weights.w;
+    float4 baked = normal_atlas.Sample(normal_atlas_sampler, input.uv01.xy) * input.weights.x +
+                   normal_atlas.Sample(normal_atlas_sampler, input.uv01.zw) * input.weights.y +
+                   normal_atlas.Sample(normal_atlas_sampler, input.uv23.xy) * input.weights.z +
+                   normal_atlas.Sample(normal_atlas_sampler, input.uv23.zw) * input.weights.w;
     // The coverage, mip-filtered: a frame's edge thins out at a distance
     // rather than shimmering.
     if (albedo.a < 0.5) discard;

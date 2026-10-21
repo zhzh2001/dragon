@@ -658,12 +658,13 @@ neither. Two corrections came from comparing crowns and impostors
 pixel for pixel: a crown shades itself (its far cards in its near cards'
 shadow), so the impostor takes 0.72 of the light ("impostor
 self-shadow"), and the bake darkens a crown's depths ("impostor depth
-shade"). 1.3-1.6 ms saved at 1080p. From straight above the impostors
+shade"). The four frames about the camera's direction are blended by
+how near each is: the nearest alone snapped 20 degrees as the camera
+circled a tree. 1.1 ms saved at 1080p (1.5 before the blend). From
+straight above the impostors
 read as filled crowns where the crowns thin to specks (their side cards
-go edge-on); the impostors are nearer a real forest from above. Not yet:
-blending between neighbouring frames (a far tree snaps a frame as the
-camera circles it), and impostor shadows (the far cascade still draws
-coarse crowns). Dials under Vegetation; `DRAGON_NO_IMPOSTORS=1` for a
+go edge-on); the impostors are nearer a real forest from above. Not yet: impostor
+shadows (the far cascade still draws coarse crowns). Dials under Vegetation; `DRAGON_NO_IMPOSTORS=1` for a
 comparison, `DRAGON_IMPOSTORS=from,to` for the band.
 
 ## The sky in the hide (2026-10-15)
