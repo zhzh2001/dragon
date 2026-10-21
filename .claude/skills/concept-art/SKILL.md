@@ -94,6 +94,17 @@ means access to **every authenticated session in that profile**. Prefer running
 it against a Chrome profile signed into nothing but ChatGPT. `--backend agy` and
 `--backend codex` need none of this.
 
+**If `web` fails with "composer never appeared" while you ARE signed in**, ChatGPT
+changed its UI (Oct 2026: the composer lost its `#prompt-textarea` id and became a
+`form div.ProseMirror[contenteditable]`). Versions before 0.30 poll the old id. The
+tool's own `update` printed success but wrote nothing (2026-10-04) — reinstall by
+hand: clone `leeguooooo/chatgpt-imagegen`, `install -m 755` both `image-use` (the
+renamed CLI, 0.30.1 verified) and the `chatgpt-imagegen` shim into `~/.local/bin`.
+Debug with `chrome-use open https://chatgpt.com/` + `chrome-use snapshot -i` to see
+what the page really shows. Under a sandbox that blocks reading Chrome's profile
+directory, `doctor` and `--profile auto` crash (`PermissionError`); pass
+`--profile relay` to use the already-open, signed-in Chrome without scanning.
+
 Each `web` run auto-deletes its ChatGPT conversation, so it leaves no history.
 If it warns `none of ['Instant','Auto'] in the picker`, the model picker labels
 differ on this account — pin one via `CHATGPT_IMAGEGEN_WEB_MODEL`.
