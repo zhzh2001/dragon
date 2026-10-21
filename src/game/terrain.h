@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "core/math.h"
 #include "core/noise.h"
@@ -24,7 +25,7 @@ struct TerrainSettings {
     float cell_size = 6.0f;       // metres per quad edge
 
     // Mountain walls: ridged noise, which gives sharp crests rather than dunes.
-    float mountain_height = 900.0f;
+    float mountain_height = 850.0f;
     // Scaled with the map, or the same noise frequency would turn the walls
     // into a field of small bumps instead of a mountain range.
     float mountain_scale = 2300.0f;  // metres per noise unit; larger = broader
@@ -36,11 +37,38 @@ struct TerrainSettings {
     // `strata_strength` -- so rock faces carry horizontal banding as
     // geometry, not tint. Both only where the mountain term is well up, so
     // the valley floor is untouched.
-    float ridge_height = 60.0f;
-    float ridge_scale = 700.0f;
+    float ridge_height = 160.0f;
+    float ridge_scale = 450.0f;
     int ridge_octaves = 2;
     float strata_step = 22.0f;
     float strata_strength = 0.3f;
+
+    // The mountains' shape past the noise (docs/GAPS.md, G1). The walls were
+    // broad ramps under a straight-combed noise, smooth cones from the chase
+    // camera.
+    // - Warp: the mountain noise is read at a position pushed about by a
+    //   broad fbm, so crests curve and branch into spurs instead of running
+    //   in the noise's own straight lattice. 0 turns it off.
+    float warp_strength = 450.0f;  // metres
+    float warp_scale = 1800.0f;  // metres per noise unit
+    // Wall profile: 1 is the smoothstep ramp from the floor's edge; below 1
+    // the lower wall rises steeply and eases into shoulders above, a
+    // glacial trough rather than a funnel.
+    float wall_profile = 0.8f;
+    // Backdrop: past the playable extent the mountains grow by this share,
+    // so the pass opens onto taller ranges rather than more of the same
+    // slope. The skirt only; nothing there is flown to.
+    float backdrop_lift = 0.8f;
+    // Spurs: ridged noise stretched across the valley, so its crests run
+    // down the walls rather than along them -- the buttresses and the gullies
+    // between them that make a wall read as a mountainside. Strongest on the
+    // upper wall; 0 turns it off.
+    float spur_height = 420.0f;   // metres
+    float spur_spacing = 380.0f;  // metres between spurs, along the valley
+
+    // key=value,... over these fields, for captures (--terrain): the shape
+    // dials by the names their sliders use.
+    void parse(const std::string& list);
 
     // Rolling detail laid over everything.
     float hill_height = 34.0f;
@@ -120,6 +148,12 @@ public:
     // not run. The terrain mesh carries them in its vertex colour.
     core::Vec2 erosion_at(float x, float z) const;
     core::Vec3 normal_at(float x, float z) const;
+    // The highest ground along a flight path: below, one to three seconds
+    // along the velocity, and 60 to 180 m along the heading. The fixed
+    // distances are for slow flight, where three seconds is too short to
+    // see a spur rising ahead (a bot climbing at 24 m/s grounded on one).
+    // What the bots and the demo pilot steer their terrain floor by.
+    float ground_ahead(core::Vec3 position, core::Vec3 velocity) const;
 
     // The surface you can stand on or splash into: the ground, or the water
     // where the ground is below the water line.

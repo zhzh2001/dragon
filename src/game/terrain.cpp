@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 
 using core::Vec3;
 
@@ -150,6 +151,46 @@ core::Vec2 Terrain::erosion_at(float x, float z) const {
     return core::Vec2{erosion_sample(erosion_.flow, x, z), erosion_sample(erosion_.deposit, x, z)};
 }
 
+void TerrainSettings::parse(const std::string& list) {
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find(',', start);
+        if (end == std::string::npos) end = list.size();
+        const std::string item = list.substr(start, end - start);
+        start = end + 1;
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = item.substr(0, eq);
+        const float value = float(std::atof(item.c_str() + eq + 1));
+        struct Field {
+            const char* key;
+            float* value;
+        };
+        const Field fields[] = {{"height", &mountain_height}, {"scale", &mountain_scale},
+                                {"ridge", &ridge_height},     {"ridge_scale", &ridge_scale},
+                                {"strata", &strata_step},     {"strata_strength", &strata_strength},
+                                {"hills", &hill_height},      {"width", &valley_width},
+                                {"falloff", &valley_falloff}, {"warp", &warp_strength},
+                                {"warp_scale", &warp_scale},  {"profile", &wall_profile},
+                                {"backdrop", &backdrop_lift}, {"spur", &spur_height},
+                                {"spur_spacing", &spur_spacing}, {"erosion_strength", &erosion_strength},
+                                {"talus", &erosion_params.talus}, {"thermal_rate", &erosion_params.thermal_rate},
+                                {"erodibility", &erosion_params.erodibility}};
+        bool found = false;
+        for (const Field& f : fields) {
+            if (key == f.key) {
+                *f.value = value;
+                found = true;
+            }
+        }
+        if (key == "erosion") {
+            erosion = value != 0.0f;
+            found = true;
+        }
+        if (!found) LOG_WARN("--terrain: unknown key '%s'", key.c_str());
+    }
+}
+
 float Terrain::valley_center_x(float z) const {
     // Two out-of-phase sines so the corridor does not read as a pure sine wave.
     const float t = z / core::maxf(settings_.valley_period, 1.0f) + settings_.valley_phase;
@@ -166,8 +207,13 @@ float Terrain::river_center_x(float z) const {
 
 float Terrain::valley_mask(float x, float z) const {
     const float distance = std::fabs(x - valley_center_x(z));
-    return core::smoothstep(settings_.valley_width, settings_.valley_width + settings_.valley_falloff,
-                      distance);
+    const float ramp = core::smoothstep(settings_.valley_width, settings_.valley_width + settings_.valley_falloff,
+                                        distance);
+    if (settings_.wall_profile >= 0.999f) return ramp;
+    // A trough: the ramp raised to a power below one climbs steeply off the
+    // floor and flattens toward the shoulders. The smoothstep underneath
+    // keeps the foot of the wall rounded, so the floor's edge is no crease.
+    return std::pow(ramp, core::maxf(settings_.wall_profile, 0.2f));
 }
 
 bool Terrain::grid_height(const gfx::MeshData& mesh, int n, float half, float cell, float x,
@@ -218,13 +264,40 @@ float Terrain::analytic_height_at(float x, float z) const {
 float Terrain::base_height_at(float x, float z) const {
     const float mask = valley_mask(x, z);
 
-    float mountains = noise_.ridged(x / settings_.mountain_scale, z / settings_.mountain_scale,
+    // Where the mountain noise is read: pushed about by a broad fbm, so the
+    // crests curve and branch. The valley, the river and the hills keep the
+    // true position.
+    float mx = x;
+    float mz = z;
+    if (settings_.warp_strength > 0.0f) {
+        const float s = 1.0f / core::maxf(settings_.warp_scale, 1.0f);
+        mx += noise_.fbm(x * s + 41.7f, z * s - 13.2f, 3) * settings_.warp_strength;
+        mz += noise_.fbm(x * s - 27.9f, z * s + 61.4f, 3) * settings_.warp_strength;
+    }
+    // Taller past the playable extent: the backdrop ranges.
+    float lift = 1.0f;
+    if (settings_.backdrop_lift > 0.0f) {
+        const float edge = core::maxf(std::fabs(x), std::fabs(z));
+        lift += settings_.backdrop_lift *
+                core::smoothstep(settings_.half_extent, settings_.half_extent * 1.8f, edge);
+    }
+
+    float mountains = noise_.ridged(mx / settings_.mountain_scale, mz / settings_.mountain_scale,
                                     settings_.mountain_octaves) *
-                      settings_.mountain_height;
+                      settings_.mountain_height * lift;
+    if (settings_.spur_height > 0.0f) {
+        // Across the valley the noise is three spacings to a unit, along it
+        // one: its crest lines run downhill. Read at the warped position so
+        // the spurs bend with the crests above them.
+        const float across = std::fabs(mx - valley_center_x(mz));
+        const float spacing = core::maxf(settings_.spur_spacing, 10.0f);
+        const float spur = noise_.ridged(mz / spacing - 3.7f, across / (spacing * 3.0f) + 8.9f, 3);
+        mountains += spur * settings_.spur_height * lift * core::smoothstep(0.0f, 0.35f, mask);
+    }
     const float up = settings_.mountain_height > 1e-3f ? mountains / settings_.mountain_height : 0.0f;
     if (settings_.ridge_height > 0.0f) {
         // Offset so the finer ridges do not line up with the broad ones.
-        const float crest = noise_.ridged(x / settings_.ridge_scale + 17.3f, z / settings_.ridge_scale - 5.1f,
+        const float crest = noise_.ridged(mx / settings_.ridge_scale + 17.3f, mz / settings_.ridge_scale - 5.1f,
                                           settings_.ridge_octaves);
         mountains += crest * crest * settings_.ridge_height * core::smoothstep(0.2f, 0.65f, up);
     }
@@ -257,6 +330,20 @@ float Terrain::base_height_at(float x, float z) const {
         const float channel = 1.0f - core::smoothstep(half, half * 2.6f, distance);
         const float bed = settings_.water_level - settings_.river_depth;
         return core::lerpf(ground, core::minf(ground, bed), channel * (1.0f - mask));
+    }
+    return ground;
+}
+
+float Terrain::ground_ahead(Vec3 position, Vec3 velocity) const {
+    float ground = height_at(position.x, position.z);
+    for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
+        const Vec3 ahead = position + velocity * look;
+        ground = core::maxf(ground, height_at(ahead.x, ahead.z));
+    }
+    const Vec3 heading = core::normalize_or(Vec3{velocity.x, 0.0f, velocity.z}, Vec3::forward());
+    for (float metres = 60.0f; metres <= 180.0f; metres += 60.0f) {
+        const Vec3 ahead = position + heading * metres;
+        ground = core::maxf(ground, height_at(ahead.x, ahead.z));
     }
     return ground;
 }

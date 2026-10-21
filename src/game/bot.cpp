@@ -347,6 +347,13 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
         decision.flight.brake = self.airspeed > 45.0f ? core::saturate(sink / 30.0f) : 0.0f;
         decision.flight.tuck = 0.0f;
     }
+    // On the ground only a fresh press of flap leaps (FlightModel::step), and
+    // a recovering bot holds it down: one that touched a slope stayed there
+    // for the rest of a ten-minute test. Pulsed, it leaps on the next frame.
+    if (self.grounded) {
+        ground_flap_ = !ground_flap_;
+        decision.flight.flap = ground_flap_ ? 1.0f : 0.0f;
+    }
 
     // ---- breath ----
     // Close and aligned: hold the flame, on a budget -- in ANY state, because a

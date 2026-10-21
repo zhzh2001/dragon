@@ -184,6 +184,8 @@ Options parse_options(int argc, char** argv) {
             options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
         } else if (arg == "--clouds" && i + 1 < argc) {
             options.clouds = argv[++i];  // key=value,... (gfx/clouds.h)
+        } else if (arg == "--terrain" && i + 1 < argc) {
+            options.terrain = argv[++i];  // key=value,... (game/terrain.h)
         } else if (arg == "--sun" && i + 1 < argc) {
             // elevation[,azimuth] in degrees: the time of day for a capture.
             float elevation = 0.0f, azimuth = -1.0f;
@@ -556,6 +558,7 @@ bool App::init(const Options& options) {
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (!options.clouds.empty()) cloud_settings_.parse(options.clouds);
+    if (!options.terrain.empty()) terrain_settings_.parse(options.terrain);
     if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
     if (options.sun_azimuth >= 0.0f) lighting_.sun_azimuth_deg = options.sun_azimuth;
     if (tier_.baked_noise) {
@@ -3063,13 +3066,17 @@ void App::build_ui(float dt) {
             dirty = true;
         }
         dirty |= ImGui::SliderFloat("mountain height", &terrain_settings_.mountain_height, 50.0f,
-                                    900.0f, "%.0f m");
+                                    1800.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("mountain scale", &terrain_settings_.mountain_scale, 300.0f,
                                     3000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("ridge octave height", &terrain_settings_.ridge_height, 0.0f, 300.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("ridge octave scale", &terrain_settings_.ridge_scale, 100.0f, 2000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("strata step", &terrain_settings_.strata_step, 0.0f, 80.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("strata strength", &terrain_settings_.strata_strength, 0.0f, 1.0f, "%.2f");
+        dirty |= ImGui::SliderFloat("ridge warp", &terrain_settings_.warp_strength, 0.0f, 1200.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("ridge warp scale", &terrain_settings_.warp_scale, 300.0f, 5000.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("wall profile", &terrain_settings_.wall_profile, 0.2f, 1.0f, "%.2f");
+        dirty |= ImGui::SliderFloat("backdrop lift", &terrain_settings_.backdrop_lift, 0.0f, 2.0f, "%.2f");
         dirty |= ImGui::SliderFloat("hill height", &terrain_settings_.hill_height, 0.0f, 90.0f,
                                     "%.0f m");
         dirty |= ImGui::SliderFloat("valley width", &terrain_settings_.valley_width, 60.0f, 1400.0f,
@@ -6351,14 +6358,9 @@ void App::update_bots(float dt) {
 
         const game::FlightState& self = bot->flight.state();
         // Terrain as seen along the flight path, not just below: avoidance that
-        // only looks down flies into rising slopes at speed. Three samples out
-        // to three seconds, because one sample at two seconds saw only the base
-        // of a valley wall.
-        float ground = terrain_.height_at(self.position.x, self.position.z);
-        for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
-            const core::Vec3 ahead = self.position + self.velocity * look;
-            ground = core::maxf(ground, terrain_.height_at(ahead.x, ahead.z));
-        }
+        // only looks down flies into rising slopes at speed. One sample at two
+        // seconds saw only the base of a valley wall (Terrain::ground_ahead).
+        const float ground = terrain_.ground_ahead(self.position, self.velocity);
         const float health_fraction =
             slot.max_health > 0.0f ? core::saturate(slot.health / slot.max_health) : 1.0f;
         // A run's rival holds its post until the run wakes it: a slow circle

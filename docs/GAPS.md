@@ -190,6 +190,49 @@ but they agree on these, and our modern frame has none of them:
   even and neutral. The grade's sliders exist; the targets want a stronger
   split.
 
+### G1, first part, as built (2026-10-21): the shape
+
+`game/terrain.h`, four new terms in `base_height_at`, each a slider under
+Terrain and a key of the new `--terrain key=value,...` capture flag. Renders
+in `artifacts/gap-study/g1-*`.
+
+- Warp (450 m at an 1800 m scale): the mountain noise is read at a
+  position pushed about by a broad fbm, so crests curve and branch.
+- Spurs (420 m, 380 m apart): ridged noise stretched three to one across
+  the valley, so its crests run down the walls. This is what broke the far
+  wall into buttresses and gullies. Squared, it showed only at the crests;
+  weighted to the upper wall, the near walls stayed smooth. It is linear
+  and reaches the foot of the wall now.
+- Wall profile (0.8): the ramp from the floor raised to a power below one,
+  so the lower wall climbs sooner. At 0.55 the walls closed on the vista
+  camera at 260 m.
+- Backdrop (0.8): past the playable extent the mountains grow by up to
+  80%, so the pass and the high views show jagged ranges behind.
+- Also: the ridge octave is 160 m at 450 m (was 60 m at 700 m), the
+  mountains 850 m (was 900 m). Strata at 45 m and 0.6 made no visible
+  difference at flight distance and stay as they were.
+
+Things learned:
+
+- The near walls' smoothness was not the erosion. With erosion off they
+  were as smooth; the erosion is what puts gullies on them.
+- Spurs this steep grounded a bot. In the ten-minute bot test it touched a
+  spur at 24 m/s, where its three-second lookahead was 72 m, and then
+  stayed down for nine minutes: take-off needs a fresh press of flap
+  (`FlightModel::step`), and a recovering bot held it down. The lookahead
+  is now one function for the bots, the demo pilot and the test
+  (`Terrain::ground_ahead`), with samples at 60, 120 and 180 m along the
+  heading as well, and a grounded bot pulses its flap. A test sets a bot
+  on the floor and checks that it is airborne within four seconds; it
+  fails without the pulse.
+- Erosion takes longer on the steeper walls: 1.1 s and 2.0 s for the
+  arena and the run's valley on the M5, against 1.3 s and 0.8 s.
+
+What it did not fix: the walls are one sandy colour from floor to crest,
+and the shaded ones still read smooth from the chase camera. That is the
+material half of G1: grey rock on steep ground, forest climbing the lower
+walls, snow on upward faces.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

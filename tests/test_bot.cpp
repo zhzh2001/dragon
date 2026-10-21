@@ -221,6 +221,35 @@ void test_terrain_is_avoided() {
     CHECK(!flight.state().grounded);
 }
 
+void test_grounded_bot_takes_off() {
+    std::printf("a bot set down on the valley floor takes off again\n");
+    game::Terrain terrain;
+    game::TerrainSettings settings;
+    terrain.generate(settings);
+
+    // Standing still on the floor. A recovering bot held flap down, and only
+    // a fresh press leaps, so one that touched a slope never left it.
+    FlightModel flight;
+    const float floor_y = terrain.height_at(0.0f, 0.0f);
+    flight.reset(Vec3{0.0f, floor_y + 0.5f, 0.0f}, Quat::identity(), 0.0f);
+    BotPilot pilot;
+    pilot.reset(5u);
+    const Vec3 target{0.0f, floor_y + 400.0f, -900.0f};
+    bool grounded_once = false;
+    for (int i = 0; i < 4 * 60; ++i) {
+        const float dt = 1.0f / 60.0f;
+        const float ground = terrain.ground_ahead(flight.state().position, flight.state().velocity);
+        const BotDecision d = pilot.update(dt, flight.state(), target_at(target), true, ground);
+        flight.update(d.flight, &terrain, dt);
+        grounded_once = grounded_once || flight.state().grounded;
+    }
+    std::printf("  after 4 s: %.0f m over the floor, grounded %d\n", flight.state().position.y - floor_y,
+                int(flight.state().grounded));
+    CHECK(grounded_once);
+    CHECK(!flight.state().grounded);
+    CHECK(flight.state().position.y > floor_y + 10.0f);
+}
+
 void test_fire_discipline() {
     std::printf("fires only in range, in the cone, on the cooldown\n");
     BotPilot pilot;
@@ -359,16 +388,11 @@ void test_long_sim_stays_finite() {
         // trajectory missed by luck, its float rounding putting it elsewhere.
         // So the target flies at least 60 m over the ground under it.
         target.y = maxf(target.y, terrain.height_at(target.x, target.z) + 60.0f);
-        // The ground the app hands a bot: the highest of below and one, two
-        // and three seconds along the flight path (App::update_bots). One
-        // sample at two seconds passed only by luck, and a sharper ridge
-        // octave in the terrain ran it into a spur.
-        const Vec3 self = flight.state().position;
-        float ground = terrain.height_at(self.x, self.z);
-        for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
-            const Vec3 ahead = self + flight.state().velocity * look;
-            ground = maxf(ground, terrain.height_at(ahead.x, ahead.z));
-        }
+        // The ground the app hands a bot (Terrain::ground_ahead). One sample
+        // at two seconds passed only by luck, and a sharper ridge octave ran
+        // it into a spur; the spurs of G1 grounded it at 24 m/s, where three
+        // seconds ahead was 72 m.
+        const float ground = terrain.ground_ahead(flight.state().position, flight.state().velocity);
         const BotDecision d = pilot.update(dt, flight.state(), target_at(target), true, ground);
         const float speed_before = flight.state().airspeed;
         const float clearance_before = flight.state().ground_clearance;
@@ -540,6 +564,7 @@ int main() {
     test_breaks_the_circle();
     test_pursuit_converges();
     test_terrain_is_avoided();
+    test_grounded_bot_takes_off();
     test_fire_discipline();
     test_damage_triggers_evasion_and_rhythm_cycles();
     test_reaction_window_is_honest();

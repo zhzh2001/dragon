@@ -64,12 +64,7 @@ void DemoPilot::reset(uint32_t seed) {
 
 float DemoPilot::ground_ahead(const FlightState& self, const DemoWorld& world) const {
     if (!world.terrain) return -1e9f;
-    float ground = world.terrain->height_at(self.position.x, self.position.z);
-    for (float look = 1.0f; look <= 3.0f; look += 1.0f) {
-        const Vec3 ahead = self.position + self.velocity * look;
-        ground = core::maxf(ground, world.terrain->height_at(ahead.x, ahead.z));
-    }
-    return ground;
+    return world.terrain->ground_ahead(self.position, self.velocity);
 }
 
 // Which job, revisited every `decide_interval`. The slot of the chosen target

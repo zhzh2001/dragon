@@ -179,6 +179,7 @@ private:
     float boost_hold_ = 0.0f;   // seconds of charge boost left
     float boost_timer_ = 0.0f;  // cooldown until the next
     float jink_phase_ = 0.0f;
+    bool ground_flap_ = false;  // the flap pulsed on the ground, so it leaps
     float orbit_timer_ = 0.0f;
 
     // Stale-by-design perception, including the measured acceleration between

@@ -70,6 +70,7 @@ struct Options {
     // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
     std::string atmosphere;
     std::string clouds;  // --clouds key=value,... (gfx/clouds.h)
+    std::string terrain;  // --terrain key=value,... (game/terrain.h)
     // --aa off|fxaa|taa (--no-taa is off): the modern tier's anti-aliasing,
     // -1 for the default (FXAA).
     int aa = -1;
