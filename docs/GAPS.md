@@ -241,10 +241,24 @@ Things learned:
 - Erosion takes longer on the steeper walls: 1.1 s and 2.0 s for the
   arena and the run's valley on the M5, against 1.3 s and 0.8 s.
 
-What it did not fix: the walls are one sandy colour from floor to crest,
-and the shaded ones still read smooth from the chase camera. That is the
-material half of G1: grey rock on steep ground, forest climbing the lower
-walls, snow on upward faces.
+### G1, second part (2026-10-21): the material, first look
+
+- Forest climbs the lower walls: trees stand on slopes to a normal of
+  0.68 (was 0.78) and to 480 m over the floor (was 330 m). 56,005 trees
+  against 44,002, about 0.6 ms a frame at 1080p on the M5 (the run's
+  autopilot, 600 frames, 13.6 ms against 13.0 median).
+- The walls' "clay" is not their colour. A grey rock palette and a darker
+  one moved the sunlit far wall from (171, 153, 140) to (151, 140, 135)
+  and changed how it reads very little; less haze changed it less. The
+  target's cliffs average (102, 85, 66). The wall is bright because a
+  face that turns to a low sun at 3 km is evenly lit: the crags bend its
+  normals but cast nothing, and the mesh's 6 m cells carry no ledges.
+  What makes a cliff read at that range is small-scale self-shadow, and
+  that is F3's CDLOD mesh or a baked detail map of the eroded heightfield
+  with its own shadow, not a palette. The palette is unchanged.
+
+Next for G1: that detail at distance, and snow that lies on the upward
+faces near the crests rather than above a contour.
 
 ## 2. Century: Age of Ashes
 

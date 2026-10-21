@@ -24,7 +24,7 @@ struct VegetationSettings {
     // Trees stop this far above the valley floor. Real treelines are about
     // climate; ours is about the mountains reading as mountains -- a forested
     // peak is a hill.
-    float treeline_above_floor = 330.0f;
+    float treeline_above_floor = 480.0f;
     // 0..1: how much of the eligible ground is forest rather than clearing.
     float forest_cover = 0.5f;
     // 0..1: how far the cover gathers into closed stands with open meadow
@@ -33,7 +33,7 @@ struct VegetationSettings {
     // forest, unchanged.
     float stand_contrast = 0.0f;
     // Steepest ground a tree will stand on, as the surface normal's y.
-    float tree_max_slope = 0.78f;
+    float tree_max_slope = 0.68f;
     // A plant on a slope sinks this many metres per unit of (1 - normal.y), so
     // its downhill skirt meets the ground instead of hanging in the air.
     float slope_sink = 6.0f;
