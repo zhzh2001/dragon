@@ -640,6 +640,32 @@ crowns takes a litter tint and less sky, and past the shadow cascades
 in for the shade (`terrain.hlsl`). Subtle in this valley, whose trees
 are sparse; the density is F7's.
 
+## F7, second part (2026-10-21): impostors
+
+Renders in `artifacts/fidelity-f7-impostors/`. The far trees were their
+crowns' coarse cards, a few large cards that turned a spruce into a
+square blob, which is why the crowns had to stay whole to 900 m and
+dissolve card by card to 1800 m. Now each tree kind is baked once, on
+the first frame, into an atlas (`foliage_impostor_bake.hlsl`): the whole
+crown from 8 x 8 directions over the upper hemisphere (hemi-octahedral),
+128 texels a frame, an albedo pass in 16 bits and a normal pass, with
+mips. A far tree is one quad facing the camera showing the frame nearest
+its direction, lit through the shared path with the baked normal
+(`foliage_impostor.hlsl`). Each tree hands over at its own distance
+between 500 and 900 m, by its hash: the crown's vertex stage collapses
+past it and the impostor's before it, so a tree is never both and never
+neither. Two corrections came from comparing crowns and impostors
+pixel for pixel: a crown shades itself (its far cards in its near cards'
+shadow), so the impostor takes 0.72 of the light ("impostor
+self-shadow"), and the bake darkens a crown's depths ("impostor depth
+shade"). 1.3-1.6 ms saved at 1080p. From straight above the impostors
+read as filled crowns where the crowns thin to specks (their side cards
+go edge-on); the impostors are nearer a real forest from above. Not yet:
+blending between neighbouring frames (a far tree snaps a frame as the
+camera circles it), and impostor shadows (the far cascade still draws
+coarse crowns). Dials under Vegetation; `DRAGON_NO_IMPOSTORS=1` for a
+comparison, `DRAGON_IMPOSTORS=from,to` for the band.
+
 ## The sky in the hide (2026-10-15)
 
 A first piece of F4's specular sky, on the creatures: `skinned.hlsl`

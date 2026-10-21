@@ -11,6 +11,7 @@
 struct FoliageParams {
     float4 wind_time_fade;  // x wind, y time, z fade start, w fade end
     float4 extra;           // x nominal height at scale 1, y LOD distance, z the LOD band (a fraction of it)
+    float4 impostor;        // x, y where trees hand over to their impostors, first and last (m); 0: they do not
 };
 
 struct VertexIn {
@@ -190,6 +191,15 @@ VertexOut vs_main(VertexIn input) {
     o.material.w = frac(o.material.w + input.color.y * 913.7);
 #endif
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
+#ifdef ATMOSPHERE
+    // Past its own handover distance, by its hash, a tree is its impostor
+    // (foliage_impostor.hlsl, which draws the complementary share): its
+    // crown collapses off the screen.
+    if (params.impostor.y > 0.0) {
+        float handover = lerp(params.impostor.x, params.impostor.y, frac(input.params.z * 0.15915494));
+        if (length(input.position_scale.xyz - scene.camera_position.xyz) >= handover) o.clip_position = float4(2.0, 2.0, 2.0, 1.0);
+    }
+#endif
     return o;
 }
 #endif

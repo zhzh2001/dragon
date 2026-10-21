@@ -513,6 +513,19 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         // there draws only the first `coarse_indices` -- the same picture
         // without the vertex work, which is what an SM2 card runs out of.
         MeshData mesh = make_tree_mesh(TreeKind(k));
+        // The sphere an impostor frames: about the middle of the tree's
+        // height, holding every vertex.
+        {
+            float low = 1e9f, high = -1e9f;
+            for (const MeshVertex& v : mesh.vertices) {
+                low = core::minf(low, v.position.y);
+                high = core::maxf(high, v.position.y);
+            }
+            const Vec3 middle{0.0f, 0.5f * (low + high), 0.0f};
+            float radius = 0.0f;
+            for (const MeshVertex& v : mesh.vertices) radius = core::maxf(radius, core::distance(v.position, middle));
+            impostor_kind_[k] = ImpostorKind{middle.y, radius * 1.02f};
+        }
         std::vector<uint32_t> coarse, detail;
         for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
             bool is_detail = false;
@@ -531,10 +544,31 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
             return false;
         }
     }
+    if (active_tier().tier == Tier::Modern && !batch_) init_impostors(*device);
+    // DRAGON_NO_IMPOSTORS=1: the crowns all the way out, for a comparison;
+    // DRAGON_IMPOSTORS=from,to: the handover band (m).
+    if (SDL_getenv("DRAGON_NO_IMPOSTORS")) impostors = false;
+    if (const char* band = SDL_getenv("DRAGON_IMPOSTORS")) {
+        float from = impostor_from, to = impostor_to;
+        if (SDL_sscanf(band, "%f,%f", &from, &to) == 2) {
+            impostor_from = from;
+            impostor_to = core::maxf(to, from + 1.0f);
+        }
+    }
     return pipeline_ != INVALID_PIPELINE;
 }
 
 void Foliage::shutdown(Device& device) {
+    device.rhi().destroy(impostor_albedo_);
+    device.rhi().destroy(impostor_normal_);
+    device.rhi().destroy(impostor_depth_);
+    device.rhi().destroy(impostor_sampler_);
+    device.rhi().destroy(impostor_instance_);
+    impostor_quad_.release(device.rhi());
+    impostor_albedo_ = impostor_normal_ = impostor_depth_ = nullptr;
+    impostor_sampler_ = nullptr;
+    impostor_instance_ = nullptr;
+    impostors_available_ = impostors_baked_ = false;
     device.rhi().destroy(leaf_texture_);
     device.rhi().destroy(card_atlas_);
     device.rhi().destroy(needle_texture_);
@@ -864,19 +898,39 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
     const float band = lod_band_for_tier();
     const float reach = tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap) : tree_draw_distance;
     const bool modern = active_tier().tier == Tier::Modern;
+    // With the impostors, a crown is whole until its tree hands over, and
+    // no crown is drawn past the last handover.
+    const bool impostors_on = impostors_active();
+    const float lod = impostors_on ? 1e6f : lod_distance;
+    const float crown_reach = impostors_on ? core::minf(reach, impostor_to) : reach;
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
         Params params;
         params.wind_time_fade = modern ? core::Vec4{wind, scene.view_params.z, reach * (1.0f - tree_fade_band), reach}
                                        : core::Vec4{wind, scene.view_params.z, 1e8f, 2e8f};
-        params.extra = core::Vec4{tree_height(TreeKind(k)), lod_distance, band, 0.0f};
+        params.extra = core::Vec4{tree_height(TreeKind(k)), lod, band, 0.0f};
+        if (impostors_on) params.impostor = core::Vec4{impostor_from, impostor_to, 0.0f, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
         // Wholly past the dither band (foliage.hlsl): the coarse cards only.
         // Fixed function has no dither, so its crowns are the coarse cards
         // everywhere.
-        trees_drawn_ += draw_static(device, pass, set, frustum, eye, reach, true, lod_distance * (1.0f + band));
+        trees_drawn_ += draw_static(device, pass, set, frustum, eye, crown_reach, true, lod * (1.0f + band));
+    }
+    if (impostors_on) {
+        draw_impostors(device, pass, scene, frustum, reach);
+        // The rocks after: their pipeline again, and the slots it reads.
+        device.rhi().bind_pipeline(pass, pipeline);
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
+        device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
+        if (shadow_map_ && shadow_map_->texture()) {
+            rhi::TextureBinding binding = {};
+            binding.texture = shadow_map_->texture();
+            binding.sampler = shadow_map_->sampler();
+            device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
+        }
+        bind_cards(device, pass, 1);
     }
     // The rocks: the same shader, no sway (a nominal height no rock reaches
     // makes the sway's height fraction nothing), no card LOD.
@@ -894,6 +948,220 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
         draw_static(device, pass, set, frustum, eye, reach, false, 0.0f);
+    }
+}
+
+// ---- the impostors (docs/FIDELITY.md, F7)
+
+namespace {
+
+constexpr uint32_t IMPOSTOR_ATLAS = 2048;  // texels a side: the four kinds in quadrants
+constexpr uint32_t IMPOSTOR_FRAMES = 8;    // frames a side of a quadrant
+constexpr uint32_t IMPOSTOR_FRAME = IMPOSTOR_ATLAS / 2 / IMPOSTOR_FRAMES;  // 128 texels
+constexpr uint32_t IMPOSTOR_MIPS = 6;      // to 4 texels a frame
+
+// The upper hemisphere unfolded from a square, -1..1 each way
+// (foliage_impostor.hlsl folds it the same way).
+Vec3 hemi_octahedral_direction(float ex, float ey) {
+    Vec3 d{(ex + ey) * 0.5f, 0.0f, (ex - ey) * 0.5f};
+    d.y = 1.0f - std::fabs(d.x) - std::fabs(d.z);
+    return core::normalize_or(d, Vec3::up());
+}
+
+PipelineDesc impostor_bake_desc(const char* name, rhi::Format format) {
+    PipelineDesc desc;
+    desc.name = name;
+    desc.shader = "foliage_impostor_bake";
+    desc.vertex_buffers = foliage_buffers();
+    desc.vertex_attributes = foliage_attributes();
+    desc.cull = rhi::Cull::None;
+    desc.color_format = format;
+    desc.depth_format = rhi::Format::D32F;
+    desc.depth_compare = rhi::Compare::Less;
+    return desc;
+}
+
+}  // namespace
+
+void Foliage::init_impostors(Device& device) {
+    rhi::Device& rhi = device.rhi();
+    PipelineDesc draw;
+    draw.name = "foliage_impostor";
+    draw.shader = "foliage_impostor";
+    draw.vertex_buffers = foliage_buffers();
+    draw.vertex_attributes = foliage_attributes();
+    draw.cull = rhi::Cull::None;
+    impostor_pipeline_ = pipelines_->create(draw);
+    bake_albedo_pipeline_ = pipelines_->create(impostor_bake_desc("impostor_bake_albedo", rhi::Format::RGBA16F));
+    bake_normal_pipeline_ = pipelines_->create(impostor_bake_desc("impostor_bake_normal", rhi::Format::RGBA8));
+
+    rhi::TextureDesc atlas;
+    atlas.width = atlas.height = IMPOSTOR_ATLAS;
+    atlas.mip_levels = IMPOSTOR_MIPS;
+    atlas.usage = rhi::TEXTURE_SAMPLED | rhi::TEXTURE_COLOR_TARGET;
+    // The albedo in 16 bits: a spruce's linear green is a twentieth of
+    // white, and 8 bits banded it.
+    atlas.format = rhi::Format::RGBA16F;
+    impostor_albedo_ = rhi.create_texture(atlas, "impostor_albedo");
+    atlas.format = rhi::Format::RGBA8;
+    impostor_normal_ = rhi.create_texture(atlas, "impostor_normal");
+    rhi::TextureDesc depth;
+    depth.width = depth.height = IMPOSTOR_ATLAS;
+    depth.format = rhi::Format::D32F;
+    depth.usage = rhi::TEXTURE_DEPTH_TARGET;
+    impostor_depth_ = rhi.create_texture(depth, "impostor_depth");
+
+    rhi::SamplerDesc sampler;
+    sampler.min_filter = sampler.mag_filter = rhi::Filter::Linear;
+    sampler.mip_mode = rhi::MipMode::Linear;
+    sampler.address_u = sampler.address_v = sampler.address_w = rhi::Address::Clamp;
+    sampler.max_lod = float(IMPOSTOR_MIPS - 1);
+    impostor_sampler_ = rhi.create_sampler(sampler);
+
+    MeshData quad;
+    const float corners[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
+    for (const auto& c : corners) {
+        MeshVertex v;
+        v.position = Vec3{c[0], c[1], 0.0f};
+        v.normal = Vec3::up();
+        quad.vertices.push_back(v);
+    }
+    quad.indices = {0, 1, 2, 0, 2, 3};
+    impostor_quad_.upload(rhi, quad, "impostor_quad");
+    FoliageInstance tree;
+    tree.position_scale = core::Vec4{0.0f, 0.0f, 0.0f, 1.0f};
+    tree.params = core::Vec4{0.0f, 1.0f, 0.0f, 0.0f};
+    impostor_instance_ = rhi.create_buffer(rhi::BufferUsage::Vertex, sizeof(tree), &tree, "impostor_tree");
+    impostors_available_ = impostor_albedo_ && impostor_normal_ && impostor_depth_ && impostor_sampler_ &&
+                           impostor_quad_.valid() && impostor_instance_;
+}
+
+bool Foliage::impostors_active() const {
+    return impostors && impostors_baked_ && impostors_available_ && active_tier().tier == Tier::Modern &&
+           pipelines_->get(impostor_pipeline_) != nullptr;
+}
+
+void Foliage::bake_impostors(Device& device, const SceneUniforms& scene) {
+    if (!impostors_available_ || impostors_baked_) return;
+    rhi::Pipeline* pipelines[2] = {pipelines_->get(bake_albedo_pipeline_), pipelines_->get(bake_normal_pipeline_)};
+    rhi::Texture* targets[2] = {impostor_albedo_, impostor_normal_};
+    if (!pipelines[0] || !pipelines[1] || !leaf_texture_ || !needle_texture_) return;
+    rhi::Device& rhi = device.rhi();
+    struct BakeUniforms {
+        core::Mat4 view_proj;
+        core::Vec4 eye;
+        core::Vec4 sphere;
+        core::Vec4 shade;
+    };
+    for (int mode = 0; mode < 2; ++mode) {
+        rhi::PassDesc desc;
+        desc.color = targets[mode];
+        desc.clear_color = true;
+        // The normal atlas cleared to an upward normal: its mips average a
+        // frame's edge with the empty texels round it.
+        const float clear[2][4] = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.5f, 1.0f, 0.5f, 0.0f}};
+        for (int i = 0; i < 4; ++i) desc.clear_rgba[i] = clear[mode][i];
+        desc.depth = impostor_depth_;
+        desc.clear_depth = true;
+        desc.clear_depth_value = 1.0f;
+        rhi::Pass* pass = rhi.begin_pass(desc);
+        if (!pass) return;
+        rhi.bind_pipeline(pass, pipelines[mode]);
+        rhi.push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
+        rhi.push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
+        rhi::TextureBinding cards[2] = {};
+        cards[0].texture = leaf_texture_;
+        cards[1].texture = needle_texture_;
+        cards[0].sampler = cards[1].sampler = card_sampler_;
+        rhi.bind_fragment_textures(pass, 0, cards, 2);
+        for (int k = 0; k < TREE_KINDS; ++k) {
+            const StaticSet& set = trees_[k];
+            if (!set.mesh.valid()) continue;
+            set.mesh.bind(rhi, pass);
+            rhi::BufferBinding instance = {};
+            instance.buffer = impostor_instance_;
+            rhi.bind_vertex_buffers(pass, 1, &instance, 1);
+            const float r = impostor_kind_[k].radius;
+            const Vec3 centre{0.0f, impostor_kind_[k].centre, 0.0f};
+            const float qx = float((k % 2) * IMPOSTOR_ATLAS / 2), qy = float((k / 2) * IMPOSTOR_ATLAS / 2);
+            for (uint32_t fy = 0; fy < IMPOSTOR_FRAMES; ++fy) {
+                for (uint32_t fx = 0; fx < IMPOSTOR_FRAMES; ++fx) {
+                    const float ex = (float(fx) + 0.5f) / float(IMPOSTOR_FRAMES) * 2.0f - 1.0f;
+                    const float ey = (float(fy) + 0.5f) / float(IMPOSTOR_FRAMES) * 2.0f - 1.0f;
+                    const Vec3 d = hemi_octahedral_direction(ex, ey);
+                    // The camera's basis as the runtime's quad builds it.
+                    const Vec3 reference = std::fabs(d.y) > 0.999f ? Vec3{0.0f, 0.0f, 1.0f} : Vec3::up();
+                    const Vec3 right = core::normalize(core::cross(reference, d));
+                    const Vec3 up = core::cross(d, right);
+                    // x and y over the sphere's width, depth along the view
+                    // into 0..1, nearer smaller (LESS).
+                    BakeUniforms u;
+                    u.view_proj.col[0] = core::Vec4{right.x / r, up.x / r, -d.x / (4.0f * r), 0.0f};
+                    u.view_proj.col[1] = core::Vec4{right.y / r, up.y / r, -d.y / (4.0f * r), 0.0f};
+                    u.view_proj.col[2] = core::Vec4{right.z / r, up.z / r, -d.z / (4.0f * r), 0.0f};
+                    u.view_proj.col[3] = core::Vec4{-core::dot(right, centre) / r, -core::dot(up, centre) / r,
+                                                    0.5f + core::dot(d, centre) / (4.0f * r), 1.0f};
+                    u.eye = core::Vec4{d.x, d.y, d.z, float(mode)};
+                    u.sphere = core::Vec4{centre, r};
+                    u.shade = core::Vec4{impostor_depth_shade, 0.0f, 0.0f, 0.0f};
+                    rhi.set_viewport(pass, qx + float(fx * IMPOSTOR_FRAME), qy + float(fy * IMPOSTOR_FRAME),
+                                     float(IMPOSTOR_FRAME), float(IMPOSTOR_FRAME));
+                    rhi.push_uniforms(rhi::Stage::Vertex, 1, &u, sizeof(u));
+                    rhi.push_uniforms(rhi::Stage::Fragment, 1, &u, sizeof(u));
+                    rhi.draw_indexed(pass, set.mesh.index_count(), 1, 0, 0, 0);
+                }
+            }
+        }
+        rhi.end_pass(pass);
+    }
+    if (!rhi.generate_mips(impostor_albedo_) || !rhi.generate_mips(impostor_normal_)) {
+        LOG_WARN("foliage: the impostors' mips could not be generated; far trees will shimmer");
+    }
+    impostors_baked_ = true;
+    LOG_INFO("foliage: impostors baked, %u frames a kind", IMPOSTOR_FRAMES * IMPOSTOR_FRAMES);
+}
+
+void Foliage::draw_impostors(Device& device, rhi::Pass* pass, const SceneUniforms& scene, const Frustum& frustum,
+                             float reach) {
+    rhi::Pipeline* pipeline = pipelines_->get(impostor_pipeline_);
+    if (!pipeline) return;
+    rhi::Device& rhi = device.rhi();
+    rhi.bind_pipeline(pass, pipeline);
+    rhi.push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
+    rhi.push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
+    rhi::TextureBinding textures[3] = {};
+    if (shadow_map_) {
+        textures[0].texture = shadow_map_->texture();
+        textures[0].sampler = shadow_map_->sampler();
+    }
+    textures[1].texture = impostor_albedo_;
+    textures[2].texture = impostor_normal_;
+    textures[1].sampler = textures[2].sampler = impostor_sampler_;
+    rhi.bind_fragment_textures(pass, 0, textures, 3);
+    if (atmosphere_) atmosphere_->bind(rhi, pass, 3);  // the atlas and the terrain's shadow heights
+    impostor_quad_.bind(rhi, pass);
+    const core::Vec3 eye = scene.camera_position.xyz();
+    struct ImpostorUniforms {
+        core::Vec4 kind, lod, fade;
+    };
+    for (int k = 0; k < TREE_KINDS; ++k) {
+        const StaticSet& set = trees_[k];
+        if (!set.instances || set.count == 0) continue;
+        ImpostorUniforms u;
+        u.kind = core::Vec4{float(k % 2) * 0.5f, float(k / 2) * 0.5f, impostor_kind_[k].centre, impostor_kind_[k].radius};
+        u.lod = core::Vec4{impostor_from, impostor_to, float(IMPOSTOR_FRAMES), 0.5f};
+        u.fade = core::Vec4{reach * (1.0f - tree_fade_band), reach, impostor_self_shadow, 0.0f};
+        rhi.push_uniforms(rhi::Stage::Vertex, 1, &u, sizeof(u));
+        rhi.push_uniforms(rhi::Stage::Fragment, 1, &u, sizeof(u));
+        rhi::BufferBinding instances = {};
+        instances.buffer = set.instances;
+        rhi.bind_vertex_buffers(pass, 1, &instances, 1);
+        for (const Cell& cell : set.cells) {
+            const float d = core::distance(eye, cell.centre);
+            if (d - cell.radius > reach || d + cell.radius < impostor_from) continue;
+            if (!frustum.sees(cell.centre, cell.radius)) continue;
+            rhi.draw_indexed(pass, impostor_quad_.index_count(), cell.count, 0, 0, cell.first);
+        }
     }
 }
 

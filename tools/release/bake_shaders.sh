@@ -49,7 +49,7 @@ for src in "$root"/shaders/*.hlsl; do
   stem=$(basename "$src" .hlsl)
   for variant in $variants; do
     # The atmosphere's tables and the temporal resolve are the modern tier's alone.
-    case $stem in atmosphere_*|clouds_*|terrain_sun|post_taa|post_ssao|post_ssao_blur|velocity_skinned) [ "$variant" = ATMOSPHERE ] || continue ;; esac
+    case $stem in atmosphere_*|clouds_*|foliage_impostor*|terrain_sun|post_taa|post_ssao|post_ssao_blur|velocity_skinned) [ "$variant" = ATMOSPHERE ] || continue ;; esac
     # The terrain's light shading is a modern variant alone (gfx/pipeline.cpp).
     case $variant in *TERRAIN_LITE*) [ "$stem" = terrain ] || continue ;; esac
     flags=""; suffix=""

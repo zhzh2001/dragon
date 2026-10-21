@@ -104,6 +104,25 @@ public:
     // tier's; past it, the impostors' shadows).
     float shadow_crown_distance = 700.0f;
 
+    // The modern tier's far trees as impostors (foliage_impostor.hlsl,
+    // docs/FIDELITY.md F7): each tree hands over from its whole crown to
+    // its impostor at its own distance between these two, by its hash.
+    bool impostors = true;
+    float impostor_from = 500.0f;
+    float impostor_to = 900.0f;
+    // How dark the impostors' baked depths are (foliage_impostor_bake.hlsl);
+    // a change takes the next bake (rebake_impostors).
+    float impostor_depth_shade = 0.5f;
+    // The light an impostor takes, against a crown's own shading of itself
+    // (foliage_impostor.hlsl).
+    float impostor_self_shadow = 0.72f;
+    void rebake_impostors() { impostors_baked_ = false; }
+    // Bakes the impostors once (foliage_impostor_bake.hlsl): inside a frame,
+    // before any pass, with the frame's scene for the palette. A no-op after
+    // the first, and on a retro tier.
+    void bake_impostors(Device& device, const SceneUniforms& scene);
+    bool impostors_active() const;
+
     // Nominal height of each kind at scale 1, for the sway's height fraction.
     static float tree_height(TreeKind kind);
     static float grass_height(GrassKind kind);
@@ -112,7 +131,29 @@ private:
     struct Params {
         core::Vec4 wind_time_fade;  // x wind, y time, z fade start, w fade end
         core::Vec4 extra;           // x nominal height, y LOD distance
+        core::Vec4 impostor;        // x, y the impostors' handover band (m); 0: none
     };
+    // ---- the impostors: an albedo and a normal atlas, the four kinds in
+    // its quadrants, 8 x 8 frames of 128 texels each over the hemisphere.
+    struct ImpostorKind {
+        float centre = 0.0f;  // the crown's middle, above the base (m, at scale 1)
+        float radius = 1.0f;  // a sphere about it holding the whole tree
+    };
+    ImpostorKind impostor_kind_[TREE_KINDS];
+    rhi::Texture* impostor_albedo_ = nullptr;
+    rhi::Texture* impostor_normal_ = nullptr;
+    rhi::Texture* impostor_depth_ = nullptr;
+    rhi::Sampler* impostor_sampler_ = nullptr;
+    rhi::Buffer* impostor_instance_ = nullptr;  // the one tree the bake draws
+    Mesh impostor_quad_;
+    PipelineHandle impostor_pipeline_ = INVALID_PIPELINE;
+    PipelineHandle bake_albedo_pipeline_ = INVALID_PIPELINE;
+    PipelineHandle bake_normal_pipeline_ = INVALID_PIPELINE;
+    bool impostors_available_ = false;
+    bool impostors_baked_ = false;
+    void init_impostors(Device& device);
+    void draw_impostors(Device& device, rhi::Pass* pass, const SceneUniforms& scene, const Frustum& frustum,
+                        float reach);
     rhi::Texture* leaf_texture_ = nullptr;
     rhi::Texture* needle_texture_ = nullptr;
     // The fixed-function tier's one card texture (gfx/render_tier.h): the

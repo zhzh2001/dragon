@@ -3114,6 +3114,15 @@ void App::build_ui(float dt) {
                 ImGui::SliderFloat("crown detail band", &foliage_.lod_band, 0.1f, 2.0f, "%.2f x distance");
                 ImGui::SliderFloat("tree fade band", &foliage_.tree_fade_band, 0.0f, 0.5f, "%.2f x draw distance");
                 ImGui::SliderFloat("whole crown shadows", &foliage_.shadow_crown_distance, 0.0f, 2000.0f, "%.0f m");
+                ImGui::Checkbox("tree impostors", &foliage_.impostors);
+                if (foliage_.impostors) {
+                    ImGui::SliderFloat("impostors from", &foliage_.impostor_from, 100.0f, 3000.0f, "%.0f m");
+                    ImGui::SliderFloat("impostors by", &foliage_.impostor_to, 100.0f, 4000.0f, "%.0f m");
+                    foliage_.impostor_to = core::maxf(foliage_.impostor_to, foliage_.impostor_from + 1.0f);
+                    ImGui::SliderFloat("impostor self-shadow", &foliage_.impostor_self_shadow, 0.3f, 1.2f, "%.2f");
+                    ImGui::SliderFloat("impostor depth shade", &foliage_.impostor_depth_shade, 0.0f, 0.9f, "%.2f");
+                    if (ImGui::IsItemDeactivatedAfterEdit()) foliage_.rebake_impostors();
+                }
             }
             ImGui::TextDisabled("%u trees (%u drawn), %u grass tufts near the camera", foliage_.tree_count(),
                                 foliage_.trees_drawn(),
@@ -8040,6 +8049,9 @@ void App::render() {
 
     // The atmosphere's tables: every world shader reads the atlas.
     if (!ablated("atmosphere")) atmosphere_.update(device_, scene, atmosphere_settings_);
+    // The trees' impostors, once, on the first frame (gfx::Foliage): outside
+    // any pass, with this frame's palette.
+    foliage_.bake_impostors(device_, scene);
 
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled && shadow_.available()) {

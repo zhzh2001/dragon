@@ -6,6 +6,7 @@
 struct FoliageParams {
     float4 wind_time_fade;
     float4 extra;
+    float4 impostor;  // foliage.hlsl's; unread here
 };
 
 struct ShadowUniforms {

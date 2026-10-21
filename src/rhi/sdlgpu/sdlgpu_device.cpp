@@ -429,6 +429,21 @@ public:
 
     float gpu_frame_ms() const override { return gpu_ms_.load(std::memory_order_relaxed); }
 
+    bool generate_mips(Texture* texture) override {
+        if (!texture) return false;
+        // Into this frame's command buffer when one is open, after whatever
+        // rendered the texture; else one of its own.
+        if (cmd_) {
+            SDL_GenerateMipmapsForGPUTexture(cmd_, sdl(texture));
+            return true;
+        }
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(gpu_);
+        if (!cmd) return false;
+        SDL_GenerateMipmapsForGPUTexture(cmd, sdl(texture));
+        submit_and_wait(cmd);
+        return true;
+    }
+
     // ---- buffers
     Buffer* create_buffer(BufferUsage usage, uint32_t size, const void* data, const char* debug_name) override {
         if (size == 0) return nullptr;

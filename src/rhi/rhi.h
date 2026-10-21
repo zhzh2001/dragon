@@ -265,6 +265,10 @@ public:
     virtual void end_frame(Texture* source, uint32_t width, uint32_t height,
                            std::vector<uint8_t>* readback) = 0;
     virtual void wait_idle() = 0;
+    // Fills a rendered texture's mip chain from its level 0, outside any
+    // pass (a colour target created with mip levels). False where the
+    // backend cannot: the caller then samples level 0 alone.
+    virtual bool generate_mips(Texture* texture) { (void)texture; return false; }
     // The GPU's time a frame, smoothed over about a third of a second, in
     // ms; 0 where the backend cannot tell (only SDL GPU can, by fences).
     // What dynamic resolution steers by (gfx/dynamic_resolution.h).
