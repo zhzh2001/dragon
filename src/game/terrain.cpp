@@ -274,12 +274,15 @@ float Terrain::base_height_at(float x, float z) const {
         mx += noise_.fbm(x * s + 41.7f, z * s - 13.2f, 3) * settings_.warp_strength;
         mz += noise_.fbm(x * s - 27.9f, z * s + 61.4f, 3) * settings_.warp_strength;
     }
-    // Taller past the playable extent: the backdrop ranges.
+    // Taller past the playable extent: the backdrop ranges. Starting at the
+    // edge, their shadows under the low sun reached kilometres into the
+    // valley and took the arena's frame from 91 to 65 of 255; from 1.4
+    // extents out they light the horizon and leave the floor alone.
     float lift = 1.0f;
     if (settings_.backdrop_lift > 0.0f) {
         const float edge = core::maxf(std::fabs(x), std::fabs(z));
         lift += settings_.backdrop_lift *
-                core::smoothstep(settings_.half_extent, settings_.half_extent * 1.8f, edge);
+                core::smoothstep(settings_.half_extent * 1.4f, settings_.half_extent * 2.4f, edge);
     }
 
     float mountains = noise_.ridged(mx / settings_.mountain_scale, mz / settings_.mountain_scale,
@@ -292,7 +295,11 @@ float Terrain::base_height_at(float x, float z) const {
         const float across = std::fabs(mx - valley_center_x(mz));
         const float spacing = core::maxf(settings_.spur_spacing, 10.0f);
         const float spur = noise_.ridged(mz / spacing - 3.7f, across / (spacing * 3.0f) + 8.9f, 3);
-        mountains += spur * settings_.spur_height * lift * core::smoothstep(0.0f, 0.35f, mask);
+        // Centred on the noise's mean, so the spurs rise as far as the gullies
+        // between them sink: the wall keeps its height and its shadow. Added
+        // on top, they raised every wall by half their height, and the run's
+        // floor went from 76 to 58 of 255 in the ridges' shade.
+        mountains += (spur - 0.55f) * settings_.spur_height * lift * core::smoothstep(0.1f, 0.6f, mask);
     }
     const float up = settings_.mountain_height > 1e-3f ? mountains / settings_.mountain_height : 0.0f;
     if (settings_.ridge_height > 0.0f) {

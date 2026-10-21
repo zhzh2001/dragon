@@ -200,16 +200,16 @@ in `artifacts/gap-study/g1-*`.
   position pushed about by a broad fbm, so crests curve and branch.
 - Spurs (420 m, 380 m apart): ridged noise stretched three to one across
   the valley, so its crests run down the walls. This is what broke the far
-  wall into buttresses and gullies. Squared, it showed only at the crests;
-  weighted to the upper wall, the near walls stayed smooth. It is linear
-  and reaches the foot of the wall now.
+  wall into buttresses and gullies. Squared, it showed only at the crests.
+  It is centred on the noise's mean, so gullies sink as far as spurs rise,
+  and weighted to the upper wall.
 - Wall profile (0.8): the ramp from the floor raised to a power below one,
   so the lower wall climbs sooner. At 0.55 the walls closed on the vista
   camera at 260 m.
-- Backdrop (0.8): past the playable extent the mountains grow by up to
-  80%, so the pass and the high views show jagged ranges behind.
+- Backdrop (0.8): from 1.4 to 2.4 extents out the mountains grow by up
+  to 80%, so the pass and the high views show jagged ranges behind.
 - Also: the ridge octave is 160 m at 450 m (was 60 m at 700 m), the
-  mountains 850 m (was 900 m). Strata at 45 m and 0.6 made no visible
+  mountains 780 m (was 900 m). Strata at 45 m and 0.6 made no visible
   difference at flight distance and stay as they were.
 
 Things learned:
@@ -225,6 +225,19 @@ Things learned:
   heading as well, and a grounded bot pulses its flap. A test sets a bot
   on the floor and checks that it is airborne within four seconds; it
   fails without the pulse.
+- The first version darkened every frame, because the low sun's shadows
+  grew with the walls. Mean brightness of the golden frames, of 255:
+  valley 90.6 before G1, 65.1 at first, 90.5 now; the run 96.2, 74.3,
+  91.0. Two causes, found by removing one term at a time:
+  - The backdrop started at the playable edge, and its ranges, 80% taller,
+    threw shadows kilometres into the valley. It starts 1.4 extents out
+    now.
+  - The spurs were added on top. Ridged noise is never negative, so they
+    raised every wall by about half their height. Centred on the mean,
+    they keep the wall's height.
+
+  The run's start is still darker on the floor (a spur's shadow lies
+  across the first 300 m), which the next playtest should judge.
 - Erosion takes longer on the steeper walls: 1.1 s and 2.0 s for the
   arena and the run's valley on the M5, against 1.3 s and 0.8 s.
 

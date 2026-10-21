@@ -25,7 +25,7 @@ struct TerrainSettings {
     float cell_size = 6.0f;       // metres per quad edge
 
     // Mountain walls: ridged noise, which gives sharp crests rather than dunes.
-    float mountain_height = 850.0f;
+    float mountain_height = 780.0f;
     // Scaled with the map, or the same noise frequency would turn the walls
     // into a field of small bumps instead of a mountain range.
     float mountain_scale = 2300.0f;  // metres per noise unit; larger = broader
