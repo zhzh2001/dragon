@@ -57,13 +57,23 @@ public:
     // `coarse`: only each crown's coarse cards, for a shadow cascade whose
     // texels are metres across (gfx/shadow_map.h): the full crown there cost
     // 2 ms a frame for detail no texel could hold.
+    // `cull`: which cells the cascade needs (ShadowMap::caster_cull); null
+    // for all of them.
     void draw_trees_depth(Device& device, rhi::Pass* pass,
                           const core::Mat4& light_view_proj, float time,
-                          core::Vec3 eye = core::Vec3::zero(), bool coarse = false);
+                          core::Vec3 eye = core::Vec3::zero(), bool coarse = false,
+                          const struct ShadowCasterCull* cull = nullptr, bool middle = false);
 
     uint32_t tree_count() const;
     // Trees drawn in the last main pass, after the cell culling.
     uint32_t trees_drawn() const { return trees_drawn_; }
+    // Crown vertices (indices times instances) the last frame submitted, in
+    // the main pass and in every shadow cascade together: what a forest
+    // costs, since both passes are bound by geometry, counted rather than
+    // timed so a change is measured on a busy machine too.
+    uint64_t crown_vertices_main() const { return crown_vertices_main_; }
+    uint64_t crown_vertices_shadow() const { return crown_vertices_shadow_; }
+    void reset_crown_counts() { crown_vertices_main_ = crown_vertices_shadow_ = 0; }
     // Trees past this distance from the camera are not drawn at all. Beyond
     // it a tree is under a pixel; the LOD dither has already taken its crowns.
     float tree_draw_distance = 4200.0f;
@@ -102,7 +112,18 @@ public:
     float tree_fade_band = 0.15f;
     // The far shadow cascade's whole crowns reach this far (the modern
     // tier's; past it, the impostors' shadows).
-    float shadow_crown_distance = 700.0f;
+    float shadow_crown_distance = 200.0f;
+    // The same for the middle cascade (37 cm texels, a 380 m box): past this
+    // its crowns cast their coarse cards. Whole to its edge, it was the
+    // costliest of the three, 2.8 ms in a forest at 1080p on the M5.
+    float shadow_mid_crown_distance = 120.0f;
+    // The middle and far cascades' trees hand their shadow over to their
+    // impostor's quad (foliage_impostor_depth.hlsl) between these
+    // distances, each tree at its own, measured flat from the eye. The far
+    // cascade's coarse cards were 4.5 of 7.8 million crown vertices in a
+    // forest at 1080p.
+    float shadow_impostor_from = 180.0f;
+    float shadow_impostor_to = 320.0f;
 
     // The modern tier's far trees as impostors (foliage_impostor.hlsl,
     // docs/FIDELITY.md F7): each tree hands over from its whole crown to
@@ -147,6 +168,7 @@ private:
     rhi::Buffer* impostor_instance_ = nullptr;  // the one tree the bake draws
     Mesh impostor_quad_;
     PipelineHandle impostor_pipeline_ = INVALID_PIPELINE;
+    PipelineHandle impostor_depth_pipeline_ = INVALID_PIPELINE;
     PipelineHandle bake_albedo_pipeline_ = INVALID_PIPELINE;
     PipelineHandle bake_normal_pipeline_ = INVALID_PIPELINE;
     bool impostors_available_ = false;
@@ -202,6 +224,9 @@ private:
     };
     static constexpr float CELL_SIZE = 320.0f;
     uint32_t trees_drawn_ = 0;
+    uint64_t crown_vertices_main_ = 0;
+    bool is_tree_set(const StaticSet& set) const { return &set >= trees_ && &set < trees_ + TREE_KINDS; }
+    uint64_t crown_vertices_shadow_ = 0;
     struct StreamSet {
         Mesh mesh;
         rhi::Buffer* instances = nullptr;

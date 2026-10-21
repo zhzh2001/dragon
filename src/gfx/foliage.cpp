@@ -802,8 +802,9 @@ uint32_t Foliage::draw_static(Device& device, rhi::Pass* pass, const StaticSet& 
                 pending_count += count;
             }
         } else {
-            rhi.draw_indexed(pass, coarse ? set.coarse_indices : set.mesh.index_count(), cell.count, 0, 0,
-                             cell.first);
+            const uint32_t indices = coarse ? set.coarse_indices : set.mesh.index_count();
+            rhi.draw_indexed(pass, indices, cell.count, 0, 0, cell.first);
+            if (is_tree_set(set)) crown_vertices_main_ += uint64_t(indices) * cell.count;
         }
         drawn += cell.count;
     }
@@ -968,6 +969,10 @@ Vec3 hemi_octahedral_direction(float ex, float ey) {
     return core::normalize_or(d, Vec3::up());
 }
 
+// Distance on the ground plane: what the shadow handover between a crown and
+// its impostor is measured by, in both depth shaders.
+float flat_distance(Vec3 a, Vec3 b) { return core::length(core::Vec2{a.x - b.x, a.z - b.z}); }
+
 PipelineDesc impostor_bake_desc(const char* name, rhi::Format format) {
     PipelineDesc desc;
     desc.name = name;
@@ -992,6 +997,12 @@ void Foliage::init_impostors(Device& device) {
     draw.vertex_attributes = foliage_attributes();
     draw.cull = rhi::Cull::None;
     impostor_pipeline_ = pipelines_->create(draw);
+    if (shadow_map_ && shadow_map_->available()) {
+        PipelineDesc depth = make_foliage_depth_desc(shadow_map_->format());
+        depth.name = "shadow_foliage_impostor";
+        depth.shader = "foliage_impostor_depth";
+        impostor_depth_pipeline_ = pipelines_->create(depth);
+    }
     bake_albedo_pipeline_ = pipelines_->create(impostor_bake_desc("impostor_bake_albedo", rhi::Format::RGBA16F));
     bake_normal_pipeline_ = pipelines_->create(impostor_bake_desc("impostor_bake_normal", rhi::Format::RGBA8));
 
@@ -1173,10 +1184,15 @@ void Foliage::draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& s
 }
 
 void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
-                               const core::Mat4& light_view_proj, float time, core::Vec3 eye, bool coarse) {
+                               const core::Mat4& light_view_proj, float time, core::Vec3 eye, bool coarse,
+                               const ShadowCasterCull* cull, bool middle) {
     if (!pass) return;
     rhi::Pipeline* pipeline = pipelines_->get(depth_pipeline_);
     if (!pipeline) return;
+    rhi::Pipeline* impostor_pipeline = pipelines_->get(impostor_depth_pipeline_);
+    // The middle and far cascades, by the same band, so a tree casts alike
+    // in either.
+    const bool far_impostors = (coarse || middle) && impostors_active() && impostor_pipeline != nullptr;
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
     bind_cards(device, pass, 0);
@@ -1197,11 +1213,19 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
         // 1.4 ms at 1080p; to 700, where a crown's shadow is a few pixels,
         // 0.6. A retro tier's coarse cascade stays coarse.
         const bool modern = active_tier().tier == Tier::Modern;
-        const float whole_to = coarse && modern ? shadow_crown_distance : coarse ? -1.0f : 1e30f;
+        // Past the band the far cascade casts impostors, not crowns.
+        const bool impostor_shadows = far_impostors;
+        const float whole_to = coarse && modern ? shadow_crown_distance
+                               : coarse         ? -1.0f
+                               : middle && modern ? shadow_mid_crown_distance
+                                                : 1e30f;
         for (int part = 0; part < 2; ++part) {
             const bool thin = part == 1;
             Params params;
             params.wind_time_fade = core::Vec4{wind, time, 1e8f, 2e8f};
+            if (impostor_shadows) {
+                params.impostor = core::Vec4{shadow_impostor_from, shadow_impostor_to, eye.x, eye.z};
+            }
             // The far cascade's coarse crowns thickened as the colour pass's
             // are past the LOD band (foliage_depth.hlsl), so a tree's shadow
             // keeps its weight there.
@@ -1210,9 +1234,12 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
             const uint32_t indices = thin && set.coarse_indices > 0 ? set.coarse_indices : set.mesh.index_count();
             for (const Cell& cell : set.cells) {
                 if (!light.sees(cell.centre, cell.radius)) continue;
+                if (cull && !cull->needed(light_view_proj, cell.centre, cell.radius)) continue;
+                if (impostor_shadows && flat_distance(eye, cell.centre) - cell.radius > shadow_impostor_to) continue;
                 const bool far = core::distance(eye, cell.centre) - cell.radius > whole_to;
                 if (far != thin) continue;
                 device.rhi().draw_indexed(pass, indices, cell.count, 0, 0, cell.first);
+                crown_vertices_shadow_ += uint64_t(indices) * cell.count;
             }
         }
     }
@@ -1232,6 +1259,45 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
             if (core::distance(eye, cell.centre) - cell.radius > rock_shadow_distance) continue;
             if (!light.sees(cell.centre, cell.radius)) continue;
             device.rhi().draw_indexed(pass, set.mesh.index_count(), cell.count, 0, 0, cell.first);
+        }
+    }
+    if (!far_impostors) return;
+    // The far trees' impostor quads, facing the sun. Toward the sun is
+    // toward the light's near plane, ndc z 0.
+    const core::Mat4 to_world = core::inverse(light_view_proj);
+    const Vec3 near_point = core::transform_point(to_world, Vec3{0.0f, 0.0f, 0.0f});
+    const Vec3 far_point = core::transform_point(to_world, Vec3{0.0f, 0.0f, 1.0f});
+    const Vec3 to_sun = core::normalize_or(near_point - far_point, Vec3::up());
+    rhi::Device& rhi = device.rhi();
+    rhi.bind_pipeline(pass, impostor_pipeline);
+    rhi.push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
+    rhi::TextureBinding atlas = {};
+    atlas.texture = impostor_albedo_;
+    atlas.sampler = impostor_sampler_;
+    rhi.bind_fragment_textures(pass, 0, &atlas, 1);
+    impostor_quad_.bind(rhi, pass);
+    struct ImpostorDepthUniforms {
+        core::Vec4 kind, lod, sun, eye;
+    };
+    const Frustum light(light_view_proj);
+    for (int k = 0; k < TREE_KINDS; ++k) {
+        const StaticSet& set = trees_[k];
+        if (!set.instances || set.count == 0) continue;
+        ImpostorDepthUniforms u;
+        u.kind = core::Vec4{float(k % 2) * 0.5f, float(k / 2) * 0.5f, impostor_kind_[k].centre, impostor_kind_[k].radius};
+        u.lod = core::Vec4{shadow_impostor_from, shadow_impostor_to, float(IMPOSTOR_FRAMES), 0.5f};
+        u.sun = core::Vec4{to_sun.x, to_sun.y, to_sun.z, 0.0f};
+        u.eye = core::Vec4{eye.x, 0.0f, eye.z, 0.0f};
+        rhi.push_uniforms(rhi::Stage::Vertex, 1, &u, sizeof(u));
+        rhi::BufferBinding instances = {};
+        instances.buffer = set.instances;
+        rhi.bind_vertex_buffers(pass, 1, &instances, 1);
+        for (const Cell& cell : set.cells) {
+            if (flat_distance(eye, cell.centre) + cell.radius < shadow_impostor_from) continue;
+            if (!light.sees(cell.centre, cell.radius)) continue;
+            if (cull && !cull->needed(light_view_proj, cell.centre, cell.radius)) continue;
+            rhi.draw_indexed(pass, impostor_quad_.index_count(), cell.count, 0, 0, cell.first);
+            crown_vertices_shadow_ += uint64_t(impostor_quad_.index_count()) * cell.count;
         }
     }
 }

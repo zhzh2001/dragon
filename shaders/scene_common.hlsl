@@ -266,6 +266,11 @@ float cascade_visibility(float3 world_position, float3 normal, Texture2D<float> 
         // quadrant's size, half the atlas's.
         float half_width = texels[c] * (0.5 / scene.shadow_params.w) * 0.5;
         float range = max(half_width * 4.4, 3000.0);
+        // Only within RECEIVER_DEPTH (2) half-widths of the box's centre
+        // along the light: past that the cascade's casters were not drawn
+        // (ShadowMap::caster_window), and the next box takes the point.
+        float centre_z = (range * 0.5 - 1.0) / (range - 1.0);
+        if (abs(ndc.z - centre_z) * (range - 1.0) > 2.0 * half_width) continue;
         float bias = texels[c] * (1.5 + slope * 4.0) / range;
         float step_uv = scene.shadow_params.w * 0.5;  // one atlas texel
         float lit = 0.0;

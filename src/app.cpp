@@ -381,6 +381,13 @@ bool App::init(const Options& options) {
                 }
             }
             if (line == "fps=1") show_fps_ = true;
+            if (line.rfind("dynres=", 0) == 0) {
+                dynamic_resolution_settings_.enabled = line == "dynres=1";
+                dynamic_resolution_saved_ = true;
+            }
+            float value = 0.0f;
+            if (std::sscanf(line.c_str(), "dynres_fps=%f", &value) == 1) dynamic_resolution_settings_.target_fps = value;
+            if (std::sscanf(line.c_str(), "dynres_min=%f", &value) == 1) dynamic_resolution_settings_.min_scale = value;
             if (line.rfind("fullscreen=", 0) == 0) fullscreen_ = line == "fullscreen=1";
             if (line == "vsync=0") vsync_ = false;
             if (line.rfind("color=", 0) == 0 && !options.color_bits) options_.color_bits = line == "color=16" ? 16 : 32;
@@ -1376,10 +1383,16 @@ void App::build_graphics_ui() {
     if (ImGui::Checkbox("show fps", &show_fps_)) save_graphics_key("fps", show_fps_ ? "1" : "0");
     if (tier_.tier == gfx::Tier::Modern && device_.rhi().gpu_frame_ms() > 0.0f) {
         gfx::DynamicResolutionSettings& d = dynamic_resolution_settings_;
-        ImGui::Checkbox("dynamic resolution", &d.enabled);
+        if (ImGui::Checkbox("dynamic resolution", &d.enabled)) save_graphics_key("dynres", d.enabled ? "1" : "0");
         if (d.enabled) {
             ImGui::SliderFloat("target fps", &d.target_fps, 30.0f, 144.0f, "%.0f");
+            if (ImGui::IsItemDeactivatedAfterEdit()) save_graphics_key("dynres_fps", std::to_string(int(d.target_fps)));
             ImGui::SliderFloat("lowest scale", &d.min_scale, 0.4f, 1.0f, "%.2f");
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                char text[16];
+                SDL_snprintf(text, sizeof(text), "%.2f", double(d.min_scale));
+                save_graphics_key("dynres_min", text);
+            }
         }
     }
 
@@ -3121,6 +3134,11 @@ void App::build_ui(float dt) {
                 ImGui::SliderFloat("crown detail band", &foliage_.lod_band, 0.1f, 2.0f, "%.2f x distance");
                 ImGui::SliderFloat("tree fade band", &foliage_.tree_fade_band, 0.0f, 0.5f, "%.2f x draw distance");
                 ImGui::SliderFloat("whole crown shadows", &foliage_.shadow_crown_distance, 0.0f, 2000.0f, "%.0f m");
+                ImGui::SliderFloat("whole crown shadows, middle", &foliage_.shadow_mid_crown_distance, 0.0f, 1000.0f,
+                                   "%.0f m");
+                ImGui::SliderFloat("impostor shadows from", &foliage_.shadow_impostor_from, 50.0f, 2000.0f, "%.0f m");
+                ImGui::SliderFloat("impostor shadows by", &foliage_.shadow_impostor_to, 50.0f, 2500.0f, "%.0f m");
+                foliage_.shadow_impostor_to = core::maxf(foliage_.shadow_impostor_to, foliage_.shadow_impostor_from + 1.0f);
                 ImGui::Checkbox("tree impostors", &foliage_.impostors);
                 if (foliage_.impostors) {
                     ImGui::SliderFloat("impostors from", &foliage_.impostor_from, 100.0f, 3000.0f, "%.0f m");
@@ -8055,6 +8073,7 @@ void App::render() {
     // any pass, with this frame's palette.
     foliage_.bake_impostors(device_, scene);
 
+    foliage_.reset_crown_counts();
     // Shadow pass first: the main pass samples what it writes.
     if (shadow_.enabled && shadow_.available()) {
         rhi::Pass* shadow_pass = shadow_.begin_pass(device_);
@@ -8062,16 +8081,26 @@ void App::render() {
         // pass of it on a retro tier.
         for (int cascade = 0; cascade < shadow_.cascades(); ++cascade) {
             shadow_.begin_cascade(device_.rhi(), shadow_pass, cascade);
-            if (!options_.hide_vegetation) {
+            if (!options_.hide_vegetation && !ablated("tree_shadows") &&
+                !ablated(cascade == 0 ? "tree_shadows0" : cascade == 1 ? "tree_shadows1" : "tree_shadows2")) {
                 // The far cascade's 2 m texels take the crowns' coarse cards.
+                // A crown's shadow runs at most its height (30 m, scaled
+                // instances) over the sun's sine down the light; the sun is
+                // taken at no lower than 8 degrees.
+                const core::Vec4& sun = world_.scene().sun;
+                const float sine = core::normalize_or(core::Vec3{sun.x, sun.y, sun.z}, core::Vec3::up()).y;
+                const float reach = 30.0f / core::maxf(sine, 0.14f);
+                const gfx::ShadowCasterCull cull = shadow_.caster_cull(reach);
                 foliage_.draw_trees_depth(device_, shadow_pass, shadow_.light_view_proj(),
                                           world_.scene().view_params.z, active_camera().position,
-                                          shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1);
+                                          shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1, &cull,
+                                          shadow_.cascades() > 2 && cascade == 1);
             }
             // Not into the far cascade: past the middle box the terrain's
             // shadow on itself comes from the heightfield (terrain_sun.hlsl),
             // and the ground there was most of the map, drawn a third time.
-            if (tier_.budget.terrain_casts_shadows && !(shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1)) {
+            if (tier_.budget.terrain_casts_shadows && !ablated("terrain_shadows") &&
+                !(shadow_.cascades() > 1 && cascade == shadow_.cascades() - 1)) {
                 world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                        gfx::ModelUniforms(), &terrain_chunks_);
             }
@@ -8446,6 +8475,10 @@ void App::run() {
     uint64_t previous_ticks = SDL_GetTicksNS();
     const uint64_t started = previous_ticks;
     std::vector<float> frame_ms;  // wall clock, for the summary's percentiles
+    // The GPU's own time a frame, from fences (rhi::Device::gpu_frame_ms):
+    // the wall clock varies 14-20 ms run to run on the same frozen frame
+    // when the machine is busy; this does not.
+    std::vector<float> gpu_ms;
     uint64_t frame_started = started;
     // DRAGON_FRAME_PROFILE=1: where a frame's wall clock goes, by phase,
     // averaged past the first second -- how a slow machine (the G41) is
@@ -8522,8 +8555,19 @@ void App::run() {
         // scale as the ceiling.
         static const bool dynamic_headless = SDL_getenv("DRAGON_DYNAMIC_RES") != nullptr;
         if (tier_.tier == gfx::Tier::Modern && (!options_.headless || dynamic_headless)) {
+            // Unless the player chose, it is on only where the display has
+            // lines to spare (the 1964-line panel it was built for); on a
+            // 1080p display the floor leaves it little to give.
+            if (!dynamic_resolution_saved_ && !options_.headless && device_.height() > 0) {
+                dynamic_resolution_settings_.enabled = device_.height() > 1300;
+                dynamic_resolution_saved_ = true;
+            }
+            gfx::DynamicResolutionSettings settings = dynamic_resolution_settings_;
+            if (device_.height() > 0) {
+                settings.min_scale = core::maxf(settings.min_scale, settings.min_lines / float(device_.height()));
+            }
             const float before = device_.world_scale();
-            const float scale = dynamic_resolution_.update(dynamic_resolution_settings_, device_.rhi().gpu_frame_ms(),
+            const float scale = dynamic_resolution_.update(settings, device_.rhi().gpu_frame_ms(),
                                                            options_.headless ? 1.0f / 60.0f : dt, tier_.budget.world_scale);
             if (scale != before) {
                 LOG_INFO("dynamic resolution: %.0f%% -> %.0f%% (gpu %.1f ms)", before * 100.0f, scale * 100.0f,
@@ -8561,6 +8605,7 @@ void App::run() {
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
         frame_ms.push_back(float(double(frame_ended - frame_started) * 1e-6));
+        if (const float g = device_.rhi().gpu_frame_ms(); g > 0.0f) gpu_ms.push_back(g);
         frame_started = frame_ended;
         if (options_.frames > 0 && frame_index_ >= options_.frames) running_ = false;
     }
@@ -8609,6 +8654,14 @@ void App::run() {
     // the longest frame, which is where a stall shows -- a valley's
     // generation at a pass was one 9-11 s frame on the Pi 1B.
     LOG_INFO("worst frame: %.1f ms", settled.empty() ? 0.0 : double(settled.back()));
+    LOG_INFO("crowns: %.2f M vertices main, %.2f M shadows (the last frame)",
+             double(foliage_.crown_vertices_main()) * 1e-6, double(foliage_.crown_vertices_shadow()) * 1e-6);
+    if (gpu_ms.size() > 60) {
+        std::vector<float> g(gpu_ms.begin() + 60, gpu_ms.end());
+        std::sort(g.begin(), g.end());
+        LOG_INFO("gpu: median %.2f ms, 1%% high %.2f ms (fences)", double(g[g.size() / 2]),
+                 double(g[std::min(g.size() - 1, g.size() * 99 / 100)]));
+    }
 }
 
 }  // namespace app

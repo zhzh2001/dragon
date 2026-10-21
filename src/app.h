@@ -301,6 +301,8 @@ private:
     gfx::SsaoSettings ssao_settings_;
     gfx::DynamicResolution dynamic_resolution_;
     gfx::DynamicResolutionSettings dynamic_resolution_settings_;
+    // graphics.cfg held the player's choice, or the display has set it.
+    bool dynamic_resolution_saved_ = false;
     gfx::Clouds clouds_;
     gfx::CloudSettings cloud_settings_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),

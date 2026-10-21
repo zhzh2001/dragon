@@ -1,11 +1,46 @@
 #pragma once
 
 #include "core/math.h"
+
+#include <cmath>
 #include "gfx/camera.h"
 #include "gfx/device.h"
 #include "gfx/pipeline.h"
 
 namespace gfx {
+
+// Which casters a cascade needs (ShadowMap::caster_cull). Light-space depth
+// is ndc z, linear in the orthographic projection.
+struct ShadowCasterCull {
+    // The cascade's casters: its receivers' depth window, widened toward the
+    // sun by how far a caster's shadow runs down the light.
+    float z_min = -1e30f;
+    float z_max = 1e30f;
+    float per_metre = 0.0f;  // metres to ndc z
+    // The next finer cascade's receiver box. A caster that sits inside it
+    // with its whole shadow (which runs along z only) shades nothing this
+    // cascade is sampled for.
+    bool has_inner = false;
+    core::Mat4 inner_view_proj;
+    float inner_xy = 0.0f;  // ndc, as the shaders' margin
+    float inner_z_min = 0.0f, inner_z_max = 0.0f, inner_per_metre = 0.0f;
+    float reach = 0.0f;     // metres a shadow runs down the light
+
+    // Whether a sphere of casters at `centre` can shade this cascade.
+    bool needed(const core::Mat4& view_proj, core::Vec3 centre, float radius) const {
+        const float z = core::transform_point(view_proj, centre).z;
+        const float rz = radius * per_metre;
+        if (z + rz < z_min || z - rz > z_max) return false;
+        if (!has_inner) return true;
+        const core::Vec3 p = core::transform_point(inner_view_proj, centre);
+        const float r = radius * inner_per_metre;
+        // The ndc x and y of the box span its full width: 2 / (2 half).
+        const float rxy = radius * inner_xy_per_metre;
+        return !(std::fabs(p.x) + rxy < inner_xy && std::fabs(p.y) + rxy < inner_xy && p.z - r > inner_z_min &&
+                 p.z + r + reach * inner_per_metre < inner_z_max);
+    }
+    float inner_xy_per_metre = 0.0f;
+};
 
 // The directional shadow map, fitted to boxes that follow the camera.
 //
@@ -45,6 +80,16 @@ public:
     static constexpr int MAX_CASCADES = 3;
     // Each cascade's half-width in metres, finest first.
     float cascade_extent[MAX_CASCADES] = {75.0f, 380.0f, 1900.0f};
+    // A point takes a cascade only within this many half-widths of the box's
+    // centre along the light (scene_common.hlsl, cascade_visibility). The box
+    // is pulled 1.5 km toward the sun, and under a 19 degree sun the finest
+    // one's 3 km of depth was a strip 150 m wide and 3 km long across the
+    // ground, every crown in it drawn whole: 4 ms a cascade in a forest at
+    // 1080p. Kept to the window, a cascade is a box again.
+    static constexpr float RECEIVER_DEPTH = 2.0f;
+    // Which casters the active cascade needs; `reach` is how far a caster's
+    // shadow runs down the light, in metres. On a single map, all of them.
+    ShadowCasterCull caster_cull(float reach) const;
 
     // The pipeline that writes depth for opaque meshes.
     rhi::Pipeline* mesh_pipeline() const;

@@ -535,6 +535,55 @@ and finding the first turned up two old bugs under it.
 
 Not verified here: Vulkan, D3D12 and D3D11, which need x99.
 
+## After the fourth playtest (2026-10-21)
+
+"Dynamic resolution looks bad, I have to disable it. At 1080p, drops to
+60-70 fps when very close camera in the forest."
+
+- **The forest's cost was its shadows.** Over and among the trees at
+  1920x1080 the frame was 14-18 ms. Counted, the main pass submitted 1.5-2.1
+  million crown vertices and the shadow pass 9.3-11.5 million, five times as
+  many. Three causes:
+  - Each cascade's box is pulled 1.5 km toward the sun, and under a 19 degree
+    sun the finest box's 3 km of depth was a strip 150 m wide and 3 km long
+    across the ground, every crown in it drawn whole. A point now takes a
+    cascade only within two half-widths of its centre along the light
+    (`ShadowMap::RECEIVER_DEPTH`, the same constant in
+    `cascade_visibility`), and a cascade draws only the trees that can
+    shade that window, plus a crown's shadow's run down the light.
+  - A coarser cascade drew the crowns inside the finer one's box, which no
+    point ever reads from it. A cell whose trees and shadows lie inside the
+    finer box is skipped (`ShadowCasterCull::needed`).
+  - The middle cascade drew every crown whole to its 380 m edge and the far
+    one whole to 700 m, then coarse cards across a 3.8 km box: 4.5 million
+    vertices of coarse cards alone. Crowns are now whole to 120 m in the
+    middle cascade, and both coarser cascades hand each tree over to its
+    impostor's quad between 180 and 320 m
+    (`foliage_impostor_depth.hlsl`: the frame nearest the sun, facing it,
+    alpha-tested; the crown's depth shader collapses by the same hash and
+    flat distance, so a tree casts once).
+
+  Shadows went from 9.3 to 3.3 million vertices at one camera and 11.5 to
+  3.8 at the other; the frame from 14-18 ms to about 11. The frames differ
+  by under 0.15% on average: the crowns at 200-400 m self-shade a little
+  less and their shadows on a slope are rounder. Dials under Vegetation:
+  "whole crown shadows" (far, now 200 m), "whole crown shadows, middle",
+  "impostor shadows from" and "by".
+- **Measuring on a busy Mac.** The wall clock of the same frozen frame
+  wandered from 14 to 20 ms between runs (Defender scanning the
+  screenshots, Steam, another GPU client), and removing a pass could
+  measure slower. Two things now end every headless run: `gpu: median`,
+  the GPU's own time from fences, and `crowns:`, the crown vertices
+  submitted, which does not wander at all. Take the lowest of three
+  interleaved runs for anything timed.
+- **Dynamic resolution** (`gfx/dynamic_resolution.h`) was built for the
+  1964-line panel, and on a 1080p display it dropped the world to 60%, 648
+  lines, stretched and sharpened, in one jump. Now the world never drops
+  under 900 lines (`min_lines`; 83% at 1080p), a drop is at most two steps
+  at once, the choice and its two dials are saved in `graphics.cfg`, and
+  with nothing saved it is on only on a display over 1300 lines tall. A
+  test pins the two-step limit.
+
 ## F8, as built (2026-10-13): the river
 
 `shaders/water.hlsl`, the modern path. Renders in `artifacts/fidelity-f8/`.

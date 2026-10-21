@@ -21,7 +21,14 @@ struct DynamicResolutionSettings {
     bool enabled = true;
     float target_fps = 60.0f;
     float min_scale = 0.6f;
+    // The world never drops under this many lines, whatever `min_scale`
+    // says (App::frame turns it into a scale for the display): at 60% a
+    // 1080p display drew the world at 648 lines, stretched and sharpened,
+    // and the playtest turned it off. On the 1964-line panel it was built
+    // for, `min_scale` still rules.
+    float min_lines = 900.0f;
     float step = 0.05f;      // the scale moves in steps of this
+    int max_drop_steps = 2;  // at most this many steps down at once
     float headroom = 0.88f;  // of the frame's interval the GPU may use
 };
 
@@ -46,11 +53,14 @@ public:
         const float step = std::max(s.step, 0.01f);
         if (over_ > 0.4f && scale_ > floor) {
             // Down to what should fit, a little under, in whole steps.
+            // Never more than `max_drop_steps` at once: a jump straight to the
+            // estimate read as the picture going soft in one frame.
             const float fits = scale_ * std::sqrt(budget * 0.95f / gpu_ms);
             const float down = std::floor(fits / step) * step;
-            scale_ = std::clamp(std::min(down, scale_ - step), floor, max_scale);
+            const float most = scale_ - step * float(std::max(s.max_drop_steps, 1));
+            scale_ = std::clamp(std::max(std::min(down, scale_ - step), most), floor, max_scale);
             over_ = 0.0f;
-            cooldown_ = 1.0f;
+            cooldown_ = 0.6f;
         } else if (under_ > 2.5f && scale_ < max_scale) {
             const float up = std::min(scale_ + step, max_scale);
             const float predicted = gpu_ms * (up / scale_) * (up / scale_);

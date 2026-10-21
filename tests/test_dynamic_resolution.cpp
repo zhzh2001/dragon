@@ -2,6 +2,7 @@
 // drops the scale to what fits, the scale climbs back only with room to
 // spare, it never leaves its bounds, and it settles instead of swinging.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -73,6 +74,20 @@ int main() {
         gfx::DynamicResolution d;
         CHECK(std::fabs(run(d, s, 20.0f, 1.0f, 200.0f, nullptr) - s.min_scale) < 1e-4f);
         CHECK(d.update(s, 2.0f, DT, 0.7f) <= 0.7f);
+    }
+    {
+        // A frame four times over the budget drops two steps at a time, not
+        // straight to the estimate (the picture went soft in one frame).
+        gfx::DynamicResolution d;
+        float scale = d.scale();
+        float largest = 0.0f;
+        for (int i = 0; i < int(20.0f / DT); ++i) {
+            const float next = d.update(s, gpu_ms_at(scale, 1.0f, 60.0f), DT, 1.0f);
+            largest = std::max(largest, scale - next);
+            scale = next;
+        }
+        CHECK(largest <= 2.0f * s.step + 1e-4f);
+        CHECK(std::fabs(scale - s.min_scale) < 1e-4f);
     }
     {
         // Off, or with no GPU time to steer by: the ceiling.

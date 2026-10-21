@@ -130,6 +130,37 @@ void ShadowMap::begin_cascade(rhi::Device& rhi, rhi::Pass* pass, int cascade) {
     rhi.set_viewport(pass, float(cascade % 2) * half, float(cascade / 2) * half, half, half);
 }
 
+namespace {
+// One cascade's receiver window in its light-space depth. fit(): the eye
+// `distance` back from the centre, the depth range from 1 m to twice that,
+// linear in an orthographic projection.
+void receiver_window(float half, float& z_min, float& z_max, float& per_metre) {
+    const float distance = std::max(half * 2.2f, 1500.0f);
+    per_metre = 1.0f / (distance * 2.0f - 1.0f);
+    const float centre = (distance - 1.0f) * per_metre;
+    const float window = ShadowMap::RECEIVER_DEPTH * half;
+    z_min = centre - window * per_metre;
+    z_max = centre + window * per_metre;
+}
+}  // namespace
+
+ShadowCasterCull ShadowMap::caster_cull(float reach) const {
+    ShadowCasterCull cull;
+    if (cascades_ <= 1) return cull;
+    receiver_window(cascade_extent[active_], cull.z_min, cull.z_max, cull.per_metre);
+    cull.z_min -= reach * cull.per_metre;
+    cull.reach = reach;
+    if (active_ > 0) {
+        const float inner = cascade_extent[active_ - 1];
+        cull.has_inner = true;
+        cull.inner_view_proj = cascade_view_proj_[active_ - 1];
+        cull.inner_xy = 0.97f;  // the shaders' margin (cascade_visibility)
+        cull.inner_xy_per_metre = 1.0f / inner;
+        receiver_window(inner, cull.inner_z_min, cull.inner_z_max, cull.inner_per_metre);
+    }
+    return cull;
+}
+
 void ShadowMap::apply(SceneUniforms& scene) const {
     if (cascades_ <= 1) return;
     for (int c = 0; c < cascades_; ++c) scene.cascade_view_proj[c] = cascade_view_proj_[c];

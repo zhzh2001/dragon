@@ -6,7 +6,10 @@
 struct FoliageParams {
     float4 wind_time_fade;
     float4 extra;
-    float4 impostor;  // foliage.hlsl's; unread here
+    // x, y the band where trees hand their shadow over to their impostor
+    // (foliage_impostor_depth.hlsl), z, w the eye's x and z; y 0: no
+    // impostors, the crown casts at every distance.
+    float4 impostor;
 };
 
 struct ShadowUniforms {
@@ -45,7 +48,15 @@ DepthOut vs_main(VertexIn input) {
     rotated.x += sway;
     rotated.z += sway * 0.6;
     DepthOut o;
-    o.clip_position = mul(shadow.light_view_proj, float4(input.position_scale.xyz + rotated, 1.0));
+    float3 world = input.position_scale.xyz + rotated;
+    if (params.impostor.y > 0.0) {
+        // Past its own distance, measured flat as the impostor measures it,
+        // the crown collapses to a point and the impostor casts instead.
+        float hash = frac(input.params.z * 0.15915494);
+        float flat_distance = length(input.position_scale.xz - params.impostor.zw);
+        if (flat_distance >= lerp(params.impostor.x, params.impostor.y, hash)) world = input.position_scale.xyz;
+    }
+    o.clip_position = mul(shadow.light_view_proj, float4(world, 1.0));
     o.uv = input.uv;
     int tag = int(input.color.z + 0.5);
     o.material = float(tag >= 10 ? tag - 10 : tag);
