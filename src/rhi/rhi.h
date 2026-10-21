@@ -221,6 +221,11 @@ struct ResourceStats {
 
 // Bytes a texture of `desc` holds, with its mip chain.
 uint64_t texture_bytes(const TextureDesc& desc);
+// Bytes a texel of an uncompressed format: what upload_texture's pixels
+// hold a texel. Every upload once assumed 4, and an RGBA16F texture (the
+// terrain's heights, gfx::Atmosphere) got half its rows from past the end
+// of the copy.
+uint32_t texel_bytes(Format format);
 
 class Device {
 public:
@@ -260,6 +265,10 @@ public:
     virtual void end_frame(Texture* source, uint32_t width, uint32_t height,
                            std::vector<uint8_t>* readback) = 0;
     virtual void wait_idle() = 0;
+    // The GPU's time a frame, smoothed over about a third of a second, in
+    // ms; 0 where the backend cannot tell (only SDL GPU can, by fences).
+    // What dynamic resolution steers by (gfx/dynamic_resolution.h).
+    virtual float gpu_frame_ms() const { return 0.0f; }
     // Stretches colour target `source` (its top-left sw x sh) over all of
     // `dest` (dw x dh), linearly filtered. Outside any pass. How a world
     // rendered at a fraction of the window is brought up to the UI's size

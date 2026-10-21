@@ -204,8 +204,13 @@ bool Device::ensure_targets(uint32_t w, uint32_t h) {
     }
 
     rhi::TextureDesc depth;
-    depth.width = scene_world_ ? ww : w;
-    depth.height = scene_world_ ? wh : h;
+    // The world's size: an HDR tier's scene_hdr is always that, and a
+    // depth target the window's size beside it was a pass of two sizes,
+    // read back by UV in the wrong place by every pass after (the clouds,
+    // the occlusion, the temporal resolve) -- at 70% the far mountains
+    // went missing behind the clouds.
+    depth.width = (hdr_ || scene_world_) ? ww : w;
+    depth.height = (hdr_ || scene_world_) ? wh : h;
     depth.format = depth_format_;
     depth.usage = rhi::TEXTURE_DEPTH_TARGET | (depth_sampled_ ? rhi::TEXTURE_SAMPLED : 0);
     depth_ = rhi_->create_texture(depth, "scene_depth");

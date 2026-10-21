@@ -12,6 +12,7 @@
 #include "gfx/atmosphere.h"
 #include "gfx/taa.h"
 #include "gfx/clouds.h"
+#include "gfx/dynamic_resolution.h"
 #include "gfx/ssao.h"
 #include "gfx/post.h"
 #include <unordered_map>
@@ -297,6 +298,8 @@ private:
     // Screen-space ambient occlusion (modern tier).
     gfx::Ssao ssao_;
     gfx::SsaoSettings ssao_settings_;
+    gfx::DynamicResolution dynamic_resolution_;
+    gfx::DynamicResolutionSettings dynamic_resolution_settings_;
     gfx::Clouds clouds_;
     gfx::CloudSettings cloud_settings_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),

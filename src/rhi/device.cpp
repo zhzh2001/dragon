@@ -53,17 +53,24 @@ std::unique_ptr<Device> Device::create(SDL_Window* window, const DeviceConfig& c
 #endif
 }
 
+uint32_t texel_bytes(Format format) {
+    switch (format) {
+        case Format::RGBA16F: return 8;
+        case Format::RGB565:
+        case Format::D16: return 2;
+        default: return 4;
+    }
+}
+
 uint64_t texture_bytes(const TextureDesc& desc) {
     // Bytes per 4x4 block for the compressed formats, per texel otherwise.
-    uint32_t block = 0, texel = 4;
+    uint32_t block = 0;
+    const uint32_t texel = texel_bytes(desc.format);
     switch (desc.format) {
         case Format::BC1:
         case Format::BC1_SRGB: block = 8; break;
         case Format::BC3:
         case Format::BC3_SRGB: block = 16; break;
-        case Format::RGBA16F: texel = 8; break;
-        case Format::RGB565:
-        case Format::D16: texel = 2; break;
         default: break;
     }
     uint64_t total = 0;

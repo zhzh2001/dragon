@@ -214,6 +214,11 @@ target_include_directories(test_erosion PRIVATE src)
 target_compile_options(test_erosion PRIVATE -Wall -Wextra)
 add_test(NAME erosion COMMAND test_erosion)
 
+add_executable(test_dynamic_resolution tests/test_dynamic_resolution.cpp)
+target_include_directories(test_dynamic_resolution PRIVATE src)
+target_compile_options(test_dynamic_resolution PRIVATE -Wall -Wextra)
+add_test(NAME dynamic_resolution COMMAND test_dynamic_resolution)
+
 add_executable(test_breath tests/test_breath.cpp src/game/breath.cpp src/game/element.cpp)
 target_include_directories(test_breath PRIVATE src)
 target_link_libraries(test_breath PRIVATE SDL3::SDL3)

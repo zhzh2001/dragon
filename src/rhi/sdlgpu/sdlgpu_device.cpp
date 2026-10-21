@@ -11,7 +11,12 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -305,6 +310,7 @@ public:
 
     ~SdlGpuDevice() override {
         report_pass_profile();
+        stop_gpu_timer();
         if (gpu_) {
             SDL_WaitForGPUIdle(gpu_);
             for (auto& [buffer, staging] : staging_) SDL_ReleaseGPUTransferBuffer(gpu_, staging.transfer);
@@ -400,7 +406,14 @@ public:
 
         if (profiling()) pass_sync("(end of frame)");
         if (pass_profile_from_ && ++pass_frame_ > uint64_t(pass_profile_from_)) ++pass_profiled_frames_;
-        if (!SDL_SubmitGPUCommandBuffer(cmd_)) LOG_ERROR("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
+        // The frame's fence goes to the timer thread, which stamps when the
+        // GPU finished it (gpu_frame_ms).
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_);
+        if (!fence) {
+            LOG_ERROR("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
+        } else {
+            time_frame(fence);
+        }
         cmd_ = nullptr;
         swapchain_ = nullptr;
 
@@ -413,6 +426,8 @@ public:
     void wait_idle() override {
         if (gpu_) SDL_WaitForGPUIdle(gpu_);
     }
+
+    float gpu_frame_ms() const override { return gpu_ms_.load(std::memory_order_relaxed); }
 
     // ---- buffers
     Buffer* create_buffer(BufferUsage usage, uint32_t size, const void* data, const char* debug_name) override {
@@ -503,13 +518,15 @@ public:
         }
         if (debug_name) SDL_SetGPUTextureName(gpu_, texture, debug_name);
         track(texture, Kind::Texture, texture_bytes(desc));
+        formats_[texture] = desc.format;
         return reinterpret_cast<Texture*>(texture);
     }
 
     bool upload_texture(Texture* texture, const void* pixels, uint32_t width, uint32_t height,
                         bool generate_mips) override {
         if (!texture || !pixels) return false;
-        const uint32_t bytes = width * height * 4;
+        const auto format = formats_.find(sdl(texture));
+        const uint32_t bytes = width * height * texel_bytes(format != formats_.end() ? format->second : Format::RGBA8);
         SDL_GPUTransferBufferCreateInfo transfer_info = {};
         transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         transfer_info.size = bytes;
@@ -576,6 +593,7 @@ public:
     void destroy(Texture* texture) override {
         if (!texture) return;
         untrack(texture);
+        formats_.erase(sdl(texture));
         SDL_ReleaseGPUTexture(gpu_, sdl(texture));
     }
 
@@ -812,6 +830,65 @@ public:
     }
 
 private:
+    // ---- the GPU's time a frame (gpu_frame_ms). SDL GPU has no timestamp
+    // queries, but a fence can be waited on from another thread: this one
+    // stamps each frame's completion, and the GPU was busy from the later
+    // of its submission and the previous frame's completion until then. The
+    // wall clock cannot say it: windowed, vsync holds every frame to the
+    // display's interval however little the GPU did.
+    struct TimedFrame {
+        SDL_GPUFence* fence;
+        uint64_t submitted;
+    };
+    void time_frame(SDL_GPUFence* fence) {
+        if (!timer_.joinable()) timer_ = std::thread([this] { run_gpu_timer(); });
+        {
+            std::lock_guard<std::mutex> lock(timer_mutex_);
+            timed_.push_back(TimedFrame{fence, SDL_GetTicksNS()});
+        }
+        timer_wake_.notify_one();
+    }
+    void run_gpu_timer() {
+        uint64_t last_done = 0;
+        float smoothed = 0.0f;
+        for (;;) {
+            TimedFrame frame;
+            {
+                std::unique_lock<std::mutex> lock(timer_mutex_);
+                timer_wake_.wait(lock, [this] { return timer_stop_ || !timed_.empty(); });
+                if (timed_.empty()) return;  // stopping, nothing left
+                frame = timed_.front();
+                timed_.pop_front();
+            }
+            SDL_WaitForGPUFences(gpu_, true, &frame.fence, 1);
+            const uint64_t done = SDL_GetTicksNS();
+            SDL_ReleaseGPUFence(gpu_, frame.fence);
+            const uint64_t began = std::max(frame.submitted, last_done);
+            last_done = done;
+            const float ms = float(double(done - began) * 1e-6);
+            // A third of a second's worth of frames, about.
+            smoothed = smoothed <= 0.0f ? ms : smoothed + (ms - smoothed) * 0.08f;
+            gpu_ms_.store(smoothed, std::memory_order_relaxed);
+        }
+    }
+    void stop_gpu_timer() {
+        if (!timer_.joinable()) return;
+        {
+            std::lock_guard<std::mutex> lock(timer_mutex_);
+            timer_stop_ = true;
+        }
+        timer_wake_.notify_one();
+        timer_.join();
+    }
+    std::thread timer_;
+    std::mutex timer_mutex_;
+    std::condition_variable timer_wake_;
+    std::deque<TimedFrame> timed_;
+    bool timer_stop_ = false;
+    std::atomic<float> gpu_ms_{0.0f};
+    // Each texture's format, for the bytes a texel an upload carries.
+    std::unordered_map<SDL_GPUTexture*, Format> formats_;
+
     struct Staging {
         SDL_GPUTransferBuffer* transfer = nullptr;
         uint32_t size = 0;

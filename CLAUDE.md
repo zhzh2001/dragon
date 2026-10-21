@@ -44,7 +44,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty-two suites, plain executables, no framework
+ctest --test-dir build            # twenty-three suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -130,6 +130,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--gpu-driver NAME` | Pick SDL's GPU backend (`metal`, `vulkan`, `direct3d12`) instead of the platform's first, or on Windows `direct3d9[:N]` for the D3D9 backend on adapter N (`docs/PORTING.md` R3; a retro tier, shaders baked by `tools/d3d9/bake_d3d9.py`) or `direct3d11[:N]` for the D3D11 one (`docs/PORTING.md` "The D3D11 backend"; feature level 11 or 10 runs the modern tier, a feature level 9 adapter -- x99's X550 is `direct3d11:1` -- the sm2 tier on its own; shaders baked by `tools/d3d11/bake_d3d11.py`, the level-9 ones with `--tier sm2 --profiles fl91`; `DRAGON_D3D11_WARP=1` runs it on Microsoft's software rasteriser, `DRAGON_D3D11_FEATURE_LEVEL=10_0|9_2` caps the level, `DRAGON_D3D11_TRACE=1` logs every draw with the debug layer's messages). `DRAGON_GPU_LOW_POWER=1` asks SDL for DXGI's other adapter: on x99 with the X550 driving the display, that is how D3D12 reaches the 5060 Ti. |
 | `--preset ultra\|high\|medium\|low\|very-low\|minimal\|lowest\|phone\|pi` | The graphics preset (`gfx/graphics_settings.h`, `docs/PORTING.md` R7): every content setting at one level. A tier starts on its own (modern ultra, sm3 high, sm2 medium, ff minimal). `minimal` is the 1998 floor below very-low (R5): a 48 m grid with a 96 m far mesh, 1.2K creatures, trees to 250 m, 64-texel textures, 50% world -- for a card whose vertices are processed in software (`DRAGON_D3D9_SOFTWARE_VP=1`, `=2` for a pure software device). `lowest` is below it, for a card slower than the G41's M6 (a Rage XL), and its quality losses are its own: Minimal plus 600-triangle creatures, the view cut to 2.5 km in linear fog (the View distance setting; `DRAGON_VIEW_DISTANCE` overrides it), a Plain HUD (no anti-aliasing fringe, coarse circles, opaque colours, alpha-tested on D3D9, solid edge bars for damage and status) and half the particles (the Particles setting). On the G41, fullscreen, the slowest frame of a run is 13.2 ms there against Minimal's 26.3 (`docs/PORTING.md`, "R6, as built"). `phone` is not a level: Low's content with the painted cloud slab, no ambient occlusion and the whole frame capped at 720 lines (the world at 70% of it), stretched to the screen -- the default on Android, 34 fps on the K30 (`docs/porting/MOBILE.md`). Nor is `pi`: Minimal's content, the frame at 540 lines with the world whole in it (on a console the display mode follows, 640x480 on a 1080p monitor) -- the default of the Pi build. |
 | `--graphics key=level,...` | Single settings over the preset, levels 0 (ultra) to 5 (minimal): `models`, `terrain`, `trees`, `grass`, `rocks`, `textures`, `shadows`, `bloom`, `resolution` (the world's, under a whole HUD: 100/85/70/50%), `clouds` (0 volumetric, 4 painted), `ao` (0 on, 4 off), `frame` (the whole frame's height: 0 native, 2 1080, 3 900, 4 720, 5 540 lines). Clamped to what the tier and device allow. |
+| `DRAGON_DYNAMIC_RES=1` | Headless only: run dynamic resolution (`gfx/dynamic_resolution.h`; in a window it is on by default on the modern tier, the Graphics panel's "dynamic resolution" and "target fps") so a capture shows the scale it settles at. Every change logs `dynamic resolution: A% -> B% (gpu N ms)`. The fps readout's `gpu N ms` is the GPU's own time a frame, from fences (`rhi::Device::gpu_frame_ms`; SDL GPU only). |
 | `--restart-every N` | Press R every N frames: the reset soak. With `--telemetry`, the `gpu:` line counts the buffers and textures alive, so anything a reset leaks shows as growth. |
 | `--size WxH` | The window, or the headless render target (default 1280x720, or the window size saved in `graphics.cfg`). |
 | `--show-fps` | The frame-rate readout, top left (the Graphics panel's "show fps", saved; headless runs ignore the saved one). |
@@ -534,7 +535,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty-two suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion,
+tests/       twenty-three suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
              combat, bot, match, vegetation, breath
 docs/        the detail -- see the table above
 ```

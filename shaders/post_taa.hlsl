@@ -56,30 +56,10 @@ float3 to_ycocg(float3 c) {
 }
 float3 from_ycocg(float3 c) { return float3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
 
-// The history, bicubic (Catmull-Rom in five bilinear taps, Jimenez's
-// arrangement): resampled bilinearly every frame as the camera moves, it
-// blurred a little more each time and the whole picture went soft in flight.
-float3 sample_history(float2 uv) {
-    float2 size = 1.0 / taa.texel.xy;
-    float2 position = uv * size;
-    float2 centre = floor(position - 0.5) + 0.5;
-    float2 f = position - centre;
-    float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
-    float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
-    float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
-    float2 w3 = f * f * (-0.5 + 0.5 * f);
-    float2 w12 = w1 + w2;
-    float2 tc12 = (centre + w2 / w12) * taa.texel.xy;
-    float2 tc0 = (centre - 1.0) * taa.texel.xy;
-    float2 tc3 = (centre + 2.0) * taa.texel.xy;
-    float3 c = history.SampleLevel(history_sampler, float2(tc12.x, tc0.y), 0.0).rgb * (w12.x * w0.y) +
-               history.SampleLevel(history_sampler, float2(tc0.x, tc12.y), 0.0).rgb * (w0.x * w12.y) +
-               history.SampleLevel(history_sampler, tc12, 0.0).rgb * (w12.x * w12.y) +
-               history.SampleLevel(history_sampler, float2(tc3.x, tc12.y), 0.0).rgb * (w3.x * w12.y) +
-               history.SampleLevel(history_sampler, float2(tc12.x, tc3.y), 0.0).rgb * (w12.x * w3.y);
-    float total = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
-    return max(c / total, 0.0);
-}
+// The history, bicubic (sample_catmull_rom, common.hlsl): resampled
+// bilinearly every frame as the camera moves, it blurred a little more each
+// time and the whole picture went soft in flight.
+float3 sample_history(float2 uv) { return sample_catmull_rom(history, history_sampler, uv, taa.texel.xy); }
 
 float4 fs_main(TaaVertex input) : SV_Target {
     float2 uv = input.uv;

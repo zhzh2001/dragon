@@ -1371,6 +1371,14 @@ void App::build_graphics_ui() {
         }
     }
     if (ImGui::Checkbox("show fps", &show_fps_)) save_graphics_key("fps", show_fps_ ? "1" : "0");
+    if (tier_.tier == gfx::Tier::Modern && device_.rhi().gpu_frame_ms() > 0.0f) {
+        gfx::DynamicResolutionSettings& d = dynamic_resolution_settings_;
+        ImGui::Checkbox("dynamic resolution", &d.enabled);
+        if (d.enabled) {
+            ImGui::SliderFloat("target fps", &d.target_fps, 30.0f, 144.0f, "%.0f");
+            ImGui::SliderFloat("lowest scale", &d.min_scale, 0.4f, 1.0f, "%.2f");
+        }
+    }
 
     // The renderer and the tier: chosen here, in force after a restart.
 #if defined(DRAGON_XP)
@@ -1867,13 +1875,19 @@ void App::draw_fps() {
     const float ms = average_frame_ms();
     char line[16];
     std::snprintf(line, sizeof(line), "%.0f", ms > 0.0f ? 1000.0f / ms : 0.0f);
+    // The GPU's own time and the world's scale, where the backend can time
+    // it: the frame rate alone cannot tell a GPU-bound frame from a capped one.
+    char gpu[40] = "fps";
+    if (const float g = device_.rhi().gpu_frame_ms(); g > 0.0f) {
+        std::snprintf(gpu, sizeof(gpu), "fps  gpu %.1f ms  %.0f%%", g, device_.world_scale() * 100.0f);
+    }
     const float margin = hud_.margin();
     const ImVec2 min(margin, margin);
     const float numeral = 24.0f;
-    const float w = hud_.numeral_width(line, numeral) + hud_.px(6.0f) + hud_.label_width("fps", 12.0f);
+    const float w = hud_.numeral_width(line, numeral) + hud_.px(6.0f) + hud_.label_width(gpu, 12.0f);
     hud_.plate(min, ImVec2(min.x + w + hud_.px(16.0f), min.y + hud_.px(34.0f)));
     hud_.numeral(ImVec2(min.x + hud_.px(8.0f), min.y + hud_.px(3.0f)), line, tk.text, numeral);
-    hud_.label(ImVec2(min.x + hud_.px(14.0f) + hud_.numeral_width(line, numeral), min.y + hud_.px(15.0f)), "fps",
+    hud_.label(ImVec2(min.x + hud_.px(14.0f) + hud_.numeral_width(line, numeral), min.y + hud_.px(15.0f)), gpu,
                tk.text_dim, 12.0f);
 }
 
@@ -3099,6 +3113,7 @@ void App::build_ui(float dt) {
             if (tier_.tier == gfx::Tier::Modern) {
                 ImGui::SliderFloat("crown detail band", &foliage_.lod_band, 0.1f, 2.0f, "%.2f x distance");
                 ImGui::SliderFloat("tree fade band", &foliage_.tree_fade_band, 0.0f, 0.5f, "%.2f x draw distance");
+                ImGui::SliderFloat("whole crown shadows", &foliage_.shadow_crown_distance, 0.0f, 2000.0f, "%.0f m");
             }
             ImGui::TextDisabled("%u trees (%u drawn), %u grass tufts near the camera", foliage_.tree_count(),
                                 foliage_.trees_drawn(),
@@ -8484,6 +8499,23 @@ void App::run() {
         if (!options_.screenshot.empty() && options_.frames > 0 &&
             frame_index_ == options_.frames - 1) {
             device_.request_screenshot(options_.screenshot);
+        }
+
+        // Dynamic resolution (gfx/dynamic_resolution.h), between frames since
+        // a change reallocates the world's targets: the modern tier, in a
+        // window (a headless capture keeps its scale, to stay repeatable,
+        // unless DRAGON_DYNAMIC_RES=1 asks), under the Resolution setting's
+        // scale as the ceiling.
+        static const bool dynamic_headless = SDL_getenv("DRAGON_DYNAMIC_RES") != nullptr;
+        if (tier_.tier == gfx::Tier::Modern && (!options_.headless || dynamic_headless)) {
+            const float before = device_.world_scale();
+            const float scale = dynamic_resolution_.update(dynamic_resolution_settings_, device_.rhi().gpu_frame_ms(),
+                                                           options_.headless ? 1.0f / 60.0f : dt, tier_.budget.world_scale);
+            if (scale != before) {
+                LOG_INFO("dynamic resolution: %.0f%% -> %.0f%% (gpu %.1f ms)", before * 100.0f, scale * 100.0f,
+                         device_.rhi().gpu_frame_ms());
+                device_.set_world_scale(scale);
+            }
         }
 
         mark = SDL_GetTicksNS();

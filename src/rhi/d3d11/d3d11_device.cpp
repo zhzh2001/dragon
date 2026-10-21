@@ -654,7 +654,7 @@ public:
         D11Texture* t = d11(texture);
         if (!t || !t->texture || !pixels) return false;
         (void)height;  // the rows are tightly packed; UpdateSubresource reads the level's own height
-        context_->UpdateSubresource(t->texture, 0, nullptr, pixels, width * 4, 0);
+        context_->UpdateSubresource(t->texture, 0, nullptr, pixels, width * texel_bytes(t->format), 0);
         if (generate_mips && t->levels > 1) {
             if (!t->generates_mips || !t->srv) return false;
             context_->GenerateMips(t->srv);

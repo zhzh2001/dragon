@@ -133,9 +133,14 @@ void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture
     rhi::Pass* pass = device.begin_color_pass(device.scene_color(), true);
     device.rhi().bind_pipeline(pass, composite);
     PostUniforms u = uniforms_for(settings, w, h, core::Vec2{0.0f, 0.0f});
-    u.texel.z = settings.enabled ? settings.sharpen : 0.0f;  // the composite's sharpening
+    // An upscale (a world smaller than the screen, the modern tier's
+    // dynamic resolution): the composite stretches it by Catmull-Rom, and
+    // sharpens a little more the smaller it is, toward the detail lost.
+    const bool upscale = active_tier().tier == Tier::Modern && w < float(device.width()) - 0.5f;
+    const float upscale_sharpen = upscale ? 0.8f * (1.0f - w / float(device.width())) : 0.0f;
+    u.texel.z = settings.enabled ? settings.sharpen + upscale_sharpen : 0.0f;  // the composite's sharpening
     u.texel.w = settings.fxaa ? 1.0f : 0.0f;
-    u.occlusion = core::Vec4{occlusion && settings.enabled ? occlusion_strength : 0.0f, 0.0f, 0.0f, 0.0f};
+    u.occlusion = core::Vec4{occlusion && settings.enabled ? occlusion_strength : 0.0f, upscale ? 1.0f : 0.0f, 0.0f, 0.0f};
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &u, sizeof(u));
     bind(pass, scene, 0);
     bind(pass, device.bloom_a(), 1);

@@ -117,3 +117,31 @@ float3 ldr_encode_fast(float3 c, float4 grade) {
 // The shadow map: a depth texture read as a plain float, compared in the
 // shader (3x3 PCF in sun_visibility), not with a comparison sampler.
 #define DEPTH2D(name, n) Texture2D<float> name : TEXTURE_SLOT(n); SamplerState name##_sampler : SAMPLER_SLOT(n)
+
+#if defined(ATMOSPHERE) && defined(FRAGMENT_STAGE)
+// Catmull-Rom in five bilinear taps (Jimenez's arrangement), `texel` one
+// texel of `map` in uv: a resample that keeps the edges a bilinear one
+// softens. The temporal resolve's history (post_taa.hlsl) and the world
+// stretched to the screen at a smaller scale (post_composite.hlsl).
+float3 sample_catmull_rom(Texture2D<float4> map, SamplerState map_sampler, float2 uv, float2 texel) {
+    float2 size = 1.0 / texel;
+    float2 position = uv * size;
+    float2 centre = floor(position - 0.5) + 0.5;
+    float2 f = position - centre;
+    float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    float2 w3 = f * f * (-0.5 + 0.5 * f);
+    float2 w12 = w1 + w2;
+    float2 tc12 = (centre + w2 / w12) * texel;
+    float2 tc0 = (centre - 1.0) * texel;
+    float2 tc3 = (centre + 2.0) * texel;
+    float3 c = map.SampleLevel(map_sampler, float2(tc12.x, tc0.y), 0.0).rgb * (w12.x * w0.y) +
+               map.SampleLevel(map_sampler, float2(tc0.x, tc12.y), 0.0).rgb * (w0.x * w12.y) +
+               map.SampleLevel(map_sampler, tc12, 0.0).rgb * (w12.x * w12.y) +
+               map.SampleLevel(map_sampler, float2(tc3.x, tc12.y), 0.0).rgb * (w3.x * w12.y) +
+               map.SampleLevel(map_sampler, float2(tc12.x, tc3.y), 0.0).rgb * (w12.x * w3.y);
+    float total = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+    return max(c / total, 0.0);
+}
+#endif

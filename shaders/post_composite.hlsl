@@ -70,6 +70,12 @@ float3 fxaa(float2 uv, float2 t) {
 
 float4 fs_main(PostVertex input) : SV_Target {
     float3 c = post.texel.w > 0.5 ? fxaa(input.uv, post.texel.xy) : scene_color.Sample(scene_color_sampler, input.uv).rgb;
+#ifdef ATMOSPHERE
+    // A world smaller than the screen (dynamic resolution, the Resolution
+    // setting) stretched by Catmull-Rom, not bilinearly, which softened
+    // every edge; FXAA's own taps already follow the edges.
+    if (post.texel.w < 0.5 && post.occlusion.y > 0.5) c = sample_catmull_rom(scene_color, scene_color_sampler, input.uv, post.texel.xy);
+#endif
     // Sharpening, for a picture the temporal resolve softened (gfx/taa.h):
     // the pixel pushed away from its four neighbours' mean, on its luminance
     // so edges gain no colour fringe. texel.z is the amount (0: none).

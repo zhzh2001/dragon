@@ -883,13 +883,16 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
     for (int k = 0; k < ROCK_KINDS; ++k) {
         const StaticSet& set = rocks_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
+        const bool big = k == 1 || k == 3 || k == 5;
+        const float reach = (big ? big_rock_draw_distance : rock_draw_distance) * rock_distance_scale;
         Params params;
-        params.wind_time_fade = core::Vec4{0.0f, scene.view_params.z, 1e8f, 2e8f};
+        // On the modern tier a rock shrinks into the ground over the last of
+        // its reach, as a tree does, instead of blinking out at it.
+        params.wind_time_fade = modern ? core::Vec4{0.0f, scene.view_params.z, reach * (1.0f - tree_fade_band), reach}
+                                       : core::Vec4{0.0f, scene.view_params.z, 1e8f, 2e8f};
         params.extra = core::Vec4{1e6f, 1e8f, 0.0f, 0.0f};
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(Params));
-        const bool big = k == 1 || k == 3 || k == 5;
-        const float reach = (big ? big_rock_draw_distance : rock_draw_distance) * rock_distance_scale;
         draw_static(device, pass, set, frustum, eye, reach, false, 0.0f);
     }
 }
@@ -912,14 +915,6 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
-        Params params;
-        params.wind_time_fade = core::Vec4{wind, time, 1e8f, 2e8f};
-        // The far cascade's coarse crowns thickened as the colour pass's are
-        // past the LOD band (foliage_depth.hlsl), so a tree's shadow keeps
-        // its weight there.
-        const float thicken = coarse && active_tier().tier == Tier::Modern ? 1.0f : 0.0f;
-        params.extra = core::Vec4{tree_height(TreeKind(k)), 0.0f, thicken, 0.0f};
-        device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
         set.mesh.bind(device.rhi(), pass);
         rhi::BufferBinding instance_binding = {};
         instance_binding.buffer = set.instances;
@@ -927,10 +922,30 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
         // The light's box is the shadow map's extent about the camera; a
         // cell outside it cannot shadow anything that is drawn.
         const Frustum light(light_view_proj);
-        const uint32_t indices = coarse && set.coarse_indices > 0 ? set.coarse_indices : set.mesh.index_count();
-        for (const Cell& cell : set.cells) {
-            if (!light.sees(cell.centre, cell.radius)) continue;
-            device.rhi().draw_indexed(pass, indices, cell.count, 0, 0, cell.first);
+        // On the modern tier the far cascade keeps whole crowns out to
+        // `shadow_crown_distance`: every tree there cast its impostor's
+        // thinner shadow, and the shadows under a forest thinned at the
+        // cascade's edge, 380 m out, as the camera moved. To 1350 m it cost
+        // 1.4 ms at 1080p; to 700, where a crown's shadow is a few pixels,
+        // 0.6. A retro tier's coarse cascade stays coarse.
+        const bool modern = active_tier().tier == Tier::Modern;
+        const float whole_to = coarse && modern ? shadow_crown_distance : coarse ? -1.0f : 1e30f;
+        for (int part = 0; part < 2; ++part) {
+            const bool thin = part == 1;
+            Params params;
+            params.wind_time_fade = core::Vec4{wind, time, 1e8f, 2e8f};
+            // The far cascade's coarse crowns thickened as the colour pass's
+            // are past the LOD band (foliage_depth.hlsl), so a tree's shadow
+            // keeps its weight there.
+            params.extra = core::Vec4{tree_height(TreeKind(k)), 0.0f, thin && modern ? 1.0f : 0.0f, 0.0f};
+            device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(Params));
+            const uint32_t indices = thin && set.coarse_indices > 0 ? set.coarse_indices : set.mesh.index_count();
+            for (const Cell& cell : set.cells) {
+                if (!light.sees(cell.centre, cell.radius)) continue;
+                const bool far = core::distance(eye, cell.centre) - cell.radius > whole_to;
+                if (far != thin) continue;
+                device.rhi().draw_indexed(pass, indices, cell.count, 0, 0, cell.first);
+            }
         }
     }
     for (int k = 0; k < ROCK_KINDS; ++k) {

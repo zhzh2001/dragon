@@ -482,6 +482,55 @@ Renders in `artifacts/fidelity-playtest2/`. Three complaints, each fixed:
   distance", "crown detail band" and "tree fade band". The retro tiers keep
   240 m and their 30% band.
 
+## After the third playtest (2026-10-21)
+
+The stray shadows were the external monitor. Three complaints remained,
+and finding the first turned up two old bugs under it.
+
+- **"Minor stutters when close in" to the forest.** Not a hitch: the
+  frame is GPU-bound (1.2 ms of CPU in 25), and at a MacBook panel's
+  native 3024x1964 it took 21-29 ms, so on a 60 Hz display frames fell
+  between one interval and two. Now **dynamic resolution**
+  (`gfx/dynamic_resolution.h`, its own test suite): the world's scale
+  follows the GPU's time a frame. Over budget (88% of the interval) for
+  0.4 s, it drops at once to what should fit, the cost taken as the
+  square of the scale; well under it for 2.5 s, it climbs a step if that
+  step should still fit; changes are a second or two apart, since each
+  reallocates the world's targets. At the panel's size it settled at
+  60-65% with the GPU at 14-15 ms. SDL GPU has no timestamp queries, so
+  the time comes from fences: a thread waits on each frame's fence and
+  stamps its completion (`rhi::Device::gpu_frame_ms`, shown in the fps
+  readout with the scale). The wall clock cannot say it under vsync. A
+  smaller world is now stretched by Catmull-Rom instead of bilinearly,
+  with sharpening that grows as the scale falls; at 60% against native,
+  only the finest detail (the wing veins) softens. Headless runs keep
+  their scale, to stay repeatable (`DRAGON_DYNAMIC_RES=1` overrides).
+- **Running at a reduced scale turned up two bugs.** At the Resolution
+  setting's 70% white puffs stood over the far peaks. (1)
+  `upload_texture` assumed 4 bytes a texel whatever the format, so the
+  RGBA16F heights texture (F4) got half its rows from past the end of
+  the copy: whatever memory lay there. Every reader of it was wrong over
+  half the map (z > 0) since F4 -- the terrain's long shadows and sky
+  occlusion marched from it, the river's bed and reflection, the canopy.
+  Which garbage depended on what had been freed before, so it changed
+  with the resolution and from run to run; here it drove far snow to
+  several times its brightness and the bloom spread it into the puffs.
+  Both upload paths now size by format (`rhi::texel_bytes`; D3D11's row
+  pitch had the same fault). (2) An HDR tier's depth target was the
+  window's size while its scene was the world's, a pass of two sizes
+  read back by UV in the wrong place by the clouds, the occlusion and
+  the temporal resolve: clouds drew over the mountains at 70%.
+- **"LOD pop-in still exists."** Two more switches with no transition.
+  The far shadow cascade drew every crown as its impostor, so the
+  shadows under a forest thinned at its edge, 380 m out; it now keeps
+  whole crowns to 700 m (Vegetation's "whole crown shadows", 0.6 ms; to
+  1350 m cost 1.4). And rocks blinked out at their reach; they shrink
+  into the ground over its last 15%, as trees do.
+- **"Clouds are quite high."** The base is 1500 m, about 500 m over the
+  highest peaks (981 m), the layer 1300 m thick.
+
+Not verified here: Vulkan, D3D12 and D3D11, which need x99.
+
 ## F8, as built (2026-10-13): the river
 
 `shaders/water.hlsl`, the modern path. Renders in `artifacts/fidelity-f8/`.

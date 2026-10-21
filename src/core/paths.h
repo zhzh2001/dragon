@@ -8,6 +8,7 @@
 // directory instead, because a packaged copy's data may be read-only and is
 // replaced wholesale by the next version.
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>

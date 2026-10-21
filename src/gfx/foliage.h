@@ -100,6 +100,9 @@ public:
     // of their draw distance, rather than whole ground cells appearing at
     // its edge.
     float tree_fade_band = 0.15f;
+    // The far shadow cascade's whole crowns reach this far (the modern
+    // tier's; past it, the impostors' shadows).
+    float shadow_crown_distance = 700.0f;
 
     // Nominal height of each kind at scale 1, for the sway's height fraction.
     static float tree_height(TreeKind kind);

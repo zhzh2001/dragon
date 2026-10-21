@@ -63,8 +63,8 @@ struct AtmosphereSettings {
     // and shadowing the ground as it drifts (shaders/sky.hlsl, atmo_clouds;
     // scene_common.hlsl, cloud_shadow). Coverage 0 is a clear sky.
     float cloud_coverage = 0.42f;
-    float cloud_base_m = 2400.0f;
-    float cloud_thickness_m = 1400.0f;
+    float cloud_base_m = 1500.0f;  // ~500 m over the highest peaks (981 m); at 2400 the layer read as far off
+    float cloud_thickness_m = 1300.0f;
     float cloud_density = 1.0f;
 
     // key=value[,key=value...] over these (--atmosphere): on, sky, aerial,

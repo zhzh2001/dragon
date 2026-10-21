@@ -17,7 +17,8 @@ struct PostUniforms {
     float4 balance;
     // x, y = one source texel in UV; z, w = blur direction in texels
     float4 texel;
-    // x how far the composite darkens toward the ambient occlusion (0: off)
+    // x how far the composite darkens toward the ambient occlusion (0: off),
+    // y 1 when the scene is smaller than the target (an upscale)
     float4 occlusion;
 };
 
