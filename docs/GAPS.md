@@ -260,6 +260,51 @@ Things learned:
 Next for G1: that detail at distance, and snow that lies on the upward
 faces near the crests rather than above a contour.
 
+### G2, first part, as built (2026-10-21): the breath
+
+Renders in `artifacts/gap-study/g2-*`. The breath was a row of round orange
+puffs; it is a jet from the jaws that billows into flame and ends in smoke,
+and it lights what is round it. On the shader tiers:
+
+- Three kinds of particle (`gfx::ParticleKind`): the old soft disc for
+  embers and flashes, a flame tongue, and smoke. A per-particle seed and
+  age reach the shader in a new attribute; fixed function's vertex layout
+  is unchanged and draws every light as the disc, and no smoke.
+- The flame tongue (`particles.hlsl`): a broad and a fine billow eat the
+  disc from its edge in, climbing as the puff ages, closed inside the quad.
+  Hottest where young and dense, so the core is at the jaws. sm2 takes one
+  octave, to stay inside `ps_2_0`.
+- Each flame puff is stretched along its motion across the screen, so the
+  young fast ones form a jet and the slow old ones billow.
+- Light is drawn premultiplied (the new `rhi::Blend::Premultiplied`, on
+  every backend) and sorted back to front. Each flame puff is mostly opaque
+  with a sharp edge, so stacked puffs converge on the front one's colour.
+  Three things had been wrong, found in that order:
+  - Added orange over a sunlit beige slope reads as peach.
+  - The composite's `hue_preserve` is 0.8: a fifth of the curve is
+    per-channel Reinhard, which turns a few hundred stacked puffs white.
+  - Faint, soft puffs a few hundred deep average every billow away.
+- Smoke (`App::smoke_for`, per element: soot, vapour, dust; none for
+  storm) launches with a share of the flame puffs on the same path, lives
+  2.2 times as long and fades in only where the flame dies, alpha-blended
+  before the light.
+- Puffs launch from the jaws (the head joint plus 2.5 m), narrow there, and
+  spread over the frame's interval: the update moved each new puff two
+  metres before it was drawn, so the flame began a gap past the mouth.
+- The breath lights what is round it (`local_light` in
+  `scene_common.hlsl`, the modern tier): one point light a third of the way
+  down the flame, in the breath's hot colour, flickering, windowed inverse
+  square, added to the direct light of the terrain, plants, meshes and
+  creatures. The player's breath, else the hostile one nearest the camera.
+  Lighting panel, "breath light".
+- The world hit marker is gone: an opaque sphere growing to 12 m over the
+  target, reset every frame a breath touched it, a balloon over anything
+  being burned. Impacts flash and shed embers, and the HUD marks the hit.
+
+Cost: about 0.6 ms at 1080p with the breath across much of the frame. Not
+yet: heat haze, the fireball (still an emissive mesh), scorch on the
+ground, the light on the retro tiers.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

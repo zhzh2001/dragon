@@ -58,6 +58,12 @@ struct SceneUniforms {
     // The volumetric clouds (gfx/clouds.h): x 1 when they are drawn, so the
     // sky leaves its own slab out (sky.hlsl); yzw unused.
     core::Vec4 clouds2 = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // One local light (modern tier, scene_common.hlsl local_light): a
+    // breath's fire on the jaws that breathe it, the wings, the ground and
+    // the target. xyz where, w its reach in metres (0: none); colour rgb, w
+    // unused.
+    core::Vec4 local_light = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    core::Vec4 local_light_color = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

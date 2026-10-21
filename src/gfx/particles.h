@@ -13,6 +13,14 @@ namespace gfx {
 // smoke-lit-by-fire. Additive because these are light sources, not surfaces --
 // they sum, they never occlude, and draw order stops mattering, which is what
 // makes one unsorted draw call correct.
+// What a particle is drawn as (particles.hlsl). The shader tiers alone tell
+// them apart; fixed function draws every light as the disc and no smoke.
+enum class ParticleKind : uint8_t {
+    Disc = 0,   // a soft glowing disc: embers, sparks, flashes
+    Flame = 1,  // a turbulent tongue that frays as it ages: a breath's puffs
+    Smoke = 2,  // not light: alpha-blended, drawn before the light over it
+};
+
 struct Particle {
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
@@ -29,6 +37,12 @@ struct Particle {
     core::Vec3 color_start = core::Vec3::one();
     core::Vec3 color_end = core::Vec3::one();
     float brightness = 1.0f;
+    ParticleKind kind = ParticleKind::Disc;
+    // 0..1, a puff's own noise and turn, so no two look alike.
+    float seed = 0.0f;
+    // Smoke: the share of its life over which it fades in, so a puff
+    // launched with the flame shows only past where the flame dies.
+    float fade_in = 0.0f;
 };
 
 class ParticleSystem {
@@ -58,8 +72,9 @@ public:
 private:
     struct Vertex {
         core::Vec3 position;
-        core::Vec4 color;  // rgb emitted light, a = distance falloff strength
+        core::Vec4 color;  // rgb emitted light (smoke: its colour), a smoke's opacity
         core::Vec2 corner;
+        core::Vec4 shape;  // x seed, y age over life, z kind; the shader tiers' alone
     };
 
     bool ensure_capacity(uint32_t vertices);
@@ -67,6 +82,8 @@ private:
     Device* device_ = nullptr;
     PipelineCache* pipelines_ = nullptr;
     PipelineHandle pipeline_ = INVALID_PIPELINE;
+    PipelineHandle smoke_pipeline_ = INVALID_PIPELINE;  // the shader tiers'
+    uint32_t smoke_vertices_ = 0;  // the first ones uploaded, drawn first
 
     // Fixed-capacity pool, swap-remove on death: a dogfight makes and destroys
     // hundreds of these per second and the pool must never allocate mid-frame.
@@ -77,6 +94,7 @@ private:
     float density_owed_ = 0.0f;
 
     std::vector<Vertex> vertices_;
+    std::vector<int> order_;  // the pool's indices, back to front
     uint32_t uploaded_ = 0;
     rhi::Buffer* vertex_buffer_ = nullptr;
     uint32_t capacity_ = 0;

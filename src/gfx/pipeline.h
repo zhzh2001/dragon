@@ -35,6 +35,9 @@ struct PipelineDesc {
     // Additive (src ONE, dst ONE): fire, glows, anything that is light rather
     // than surface. Wins over alpha_blend if both are set.
     bool additive_blend = false;
+    // Premultiplied (rhi::Blend::Premultiplied): light that also hides some of
+    // what is behind it. Wins over the other two.
+    bool premultiplied_blend = false;
 
     // Defaults to GREATER for the reversed-Z main pass. The shadow pass uses a
     // conventional [0,1] depth range and so overrides this with LESS.

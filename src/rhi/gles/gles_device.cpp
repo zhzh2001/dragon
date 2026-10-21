@@ -855,6 +855,7 @@ public:
         // alpha kept.
         if (d.blend == Blend::Alpha) glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
         if (d.blend == Blend::Additive) glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+        if (d.blend == Blend::Premultiplied) glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         if (!state_known_) {
             glDisable(GL_SCISSOR_TEST);

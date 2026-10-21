@@ -67,6 +67,10 @@ struct SceneUniforms {
     // The volumetric clouds (modern tier, gfx/clouds.h): x 1 when they are
     // drawn, so the sky leaves its own slab out; yzw unused.
     float4 clouds2;
+    // One local light (modern tier): xyz where, w its reach (0: none);
+    // local_light_color rgb.
+    float4 local_light;
+    float4 local_light_color;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -467,6 +471,25 @@ float3 direct_sun(float3 normal, float visibility) {
     float3 to_sun = normalize(scene.sun.xyz);
     float wrapped = saturate((dot(normal, to_sun) + wrap) / (1.0 + wrap));
     return scene.sun_color.rgb * scene.sun.w * wrapped * visibility;
+}
+
+// The local light (SceneUniforms::local_light): a breath's fire lighting
+// the jaws, the wings, the ground under it and what it burns. Inverse
+// square, windowed to zero at its reach, a little wrapped (the fire is
+// metres across), and unshadowed. Modern tier only: the retro tiers'
+// instruction budgets are measured without it.
+float3 local_light(float3 world_position, float3 normal) {
+#ifdef ATMOSPHERE
+    float reach = scene.local_light.w;
+    if (reach <= 0.0) return (float3)0.0;
+    float3 to_light = scene.local_light.xyz - world_position;
+    float d2 = dot(to_light, to_light);
+    float window = saturate(1.0 - d2 / (reach * reach));
+    float facing = saturate(dot(normal, to_light * rsqrt(max(d2, 1e-4))) * 0.7 + 0.3);
+    return scene.local_light_color.rgb * (window * window * facing / (1.0 + d2));
+#else
+    return (float3)0.0;
+#endif
 }
 
 // Hemispheric ambient: cool sky from above, the warm bounce off sunlit ground

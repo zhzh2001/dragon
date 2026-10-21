@@ -1218,6 +1218,11 @@ private:
             rt.SrcBlend = rt.DestBlend = D3D11_BLEND_ONE;
             rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_ONE : D3D11_BLEND_ZERO;
             rt.DestBlendAlpha = D3D11_BLEND_ONE;
+        } else if (d.blend == Blend::Premultiplied) {
+            rt.SrcBlend = D3D11_BLEND_ONE;
+            rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+            rt.SrcBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_ONE : D3D11_BLEND_ZERO;
+            rt.DestBlendAlpha = level_ == D3D_FEATURE_LEVEL_9_1 ? D3D11_BLEND_INV_SRC_ALPHA : D3D11_BLEND_ONE;
         } else {
             rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
             rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;

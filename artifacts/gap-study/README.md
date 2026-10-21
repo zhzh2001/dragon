@@ -21,3 +21,11 @@ on the M5.
 | `g1-shape-before-after.png` | Top row before, bottom row after: the run 7 chase view, the vista, and `--cam 600,1500,2600,0,150,-1200` |
 | `g1-top-before-after.png` | `--hide-vegetation --cam 0,6000,10,0,0,0`, before and after |
 | `g1-feet.png` | `--input -0.25,0,0,0,0,0 --frames 900 --inspect 60 11 3`: the landed feet on the unchanged floor |
+
+## G2, the breath
+
+| File | What |
+|---|---|
+| `g2-breath-before-after.png` | `--combat --attack --inspect 60 30 5 --frames 90`, before and after |
+| `g2-breath-close.png` | `--inspect 120 18 3` (the jaws and the light on the neck) and `--inspect 90 3.5 0 --inspect-head` |
+| `g2-elements.png` | The same capture with `--element` fire, frost, blight (top), storm, tide, stone (bottom) |

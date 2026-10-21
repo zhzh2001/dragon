@@ -721,10 +721,21 @@ private:
     // Deterministic jitter for the emitters.
     uint32_t particle_rng_ = 1u;
     float particle_unit();
+    // What a breath leaves behind it (App::emit_flame): its colour, the
+    // share of flame puffs that also launch one, and its opacity.
+    struct BreathSmoke {
+        core::Vec3 colour;
+        float rate;
+        float opacity;
+    };
+    static BreathSmoke smoke_for(game::Element element);
+    void set_local_light(gfx::SceneUniforms& scene) const;
+    // How bright a breath's light is (Lighting panel, "breath light"):
+    // the hot colour times this, over 1 + metres squared.
+    float local_light_strength_ = 900.0f;
+    float smoke_owed_ = 0.0f;
     void emit_impact(core::Vec3 position, bool hostile, bool on_terrain,
                      game::Element element = game::Element::None);
-    float hit_marker_ = 0.0f;
-    core::Vec3 hit_marker_position_ = core::Vec3::zero();
     float damage_flash_ = 0.0f;
     // Edge detection for gamepad buttons, which core::Input only reports as
     // held state.

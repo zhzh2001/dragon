@@ -304,7 +304,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // a stand in a gully sees less sky
 #endif
-    float3 light = direct_sun(normal, visibility) + ambient +
+    float3 light = direct_sun(normal, visibility) + local_light(input.world_position, normal) + ambient +
                    translucent_sun(normal, visibility, translucency);
     float3 lit_color = albedo * light;
     float3 fogged = apply_fog(lit_color, input.world_position);

@@ -1422,6 +1422,10 @@ public:
             set_render_state(D3DRS_SRCBLEND, D3DBLEND_ONE);
             set_render_state(D3DRS_DESTBLEND, D3DBLEND_ONE);
             set_render_state(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+        } else if (d.blend == Blend::Premultiplied) {
+            set_render_state(D3DRS_SRCBLEND, D3DBLEND_ONE);
+            set_render_state(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            set_render_state(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
         } else if (d.blend == Blend::Alpha) {
             set_render_state(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
             set_render_state(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);

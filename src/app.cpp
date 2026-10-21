@@ -2480,8 +2480,6 @@ void App::update(float dt) {
                 audio_.play(audio::Clip::BiteHit, 1.0f);
                 emit_impact(events.melee_hit_position, false, false);
                 chase_.kick(0.5f + 0.25f * float(events.melee_combo));
-                hit_marker_ = 0.35f;
-                hit_marker_position_ = events.melee_hit_position;
             }
             // The lunge spends airspeed: a bite is a commitment, not a free
             // action on a cooldown. Taken off the velocity directly, the way a
@@ -2506,8 +2504,6 @@ void App::update(float dt) {
         hitmarker_ = core::maxf(hitmarker_ - dt, 0.0f);
         killmarker_ = core::maxf(killmarker_ - dt, 0.0f);
         if (events.had_hit) {
-            hit_marker_ = 0.35f;
-            hit_marker_position_ = events.last_hit;
             // A burning target sheds embers continuously: breath damage has no
             // projectile impact to detonate, and a white glow alone was not
             // reading as "your flame is landing".
@@ -2588,7 +2584,6 @@ void App::update(float dt) {
             respawn_dragon();
         }
     }
-    hit_marker_ = core::maxf(hit_marker_ - dt, 0.0f);
     damage_flash_ = core::maxf(damage_flash_ - dt * 1.6f, 0.0f);
     damage_marker_ = core::maxf(damage_marker_ - dt, 0.0f);
     hit_sound_cooldown_ = core::maxf(hit_sound_cooldown_ - dt, 0.0f);
@@ -3190,6 +3185,9 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("foliage translucency", &lighting_.foliage_translucency, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
         if (atmosphere_.available()) ImGui::SliderFloat("sky in the hide", &lighting_.sky_reflection, 0.0f, 3.0f, "%.2f");
+        if (tier_.tier == gfx::Tier::Modern) {
+            ImGui::SliderFloat("breath light", &local_light_strength_, 0.0f, 1500.0f, "%.0f");
+        }
     }
 
     // The modern tier's sky (gfx/atmosphere.h): with it on, the zenith,
@@ -6673,16 +6671,100 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
         const float spread_side = particle_unit();
         const float spread_lift = particle_unit();
         p.velocity = direction * speed + (side * spread_side + lift * spread_lift) * (speed * b.spread);
+        // Launched somewhere in this frame, not at its end: the update that
+        // follows moves every new puff a whole frame (two metres at a
+        // breath's speed) before it is drawn, and the flame began a gap past
+        // the jaws. Pulled back by a share of the frame, the jet starts at
+        // the mouth and its puffs are spread evenly along it.
+        // The origin is the head joint, mid-skull; the jaws are about 2.5 m
+        // on, and a puff launched behind them buried the head in fire.
+        const float launched = 0.5f + 0.5f * particle_unit();
+        p.position = origin + direction * 2.5f - p.velocity * (dt * launched);
         // Positive billows like flame, negative pours like frost or heavy gas.
         p.acceleration = core::Vec3{0.0f, b.buoyancy, 0.0f};
         p.drag = b.drag;
         p.life = b.life * (1.0f + 0.08f * particle_unit());
-        p.size_start = b.size_start;
+        // Narrow at the jaws (the stretched quad is this wide either side),
+        // swelling to the profile's size down the flame.
+        p.size_start = b.size_start * 0.55f;
         p.size_end = b.size_end;
         p.color_start = hot;
         p.color_end = cool;
         p.brightness = b.brightness;
+        p.kind = gfx::ParticleKind::Flame;
+        p.seed = particle_unit() * 0.5f + 0.5f;
         particles_.spawn(p);
+        // What the flame leaves: smoke launched with it on the same path,
+        // living longer and showing only past where the flame dies -- so the
+        // breath ends in a roll of smoke rather than a cut. Per element
+        // (smoke_for): fire's soot, frost's vapour, stone's dust; storm none.
+        const BreathSmoke smoke = smoke_for(b.element);
+        smoke_owed_ += smoke.rate;
+        if (smoke_owed_ >= 1.0f) {
+            smoke_owed_ -= 1.0f;
+            gfx::Particle s = p;
+            s.kind = gfx::ParticleKind::Smoke;
+            s.seed = particle_unit() * 0.5f + 0.5f;
+            const float stretch = 2.2f;
+            s.life = p.life * stretch;
+            s.fade_in = 1.0f / stretch;
+            s.acceleration = core::Vec3{0.0f, b.buoyancy * 0.6f + 2.0f, 0.0f};
+            s.size_start = b.size_start * 1.2f;
+            s.size_end = b.size_end * 2.2f;
+            s.color_start = smoke.colour;
+            s.color_end = smoke.colour * 1.25f;
+            s.brightness = smoke.opacity;
+            particles_.spawn(s);
+        }
+    }
+}
+
+// The breath lights what is around it (scene_common.hlsl, local_light): the
+// player's while it breathes, else the hostile breath nearest the camera.
+// A third of the way down the flame, where the fire is thickest, in the
+// breath's hot colour, flickering.
+void App::set_local_light(gfx::SceneUniforms& scene) const {
+    scene.local_light = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    if (tier_.tier != gfx::Tier::Modern) return;
+    core::Vec3 origin, direction, hot;
+    float range = 0.0f;
+    if (combat_.breathing()) {
+        origin = combat_.breath_origin();
+        direction = combat_.breath_direction();
+        range = combat_.tuning.breath_range * combat_.player_breath.range;
+        hot = player_breath_.hot;
+    } else {
+        float nearest = 1e30f;
+        for (const game::BreathCone& flame : combat_.hostile_breaths()) {
+            const float d = core::distance(flame.origin, active_camera().position);
+            if (d >= nearest) continue;
+            nearest = d;
+            origin = flame.origin;
+            direction = flame.direction;
+            range = combat_.tuning.hostile_breath_range * flame.scales.range;
+            hot = flame.element != game::Element::None ? element_breaths_[int(flame.element)].hot
+                                                        : core::Vec3{1.3f, 1.7f, 2.2f};
+        }
+    }
+    if (range <= 0.0f) return;
+    const core::Vec3 at = origin + direction * (range * 0.3f);
+    const float t = time_seconds_;
+    const float flicker = 0.85f + 0.1f * std::sin(t * 23.0f) + 0.05f * std::sin(t * 41.0f + 1.3f);
+    scene.local_light = core::Vec4{at.x, at.y, at.z, range * 0.9f};
+    const core::Vec3 colour = hot * (local_light_strength_ * flicker);
+    scene.local_light_color = core::Vec4{colour.x, colour.y, colour.z, 0.0f};
+}
+
+App::BreathSmoke App::smoke_for(game::Element element) {
+    // Linear colours in the scene's units (sunlit grey rock is about 0.5):
+    // smoke is lit, not light, so these are what a lit puff averages to.
+    switch (element) {
+        case game::Element::Fire: return {core::Vec3{0.16f, 0.15f, 0.14f}, 0.30f, 0.85f};
+        case game::Element::Frost: return {core::Vec3{0.62f, 0.68f, 0.75f}, 0.35f, 0.35f};
+        case game::Element::Blight: return {core::Vec3{0.22f, 0.27f, 0.12f}, 0.35f, 0.5f};
+        case game::Element::Tide: return {core::Vec3{0.65f, 0.70f, 0.72f}, 0.30f, 0.3f};
+        case game::Element::Stone: return {core::Vec3{0.36f, 0.30f, 0.22f}, 0.45f, 0.5f};
+        default: return {core::Vec3{0.2f, 0.2f, 0.2f}, 0.0f, 0.0f};  // storm, a drone: no smoke
     }
 }
 
@@ -6932,10 +7014,10 @@ void App::draw_combat(rhi::Pass* pass) {
     // Flames and explosions are particles now (emitted in update); nothing to
     // draw here but the solid bolts above.
 
-    if (hit_marker_ > 0.0f) {
-        draw_ball(hit_marker_position_, 4.0f * (1.0f + (0.35f - hit_marker_) * 6.0f),
-                  core::Vec3{1.0f, 0.92f, 0.80f}, hit_marker_ * 4.0f, true);
-    }
+    // No world hit marker: an opaque sphere growing to 12 m over the target,
+    // reset every frame a breath touched it, read as a balloon over anything
+    // being burned. The impact's flash and embers (emit_impact), the embers a
+    // burning target sheds, and the HUD's marker say "hit".
 }
 
 // Combat readouts. Everything here answers a question the player has while
@@ -8030,6 +8112,7 @@ void App::render() {
     scene.clouds2.x =
         clouds_.active(scene, cloud_settings_) && tier_.budget.volumetric_clouds && !ablated("clouds") ? 1.0f : 0.0f;
     shadow_.apply(scene);
+    set_local_light(scene);
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
     world_.set_material_toggles(material_toggles_);

@@ -87,7 +87,10 @@ enum class Fill : uint8_t { Solid, Wireframe };
 enum class FrontFace : uint8_t { CounterClockwise, Clockwise };
 // Opaque writes the source; Alpha is src-alpha over; Additive is one + one
 // (fire, glows: light rather than surface).
-enum class Blend : uint8_t { Opaque, Alpha, Additive };
+// Premultiplied: src ONE, dst ONE - src alpha. Light that also hides some of
+// what is behind it -- fire: added orange over a sunlit mountain read as
+// peach. Alpha 0 is purely additive.
+enum class Blend : uint8_t { Opaque, Alpha, Additive, Premultiplied };
 
 enum class VertexFormat : uint8_t { Float, Float2, Float3, Float4, UByte4, UByte4Norm };
 enum class InputRate : uint8_t { Vertex, Instance };

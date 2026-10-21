@@ -660,6 +660,14 @@ public:
             blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
             blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+        } else if (d.blend == Blend::Premultiplied) {
+            blend.enable_blend = true;
+            blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+            blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+            blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
         } else if (d.blend == Blend::Alpha) {
             blend.enable_blend = true;
             blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;

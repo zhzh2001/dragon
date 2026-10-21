@@ -181,7 +181,8 @@ bool PipelineCache::build(Entry& entry) {
         if (desc.depth_compare == rhi::Compare::Greater) desc.depth_compare = rhi::Compare::Less;
         else if (desc.depth_compare == rhi::Compare::GreaterEqual) desc.depth_compare = rhi::Compare::LessEqual;
     }
-    desc.blend = d.additive_blend ? rhi::Blend::Additive
+    desc.blend = d.premultiplied_blend ? rhi::Blend::Premultiplied
+                 : d.additive_blend ? rhi::Blend::Additive
                  : d.alpha_blend  ? rhi::Blend::Alpha
                                   : rhi::Blend::Opaque;
     // World pipelines render into the main target: the HDR scene, or the

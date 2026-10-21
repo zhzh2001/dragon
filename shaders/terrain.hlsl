@@ -486,7 +486,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     // cover stands in for the shade under it.
     visibility *= 1.0 - 0.7 * canopy * smoothstep(1400.0, 2000.0, camera_distance);
 #endif
-    float3 direct = direct_sun(normal, visibility);
+    float3 direct = direct_sun(normal, visibility) + local_light(input.world_position, normal);
     float3 lit_color = albedo * (direct + ambient);
 
     // Snow glints: a modest specular lobe only where the surface is bright and

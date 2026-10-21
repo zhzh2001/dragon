@@ -1,5 +1,6 @@
 #include "gfx/particles.h"
 
+#include <algorithm>
 #include <cstring>
 #include "gfx/texture.h"
 #include "gfx/render_tier.h"
@@ -46,8 +47,28 @@ bool ParticleSystem::init(Device* device, PipelineCache* pipelines) {
         attribute(1, rhi::VertexFormat::Float4, offsetof(Vertex, color)),
         attribute(2, rhi::VertexFormat::Float2, offsetof(Vertex, corner)),
     };
+    // The shape (seed, age, kind) on the shader tiers; fixed function's
+    // vertex layout stays as R5 measured it.
+    if (!active_tier().fixed_function) {
+        desc.vertex_attributes.push_back(attribute(3, rhi::VertexFormat::Float4, offsetof(Vertex, shape)));
+    }
 
+    // On the shader tiers light is premultiplied: a disc's alpha is 0, so it
+    // adds as before; a flame's is its body, so it also hides some of the
+    // ground behind it and keeps its orange over a sunlit slope. Fixed
+    // function's stage writes alpha 1 and stays additive.
+    desc.premultiplied_blend = !active_tier().fixed_function;
     pipeline_ = pipelines->create(desc);
+    desc.premultiplied_blend = false;
+    if (!active_tier().fixed_function) {
+        // Smoke is a surface, not light: blended over what is behind it, still
+        // writing no depth, before the additive light so fire glows over it.
+        PipelineDesc smoke = desc;
+        smoke.name = "particles_smoke";
+        smoke.additive_blend = false;
+        smoke.alpha_blend = true;
+        smoke_pipeline_ = pipelines->create(smoke);
+    }
     if (active_tier().fixed_function) {
         constexpr int N = 64;
         ImageData disc;
@@ -149,31 +170,72 @@ void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 ca
                             Vec3 camera_up) {
     uniforms_.view_proj = view_proj;
     vertices_.clear();
-    for (int i = 0; i < count_; ++i) {
-        const Particle& p = pool_[i];
-        const float t = p.age / p.life;
-        const float size = core::lerpf(p.size_start, p.size_end, t);
-        // Bright fast, gone smoothly: quadratic fade reads as cooling.
-        const float fade = (1.0f - t) * (1.0f - t);
-        const Vec3 color = core::lerp(p.color_start, p.color_end, t) * (p.brightness * fade);
-        if (color.x + color.y + color.z < 0.01f) continue;
-
-        const Vec3 right = camera_right * size;
-        const Vec3 up = camera_up * size;
-        const Vec4 packed{color, 1.0f};
-        const Vertex corners[4] = {
-            {p.position - right - up, packed, Vec2{-1.0f, -1.0f}},
-            {p.position + right - up, packed, Vec2{1.0f, -1.0f}},
-            {p.position + right + up, packed, Vec2{1.0f, 1.0f}},
-            {p.position - right + up, packed, Vec2{-1.0f, 1.0f}},
-        };
-        vertices_.push_back(corners[0]);
-        vertices_.push_back(corners[1]);
-        vertices_.push_back(corners[2]);
-        vertices_.push_back(corners[0]);
-        vertices_.push_back(corners[2]);
-        vertices_.push_back(corners[3]);
+    const bool smoke_drawn = smoke_pipeline_ != INVALID_PIPELINE;
+    // Back to front: flame and smoke cover what is behind them, so order
+    // matters now (a disc's alpha is 0 and adds in any order). A few hundred
+    // puffs, sorted by depth along the view.
+    const Vec3 camera_forward = core::cross(camera_up, camera_right);
+    order_.resize(size_t(count_));
+    for (int i = 0; i < count_; ++i) order_[size_t(i)] = i;
+    std::sort(order_.begin(), order_.end(), [&](int a, int b) {
+        return core::dot(pool_[a].position, camera_forward) > core::dot(pool_[b].position, camera_forward);
+    });
+    // Smoke first, then light: two draws from one buffer.
+    for (int pass = 0; pass < 2; ++pass) {
+        const bool smoke_pass = pass == 0;
+        if (smoke_pass && !smoke_drawn) continue;
+        for (const int i : order_) {
+            const Particle& p = pool_[i];
+            if ((p.kind == ParticleKind::Smoke) != smoke_pass) continue;
+            const float t = p.age / p.life;
+            const float size = core::lerpf(p.size_start, p.size_end, t);
+            Vec4 packed;
+            if (smoke_pass) {
+                // In after the flame it follows, out slowly as it spreads.
+                const float in = p.fade_in > 0.0f ? core::smoothstep(p.fade_in * 0.7f, p.fade_in, t) : 1.0f;
+                const float opacity = p.brightness * in * (1.0f - t);
+                if (opacity < 0.005f) continue;
+                packed = Vec4{core::lerp(p.color_start, p.color_end, t), opacity};
+            } else {
+                // Bright fast, gone smoothly: quadratic fade reads as cooling.
+                const float fade = (1.0f - t) * (1.0f - t);
+                const Vec3 color = core::lerp(p.color_start, p.color_end, t) * (p.brightness * fade);
+                if (color.x + color.y + color.z < 0.01f) continue;
+                packed = Vec4{color, 1.0f};
+            }
+            Vec3 right = camera_right * size;
+            Vec3 up = camera_up * size;
+            if (p.kind == ParticleKind::Flame) {
+                // Stretched along its motion across the screen: a fast young
+                // puff is a streak, so the breath leaves the jaws as a jet and
+                // slows into billows, rather than a row of balls.
+                const Vec3 across = p.velocity - camera_forward * core::dot(p.velocity, camera_forward);
+                const float speed = core::length(across);
+                if (speed > 1.0f) {
+                    const Vec3 along = across / speed;
+                    const Vec3 side = core::normalize_or(core::cross(camera_forward, along), camera_right);
+                    const float stretch = 1.0f + core::minf(speed * 0.03f, 1.5f);
+                    up = along * (size * stretch);
+                    right = side * size;
+                }
+            }
+            const Vec4 shape{p.seed, t, float(int(p.kind)), 0.0f};
+            const Vertex corners[4] = {
+                {p.position - right - up, packed, Vec2{-1.0f, -1.0f}, shape},
+                {p.position + right - up, packed, Vec2{1.0f, -1.0f}, shape},
+                {p.position + right + up, packed, Vec2{1.0f, 1.0f}, shape},
+                {p.position - right + up, packed, Vec2{-1.0f, 1.0f}, shape},
+            };
+            vertices_.push_back(corners[0]);
+            vertices_.push_back(corners[1]);
+            vertices_.push_back(corners[2]);
+            vertices_.push_back(corners[0]);
+            vertices_.push_back(corners[2]);
+            vertices_.push_back(corners[3]);
+        }
+        if (smoke_pass) smoke_vertices_ = uint32_t(vertices_.size());
     }
+    if (!smoke_drawn) smoke_vertices_ = 0;
 
     uploaded_ = uint32_t(vertices_.size());
     if (uploaded_ == 0) return;
@@ -197,6 +259,18 @@ void ParticleSystem::draw(Device& device, rhi::Pass* pass) {
     rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
     if (!pipeline) return;
 
+    rhi::BufferBinding binding = {};
+    binding.buffer = vertex_buffer_;
+    rhi::Pipeline* smoke = smoke_vertices_ > 0 ? pipelines_->get(smoke_pipeline_) : nullptr;
+    if (smoke) {
+        device.rhi().bind_pipeline(pass, smoke);
+        device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &uniforms_, sizeof(Uniforms));
+        device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &uniforms_, sizeof(Uniforms));
+        device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);
+        device.rhi().draw(pass, smoke_vertices_, 1, 0, 0);
+    }
+    const uint32_t light_first = smoke ? smoke_vertices_ : 0;
+    if (uploaded_ <= light_first) return;
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &uniforms_, sizeof(Uniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &uniforms_, sizeof(Uniforms));
@@ -206,10 +280,8 @@ void ParticleSystem::draw(Device& device, rhi::Pass* pass) {
         disc.sampler = disc_sampler_;
         device.rhi().bind_fragment_textures(pass, 0, &disc, 1);
     }
-    rhi::BufferBinding binding = {};
-    binding.buffer = vertex_buffer_;
     device.rhi().bind_vertex_buffers(pass, 0, &binding, 1);
-    device.rhi().draw(pass, uploaded_, 1, 0, 0);
+    device.rhi().draw(pass, uploaded_ - light_first, 1, light_first, 0);
 }
 
 }  // namespace gfx
