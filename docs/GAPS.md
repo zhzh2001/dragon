@@ -157,6 +157,39 @@ valley. Two faults showed up in the captures:
   visible. Fewer, larger, nearer trees would read more like a forest than
   the current far, sparse spread (inferred).
 
+### 1.9 What the other games' frames add
+
+Read off the Steam store screenshots of Century, Day of Dragons, Dragon's
+Dogma 2, Elden Ring, Monster Hunter Wilds, Ace Combat 7, Horizon Forbidden
+West and Skyrim (2026-10-21). They are marketing frames, so they flatter,
+but they agree on these, and our modern frame has none of them:
+
+- Air with layers. Every one of them puts mist in the valleys, fog banks
+  below the viewer and shafts of light through them (Elden Ring's
+  panoramas, Horizon's cloud sea, Skyrim's forest). Our air is clear to
+  the far wall; the aerial perspective is uniform and the valley fog is
+  thin. Height fog that pools in the valley floor, cloud banks below the
+  peaks, and light shafts from the terrain-sun map's shadowed air (F4
+  already darkens the froxels) are the pieces.
+- The sun in frame. Century and Ace Combat put the sun in the shot: glare,
+  a bloom halo and streaks. Our sun is mostly behind the camera, and the
+  bloom is subtle by choice. A lens glare at the sun and the chase camera
+  framing toward the light at moments would use the low sun we have.
+- Membranes that glow. Century's red wings and Day of Dragons' orange ones
+  glow where the sun is behind them, and Century's breath lights the
+  underside of the wing (1.3, 1.5).
+- Speed. Century smears the frame radially at boost and adds white
+  streaks. Reviewers said it was too much; a lighter version is the cue
+  we lack (1.5).
+- Snow and rock by orientation. Century's rock is dark, with snow on every
+  upward face. Ours has snow by altitude only.
+- Ground cover. Day of Dragons, Skyrim and Monster Hunter fill the ground
+  with grass, shrubs and stones; the ground is never bare at a standing
+  camera (1.6).
+- A strong grade. Warm sun and cool shade, saturated near the sun. Ours is
+  even and neutral. The grade's sliders exist; the targets want a stronger
+  split.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.
@@ -264,6 +297,9 @@ reviews and the VFX vendor say.
 
 ## 4. The retro tiers: what each modern feature can become
 
+Deferred (the user's call, 2026-10-21): the modern tier comes first. This
+section is the record for when the retro work resumes.
+
 The finding that shapes this section: **the sun does not move within a
 run.** Everything the modern tier recomputes each frame from the sun and
 the terrain alone can be computed once per valley on the CPU and stored.
@@ -355,15 +391,17 @@ By what each buys per session, with the tier each reaches. The F phases in
 |---|---|---|---|
 | G1 | Mountain shape (1.1): a stronger ridge octave, terraces that survive erosion, a colour map with rock by slope, and backdrop ranges past the skirt | all | 2 |
 | G2 | The breath (1.3): flipbooks, core, smoke, the flame's light, heat haze; per element | all, tiered | 2 |
-| G3 | The retro bake (4): sky-view, aerial table, terrain-sun map and sky occlusion on the CPU at valley load; clouds in the sky bake; the 6200 TC check (4.1) | sm3, sm2, ff | 2 |
+| G3 | Deferred: the retro bake (4): sky-view, aerial table, terrain-sun map and sky occlusion on the CPU at valley load; clouds in the sky bake; the 6200 TC check (4.1) | sm3, sm2, ff | 2 |
 | G4 | Contact and weight (1.4, 1.5): downwash, dust, spray, landing kick, membrane back-light, speed cues | all | 1-2 |
 | G5 | Tells, the punish window and the incoming-shot ring (2, 5) | gameplay, all | 1-2 |
 | G6 | The river's course (1.2): width, braids, gravel bars | all | 1-2 |
 | G7 | Clouds, weather and lift in play (2, 5); pinch points in the corridor | gameplay, all | 2 |
 | G8 | Ground level (1.6) and a time of day from the seed (1.7) | all | 1 |
+| G9 | Layered air (1.9): height fog pooled in the valley, cloud banks below the peaks, light shafts, sun glare, snow on upward faces, a stronger grade | modern | 2 |
 
 G1 comes first because the mountains are most of every frame on every
-tier. G3 is the cheapest large step for the retro tiers. G5 and G7 are the
+tier. G3 is the cheapest large step for the retro tiers, and waits until
+the modern tier is done. G5 and G7 are the
 play gaps the research names most often.
 
 ## Sources
