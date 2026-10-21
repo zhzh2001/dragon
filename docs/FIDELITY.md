@@ -15,6 +15,10 @@ stack, so that line no longer holds for the modern tier.
 The baseline is in `artifacts/fidelity-baseline/`: a run, a valley vista
 and the dragon close, at Ultra on the Mac, 2026-10-13, beside the target.
 
+`concept/valley-target.png` was a test of the concept-art skill, not a
+chosen direction. Since 2026-10-21 the targets are `concept/gaps/`, and
+`GAPS.md` ranks the gaps against them and against other games.
+
 ## Where the picture is
 
 Read off those captures against the target, worst first:

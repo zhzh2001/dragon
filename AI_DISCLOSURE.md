@@ -67,7 +67,7 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Material | Made with |
 |---|---|
 | Concept art, creature reference sheets, turnarounds and view plates (`artifacts/dragon-options/`, `artifacts/**/concept*`) | **OpenAI GPT Image 2**: through ChatGPT Plus (via `chatgpt-imagegen`) and through Codex's built-in image tool (orchestrated by gpt-5.6-luna) |
-| Art-direction targets in `docs/concept/` (HUD, vegetation, pose references) | **Google Nano Banana 2** (Gemini, via the Antigravity CLI). These carry Google's SynthID and C2PA marks; the valley key art is GPT Image 2 |
+| Art-direction targets in `docs/concept/` (HUD, vegetation, pose references) | **Google Nano Banana 2** (Gemini, via the Antigravity CLI). These carry Google's SynthID and C2PA marks; the valley key art is GPT Image 2, and so are the run, breath and landing targets in `docs/concept/gaps/` (2026-10-21); its two period-style retro targets are Nano Banana 2 |
 | Comparison renders of meshes that were evaluated and **not** used (`artifacts/dragon-options/embercrest-model-field.png` and siblings) | **TRELLIS.2** (Microsoft, local and on its Hugging Face Space), **Pixal3D**, **Hunyuan3D-2mv** (open weights, run locally), and one **Tripo** v2.5 mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 

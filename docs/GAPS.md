@@ -1,0 +1,402 @@
+# Gaps: the build against other dragon and flight games
+
+Written 2026-10-21. This file compares the modern build and the retro tiers
+against Century: Age of Ashes, other dragon and creature-flight games, and
+period games on the retro tiers' hardware. It ranks the gaps in the picture,
+in feel and in play, and says which fixes reach D3D9 and the fixed-function
+tier. `FIDELITY.md` stays the record of the modern techniques and their
+phases. `DIRECTION.md` stays the plan for the game's shape. This file feeds
+both.
+
+Method:
+
+- Our frames came from the current `main` (`efe3468`), headless, at each
+  tier's default preset, on the M5.
+- The targets are new. `concept/valley-target.png` was a test of the
+  concept-art skill, not a direction, so it no longer sets the bar. Five
+  new targets are in `concept/gaps/` (below).
+- Research came from reviews, developer talks, wikis, Steam threads and
+  GPU Gems-era papers. The sources are listed at the end. A claim marked
+  "(inferred)" is judgment, not a source.
+- No other game's screenshot is in this repository. The comparisons are
+  against our own generated targets. The two period-style prompts named
+  Far Cry, Half-Life 2, Oblivion, Drakan and Panzer Dragoon as a style;
+  the images contain no character, logo or asset from them.
+
+## The targets
+
+| File | Backend | What it sets |
+|---|---|---|
+| `concept/gaps/run-target.png` | GPT Image 2 | The run's chase view: cliff bands, gullies, scree fans, ranges in haze behind the pass, a braided river with gravel bars, dark forest masses |
+| `concept/gaps/breath-target.png` | GPT Image 2 | The breath: a white core at the jaws, turbulent orange flame, grey smoke at the far end, the fire lighting the dragon's own head and wings |
+| `concept/gaps/landing-target.png` | GPT Image 2 | Weight: the downwash flattens a ring of grass, dust and pebbles fly, the legs flex |
+| `concept/gaps/retro-sm2-target.png` | Nano Banana 2 | A 2004 D3D9 frame: normal-mapped dragon, rock by slope, baked ridge shadows, a painted cloudy sky, layered haze |
+| `concept/gaps/retro-ff-target.png` | Nano Banana 2 | A 2000 DX7 frame: low-polygon dragon, a base texture times a detail texture, crossed-quad trees, a painted sky dome, a blob shadow |
+
+The pairs, our frame on the left, are in `artifacts/gap-study/`.
+
+## 1. The picture
+
+Read off the pairs, worst first. Each row says which tiers the fix reaches.
+
+### 1.1 The mountains are the biggest gap, on every tier
+
+Our walls are broad ramps. The generator lifts 900 m of ridged noise on a
+2.3 km scale over a 950 m falloff from the valley floor
+(`game/terrain.h`). The ridge octave is 60 m, and erosion combs the faces
+into parallel gullies. From the chase camera the result reads as smooth
+cones with stripes. Every target has cliff bands, sharp crests, scree fans
+under the cliffs and more ranges behind the pass.
+
+This is not a shader gap. The period-style targets are generated images,
+not real games, but they show what real games of that era did (Drakan,
+Far Cry, Oblivion): their mountains are sharper and rockier than our modern
+frame. They get that from three things, and all three are content:
+
+1. Relief at 50-300 m: crests, spurs and steps in the faces. That is the
+   generator's job (inferred: a stronger ridge octave, and terracing that
+   survives erosion on slopes above about 40 degrees).
+2. Rock coloured by slope. The modern tier has scanned rock to 2.5 km
+   (F3), and past that only the crags' normals and grey blotches. On every
+   retro tier a face is tinted ground with no rock in it. A colour map
+   baked from slope, the erosion's flow and its scree would carry rock to
+   the horizon on every tier.
+3. Ranges past the playable square. The skirt carries the same noise to
+   three times the extent, so the pass opens onto more of the same slope. A
+   ring of taller, sharper backdrop ranges (geometry only, never flown to)
+   gives the receding layers that every target uses for depth.
+
+Fix reaches: all four tiers. It changes `height_at`, so the foot-plant
+renders (`--inspect 60 11 3`) and the run's gameplay ground must be checked
+again.
+
+### 1.2 The river is a canal
+
+The river is 52 m wide everywhere with steep banks (`river_half_width`).
+Every target has a braided bed: channels that split and join, pale gravel
+bars, and width that changes along the course. F2 already writes a sediment
+map, and F8 already reads the bed's depth. The missing part is the course:
+width, braids and bars from the generator. Fix reaches: all tiers, because
+the bed is geometry and the bars are colour.
+
+### 1.3 The breath is a row of soft balls
+
+`artifacts/gap-study/breath-vs-target.png`. Our flame is additive round
+puffs of one orange. It has no core, no structure, no smoke and no light on
+anything. The target has a white-hot core at the jaws, flame tongues, smoke
+that rolls off the end, and the fire lighting the dragon's own head, neck
+and wing undersides orange. Missing pieces, and the tiers each reaches:
+
+| Piece | Modern | SM3 | SM2 | Fixed function |
+|---|---|---|---|---|
+| A flipbook flame texture instead of one round puff | yes | yes | yes | yes |
+| A hot core: a short bright stretched sprite at the jaws | yes | yes | yes | yes |
+| Smoke: alpha-blended grey puffs at the end of each flame's life | yes | yes | yes | yes, sorted on the CPU |
+| Soft particles: fade where a puff meets the ground | yes | yes, with depth | no depth texture on the GMA 3150 | no |
+| The breath lights its source: one point light from the flame into the dragon's and the target's shaders | yes | yes | per vertex | a D3D9 point light |
+| Heat haze: screen distortion behind the flame | yes | yes | yes, a screen-copy offset (GPU Gems 2 ch.19) | no |
+| Scorch on the ground, burning trees | yes | yes | yes | yes, decal |
+
+The same holds for the other five elements: each breath wants its own
+flipbook, its own smoke or vapour and its own light colour.
+
+### 1.4 Nothing has weight on contact
+
+`artifacts/gap-study/landing-vs-target.png`. A landing in our build is a
+dragon that stops. The grass is still, no dust rises and the camera holds.
+Grass is already placed around the camera every frame, so a downwash
+(a radial push in the grass's wind input, from the wings' height and
+beat) costs little. Dust and pebbles are particles. A camera kick scaled by
+the impact speed and the growth stage sells size. The same kit serves a
+low pass over water (spray and a ring of ripples) and a dive past trees.
+Fix reaches: all tiers. The grass bend is a vertex-shader input on the
+shader tiers and a CPU offset on fixed function.
+
+### 1.5 The creature sits on the scene, not in it
+
+- The wing membranes show no light through them. Every dragon target and
+  every reference game with membranes shows the sun through the wing when
+  it is behind it. It is a wrap and back-light term in `skinned.hlsl` with
+  a thickness from the hide's colour (Valve's half-Lambert family). Fix
+  reaches: modern, SM3 and SM2 cheaply; fixed function only as a baked
+  brighter texture.
+- No speed cue but the boost's field-of-view surge. A dive at 80 m/s and a
+  glide at 30 m/s look alike. Camera-velocity motion blur needs depth (modern
+  and SM3). Wind streaks, a field of view and a synthesized wind pitch tied
+  to airspeed reach every tier.
+
+### 1.6 Ground level is unfinished
+
+The grass is sparse blades and the bushes are flat green blobs
+(`landing-vs-target.png`). The flier sees this only when landed, which the
+run now asks for at every cache. Denser grass with a clumped meadow texture
+under it, and bushes built from the same leaf cards as the crowns, close
+most of it (inferred).
+
+### 1.7 Light and time of day
+
+The targets are all low sun, backlit, with warm and cool sides. The modern
+tier's sun is at 19 degrees, which is close, and it has the long shadows.
+What is missing is a reason to vary it: a run could deal its valley a time
+of day from the seed, from dawn to dusk, now that every sky and shadow
+term is physical.
+
+### 1.8 The retro tiers lack everything the atmosphere work added
+
+`artifacts/gap-study/vista-four-tiers.png` (modern, sm3, sm2, ff). The
+retro tiers have no clouds, no long ridge shadows, no aerial blue and no
+sky occlusion. Section 4 shows that most of this can be baked once per
+valley. Two faults showed up in the captures:
+
+- On sm2 the tree shadows are thin streaks several times longer than the
+  trees (`sm2-vs-target.png`). The 14-degree retro sun and a 1024 map
+  draw them as noise. A higher retro sun or a contact-only shadow length
+  would read better (inferred).
+- On ff at Low the run's start has almost no trees (`ff-vs-target.png`).
+  The 2000 target has fewer trees than any modern tier, but each one is
+  visible. Fewer, larger, nearer trees would read more like a forest than
+  the current far, sparse spread (inferred).
+
+## 2. Century: Age of Ashes
+
+Playwing, UE4, free to play, PvP dragon combat, released December 2021.
+It is the closest commercial game to our arena, and the most useful
+contrast to our run.
+
+What it is:
+
+- Three classes at launch (Windguard, Phantom, Marauder), three more in
+  the seasons (Stormraiser, Thornweaver, Rimeblood). Each has one power,
+  two abilities, a passive and a Rage that charges over a match.
+- Modes: Carnage (6v6 deathmatch with bounties), Gates of Fire (a flag
+  carried through eight gates), Spoils of War (gold), Survival (4v4v4),
+  Skirmish (3v3), and one PvE mode, Outbreak (four players defend towers
+  through ten waves).
+- Maps are arenas with "extreme verticality": open bowls joined by narrow,
+  dense passages, connected so that flight never stops. Weather and time
+  of day are fixed per map variant, not dynamic.
+- Reception: OpenCritic 73; Steam 73% positive of 8,315, recent reviews
+  66%. Steam players went from a 12,222 peak at launch to a 43 average in
+  September 2026. The last season was July 2023; the game is in
+  maintenance.
+
+### How it looks
+
+The developers said little about lighting, clouds or water, and the
+interview page could not be fetched, so the rendering below is what
+reviews and the VFX vendor say.
+
+- The visual strength is the effects, not the world. Persistant Studios
+  built about 80 effects in PopcornFX, with nine artists over two and a
+  half years. The art director said the game "would not have had the same
+  success" without them. Two of their techniques fit us directly:
+  - Each effect is parameterised by the dragon's size and shape, so one
+    breath fits every body.
+  - One master material, driven with the particles, shows every status
+    effect on the hide.
+
+  We have seven species, six elements, three growth stages and a status
+  per element. That is the same problem, and today our statuses are a tint
+  and some particles.
+- Reviewers praise the draw distance, the water and wind effects in dives
+  and boosts, and the "wall of flames". They criticise a palette of
+  "browns, blues and yellows that all blur together", so targets merge
+  with the ground.
+- Motion blur was "extremely aggressive", became optional only after the
+  first beta, and players set it to 0. Speed has to read without smearing
+  the target.
+- The animation was keyframed (the credits list animators and riggers; no
+  mocap or procedural animation is mentioned). Ours is procedural, which
+  is the harder road and the more distinctive one.
+
+### How it plays
+
+- The dragon flies forward on its own; W and S change speed; a double tap
+  boosts on stamina. A boost lasts longer in a dive, and fireballs inherit
+  the shooter's speed, so diving attacks pay. Ours does the second already
+  (`game/combat.cpp`, the fireball's intercept).
+- Brake then boost in a turn is a "drift", the main evasive turn.
+- Wind tunnels, updrafts and geysers are part of the level art and refill
+  stamina or launch the dragon. Reading the map is a skill.
+- Aim assist is generous: "most of the attacks don't require pinpoint
+  aim". Our aim assist is the same choice.
+- There was no dodge at launch, and the most common early complaint was
+  that a lock could not be escaped. A dodge came in 2023: one stamina, and
+  it voids every incoming fireball whose indicator has turned yellow.
+- No melee, grabs or takedowns were found. Our bite, claw and tail, and
+  carrying prey, are ahead of it.
+- Growth is between matches: eggs hatch and grow by tasks. Reviewers found
+  it slow. Ours is inside a run, which is the better answer.
+- The HUD carries the threat: the breath left as arcs on the reticle,
+  fireball charges as bars above it, a red mark when an enemy is in breath
+  range, and a semicircle arrow per incoming fireball whose size gives the
+  distance and whose colour says it will miss. Players still found it
+  cluttered and too small on a TV.
+
+### What it teaches us
+
+| Century | Us | Gap |
+|---|---|---|
+| Updrafts, wind tunnels and geysers as level features | The valley has none; thermals are in `DIRECTION.md` row 9, unbuilt | Thermals over sunlit faces and ridge lift along the walls. The terrain-sun map (F4) already knows which faces are in sun |
+| One incoming-shot indicator per fireball, coloured by whether it will hit | Edge arrows point to targets; nothing warns of a shot | An incoming-fire ring, which the roll and the flip need in order to be skill rather than luck |
+| VFX parameterised by size, one status material | Particles scaled per species; status as a tint | A status layer in `skinned.hlsl` (frost rime, blight veins, storm sparks, stone crust) driven by the status amount |
+| Bowls joined by narrow passages, scaled to dragon speed | One meandering corridor, the same width all along | The valley generator can pinch the corridor into gorges and open it into basins; risk and cover in one |
+| Fixed weather per map variant | Four valley kinds from the seed | Weather per valley (section 5) |
+| Thin content and no reason to return | A roguelite's run-to-run variety, if the valleys differ enough | The second run playtest said the seeds did not change much; G1 and the pinch points are also variety |
+
+## 3. Other games
+
+| Game | What it does well | Its main criticism | What to take |
+|---|---|---|---|
+| Day of Dragons (UE, early access since 2019) | Physics flight; growth from hatchling to Alpha | Flight edges punish: stalls, dive pull-outs and hovers crash the dragon. "Nothing to do" in an empty world. Growth takes hours | Growth needs a loop around it. A stall and a landing must be recoverable states |
+| Dragon's Dogma 2 (RE Engine, 2024) | A world whose slopes matter: downhill is faster, a throw from above hits harder. Monsters react; the player climbs them and tears their wings to ground them | Performance, enemy variety | Damage to wings as a way to ground a rival |
+| Elden Ring | Agheel's dive lands him on the player and leaves him open: a punish window | The camera does not frame a huge enemy; lock-on fixes on a leg | A committed attack that ends grounded and vulnerable; frame large targets |
+| Skyrim | A dragon roars before it engages, makes fly-bys, perches out of reach, lands to fight, crash-lands at half health and skids | Endless circling; dragons that leave without a fight | The crash-landing at low health: a rival that loses the air |
+| Monster Hunter (World, Rise, Wilds) | Attack tells: Rathalos' mouth glows before a fireball, its wings pull up before a talon dive. Monsters limp to their nest and sleep; they fight each other in turf wars. Wilds' weather phases bring the apex monster with the storm | Wilds' PC performance; little challenge at launch | Tells, retreat and recovery, infighting, weather with a threat attached |
+| Ace Combat 7 (UE4, trueSKY) | Clouds change combat: they hide an aircraft, break or slow a lock, ice it if it stays; wind and lightning push and blind | The all-weather map is often skipped | Clouds as cover and as a hazard, with a cost to staying |
+| Horizon Forbidden West | The Sunwing flies through voxel clouds made for flying (Nubis cubed) | Flight comes late | Clouds worth flying into |
+| Tears of the Kingdom | Sky and ground as one map; a dive is also a survey | -- | The dive as a way to read the valley ahead |
+| Lair (PS3, 2007) | Praised visuals and score | Tilt steering and a "lottery" lock-on sank it (Metacritic 53) | Controls and targeting decide the game, not the picture |
+| School of Dragons (shut 2023) | Growth unlocks movement: a teen glides, an adult flies | -- | Growth that changes how you move, not only numbers |
+| Crimson Desert (2026) | A dragon mount with spit, breath and a barrel roll | 15 minutes of flight, then an hour's cooldown | -- |
+| Sagas of Lumin (early access planned 2026) | Dragon dogfights with breath, claw, bite and tackle; base and airship attacks | Not released | The closest design neighbour; watch it |
+| Dragontwin (Patreon builds) | Physics-driven dragons, no clips: any proportions move | Placeholder art | The closest technical neighbour to our procedural rig |
+
+## 4. The retro tiers: what each modern feature can become
+
+The finding that shapes this section: **the sun does not move within a
+run.** Everything the modern tier recomputes each frame from the sun and
+the terrain alone can be computed once per valley on the CPU and stored.
+The retro tiers then sample a texture (SM3, SM2) or read a vertex colour
+(fixed function). Crysis did the same on DX9: it solved its sky on the CPU
+into a 128x64 float texture and spread the update over 15-20 s (Wenzel
+2006).
+
+| Modern feature | SM3 | SM2 | Fixed function | Notes |
+|---|---|---|---|---|
+| Hillaire sky (F1) | Bake the sky-view map on the CPU at valley load; sample it as now | The same texture | The same function into the existing 512x256 dome bake (`porting/FIXED_FUNCTION.md`) | The ff dome already bakes "whatever the sky function returns"; the retro tiers pass it the analytic sky today |
+| Aerial perspective (F1) | Per-pixel exponential haze, coloured by a CPU-baked table of (distance, view elevation) | Hoffman-Preetham per vertex: extinction and in-scatter as two vertex colours, 33 instructions (GDC 2002) | The same two colours: texture times diffuse, plus the specular colour. The slides name the fixed pipeline as a target | On the GMA 3150 and fixed function the vertex work is CPU work; keep the far mesh dense enough to hide per-vertex error |
+| Volumetric clouds (F6) | Sprite clouds (FS2004, Wang 2003) or Harris impostors; or bake the painted slab into the sky texture | A cloud layer baked into the sky-view texture | Clouds in the dome bake | Clouds that do not move are acceptable at a fixed sun. Overdraw is the cost of sprites |
+| Cloud shadows | One extra lookup of a scrolling coverage texture | The same | A projected texture on a spare stage (camera-space texture coordinates and a texture transform) | The Rage XL has one stage; it takes an extra pass |
+| Long terrain shadows and sky occlusion (F4) | Bake the terrain-sun map on the CPU (it is a march over the heightfield) and sample it | The same map, or fold it into the colour map | Into the terrain's vertex colour, which already carries baked shadow | Erosion already runs on the CPU at load; this is the same kind of work |
+| Cascaded shadows (F4) | Two cascades; GeForce 6 has free hardware PCF on D24 | One map, creatures and props only (Crysis moved its SM2 shadow lookup into a screen-space mask to fit 64 instructions) | Blob shadows (planned in R5) | -- |
+| SSAO (F6) | Half resolution, ambient only, as the modern one | Baked AO in the colour map | Baked AO in vertex colour | -- |
+| TAA (F5) | MSAA on an 8-bit target; GeForce 6/7 has no MSAA on FP16 | MSAA; alpha-to-coverage through ATI's hack on the X550 | The card's MSAA if any | -- |
+| Impostors (F7) | The same atlas, four frames blended | One frame, no blend | Crossed quads or one billboard view | The bake needs a render target; run it on the card at load or ship the atlas |
+| River (F8) | Planar reflection at half resolution, flow map | Flow-mapped normals, a cube-map reflection (Source's "cheap" water) | EMBM on the G550 and the Radeon 7000; scrolling texture plus a sphere map elsewhere | -- |
+| Tonemap and bloom | HDR if the card has FP16 blending, else the sm2 path | Tonemap in each shader (Valve 2006), already `LDR_OUTPUT` | Tron 2.0's glow with overlapping quads (GPU Gems ch.21) | Already built for sm2 and ff |
+| Membrane back-light | Yes | Yes, a few instructions | A brighter baked texture | -- |
+| Breath (1.3) | All of it | All but soft particles where there is no depth texture | Flipbook, core, sorted smoke, a D3D9 point light | -- |
+
+### 4.1 A risk on the SM3 floor card
+
+`gfx/render_tier.h` gives the sm3 tier an HDR target unconditionally
+(`t.hdr = tier == Tier::Modern || tier == Tier::SM3`), and
+`gfx/device.cpp` checks only the depth and 16-bit colour formats. HEXUS's
+preview of the GeForce 6200 TurboCache (NV44) says it has no 64-bit
+floating-point buffer formats, and bit-tech says it has no FP16 blending.
+The particles and the water blend into `scene_hdr`. If the preview is
+right, the sm3 tier misrenders on its own floor card.
+
+Before the G41 gets the 6200 TC, the backend must check `A16B16G16R16F`
+with `D3DUSAGE_RENDERTARGET` and `D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING`.
+If either fails, the card runs SM3 shaders with `LDR_OUTPUT`, the sm2
+colour path. This needs a baked sm3-LDR shader set, so it is not a
+one-line fallback.
+
+### 4.2 Caps to read on the real cards
+
+| Card | Read |
+|---|---|
+| GeForce 6200 TC | FP16 render target and blending; D24 shadow maps; RAWZ |
+| Radeon X550 | Instruction slots; DF16; the R2VB and alpha-to-coverage FOURCCs |
+| GMA 3150 | R16F and R32F targets, the real pixel shader profile (the SM3 claim is disputed), MRT count |
+| Matrox G550, GeForce4 MX | Cube maps, EMBM, texture stages |
+
+### 4.3 Period references for a flight game on this hardware
+
+- Drakan (1999): dragon flight over terrain, DX6/7. The fixed-function
+  tier's reference.
+- Panzer Dragoon Orta (Xbox, 2002): DX8-class, a dragon, 60 fps.
+- FS2004 and FSX: sprite clouds, water tiered by shader version.
+- Far Cry (2004), Oblivion (2006), Crysis on Low and Medium: terrain,
+  water, SpeedTree, and an atmosphere designed with SM2 in mind.
+
+## 5. Play
+
+The genre's most common complaints are punishing flight edges (Day of
+Dragons, Lair), a lock-on and camera that fail against large flyers (Elden
+Ring, Lair), endless circling (Skyrim), and empty worlds or long grinds
+(Day of Dragons). Against them:
+
+| Gap | Where we stand | What to build | Source |
+|---|---|---|---|
+| Attack tells | Rivals and towers fire without a readable wind-up | A held wind-up per attack: mouth glow and a head pull-back before a fireball, wings raised before a dive. The gesture layer (M18.3) can pose it without clips | Monster Hunter |
+| Clouds in combat | Volumetric clouds are scenery | Inside a cloud the aim assist cannot lock you and you cannot lock out; a long stay costs (icing for frost, lightning for storm). On the modern tier the cloud is visible; on the retro tiers the rule still holds | Ace Combat 7 |
+| A dive with a punish window | Melee and dives have no recovery cost | A committed stoop that hits hard and leaves the attacker grounded or slow for a moment; for rivals as well as the player | Elden Ring, Skyrim |
+| Weather per valley | Four valley kinds from the seed; no weather | A phase per valley (calm, storm, clear) with a threat that comes only in the storm | Monster Hunter Wilds |
+| Rival arcs | Rivals fight, flee to heal and return (M19) | A wounded rival limps to its nest and sleeps; the player chooses to chase it there. Rivals and hunters fight each other when they meet | Monster Hunter |
+| A rival that loses the air | Bots die in the air | Torn wings or low health force a crash-landing and a ground fight | Skyrim, Dragon's Dogma 2 |
+| Forgiving edges | A full-brake descent stalls (`STATUS.md` open questions); `safe_landing_speed` is unread | An auto-flare near the ground; a stall that recovers by a flap. Keep crashes out until they are fair | Day of Dragons |
+| Framing big targets | The chase camera ignores the target's size | Pull the camera back and widen it against an adult rival or a tower | Elden Ring, Lair |
+| Growth that changes movement | Growth moves the tuning sliders (M25) | One new move per stage: a drake cannot hover, an adult can stoop from altitude or carry | School of Dragons |
+| Grab and carry | Prey can be picked up | Lift a hunter or a small rival and drop it: a move only a dragon has | Dragon's Dogma 2, Skyrim |
+| Lift as a resource | No thermals or ridge lift | Thermals over sunlit faces, lift along windward ridges, a gorge's wind | Century, Tears of the Kingdom |
+| Incoming-shot warning | None | A ring segment per incoming projectile, coloured by whether it will hit | Century |
+| Status on the hide | A tint | A status layer per element in the creature shader | Century's status material |
+
+## 6. Order
+
+By what each buys per session, with the tier each reaches. The F phases in
+`FIDELITY.md` stay as they are; F3's CDLOD mesh is still the way to the
+1 m triangles that 1.1 needs up close.
+
+| # | Work | Tiers | Sessions |
+|---|---|---|---|
+| G1 | Mountain shape (1.1): a stronger ridge octave, terraces that survive erosion, a colour map with rock by slope, and backdrop ranges past the skirt | all | 2 |
+| G2 | The breath (1.3): flipbooks, core, smoke, the flame's light, heat haze; per element | all, tiered | 2 |
+| G3 | The retro bake (4): sky-view, aerial table, terrain-sun map and sky occlusion on the CPU at valley load; clouds in the sky bake; the 6200 TC check (4.1) | sm3, sm2, ff | 2 |
+| G4 | Contact and weight (1.4, 1.5): downwash, dust, spray, landing kick, membrane back-light, speed cues | all | 1-2 |
+| G5 | Tells, the punish window and the incoming-shot ring (2, 5) | gameplay, all | 1-2 |
+| G6 | The river's course (1.2): width, braids, gravel bars | all | 1-2 |
+| G7 | Clouds, weather and lift in play (2, 5); pinch points in the corridor | gameplay, all | 2 |
+| G8 | Ground level (1.6) and a time of day from the seed (1.7) | all | 1 |
+
+G1 comes first because the mountains are most of every frame on every
+tier. G3 is the cheapest large step for the retro tiers. G5 and G7 are the
+play gaps the research names most often.
+
+## Sources
+
+- Century: Steam page https://store.steampowered.com/app/918570/Century_Age_of_Ashes/, news https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=918570&count=100&maxlength=0&feeds=steam_community_announcements, player counts https://steamcharts.com/app/918570
+- Century's art director on flight and maps: https://80.lv/articles/century-age-of-ashes-art-director-talks-flying-mechanics-of-the-game, https://gamingbolt.com/century-age-of-ashes-interview-maps-classes-post-launch-plans-and-more
+- Century's effects (PopcornFX): https://www.popcornfx.com/work-for-hire-art/
+- Century reviews: https://www.noobfeed.com/reviews/1804/century-age-of-ashes-pc-review, https://www.inverse.com/gaming/century-age-of-ashes-preview-star-wars-squadrons, https://www.theouterhaven.net/?p=230534, https://totalgamingaddicts.com/?p=50240
+- Century's HUD and mechanics, from players: https://steamcommunity.com/app/918570/discussions/0/3199242034528134362/
+- Hoffman and Preetham, GDC 2002: https://renderwonk.com/publications/gdc-2002/
+- Wenzel, Real-time Atmospheric Effects in Games (CryEngine 2), SIGGRAPH 2006: https://advances.realtimerendering.com/s2006/Chapter6-Real-time%20Atmospheric%20Effects%20in%20Games.pdf
+- Mittring, Finding Next Gen: CryEngine 2, SIGGRAPH 2007: https://www.advances.realtimerendering.com/s2007/Mittring-Finding_NextGen_CryEngine2(Siggraph07%20Course%20Notes).pdf
+- Mitchell, McTaggart and Green, Shading in Valve's Source Engine, SIGGRAPH 2006: https://advances.realtimerendering.com/s2006/Chapter7-Shading_in_Valve's_Source_Engine.pdf
+- O'Neil, GPU Gems 2 ch.16: https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering
+- Zhang et al., GPU Gems 3 ch.10 (PSSM): https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
+- Sousa, GPU Gems 2 ch.19 (refraction): https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-19-generic-refraction-simulation
+- James and O'Rorke, GPU Gems ch.21 (glow): https://developer.nvidia.com/gpugems/gpugems/part-iv-image-processing/chapter-21-real-time-glow
+- Harris, Real-Time Cloud Rendering for Games, GDC 2002: https://aurora.cs.uaf.edu/~olawlor/academic/thesis/ref/RTCloudsForGames_HarrisGDC2002.pdf
+- Pranckevičius, D3D9 GPU Hacks: https://www.aras-p.info/texts/D3D9GPUHacks.html
+- HEXUS, GeForce 6200 TurboCache preview: https://hexus.net/tech/reviews/graphics/952-nvidias-geforce-6200-turbocache-preview/?page=2
+- bit-tech, 7300 GS review (FP16 blending): https://bit-tech.net/reviews/tech/nvidia_7300_gs/2/
+- Valve Developer Wiki, water shader: https://developer.valvesoftware.com/wiki/Water_Shader
+- Day of Dragons, Steam page and flight threads: https://store.steampowered.com/app/1088090/Day_of_Dragons/, https://steamcommunity.com/app/1088090/discussions/1/3193616250034838171
+- Dragon's Dogma 2 physics: https://wccftech.com/dragons-dogma-2-will-be-a-fantasy-world-simulation-game-with-more-emphasis-on-physics/
+- Elden Ring dragon fights: https://exputer.com/features/dragon-fights-elden-ring-always-sucked/
+- Skyrim dragons: https://en.uesp.net/wiki/Skyrim:Dragon
+- Rathalos tells: https://www.icy-veins.com/monster-hunter-wilds/rathalos-monster-guide
+- Monster Hunter Wilds weather: https://www.gamereactor.eu/monster-hunter-wilds-all-weather-conditions-and-how-to-change-it-1505913/
+- Ace Combat 7 clouds and weather: https://www.skywardfm.com/post/the-form-and-function-of-clouds-and-weather-in-ace-combat-7
+- Nubis cubed (Horizon Forbidden West): https://www.guerrilla-games.com/read/nubis-cubed
+- Tears of the Kingdom interview: https://www.nintendo.com/sg/interview/totk/03.html
+- Lair: https://en.wikipedia.org/wiki/Lair_(video_game)
+- School of Dragons flight: https://schoolofdragons.wiki.gg/wiki/Dragons/Dragon_Flight
+- Crimson Desert's dragon: https://mein-mmo.de/en/crimson-desert-unlocking-dragons-how-to-unlock-the-flying-mount-blackstar,1558660/
+- Sagas of Lumin: https://www.gematsu.com/games/sagas-of-lumin
+- Dragontwin: https://mein-mmo.de/en/drachenspiel-wie-game-of-thrones-dragontwin,1551621/
