@@ -2148,7 +2148,10 @@ void App::update(float dt) {
         const bool was_grounded = flight_.state().grounded;
         const float sink_before = -flight_.state().velocity.y;
         flight_.update(input, &terrain_, dt);
-        if (flight_.state().grounded && !was_grounded) on_touchdown(sink_before);
+        // A third of a second in the air at least: a hop is not a landing.
+        airborne_time_ = flight_.state().grounded ? 0.0f : airborne_time_ + dt;
+        if (flight_.state().grounded && !was_grounded && airborne_before_ > 0.33f) on_touchdown(sink_before);
+        airborne_before_ = airborne_time_;
         update_downwash(dt);
         // The pounce: while an elder's boost is locked onto a target, the
         // flight is turned onto it -- velocity and nose together, at the
@@ -8152,6 +8155,9 @@ void App::build_flight_ui() {
         ImGui::SliderFloat("flap force", &t.flap_peak_force, 0.0f, 30000.0f, "%.0f N");
         ImGui::SliderFloat("flap period", &t.flap_period, 0.3f, 2.5f, "%.2f s");
         ImGui::SliderFloat("glide thrust", &t.glide_thrust, 0.0f, 6000.0f, "%.0f N");
+        ImGui::SliderFloat("take-off lift", &t.takeoff_lift, 0.0f, 3.0f, "%.2fx weight");
+        ImGui::SliderFloat("take-off lift to speed", &t.takeoff_lift_speed, 5.0f, 50.0f, "%.0f m/s");
+        ImGui::SliderFloat("take-off lift to height", &t.takeoff_lift_height, 5.0f, 80.0f, "%.0f m");
         ImGui::SliderFloat("tuck lift loss", &t.tuck_lift_loss, 0.0f, 1.0f);
         ImGui::SliderFloat("tuck drag loss", &t.tuck_drag_loss, 0.0f, 1.0f);
         ImGui::SliderFloat("brake drag gain", &t.brake_drag_gain, 0.0f, 8.0f);

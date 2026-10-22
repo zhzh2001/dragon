@@ -7,6 +7,7 @@
 // aerodynamics actually oppose the pilot the way air does.
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "test_paths.h"
 #include "game/flight.h"
@@ -565,6 +566,18 @@ void test_landing_and_takeoff() {
     CHECK(model.state().velocity.y > 2.0f);
     for (int i = 0; i < 54; ++i) model.update(flap, &terrain, 1.0f / 60.0f);
     CHECK(model.state().ground_clearance > 2.0f);
+    // Held: the flap keeps lifting near the ground, so the dragon climbs away
+    // instead of falling back after the leap and sitting there (the playtest
+    // of 2026-10-21). Level stick, three seconds on: well clear and moving.
+    {
+        FlightModel m = model;
+        for (int i = 0; i < 180; ++i) m.update(flap, &terrain, 1.0f / 60.0f);
+        std::printf("  held flap, 4 s from standing: %.1f m up at %.1f m/s\n", m.state().ground_clearance,
+                    m.state().airspeed);
+        CHECK(!m.state().grounded);
+        CHECK(m.state().ground_clearance > 10.0f);
+        CHECK(m.state().airspeed > 12.0f);
+    }
     CHECK(state_is_sane(model));
 
     // Heft: the same roll command turns a heavier dragon more slowly.
@@ -641,7 +654,66 @@ void test_roll_and_flip_complete() {
     CHECK(!refused.start(game::ManeuverKind::Flip, 1.0f, flight.state(), tuning));
 }
 
+// The playtest of 2026-10-21: "diving from high keeps the dragon spinning".
+// A dive held nose-down from 3 km, then the stick let go: once released, the
+// body must stop turning, not keep rolling or yawing through the dive.
+void test_dive_from_high_settles() {
+    std::printf("a dive from high stops turning once the stick is released\n");
+    const char* env = std::getenv("DIVE_PRINT");
+    for (int variant = 0; variant < 3; ++variant) {
+        FlightModel f;
+        f.reset(Vec3{0.0f, 3000.0f, 0.0f}, Quat::identity(), 40.0f);
+        const float hold = variant == 0 ? 1.5f : variant == 1 ? 3.0f : 5.0f;
+        float late_rate = 0.0f;
+        float late_bank_change = 0.0f;
+        float last_bank = 0.0f;
+        float held_rate = 0.0f, bank_travel = 0.0f, last_meaningful_bank = 0.0f;
+        bool have_bank = false;
+        for (int i = 0; i < int(16.0f / DT); ++i) {
+            const float t = float(i) * DT;
+            FlightInput in;
+            in.pitch = t < hold ? -1.0f : 0.0f;
+            in.tuck = 1.0f;
+            f.update(in, nullptr, DT);
+            const auto& st = f.state();
+            const Vec3 fw = st.forward(), up = st.up(), rt = st.right();
+            const float pitch = std::asin(std::fmax(-1.0f, std::fmin(1.0f, fw.y))) * 57.3f;
+            const float bank = std::atan2(rt.y, up.y) * 57.3f;
+            if (env && i % 30 == 0) {
+                std::printf("  hold %.1f t=%5.2f y=%6.0f spd=%5.1f pitch=%6.1f bank=%7.1f w=(%5.2f %5.2f %5.2f)\n", hold,
+                            t, st.position.y, st.airspeed, pitch, bank, st.angular_velocity.x,
+                            st.angular_velocity.y, st.angular_velocity.z);
+            }
+            // While the stick is held: past vertical it may roll upright once
+            // (half a turn), never corkscrew.
+            if (t < hold) held_rate = std::fmax(held_rate, std::fabs(st.angular_velocity.z));
+            if (std::fabs(pitch) < 80.0f) {
+                float d = std::fabs(bank - last_meaningful_bank);
+                if (d > 180.0f) d = 360.0f - d;
+                if (have_bank) bank_travel += d;
+                last_meaningful_bank = bank;
+                have_bank = true;
+            }
+            if (t > hold + 4.0f && st.position.y > 200.0f) {
+                late_rate = std::fmax(late_rate, length(st.angular_velocity));
+                float d = std::fabs(bank - last_bank);
+                if (d > 180.0f) d = 360.0f - d;
+                late_bank_change += d;
+            }
+            last_bank = bank;
+        }
+        std::printf("  hold %.1f s: roll rate while held %.2f rad/s, bank travelled %.0f deg; after settling %.2f rad/s, "
+                    "%.0f deg\n",
+                    hold, held_rate, bank_travel, late_rate, late_bank_change);
+        CHECK(held_rate < 2.5f);
+        CHECK(bank_travel < 400.0f);
+        CHECK(late_rate < 0.6f);
+        CHECK(late_bank_change < 180.0f);
+    }
+}
+
 int main() {
+    test_dive_from_high_settles();
     test_roll_and_flip_complete();
     test_landing_and_takeoff();
     test_glide_loses_energy_slowly();

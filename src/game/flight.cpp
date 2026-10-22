@@ -227,6 +227,20 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
 
     state_.thrust = thrust_magnitude;
     Vec3 thrust_force = forward * thrust_magnitude;
+    // Take-off lift (FlightTuning::takeoff_lift): beating hard close to the
+    // ground and slow. The beat's amplitude, not its phase, so the climb is
+    // steady rather than a hop a stroke. Clearance is the last step's.
+    if (tuning.takeoff_lift > 0.0f && state_.flap_amplitude > 0.01f && !state_.grounded) {
+        const float slow = 1.0f - core::smoothstep(tuning.takeoff_lift_speed * 0.5f,
+                                                   core::maxf(tuning.takeoff_lift_speed, 1.0f), airspeed);
+        const float low = 1.0f - core::smoothstep(tuning.ground_offset + 2.0f,
+                                                  core::maxf(tuning.takeoff_lift_height, tuning.ground_offset + 3.0f),
+                                                  state_.ground_clearance);
+        const float share = state_.flap_amplitude * slow * low;
+        const Vec3 level_forward = core::normalize_or(Vec3{forward.x, 0.0f, forward.z}, Vec3::forward());
+        const float weight = tuning.gravity * tuning.effective_mass();
+        thrust_force += (Vec3::up() * tuning.takeoff_lift + level_forward * 0.35f) * (weight * share);
+    }
     Vec3 gravity_force = Vec3{0.0f, -tuning.gravity * tuning.effective_mass(), 0.0f};
 
     debug_lift = lift_force;
@@ -263,6 +277,16 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
                    -state_.control.z * tuning.roll_rate * rate_scale};
     commanded *= authority;
 
+    // A dive stops at vertical. Pushing on past it is an outside loop: the
+    // nose goes over toward the back, the body hangs inverted, auto-level
+    // rolls it upright, and the held stick pushes it over again -- a tumble
+    // for as long as the stick stays down. Pulling up through a loop is
+    // untouched, and so is a scripted manoeuvre.
+    if (!input.maneuver && commanded.x < 0.0f) {
+        const float down = -core::dot(state_.forward(), Vec3::up());
+        commanded.x *= 1.0f - core::smoothstep(0.9f, 0.995f, down);
+    }
+
     // --- assists, expressed as extra commanded rate ---
 
     // Bank angle, signed. Rolling right yaws the body so that the right wing
@@ -272,11 +296,23 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     // the dragon all the way inverted, and turn coordination was yawing out of
     // the turn instead of into it.
     const float bank = std::atan2(core::dot(right, Vec3::up()), core::dot(up, Vec3::up()));
+    // Near vertical the bank means nothing: a sliver of roll swings it from 0
+    // to 180 degrees. The three assists below steered by it there -- turn
+    // coordination yawing by a 180 degree "bank", auto-level and the bank
+    // limit rolling at full rate -- and a dive held past vertical corkscrewed
+    // at 3.5 rad/s for as long as the stick stayed down (the playtest of
+    // 2026-10-21, "diving from high keeps the dragon spinning"). They fade out
+    // as the nose nears vertical and come back as it leaves.
+    const float steep = std::fabs(core::dot(state_.forward(), Vec3::up()));
+    const float bank_meaningful = 1.0f - core::smoothstep(0.8f, 0.96f, steep);
 
     // Turn coordination: entering a bank should swing the nose around with it,
     // otherwise the turn skids and reads as a slide rather than a turn. Right
-    // bank (negative) needs right yaw (negative rate).
-    commanded.y += bank * tuning.turn_coordination * core::saturate(airspeed / 30.0f);
+    // bank (negative) needs right yaw (negative rate). Upright only: inverted,
+    // "into the turn" is the other way, and a 180 degree bank is no turn.
+    const float upright = core::smoothstep(-0.1f, 0.3f, core::dot(up, Vec3::up()));
+    commanded.y += core::clampf(bank, -core::HALF_PI, core::HALF_PI) * tuning.turn_coordination *
+                   core::saturate(airspeed / 30.0f) * bank_meaningful * upright;
 
     // Auto-level: roll back toward wings-level, but only when the player is not
     // asking for roll, so it assists rather than fights.
@@ -301,7 +337,7 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
         const float level_rate = core::clampf(roll_error * tuning.auto_level,
                                               -tuning.auto_level_max_rate,
                                               tuning.auto_level_max_rate);
-        commanded.z += level_rate * roll_released;
+        commanded.z += level_rate * roll_released * bank_meaningful;
     }
 
     // Bank limit. Applied after auto-level so it has the final say, and unlike
@@ -314,8 +350,7 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
         // window is crossed before the command can reverse -- the first attempt
         // used 14 degrees and overshot to 92, past vertical, which is exactly
         // the failure this assist exists to prevent.
-        const float over =
-            core::smoothstep(limit - core::radians(30.0f), limit, std::fabs(bank));
+        const float over = core::smoothstep(limit - core::radians(30.0f), limit, std::fabs(bank)) * bank_meaningful;
         if (over > 0.0f) {
             // commanded.z and bank share a sign when the roll command is
             // deepening the bank rather than recovering from it.
@@ -398,8 +433,22 @@ void FlightModel::resolve_ground(const Terrain* terrain, float dt) {
     const float resting_height = ground_height + tuning.ground_offset;
 
     if (state_.position.y > resting_height) {
-        state_.grounded = false;
-        return;
+        // Walking keeps its feet: downhill or over a crest each step left the
+        // ground a little below the body, which counted as airborne for a
+        // frame -- and every touchdown after it played the landing (the rig's
+        // pose, the dust, the jolt), dozens of times a minute on a slope. A
+        // grounded body that is walking, or slow and not rising, follows the
+        // ground down as far as a step on a steep slope drops. Walking uphill
+        // rises along the slope, so a walker is not asked about its climb; a
+        // leap clears `grounded` before this (FlightModel::step).
+        const Vec3 flat{state_.velocity.x, 0.0f, state_.velocity.z};
+        const bool keeps_feet =
+            state_.grounded && (walking_ || (state_.velocity.y < 1.0f && core::length(flat) < 8.0f));
+        const float drop = 0.4f + core::length(flat) * dt * 2.0f;
+        if (!keeps_feet || state_.position.y - resting_height > drop) {
+            state_.grounded = false;
+            return;
+        }
     }
 
     const bool on_water =
@@ -514,7 +563,8 @@ const Field FIELDS[] = {
     FIELD(gravity),              FIELD(lift_coefficient_max), FIELD(stall_angle_deg),
     FIELD(post_stall_lift),      FIELD(parasitic_drag),      FIELD(induced_drag_factor),
     FIELD(flap_peak_force),      FIELD(flap_period),         FIELD(glide_thrust),
-    FIELD(boost_force),
+    FIELD(boost_force),          FIELD(takeoff_lift),        FIELD(takeoff_lift_speed),
+    FIELD(takeoff_lift_height),
     FIELD(flap_up_angle_deg),    FIELD(flap_down_angle_deg),
     FIELD(flap_downstroke_fraction), FIELD(glide_dihedral_deg), FIELD(flap_blend),
     FIELD(tuck_lift_loss),       FIELD(tuck_drag_loss),      FIELD(brake_drag_gain),

@@ -138,6 +138,16 @@ struct FlightTuning {
     // forward speed added on the first beat.
     float takeoff_jump = 7.0f;
     float takeoff_push = 5.0f;
+    // Take-off lift: near the ground and slow, a wingbeat also lifts -- the
+    // dragon's weight times this, at full flap -- and pushes forward, fading
+    // out by `takeoff_lift_speed` (m/s) and `takeoff_lift_height` (m) over the
+    // ground. The flap's thrust is along the body alone, a third of the
+    // weight, and the wings lift nothing at walking speed, so after the leap
+    // a held flap fell back to the ground (the playtest of 2026-10-21:
+    // "taking off is kind of tricky without boost").
+    float takeoff_lift = 1.3f;
+    float takeoff_lift_speed = 22.0f;
+    float takeoff_lift_height = 25.0f;
     float ground_friction = 1.8f;
     // Static friction. Sliding friction alone is multiplicative, so it can never
     // fully cancel the component of gravity along a slope -- a landed dragon

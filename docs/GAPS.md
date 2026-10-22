@@ -376,6 +376,38 @@ and every streak fell vertical, like rain. Dials: Camera, "speed streaks
 from" and "a second". Light by design: Century's radial blur was the
 most criticised effect in its reviews.
 
+### After the playtest of G4 (2026-10-21, later)
+
+"Walking on uneven surface causes the landing animation. Diving from high
+keeps the dragon spinning. Taking off is kind of tricky without boost."
+All three were in the flight model (`game/flight.cpp`), and each now has a
+check in `tests/test_flight.cpp` that fails on the old model.
+
+- **Walking left the ground.** Downhill or over a crest each step left the
+  ground a little under the body, which counted as airborne for a frame;
+  every touchdown after it played the landing (the rig's pose, and since
+  G4 the dust and the jolt), 45 times a minute walking at a slope.
+  `resolve_ground` now keeps a grounded body that is walking, or slow and
+  not rising, on the ground as far as a step on a steep slope drops; a
+  walker going uphill rises along the slope, so it is not asked about its
+  climb. The touchdown effects also need a third of a second in the air.
+- **The spin.** Holding the nose down carried it past vertical into an
+  outside loop: the body hung inverted, auto-level rolled it upright, the
+  held stick pushed it over again, and three assists that steer by the
+  bank angle (turn coordination, auto-level, the bank limit) read a
+  meaningless 180 degrees near vertical and rolled at 3.5 rad/s. A push
+  now stops at vertical (pulling through a loop, and the scripted flip,
+  are untouched), and the three assists fade out as the nose nears
+  vertical; turn coordination also acts only upright.
+- **Take-off.** The flap's thrust is along the body, a third of the
+  dragon's weight, and the wings lift nothing at walking speed, so after
+  the leap a held flap fell back and sat there; only boost or mashing
+  flap got a dragon up. Near the ground and slow, a wingbeat now also
+  lifts 1.3 times the weight and pushes forward, fading out by 22 m/s and
+  25 m up (`FlightTuning::takeoff_lift`, Flight panel, Propulsion). Held
+  flap from standing: 17 m up at 20 m/s after four seconds. Pulling the
+  nose full up still climbs into a stall.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

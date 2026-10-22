@@ -738,6 +738,7 @@ private:
     float speed_streak_rate_ = 120.0f;
     void update_downwash(float dt);
     float downwash_ = 0.0f;
+    float airborne_time_ = 0.0f, airborne_before_ = 0.0f;
     // Landing weight (Dragon panel): the grass's push under the wings (m at
     // a blade's tip), the camera's jolt on touchdown (degrees, at a hard
     // landing), and the dust's colour.
