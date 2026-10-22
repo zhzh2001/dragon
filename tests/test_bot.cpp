@@ -6,6 +6,7 @@
 // rhythm cycles attack and extend, and hours of simulated flight stay finite.
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "game/bot.h"
 #include "game/combat.h"
@@ -248,6 +249,45 @@ void test_grounded_bot_takes_off() {
     CHECK(grounded_once);
     CHECK(!flight.state().grounded);
     CHECK(flight.state().position.y > floor_y + 10.0f);
+}
+
+// The tell (GAPS.md, G5): a shot is announced before it is sent. Lined up
+// and in range, the bot winds up for its whole `fire_windup`, reporting how
+// far through, and only then fires; a target that leaves the range during
+// the wind-up gets no shot.
+void test_shot_is_told() {
+    std::printf("a shot is wound up before it is fired\n");
+    BotPilot pilot;
+    pilot.reset(13u);
+    FlightState self;
+    self.position = Vec3::zero();
+    self.velocity = Vec3{0.0f, 0.0f, -40.0f};
+    int told = 0, first_shot = -1;
+    float last_tell = 0.0f;
+    bool rising = true;
+    for (int i = 0; i < 120 && first_shot < 0; ++i) {
+        const BotDecision d = pilot.update(1.0f / 60.0f, self, target_at(Vec3{0.0f, 0.0f, -400.0f}), true, -1e9f);
+        if (d.winding_up > 0.0f) {
+            ++told;
+            rising = rising && d.winding_up >= last_tell;
+            last_tell = d.winding_up;
+        }
+        if (d.fire) first_shot = i;
+    }
+    std::printf("  %d frames of tell, the shot at frame %d\n", told, first_shot);
+    CHECK(first_shot >= 0);
+    CHECK(float(told) / 60.0f >= pilot.tuning.fire_windup - 2.0f / 60.0f);
+    CHECK(rising);
+
+    // The target runs out of range mid-tell: no shot.
+    BotPilot quitter;
+    quitter.reset(13u);
+    int shots = 0;
+    for (int i = 0; i < 120; ++i) {
+        const float z = i < 10 ? -400.0f : -3000.0f;
+        shots += quitter.update(1.0f / 60.0f, self, target_at(Vec3{0.0f, 0.0f, z}), true, -1e9f).fire ? 1 : 0;
+    }
+    CHECK(shots == 0);
 }
 
 void test_fire_discipline() {
@@ -566,6 +606,7 @@ int main() {
     test_terrain_is_avoided();
     test_grounded_bot_takes_off();
     test_fire_discipline();
+    test_shot_is_told();
     test_damage_triggers_evasion_and_rhythm_cycles();
     test_reaction_window_is_honest();
     test_arc_lead_beats_linear_on_a_turn();

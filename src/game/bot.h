@@ -38,6 +38,11 @@ struct BotTuning {
     // not by turrets.
     float fire_cone_deg = 8.0f;
     float fire_cooldown = 1.7f;
+    // The tell (GAPS.md, G5): seconds a bot holds its fireball, jaws open and
+    // glowing, before it lets go. It re-solves the shot at the release and
+    // drops it if the target has left the cone or the range. 0 fires at once,
+    // as before: the shot arrived with no warning but its sound.
+    float fire_windup = 0.45f;
     // Aim error, degrees of cone around the true solution.
     float aim_spread_deg = 3.0f;
     float projectile_speed = 230.0f;
@@ -122,6 +127,8 @@ enum class BotState : int { Attack, Extend, Evade };
 struct BotDecision {
     FlightInput flight;
     bool fire = false;
+    // 0..1 through the tell before a shot; 0 when none is coming.
+    float winding_up = 0.0f;
     // World-space velocity for the projectile if fire is set.
     core::Vec3 fire_velocity = core::Vec3::zero();
     // Holding the flame this frame.
@@ -171,6 +178,7 @@ private:
     BotState state_ = BotState::Attack;
     float state_time_ = 0.0f;
     float fire_timer_ = 0.0f;
+    float windup_ = 0.0f;  // seconds of the tell left; 0 when none
     float melee_timer_ = 0.0f;
     bool charging_ = false;
     float aggression_ = 0.5f;

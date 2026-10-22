@@ -408,6 +408,31 @@ check in `tests/test_flight.cpp` that fails on the old model.
   flap from standing: 17 m up at 20 m/s after four seconds. Pulling the
   nose full up still climbs into a stall.
 
+### G5, first part, as built (2026-10-21): the shot announced
+
+- **Incoming fire, before it lands.** For each hostile shot, its closest
+  approach to the player over the next three seconds (gravity included);
+  one passing within three times the hit distance draws an arc at the edge
+  of the view toward it, red if it will hit, pale if it will pass close,
+  thicker and wider as it nears. The old marker said only where the last
+  hit came from, after it landed. Combat panel, "incoming-fire warning".
+- **The bot's tell.** A rival holds a fireball for `fire_windup` (0.6 s
+  rookie, 0.45 veteran, 0.3 ace; Combat panel, "bot shot tell") with its
+  jaws opening and a glow swelling in them in its element's colour, then
+  re-solves the shot and fires, or drops it if the target has left the
+  range or a cone half again as wide. `test_bot` pins both.
+- **Bots that the tell sent into the ground.** The tell moved the ten-minute
+  bot test's path, and two old faults showed. The pull-out reflex assumed 12
+  m/s^2 of pull and fell 2 m short from a 75 m/s dive at G1's steeper walls;
+  it assumes 9 now. And the shared steering (`steer_toward`) climbed toward
+  a target overhead until the bot hung at 7 m/s and stalled onto a slope;
+  below 18 m/s with the nose up it now pushes the nose down, for bots, the
+  course autopilot and the demo pilot alike.
+
+Not yet: the towers' tell (they fire on a timer in `game/combat.cpp`), a
+punish window after a committed dive, and frame-level poses for the tell
+(the jaws use the breath's opening).
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

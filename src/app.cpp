@@ -4122,6 +4122,7 @@ void App::apply_bot_skill(int level) {
             t.reaction_interval = 0.55f;
             t.aim_spread_deg = 5.0f;
             t.fire_cooldown = 2.3f;
+            t.fire_windup = 0.6f;
             t.lead_curvature = 0.3f;
             t.damage = 9.0f;
             t.aggression = 0.35f;
@@ -4140,6 +4141,7 @@ void App::apply_bot_skill(int level) {
             t.reaction_interval = 0.15f;
             t.aim_spread_deg = 1.2f;
             t.fire_cooldown = 1.1f;
+            t.fire_windup = 0.3f;
             t.damage = 14.0f;
             t.fire_range = 650.0f;
             t.aggression = 0.8f;
@@ -6596,6 +6598,21 @@ void App::update_bots(float dt) {
                 muzzle = core::transform_point(to_world, head_model);
             }
         }
+        // The tell: a glow swelling in the open jaws through the wind-up, in
+        // the bot's element, so a shot is seen coming before it is sent.
+        if (decision.winding_up > 0.0f) {
+            const game::BreathProfile& b =
+                bot->element != game::Element::None ? element_breaths_[int(bot->element)] : bot->breath;
+            gfx::Particle glow;
+            glow.position = muzzle + bot->flight.state().forward() * 1.5f;
+            glow.velocity = bot->flight.state().velocity;
+            glow.life = 0.06f;
+            const float grow = decision.winding_up;
+            glow.size_start = glow.size_end = 1.2f + 3.0f * grow;
+            glow.color_start = glow.color_end = b.hot;
+            glow.brightness = 0.6f + 1.4f * grow * grow;
+            particles_.spawn(glow);
+        }
         if (decision.fire) {
             combat_.fire_hostile(muzzle, decision.fire_velocity,
                                  bot->pilot.tuning.damage * slot.status.weaken(combat_.tuning.elements),
@@ -6618,7 +6635,8 @@ void App::update_bots(float dt) {
             if (speed > cost + 1.0f) st.velocity = st.velocity * ((speed - cost) / speed);
         }
         anim::RigAction action;
-        action.breath = decision.breathe ? 1.0f : 0.0f;
+        // Jaws opening through the wind-up, as for the breath.
+        action.breath = decision.breathe ? 1.0f : 0.6f * decision.winding_up;
         action.fire = decision.fire;
         if (decision.melee) {
             const game::MeleeGesture gesture = game::melee_gesture_for(
@@ -7604,6 +7622,44 @@ void App::draw_combat_hud() {
     // Where the last hit came from, held for a few seconds. A hit you cannot
     // locate is not a fight, it is damage arriving from nowhere -- and this is
     // the one indicator that turns "randomly hit" into "turn left".
+    // Incoming fire, before it lands (GAPS.md, G5): an arc toward each
+    // hostile shot that will pass near in the next three seconds -- red if
+    // it will hit, pale if it will only pass close -- thicker and wider as
+    // it nears. The roll and the flip are answers; without this the
+    // question arrived as damage (Century added the same after launch, when
+    // its lock-ons felt inescapable).
+    if (combat_.alive() && incoming_warning_) {
+        const gfx::Camera& camera = active_camera();
+        const game::FlightState& me = flight_.state();
+        const float hit_radius = combat_.tuning.player_radius;
+        for (const game::Projectile& shot : combat_.projectiles()) {
+            if (!shot.alive || shot.team != game::Team::Hostile) continue;
+            float nearest = 1e30f, when = 0.0f;
+            for (float t = 0.0f; t <= 3.0f; t += 0.05f) {
+                const core::Vec3 s = shot.position + shot.velocity * t - core::Vec3{0.0f, 0.5f * shot.gravity * t * t, 0.0f};
+                const float d = core::distance(s, me.position + me.velocity * t);
+                if (d < nearest) {
+                    nearest = d;
+                    when = t;
+                }
+            }
+            const float reach = hit_radius + shot.radius + shot.blast_radius;
+            if (nearest > reach * 3.0f) continue;
+            const bool hits = nearest <= reach;
+            const core::Vec3 to_shot = shot.position - camera.position;
+            core::Vec2 direction{core::dot(to_shot, camera.right()), -core::dot(to_shot, camera.up())};
+            if (core::dot(to_shot, camera.forward()) < 0.0f) direction = core::Vec2{-direction.x, -direction.y};
+            const float span = core::length(direction);
+            if (span < 1e-3f) continue;
+            direction = core::Vec2{direction.x / span, direction.y / span};
+            const float soon = 1.0f - core::saturate(when / 3.0f);
+            const ImU32 base = hits ? tk.danger : tk.text;
+            const ImU32 colour = (base & 0x00FFFFFF) | (ImU32((hits ? 150.0f : 90.0f) + 100.0f * soon) << 24);
+            hud_.edge_arc(ImVec2(width * 0.5f, height * 0.5f), direction, core::minf(width, height) * 0.24f, colour,
+                          hud_.px(3.0f + 5.0f * soon), 0.12f + 0.22f * soon);
+        }
+    }
+
     if (damage_marker_ > 0.0f) {
         const gfx::Camera& camera = active_camera();
         const core::Vec3 to_source = damage_direction_ - camera.position;
@@ -7643,6 +7699,7 @@ void App::build_combat_ui() {
         bots_.clear();
         combat_.reset(&terrain_, flight_.state().position, 20260824u, arena_wave_);
     }
+    ImGui::Checkbox("incoming-fire warning", &incoming_warning_);
     if (!combat_enabled_) {
         ImGui::TextDisabled("switch on to arm the dragon");
         ImGui::End();
@@ -7930,6 +7987,7 @@ void App::build_combat_ui() {
     // own around this at spawn; health moves it live (the panel shows each
     // bot's nerve in the roster below).
     ImGui::SliderFloat("bot aggression", &bot_tuning_.aggression, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("bot shot tell", &bot_tuning_.fire_windup, 0.0f, 1.5f, "%.2f s");
     ImGui::SliderFloat("aggression spread", &bot_tuning_.aggression_spread, 0.0f, 0.5f, "%.2f");
     if (ImGui::RadioButton("rookie", bot_skill_ == 0)) apply_bot_skill(0);
     ImGui::SameLine();

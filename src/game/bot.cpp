@@ -14,6 +14,7 @@ void BotPilot::reset(uint32_t seed) {
     state_time_ = 0.0f;
     orbit_timer_ = 0.0f;
     fire_timer_ = 0.0f;
+    windup_ = 0.0f;
     melee_timer_ = 0.0f;
     boost_hold_ = 0.0f;
     boost_timer_ = 0.0f;
@@ -288,10 +289,13 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     // a fixed height or time. Arresting `sink` of vertical speed at roughly
     // 12 m/s^2 of usable pull consumes sink^2/24 metres -- 66 m from a 40 m/s
     // dive -- so the reflex must fire while that much altitude still exists,
-    // plus a margin for the PD loop to actually get the nose up.
+    // plus a margin for the PD loop to actually get the nose up. Measured,
+    // the pull is less: a 57 degree dive at 75 m/s that began pulling out at
+    // 151 m needed 153 (the ten-minute bot test, once the shot's tell moved
+    // its path onto G1's steeper walls). So 9 m/s^2, sink^2/18.
     const float clearance = ground_height > -1e8f ? self.position.y - ground_height : 1e9f;
     const float sink = core::maxf(-self.climb_rate, 0.0f);
-    const float pull_out_altitude = sink * sink / 24.0f + 45.0f;
+    const float pull_out_altitude = sink * sink / 18.0f + 45.0f;
     const bool recovering =
         clearance < tuning.terrain_floor * 0.55f || clearance < pull_out_altitude;
     if (recovering) {
@@ -398,8 +402,21 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     }
 
     // ---- gunnery ----
-    if (state_ == BotState::Attack && player_alive && fire_timer_ <= 0.0f && !recovering &&
-        range <= tuning.fire_range) {
+    // The tell first (fire_windup), then the shot, solved afresh at the
+    // release: the wind-up is a warning, not a delay on a stale solution.
+    const bool can_fire = state_ == BotState::Attack && player_alive && !recovering && range <= tuning.fire_range;
+    bool releasing = false;
+    if (windup_ > 0.0f) {
+        windup_ = core::maxf(windup_ - dt, 0.0f);
+        if (!can_fire) {
+            windup_ = 0.0f;  // the moment passed: no shot, and the tell stops
+        } else if (windup_ > 0.0f) {
+            decision.winding_up = 1.0f - windup_ / core::maxf(tuning.fire_windup, 1e-3f);
+        } else {
+            releasing = true;
+        }
+    }
+    if (can_fire && (releasing || (windup_ <= 0.0f && fire_timer_ <= 0.0f))) {
         // Same arc-aware, drift-compensated solution the steering flies toward.
         float flight_time = range / core::maxf(tuning.projectile_speed, 1.0f);
         for (int i = 0; i < 3; ++i) {
@@ -412,7 +429,14 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
                                    self.velocity * flight_time,
                                self.forward());
         const float aligned = core::dot(to_solution, self.forward());
-        if (aligned >= std::cos(core::radians(tuning.fire_cone_deg))) {
+        // At the release the cone is half again as wide: the tell commits the
+        // bot, and a target that slipped a little is still shot at.
+        const float cone = tuning.fire_cone_deg * (releasing ? 1.5f : 1.0f);
+        if (aligned >= std::cos(core::radians(cone)) && !releasing && tuning.fire_windup > 0.0f) {
+            windup_ = tuning.fire_windup;
+            fire_timer_ = tuning.fire_cooldown;
+            decision.winding_up = 0.0f;
+        } else if (aligned >= std::cos(core::radians(cone))) {
             fire_timer_ = tuning.fire_cooldown;
             decision.fire = true;
             // Spread as a random tilt of the firing direction: honest error in

@@ -68,6 +68,14 @@ FlightInput steer_toward(const FlightState& state, Vec3 target, const AutopilotT
     // subtracts the current rate directly.
     input.pitch = core::clampf(pitch_command - state.angular_velocity.x * tuning.pitch_damping,
                                -1.0f, 1.0f);
+    // Out of energy with the nose up: no higher, and the slower the harder
+    // down, before the wing lets go. Chasing a target overhead, a bot hung on
+    // its wings at 7 m/s with the nose 65 degrees up, stalled over a slope
+    // and fell 85 m into it (the ten-minute bot test).
+    const float slow = 1.0f - core::smoothstep(10.0f, 18.0f, state.airspeed);
+    if (slow > 0.0f && state.forward().y > 0.2f) {
+        input.pitch = core::minf(input.pitch, -0.6f * slow);
+    }
 
     // Flap when slow, or whenever the target is above: climbing costs energy and
     // flapping is the only way to make it.

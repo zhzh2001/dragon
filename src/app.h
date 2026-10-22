@@ -731,6 +731,7 @@ private:
     static BreathSmoke smoke_for(game::Element element);
     void set_local_light(gfx::SceneUniforms& scene) const;
     void on_touchdown(float sink);
+    bool incoming_warning_ = true;  // Combat panel: arcs toward shots about to hit
     void emit_speed_streak(float strength);
     // Speed streaks (Camera panel): past this airspeed they start, and reach
     // this many a second 40 m/s faster.
