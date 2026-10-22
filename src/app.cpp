@@ -6693,6 +6693,7 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
         p.brightness = b.brightness;
         p.kind = gfx::ParticleKind::Flame;
         p.seed = particle_unit() * 0.5f + 0.5f;
+        p.cover = b.cover;
         particles_.spawn(p);
         // What the flame leaves: smoke launched with it on the same path,
         // living longer and showing only past where the flame dies -- so the
@@ -6705,12 +6706,12 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
             gfx::Particle s = p;
             s.kind = gfx::ParticleKind::Smoke;
             s.seed = particle_unit() * 0.5f + 0.5f;
-            const float stretch = 2.2f;
+            const float stretch = 1.8f;
             s.life = p.life * stretch;
             s.fade_in = 1.0f / stretch;
             s.acceleration = core::Vec3{0.0f, b.buoyancy * 0.6f + 2.0f, 0.0f};
             s.size_start = b.size_start * 1.2f;
-            s.size_end = b.size_end * 2.2f;
+            s.size_end = b.size_end * 1.5f;
             s.color_start = smoke.colour;
             s.color_end = smoke.colour * 1.25f;
             s.brightness = smoke.opacity;
@@ -6759,11 +6760,14 @@ App::BreathSmoke App::smoke_for(game::Element element) {
     // Linear colours in the scene's units (sunlit grey rock is about 0.5):
     // smoke is lit, not light, so these are what a lit puff averages to.
     switch (element) {
-        case game::Element::Fire: return {core::Vec3{0.16f, 0.15f, 0.14f}, 0.30f, 0.85f};
-        case game::Element::Frost: return {core::Vec3{0.62f, 0.68f, 0.75f}, 0.35f, 0.35f};
-        case game::Element::Blight: return {core::Vec3{0.22f, 0.27f, 0.12f}, 0.35f, 0.5f};
-        case game::Element::Tide: return {core::Vec3{0.65f, 0.70f, 0.72f}, 0.30f, 0.3f};
-        case game::Element::Stone: return {core::Vec3{0.36f, 0.30f, 0.22f}, 0.45f, 0.5f};
+        // Light (the playtest of 2026-10-21: "the fog is too much"): a
+        // tenth to a sixth of the puffs, and blight's own cloud is already
+        // a fog, so it leaves the least.
+        case game::Element::Fire: return {core::Vec3{0.16f, 0.15f, 0.14f}, 0.15f, 0.6f};
+        case game::Element::Frost: return {core::Vec3{0.62f, 0.68f, 0.75f}, 0.15f, 0.25f};
+        case game::Element::Blight: return {core::Vec3{0.22f, 0.27f, 0.12f}, 0.08f, 0.3f};
+        case game::Element::Tide: return {core::Vec3{0.65f, 0.70f, 0.72f}, 0.12f, 0.25f};
+        case game::Element::Stone: return {core::Vec3{0.36f, 0.30f, 0.22f}, 0.18f, 0.35f};
         default: return {core::Vec3{0.2f, 0.2f, 0.2f}, 0.0f, 0.0f};  // storm, a drone: no smoke
     }
 }
@@ -8124,7 +8128,8 @@ void App::render() {
         debug_.upload(device_);
         // Copy passes cannot open inside a render pass, so particle staging rides
         // alongside the debug-line upload.
-        particles_.upload(device_, taa_.jitter() * camera.view_projection(aspect), camera.right(), camera.up());
+        particles_.upload(device_, taa_.jitter() * camera.view_projection(aspect), camera.right(), camera.up(),
+                          camera.position);
     }
     // Grass is re-placed around the camera every frame, deterministically from
     // the ground cell, and streamed like the particles.

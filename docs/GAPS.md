@@ -305,6 +305,24 @@ Cost: about 0.6 ms at 1080p with the breath across much of the frame. Not
 yet: heat haze, the fireball (still an emissive mesh), scorch on the
 ground, the light on the retro tiers.
 
+After the playtest (the same day): "the fog effect is probably too much;
+with blight the dragon can be in fog for several seconds, tanking fps". Three
+causes, and the murk was not the smoke:
+
+- Old flame puffs are large and dim, and they still covered what was behind
+  them, so a blight cloud (13 m puffs living 1.9 s) laid a dark green veil
+  over the view. Cover now falls away with age faster than the light does.
+- A breath that is a gas covers less: `cover` in the breath profile (fire
+  0.9, stone 0.8, storm 0.7, frost and tide 0.55, blight 0.4). Every
+  species' `.breath.cfg` that is not fire carries its own, since a partial
+  file inherits fire's.
+- Flame and smoke fade as the camera comes within two of their sizes and
+  are not drawn inside one, so flying into a cloud no longer puts hundreds
+  of screen-sized quads over the frame. Blight's particles went from 3.5 ms
+  to 1.3 ms at 1080p in the chase view; fire's are 0.7 ms.
+- Smoke is lighter: a tenth to a sixth of the flame puffs leave one (a third
+  before), smaller and shorter-lived, and blight leaves the least.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

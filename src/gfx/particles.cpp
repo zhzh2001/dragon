@@ -167,7 +167,7 @@ bool ParticleSystem::ensure_capacity(uint32_t vertices) {
 }
 
 void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 camera_right,
-                            Vec3 camera_up) {
+                            Vec3 camera_up, Vec3 eye) {
     uniforms_.view_proj = view_proj;
     vertices_.clear();
     const bool smoke_drawn = smoke_pipeline_ != INVALID_PIPELINE;
@@ -189,19 +189,29 @@ void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 ca
             if ((p.kind == ParticleKind::Smoke) != smoke_pass) continue;
             const float t = p.age / p.life;
             const float size = core::lerpf(p.size_start, p.size_end, t);
+            // Flame and smoke fade as the camera comes within two of their
+            // sizes and vanish inside one: a puff the camera is in covers the
+            // screen and shows nothing. Flying into a blight cloud put
+            // hundreds of quads up to 29 m across over the whole frame, and
+            // the frame rate fell with them.
+            float near = 1.0f;
+            if (p.kind != ParticleKind::Disc) {
+                near = core::smoothstep(size, size * 2.0f, core::distance(eye, p.position));
+                if (near <= 0.0f) continue;
+            }
             Vec4 packed;
             if (smoke_pass) {
                 // In after the flame it follows, out slowly as it spreads.
                 const float in = p.fade_in > 0.0f ? core::smoothstep(p.fade_in * 0.7f, p.fade_in, t) : 1.0f;
-                const float opacity = p.brightness * in * (1.0f - t);
+                const float opacity = p.brightness * in * (1.0f - t) * near;
                 if (opacity < 0.005f) continue;
                 packed = Vec4{core::lerp(p.color_start, p.color_end, t), opacity};
             } else {
                 // Bright fast, gone smoothly: quadratic fade reads as cooling.
                 const float fade = (1.0f - t) * (1.0f - t);
-                const Vec3 color = core::lerp(p.color_start, p.color_end, t) * (p.brightness * fade);
+                const Vec3 color = core::lerp(p.color_start, p.color_end, t) * (p.brightness * fade * near);
                 if (color.x + color.y + color.z < 0.01f) continue;
-                packed = Vec4{color, 1.0f};
+                packed = Vec4{color, near * p.cover};  // a flame's cover, faded with its light
             }
             Vec3 right = camera_right * size;
             Vec3 up = camera_up * size;

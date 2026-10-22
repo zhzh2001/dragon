@@ -51,6 +51,7 @@ const Field SCALAR_FIELDS[] = {
     {"size_start", &BreathProfile::size_start}, {"size_end", &BreathProfile::size_end},
     {"life", &BreathProfile::life},           {"rate", &BreathProfile::rate},
     {"drag", &BreathProfile::drag},           {"brightness", &BreathProfile::brightness},
+    {"cover", &BreathProfile::cover},
 };
 
 float& component(core::Vec3& v, int i) { return i == 0 ? v.x : (i == 1 ? v.y : v.z); }

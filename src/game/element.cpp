@@ -81,6 +81,7 @@ BreathProfile element_breath(Element element) {
             b.rate = 300.0f;
             b.drag = 2.1f;
             b.brightness = 0.8f;
+            b.cover = 0.55f;
             break;
         case Element::Blight:  // blightmaw: a slow corrosive cloud
             b.scales = {0.8f, 1.4f, 0.8f, 0.8f};
@@ -94,6 +95,7 @@ BreathProfile element_breath(Element element) {
             b.rate = 220.0f;
             b.drag = 2.6f;
             b.brightness = 0.72f;
+            b.cover = 0.4f;
             break;
         case Element::Storm:  // stormsail: a narrow arc
             b.scales = {1.5f, 0.55f, 1.25f, 1.35f};
@@ -107,6 +109,7 @@ BreathProfile element_breath(Element element) {
             b.rate = 520.0f;
             b.drag = 0.9f;
             b.brightness = 0.8f;
+            b.cover = 0.7f;
             break;
         case Element::Tide:  // tidewrack: a pressurised jet of brine
             b.scales = {1.15f, 0.8f, 1.0f, 0.9f};
@@ -120,6 +123,7 @@ BreathProfile element_breath(Element element) {
             b.rate = 380.0f;
             b.drag = 1.8f;
             b.brightness = 0.62f;
+            b.cover = 0.55f;
             break;
         case Element::Stone:  // ironroot: a heavy blast of hot grit
             b.scales = {0.7f, 1.3f, 1.15f, 1.1f};
@@ -133,6 +137,7 @@ BreathProfile element_breath(Element element) {
             b.rate = 300.0f;
             b.drag = 2.4f;
             b.brightness = 0.62f;
+            b.cover = 0.8f;
             break;
         default: break;
     }

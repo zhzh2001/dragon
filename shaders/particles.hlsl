@@ -130,7 +130,12 @@ float4 fs_main(VertexOut input) : SV_Target {
         // tip; a patchy heat everywhere read as a leopard's coat.
         float heat = saturate(smoothstep(0.4, 1.1, density) * (1.25 - age * 1.6));
         // Fades out over its life.
-        cover = body * 0.9 * saturate(1.6 - age * 1.6);
+        // a: the breath's own cover (fire 0.9, a gas less), faded near the
+        // camera. And gone faster with age than the light: an old puff is
+        // large and dim, and covering, it laid a dark veil over the view
+        // behind a blight cloud.
+        float young = saturate(1.0 - age * 1.4);
+        cover = body * young * young * input.color.a;
         // Light over cover is the colour seen: the breath's own colour dimmed
         // at the fringe (fire's cool end is already red), paler and bright
         // enough to bloom in the heat. A fixed red fringe drew frost, blight

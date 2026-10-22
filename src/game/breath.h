@@ -71,6 +71,11 @@ struct BreathProfile {
     // Brightness fed to the additive particle. A light source should not also
     // be lit, so this is the whole of how bright a breath is.
     float brightness = 0.85f;
+    // How much of what is behind it a flame puff hides (particles.hlsl): fire
+    // is a body of burning gas; a breath that is a gas cloud is
+    // translucent. Mostly opaque, blight's 13 m puffs were a green wall the
+    // dragon flew into for seconds.
+    float cover = 0.9f;
 
     // What it is made of, and so what it does beyond damage (element.h).
     // In the file as `element frost`; absent is fire, like everything before.

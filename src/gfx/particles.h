@@ -43,6 +43,8 @@ struct Particle {
     // Smoke: the share of its life over which it fades in, so a puff
     // launched with the flame shows only past where the flame dies.
     float fade_in = 0.0f;
+    // A flame's opacity scale (BreathProfile::cover).
+    float cover = 1.0f;
 };
 
 class ParticleSystem {
@@ -65,14 +67,16 @@ public:
     // The in-shader grade an LDR tier finishes additive light with (see
     // SceneUniforms::output_grade).
     void set_output_grade(core::Vec4 grade) { uniforms_.output_grade = grade; }
+    // `eye`: flame and smoke fade out as the camera nears them, and one the
+    // camera is inside is not drawn.
     void upload(Device& device, const core::Mat4& view_proj, core::Vec3 camera_right,
-                core::Vec3 camera_up);
+                core::Vec3 camera_up, core::Vec3 eye);
     void draw(Device& device, rhi::Pass* pass);
 
 private:
     struct Vertex {
         core::Vec3 position;
-        core::Vec4 color;  // rgb emitted light (smoke: its colour), a smoke's opacity
+        core::Vec4 color;  // rgb emitted light (smoke: its colour); a smoke's opacity, or a flame's cover scale
         core::Vec2 corner;
         core::Vec4 shape;  // x seed, y age over life, z kind; the shader tiers' alone
     };
