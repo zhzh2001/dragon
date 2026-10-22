@@ -68,7 +68,7 @@ struct SceneUniforms {
     // drawn, so the sky leaves its own slab out; yzw unused.
     float4 clouds2;
     // One local light (modern tier): xyz where, w its reach (0: none);
-    // local_light_color rgb.
+    // local_light_color rgb, and w the membranes' glow (skinned.hlsl).
     float4 local_light;
     float4 local_light_color;
 };

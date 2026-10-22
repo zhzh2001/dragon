@@ -3187,6 +3187,7 @@ void App::build_ui(float dt) {
         if (atmosphere_.available()) ImGui::SliderFloat("sky in the hide", &lighting_.sky_reflection, 0.0f, 3.0f, "%.2f");
         if (tier_.tier == gfx::Tier::Modern) {
             ImGui::SliderFloat("breath light", &local_light_strength_, 0.0f, 1500.0f, "%.0f");
+            ImGui::SliderFloat("membrane glow", &membrane_glow_, 0.0f, 8.0f, "%.2f");
         }
     }
 
@@ -4377,6 +4378,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
+    if (out.joints.valid()) mark_membranes(mesh_data, out.skeleton, out.joints);
     out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str(), 0, pack.get(), &loaded.textures), tag.c_str());
     upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str(), pack.get(), &loaded.textures);
 
@@ -4583,6 +4585,38 @@ anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, con
                  lod.mesh.vertices.size(), split.vertices.size());
     }
     return split;
+}
+
+// The membrane: the share of each vertex's skin weight on a wing finger or
+// anything below one, written into the tangent's |w| past 1 (the sign stays
+// the handedness). The fingers span the membrane; the arm's bones are
+// thick. skinned.hlsl lights it from behind (docs/GAPS.md, G4).
+void App::mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
+                         const anim::DragonJoints& joints) {
+    const int count = skeleton.count();
+    std::vector<bool> membrane(size_t(count), false);
+    for (int side = 0; side < 2; ++side) {
+        for (const std::vector<int>& finger : joints.wing_fingers[side]) {
+            for (int j : finger) {
+                if (j >= 0 && j < count) membrane[size_t(j)] = true;
+            }
+        }
+    }
+    for (int j = 0; j < count; ++j) {
+        const int parent = skeleton.joint(j).parent;
+        if (parent != anim::NO_PARENT && membrane[size_t(parent)]) membrane[size_t(j)] = true;
+    }
+    size_t marked = 0;
+    for (anim::SkinnedVertex& v : mesh.vertices) {
+        float share = 0.0f;
+        for (int k = 0; k < 4; ++k) {
+            if (v.joints[k] < membrane.size() && membrane[v.joints[k]]) share += v.weights[k];
+        }
+        share = core::saturate(share);
+        if (share > 0.5f) ++marked;
+        v.tangent.w = (v.tangent.w < 0.0f ? -1.0f : 1.0f) * (1.0f + 0.98f * share);
+    }
+    LOG_INFO("membranes: %zu of %zu vertices", marked, mesh.vertices.size());
 }
 
 bool App::load_prop(const char* path, PropModel& out, const char* tag,
@@ -6726,6 +6760,7 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
 // breath's hot colour, flickering.
 void App::set_local_light(gfx::SceneUniforms& scene) const {
     scene.local_light = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    scene.local_light_color.w = membrane_glow_;  // not the breath's: the membranes' gain
     if (tier_.tier != gfx::Tier::Modern) return;
     core::Vec3 origin, direction, hot;
     float range = 0.0f;
@@ -6753,7 +6788,7 @@ void App::set_local_light(gfx::SceneUniforms& scene) const {
     const float flicker = 0.85f + 0.1f * std::sin(t * 23.0f) + 0.05f * std::sin(t * 41.0f + 1.3f);
     scene.local_light = core::Vec4{at.x, at.y, at.z, range * 0.9f};
     const core::Vec3 colour = hot * (local_light_strength_ * flicker);
-    scene.local_light_color = core::Vec4{colour.x, colour.y, colour.z, 0.0f};
+    scene.local_light_color = core::Vec4{colour.x, colour.y, colour.z, membrane_glow_};
 }
 
 App::BreathSmoke App::smoke_for(game::Element element) {

@@ -323,6 +323,25 @@ causes, and the murk was not the smoke:
 - Smoke is lighter: a tenth to a sixth of the flame puffs leave one (a third
   before), smaller and shorter-lived, and blight leaves the least.
 
+### G4, first part, as built (2026-10-21): light through the wings
+
+Renders in `artifacts/gap-study/g4-membranes-*`. A wing with the sun behind
+it was a dark silhouette; it now passes the sun's light, coloured by the
+hide, with the veins still dark.
+
+- Nothing marked a membrane, so the load marks it (`App::mark_membranes`):
+  each vertex's share of skin weight on a wing finger chain or below one,
+  where the membrane spans; the arm's bones are thick and take none. A
+  quarter to a third of each roster creature's vertices. It travels in the
+  tangent's |w| past 1, the sign still the handedness, so no vertex format
+  changed (`skinned.hlsl` reads the sign alone now).
+- `skinned.hlsl`, the modern tier: where the sun is behind the face the
+  viewer sees, the membrane adds the hide's colour filtered once more by its
+  hue, strongest looking toward the sun. Its shadow is looked up from the
+  sunward face; from the viewer's, the membrane shadows itself.
+  At the hue alone a grey wing went white and lost its veins.
+- Lighting panel, "membrane glow" (1.2).
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

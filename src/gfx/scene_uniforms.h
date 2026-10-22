@@ -61,7 +61,7 @@ struct SceneUniforms {
     // One local light (modern tier, scene_common.hlsl local_light): a
     // breath's fire on the jaws that breathe it, the wings, the ground and
     // the target. xyz where, w its reach in metres (0: none); colour rgb, w
-    // unused.
+    // the wing membranes' glow from behind (skinned.hlsl), not the breath's.
     core::Vec4 local_light = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     core::Vec4 local_light_color = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };

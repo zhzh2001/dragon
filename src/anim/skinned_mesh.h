@@ -20,6 +20,8 @@ struct SkinnedVertex {
     core::Vec2 uv;
     // xyz tangent, w handedness (+/-1) for reconstructing the bitangent. Needed
     // only for tangent-space normal mapping; a mesh without one shades flat.
+    // |w| past 1 is the vertex's membrane share (mark_membranes), which the
+    // modern tier lights from behind; only the sign is the handedness.
     core::Vec4 tangent = core::Vec4{1.0f, 0.0f, 0.0f, 1.0f};
     // Joint indices as bytes: MAX_JOINTS is 256, so a byte is exactly enough.
     uint8_t joints[4] = {0, 0, 0, 0};

@@ -29,3 +29,10 @@ on the M5.
 | `g2-breath-before-after.png` | `--combat --attack --inspect 60 30 5 --frames 90`, before and after |
 | `g2-breath-close.png` | `--inspect 120 18 3` (the jaws and the light on the neck) and `--inspect 90 3.5 0 --inspect-head` |
 | `g2-elements.png` | The same capture with `--element` fire, frost, blight (top), storm, tide, stone (bottom) |
+
+## G4, the membranes
+
+| File | What |
+|---|---|
+| `g4-membranes-before-after.png` | `--studio 0 --inspect 0 16 -12` and `--inspect 90 16 -12` on Embercrest, and Stormsail at 0: before left, after right |
+| `g4-membranes-roster.png` | Frostvein, Blightmaw, Ironroot, Tidewrack at `--inspect 0 16 -12`: only the membranes take the light |

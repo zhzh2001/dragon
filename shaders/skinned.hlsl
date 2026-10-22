@@ -163,6 +163,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     // tangent frame is flipped consistently with the geometric normal.
     float side = dot(normal, to_camera) < 0.0 ? -1.0 : 1.0;
     normal *= side;
+    const float3 face = normal;  // the face toward the viewer, before the normal map
+    // |w| past 1 is the membrane share (App::mark_membranes); the sign alone
+    // is the handedness.
+    const float handedness = input.tangent_sign < 0.0 ? -1.0 : 1.0;
+    const float membrane = saturate(abs(input.tangent_sign) - 1.0);
 
     // A degenerate tangent would normalize to NaN, so it is rejected before any
     // of the frame is built from it.
@@ -173,7 +178,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         float3 orthogonal = input.world_tangent - normal * dot(normal, input.world_tangent);
         if (dot(orthogonal, orthogonal) > 1e-8) {
             float3 tangent = normalize(orthogonal);
-            float3 bitangent = cross(normal, tangent) * input.tangent_sign * side;
+            float3 bitangent = cross(normal, tangent) * handedness * side;
 #ifdef SWIZZLED_NORMALS
             // DXT5nm (gfx/texture.h): x in alpha, y in green, z rebuilt.
             float4 packed = normal_map.Sample(normal_map_sampler, input.uv);
@@ -208,6 +213,19 @@ float4 fs_main(VertexOut input) : SV_Target {
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // down in a gully, less sky
 #endif
+    // The sun through a membrane: where the sun is behind the face the
+    // viewer sees, a thin wing passes its light on, coloured by the hide and
+    // strongest looking toward the sun. Its shadow is looked up from the
+    // sunward face: from this one, the membrane shadows itself.
+    float transmitted = 0.0;
+#ifdef ATMOSPHERE
+    float behind = saturate(-dot(face, to_sun));
+    if (membrane > 0.01 && behind > 0.0) {
+        float through = sun_visibility(input.world_position, -face, shadow_map, shadow_map_sampler);
+        float forward = saturate(dot(-to_camera, to_sun));
+        transmitted = membrane * behind * through * (0.35 + 0.65 * forward * forward) * scene.local_light_color.w;
+    }
+#endif
 
     // The texture is sRGB, so the sample arrives already linear.
     float3 albedo = input.albedo;
@@ -241,6 +259,13 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 lit_color = diffuse * (direct + ambient * occlusion) +
                        specular * scene.sun_color.rgb * scene.sun.w * visibility +
                        albedo * input.emissive;
+    // Through the membrane: the hide's own texture, so the veins stay dark,
+    // filtered once more by its hue, so it glows deeper than its lit face.
+    // At the hue alone a grey wing went white and every vein was lost.
+    if (transmitted > 0.0) {
+        float3 hue = albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 0.02);
+        lit_color += diffuse * hue * scene.sun_color.rgb * scene.sun.w * (transmitted * 0.5);
+    }
 #ifdef USE_ATMOSPHERE
     // The sky in the hide (F4): what the reflected ray sees -- the sky above
     // the horizon, the lit ground's bounce below -- through a Fresnel that

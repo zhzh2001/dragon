@@ -730,6 +730,11 @@ private:
     };
     static BreathSmoke smoke_for(game::Element element);
     void set_local_light(gfx::SceneUniforms& scene) const;
+    static void mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
+                               const anim::DragonJoints& joints);
+    // Sun through the wing membranes (skinned.hlsl): the transmitted light
+    // is the hide's colour times this (Lighting panel, "membrane glow").
+    float membrane_glow_ = 1.2f;
     // How bright a breath's light is (Lighting panel, "breath light"):
     // the hot colour times this, over 1 + metres squared.
     float local_light_strength_ = 900.0f;
