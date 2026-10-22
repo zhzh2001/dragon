@@ -254,6 +254,11 @@ public:
     const FlightState& state() const { return state_; }
     FlightState& state() { return state_; }
     FlightTuning tuning;
+    // The air's own motion, m/s, set by the owner each frame (game/thermals.h:
+    // rising air). Every aerodynamic force is computed on the velocity
+    // through the air, so a glider in air rising faster than it sinks
+    // climbs -- no special case. Zero is still air, as everything was before.
+    core::Vec3 wind = core::Vec3::zero();
 
     // Forces from the last update, in world space, for debug visualisation.
     // Seeing these is how a flight model actually gets debugged.

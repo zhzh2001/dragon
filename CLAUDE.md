@@ -45,7 +45,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty-three suites, plain executables, no framework
+ctest --test-dir build            # twenty-four suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -538,8 +538,8 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty-three suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
-             combat, bot, match, vegetation, breath
+tests/       twenty-four suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
+             combat, bot, match, vegetation, breath, thermals
 docs/        the detail -- see the table above
 ```
 

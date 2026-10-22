@@ -39,6 +39,7 @@
 #include "game/flight.h"
 #include "game/rally.h"
 #include "game/terrain.h"
+#include "game/thermals.h"
 #include "game/vegetation.h"
 #include "gfx/foliage.h"
 #include "gfx/debug_draw.h"
@@ -739,6 +740,14 @@ private:
     float speed_streak_from_ = 55.0f;
     float speed_streak_rate_ = 120.0f;
     void update_downwash(float dt);
+    // Rising air (game/thermals.h): placed with each terrain, read by every
+    // flight model each frame, shown by motes rising in each column.
+    game::Thermals thermals_;
+    game::ThermalSettings thermal_settings_;
+    core::Vec3 rising_air(core::Vec3 position) const;
+    void emit_thermal_motes(float dt);
+    float player_lift_ = 0.0f;  // m/s of rising air at the player, for the HUD
+    float thermal_motes_ = 60.0f;  // motes a second from a nearby column (Flight panel)
     float downwash_ = 0.0f;
     float airborne_time_ = 0.0f, airborne_before_ = 0.0f;
     // Landing weight (Dragon panel): the grass's push under the wings (m at

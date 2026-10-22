@@ -111,14 +111,16 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
     const Vec3 up = state_.up();
     const Vec3 right = state_.right();
 
-    const float airspeed = core::length(state_.velocity);
+    // Through the air, not over the ground (FlightModel::wind).
+    const Vec3 air = state_.velocity - wind;
+    const float airspeed = core::length(air);
     state_.airspeed = airspeed;
 
     // Relative wind in body axes. Below a threshold there is no meaningful
     // airflow, so aerodynamic forces vanish rather than producing garbage
     // angles from a near-zero vector.
     const bool has_airflow = airspeed > 0.5f;
-    const Vec3 flow = has_airflow ? state_.velocity / airspeed : forward;
+    const Vec3 flow = has_airflow ? air / airspeed : forward;
 
     const float along = core::dot(flow, forward);
     const float vertical = core::dot(flow, up);
@@ -261,7 +263,7 @@ void FlightModel::integrate_rotation(const FlightInput& input, float dt) {
     const Vec3 up = state_.up();
     const Vec3 right = state_.right();
 
-    const float airspeed = core::length(state_.velocity);
+    const float airspeed = core::length(state_.velocity - wind);
     // Control authority grows with airflow over the wings, but never to zero --
     // a dragon can still throw its weight around at a hover.
     const float authority =

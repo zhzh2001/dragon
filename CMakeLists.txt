@@ -93,6 +93,7 @@ target_sources(dragon PRIVATE
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp
+  src/game/thermals.cpp
   src/game/terrain.cpp
   src/game/erosion.cpp
   src/game/flight.cpp
@@ -525,3 +526,18 @@ target_include_directories(test_vegetation PRIVATE src)
 target_link_libraries(test_vegetation PRIVATE SDL3::SDL3)
 target_compile_options(test_vegetation PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME vegetation COMMAND test_vegetation)
+
+add_executable(test_thermals
+  tests/test_thermals.cpp
+  src/game/thermals.cpp
+  src/game/terrain.cpp
+  src/game/erosion.cpp
+  src/game/flight.cpp
+  src/game/maneuver.cpp
+  src/core/noise.cpp
+  src/gfx/mesh.cpp
+)
+target_include_directories(test_thermals PRIVATE src)
+target_link_libraries(test_thermals PRIVATE SDL3::SDL3)
+target_compile_options(test_thermals PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME thermals COMMAND test_thermals)

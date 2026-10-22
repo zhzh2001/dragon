@@ -38,3 +38,9 @@ on the M5.
 | `g4-membranes-roster.png` | Frostvein, Blightmaw, Ironroot, Tidewrack at `--inspect 0 16 -12`: only the membranes take the light |
 | `g4-touchdown-dust.png` | `--input -0.25,0,0,0,0,0`, the chase view at frames 296 and 310: the dust ring after a touchdown |
 | `g4-speed-streaks.png` | The fire golden's frame (`--training --attack`, boosting at 91 m/s): the air streaks radiating from the heading |
+
+## G7, rising air
+
+| File | What |
+|---|---|
+| `g7-thermal-caps.png` | Top-down `--cam 0,7000,10,0,0,0`, the run 7 chase view, and a cap from below: a cumulus over each thermal along the corridor |

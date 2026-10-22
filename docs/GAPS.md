@@ -442,6 +442,34 @@ check in `tests/test_flight.cpp` that fails on the old model.
 Not yet: a committed dive attack for the rivals with its own recovery,
 and frame-level poses for the tells (the jaws use the breath's opening).
 
+### G7, first part, as built (2026-10-21): rising air
+
+`game/thermals.h`. Century's updrafts and the paraglider's thermals: lift
+as a resource the valley offers, read from the sky.
+
+- **Placement**: nine columns a valley, from its seed, deterministic, over
+  dry ground that faces the sun, gentle, and low -- the meadows and lower
+  slopes along the corridor, at least 550 m apart. A first version scored
+  sun and slope alone and stood a column on a peak at the map's edge.
+- **The air moves**: `FlightModel::wind`, and every aerodynamic force is
+  computed on the velocity through the air. A glider in 6 m/s of rising
+  air climbs 3.4 m/s where it sinks 2.6 in still air, with no special case
+  (`test_thermals`). Each column is Gaussian across, about 85 m to 1/e,
+  4.9-8.1 m/s at its axis, fading in over 40 m above the ground and out
+  under its top (1350 m, under the cloud base), breathing over a minute.
+  The player and every bot fly through it.
+- **Seen from afar**: a cumulus caps every column (`thermal_caps` in
+  `scene_common.hlsl`, used by the sky, the cloud shadows and the
+  volumetric clouds' weather map, which had its own copy of the coverage
+  formula and showed no caps at first). The cap is 4.5 column radii wide:
+  at 2.6 it was two weather-map texels across, a faceted lump.
+- **Felt close**: pale motes carried up and round each column near the
+  camera, and "RISING AIR +x.x" over the speed while the player is in it.
+- Dials: Flight, "Rising air" (count, strength, radius, top, motes).
+
+Not yet: ridge lift on windward slopes, thermals in the bots' and the demo
+pilot's plans (they fly through them by chance), and caps less round.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

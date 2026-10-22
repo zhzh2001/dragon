@@ -1612,6 +1612,12 @@ void App::regenerate_terrain() {
     } else {
         terrain_.generate(settings);
     }
+    thermals_.place(terrain_, terrain_settings_.seed, lighting_.sun_direction(), thermal_settings_);
+    if (!thermals_.columns().empty()) {
+        const game::Thermal& first = thermals_.columns()[0];
+        LOG_INFO("thermals: %zu columns, the strongest-placed at (%.0f, %.0f, %.0f), %.1f m/s", thermals_.columns().size(),
+                 double(first.base.x), double(first.base.y), double(first.base.z), double(first.strength));
+    }
     // The material follows the terrain that came out -- before the meshes are
     // built, since the fixed-function tier bakes it into their colours.
     // Snow should sit sensibly relative to whatever the peaks came out at.
@@ -2145,6 +2151,8 @@ void App::update(float dt) {
             input.yaw *= stick;
             if (frozen) input.flap = 0.0f;
         }
+        flight_.wind = rising_air(flight_.state().position);
+        player_lift_ = flight_.wind.y;
         const bool was_grounded = flight_.state().grounded;
         const float sink_before = -flight_.state().velocity.y;
         flight_.update(input, &terrain_, dt);
@@ -2153,6 +2161,7 @@ void App::update(float dt) {
         if (flight_.state().grounded && !was_grounded && airborne_before_ > 0.33f) on_touchdown(sink_before);
         airborne_before_ = airborne_time_;
         update_downwash(dt);
+        emit_thermal_motes(dt);
         // The pounce: while an elder's boost is locked onto a target, the
         // flight is turned onto it -- velocity and nose together, at the
         // pounce's turn rate, and kept fast -- so a boost meets its mark.
@@ -3416,6 +3425,13 @@ void App::draw_hud() {
         const float x = width * 0.5f - total * 0.5f;
         hud_.numeral(ImVec2(x, min.y + hud_.px(6.0f)), line, tk.text, numeral_size);
         hud_.label(ImVec2(x + w + hud_.px(6.0f), min.y + hud_.px(30.0f)), "m/s", tk.text_dim, 14.0f);
+        // Rising air under the wings (game/thermals.h): how much, above the
+        // speed, in the cool tone -- a climb the air is giving, not a threat.
+        if (player_lift_ > 0.8f && !flight_.state().grounded) {
+            std::snprintf(line, sizeof(line), "RISING AIR +%.1f", double(player_lift_));
+            const ImU32 colour = (tk.cool & 0x00FFFFFF) | (ImU32(120.0f + 120.0f * core::saturate(player_lift_ / 6.0f)) << 24);
+            hud_.label(ImVec2(width * 0.5f, min.y - hud_.px(22.0f)), line, colour, 14.0f, ui::Align::Centre);
+        }
     }
 
     // During a match the rally readout stands down: you are fighting, not
@@ -6501,6 +6517,7 @@ void App::update_bots(float dt) {
         const float sink_before = bot->flight.state().climb_rate;
         {
             CORE_PROFILE("bots: flight");
+            bot->flight.wind = rising_air(bot->flight.state().position);
             bot->flight.update(decision.flight, &terrain_, dt);
         }
         if (slow > 0.0f && !bot->flight.state().grounded) {
@@ -6825,6 +6842,50 @@ void App::emit_speed_streak(float strength) {
     streak.color_end = pale;
     streak.brightness = 2.0f * strength;
     particles_.spawn(streak);
+}
+
+core::Vec3 App::rising_air(core::Vec3 position) const {
+    if (thermals_.columns().empty()) return core::Vec3::zero();
+    const float ground = terrain_.height_at(position.x, position.z);
+    return core::Vec3{0.0f, thermals_.lift_at(position, ground, time_seconds_), 0.0f};
+}
+
+// What shows a column: pale motes -- seeds, dust, insects -- carried up
+// through it near the camera, spiralling a little, so rising air is found by
+// looking rather than by luck. Each column within 700 m of the camera
+// sheds a few a second at heights about the camera's.
+void App::emit_thermal_motes(float dt) {
+    const core::Vec3 eye = active_camera().position;
+    static float carry = 0.0f;
+    for (const game::Thermal& c : thermals_.columns()) {
+        const float dx = c.base.x - eye.x, dz = c.base.z - eye.z;
+        const float far = std::sqrt(dx * dx + dz * dz);
+        if (far > 700.0f) continue;
+        carry += dt * thermal_motes_ * (1.0f - far / 700.0f);
+        while (carry >= 1.0f) {
+            carry -= 1.0f;
+            const float angle = particle_unit() * core::PI;
+            const float out = std::fabs(particle_unit());
+            const float height = particle_unit();
+            core::Vec3 at{c.base.x + std::cos(angle) * c.radius * out, 0.0f, c.base.z + std::sin(angle) * c.radius * out};
+            at.y = core::clampf(eye.y + 120.0f * height, c.base.y + 10.0f, c.top - 50.0f);
+            const float ground = terrain_.height_at(at.x, at.z);
+            const float rise = thermals_.lift_at(at, ground, time_seconds_);
+            if (rise < 0.5f) continue;
+            gfx::Particle p;
+            p.position = at;
+            // Up with the air, and round the axis: a column turns as it rises.
+            const core::Vec3 round{-std::sin(angle), 0.0f, std::cos(angle)};
+            p.velocity = core::Vec3{0.0f, rise, 0.0f} + round * (1.5f + 1.5f * out);
+            p.life = 4.0f;
+            p.size_start = 0.6f;
+            p.size_end = 0.6f;
+            p.color_start = core::Vec3{1.0f, 0.95f, 0.85f};
+            p.color_end = p.color_start;
+            p.brightness = 0.9f;
+            particles_.spawn(p);
+        }
+    }
 }
 
 // A landing has weight: dust thrown out in a ring and a jolt through the
@@ -8219,6 +8280,22 @@ void App::build_flight_ui() {
         ImGui::SliderFloat("induced drag", &t.induced_drag_factor, 0.005f, 0.2f, "%.3f");
     }
 
+    if (ImGui::CollapsingHeader("Rising air")) {
+        game::ThermalSettings& ts = thermal_settings_;
+        bool replace = false;
+        ImGui::SliderInt("thermals", &ts.count, 0, 30);
+        replace |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SliderFloat("thermal strength", &ts.strength, 0.0f, 15.0f, "%.1f m/s");
+        replace |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SliderFloat("thermal radius", &ts.radius, 20.0f, 300.0f, "%.0f m");
+        replace |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SliderFloat("thermal top", &ts.top, 300.0f, 3000.0f, "%.0f m");
+        replace |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SliderFloat("thermal motes", &thermal_motes_, 0.0f, 300.0f, "%.0f /s");
+        if (replace) thermals_.place(terrain_, terrain_settings_.seed, lighting_.sun_direction(), ts);
+        ImGui::Text("rising air here: %+.1f m/s", double(player_lift_));
+    }
+
     if (ImGui::CollapsingHeader("Propulsion")) {
         ImGui::SliderFloat("flap force", &t.flap_peak_force, 0.0f, 30000.0f, "%.0f N");
         ImGui::SliderFloat("flap period", &t.flap_period, 0.3f, 2.5f, "%.2f s");
@@ -8320,6 +8397,15 @@ void App::render() {
         clouds_.active(scene, cloud_settings_) && tier_.budget.volumetric_clouds && !ablated("clouds") ? 1.0f : 0.0f;
     shadow_.apply(scene);
     set_local_light(scene);
+    {
+        const auto& columns = thermals_.columns();
+        const int n = std::min(int(columns.size()), gfx::SceneUniforms::MAX_THERMALS);
+        for (int i = 0; i < n; ++i) {
+            const game::Thermal& t = columns[size_t(i)];
+            scene.thermals[i] = core::Vec4{t.base.x, t.radius, t.base.z, t.strength};
+        }
+        scene.thermal_count = core::Vec4{float(n), 0.0f, 0.0f, 0.0f};
+    }
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
     world_.set_material_toggles(material_toggles_);

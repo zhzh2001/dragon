@@ -71,6 +71,10 @@ struct SceneUniforms {
     // local_light_color rgb, and w the membranes' glow (skinned.hlsl).
     float4 local_light;
     float4 local_light_color;
+    // The valley's thermals: xz the column, y its radius, w its strength
+    // (m/s); thermal_count.x how many. A cumulus caps each (cloud_coverage).
+    float4 thermals[12];
+    float4 thermal_count;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -217,9 +221,26 @@ float cloud_field(float2 xz) {
 }
 // How much cloud stands over (x, z), 0..1: the field thresholded by the
 // coverage so the gaps are sky, not thin cloud.
+// A cumulus over every thermal (game/thermals.h), 0..1: rising air
+// condenses at its top, which is how a pilot finds one from kilometres
+// away. Wider than the column, ragged with the field, fuller for a stronger
+// one. The volumetric clouds' weather map reads it too (clouds_weather.hlsl).
+float thermal_caps(float2 xz) {
+    float caps = 0.0;
+    for (int i = 0; i < 12; ++i) {
+        if (float(i) >= scene.thermal_count.x) break;
+        float4 t = scene.thermals[i];
+        // 4.5 radii: the weather map's texels are 156 m, and a cap two of
+        // them across drew as a faceted lump.
+        float2 d = (xz - t.xz) / (t.y * 4.5);
+        caps = max(caps, exp(-dot(d, d)) * saturate(t.w / 5.0));
+    }
+    if (caps <= 0.0) return 0.0;
+    return saturate(caps * (0.7 + 0.6 * cloud_field(xz * 1.3)) * 1.3 - 0.2);
+}
 float cloud_coverage(float2 xz) {
     float cover = scene.clouds.x;
-    return saturate((cloud_field(xz) - (1.0 - cover) * 0.85) / 0.18);
+    return max(saturate((cloud_field(xz) - (1.0 - cover) * 0.85) / 0.18), thermal_caps(xz));
 }
 // The density at a point in the slab: the coverage, rounded at the base and
 // heaped toward the top, frayed by a finer noise.
