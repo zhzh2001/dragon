@@ -223,6 +223,67 @@ void test_towers_answer_a_standing_dragon() {
     CHECK(standing >= cruising);
 }
 
+// A tower's bolt is told before it leaves (GAPS.md, G5): every new bolt
+// follows `defence_tell` seconds in which the tower's tell rose to 1.
+void test_tower_tells_its_bolt() {
+    std::printf("a tower's brazier flares for its whole tell before every bolt\n");
+    Combat c;
+    c.tuning.max_health = 1e6f;
+    c.reset(nullptr, Vec3::zero(), 9u);
+    for (auto& s : c.sentinels()) retire(s);
+    c.spawn_defence(Vec3::zero());
+    const FlightState target = player_at(Vec3{300.0f, 20.0f, 0.0f});
+    int shots = 0, told_shots = 0, told_frames = 0;
+    float peak = 0.0f;
+    for (int i = 0; i < 900; ++i) {
+        c.update(1.0f / 60.0f, target, CombatInput{});
+        const float tell = c.sentinels().back().tell;
+        if (tell > 0.0f) {
+            ++told_frames;
+            peak = std::max(peak, tell);
+        }
+        bool shot = false;
+        for (const game::Projectile& p : c.projectiles()) {
+            shot = shot || (p.alive && p.team == game::Team::Hostile && p.life > c.tuning.fireball_lifetime - 1.5f / 60.0f);
+        }
+        if (shot) {
+            ++shots;
+            if (float(told_frames) / 60.0f >= c.tuning.defence_tell - 3.0f / 60.0f && peak > 0.95f) ++told_shots;
+            told_frames = 0;
+            peak = 0.0f;
+        }
+    }
+    std::printf("  %d bolts, %d told\n", shots, told_shots);
+    CHECK(shots >= 3);
+    CHECK(told_shots == shots);
+}
+
+// The punish window (GAPS.md, G5): a rival's swing that misses stuns it for
+// `whiff_stun`; one that lands does not.
+void test_rival_miss_leaves_it_open() {
+    std::printf("a rival's missed bite stuns it; a landed one does not\n");
+    for (int landed = 0; landed < 2; ++landed) {
+        Combat c;
+        c.tuning.max_health = 1e6f;
+        c.reset(nullptr, Vec3::zero(), 4u);
+        for (auto& s : c.sentinels()) retire(s);
+        const int slot = c.spawn_external(500.0f, 6.0f);
+        const Vec3 body{0.0f, 20.0f, 30.0f};
+        c.drive_external(slot, body, Vec3::zero());
+        // Facing the player (at the origin) to land; facing away to miss.
+        const Vec3 forward = landed ? Vec3{0.0f, 0.0f, -1.0f} : Vec3{0.0f, 0.0f, 1.0f};
+        const FlightState player = player_at(landed ? Vec3{0.0f, 20.0f, 12.0f} : Vec3::zero());
+        c.hostile_melee(body + forward * 6.0f, forward, body, game::Element::None, 1.0f, slot);
+        const game::CombatEvents events = c.update(1.0f / 60.0f, player, CombatInput{});
+        const float stun = c.sentinels()[size_t(slot)].stun;
+        std::printf("  %s: bitten %d, whiffed %d, stun %.2f s\n", landed ? "landed" : "missed", int(events.bitten),
+                    int(events.rival_whiffed), stun);
+        CHECK(events.bitten == bool(landed));
+        CHECK(events.rival_whiffed == !landed);
+        CHECK(landed ? stun == 0.0f : stun > c.tuning.whiff_stun - 0.05f);
+    }
+}
+
 void test_player_size_scales_the_body() {
     std::printf("a grown player is a bigger target: a bolt 10 m wide misses at 1x, hits at 1.3x\n");
     auto takes = [](float size) {
@@ -1059,6 +1120,8 @@ int main() {
     test_closest_point_fraction();
     test_melee_reach_and_cooldown();
     test_melee_stuns_knocks_and_chains();
+    test_tower_tells_its_bolt();
+    test_rival_miss_leaves_it_open();
     test_player_size_scales_the_body();
     test_towers_answer_a_standing_dragon();
     test_training_room_is_passive();

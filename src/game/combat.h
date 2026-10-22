@@ -57,6 +57,11 @@ struct CombatTuning {
     // stuns: losing the controls is the one thing a player must not suffer.
     float hostile_melee_damage = 12.0f;
     float hostile_melee_knockback = 10.0f;
+    // A rival's bite or strike that misses leaves it stunned this long: it
+    // committed its lunge and overran. The punish window -- Elden Ring's
+    // dragon left open after its dive -- and the answer to a rival biting
+    // at a dodging player for free.
+    float whiff_stun = 0.9f;
 
     // ---- fireball ----
     // Fast enough to lead a target rather than lob at it, slow enough that a
@@ -160,6 +165,9 @@ struct CombatTuning {
     // flight along the ridge above them is not. Destroyed ones stay down.
     float defence_health = 90.0f;
     float defence_fire_interval = 2.4f;
+    // Seconds a tower's brazier flares before each bolt: the shot is seen
+    // coming, from the side as well as ahead.
+    float defence_tell = 0.7f;
     float defence_projectile_speed = 170.0f;
     float defence_gravity = 14.0f;
     // 14 until the second playtest ("towers overpowered"), with the demo
@@ -295,6 +303,7 @@ struct MeleeSwing {
     core::Vec3 body = core::Vec3::zero();
     Element element = Element::None;
     float scale = 1.0f;  // the biter's own damage multiplier (a drench weakens it)
+    int slot = -1;       // the biter's sentinel slot: a miss leaves it open
 };
 
 struct Projectile {
@@ -358,6 +367,10 @@ struct Sentinel {
     // A ground defence fires from its brazier, this far above `position`
     // (which is where it is hit, at its middle).
     float muzzle_height = 0.0f;
+    // 0..1 through a ground defence's tell before its next bolt (GAPS.md,
+    // G5): the brazier flares over `defence_tell` seconds. 0 when none is
+    // coming, or the player is out of its range.
+    float tell = 0.0f;
     core::Vec3 position = core::Vec3::zero();
     core::Vec3 velocity = core::Vec3::zero();
     float health = 0.0f;
@@ -426,6 +439,7 @@ struct CombatEvents {
     int hits_dealt = 0;      // player projectiles or breath connecting
     int kills = 0;
     float damage_taken = 0.0f;
+    bool rival_whiffed = false;  // a rival's swing missed this frame, and left it stunned
     bool player_died = false;
     // World position of the most recent hit the player scored, for a marker.
     core::Vec3 last_hit = core::Vec3::zero();
@@ -574,8 +588,10 @@ public:
                         BreathScales scales = {}, Element element = Element::None);
     // An external pilot biting or striking this frame: its mouth, the way it
     // faces, and its body centre. Resolved against the player in update().
+    // `slot`, the biter's own: a swing that misses stuns it for
+    // `whiff_stun` seconds, the punish window (GAPS.md, G5).
     void hostile_melee(core::Vec3 mouth, core::Vec3 forward, core::Vec3 body,
-                       Element element = Element::None, float scale = 1.0f);
+                       Element element = Element::None, float scale = 1.0f, int slot = -1);
     // A bot's pounce landing on the player: damage of its element, a knock
     // along `direction` (reported as a bite, so the app applies it).
     void hostile_ram(core::Vec3 from, core::Vec3 direction, Element element, float scale = 1.0f);

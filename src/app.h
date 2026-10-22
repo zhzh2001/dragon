@@ -375,6 +375,7 @@ private:
     // a bite connected, the counters can.
     int bites_landed_ = 0;
     int bites_taken_ = 0;
+    int rival_misses_ = 0;
     int bites_swung_ = 0;
 
     // M14: bot dragons. Each flies its own FlightModel through a BotPilot and

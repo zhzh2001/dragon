@@ -2332,7 +2332,8 @@ void App::update(float dt) {
             const game::Sentinel& tower = combat_.sentinels()[size_t(slot)];
             if (!tower.alive || tower.element == game::Element::None) continue;
             const game::BreathProfile& b = element_breaths_[int(tower.element)];
-            const float rate = tower.status.jammed() ? 6.0f : 28.0f;
+            // The tell (Sentinel::tell): the brazier flares before each bolt.
+            const float rate = tower.status.jammed() ? 6.0f : 28.0f + 90.0f * tower.tell;
             if (0.5f + 0.5f * particle_unit() > rate * dt) continue;
             gfx::Particle p;
             p.position = tower.position + core::Vec3{particle_unit() * 0.8f, tower.muzzle_height + 0.6f,
@@ -2343,11 +2344,11 @@ void App::update(float dt) {
             p.acceleration = core::Vec3{0.0f, b.buoyancy * 0.35f, 0.0f};
             p.drag = 1.0f;
             p.life = 0.9f;
-            p.size_start = 2.4f;
+            p.size_start = 2.4f * (1.0f + 1.2f * tower.tell);
             p.size_end = 0.8f;
             p.color_start = b.hot;
             p.color_end = b.cool;
-            p.brightness = 0.8f;
+            p.brightness = 0.8f + 1.2f * tower.tell * tower.tell;
             particles_.spawn(p);
         }
         // What everything is suffering, on its body; the storm's arcs; and
@@ -2563,6 +2564,12 @@ void App::update(float dt) {
             }
         }
 
+        // A rival's swing that missed: the snap of empty jaws, low, so the
+        // punish window it opened is heard as well as seen (STUNNED).
+        if (events.rival_whiffed) {
+            audio_.play(audio::Clip::Bite, 0.7f, 0.75f);
+            ++rival_misses_;
+        }
         if (events.bitten) {
             ++bites_taken_;
             // Knocked: the shove goes straight into the velocity, and the
@@ -6472,6 +6479,7 @@ void App::update_bots(float dt) {
         }
         if (slot.stun > 0.0f) {
             decision.flight = game::FlightInput{};
+            decision.winding_up = 0.0f;
             decision.fire = false;
             decision.breathe = false;
             decision.melee = false;
@@ -6627,7 +6635,7 @@ void App::update_bots(float dt) {
         }
         if (decision.melee) {
             combat_.hostile_melee(muzzle, bot->flight.state().forward(), self.position,
-                                  bot->element, slot.status.weaken(combat_.tuning.elements));
+                                  bot->element, slot.status.weaken(combat_.tuning.elements), bot->slot);
             // The same lunge cost the player pays.
             game::FlightState& st = bot->flight.state();
             const float speed = core::length(st.velocity);
@@ -7843,6 +7851,8 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("tower range", &t.defence_range, 100.0f, 900.0f, "%.0f m");
         ImGui::SliderFloat("tower damage", &t.defence_damage, 1.0f, 40.0f, "%.0f");
         ImGui::SliderFloat("tower interval", &t.defence_fire_interval, 0.5f, 8.0f, "%.1f s");
+        ImGui::SliderFloat("tower tell", &t.defence_tell, 0.0f, 2.0f, "%.2f s");
+        ImGui::SliderFloat("rival miss stun", &t.whiff_stun, 0.0f, 3.0f, "%.2f s");
         ImGui::SliderFloat("bolt speed", &t.defence_projectile_speed, 60.0f, 400.0f, "%.0f m/s");
         ImGui::SliderFloat("bolt gravity", &t.defence_gravity, 0.0f, 40.0f, "%.0f m/s2");
         ImGui::SliderFloat("bolt spread", &t.defence_spread, 0.0f, 40.0f, "%.0f m");
@@ -8717,9 +8727,9 @@ void App::log_telemetry() const {
                                     : "");
     }
     if (combat_enabled_) {
-        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d  fury %.2f  charge %.2f  rams %d  furies %d",
+        LOG_INFO("   combat: health %.0f  kills %d  bites swung %d landed %d taken %d missed by rivals %d  fury %.2f  charge %.2f  rams %d  furies %d",
                  double(combat_.health()), combat_.kills(), bites_swung_, bites_landed_,
-                 bites_taken_, double(combat_.fury()), double(combat_.charge()),
+                 bites_taken_, rival_misses_, double(combat_.fury()), double(combat_.charge()),
                  rams_landed_, furies_released_);
     }
     if (demo_active()) {

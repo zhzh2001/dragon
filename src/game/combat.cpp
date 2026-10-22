@@ -359,13 +359,14 @@ void Combat::hostile_ram(Vec3 from, Vec3 direction, Element element, float scale
     hostile_rams_pending_.push_back({from, core::normalize_or(direction, Vec3::forward()), element, scale});
 }
 
-void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element, float scale) {
+void Combat::hostile_melee(Vec3 mouth, Vec3 forward, Vec3 body, Element element, float scale, int slot) {
     MeleeSwing swing;
     swing.mouth = mouth;
     swing.forward = core::normalize_or(forward, Vec3::forward());
     swing.body = body;
     swing.element = element;
     swing.scale = scale;
+    swing.slot = slot;
     hostile_melee_pending_.push_back(swing);
 }
 
@@ -914,12 +915,17 @@ void Combat::update_sentinels(float dt, const FlightState& player, CombatEvents&
         sentinel.position = orbit_position(sentinel);
         sentinel.velocity = dt > 0.0f ? (sentinel.position - previous) / dt : Vec3::zero();
 
+        sentinel.tell = 0.0f;  // set again below while a bolt is coming
         if (health_ <= 0.0f || sentinel.passive || sentinel.stun > 0.0f) continue;
         // Shocked or frozen: weapons cold. Chilled: the reload drags.
         if (sentinel.status.jammed()) continue;
 
         sentinel.fire_timer -= dt * (1.0f - 0.6f * slow) *
                                (sentinel.status.drench > 0.0f ? tuning.elements.drench_reload : 1.0f);
+        if (sentinel.ground && tuning.defence_tell > 0.0f && sentinel.fire_timer < tuning.defence_tell &&
+            core::distance(player.position, sentinel.position) <= tuning.defence_range) {
+            sentinel.tell = 1.0f - core::maxf(sentinel.fire_timer, 0.0f) / tuning.defence_tell;
+        }
         if (sentinel.fire_timer > 0.0f) continue;
         const bool ground = sentinel.ground;
         const Vec3 to_player = player.position - sentinel.position;
@@ -1175,7 +1181,14 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
         if (health_ <= 0.0f) break;
         const MeleeKind kind = melee_reach(swing.mouth, swing.forward, swing.body, player.position,
                                            tuning.sentinel_radius * player_size, tuning);
-        if (kind == MeleeKind::None) continue;
+        if (kind == MeleeKind::None) {
+            if (swing.slot >= 0 && size_t(swing.slot) < sentinels_.size() && sentinels_[size_t(swing.slot)].alive) {
+                Sentinel& biter = sentinels_[size_t(swing.slot)];
+                biter.stun = core::maxf(biter.stun, tuning.whiff_stun);
+                events.rival_whiffed = true;
+            }
+            continue;
+        }
         const float damage =
             tuning.hostile_melee_damage * (kind == MeleeKind::Bite ? 1.0f : 0.6f) * swing.scale;
         hurt_player(damage, swing.element, tuning.elements.melee_weight, swing.mouth, events);

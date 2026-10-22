@@ -429,9 +429,18 @@ check in `tests/test_flight.cpp` that fails on the old model.
   below 18 m/s with the nose up it now pushes the nose down, for bots, the
   course autopilot and the demo pilot alike.
 
-Not yet: the towers' tell (they fire on a timer in `game/combat.cpp`), a
-punish window after a committed dive, and frame-level poses for the tell
-(the jaws use the breath's opening).
+- **The towers' tell.** The last `defence_tell` seconds (0.7) before a
+  tower's bolt, its brazier flares, up to four times the plume and twice
+  its size (`Sentinel::tell`). `test_combat` checks every bolt is told.
+- **The punish window.** A rival's bite or strike that misses leaves it
+  stunned for `whiff_stun` (0.9 s): weapons cold, controls slack, STUNNED
+  on its marker, and the low snap of empty jaws. A rival biting at a
+  dodging player was free before; now a roll that makes it miss opens it
+  to a counter. The combat telemetry line counts the misses. Dials:
+  Combat, "tower tell", "rival miss stun".
+
+Not yet: a committed dive attack for the rivals with its own recovery,
+and frame-level poses for the tells (the jaws use the breath's opening).
 
 ## 2. Century: Age of Ashes
 
