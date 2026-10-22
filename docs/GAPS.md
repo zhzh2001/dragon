@@ -342,6 +342,24 @@ hide, with the veins still dark.
   At the hue alone a grey wing went white and lost its veins.
 - Lighting panel, "membrane glow" (1.2).
 
+### G4, second part (2026-10-21): landing weight
+
+- Touchdown (`App::on_touchdown`): a ring of dust thrown outward, and a
+  jolt through the chase camera, both growing with the sink speed and the
+  growth stage. The dust is small, off the ground and rising: a
+  camera-facing quad that cut into the ground showed as a hard-edged bar,
+  and large dense puffs read as one flat sheet over the dragon.
+- Downwash (`App::update_downwash`, `gfx::Foliage::downwash`,
+  `foliage.hlsl`, the modern tier): under a dragon low and slow, the grass
+  within 16 m (times the growth scale) lies away from it, flattening toward
+  the middle and fluttering. In fast, out over about a second, so the air
+  settles after the dragon does. Only the grass; trees do not bend.
+- Dials: Dragon panel, "Landing weight" (downwash, jolt, dust colour).
+- Found on the way, not fixed: the scripted dive
+  (`--input -0.25,0,0,0,0,0`) arrives at 50 m/s straight down and stops
+  dead with no damage (`STATUS.md`, `safe_landing_speed` is unread). A
+  hard landing reads as weight now, but it costs nothing.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

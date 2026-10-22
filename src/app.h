@@ -730,6 +730,15 @@ private:
     };
     static BreathSmoke smoke_for(game::Element element);
     void set_local_light(gfx::SceneUniforms& scene) const;
+    void on_touchdown(float sink);
+    void update_downwash(float dt);
+    float downwash_ = 0.0f;
+    // Landing weight (Dragon panel): the grass's push under the wings (m at
+    // a blade's tip), the camera's jolt on touchdown (degrees, at a hard
+    // landing), and the dust's colour.
+    float downwash_push_ = 2.2f;
+    float touchdown_kick_ = 2.5f;
+    core::Vec3 dust_colour_{0.30f, 0.27f, 0.21f};
     static void mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
                                const anim::DragonJoints& joints);
     // Sun through the wing membranes (skinned.hlsl): the transmitted light

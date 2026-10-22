@@ -2145,7 +2145,11 @@ void App::update(float dt) {
             input.yaw *= stick;
             if (frozen) input.flap = 0.0f;
         }
+        const bool was_grounded = flight_.state().grounded;
+        const float sink_before = -flight_.state().velocity.y;
         flight_.update(input, &terrain_, dt);
+        if (flight_.state().grounded && !was_grounded) on_touchdown(sink_before);
+        update_downwash(dt);
         // The pounce: while an elder's boost is locked onto a target, the
         // flight is turned onto it -- velocity and nose together, at the
         // pounce's turn rate, and kept fast -- so a boost meets its mark.
@@ -3844,6 +3848,12 @@ void App::build_dragon_ui() {
                 set_player_model(int(i));
             }
         }
+    }
+
+    if (ImGui::CollapsingHeader("Landing weight")) {
+        ImGui::SliderFloat("downwash on grass", &downwash_push_, 0.0f, 4.0f, "%.1f m");
+        ImGui::SliderFloat("touchdown jolt", &touchdown_kick_, 0.0f, 8.0f, "%.1f deg");
+        ImGui::ColorEdit3("dust", &dust_colour_.x);
     }
 
     if (ImGui::CollapsingHeader("Material maps", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -6752,6 +6762,56 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
             particles_.spawn(s);
         }
     }
+}
+
+// A landing has weight: dust thrown out in a ring and a jolt through the
+// camera, both growing with the speed it came down at and the dragon's size.
+void App::on_touchdown(float sink) {
+    const float hard = core::saturate((sink - 1.0f) / 8.0f);
+    const game::FlightState& s = flight_.state();
+    chase_.kick(touchdown_kick_ * (0.3f + 0.7f * hard) * growth_scale_);
+    const float ground = terrain_.height_at(s.position.x, s.position.z);
+    const int count = int(10.0f + 26.0f * hard);
+    for (int i = 0; i < count; ++i) {
+        const float angle = (float(i) + 0.5f * particle_unit()) / float(count) * core::TWO_PI;
+        const core::Vec3 out{std::cos(angle), 0.0f, std::sin(angle)};
+        gfx::Particle p;
+        p.kind = gfx::ParticleKind::Smoke;
+        p.seed = particle_unit() * 0.5f + 0.5f;
+        // Small and off the ground, rising as they spread: a camera-facing
+        // quad that cuts into the ground shows as a hard-edged bar, and big
+        // dense puffs read as one flat sheet over the dragon.
+        const float size = (1.0f + 0.6f * hard) * growth_scale_;
+        const float start = (5.0f + 1.5f * particle_unit()) * growth_scale_;
+        p.position = core::Vec3{s.position.x, ground + size + 0.3f, s.position.z} + out * start;
+        const float speed = (7.0f + 9.0f * hard) * (1.0f + 0.25f * particle_unit());
+        p.velocity = out * speed + core::Vec3{0.0f, 1.2f + 0.6f * particle_unit(), 0.0f};
+        p.acceleration = core::Vec3{0.0f, 1.2f, 0.0f};
+        p.drag = 2.2f;
+        p.life = 1.1f + 0.4f * particle_unit();
+        p.size_start = size;
+        p.size_end = size * 2.8f;
+        p.color_start = dust_colour_;
+        p.color_end = dust_colour_ * 1.15f;
+        p.brightness = 0.2f + 0.25f * hard;
+        particles_.spawn(p);
+    }
+}
+
+// The wings' air on the grass (gfx::Foliage::downwash): under a dragon low
+// and slow -- landing, taking off, hovering -- the blades lie flat away from
+// it; a fast low pass stirs them less; settled on the ground, calm.
+void App::update_downwash(float dt) {
+    const game::FlightState& s = flight_.state();
+    float target = 0.0f;
+    if (!s.grounded) {
+        const float low = 1.0f - core::smoothstep(4.0f, 22.0f * growth_scale_, s.ground_clearance);
+        const float slow = core::clampf(1.0f - s.airspeed / 45.0f, 0.3f, 1.0f);
+        target = low * slow;
+    }
+    // In fast, out slowly: the air settles after the dragon does.
+    downwash_ = core::damp(downwash_, target, target > downwash_ ? 0.08f : 0.6f, dt);
+    foliage_.downwash = core::Vec4{s.position.x, 16.0f * growth_scale_, s.position.z, downwash_ * downwash_push_};
 }
 
 // The breath lights what is around it (scene_common.hlsl, local_light): the

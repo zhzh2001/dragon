@@ -12,6 +12,7 @@ struct FoliageParams {
     float4 wind_time_fade;  // x wind, y time, z fade start, w fade end
     float4 extra;           // x nominal height at scale 1, y LOD distance, z the LOD band (a fraction of it)
     float4 impostor;        // x, y where trees hand over to their impostors, first and last (m); 0: they do not
+    float4 push;            // the downwash (gfx::Foliage::downwash): x, z centre, y radius, w push (m); w 0 calm
 };
 
 struct VertexIn {
@@ -106,6 +107,21 @@ float3 place_vertex(VertexIn input, float3 camera_position, out float3 world_nor
                  (sin(t * 1.3 + input.params.z) + 0.5 * sin(t * 2.9 + input.params.z * 1.7));
     rotated.x += sway;
     rotated.z += sway * 0.6;
+#ifdef ATMOSPHERE
+    // The downwash: blades lie away from under a dragon's wings, flattening
+    // toward the middle, fluttering fast.
+    if (params.push.w > 0.0) {
+        float2 away = input.position_scale.xz - params.push.xz;
+        float r = length(away);
+        float reach = 1.0 - smoothstep(params.push.y * 0.3, params.push.y, r);
+        if (reach > 0.0) {
+            float flutter = 0.8 + 0.2 * sin(t * 17.0 + input.params.z * 3.0);
+            float lean = params.push.w * reach * flutter * height_fraction * height_fraction;
+            rotated.xz += away / max(r, 0.5) * lean;
+            rotated.y -= lean * 0.7;
+        }
+    }
+#endif
 
     world_normal = float3(c * input.normal.x + s * input.normal.z, input.normal.y,
                           -s * input.normal.x + c * input.normal.z);

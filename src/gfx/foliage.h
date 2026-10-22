@@ -117,6 +117,10 @@ public:
     // its crowns cast their coarse cards. Whole to its edge, it was the
     // costliest of the three, 2.8 ms in a forest at 1080p on the M5.
     float shadow_mid_crown_distance = 120.0f;
+    // A dragon's wings on the grass (foliage.hlsl, the modern tier): x, z
+    // the centre on the ground, y the radius (m), w how far a blade's tip is
+    // pushed out (m). The app sets it each frame; w 0 is calm.
+    core::Vec4 downwash = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     // The middle and far cascades' trees hand their shadow over to their
     // impostor's quad (foliage_impostor_depth.hlsl) between these
     // distances, each tree at its own, measured flat from the eye. The far
@@ -153,6 +157,7 @@ private:
         core::Vec4 wind_time_fade;  // x wind, y time, z fade start, w fade end
         core::Vec4 extra;           // x nominal height, y LOD distance
         core::Vec4 impostor;        // x, y the impostors' handover band (m); 0: none
+        core::Vec4 push;            // the grass's downwash (Foliage::downwash); 0: none
     };
     // ---- the impostors: an albedo and a normal atlas, the four kinds in
     // its quadrants, 8 x 8 frames of 128 texels each over the hemisphere.

@@ -36,3 +36,4 @@ on the M5.
 |---|---|
 | `g4-membranes-before-after.png` | `--studio 0 --inspect 0 16 -12` and `--inspect 90 16 -12` on Embercrest, and Stormsail at 0: before left, after right |
 | `g4-membranes-roster.png` | Frostvein, Blightmaw, Ironroot, Tidewrack at `--inspect 0 16 -12`: only the membranes take the light |
+| `g4-touchdown-dust.png` | `--input -0.25,0,0,0,0,0`, the chase view at frames 296 and 310: the dust ring after a touchdown |

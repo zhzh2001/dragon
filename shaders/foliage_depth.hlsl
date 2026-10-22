@@ -10,6 +10,7 @@ struct FoliageParams {
     // (foliage_impostor_depth.hlsl), z, w the eye's x and z; y 0: no
     // impostors, the crown casts at every distance.
     float4 impostor;
+    float4 push;  // foliage.hlsl's; unread here
 };
 
 struct ShadowUniforms {

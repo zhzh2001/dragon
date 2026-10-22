@@ -853,6 +853,7 @@ void Foliage::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene,
     Params params;
     params.wind_time_fade = core::Vec4{wind, scene.view_params.z, fade_start, fade_end};
     params.extra = core::Vec4{height, lod_distance, lod_band_for_tier(), 0.0f};
+    params.push = downwash;  // only the grass is drawn through here
 
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
