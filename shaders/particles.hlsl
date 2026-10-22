@@ -98,7 +98,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     float turn = seed * 6.2831853;
     float2 p = float2(cos(turn) * input.corner.x - sin(turn) * input.corner.y,
                       sin(turn) * input.corner.x + cos(turn) * input.corner.y);
-    if (input.shape.z > 1.5) {
+    if (input.shape.z > 1.5 && input.shape.z < 2.5) {
         // Smoke: a billowed disc, its edge eaten by the noise, rolling slowly.
         float billow = particle_billow(p * 1.3 + seed * 11.0 - float2(0.0, age * 0.8));
         float body = saturate(1.0 - r) * 1.15 + (billow - 0.5) * 0.9;
@@ -113,7 +113,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     float falloff;
     float cover = 0.0;  // how much of what is behind it a puff hides
     float3 light = input.color.rgb;
-    if (input.shape.z > 0.5) {
+    if (input.shape.z > 0.5 && input.shape.z < 1.5) {
         // A flame tongue: a broad billow and a fine one, climbing as it ages,
         // eat the disc from the edge in. Mostly opaque with a sharp edge, and
         // sorted back to front (gfx::ParticleSystem::upload), so stacked puffs

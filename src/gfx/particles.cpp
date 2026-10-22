@@ -215,7 +215,20 @@ void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 ca
             }
             Vec3 right = camera_right * size;
             Vec3 up = camera_up * size;
-            if (p.kind == ParticleKind::Flame) {
+            if (p.kind == ParticleKind::Streak) {
+                // A ribbon along the world line, turned to face the eye: in
+                // perspective the streaks radiate from where the flight is
+                // heading. Projected onto the camera plane instead, a line
+                // along the view lost its length and every streak fell
+                // vertical, like rain.
+                const float length = core::length(p.stretch);
+                if (length > 0.01f) {
+                    const Vec3 along = p.stretch / length;
+                    const Vec3 to_eye = core::normalize_or(eye - p.position, -camera_forward);
+                    up = along * (0.5f * length + size);
+                    right = core::normalize_or(core::cross(along, to_eye), camera_right) * size;
+                }
+            } else if (p.kind == ParticleKind::Flame) {
                 // Stretched along its motion across the screen: a fast young
                 // puff is a streak, so the breath leaves the jaws as a jet and
                 // slows into billows, rather than a row of balls.

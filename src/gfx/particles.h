@@ -19,6 +19,7 @@ enum class ParticleKind : uint8_t {
     Disc = 0,   // a soft glowing disc: embers, sparks, flashes
     Flame = 1,  // a turbulent tongue that frays as it ages: a breath's puffs
     Smoke = 2,  // not light: alpha-blended, drawn before the light over it
+    Streak = 3, // a soft line of light along `stretch`: rushing air
 };
 
 struct Particle {
@@ -45,6 +46,9 @@ struct Particle {
     float fade_in = 0.0f;
     // A flame's opacity scale (BreathProfile::cover).
     float cover = 1.0f;
+    // A streak's length and direction in the world (m): the quad is drawn
+    // this long along it, whatever its velocity.
+    core::Vec3 stretch = core::Vec3::zero();
 };
 
 class ParticleSystem {

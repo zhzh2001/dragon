@@ -2635,21 +2635,23 @@ void App::update(float dt) {
                 p.brightness = 0.55f;
                 particles_.spawn(p);
             }
-            // Slipstream streak: born ahead and beside, swept backward fast so
-            // it rushes past the camera.
-            gfx::Particle streak;
-            const float ahead = particle_unit(), beside = particle_unit(), above = particle_unit();
-            streak.position = s.position + s.forward() * (30.0f + 20.0f * ahead) + s.right() * (12.0f * beside) +
-                              s.up() * (8.0f * above);
-            streak.velocity = s.velocity * 0.1f - s.forward() * 60.0f;
-            streak.size_start = 0.5f;
-            streak.size_end = 1.6f;
-            streak.drag = 1.0f;
-            streak.life = 0.5f;
-            streak.color_start = pale;
-            streak.color_end = pale * 0.3f;
-            streak.brightness = 0.5f;
-            particles_.spawn(streak);
+            emit_speed_streak(1.0f);
+        }
+    }
+    // Fast without boosting -- a dive, a pull-out -- the air streaks past
+    // too, more the faster (GAPS.md, G4): a dive at 80 m/s and a glide at 30
+    // looked alike. A boost already streaks.
+    if (!boosting && !flight_.state().grounded) {
+        const float over = (flight_.state().airspeed - speed_streak_from_) / 40.0f;
+        static float speed_carry = 0.0f;
+        if (over > 0.0f) {
+            speed_carry += dt * speed_streak_rate_ * core::minf(over, 1.0f);
+            while (speed_carry >= 1.0f) {
+                speed_carry -= 1.0f;
+                emit_speed_streak(core::minf(over, 1.0f));
+            }
+        } else {
+            speed_carry = 0.0f;
         }
     }
     if (boosting && !was_boosting_) {
@@ -3038,6 +3040,8 @@ void App::build_ui(float dt) {
         if (ImGui::TreeNode("Field of view")) {
             ImGui::SliderFloat("fov base", &c.fov_base_deg, 40.0f, 100.0f, "%.0f deg");
             ImGui::SliderFloat("fov/speed", &c.fov_speed_gain, 0.0f, 0.6f);
+            ImGui::SliderFloat("speed streaks from", &speed_streak_from_, 20.0f, 120.0f, "%.0f m/s");
+            ImGui::SliderFloat("speed streaks a second", &speed_streak_rate_, 0.0f, 200.0f, "%.0f");
             ImGui::SliderFloat("fov max", &c.fov_max_deg, 60.0f, 120.0f, "%.0f deg");
             ImGui::SliderFloat("fov lag", &c.fov_lag, 0.0f, 1.0f, "%.2f s");
             ImGui::TreePop();
@@ -6762,6 +6766,36 @@ void App::emit_flame(core::Vec3 origin, core::Vec3 direction, float range, bool 
             particles_.spawn(s);
         }
     }
+}
+
+// Rushing air: a thin pale line in the air about the camera, at rest in the
+// world while the camera flies past it, as long as a tenth of a second of
+// the flight. Born in a ring about the view's axis, never through its
+// middle: a streak across the dragon hides it. `strength` 0..1 dims it.
+// Born about the dragon, 30-50 m from the camera, streaks were thinner than
+// a pixel and never seen.
+void App::emit_speed_streak(float strength) {
+    const game::FlightState& s = flight_.state();
+    const gfx::Camera& camera = active_camera();
+    const core::Vec3 pale{0.6f, 0.7f, 0.85f};
+    gfx::Particle streak;
+    streak.kind = gfx::ParticleKind::Streak;
+    const float ahead = particle_unit();  // one draw per statement (emit_flame)
+    const float angle = particle_unit() * core::PI;
+    const float out = particle_unit();
+    const float radius = 5.0f + 3.0f * out;
+    streak.position = camera.position + camera.forward() * (22.0f + 10.0f * ahead) +
+                      (camera.right() * std::cos(angle) * 1.6f + camera.up() * std::sin(angle)) * radius;
+    streak.velocity = core::Vec3::zero();
+    const core::Vec3 along = core::normalize_or(s.velocity, s.forward());
+    streak.stretch = along * core::clampf(s.airspeed * 0.1f, 4.0f, 12.0f);
+    streak.size_start = 0.09f;
+    streak.size_end = 0.07f;
+    streak.life = 0.5f;
+    streak.color_start = pale;
+    streak.color_end = pale;
+    streak.brightness = 2.0f * strength;
+    particles_.spawn(streak);
 }
 
 // A landing has weight: dust thrown out in a ring and a jolt through the

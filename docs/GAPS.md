@@ -360,6 +360,22 @@ hide, with the veins still dark.
   dead with no damage (`STATUS.md`, `safe_landing_speed` is unread). A
   hard landing reads as weight now, but it costs nothing.
 
+### G4, third part (2026-10-21): speed
+
+The field of view already widened with airspeed and the wind's sound
+followed it; nothing was seen to rush past. Now streaks of air
+(`App::emit_speed_streak`, `gfx::ParticleKind::Streak`): thin pale lines at
+rest in the air in a ring about the camera's view, 22-32 m ahead, never
+through its middle, each as long as a tenth of a second of flight, so the
+camera flies past them. Past 55 m/s, up to 120 a second 40 m/s faster;
+always while boosting (the boost's streaks were round dots 30-50 m out,
+thinner than a pixel, never seen). Each is a ribbon along its world line
+turned to the eye, so in perspective they radiate from the heading:
+projected onto the camera plane, a line along the view lost its length
+and every streak fell vertical, like rain. Dials: Camera, "speed streaks
+from" and "a second". Light by design: Century's radial blur was the
+most criticised effect in its reviews.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

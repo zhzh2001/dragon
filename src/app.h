@@ -731,6 +731,11 @@ private:
     static BreathSmoke smoke_for(game::Element element);
     void set_local_light(gfx::SceneUniforms& scene) const;
     void on_touchdown(float sink);
+    void emit_speed_streak(float strength);
+    // Speed streaks (Camera panel): past this airspeed they start, and reach
+    // this many a second 40 m/s faster.
+    float speed_streak_from_ = 55.0f;
+    float speed_streak_rate_ = 120.0f;
     void update_downwash(float dt);
     float downwash_ = 0.0f;
     // Landing weight (Dragon panel): the grass's push under the wings (m at
