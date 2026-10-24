@@ -45,7 +45,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty-four suites, plain executables, no framework
+ctest --test-dir build            # twenty-five suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -102,10 +102,10 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--autopilot` | Hands-off. Without combat it flies the selected course; in a run or with combat on it is the demo pilot (`game::DemoPilot`), which plays through the player's own controls -- sieges guard towers, fights, lands on caches, walks in, collects, flees to heal, flies to the pass -- and rolls into the next valley or rematch after the results. Doubles as a soak test. |
 | `--stage N` | Start a run already grown (0 drake, 1 young, 2 adult) at full size: how each stage's size gets onto a capture. |
 | `--element NAME` | The player breathes that element (fire, frost, blight, storm, tide, stone) instead of the species' -- its look, its scales and its status (`COMBAT.md` "Elements"). Also the Combat panel's "you breathe". |
-| `--atmosphere key=value,...` | Over the modern tier's atmosphere dials (`gfx/atmosphere.h`, `docs/FIDELITY.md` F1): `on=0` for the analytic sky, `aerial`, `haze`, `glow`, `sky`, `fog`, `sky_light`, `disc`, and the rest the struct lists. |
+| `--atmosphere key=value,...` | Over the modern tier's atmosphere dials (`gfx/atmosphere.h`, `docs/FIDELITY.md` F1): `on=0` for the analytic sky, `aerial`, `haze`, `glow`, `sky`, `fog`, `sky_light`, `disc`, the valley mist's `mist` (density per metre at the floor, at a morning's mist), `mist_height` and `mist_patches`, and the rest the struct lists. |
 | `--terrain key=value,...` | Over the terrain's shape dials (`game/terrain.h`, `docs/GAPS.md` G1): `height`, `scale`, `ridge`, `ridge_scale`, `strata`, `strata_strength`, `hills`, `width`, `falloff`, `warp`, `warp_scale`, `profile`, `backdrop`, `spur`, `spur_spacing`, `erosion` (0 skips it), `erosion_strength`, `talus`, `thermal_rate`, `erodibility`. Applies to the arena and every run valley built from it. |
 | `--clouds key=value,...` | Over the modern tier's volumetric clouds (`gfx/clouds.h`, `docs/FIDELITY.md` F6): `on=0` for the sky's painted slab, `steps`, `extinction`, `shape`, `detail_scale`, `erosion`, `softness`, `sun`, `sky`, `history`. The layer's cover, base and thickness are `--atmosphere`'s `clouds`, `cloud_base`, `cloud_thickness`. |
-| `--sun ELEV[,AZ]` | The sun's elevation and azimuth in degrees: the time of day for a capture (late afternoon, 14 and 235, by default). |
+| `--sun ELEV[,AZ]` | The sun's elevation and azimuth in degrees: the time of day for a capture (late afternoon, 19 and 235 on the modern tier, 14 on the retro ones, by default). It also turns off the run's own time of day: on the modern tier each valley of a run is dealt an hour from its seed, morning in the first, evening in the last (`game/time_of_day.h`, the Atmosphere panel's "time of day from the seed"), and the log says which. |
 | `--status NAME` | Hold that element's status on every enemy (frost holds the freeze), for a capture of how each looks. |
 | `--valley N` | Start a run N valleys down the descent (a run is three valleys; each deeper is harder). |
 | `--demo` | The game playing itself: a hands-off run on a random valley, one after another. The same as P in play. |
@@ -120,6 +120,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--run [seed]` | The hoard run (`DIRECTION.md` row 3): one generated valley flown head to pass, rivals at posts and towers on the slopes along it, three hoard caches to land on, the pass gate, death ending it, results text. No seed picks one from the clock; the seed is printed and on the results screen so a good valley can be flown again. `--seed N` also sets it. |
 | `--hunters-after S` | In a run, loose the first hunter after S seconds instead of two minutes, for a capture of one. |
 | `--walk F[,T]` | Once grounded, walk at F (-1..1) turning at T: with `--input -0.25,0,0,0,0,0` it lands and then walks, the in-game check of the stride. |
+| `--skim` | Spawn six metres over the river, flying along it: how the spray off the water gets onto a capture. |
 | `--run-empty` | The run with no rivals and no towers: how the autopilot soaks the banking path (`--run-empty --autopilot --frames 8400` banks at the pass). |
 | `--bake-packs` | Write `<model>.glb.pack` beside every roster model (`--models` narrows it) and prop, then exit: the LODs and encoded textures a retro tier uploads, baked once (`anim/model_pack.h`, `PORTING.md` R2b). A retro tier loads a fresh pack instead of decoding the glTF -- 217 MB and 0.6 s for the roster against 983 MB and 6.7 s -- and the frame is byte-identical. `DRAGON_NO_PACKS=1` forces the glTF route for a comparison. Packs are gitignored build products; the Windows packager bakes its own. |
 | `--model PATH` | Load one rigged glTF instead of the default roster. Bench work on one creature should use it: the default roster loads seven meshes, about 3 s more per headless render (4.7 s against 1.9 s for 40 frames). |
@@ -138,7 +139,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--size WxH` | The window, or the headless render target (default 1280x720, or the window size saved in `graphics.cfg`). |
 | `--show-fps` | The frame-rate readout, top left (the Graphics panel's "show fps", saved; headless runs ignore the saved one). |
 | `--fullscreen`, `--windowed` | Over the saved choice (the Graphics panel's "fullscreen", restart-applied). D3D9 takes an exclusive display mode at the window's size, and handles losing it (Alt-Tab resets the device, `tools/xp/g41/dragon-alttab.ahk`); the SDL GPU backends get a borderless fullscreen window. On the G41's M6, 640x480 Minimal went from 25 to 18.6 ms (`docs/PORTING.md`, "R6, as built"). Headless ignores it. |
-| `DRAGON_FREEZE_AT=N`, `DRAGON_ABLATE=a,b` | Headless only: from frame N the world holds still and the same frame renders again and again; with `DRAGON_ABLATE` naming what to leave out (terrain_near, terrain_far, skirt, water, trees, grass, player, rings, run, prey, bots, sky, atmosphere, ssao, clouds, towers, projectiles, particles, ui, hud_combat, hud_run, hud_speed, hud_autopilot, and in the shadow pass tree_shadows, tree_shadows0/1/2 for one cascade's, terrain_shadows) and `DRAGON_FRAME_PROFILE=N` / `DRAGON_D3D9_PROFILE=N` counting from frame N, a slow moment of a run is taken apart on the machine it is slow on. Every headless run ends with `gpu: median` (the GPU's own time, from fences: the wall clock wanders 14-20 ms on a busy Mac where this does not) and `crowns:` (the crown vertices the last frame submitted, main pass and shadows: the forest's cost, counted rather than timed). |
+| `DRAGON_FREEZE_AT=N`, `DRAGON_ABLATE=a,b` | Headless only: from frame N the world holds still and the same frame renders again and again; with `DRAGON_ABLATE` naming what to leave out (terrain_near, terrain_far, skirt, water, trees, grass, player, rings, run, prey, bots, sky, atmosphere, ssao, clouds, towers, projectiles, particles, ui, hud_combat, hud_run, hud_speed, hud_autopilot, thermal_caps, mist, lens, and in the shadow pass tree_shadows, tree_shadows0/1/2 for one cascade's, terrain_shadows) and `DRAGON_FRAME_PROFILE=N` / `DRAGON_D3D9_PROFILE=N` counting from frame N, a slow moment of a run is taken apart on the machine it is slow on. `DRAGON_ABLATE_ALTERNATE=a,b` is the paired form: the frozen frame alternates every 30 frames between with and without those terms, and the log ends with `gpu a/b:`, each half's median and the difference. Both halves share whatever else loads the GPU, which separate runs on a busy Mac do not (`docs/GAPS.md`, "The suspected performance regression"). Every headless run ends with `gpu: median` (the GPU's own time, from fences: the wall clock wanders 14-20 ms on a busy Mac where this does not) and `crowns:` (the crown vertices the last frame submitted, main pass and shadows: the forest's cost, counted rather than timed). |
 | `--no-vsync` | D3D9 presents at once instead of on the refresh (the Graphics panel's "vsync", restart-applied, saved): at a 60 Hz mode vsync caps the frame rate at 60, so this is how a frame's real cost shows on the fps readout. `DRAGON_D3D9_VSYNC=0` does the same for a run. |
 | `--color 16\|32` | D3D9's colour depth (the panel's "16-bit colour"): a 5-6-5 world target, dithered, and a 16-bit display mode when fullscreen. On by default for the ff tier. |
 | `--open-panel graphics` | Start with the Graphics panel expanded and in front, for a capture of it. |
@@ -538,8 +539,8 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty-four suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
-             combat, bot, match, vegetation, breath, thermals
+tests/       twenty-five suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
+             combat, bot, match, vegetation, breath, thermals, time_of_day
 docs/        the detail -- see the table above
 ```
 

@@ -20,6 +20,9 @@ struct PostUniforms {
     // x how far the composite darkens toward the ambient occlusion (0: off),
     // y 1 when the scene is smaller than the target (an upscale)
     float4 occlusion;
+    // xy the sun on the screen (uv), z the lens flare's strength, w the sun's
+    // glare (0: off, or the sun behind the camera). The modern tier's.
+    float4 flare;
 };
 
 struct PostVertex {

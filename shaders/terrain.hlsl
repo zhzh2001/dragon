@@ -269,8 +269,21 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     // Snow only settles where it is both high and not too steep. The noise makes
     // the snow line ragged instead of a perfect contour.
     float ragged_snow_line = snow_line + (patches - 0.5) * 90.0;
+#ifdef ATMOSPHERE
+    // On the modern tier snow lies on what faces up, not above a contour
+    // (GAPS.md 1.9, Century's dark rock with snow on every upward face): in
+    // a band from well under the line, low down only the ledges -- the bent
+    // normal's flattest pixels -- hold it, near the crests all but the
+    // cliffs. Faces turned from the sun keep it lower down.
+    float snow_band = smoothstep(ragged_snow_line - 200.0, ragged_snow_line + 100.0, height);
+    float2 sun_flat = normalize(scene.sun.xz + 1e-4);
+    float shaded = saturate(-dot(normal.xz, sun_flat) * 2.0);
+    float needed = lerp(0.93, 0.55, snow_band) - 0.07 * shaded;
+    float snow_amount = smoothstep(needed - 0.05, needed + 0.03, flatness) * smoothstep(0.0, 0.2, snow_band);
+#else
     float snow_amount = smoothstep(ragged_snow_line, ragged_snow_line + 120.0, height) *
                         smoothstep(0.52, 0.78, flatness);
+#endif
     albedo = lerp(albedo, SNOW * modulate(detail.ground.a, strength), snow_amount);
 
     // Fine grain last, so it varies every material rather than only the grass.

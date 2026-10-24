@@ -279,6 +279,8 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--run") {
             options.run = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--skim") {
+            options.skim = true;
         } else if (arg == "--hunters-after" && i + 1 < argc) {
             options.hunters_after = float(SDL_atof(argv[++i]));
         } else if (arg == "--walk" && i + 1 < argc) {
@@ -866,6 +868,14 @@ void App::respawn_dragon() {
         look = hoard_run_.layout().start_look;
     }
 
+    // --skim: six metres over the river, flying along it -- how the spray
+    // off the water (App::update_spray) gets onto a capture.
+    if (options_.skim) {
+        const float z = -terrain_settings_.half_extent * 0.4f;
+        const float water = terrain_settings_.water_level;
+        spawn = core::Vec3{terrain_.river_center_x(z), water + 6.0f, z};
+        look = core::Vec3{terrain_.river_center_x(z + 120.0f), water + 6.0f, z + 120.0f};
+    }
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
     chase_.snap_to(flight_.state());
     // Health and breath come back, but the sentinels do not: dying should cost
@@ -2161,6 +2171,7 @@ void App::update(float dt) {
         if (flight_.state().grounded && !was_grounded && airborne_before_ > 0.33f) on_touchdown(sink_before);
         airborne_before_ = airborne_time_;
         update_downwash(dt);
+        update_spray(dt);
         emit_thermal_motes(dt);
         // The pounce: while an elder's boost is locked onto a target, the
         // flight is turned onto it -- velocity and nose together, at the
@@ -3202,7 +3213,13 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("sun azimuth", &lighting_.sun_azimuth_deg, 0.0f, 360.0f, "%.0f deg");
         ImGui::SliderFloat("sun elevation", &lighting_.sun_elevation_deg, -5.0f, 89.0f, "%.0f deg");
         ImGui::SliderFloat("sun intensity", &lighting_.sun_intensity, 0.0f, 8.0f);
-        ImGui::ColorEdit3("sun colour", lighting_.sun_color);
+        if (atmosphere_.available()) {
+            // The colour at 19 degrees; at any other height it is this
+            // through more or less air (game/time_of_day.h).
+            ImGui::ColorEdit3("sun colour at 19 deg", sun_colour_tuned_);
+        } else {
+            ImGui::ColorEdit3("sun colour", lighting_.sun_color);
+        }
         ImGui::ColorEdit3("zenith", lighting_.sky_zenith);
         ImGui::ColorEdit3("horizon", lighting_.sky_horizon);
         ImGui::ColorEdit3("fog", lighting_.fog_color);
@@ -3231,6 +3248,14 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("blue sky", &a.rayleigh, 0.0f, 4.0f, "%.2f x");
         ImGui::SliderFloat("ozone", &a.ozone, 0.0f, 4.0f, "%.2f x");
         ImGui::SliderFloat("valley fog kept", &a.valley_fog, 0.0f, 1.0f, "%.2f");
+        ImGui::SeparatorText("valley mist");
+        ImGui::Checkbox("time of day from the seed", &time_of_day_from_seed_);
+        ImGui::SetItemTooltip("A run's valleys go from morning to evening (game/time_of_day.h); the next valley takes it");
+        ImGui::Text("%s: mist %.2f", time_of_day_.name, double(time_of_day_.mist));
+        ImGui::SliderFloat("mist this valley", &time_of_day_.mist, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("mist density", &a.mist_density, 0.0f, 0.02f, "%.4f /m");
+        ImGui::SliderFloat("mist height", &a.mist_height_m, 5.0f, 300.0f, "%.0f m");
+        ImGui::SliderFloat("mist patches", &a.mist_patches, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("sky light", &a.sky_light, 0.0f, 3.0f, "%.2f");
         ImGui::SliderFloat("sun disc", &a.sun_disc, 0.0f, 400.0f, "%.0f");
         ImGui::SliderFloat("ground altitude", &a.ground_altitude_km, 0.0f, 3.0f, "%.2f km");
@@ -3300,6 +3325,10 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("bloom strength", &g.bloom_strength, 0.0f, 1.5f, "%.2f");
         ImGui::SliderFloat("bloom threshold", &g.bloom_threshold, 0.0f, 4.0f, "%.2f");
         ImGui::SliderFloat("bloom knee", &g.bloom_knee, 0.01f, 2.0f, "%.2f");
+        if (tier_.tier == gfx::Tier::Modern) {
+            ImGui::SliderFloat("lens flare", &g.lens_flare, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("sun glare", &g.sun_glare, 0.0f, 2.0f, "%.2f");
+        }
     }
 
     // The world's colours, live. Drag a tree green toward the ground green
@@ -3884,6 +3913,10 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("downwash on grass", &downwash_push_, 0.0f, 4.0f, "%.1f m");
         ImGui::SliderFloat("touchdown jolt", &touchdown_kick_, 0.0f, 8.0f, "%.1f deg");
         ImGui::ColorEdit3("dust", &dust_colour_.x);
+        ImGui::SliderFloat("spray off water", &spray_rate_, 0.0f, 300.0f, "%.0f /s");
+        // Above 1: smoke is drawn unlit, and spray in the sun is brighter
+        // than white paper.
+        ImGui::ColorEdit3("spray", &spray_colour_.x, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
     }
 
     if (ImGui::CollapsingHeader("Material maps", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -4894,6 +4927,7 @@ void App::start_run(uint32_t seed) {
         settings.guards = false;
         settings.max_hunters = 0;
     }
+    apply_time_of_day(seed, 0);
     if (terrain_run_seed_ != seed) {
         terrain_settings_ = terrain;
         if (!prebuilt.empty()) adopt_terrain_ = std::move(prebuilt[0]);
@@ -5116,6 +5150,7 @@ void App::advance_valley() {
     }
     const uint64_t waited = SDL_GetTicksNS();
     const bool adopted = adopt_terrain_.has_value();
+    apply_time_of_day(seed, depth);
     regenerate_terrain();
     terrain_run_seed_ = seed;
     hoard_run_.settings = settings;
@@ -5586,7 +5621,8 @@ void App::end_run() {
     hoard_run_.abandon();
     bots_.clear();
     restore_growth_base();
-    // Back to the arena's valley.
+    // Back to the arena's valley, and its afternoon.
+    restore_arena_time_of_day();
     if (terrain_run_seed_ != 0) {
         terrain_settings_ = arena_terrain_;
         regenerate_terrain();
@@ -6888,6 +6924,27 @@ void App::emit_thermal_motes(float dt) {
     }
 }
 
+// A run's valley gets its hour (game/time_of_day.h, GAPS.md G8): morning at
+// the head of the descent, evening at its end. Before the terrain is built,
+// since the thermals stand on the ground that faces this sun. The modern
+// tier's: the retro tiers have no long shadows or mist to show it, and
+// their pre-lit ground was tuned at their own 14 degrees.
+void App::apply_time_of_day(uint32_t seed, int depth) {
+    if (!time_of_day_from_seed_ || !atmosphere_.available() || options_.sun_elevation > -90.0f) return;
+    time_of_day_ = game::time_of_day_for(seed, depth, run_dials_.valleys);
+    lighting_.sun_elevation_deg = time_of_day_.sun_elevation_deg;
+    lighting_.sun_azimuth_deg = time_of_day_.sun_azimuth_deg;
+    LOG_INFO("time of day: %s, the sun at %.1f deg, bearing %.0f deg, mist %.2f", time_of_day_.name,
+             double(time_of_day_.sun_elevation_deg), double(time_of_day_.sun_azimuth_deg), double(time_of_day_.mist));
+}
+
+void App::restore_arena_time_of_day() {
+    if (!time_of_day_from_seed_ || !atmosphere_.available() || options_.sun_elevation > -90.0f) return;
+    time_of_day_ = game::TimeOfDay{};
+    lighting_.sun_elevation_deg = time_of_day_.sun_elevation_deg;
+    lighting_.sun_azimuth_deg = options_.sun_azimuth >= 0.0f ? options_.sun_azimuth : time_of_day_.sun_azimuth_deg;
+}
+
 // A landing has weight: dust thrown out in a ring and a jolt through the
 // camera, both growing with the speed it came down at and the dragon's size.
 void App::on_touchdown(float sink) {
@@ -6895,6 +6952,10 @@ void App::on_touchdown(float sink) {
     const game::FlightState& s = flight_.state();
     chase_.kick(touchdown_kick_ * (0.3f + 0.7f * hard) * growth_scale_);
     const float ground = terrain_.height_at(s.position.x, s.position.z);
+    // On the river the ring is spray, off its surface.
+    const bool water = ground < material_.water_level - 0.5f;
+    const float surface = water ? material_.water_level : ground;
+    const core::Vec3 colour = water ? spray_colour_ : dust_colour_;
     const int count = int(10.0f + 26.0f * hard);
     for (int i = 0; i < count; ++i) {
         const float angle = (float(i) + 0.5f * particle_unit()) / float(count) * core::TWO_PI;
@@ -6907,7 +6968,7 @@ void App::on_touchdown(float sink) {
         // dense puffs read as one flat sheet over the dragon.
         const float size = (1.0f + 0.6f * hard) * growth_scale_;
         const float start = (5.0f + 1.5f * particle_unit()) * growth_scale_;
-        p.position = core::Vec3{s.position.x, ground + size + 0.3f, s.position.z} + out * start;
+        p.position = core::Vec3{s.position.x, surface + size + 0.3f, s.position.z} + out * start;
         const float speed = (7.0f + 9.0f * hard) * (1.0f + 0.25f * particle_unit());
         p.velocity = out * speed + core::Vec3{0.0f, 1.2f + 0.6f * particle_unit(), 0.0f};
         p.acceleration = core::Vec3{0.0f, 1.2f, 0.0f};
@@ -6915,8 +6976,8 @@ void App::on_touchdown(float sink) {
         p.life = 1.1f + 0.4f * particle_unit();
         p.size_start = size;
         p.size_end = size * 2.8f;
-        p.color_start = dust_colour_;
-        p.color_end = dust_colour_ * 1.15f;
+        p.color_start = colour;
+        p.color_end = colour * 1.15f;
         p.brightness = 0.2f + 0.25f * hard;
         particles_.spawn(p);
     }
@@ -6936,6 +6997,68 @@ void App::update_downwash(float dt) {
     // In fast, out slowly: the air settles after the dragon does.
     downwash_ = core::damp(downwash_, target, target > downwash_ ? 0.08f : 0.6f, dt);
     foliage_.downwash = core::Vec4{s.position.x, 16.0f * growth_scale_, s.position.z, downwash_ * downwash_push_};
+}
+
+// Spray off the river (GAPS.md 1.4): the same kit as the touchdown's dust,
+// over water. Low and fast, the dragon's wake throws a sheet up beside and
+// behind it; low and slow, its wingbeat (the downwash) blows a ring off the
+// surface. Pale, rising fast and falling back, gone in a second.
+void App::update_spray(float dt) {
+    const game::FlightState& s = flight_.state();
+    if (s.grounded || spray_rate_ <= 0.0f) return;
+    const float water = material_.water_level;
+    if (terrain_.height_at(s.position.x, s.position.z) > water - 0.5f) return;  // not over the river
+    const float above = s.position.y - water;
+    const float low = 1.0f - core::smoothstep(1.0f, 9.0f * growth_scale_, above);
+    const float wake = core::smoothstep(12.0f, 40.0f, s.airspeed);
+    const float amount = low * core::maxf(wake, downwash_);
+    if (amount <= 0.0f) {
+        spray_carry_ = 0.0f;
+        return;
+    }
+    spray_carry_ += dt * spray_rate_ * amount;
+    const core::Vec3 along = core::normalize_or(core::Vec3{s.velocity.x, 0.0f, s.velocity.z}, core::Vec3::forward());
+    const core::Vec3 across{-along.z, 0.0f, along.x};
+    while (spray_carry_ >= 1.0f) {
+        spray_carry_ -= 1.0f;
+        const float side = particle_unit() < 0.5f ? -1.0f : 1.0f;
+        const float out = particle_unit();
+        const float back = particle_unit();
+        const float lift = particle_unit();
+        gfx::Particle p;
+        p.kind = gfx::ParticleKind::Smoke;
+        p.seed = particle_unit();
+        // The wake: thrown out to the sides from just behind the body; the
+        // wingbeat's: all round it.
+        const float spread = (2.0f + 5.0f * out) * growth_scale_;
+        const float size = (0.7f + 0.5f * amount) * growth_scale_;
+        p.position = core::Vec3{s.position.x, water + size * 0.6f, s.position.z} + across * (side * spread) -
+                     along * ((1.0f + 4.0f * back) * growth_scale_ * wake);
+        p.velocity = across * (side * (3.0f + 5.0f * out)) + core::Vec3{0.0f, 4.0f + 7.0f * lift * amount, 0.0f} +
+                     along * (s.airspeed * 0.25f * wake);
+        p.acceleration = core::Vec3{0.0f, -9.0f, 0.0f};
+        p.drag = 1.4f;
+        p.life = 0.8f + 0.5f * lift;
+        p.size_start = size * 0.8f;
+        p.size_end = size * 2.2f;
+        p.color_start = spray_colour_;
+        p.color_end = spray_colour_ * 1.1f;
+        p.brightness = 0.25f + 0.2f * amount;
+        particles_.spawn(p);
+        // And a drop thrown higher and faster, catching the light.
+        gfx::Particle drop;
+        drop.position = p.position;
+        drop.velocity = p.velocity * 1.4f + core::Vec3{0.0f, 3.0f, 0.0f};
+        drop.acceleration = core::Vec3{0.0f, -9.8f, 0.0f};
+        drop.drag = 0.4f;
+        drop.life = 0.7f + 0.3f * lift;
+        drop.size_start = 0.2f * growth_scale_;
+        drop.size_end = 0.12f * growth_scale_;
+        drop.color_start = core::Vec3{0.9f, 0.95f, 1.0f};
+        drop.color_end = core::Vec3{0.6f, 0.7f, 0.8f};
+        drop.brightness = 0.8f;
+        particles_.spawn(drop);
+    }
 }
 
 // The breath lights what is around it (scene_common.hlsl, local_light): the
@@ -8361,6 +8484,20 @@ void App::render() {
     const float aspect = device_.aspect();
     const gfx::Camera& camera = active_camera();
 
+    // The sun's colour through the air at its height (game/time_of_day.h):
+    // the tuned colour at 19 degrees, redder and dimmer below, whiter above.
+    // The retro tiers keep the tuned colour at their own 14.
+    if (atmosphere_.available()) {
+        const core::Vec3 key{lighting_.sun_elevation_deg, atmosphere_settings_.rayleigh, atmosphere_settings_.mie};
+        if (key.x != sun_colour_key_.x || key.y != sun_colour_key_.y || key.z != sun_colour_key_.z) {
+            sun_colour_key_ = key;
+            sun_colour_ratio_ = game::sun_colour_ratio(lighting_.sun_elevation_deg, 19.0f, atmosphere_settings_.rayleigh,
+                                                       atmosphere_settings_.mie);
+        }
+        lighting_.sun_color[0] = sun_colour_tuned_[0] * sun_colour_ratio_.x;
+        lighting_.sun_color[1] = sun_colour_tuned_[1] * sun_colour_ratio_.y;
+        lighting_.sun_color[2] = sun_colour_tuned_[2] * sun_colour_ratio_.z;
+    }
     shadow_.update(camera, lighting_.sun_direction());
     taa_.begin_frame(camera, aspect, device_.world_width(), device_.world_height());
 
@@ -8399,12 +8536,18 @@ void App::render() {
     set_local_light(scene);
     {
         const auto& columns = thermals_.columns();
-        const int n = std::min(int(columns.size()), gfx::SceneUniforms::MAX_THERMALS);
+        const int n = ablated("thermal_caps") ? 0 : std::min(int(columns.size()), gfx::SceneUniforms::MAX_THERMALS);
         for (int i = 0; i < n; ++i) {
             const game::Thermal& t = columns[size_t(i)];
             scene.thermals[i] = core::Vec4{t.base.x, t.radius, t.base.z, t.strength};
         }
         scene.thermal_count = core::Vec4{float(n), 0.0f, 0.0f, 0.0f};
+    }
+    // The valley mist (scene_common.hlsl, valley_mist), the modern tier's:
+    // pooled on the floor, as thick as the valley's hour makes it.
+    if (atmosphere_.available() && atmosphere_settings_.enabled && !ablated("mist")) {
+        const gfx::AtmosphereSettings& a = atmosphere_settings_;
+        scene.mist = core::Vec4{a.mist_density * time_of_day_.mist, material_.water_level, a.mist_height_m, a.mist_patches};
     }
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);
@@ -8777,6 +8920,16 @@ void App::render() {
         if (!taa_.active()) post.sharpen = 0.0f;
         // The modern tier's (SM3 runs this composite too, and keeps its picture).
         post.fxaa = aa_mode_ == 1 && taa_.available();
+        if (ablated("lens")) post.lens_flare = post.sun_glare = 0.0f;
+        // Where the sun is on the screen, for its glare (post_composite.hlsl).
+        {
+            const gfx::Camera& camera = active_camera();
+            const core::Vec4 clip =
+                camera.view_projection(aspect) * core::Vec4{camera.position + lighting_.sun_direction() * 1000.0f, 1.0f};
+            post_.sun_ahead = clip.w > 0.0f && lighting_.sun_elevation_deg > -1.0f;
+            const float w = core::maxf(clip.w, 1e-4f);
+            post_.sun_uv = core::Vec2{clip.x / w * 0.5f + 0.5f, 0.5f - clip.y / w * 0.5f};
+        }
         post_.run(device_, post, resolved, occlusion, ssao_settings_.strength);
     }
 
@@ -8856,6 +9009,19 @@ void App::run() {
     // the wall clock varies 14-20 ms run to run on the same frozen frame
     // when the machine is busy; this does not.
     std::vector<float> gpu_ms;
+    // DRAGON_ABLATE_ALTERNATE=a,b (with DRAGON_FREEZE_AT): the frozen frame
+    // drawn 30 times with DRAGON_ABLATE's list, then 30 with this one added,
+    // and so on, each half's GPU time kept apart -- a paired A/B, both sides
+    // under whatever else the GPU is doing. Separate runs of one frame
+    // wandered 16-25 ms on a busy M5; repeats of this agree within about
+    // 0.4 ms (GAPS.md, "The suspected performance regression").
+    const std::string base_ablate = ablate_;
+    std::string alternate_ablate;
+    if (const char* alternate = SDL_getenv("DRAGON_ABLATE_ALTERNATE"); alternate && freeze_at_ > 0) {
+        alternate_ablate = (base_ablate.empty() ? "," : base_ablate) + std::string(alternate) + ",";
+    }
+    std::vector<float> gpu_with, gpu_without;
+    int ablate_switched = 0;
     uint64_t frame_started = started;
     // DRAGON_FRAME_PROFILE=1: where a frame's wall clock goes, by phase,
     // averaged past the first second -- how a slow machine (the G41) is
@@ -8879,6 +9045,14 @@ void App::run() {
     };
 
     while (running_) {
+        if (!alternate_ablate.empty() && uint64_t(frame_index_) >= freeze_at_ + 30) {
+            const bool off = ((uint64_t(frame_index_) - freeze_at_) / 30) % 2 == 1;
+            const std::string& want = off ? alternate_ablate : base_ablate;
+            if (ablate_ != want) {
+                ablate_ = want;
+                ablate_switched = 0;
+            }
+        }
         uint64_t now = SDL_GetTicksNS();
         float dt = float(now - previous_ticks) * 1e-9f;
         previous_ticks = now;
@@ -8982,7 +9156,14 @@ void App::run() {
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
         frame_ms.push_back(float(double(frame_ended - frame_started) * 1e-6));
-        if (const float g = device_.rhi().gpu_frame_ms(); g > 0.0f) gpu_ms.push_back(g);
+        if (const float g = device_.rhi().gpu_frame_ms(); g > 0.0f) {
+            gpu_ms.push_back(g);
+            // The fence reports a frame or two late: a half's first eight
+            // samples may belong to the other half.
+            if (!alternate_ablate.empty() && uint64_t(frame_index_) > freeze_at_ + 30 && ++ablate_switched > 8) {
+                (ablate_ == base_ablate ? gpu_with : gpu_without).push_back(g);
+            }
+        }
         frame_started = frame_ended;
         if (options_.frames > 0 && frame_index_ >= options_.frames) running_ = false;
     }
@@ -9033,6 +9214,14 @@ void App::run() {
     LOG_INFO("worst frame: %.1f ms", settled.empty() ? 0.0 : double(settled.back()));
     LOG_INFO("crowns: %.2f M vertices main, %.2f M shadows (the last frame)",
              double(foliage_.crown_vertices_main()) * 1e-6, double(foliage_.crown_vertices_shadow()) * 1e-6);
+    if (!gpu_with.empty() && !gpu_without.empty()) {
+        std::sort(gpu_with.begin(), gpu_with.end());
+        std::sort(gpu_without.begin(), gpu_without.end());
+        const float with = gpu_with[gpu_with.size() / 2], without = gpu_without[gpu_without.size() / 2];
+        LOG_INFO("gpu a/b: median %.2f ms as set, %.2f ms without %s: %+.2f ms (%zu and %zu frames)", double(with),
+                 double(without), SDL_getenv("DRAGON_ABLATE_ALTERNATE"), double(with - without), gpu_with.size(),
+                 gpu_without.size());
+    }
     if (gpu_ms.size() > 60) {
         std::vector<float> g(gpu_ms.begin() + 60, gpu_ms.end());
         std::sort(g.begin(), g.end());

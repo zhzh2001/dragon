@@ -11,8 +11,9 @@
 float4 fs_main(CloudVertex input) : SV_Target {
     float2 xz = vol.weather.xy + (input.uv - 0.5) * 2.0 * vol.weather.z;
     float cover = scene.clouds.x;
-    float caps = thermal_caps(xz);
-    float coverage = max(saturate((cloud_field(xz) - (1.0 - cover) * 0.85) / (0.18 + vol.shape.w * 0.4)), caps);
+    float field = cloud_field(xz);
+    float caps = thermal_caps(xz, field);
+    float coverage = max(saturate((field - (1.0 - cover) * 0.85) / (0.18 + vol.shape.w * 0.4)), caps);
     // Towering here, flat there: a broad noise of its own; a thermal's
     // cumulus heaps up.
     float tall = max(smoothstep(0.3, 0.8, cloud_value((xz + cloud_drift()) / 7000.0 + 41.0)), caps * 0.8);

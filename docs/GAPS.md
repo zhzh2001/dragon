@@ -470,6 +470,115 @@ as a resource the valley offers, read from the sky.
 Not yet: ridge lift on windward slopes, thermals in the bots' and the demo
 pilot's plans (they fly through them by chance), and caps less round.
 
+### G8 and G9, first part, as built (2026-10-24): the hour, the mist, the lens
+
+A batch for one playtest, chosen to change the picture and not the play.
+Modern tier only. Renders in `artifacts/gap-study/g9-*` and `g4-spray.png`.
+
+- A time of day for each valley (`game/time_of_day.h`, 1.7). A run starts
+  in the morning (sun 12-16 degrees, ahead and to the right). The second
+  valley is the afternoon (19-26 degrees, near the tuned bearing), and the
+  last is the evening (12-15 degrees, ahead and to the left). Each
+  valley's seed jitters the hour. The thermals are placed after the sun is
+  set, so they stand on the ground that faces it. The arena keeps its
+  afternoon. `--sun` turns the run's hours off. Atmosphere panel, "time of
+  day from the seed".
+- The sun's colour follows its height. `sun_colour_ratio` integrates the
+  Rayleigh and aerosol optical depth along the sun's ray on the sphere and
+  divides by the 19-degree path. The tuned colour is the 19-degree colour
+  (Sky & light, "sun colour at 19 deg"). At 10 degrees it is
+  (0.88, 0.76, 0.52) of that, at 26 degrees (1.04, 1.09, 1.23).
+  `test_time_of_day` checks both, and the order of the hours.
+- Valley mist (`valley_mist` in `scene_common.hlsl`, 1.9). An exponential
+  layer over the valley floor (the water level), 50 m to 1/e, integrated in
+  closed form along each ray. Two drifting noises cut it into banks with
+  gaps. The sun lights it with forward scattering (Henyey-Greenstein,
+  g 0.45) except where the terrain-sun map shades the ground under it, and
+  the sky lights it everywhere. The density is 0.0045 per metre at the
+  floor in the morning, 0.4 of that in the evening, and zero in the
+  afternoon. `--atmosphere mist=,mist_height=,mist_patches=`. Found on the
+  way:
+  - At 0.0035 nothing showed, and a layer without patches read as blue
+    smog.
+  - Lit by the sky alone, the shaded mist was grey-blue. A mist scatters
+    many times over, so it now takes twice the sky light a surface does,
+    and a twentieth of the sun even in shade.
+  - At 0.006 and 60 m the floor under a dragon 180 m up was half hidden,
+    the herds and caches with it. At 0.0045 and 50 m it lets through two
+    thirds there, and a tenth 2 km out.
+  - An afternoon mist of 0.12 washed the far floor milky from any raised
+    camera, because 2-3 km of thin layer adds up. The `dragon-side` golden
+    moved by a mean of 20/255 with it and by 1.9 without it.
+- The lens (`post_composite.hlsl`, 1.9). Ghosts of the bloom are mirrored
+  through the centre at four scales, with a halo ring (Chapman's
+  screen-space flare). Their source is the bloom above 0.5: the clouds'
+  own bloom made a purple disc in the middle of the sky. When the sun is
+  in the frame, a glare surrounds it: twelve rays, a halo and a faint
+  veil. The glare is as bright as five taps of the scene about the sun
+  disc show, so a ridge or a cloud in front of the sun puts it out. A veil
+  spread over the whole frame greyed every shot with the sun in it. Grade
+  & bloom, "lens flare" (0.06) and "sun glare" (0.4).
+- Snow on the upward faces (`terrain.hlsl`, 1.9). From 200 m under the
+  ragged snow line to 100 m over it, the flatness that holds snow falls
+  from 0.93 to 0.55. Low down only the ledges keep it, which are the bent
+  normal's flattest pixels. Near the crests all but the cliffs keep it.
+  Faces turned from the sun hold snow 0.07 steeper. The retro tiers keep
+  the contour.
+- Spray off the river (`App::update_spray`, 1.4). Low and fast over the
+  water, the wake throws a sheet of spray and drops out to the sides. Low
+  and slow, the wingbeat blows it off all round. A touchdown on the river
+  throws spray, not dust. Smoke particles are drawn unlit, so sunlit spray
+  needs a colour over 1 (1.25, 1.32, 1.4); at 0.65 it read as grey
+  cotton. Dragon panel, Landing weight, "spray off water". `--skim`
+  spawns the dragon six metres over the river for a capture.
+- The thermals' caps are less round. A cap's coverage stops at 0.72, so
+  the volumetric march's billows cut into it, and it carries lobes a few
+  hundred metres across. From below, each cap was one smooth white ball.
+  It is still soft; the march's shape noise is the next step.
+
+Found, not fixed: skimming the river, the water shows harsh white streaks
+toward the far bank, where every wave tips the near-mirror reflection
+between sky and bank. Flattening the waves edge-on did not change it. In
+the evening valley the whole floor can lie in the walls' shade.
+
+### The suspected performance regression (2026-10-24)
+
+No recent change costs more than about 0.6 ms of GPU time at 1080p on the
+M5. What looked like a regression was the machine's other load.
+
+- Eight commits from `e5d388b` to `a7bd866`, built in worktrees and run in
+  commit order on four scenes, showed the GPU time climbing by commit. On
+  the frozen run frame it was 10.7 ms at `f8c7307`, 12.5 at `c0a9608` and
+  14.0 at `a7bd866`. Interleaved and repeated, the same binaries gave
+  16-21 ms for the same frame in any order. With no game running, the GPU
+  sat at about 20% utilization, with bursts to 90% (other agents' jobs,
+  WindowServer, Defender scanning the new worktrees).
+- So the measure became paired. `DRAGON_ABLATE_ALTERNATE=term` with
+  `DRAGON_FREEZE_AT` draws the frozen frame 30 times with the term and 30
+  times without it, alternating, and logs each half's median. Both halves
+  see the same contention. Three runs of 1800 frames each:
+
+  | Term | Vista | Run, frame 240 |
+  |---|---|---|
+  | `thermal_caps`, the cumulus over the thermals (`a7bd866`) | +0.13 to +0.60 ms | -0.16 to +0.61 ms |
+  | `particles`, which holds the speed streaks (`c0a9608`) and the motes | not run | -1.8 to -0.2 ms (none) |
+  | `thermal_caps` after the fix below | -0.39 to +0.05 ms | -0.01 to +0.60 ms |
+  | `mist`, this batch's, in valley 1's morning | not drawn (the arena's afternoon has none) | +0.27 to +0.61 ms |
+  | `lens`, this batch's, the sun in the frame | +0.10 to -0.13 ms (the sun at the corner) | +0.07 to +0.19 ms |
+
+- The thermal caps cost every world pixel a loop over twelve columns in
+  its cloud shadow, and a second four-octave cloud field under a cap. The
+  loop now skips a column more than three cap-widths away before its
+  `exp`, and the cap reuses the field the coverage already read.
+- The mist runs per fragment, under the forest's overdraw too. It returns
+  before its noise when the layer along the ray is too thin to show, and
+  the glare returns before its taps past 0.6 of the frame from the sun:
+  0.45 ms and 0.4-0.7 ms before those two changes.
+- One change a playtester can feel as a regression: since `6e5b221`,
+  dynamic resolution defaults on only for displays over 1300 lines. On a
+  1080p window a heavy frame now shows as a lower frame rate, not as a
+  softer picture. The Graphics panel's "dynamic resolution" turns it on.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

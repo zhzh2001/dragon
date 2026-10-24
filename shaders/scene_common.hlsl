@@ -75,6 +75,10 @@ struct SceneUniforms {
     // (m/s); thermal_count.x how many. A cumulus caps each (cloud_coverage).
     float4 thermals[12];
     float4 thermal_count;
+    // The valley mist (valley_mist, the modern tier's): x its density at the
+    // floor (per metre; 0 for none), y the floor's height, z the height over
+    // it in which it thins by e, w how patchy it is.
+    float4 mist;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
@@ -225,7 +229,8 @@ float cloud_field(float2 xz) {
 // condenses at its top, which is how a pilot finds one from kilometres
 // away. Wider than the column, ragged with the field, fuller for a stronger
 // one. The volumetric clouds' weather map reads it too (clouds_weather.hlsl).
-float thermal_caps(float2 xz) {
+// `field` is cloud_field at the point, which the caller has already paid for.
+float thermal_caps(float2 xz, float field) {
     float caps = 0.0;
     for (int i = 0; i < 12; ++i) {
         if (float(i) >= scene.thermal_count.x) break;
@@ -233,14 +238,24 @@ float thermal_caps(float2 xz) {
         // 4.5 radii: the weather map's texels are 156 m, and a cap two of
         // them across drew as a faceted lump.
         float2 d = (xz - t.xz) / (t.y * 4.5);
-        caps = max(caps, exp(-dot(d, d)) * saturate(t.w / 5.0));
+        float r2 = dot(d, d);
+        // Past three of those widths the cap is under a thousandth: every
+        // world pixel asks this for its cloud shadow.
+        if (r2 < 9.0) caps = max(caps, exp(-r2) * saturate(t.w / 5.0));
     }
     if (caps <= 0.0) return 0.0;
-    return saturate(caps * (0.7 + 0.6 * cloud_field(xz * 1.3)) * 1.3 - 0.2);
+    // Lobes a few hundred metres across, so a cap is a heap of towers and
+    // not a disc: from below, a Gaussian alone drew a ball of cotton.
+    caps *= 0.45 + 1.1 * cloud_value(xz / 300.0 + 13.1);
+    // Short of solid: at full coverage the volumetric march's billows have
+    // nothing to cut (clouds_march.hlsl, the shape remapped by the coverage),
+    // and a cap drew as one smooth white lump.
+    return saturate(caps * (0.7 + 0.6 * field) * 1.3 - 0.2) * 0.72;
 }
 float cloud_coverage(float2 xz) {
     float cover = scene.clouds.x;
-    return max(saturate((cloud_field(xz) - (1.0 - cover) * 0.85) / 0.18), thermal_caps(xz));
+    float field = cloud_field(xz);
+    return max(saturate((field - (1.0 - cover) * 0.85) / 0.18), thermal_caps(xz, field));
 }
 // The density at a point in the slab: the coverage, rounded at the base and
 // heaped toward the top, frayed by a finer noise.
@@ -554,6 +569,63 @@ float3 translucent_sun(float3 normal, float visibility, float translucency) {
 // occlusion darkens that part only (occlusion_share).
 static float g_surface_share = 1.0;
 #endif
+#ifdef USE_ATMOSPHERE
+// The valley mist (GAPS.md G9, game/time_of_day.h): air that pools on the
+// valley floor, thick at dawn, thin by the afternoon, so the valley has a
+// layer below the viewer instead of air that is clear to the far wall. An
+// exponential in height over the floor, integrated in closed form along the
+// ray, its density patched by a broad drifting noise where the ray ends and
+// half way along it. Lit by the sun (forward-scattering, so it glows looking
+// toward the light) where the terrain does not shade it, and by the sky.
+// Returns the light it adds, and in a how much of what is behind it shows.
+float4 valley_mist(float3 world_position, float3 ray, float dist) {
+    float density = scene.mist.x;
+    if (density <= 0.0) return float4(0.0, 0.0, 0.0, 1.0);
+    float height = scene.mist.z;
+    float3 eye = scene.camera_position.xyz;
+    float a = max(eye.y - scene.mist.y, 0.0);
+    float b = max(world_position.y - scene.mist.y, 0.0);
+    float ea = exp(-a / height), eb = exp(-b / height);
+    // The mean of exp(-h / H) over the ray: (ea - eb) / ((b - a) / H), or
+    // ea when the ray runs level.
+    float mean = abs(b - a) > 0.5 ? (ea - eb) * height / (b - a) : 0.5 * (ea + eb);
+    // The most the patches can make of it is 1.7 times: a peak, the sky's
+    // edge or a short ray over the mist stops here, before the noise.
+    float depth = density * mean * dist;
+    if (depth * 1.7 < 0.002) return float4(0.0, 0.0, 0.0, 1.0);
+    // Banks and gaps 400-900 m across, drifting with the wind: one sample
+    // where the ray ends (the densest part when it looks down into the
+    // valley) and one half way (when it runs along the floor).
+    float2 drift = float2(3.0, 1.2) * scene.view_params.z;
+    float2 mid = lerp(eye.xz, world_position.xz, 0.5);
+    float patch_end = cloud_value((world_position.xz + drift) / 650.0) * 0.6 +
+                      cloud_value((world_position.xz - drift) / 260.0 + 3.7) * 0.4;
+    float patch_mid = cloud_value((mid + drift) / 650.0);
+    // Cut, not just varied, so there are gaps the ground shows through.
+    float bank = saturate((patch_end * 0.65 + patch_mid * 0.35 - 0.32) * 2.6);
+    depth *= max(lerp(1.0, 1.7 * bank, scene.mist.w), 0.0);
+    float transmittance = exp(-depth);
+    if (transmittance > 0.999) return float4(0.0, 0.0, 0.0, 1.0);
+    float3 to_sun = normalize(scene.sun.xyz);
+    // Henyey-Greenstein at g 0.45, scaled so its mean over the sphere is 1.
+    const float g = 0.45;
+    float phase = (1.0 - g * g) / pow(max(1.0 + g * g - 2.0 * g * dot(ray, to_sun), 1e-3), 1.5);
+    float sunlit = 1.0;
+#ifdef USE_TERRAIN_SUN
+    // In the shade of a ridge where the mist lies: half its height over the
+    // ground the ray ends on.
+    sunlit = terrain_sun(world_position + float3(0.0, height * 0.5, 0.0));
+#endif
+    // A mist is white and scatters many times over: brighter than a grey
+    // surface in the same light, and even in a ridge's shade it carries
+    // some of the sun the mist beside it took.
+    float3 light = scene.sun_color.rgb * scene.sun.w * (sunlit * (0.14 + 0.2 * phase) + 0.05) +
+                   atmo_atlas(float2(0.5, ATMO_AMBIENT_ROW + 0.5)).rgb * scene.atmosphere.x * scene.atmosphere2.y *
+                       scene.terrain_params.w * 2.2;  // the sky light from straight up (atmo_sky_light)
+    return float4(light * (1.0 - transmittance), transmittance);
+}
+#endif
+
 float3 apply_fog(float3 lit_color, float3 world_position) {
     float3 to_point = world_position - scene.camera_position.xyz;
     float dist = length(to_point);
@@ -562,6 +634,10 @@ float3 apply_fog(float3 lit_color, float3 world_position) {
 #ifdef USE_ATMOSPHERE
     float3 surface = lit_color;
     if (atmosphere_on()) {
+        // The mist first, nearest the surface; the air in front of it next.
+        float4 mist = valley_mist(world_position, ray, dist);
+        lit_color = lit_color * mist.a + mist.rgb;
+        surface *= mist.a;
         float4 air = atmo_aerial(world_position);
         lit_color = lit_color * air.a + air.rgb;
         surface *= air.a;

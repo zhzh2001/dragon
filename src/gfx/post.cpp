@@ -141,6 +141,9 @@ void PostProcess::run(Device& device, const PostSettings& settings, rhi::Texture
     u.texel.z = settings.enabled ? settings.sharpen + upscale_sharpen : 0.0f;  // the composite's sharpening
     u.texel.w = settings.fxaa ? 1.0f : 0.0f;
     u.occlusion = core::Vec4{occlusion && settings.enabled ? occlusion_strength : 0.0f, upscale ? 1.0f : 0.0f, 0.0f, 0.0f};
+    const bool lens = settings.enabled && active_tier().tier == Tier::Modern;
+    u.flare = core::Vec4{sun_uv.x, sun_uv.y, lens ? settings.lens_flare : 0.0f,
+                         lens && sun_ahead ? settings.sun_glare : 0.0f};
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &u, sizeof(u));
     bind(pass, scene, 0);
     bind(pass, device.bloom_a(), 1);

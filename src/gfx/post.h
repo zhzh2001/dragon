@@ -16,6 +16,7 @@ struct PostUniforms {
     core::Vec4 balance;     // temperature, tint, lift, gamma
     core::Vec4 texel;       // 1/w, 1/h, blur dir x, blur dir y
     core::Vec4 occlusion;   // x the ambient occlusion's strength (0: off)
+    core::Vec4 flare;       // xy the sun on the screen (uv), z the lens flare, w the sun's glare (0: off)
 };
 
 // The grade and the bloom, as dials. Everything a person would drag while
@@ -55,6 +56,11 @@ struct PostSettings {
     // FXAA in the composite (post_composite.hlsl): the spatial anti-aliasing,
     // for when the temporal resolve is off.
     bool fxaa = false;
+    // The modern tier's lens (post_composite.hlsl, GAPS.md G9): ghosts of
+    // the bright spots mirrored through the centre, and a glare of rays about
+    // the sun when it is in the frame and not behind a ridge.
+    float lens_flare = 0.06f;
+    float sun_glare = 0.4f;
 };
 
 // Renders the HDR scene target to the 8-bit scene colour target through the
@@ -72,6 +78,11 @@ public:
     // its strength; null for none.
     void run(Device& device, const PostSettings& settings, rhi::Texture* scene, rhi::Texture* occlusion = nullptr,
              float occlusion_strength = 0.0f);
+
+    // Where the sun is on the screen (uv, y down) and whether it is ahead of
+    // the camera at all, for the glare; set each frame before run().
+    core::Vec2 sun_uv{0.5f, 0.5f};
+    bool sun_ahead = false;
 
 private:
     PostUniforms uniforms_for(const PostSettings& settings, float w, float h,

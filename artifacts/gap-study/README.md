@@ -44,3 +44,14 @@ on the M5.
 | File | What |
 |---|---|
 | `g7-thermal-caps.png` | Top-down `--cam 0,7000,10,0,0,0`, the run 7 chase view, and a cap from below: a cumulus over each thermal along the corridor |
+| `g7-caps-before-after.png` | `--run 7 --sun 19,235 --cam 109,200,1100,109,1550,139`, a cap from below, before and after: capped at 0.72 coverage and lobed |
+
+## G8 and G9, the hour, the mist, the lens
+
+| File | What |
+|---|---|
+| `g9-time-of-day.png` | `--run 7 --autopilot`, frozen at frame 240: before (the afternoon), then valley 1 (morning), with `--valley 1` (afternoon) and `--valley 2` (evening) |
+| `g9-mist.png` | Valley 1's morning with `DRAGON_ABLATE=mist` and without it |
+| `g9-sun-glare.png` | `--cam 300,320,700,-1300,620,-300` in the arena, into the sun: before and after (rays, halo, ghosts) |
+| `g9-snow.png` | The run's chase view with `--sun 19,235`, before and after: snow on the crests' upward faces and ledges |
+| `g4-spray.png` | `--skim --frames 30`: the wake's spray and drops off the river |

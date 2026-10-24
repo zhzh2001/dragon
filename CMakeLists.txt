@@ -94,6 +94,7 @@ target_sources(dragon PRIVATE
   src/core/noise.cpp
   src/game/debug_camera.cpp
   src/game/thermals.cpp
+  src/game/time_of_day.cpp
   src/game/terrain.cpp
   src/game/erosion.cpp
   src/game/flight.cpp
@@ -541,3 +542,11 @@ target_include_directories(test_thermals PRIVATE src)
 target_link_libraries(test_thermals PRIVATE SDL3::SDL3)
 target_compile_options(test_thermals PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME thermals COMMAND test_thermals)
+
+add_executable(test_time_of_day
+  tests/test_time_of_day.cpp
+  src/game/time_of_day.cpp
+)
+target_include_directories(test_time_of_day PRIVATE src)
+target_compile_options(test_time_of_day PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME time_of_day COMMAND test_time_of_day)

@@ -68,6 +68,65 @@ float3 fxaa(float2 uv, float2 t) {
     return (l_b < l_min || l_b > l_max) ? a : b;
 }
 
+#ifdef ATMOSPHERE
+// The lens (GAPS.md G9): Century and Ace Combat put the sun in the shot, with
+// its glare and the ghosts a camera's glass makes of it. Two parts, both in
+// linear light before the exposure, so they bloom and tonemap with the rest.
+//
+// The ghosts: the bloom's bright spots mirrored through the centre at four
+// scales, each tinted as a coated lens tints them, fading toward the frame's
+// edge (Chapman's screen-space flare), and a thin halo ring. The bloom is
+// already thresholded, so only the sun, fire and glinting snow make any.
+float3 lens_ghosts(float2 uv) {
+    float2 mirrored = 1.0 - uv;
+    float2 to_centre = 0.5 - mirrored;
+    const float3 TINT[4] = {float3(1.0, 0.85, 0.65), float3(0.7, 0.85, 1.0), float3(0.95, 0.75, 1.0), float3(0.8, 1.0, 0.85)};
+    const float SCALE[4] = {0.35, 0.75, 1.3, 1.75};
+    float3 sum = (float3)0.0;
+    for (int i = 0; i < 4; ++i) {
+        float2 at = mirrored + to_centre * SCALE[i];
+        float edge = saturate(1.0 - length(at - 0.5) * 1.6);
+        // Only what is far brighter than a sunlit cloud: the clouds' own
+        // bloom made a purple disc in the middle of the sky.
+        float3 source = max(bloom.SampleLevel(bloom_sampler, at, 0.0).rgb - 0.5, 0.0);
+        sum += source * TINT[i] * (edge * edge * edge);
+    }
+    float2 ring = normalize(to_centre + 1e-5) * 0.38;
+    float halo = pow(saturate(1.0 - abs(length(mirrored + ring - 0.5) - 0.38) * 12.0), 2.0);
+    sum += max(bloom.SampleLevel(bloom_sampler, mirrored + ring, 0.0).rgb - 0.5, 0.0) * float3(0.8, 0.85, 1.0) * halo * 0.5;
+    return sum;
+}
+
+// The glare: rays and a broad veil about the sun when it is in the frame,
+// as bright as the sun disc that shows -- five taps of the scene about it, so
+// a ridge or a cloud in front puts it out.
+float3 sun_glare(float2 uv, float2 sun_uv, float aspect) {
+    float2 d = (uv - sun_uv) * float2(aspect, 1.0);
+    float r = length(d);
+    // Past 0.6 of the frame's height every term below is under a percent.
+    if (r > 0.6 || any(sun_uv < -0.2) || any(sun_uv > 1.2)) return (float3)0.0;
+    float2 t = post.texel.xy * 3.0;
+    float3 seen = (scene_color.SampleLevel(scene_color_sampler, sun_uv, 0.0).rgb +
+                   scene_color.SampleLevel(scene_color_sampler, sun_uv + float2(t.x, 0.0), 0.0).rgb +
+                   scene_color.SampleLevel(scene_color_sampler, sun_uv - float2(t.x, 0.0), 0.0).rgb +
+                   scene_color.SampleLevel(scene_color_sampler, sun_uv + float2(0.0, t.y), 0.0).rgb +
+                   scene_color.SampleLevel(scene_color_sampler, sun_uv - float2(0.0, t.y), 0.0).rgb) * 0.2;
+    // The disc is tens of units bright; the sky beside it two or three.
+    float visible = smoothstep(4.0, 20.0, dot(seen, float3(0.2126, 0.7152, 0.0722)));
+    if (visible <= 0.0) return (float3)0.0;
+    float3 colour = seen / max(max(seen.r, max(seen.g, seen.b)), 1e-4);
+    float angle = atan2(d.y, d.x);
+    // Six long rays and six short ones between, turning a little with the
+    // sun's place so they do not sit still on the screen.
+    float turn = (sun_uv.x + sun_uv.y) * 1.3;
+    float rays = pow(abs(cos(angle * 3.0 + turn)), 60.0) + 0.5 * pow(abs(cos(angle * 3.0 + turn + 1.5708)), 90.0);
+    // The veil kept close: spread over the frame, it greyed every shot with
+    // the sun in it, the dragon's dark hide most.
+    float3 glare = colour * (rays * 0.6 / (1.0 + r * 40.0) + 0.4 * exp(-r * 9.0) + 0.04 * exp(-r * 3.0));
+    return glare * visible;
+}
+#endif
+
 float4 fs_main(PostVertex input) : SV_Target {
     float3 c = post.texel.w > 0.5 ? fxaa(input.uv, post.texel.xy) : scene_color.Sample(scene_color_sampler, input.uv).rgb;
 #ifdef ATMOSPHERE
@@ -104,6 +163,10 @@ float4 fs_main(PostVertex input) : SV_Target {
 #endif
     float3 glow = bloom.Sample(bloom_sampler, input.uv).rgb;
     c += glow * post.grade.w;
+#ifdef ATMOSPHERE
+    if (post.flare.z > 0.0) c += lens_ghosts(input.uv) * post.flare.z;
+    if (post.flare.w > 0.0) c += sun_glare(input.uv, post.flare.xy, post.texel.y / max(post.texel.x, 1e-6)) * post.flare.w;
+#endif
     c *= post.grade.x;  // exposure
 
     // White balance in linear light, before the curve: a warm push raises red

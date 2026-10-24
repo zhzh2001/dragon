@@ -70,6 +70,10 @@ struct SceneUniforms {
     static constexpr int MAX_THERMALS = 12;
     core::Vec4 thermals[MAX_THERMALS];
     core::Vec4 thermal_count = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // The valley mist (scene_common.hlsl, valley_mist): x its density at
+    // the floor (per metre; 0 for none), y the floor's height, z the height
+    // over it in which it thins by e, w how patchy it is (0..1).
+    core::Vec4 mist = core::Vec4{0.0f, 0.0f, 50.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

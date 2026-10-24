@@ -103,7 +103,9 @@ void AtmosphereSettings::parse(const std::string& list) {
                                 {"disc", &sun_disc},        {"altitude", &ground_altitude_km},
                                 {"albedo", &ground_albedo}, {"ms", &multiscatter},
                                 {"clouds", &cloud_coverage}, {"cloud_base", &cloud_base_m},
-                                {"cloud_thickness", &cloud_thickness_m}, {"cloud_density", &cloud_density}};
+                                {"cloud_thickness", &cloud_thickness_m}, {"cloud_density", &cloud_density},
+                                {"mist", &mist_density},    {"mist_height", &mist_height_m},
+                                {"mist_patches", &mist_patches}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;

@@ -40,6 +40,7 @@
 #include "game/rally.h"
 #include "game/terrain.h"
 #include "game/thermals.h"
+#include "game/time_of_day.h"
 #include "game/vegetation.h"
 #include "gfx/foliage.h"
 #include "gfx/debug_draw.h"
@@ -210,6 +211,7 @@ struct Options {
     // --hunters-after S: loose the run's first hunter after S seconds instead
     // of the default two minutes, for a capture of one.
     float hunters_after = 0.0f;
+    bool skim = false;  // --skim: spawn low over the river (App::respawn_dragon)
     // --element NAME: the player breathes this instead of its species'
     // element (fire, frost, blight, storm, tide, stone). -1 = the species'.
     int element = -1;
@@ -740,6 +742,12 @@ private:
     float speed_streak_from_ = 55.0f;
     float speed_streak_rate_ = 120.0f;
     void update_downwash(float dt);
+    // Spray off the river (App::update_spray): a dragon skimming the water,
+    // or beating its wings low over it, throws up a sheet of it. Puffs a
+    // second at full strength (Dragon panel, "Landing weight").
+    void update_spray(float dt);
+    float spray_rate_ = 140.0f;
+    float spray_carry_ = 0.0f;
     // Rising air (game/thermals.h): placed with each terrain, read by every
     // flight model each frame, shown by motes rising in each column.
     game::Thermals thermals_;
@@ -748,6 +756,20 @@ private:
     void emit_thermal_motes(float dt);
     float player_lift_ = 0.0f;  // m/s of rising air at the player, for the HUD
     float thermal_motes_ = 60.0f;  // motes a second from a nearby column (Flight panel)
+    // The hour of a run's valley (game/time_of_day.h, GAPS.md G8), the
+    // modern tier's: the sun's height and bearing, its colour through the
+    // air, and the valley mist. Off, or with --sun, the run keeps the arena's.
+    bool time_of_day_from_seed_ = true;
+    game::TimeOfDay time_of_day_;
+    void apply_time_of_day(uint32_t seed, int depth);
+    void restore_arena_time_of_day();
+    // The sun colour the build was tuned with at 19 degrees (Sky & light);
+    // the sun's colour at any other height is this through more or less air.
+    float sun_colour_tuned_[3] = {1.0f, 0.80f, 0.58f};
+    // The sun's height and the air's two dials the colour was last worked
+    // out for.
+    core::Vec3 sun_colour_key_{-1000.0f, 0.0f, 0.0f};
+    core::Vec3 sun_colour_ratio_{1.0f, 1.0f, 1.0f};
     float downwash_ = 0.0f;
     float airborne_time_ = 0.0f, airborne_before_ = 0.0f;
     // Landing weight (Dragon panel): the grass's push under the wings (m at
@@ -756,6 +778,7 @@ private:
     float downwash_push_ = 2.2f;
     float touchdown_kick_ = 2.5f;
     core::Vec3 dust_colour_{0.30f, 0.27f, 0.21f};
+    core::Vec3 spray_colour_{1.25f, 1.32f, 1.4f};  // drawn unlit, so sunlit white is over 1
     static void mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
                                const anim::DragonJoints& joints);
     // Sun through the wing membranes (skinned.hlsl): the transmitted light
@@ -928,7 +951,9 @@ private:
     // find by elimination what a slow card's frame is made of (PORTING.md,
     // "R6, as built"). Names: terrain_near terrain_far skirt water trees
     // grass player rings run prey bots sky towers projectiles particles ui,
-    // and the HUD's parts: hud_combat hud_run hud_speed hud_autopilot.
+    // and the HUD's parts: hud_combat hud_run hud_speed hud_autopilot; and
+    // terms of the modern tier's lighting: thermal_caps (the cumulus over
+    // the thermals), mist (the valley mist), lens (the flare and glare).
     std::string ablate_;
     uint64_t freeze_at_ = 0;  // DRAGON_FREEZE_AT
     bool ablated(const char* what) const {

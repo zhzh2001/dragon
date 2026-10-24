@@ -67,10 +67,19 @@ struct AtmosphereSettings {
     float cloud_thickness_m = 1300.0f;
     float cloud_density = 1.0f;
 
+    // The valley mist (scene_common.hlsl, valley_mist; GAPS.md G9): its
+    // density at the valley floor per metre, at a valley mist of 1 (a run's
+    // morning, game/time_of_day.h); the height over the floor in which it
+    // thins by e; how patchy it is, 0..1.
+    float mist_density = 0.0045f;
+    float mist_height_m = 50.0f;
+    float mist_patches = 0.7f;
+
     // key=value[,key=value...] over these (--atmosphere): on, sky, aerial,
     // far, haze, haze_height, glow, rayleigh, ozone, fog, sky_light, disc,
     // altitude, albedo, ms, clouds, cloud_base, cloud_thickness,
-    // cloud_density. Unknown keys are logged and skipped.
+    // cloud_density, mist, mist_height, mist_patches. Unknown keys are
+    // logged and skipped.
     void parse(const std::string& list);
 };
 
