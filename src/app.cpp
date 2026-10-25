@@ -3174,6 +3174,8 @@ void App::build_ui(float dt) {
                 ImGui::SliderFloat("impostor shadows by", &foliage_.shadow_impostor_to, 50.0f, 2500.0f, "%.0f m");
                 foliage_.shadow_impostor_to = core::maxf(foliage_.shadow_impostor_to, foliage_.shadow_impostor_from + 1.0f);
                 ImGui::Checkbox("tree impostors", &foliage_.impostors);
+                ImGui::Checkbox("crown depth pre-pass", &foliage_.tree_prepass);
+                ImGui::SetItemTooltip("The crowns' depth first, then each pixel lit once: the same picture, faster");
                 if (foliage_.impostors) {
                     ImGui::SliderFloat("impostors from", &foliage_.impostor_from, 100.0f, 3000.0f, "%.0f m");
                     ImGui::SliderFloat("impostors by", &foliage_.impostor_to, 100.0f, 4000.0f, "%.0f m");
@@ -6923,6 +6925,49 @@ void App::emit_thermal_motes(float dt) {
             particles_.spawn(p);
         }
     }
+    // Wind lines spiralling up each column, out to 1.4 km: the motes are
+    // under a pixel past a few hundred metres and the cumulus is overhead,
+    // out of the chase view, so a column could not be seen from where a
+    // pilot would choose one. Thin ribbons a few metres long, turning about
+    // the axis as they climb, where the lift is (Flight, "thermal streaks").
+    static float streak_carry = 0.0f;
+    for (const game::Thermal& c : thermals_.columns()) {
+        const float dx = c.base.x - eye.x, dz = c.base.z - eye.z;
+        const float far = std::sqrt(dx * dx + dz * dz);
+        if (far > 1400.0f || thermal_streaks_ <= 0.0f) continue;
+        streak_carry += dt * thermal_streaks_;
+        while (streak_carry >= 1.0f) {
+            streak_carry -= 1.0f;
+            const float angle = particle_unit() * core::PI;
+            const float out = 0.25f + 0.6f * std::fabs(particle_unit());
+            const float height = std::fabs(particle_unit());
+            const float r = c.radius * out;
+            core::Vec3 at{c.base.x + std::cos(angle) * r, 0.0f, c.base.z + std::sin(angle) * r};
+            const float ground = terrain_.height_at(at.x, at.z);
+            at.y = ground + 30.0f + 420.0f * height;
+            const float rise = thermals_.lift_at(at, ground, time_seconds_);
+            if (rise < 1.0f) continue;
+            const core::Vec3 round{-std::sin(angle), 0.0f, std::cos(angle)};
+            // Up and round at once: a line along that path is a turn of a
+            // helix seen a few metres at a time.
+            const core::Vec3 velocity = core::Vec3{0.0f, rise * 1.6f, 0.0f} + round * (rise * 1.3f);
+            gfx::Particle p;
+            p.kind = gfx::ParticleKind::Streak;
+            p.position = at;
+            p.velocity = velocity;
+            p.stretch = core::normalize(velocity) * (22.0f + 14.0f * out);
+            p.life = 2.6f;
+            // A metre and more across: at 0.35 m they were under a pixel
+            // from 400 m out, which is where a pilot picks a column.
+            p.size_start = 1.0f + far / 1000.0f;
+            p.size_end = p.size_start * 0.7f;
+            p.color_start = core::Vec3{0.85f, 0.88f, 0.92f};
+            p.color_end = p.color_start;
+            // Fainter near the camera, where the motes already show it.
+            p.brightness = 1.1f * core::smoothstep(60.0f, 250.0f, far);
+            particles_.spawn(p);
+        }
+    }
 }
 
 // A run's valley gets its hour (game/time_of_day.h, GAPS.md G8): morning at
@@ -8426,6 +8471,7 @@ void App::build_flight_ui() {
         ImGui::SliderFloat("thermal top", &ts.top, 300.0f, 3000.0f, "%.0f m");
         replace |= ImGui::IsItemDeactivatedAfterEdit();
         ImGui::SliderFloat("thermal motes", &thermal_motes_, 0.0f, 300.0f, "%.0f /s");
+        ImGui::SliderFloat("thermal streaks", &thermal_streaks_, 0.0f, 80.0f, "%.0f /s");
         if (replace) thermals_.place(terrain_, terrain_settings_.seed, lighting_.sun_direction(), ts);
         ImGui::Text("rising air here: %+.1f m/s", double(player_lift_));
     }
@@ -8703,6 +8749,13 @@ void App::render() {
     // looks like a sky rather than a void.
     rhi::Pass* pass = device_.begin_main_pass(
         lighting_.fog_color[0], lighting_.fog_color[1], lighting_.fog_color[2]);
+    // The crowns' depth before anything is lit (gfx::Foliage::draw_trees_prepass):
+    // the ground under the forest and every card behind the front one are
+    // then rejected before they are shaded.
+    if (!options_.hide_vegetation && !ablated("trees") && !ablated("tree_prepass")) {
+        CORE_PROFILE("tree prepass");
+        foliage_.draw_trees_prepass(device_, pass, world_.scene());
+    }
     if (terrain_far_mesh_.valid()) {
         // Near chunks from the near mesh, the rest from the far one, decided
         // per square of the shared chunk grid so no ground is drawn twice or
@@ -8758,7 +8811,7 @@ void App::render() {
         CORE_PROFILE("terrain draws");
         if (!ablated("terrain_near")) world_.draw_terrain(device_, pass, terrain_mesh_, &near_chunks);
         if (!ablated("terrain_far")) world_.draw_terrain(device_, pass, terrain_far_mesh_, &far_chunks);
-    } else {
+    } else if (!ablated("terrain_near")) {
         world_.draw_terrain(device_, pass, terrain_mesh_, &terrain_chunks_);
     }
     {

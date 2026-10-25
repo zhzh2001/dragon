@@ -251,9 +251,42 @@ float4 fs_main(VertexOut input) : SV_Target {
     clip(min(lerp(1.0, card.y, input.uv.z) - 0.45, lerp(1.0, input.lod.x, input.albedo.a)));
     return float4(color, 1.0);
 }
+#elif defined(FOLIAGE_PREPASS)
+// The depth pre-pass (foliage_prepass.hlsl): the same cut as below -- the
+// LOD's and the card's, to the same thresholds -- and no light. Drawn with a
+// premultiplied blend of nothing, so the colour target is left as it was.
+float4 fs_main(VertexOut input) : SV_Target {
+    int material = int(input.material.x + 0.5);
+    // Read first, as the shaded pass reads them (below): the two passes
+    // must cut each card alike to the pixel.
+    float4 leaf = leaf_card.Sample(leaf_card_sampler, input.uv);
+    float4 needle = needle_card.Sample(needle_card_sampler, input.uv);
+    float thicken = 0.0;
+    if (input.material.y > 0.5) {
+        if (crown_thicken(input.material.z) > input.material.w) discard;
+    } else {
+        thicken = crown_thicken(input.material.z);
+    }
+    if (material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE) {
+        float4 card = material == FOLIAGE_MAT_LEAF ? leaf : needle;
+        if (card.a < 0.45 - 0.08 * thicken) discard;
+    }
+    // Slots 0 (the scene, the shadow map) kept in this stage's reflection,
+    // so the cards and `params` stay where the C++ binds them: a stage that
+    // reads nothing in a slot loses it (foliage_impostor_bake.hlsl).
+    float keep = min(scene.view_params.x, 0.0) + min(shadow_map.Sample(shadow_map_sampler, (float2)0.5), 0.0);
+    return float4(0.0, 0.0, 0.0, keep);
+}
 #else
 float4 fs_main(VertexOut input) : SV_Target {
     int material = int(input.material.x + 0.5);
+    // Both cards read first, in uniform control flow: sampled after the
+    // LOD's discard and inside the material's branch, the mip came from
+    // undefined derivatives, and the depth pre-pass (FOLIAGE_PREPASS above),
+    // compiled apart, cut some cards' edges a pixel differently -- a hole of
+    // the clear colour at one crown pixel in a few thousand.
+    float4 leaf = leaf_card.Sample(leaf_card_sampler, input.uv);
+    float4 needle = needle_card.Sample(needle_card_sampler, input.uv);
 
     // The distance LOD: past `lod_distance` the detail cards go and the coarse
     // ones carry the crown. Dithered per instance over a 30% band with the
@@ -268,7 +301,9 @@ float4 fs_main(VertexOut input) : SV_Target {
     // few large cards, the trunk showing through, a spruce turned into a
     // square blob -- was so unlike it that a tree changed as it crossed.
     if (input.material.y > 0.5) {
+#ifndef FOLIAGE_AFTER_PREPASS
         if (crown_thicken(input.material.z) > input.material.w) discard;
+#endif
     } else {
         thicken = crown_thicken(input.material.z);
     }
@@ -286,10 +321,10 @@ float4 fs_main(VertexOut input) : SV_Target {
         // The card: a grey detail map with the leaves cut out in alpha,
         // coloured by the palette. Alpha-tested, not blended: sorted-blend
         // foliage is a rabbit hole and the 2005 look shipped on the test.
-        float4 card = material == FOLIAGE_MAT_LEAF
-                          ? leaf_card.Sample(leaf_card_sampler, input.uv)
-                          : needle_card.Sample(needle_card_sampler, input.uv);
+        float4 card = material == FOLIAGE_MAT_LEAF ? leaf : needle;
+#ifndef FOLIAGE_AFTER_PREPASS
         if (card.a < 0.45 - 0.08 * thicken) discard;
+#endif
         // The map's greys average about 0.45; normalised so the palette entry
         // is the crown's mean colour, with the map's mottle around it.
         albedo *= card.r * 2.2;

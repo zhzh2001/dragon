@@ -579,6 +579,58 @@ M5. What looked like a regression was the machine's other load.
   1080p window a heavy frame now shows as a lower frame rate, not as a
   softer picture. The Graphics panel's "dynamic resolution" turns it on.
 
+### Where the GPU's time goes (2026-10-25)
+
+The playtest found the run under 60 fps on a 99 Hz display, with
+stutter. With vsync each frame waits for a refresh, so a frame just over
+10.1 ms is shown at 20.2 ms (49.5 fps) and a slower one at 30.3 ms (33).
+The run's frame at Ultra, 1080p, costs about 11 ms of GPU time on a quiet
+M5: always just over the interval.
+
+The frozen run frame (`--run 7 --autopilot`, frame 240) taken apart, with
+OBS loading the GPU, so every figure is about twice a quiet one:
+
+| Part | How measured | Cost |
+|---|---|---|
+| The main pass, all of it | `DRAGON_GPU_PASS_PROFILE` | 12.2 ms of 20.9 |
+| The crowns (`trees`) | paired ablation | 2.6-3.2 ms |
+| The terrain (`terrain_near`; it was not ablatable on the modern tier before) | paired ablation | 1.5 ms |
+| The shadow pass | pass profile | 3.3 ms; its crowns (`tree_shadows`) 0.6-0.9 |
+| The water, the mist | paired ablation | 0.5 ms each |
+| Clouds (weather, march, resolve, apply) | pass profile | 1.3 ms |
+| Post (SSAO, bloom, composite) | pass profile | 2.3 ms |
+| Grass, sky, rocks, the dragon | paired ablation | 0.4 ms or less each |
+
+Each profiled pass also carries about 0.2 ms of the profiler's own wait.
+
+The crowns are fragment-bound: at a quarter of the pixels they cost 1.0
+ms against 2.6. Their cards are alpha-tested, and a `discard` defeats the
+tile GPU's hidden-surface removal, so every card behind the front one and
+the ground under the forest were lit in full. A depth pre-pass now draws
+the crowns' depth first (`foliage_prepass.hlsl`). The crowns are then lit
+with an EQUAL test (`foliage_shaded.hlsl`), once a pixel. The picture is
+unchanged: at most 19/255 at a few hundred pixels, mean 0.0002. It saves
+0.7 ms on the run frame, 0.1-0.2 ms on views with less forest; the
+crowns' vertices are drawn twice for it. `DRAGON_ABLATE=tree_prepass` and
+Vegetation, "crown depth pre-pass" turn it off. Two things went wrong on
+the way:
+
+- With the alpha cut in both passes, about one crown pixel in 7,000 was a
+  hole of the clear colour. The depths matched to the bit; the two
+  shaders, compiled apart, cut a card's edge a pixel differently. The
+  shaded pass now cuts nothing: the pre-pass alone decides coverage.
+- The impostor bake read its uniforms from an unbound buffer: its
+  fragment stage read nothing at slot 0, so the reflected count was 1 and
+  slot 1 was never bound. Metal's API validation stopped on it, which is
+  how the playtester's restart crashed. A read of `scene` that changes
+  nothing keeps the slot. Every main scene and tier now runs clean under
+  `MTL_DEBUG_LAYER=1`.
+
+Not yet, and each changes the picture a little: the mist in the
+aerial-perspective froxels instead of per fragment, the far cascades of
+the shadow map refreshed every other frame, and dynamic resolution aiming
+at the display's refresh rather than at 60.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

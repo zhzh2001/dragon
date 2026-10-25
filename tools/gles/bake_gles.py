@@ -132,7 +132,7 @@ def main():
     # The modern tier's alone: the atmosphere, the clouds, the temporal and
     # occlusion passes (tools/release/bake_shaders.sh).
     stems = [s for s in stems if not s.startswith(("atmosphere_", "clouds_")) and
-             s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned")]
+             s not in ("terrain_sun", "post_taa", "post_ssao", "post_ssao_blur", "velocity_skinned", "foliage_prepass", "foliage_shaded")]
     if "LDR_OUTPUT" in defines:
         stems = [s for s in stems if not s.startswith("post_")]
     if args.only:

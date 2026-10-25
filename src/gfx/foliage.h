@@ -53,6 +53,11 @@ public:
     void set_atmosphere(const Atmosphere* atmosphere) { atmosphere_ = atmosphere; }
 
     void draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
+    // The crowns' depth alone, before the ground in the main pass
+    // (foliage_prepass.hlsl); draw_trees then shades each pixel's front
+    // card once. Modern tier, unless `tree_prepass` is off.
+    void draw_trees_prepass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
+    bool tree_prepass = true;
     void draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
     // `coarse`: only each crown's coarse cards, for a shadow cascade whose
     // texels are metres across (gfx/shadow_map.h): the full crown there cost
@@ -248,6 +253,13 @@ private:
     ShadowMap* shadow_map_ = nullptr;
     const Atmosphere* atmosphere_ = nullptr;
     PipelineHandle pipeline_ = INVALID_PIPELINE;
+    // The crowns' depth pre-pass, and the crowns shaded after it (EQUAL, no
+    // depth write); prepassed_ while this frame's pre-pass is in the target.
+    PipelineHandle prepass_pipeline_ = INVALID_PIPELINE;
+    PipelineHandle equal_pipeline_ = INVALID_PIPELINE;
+    bool prepassed_ = false;
+    void bind_crown_slots(Device& device, rhi::Pass* pass, rhi::Pipeline* pipeline, const SceneUniforms& scene);
+    uint32_t draw_crowns(Device& device, rhi::Pass* pass, const SceneUniforms& scene);
     PipelineHandle depth_pipeline_ = INVALID_PIPELINE;
     // Where an instanced draw is a draw per instance (GLES 2.0): each cell's
     // static instances are baked into one mesh and drawn by batched_pipeline_,

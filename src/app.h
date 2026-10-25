@@ -756,6 +756,7 @@ private:
     void emit_thermal_motes(float dt);
     float player_lift_ = 0.0f;  // m/s of rising air at the player, for the HUD
     float thermal_motes_ = 60.0f;  // motes a second from a nearby column (Flight panel)
+    float thermal_streaks_ = 14.0f;  // wind lines a second up each column within 1.4 km (Flight panel)
     // The hour of a run's valley (game/time_of_day.h, GAPS.md G8), the
     // modern tier's: the sun's height and bearing, its colour through the
     // air, and the valley mist. Off, or with --sun, the run keeps the arena's.
@@ -953,7 +954,8 @@ private:
     // grass player rings run prey bots sky towers projectiles particles ui,
     // and the HUD's parts: hud_combat hud_run hud_speed hud_autopilot; and
     // terms of the modern tier's lighting: thermal_caps (the cumulus over
-    // the thermals), mist (the valley mist), lens (the flare and glare).
+    // the thermals), mist (the valley mist), lens (the flare and glare);
+    // tree_prepass (the crowns' depth pre-pass: the trees shaded as before).
     std::string ablate_;
     uint64_t freeze_at_ = 0;  // DRAGON_FREEZE_AT
     bool ablated(const char* what) const {

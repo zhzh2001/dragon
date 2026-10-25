@@ -455,6 +455,24 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     // as trees popping.
     if (active_tier().tier == Tier::Modern) lod_distance = 900.0f;
     pipeline_ = pipelines_->create(make_foliage_desc());
+    if (active_tier().tier == Tier::Modern) {
+        // The pre-pass writes depth and leaves the colour as it was: a
+        // premultiplied blend of a transparent black (the interface has no
+        // colour write mask). The crowns after it pass where they are the
+        // depth already there -- the same vertex stage, to the bit -- write
+        // none, and cut nothing (foliage_shaded.hlsl).
+        PipelineDesc prepass = make_foliage_desc();
+        prepass.name = "foliage_prepass";
+        prepass.shader = "foliage_prepass";
+        prepass.premultiplied_blend = true;
+        prepass_pipeline_ = pipelines_->create(prepass);
+        PipelineDesc equal = make_foliage_desc();
+        equal.name = "foliage_shaded";
+        equal.shader = "foliage_shaded";
+        equal.depth_compare = rhi::Compare::Equal;
+        equal.depth_write = false;
+        equal_pipeline_ = pipelines_->create(equal);
+    }
     if (shadow_map->available()) depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
     // DRAGON_FOLIAGE_BATCH=0: the per-instance draws regardless, to compare.
     const char* batch_env = SDL_getenv("DRAGON_FOLIAGE_BATCH");
@@ -878,15 +896,9 @@ float Foliage::lod_band_for_tier() const {
     return active_tier().tier == Tier::Modern ? lod_band : 0.3f;
 }
 
-void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
-    // No fade: a forest that thins out with distance is a forest that pops.
-    // One instanced draw per ground cell the frustum and the distance admit.
-    trees_drawn_ = 0;
-    if (!pass) return;
-    rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
-    if (!pipeline) return;
-    const Frustum frustum(scene.view_proj);
-    const core::Vec3 eye = scene.camera_position.xyz();
+// The pipeline, the scene and the slots every crown draw reads: the shadow
+// map and the two cards.
+void Foliage::bind_crown_slots(Device& device, rhi::Pass* pass, rhi::Pipeline* pipeline, const SceneUniforms& scene) {
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
@@ -897,6 +909,13 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
     }
     bind_cards(device, pass, 1);
+}
+
+// Every crown the frustum and the distance admit, with the pipeline bound:
+// the pre-pass and the shaded pass draw exactly these, in this order.
+uint32_t Foliage::draw_crowns(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
+    const Frustum frustum(scene.view_proj);
+    const core::Vec3 eye = scene.camera_position.xyz();
     const float band = lod_band_for_tier();
     const float reach = tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap) : tree_draw_distance;
     const bool modern = active_tier().tier == Tier::Modern;
@@ -905,6 +924,7 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
     const bool impostors_on = impostors_active();
     const float lod = impostors_on ? 1e6f : lod_distance;
     const float crown_reach = impostors_on ? core::minf(reach, impostor_to) : reach;
+    uint32_t drawn = 0;
     for (int k = 0; k < TREE_KINDS; ++k) {
         const StaticSet& set = trees_[k];
         if (!set.instances || set.count == 0 || !set.mesh.valid()) continue;
@@ -918,22 +938,46 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
         // Wholly past the dither band (foliage.hlsl): the coarse cards only.
         // Fixed function has no dither, so its crowns are the coarse cards
         // everywhere.
-        trees_drawn_ += draw_static(device, pass, set, frustum, eye, crown_reach, true, lod * (1.0f + band));
+        drawn += draw_static(device, pass, set, frustum, eye, crown_reach, true, lod * (1.0f + band));
     }
-    if (impostors_on) {
-        draw_impostors(device, pass, scene, frustum, reach);
-        // The rocks after: their pipeline again, and the slots it reads.
-        device.rhi().bind_pipeline(pass, pipeline);
-        device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene, sizeof(SceneUniforms));
-        device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene, sizeof(SceneUniforms));
-        if (shadow_map_ && shadow_map_->texture()) {
-            rhi::TextureBinding binding = {};
-            binding.texture = shadow_map_->texture();
-            binding.sampler = shadow_map_->sampler();
-            device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
-        }
-        bind_cards(device, pass, 1);
-    }
+    return drawn;
+}
+
+// The crowns' depth, first in the main pass (foliage_prepass.hlsl): then the
+// ground and the crowns behind the front card are rejected before they are
+// lit. Modern tier; it draws the crowns' vertices twice for it.
+void Foliage::draw_trees_prepass(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
+    prepassed_ = false;
+    if (!pass || !tree_prepass || active_tier().tier != Tier::Modern || batch_) return;
+    rhi::Pipeline* prepass = pipelines_->get(prepass_pipeline_);
+    if (!prepass || !pipelines_->get(equal_pipeline_)) return;
+    bind_crown_slots(device, pass, prepass, scene);
+    const uint64_t counted = crown_vertices_main_;
+    draw_crowns(device, pass, scene);
+    crown_vertices_main_ = counted;  // the crowns' count is the shaded pass's
+    prepassed_ = true;
+}
+
+void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
+    // No fade: a forest that thins out with distance is a forest that pops.
+    // One instanced draw per ground cell the frustum and the distance admit.
+    trees_drawn_ = 0;
+    if (!pass) return;
+    rhi::Pipeline* pipeline = pipelines_->get(pipeline_);
+    if (!pipeline) return;
+    // After the pre-pass, each pixel's front card alone passes.
+    rhi::Pipeline* crowns = prepassed_ ? pipelines_->get(equal_pipeline_) : pipeline;
+    if (!crowns) crowns = pipeline;
+    prepassed_ = false;
+    bind_crown_slots(device, pass, crowns, scene);
+    trees_drawn_ = draw_crowns(device, pass, scene);
+    const Frustum frustum(scene.view_proj);
+    const core::Vec3 eye = scene.camera_position.xyz();
+    const bool modern = active_tier().tier == Tier::Modern;
+    const float reach = tree_distance_cap > 0.0f ? core::minf(tree_draw_distance, tree_distance_cap) : tree_draw_distance;
+    if (impostors_active()) draw_impostors(device, pass, scene, frustum, reach);
+    // The rocks after: their pipeline again, and the slots it reads.
+    if (crowns != pipeline || impostors_active()) bind_crown_slots(device, pass, pipeline, scene);
     // The rocks: the same shader, no sway (a nominal height no rock reaches
     // makes the sway's height fraction nothing), no card LOD.
     for (int k = 0; k < ROCK_KINDS; ++k) {

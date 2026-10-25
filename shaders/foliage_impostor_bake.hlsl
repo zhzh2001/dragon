@@ -83,6 +83,12 @@ float4 fs_main(VertexOut input) : SV_Target {
         float fine = value_noise(float2(input.uv.x * 40.0, input.uv.y * 6.0));
         albedo *= 0.7 + 0.5 * streak + 0.15 * (fine - 0.5);
     }
+    // A read of `scene` that changes nothing (tan of half the field of view
+    // is positive), so slot 0 stays in this stage's reflection. Without it
+    // the stage declared one uniform block, SDL bound only slot 0, and
+    // `bake` at slot 1 was read from an unbound buffer: Metal's validation
+    // stops on it, and without validation the bake read whatever was there.
+    albedo *= 1.0 + min(scene.view_params.x, 0.0);
     if (dot(n, bake.eye.xyz) < 0.0) n = -n;
     if (bake.eye.w > 0.5) return float4(n * 0.5 + 0.5, translucent);
     // The crown's depths, darker: in the crown itself the cards inside are
