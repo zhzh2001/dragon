@@ -300,9 +300,21 @@ public:
             claimed_ = true;
             // Mailbox where available (lowest latency), else vsync. Input
             // latency has a direct effect on how responsive flight feels.
-            if (SDL_WindowSupportsGPUPresentMode(gpu_, window_, SDL_GPU_PRESENTMODE_MAILBOX)) {
+            // Metal has no mailbox: with vsync a frame that misses the
+            // refresh waits for the next one, so a 12 ms frame on a 99 Hz
+            // display runs at 49.5 fps, and one a little slower at 33. With
+            // vsync off (the Graphics panel) it presents at once, tearing,
+            // on macOS where Metal allows it.
+            if (!config.vsync && SDL_WindowSupportsGPUPresentMode(gpu_, window_, SDL_GPU_PRESENTMODE_IMMEDIATE)) {
+                SDL_SetGPUSwapchainParameters(gpu_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                              SDL_GPU_PRESENTMODE_IMMEDIATE);
+                LOG_INFO("present: immediate (vsync off)");
+            } else if (SDL_WindowSupportsGPUPresentMode(gpu_, window_, SDL_GPU_PRESENTMODE_MAILBOX)) {
                 SDL_SetGPUSwapchainParameters(gpu_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                                               SDL_GPU_PRESENTMODE_MAILBOX);
+                LOG_INFO("present: mailbox");
+            } else {
+                LOG_INFO("present: vsync");
             }
         }
         return true;

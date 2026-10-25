@@ -203,8 +203,9 @@ struct DeviceConfig {
     bool fullscreen = false;
     // 16-bit colour (D3D9): a 5-6-5 display mode when fullscreen, dithered.
     bool color16 = false;
-    // Present on the display's refresh (D3D9). Off: at once, tearing, and
-    // the frame rate is the frame's own instead of capped at the refresh.
+    // Present on the display's refresh. Off: at once, tearing, and the
+    // frame rate is the frame's own instead of held to a step of the
+    // refresh (D3D9; SDL GPU where the driver offers it, Metal on macOS).
     bool vsync = true;
 };
 

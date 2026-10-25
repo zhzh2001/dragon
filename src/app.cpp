@@ -1461,10 +1461,11 @@ void App::build_graphics_ui() {
     if (d3d9) {
         ImGui::SameLine();
         ImGui::Checkbox("16-bit colour *", &color16_pending_);
-        ImGui::SameLine();
-        // On, a 60 Hz mode caps the frame rate at 60; off, it tears.
-        ImGui::Checkbox("vsync *", &vsync_pending_);
     }
+    // On, a frame that misses the refresh waits for the next: at 99 Hz a
+    // 12 ms frame runs at 49.5 fps. Off, it presents at once and tears.
+    ImGui::SameLine();
+    ImGui::Checkbox("vsync *", &vsync_pending_);
     const bool display_changed =
         fullscreen_pending_ != fullscreen_ || color16_pending_ != color16_ || vsync_pending_ != vsync_;
     bool restart = tier_pending_ != tier_.tier || driver_pending_ != options_.gpu_driver || display_changed;
@@ -8229,6 +8230,16 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("blast radius", &t.fireball_blast_radius, 0.0f, 40.0f, "%.0f m");
         ImGui::SliderFloat("cooldown", &t.fireball_cooldown, 0.1f, 3.0f, "%.2f s");
         ImGui::SliderFloat("gravity", &t.fireball_gravity, 0.0f, 20.0f, "%.1f m/s2");
+        // The charged shot (young stage on; always in the arena). At full it
+        // hits for damage x this, plus the element's status: a fire one at
+        // 2.2 is 66 on a young dragon against a valley-1 rival's 80, with
+        // the burn's 21 after it.
+        ImGui::SeparatorText("charged shot");
+        ImGui::SliderFloat("charge time", &t.charge_time, 0.1f, 3.0f, "%.2f s");
+        ImGui::SliderFloat("charged damage", &t.charged_damage, 1.0f, 4.0f, "x%.2f");
+        ImGui::SliderFloat("charged blast", &t.charged_blast, 1.0f, 4.0f, "x%.2f");
+        ImGui::SliderFloat("charged seek", &t.charged_seek, 0.0f, 6.0f, "%.1f rad/s");
+        ImGui::SliderFloat("charged status", &t.charged_status, 1.0f, 5.0f, "x%.1f");
     }
 
     if (ImGui::CollapsingHeader("Breath")) {
@@ -9021,6 +9032,7 @@ void App::run() {
         alternate_ablate = (base_ablate.empty() ? "," : base_ablate) + std::string(alternate) + ",";
     }
     std::vector<float> gpu_with, gpu_without;
+    std::vector<float> frame_gpu_ms;  // each frame's fence reading, for DRAGON_FRAMETIMES
     int ablate_switched = 0;
     uint64_t frame_started = started;
     // DRAGON_FRAME_PROFILE=1: where a frame's wall clock goes, by phase,
@@ -9156,6 +9168,7 @@ void App::run() {
         ++frame_index_;
         const uint64_t frame_ended = SDL_GetTicksNS();
         frame_ms.push_back(float(double(frame_ended - frame_started) * 1e-6));
+        frame_gpu_ms.push_back(device_.rhi().gpu_frame_ms());
         if (const float g = device_.rhi().gpu_frame_ms(); g > 0.0f) {
             gpu_ms.push_back(g);
             // The fence reports a frame or two late: a half's first eight
@@ -9202,6 +9215,28 @@ void App::run() {
             double sum = 0.0;
             for (size_t i = start; i < start + 60; ++i) sum += frame_ms[i];
             LOG_INFO("frame trace: frames %zu-%zu mean %.1f ms", start, start + 59, sum / 60.0);
+        }
+    }
+    // DRAGON_FRAMETIMES=path: every frame's wall time and the GPU's, as CSV
+    // (frame, t_ms, dt_ms, gpu_ms_ema; the last is the fences' GPU time,
+    // averaged over about a third of a second, as read that frame). In a window the wall time is
+    // present to present, so a vsync that holds a late frame to the next
+    // refresh shows as a step to twice the interval, and a stutter as one
+    // frame among many.
+    if (const char* path = SDL_getenv("DRAGON_FRAMETIMES")) {
+        if (FILE* f = std::fopen(path, "w")) {
+            std::fprintf(f, "frame,t_ms,dt_ms,gpu_ms_ema\n");
+            double t = 0.0;
+            for (size_t i = 0; i < frame_ms.size(); ++i) {
+                t += double(frame_ms[i]);
+                if (i < frame_gpu_ms.size() && frame_gpu_ms[i] > 0.0f) {
+                    std::fprintf(f, "%zu,%.3f,%.3f,%.3f\n", i, t, double(frame_ms[i]), double(frame_gpu_ms[i]));
+                } else {
+                    std::fprintf(f, "%zu,%.3f,%.3f,\n", i, t, double(frame_ms[i]));
+                }
+            }
+            std::fclose(f);
+            LOG_INFO("frame times -> %s", path);
         }
     }
     LOG_INFO("frames: %llu in %.1f s, %.1f fps; median %.1f ms, 1%% low %.1f ms (%s, tier %s, preset %s)",
