@@ -14,7 +14,7 @@ TEXTURE2D(transmittance_lut, 0);
 TEXTURE2D(multiscatter_lut, 1);
 
 float4 fs_main(AtmoVertex input) : SV_Target {
-    float2 pix = input.clip_position.xy;
+    float2 pix = input.uv * ATMO_ATLAS_SIZE;  // the pixel centre (AtmoVertex)
     float3 sun = normalize(scene.sun.xyz);
     float r = atmosphere.radii.x + atmosphere.radii.z;
     float3 origin = float3(0.0, r, 0.0);

@@ -173,6 +173,10 @@ void atmo_sky_view_params(float planet_radius, float2 unit, float r, out float v
 }
 
 // The table passes' vertex stage: a fullscreen triangle, uv running down.
+// A table pass reads its pixel as uv times the table's size, never from
+// SV_Position: the DXIL is made through SPIR-V, which drops the unread uv
+// and puts SV_Position in its register, and D3D12 refuses a pipeline whose
+// registers differ from the vertex stage's (tools/release/check_dxil_linkage.py).
 struct AtmoVertex {
     float4 clip_position : SV_Position;
     float2 uv : TEXCOORD0;

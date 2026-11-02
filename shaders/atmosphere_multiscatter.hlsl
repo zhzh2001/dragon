@@ -12,7 +12,7 @@ ConstantBuffer<AtmosphereUniforms> atmosphere : UNIFORM_SLOT(0);
 TEXTURE2D(transmittance_lut, 0);
 
 float4 fs_main(AtmoVertex input) : SV_Target {
-    float2 unit = atmo_sub_uv_to_unit(input.clip_position.xy / ATMO_MULTISCATTER_SIZE, ATMO_MULTISCATTER_SIZE);
+    float2 unit = atmo_sub_uv_to_unit(input.uv, ATMO_MULTISCATTER_SIZE);
     float sun_cos = unit.x * 2.0 - 1.0;
     float3 sun = float3(0.0, sun_cos, sqrt(saturate(1.0 - sun_cos * sun_cos)));
     float r = atmosphere.radii.x + saturate(unit.y) * (atmosphere.radii.y - atmosphere.radii.x);

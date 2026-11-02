@@ -44,6 +44,9 @@ rm -rf "$root/dist/stage-win"
 mkdir -p "$stage/assets"
 cp build-win-release/dragon.exe "$stage/"
 tools/release/bake_shaders.sh "$stage/shaders" dxil spv
+# D3D12 refuses a pipeline whose fragment inputs are in other registers than
+# the vertex outputs. The bake's SPIR-V route renumbers them, so check.
+python3 tools/release/check_dxil_linkage.py "$stage/shaders"
 # assets/species/: the profiles of models not distributed (the gold and
 # silver studies), so a player who has one can drop it in beside them.
 cp -R assets/textures assets/fonts assets/species "$stage/assets/"

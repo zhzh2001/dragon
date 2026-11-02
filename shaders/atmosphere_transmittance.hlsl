@@ -8,7 +8,7 @@
 ConstantBuffer<AtmosphereUniforms> atmosphere : UNIFORM_SLOT(0);
 
 float4 fs_main(AtmoVertex input) : SV_Target {
-    float2 uv = input.clip_position.xy / ATMO_TRANSMITTANCE_SIZE;
+    float2 uv = input.uv;  // the pixel centre over the size (AtmoVertex)
     float r, mu;
     atmo_transmittance_params(atmosphere, uv, r, mu);
     float3 origin = float3(0.0, r, 0.0);

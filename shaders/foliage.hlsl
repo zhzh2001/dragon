@@ -59,15 +59,20 @@ struct VertexOut {
     SM2_LIGHT_VARYINGS
 };
 #else
+// The uv and the material come first. The depth pre-pass reads only those
+// two, and a fragment stage must read a prefix of the vertex stage's
+// outputs: the DXIL is made through SPIR-V, which drops unread inputs and
+// renumbers the rest, and D3D12 refuses a pipeline whose registers differ
+// (tools/release/check_dxil_linkage.py).
 struct VertexOut {
     float4 clip_position : SV_Position;
-    float3 world_position : TEXCOORD0;
-    float3 world_normal : TEXCOORD1;
-    float3 albedo : TEXCOORD2;
-    float2 uv : TEXCOORD3;
+    float2 uv : TEXCOORD0;
     // x material, y 1 when this is a detail card, z camera distance to the
     // plant's base (for the LOD), w instance hash (for the LOD dither)
-    float4 material : TEXCOORD4;
+    float4 material : TEXCOORD1;
+    float3 world_position : TEXCOORD2;
+    float3 world_normal : TEXCOORD3;
+    float3 albedo : TEXCOORD4;
 };
 #endif
 
