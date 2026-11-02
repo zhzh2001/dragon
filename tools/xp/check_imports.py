@@ -26,7 +26,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RECORDED = os.path.join(ROOT, "tools", "xp", "xp-sp3-exports.txt")
-OBJDUMP = os.environ.get("LLVM_OBJDUMP") or "/opt/homebrew/opt/llvm@21/bin/llvm-objdump"
+OBJDUMP = os.environ.get("LLVM_OBJDUMP") or "/opt/homebrew/opt/llvm@22/bin/llvm-objdump"
 
 
 def imports(exe):

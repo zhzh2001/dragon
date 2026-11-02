@@ -200,6 +200,16 @@ int WINAPI xp_GetLocaleInfoEx(const wchar_t* name, LCTYPE type, wchar_t* data, i
 }
 
 // A thread's id from its handle: ntdll's thread basic information on XP.
+// libc++'s std::thread::hardware_concurrency asks for the processors in
+// every group (Windows 7). XP has one group, so GetSystemInfo's count is it.
+DWORD WINAPI xp_GetActiveProcessorCount(WORD group) {
+    REAL(GetActiveProcessorCount, "kernel32.dll");
+    if (real) return real(group);
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return info.dwNumberOfProcessors;
+}
+
 DWORD WINAPI xp_GetThreadId(HANDLE thread) {
     REAL(GetThreadId, "kernel32.dll");
     if (real) return real(thread);
@@ -311,6 +321,7 @@ XP_IMPORT(BOOL, WINAPI, FlsSetValue, "_FlsSetValue@8", (DWORD i, void* v), (i, v
 XP_IMPORT(int, WINAPI, GetLocaleInfoEx, "_GetLocaleInfoEx@16", (const wchar_t* n, LCTYPE t, wchar_t* d, int s),
           (n, t, d, s))
 XP_IMPORT(DWORD, WINAPI, GetThreadId, "_GetThreadId@4", (HANDLE t), (t))
+XP_IMPORT(DWORD, WINAPI, GetActiveProcessorCount, "_GetActiveProcessorCount@4", (WORD g), (g))
 XP_IMPORT(BOOL, WINAPI, K32EnumProcessModules, "_K32EnumProcessModules@16",
           (HANDLE p, HMODULE* m, DWORD b, DWORD* n), (p, m, b, n))
 XP_IMPORT(HRESULT, WINAPI, DwmIsCompositionEnabled, "_DwmIsCompositionEnabled@4", (BOOL* e), (e))

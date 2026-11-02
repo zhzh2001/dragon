@@ -42,6 +42,8 @@ typedef uint64_t Uint64;
 #define SDL_sscanf sscanf
 #define SDL_free free
 #define SDL_malloc malloc
+#define SDL_strcmp strcmp
+#define SDL_snprintf snprintf
 
 // ---- errors and hints
 const char* SDL_GetError(void);
@@ -81,6 +83,10 @@ void SDL_LogError(int category, const char* fmt, ...);
 // ---- time
 Uint64 SDL_GetTicks(void);
 Uint64 SDL_GetTicksNS(void);
+void SDL_Delay(Uint32 ms);
+
+// ---- the CPU
+int SDL_GetNumLogicalCPUCores(void);
 
 // ---- files and paths (UTF-8, as in SDL)
 void* SDL_LoadFile(const char* file, size_t* datasize);
@@ -104,6 +110,7 @@ void* SDL_GetPointerProperty(SDL_PropertiesID props, const char* name, void* def
 typedef struct SDL_Window SDL_Window;
 typedef Uint64 SDL_WindowFlags;
 #define SDL_WINDOW_FULLSCREEN 0x0000000000000001ull  // declared, never set: D3D9 takes the mode itself
+#define SDL_WINDOW_OPENGL 0x0000000000000002ull  // declared, never set: no GLES backend here
 #define SDL_WINDOW_HIDDEN 0x0000000000000008ull
 #define SDL_WINDOW_RESIZABLE 0x0000000000000020ull
 #define SDL_WINDOW_HIGH_PIXEL_DENSITY 0x0000000000002000ull
@@ -116,6 +123,30 @@ bool SDL_GetWindowSizeInPixels(SDL_Window* window, int* w, int* h);
 bool SDL_SetWindowSize(SDL_Window* window, int w, int h);
 bool SDL_RestoreWindow(SDL_Window* window);
 bool SDL_SetWindowRelativeMouseMode(SDL_Window* window, bool enabled);
+
+// ---- the display. The video driver is "windows". The display-mode calls
+// exist for gfx::Device::fit_display_mode, which acts only on a console
+// ("kmsdrm"); here they report no modes, since D3D9 takes its exclusive
+// mode itself (rhi/d3d9).
+typedef Uint32 SDL_DisplayID;
+typedef struct SDL_DisplayMode {
+    SDL_DisplayID displayID;
+    Uint32 format;
+    int w;
+    int h;
+    float pixel_density;
+    float refresh_rate;
+    int refresh_rate_numerator;
+    int refresh_rate_denominator;
+    void* internal;
+} SDL_DisplayMode;
+const char* SDL_GetCurrentVideoDriver(void);
+SDL_DisplayID SDL_GetDisplayForWindow(SDL_Window* window);
+const SDL_DisplayMode* SDL_GetDesktopDisplayMode(SDL_DisplayID display);
+SDL_DisplayMode** SDL_GetFullscreenDisplayModes(SDL_DisplayID display, int* count);
+bool SDL_SetWindowFullscreenMode(SDL_Window* window, const SDL_DisplayMode* mode);
+bool SDL_SetWindowFullscreen(SDL_Window* window, bool fullscreen);
+bool SDL_SyncWindow(SDL_Window* window);
 
 // The XP build's one extension: a hook called first in the window
 // procedure, for Dear ImGui's Win32 backend (editor/imgui_layer.cpp). A

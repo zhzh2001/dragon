@@ -9,8 +9,8 @@ root=$(cd "$(dirname "$0")/../../.." && pwd)
 out=$1
 mkdir -p "$out"
 m=${DRAGON_LLVM_MINGW:-$HOME/.local/opt/llvm-mingw-msvcrt}
-llvm=${DRAGON_LLVM:-/opt/homebrew/opt/llvm@21}
-lld=${DRAGON_LLD:-/opt/homebrew/opt/lld@21}
+llvm=${DRAGON_LLVM:-/opt/homebrew/opt/llvm@22}
+lld=${DRAGON_LLD:-/opt/homebrew/opt/lld@22}
 tmp=$(mktemp -d)
 cxx="$llvm/bin/clang++ --target=i686-w64-mingw32 --sysroot=$m -resource-dir=$m/clang21-resource -stdlib=libc++ -msse2 -mfpmath=sse -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -O2"
 $cxx -fno-threadsafe-statics -I"$root/src" -c "$root/src/platform/xp/xp_thunks.cpp" -o "$tmp/xp_thunks.o"

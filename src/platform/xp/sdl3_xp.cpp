@@ -405,6 +405,16 @@ Uint64 SDL_GetTicksNS(void) {
 
 Uint64 SDL_GetTicks(void) { return SDL_GetTicksNS() / 1000000ull; }
 
+void SDL_Delay(Uint32 ms) { Sleep(ms); }
+
+// ---- the CPU
+
+int SDL_GetNumLogicalCPUCores(void) {
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return int(info.dwNumberOfProcessors);
+}
+
 // ---- files and paths
 
 void* SDL_LoadFile(const char* file, size_t* datasize) {
@@ -532,6 +542,24 @@ void SDL_DestroyWindow(SDL_Window* window) {
 }
 
 SDL_PropertiesID SDL_GetWindowProperties(SDL_Window* window) { return window ? 1 : 0; }
+
+// ---- the display (SDL.h says why there are no modes)
+
+const char* SDL_GetCurrentVideoDriver(void) { return "windows"; }
+SDL_DisplayID SDL_GetDisplayForWindow(SDL_Window* window) { return window ? 1 : 0; }
+const SDL_DisplayMode* SDL_GetDesktopDisplayMode(SDL_DisplayID) {
+    SDL_SetError("no display modes in the XP subset");
+    return nullptr;
+}
+SDL_DisplayMode** SDL_GetFullscreenDisplayModes(SDL_DisplayID, int* count) {
+    if (count) *count = 0;
+    return nullptr;
+}
+bool SDL_SetWindowFullscreenMode(SDL_Window*, const SDL_DisplayMode*) {
+    return SDL_SetError("no display modes in the XP subset");
+}
+bool SDL_SetWindowFullscreen(SDL_Window*, bool) { return SDL_SetError("no display modes in the XP subset"); }
+bool SDL_SyncWindow(SDL_Window* window) { return window != nullptr; }
 
 bool SDL_GetWindowSize(SDL_Window* window, int* w, int* h) {
     RECT r = {};
