@@ -12,6 +12,12 @@
 # The APK carries no data: tools/android/push_assets.sh puts it in the app's
 # external files directory. --install also adb-installs the result.
 #
+# A release (tools/release/package_android.sh) sets three variables:
+# DRAGON_APK_DATA, a directory added as the APK's assets (with its data.txt
+# manifest, which core/paths.cpp unpacks from); DRAGON_APK_VERSION, the
+# version name; and DRAGON_APK_KEYSTORE, the release key, with its password
+# in the file beside it (<keystore>.pass). The release APK is not debuggable.
+#
 # Needs the NDK (brew install --cask android-ndk), the SDK's platform 35 and
 # build-tools 35 (brew install --cask android-commandlinetools, then
 # sdkmanager), and a JDK 17 (brew install openjdk@17).
@@ -45,9 +51,12 @@ sdl_java=$build/_deps/sdl3-src/android-project/app/src/main/java
 "$BT/d8" --release --min-api $min_api --lib "$JAR" --output "$out/dex" \
   $(find "$out/classes" -name '*.class')
 
+link_args=(--debug-mode)
+[ -n "${DRAGON_APK_KEYSTORE:-}" ] && link_args=()
+[ -n "${DRAGON_APK_DATA:-}" ] && link_args+=(-A "$DRAGON_APK_DATA")
 "$BT/aapt2" link -o "$out/unaligned.apk" -I "$JAR" --manifest android/AndroidManifest.xml \
-  --min-sdk-version $min_api --target-sdk-version 35 --debug-mode \
-  --version-code "$(git rev-list --count HEAD)" --version-name "$(git describe --always --dirty)"
+  --min-sdk-version $min_api --target-sdk-version 35 ${link_args[@]+"${link_args[@]}"} \
+  --version-code "$(git rev-list --count HEAD)" --version-name "${DRAGON_APK_VERSION:-$(git describe --always --dirty)}"
 cp "$out/dex/classes.dex" "$out/zip/"
 "$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip" -o "$out/zip/lib/arm64-v8a/libmain.so" \
   "$build/libmain.so"
@@ -55,13 +64,17 @@ cp "$out/dex/classes.dex" "$out/zip/"
 "$BT/zipalign" -P 16 -f 4 "$out/unaligned.apk" "$out/aligned.apk"
 
 key=$HOME/.android/debug.keystore
-if [ ! -f "$key" ]; then
+pass=pass:android
+if [ -n "${DRAGON_APK_KEYSTORE:-}" ]; then
+  key=$DRAGON_APK_KEYSTORE
+  pass=file:$key.pass
+elif [ ! -f "$key" ]; then
   mkdir -p "$(dirname "$key")"
   "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$key" -storepass android -keypass android \
     -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
     -dname "CN=Android Debug,O=Android,C=US" >/dev/null
 fi
-"$BT/apksigner" sign --ks "$key" --ks-pass pass:android --out "$out/dragon.apk" "$out/aligned.apk"
+"$BT/apksigner" sign --ks "$key" --ks-pass "$pass" --out "$out/dragon.apk" "$out/aligned.apk"
 echo "$out/dragon.apk: $(du -h "$out/dragon.apk" | cut -f1)"
 
 if [ "${1:-}" = "--install" ]; then

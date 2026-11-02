@@ -1,8 +1,12 @@
 #include "core/paths.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_system.h>
+#ifdef SDL_PLATFORM_ANDROID
+#include <SDL3/SDL_timer.h>
+#endif
 
 #include "core/log.h"
 
@@ -45,17 +49,85 @@ std::string pick(std::initializer_list<std::string> candidates) {
     return last;
 }
 
+#ifdef SDL_PLATFORM_ANDROID
+// A release APK carries the data inside it (tools/release/package_android.sh)
+// with a manifest, data.txt: a version on the first line, then one path per
+// line. The game reads its files with fopen and std::ifstream, which cannot
+// open an APK's assets, so they are copied once to the external files
+// directory, where a development build's push_assets.sh puts them, and again
+// only when the version changes. A development APK has no manifest and this
+// does nothing.
+void unpack_apk_data(const std::string& external) {
+    size_t size = 0;
+    char* manifest = static_cast<char*>(SDL_LoadFile("data.txt", &size));  // relative: from the APK
+    if (!manifest) return;
+    const std::string text(manifest, size);
+    SDL_free(manifest);
+    const size_t first = text.find('\n');
+    const std::string version = text.substr(0, first);
+    const std::string stamp = join(external, "data.version");
+    size_t stamp_size = 0;
+    if (char* old = static_cast<char*>(SDL_LoadFile(stamp.c_str(), &stamp_size))) {
+        const bool same = std::string(old, stamp_size) == version;
+        SDL_free(old);
+        if (same) return;
+    }
+    const uint64_t started = SDL_GetTicksNS();
+    std::vector<char> buffer(1 << 20);
+    int files = 0;
+    uint64_t bytes = 0;
+    size_t at = first == std::string::npos ? text.size() : first + 1;
+    while (at < text.size()) {
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        const std::string rel = text.substr(at, end - at);
+        at = end + 1;
+        if (rel.empty()) continue;
+        const std::string out_path = join(external, rel);
+        const size_t slash = out_path.find_last_of('/');
+        if (slash != std::string::npos) SDL_CreateDirectory(out_path.substr(0, slash).c_str());
+        SDL_IOStream* in = SDL_IOFromFile(rel.c_str(), "rb");
+        SDL_IOStream* out = in ? SDL_IOFromFile(out_path.c_str(), "wb") : nullptr;
+        bool ok = in && out;
+        while (ok) {
+            const size_t n = SDL_ReadIO(in, buffer.data(), buffer.size());
+            if (n == 0) break;
+            ok = SDL_WriteIO(out, buffer.data(), n) == n;
+            bytes += n;
+        }
+        if (in) SDL_CloseIO(in);
+        if (out && !SDL_CloseIO(out)) ok = false;
+        if (!ok) {
+            // No stamp: the next start tries again.
+            LOG_ERROR("unpacking %s from the APK failed: %s", rel.c_str(), SDL_GetError());
+            return;
+        }
+        ++files;
+    }
+    if (SDL_IOStream* out = SDL_IOFromFile(stamp.c_str(), "wb")) {
+        SDL_WriteIO(out, version.data(), version.size());
+        SDL_CloseIO(out);
+    }
+    LOG_INFO("unpacked %d files (%.0f MB) of data %s from the APK in %.1f s", files, bytes / 1048576.0,
+             version.c_str(), (SDL_GetTicksNS() - started) / 1e9);
+}
+#endif
+
 }  // namespace
 
 void init() {
     const char* base_c = SDL_GetBasePath();
     std::string base = base_c ? base_c : "";
 #ifdef SDL_PLATFORM_ANDROID
-    // Android: the data is not read out of the APK but pushed beside it, to
-    // the app's external files directory (tools/android/push_assets.sh),
-    // where fopen and std::ifstream read it as on every other platform
-    // (docs/porting/MOBILE.md).
-    if (const char* external = SDL_GetAndroidExternalStoragePath()) base = external;
+    // Android: the data is not read out of the APK but kept beside it, in
+    // the app's external files directory, where fopen and std::ifstream read
+    // it as on every other platform (docs/porting/MOBILE.md). A development
+    // build's data is pushed there (tools/android/push_assets.sh); a release
+    // APK's is unpacked there from the APK on first start.
+    if (const char* external = SDL_GetAndroidExternalStoragePath()) {
+        base = external;
+        unpack_apk_data(base);
+    }
 #endif
 
 #ifdef ASSET_ROOT
