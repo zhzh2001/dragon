@@ -40,6 +40,7 @@ fi
 
 tarball=$root/dist/Dragon-$version-pi.tar.gz
 rm -f "$tarball"
-tar czf "$tarball" -C "$out" Dragon
+# No macOS extended attributes: GNU tar warns about each one.
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$tarball" -C "$out" Dragon
 rm -rf "$out"
 echo "$tarball: $(du -h "$tarball" | cut -f1)"

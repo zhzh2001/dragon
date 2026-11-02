@@ -25,3 +25,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # come after CMake's definitions, so this undoes it.
 set(CMAKE_C_FLAGS_INIT "-U_TIME_BITS")
 set(CMAKE_CXX_FLAGS_INIT "-U_TIME_BITS")
+# No build-tree RUNPATH: CMake added the sysroot's library directory for
+# the GLES library named by its full path, which put the Mac's home into
+# the executable. The Pi finds libGLESv2 in its own system path.
+set(CMAKE_SKIP_BUILD_RPATH ON)

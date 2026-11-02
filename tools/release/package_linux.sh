@@ -78,6 +78,7 @@ fi
 
 tarball=$root/dist/Dragon-$version-linux.tar.gz
 rm -f "$tarball"
-tar czf "$tarball" -C "$root/dist/stage-linux" Dragon
+# No macOS extended attributes: GNU tar warns about each one.
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$tarball" -C "$root/dist/stage-linux" Dragon
 rm -rf "$root/dist/stage-linux"
 echo "$tarball: $(du -h "$tarball" | cut -f1) (newest symbol $newest)"
