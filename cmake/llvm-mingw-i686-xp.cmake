@@ -16,16 +16,16 @@
 #     -p 'llvm-mingw-20260922-msvcrt-ubuntu-22.04-x86_64.tar.xz'
 #   (sha256 17bbc667b96f7b1f02ce4a172d8cac4fa480927a1f649e788dee5914919566a1)
 #   tar -xJf ... into ~/.local/opt/llvm-mingw-msvcrt, then
-#   mkdir clang21-resource/lib; ln -s <homebrew llvm>/lib/clang/21/include clang21-resource/include
-#   ln -s ../../lib/clang/23/lib/windows clang21-resource/lib/windows
+#   mkdir clang22-resource/lib; ln -s <homebrew llvm>/lib/clang/22/include clang22-resource/include
+#   ln -s ../../lib/clang/23/lib/windows clang22-resource/lib/windows
 #
 # What libc++ and the CRT import that XP lacks is supplied by
 # src/platform/xp/xp_thunks.cpp, and tools/xp/check_imports.py is the gate.
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR i686)
 
-set(DRAGON_LLVM "/opt/homebrew/opt/llvm@21" CACHE PATH "the clang that compiles the XP build")
-set(DRAGON_LLD "/opt/homebrew/opt/lld@21" CACHE PATH "the lld that links it")
+set(DRAGON_LLVM "/opt/homebrew/opt/llvm@22" CACHE PATH "the clang that compiles the XP build")
+set(DRAGON_LLD "/opt/homebrew/opt/lld@22" CACHE PATH "the lld that links it")
 if(DEFINED ENV{DRAGON_LLVM_MINGW})
   set(DRAGON_LLVM_MINGW "$ENV{DRAGON_LLVM_MINGW}" CACHE PATH "")
 else()
@@ -47,7 +47,7 @@ set(CMAKE_SYSROOT "${DRAGON_LLVM_MINGW}")
 # (the Pentium 4 benches, the G41's Core 2). _WIN32_WINNT=0x0501: the headers
 # declare only what XP has, so a newer API fails to compile here rather than
 # to load there.
-set(_xp_flags "-resource-dir=${DRAGON_LLVM_MINGW}/clang21-resource -stdlib=libc++ -msse2 -mfpmath=sse -D_WIN32_WINNT=0x0501 -DWINVER=0x0501")
+set(_xp_flags "-resource-dir=${DRAGON_LLVM_MINGW}/clang22-resource -stdlib=libc++ -msse2 -mfpmath=sse -D_WIN32_WINNT=0x0501 -DWINVER=0x0501")
 set(CMAKE_C_FLAGS_INIT "${_xp_flags}")
 set(CMAKE_CXX_FLAGS_INIT "${_xp_flags}")
 # One self-contained .exe: libc++, libunwind and the builtins linked in.
