@@ -193,9 +193,10 @@ M0's shared work with it. What exists:
   to 2048 textures by `shrink_glb.py`) and `adb push --sync`es it to
   `/sdcard/Android/data/com.paleshell.dragon/files`, which
   `core/paths.cpp` takes as the root on Android. fopen and ifstream read it
-  unchanged, so no file access was rewritten. A release APK will still
-  need the assets inside it (the open item from "What every mobile target
-  needs").
+  unchanged, so no file access was rewritten. A release APK
+  (`tools/release/package_android.sh`, 0.3.0) carries the same files
+  inside it with a manifest, and `core/paths.cpp` copies them to that
+  directory on the first start of each version.
 - **Driven from the Mac.** `tools/android/run.sh -- ARGS` launches with a
   command line (the intent's `args` extra; leading `NAME=value` words are
   set as environment variables first), waits for SDL_main to return, and
@@ -302,8 +303,8 @@ over ten minutes; this is the first two.
 default tier picked from the GPU (the Ace 3V should start higher); the
 cloud march and the composite, the two fixed costs left for the presets
 above Phone; touch controls through the HUD kit; lifecycle (pause on
-background, the swapchain on return); the safe area; the assets inside a
-release APK.
+background, the swapchain on return); the safe area. (The assets inside
+a release APK came with 0.3.0.)
 
 ## M4 and M5, as built so far (2026-10-15): the Pi 1B runs the game
 

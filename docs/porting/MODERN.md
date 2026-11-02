@@ -203,11 +203,10 @@ simulation.
 **Packages.** `tools/release/package_windows.sh` builds a 144 MB zip on the
 Mac. Unpacked on Windows, it matches the D3D12 goldens exactly and passes
 them all on Vulkan. A 9000-frame `--demo` soak ran into valley 2 in 50 s
-with no errors. **A Linux package is not done.** A CachyOS build requires
-glibc 2.43, which only rolling distros have, so it must be built in an
-older container (Ubuntu 24.04: glibc 2.39). x99's Docker keeps its images
-on a root disk with 3.7 GB free, so it waits for Docker to move to
-`/mnt/Data`, or for a build on another box.
+with no errors. **The Linux package** came with 0.3.0 (2026-11-01). A
+CachyOS build requires glibc 2.43, which only rolling distros have, and
+the older-glibc container planned here did not fit on x99's root disk.
+Zig's clang targets glibc 2.31 from CachyOS instead (`docs/RELEASE.md`).
 
 **CI.** `.github/workflows/ci.yml` builds and runs the suites on macOS,
 Ubuntu and Windows (MSYS2 UCRT64) on every push to the public repository,

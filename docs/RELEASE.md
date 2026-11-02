@@ -90,18 +90,38 @@ them, and only a GitHub Support request purges that sooner.
 
 ## A copy of the game
 
-```sh
-tools/release/package_macos.sh 0.1.0     # -> dist/Dragon-0.1.0-macos.zip
-```
+There are six packages, one script each, all run on the Mac:
 
-The script, and what P0 changed to make a copy work, are in
-`docs/PORTING.md`. Windows is `tools/release/package_windows.sh`, which
-cross-builds on the Mac: `Dragon/` holds `dragon.exe`, the shaders baked to
-DXIL and SPIR-V, the same `assets/`, a `README.txt`
-(`tools/release/README-windows.txt`) and the licence files. Nothing on the
-Mac can run the result, so unpack it on x99-windows and run the goldens
-with `--binary` before uploading it (`docs/PORTING.md`, P2). There is no Linux
-package yet; the same section says why. The zip holds `Dragon/`:
+| Script | Package | Built how | Checked where |
+|---|---|---|---|
+| `package_macos.sh` | `Dragon-V-macos.zip` | natively, MSL baked | the script renders a frame from the unpacked zip |
+| `package_windows.sh` | `Dragon-V-windows.zip` | MinGW-w64, DXIL and SPIR-V | x99-windows: the goldens with the unpacked `dragon.exe` |
+| `package_xp.sh` | `Dragon-V-xp.zip` | llvm-mingw for XP, D3D9 shaders baked under Wine (`WINE=`, `docs/porting/D3D9.md`) | `check_imports.py` in the script; then the G41 or the Atom (`docs/porting/CARDS.md`) |
+| `package_linux.sh` | `Dragon-V-linux.tar.gz` | on `LINUX_HOST` (x99) over ssh, Zig against glibc 2.31 | the script gates on glibc and imports; then the goldens on x99's CachyOS |
+| `package_android.sh` | `Dragon-V-android.apk` | `tools/android/build_apk.sh`, the data inside the APK | the K30 over adb: a first start unpacks the data, then a run |
+| `package_pi.sh` | `Dragon-V-pi.tar.gz` | `tools/pi/build.sh`, one species | the Pi 1B from its console |
+
+Each refuses to package uncommitted changes. The Windows and XP packages
+carry model packs for the D3D9 tiers; the XP package is also how a
+Direct3D 9 card on Windows 10 runs the game.
+
+**The Linux package** has no container. Zig's clang targets glibc 2.31
+(Ubuntu 20.04, Debian 11) from x99's CachyOS (glibc 2.43), the way the Pi
+build pins Bullseye. SDL opens X11, Wayland, Vulkan and the sound servers
+at run time, so the build machine's headers are enough
+(`tools/linux/zig-cc`). The executable imports only glibc. Zig 0.17.0 is
+in `~/opt` on x99 (`ZIG=` overrides).
+
+**The Android APK** carries its data and a manifest (`data.txt`), and
+`core/paths.cpp` copies the files to the app's external files directory
+on the first start of each version. It is signed with
+`~/.android/dragon-release.keystore`, password in the `.pass` file beside
+it, made by the first `package_android.sh` on 2026-11-01. Keep both, and
+back them up: an APK signed with another key does not install over the
+last one, and uninstalling deletes the player's records.
+
+The macOS script, and what P0 changed to make a copy work, are in
+`docs/PORTING.md`. The macOS zip holds `Dragon/`:
 
 - `Dragon.app`. Its `Contents/Resources` carries `shaders/`, `assets/`
   (props, textures, fonts, and the seven species' `.glb` at 2048² with

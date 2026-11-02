@@ -49,7 +49,7 @@ local.
 
 | Phase | State | What is left |
 |---|---|---|
-| P0-P2 | Done | A Linux package (an older-glibc container) |
+| P0-P2 | Done, with a Linux package since 0.3.0 (Zig against glibc 2.31, `docs/RELEASE.md`) | -- |
 | R0 | Done | -- |
 | R1, R2 | Done | -- |
 | R2b (model packs) | Done: `--bake-packs`, pixel-identical at sm3 and sm2. The packs carry DXT only | A retro-only package that ships packs without the glTFs; an uncompressed or ETC pack for cards without DXT (the G550 loads glTFs, 25 s to the first frame; the Pi has no DXT either) |
@@ -64,6 +64,22 @@ local.
 
 **Loose ends a new session should know:**
 
+- **D3D12 draws a black world on x99's RX 580** (found 2026-11-01, the 0.3.0
+  Windows package). The X550 is gone from x99's adapter list; an RX 580
+  2048SP on AMD's driver 27.20.1034.6 (August 2020) is there instead, and
+  D3D12 takes it with or without `DRAGON_GPU_LOW_POWER=1` or Windows'
+  per-app GPU preference. Four pipelines fail at creation with
+  E_INVALIDARG: `foliage_prepass`, `atmosphere_transmittance`,
+  `atmosphere_multiscatter` and `atmosphere_frame`. `terrain_sun`, with an
+  identical pipeline description, builds, so the cause is in those
+  shaders' DXIL on this driver; the debug layer's messages go to the
+  debugger, not the log, and were not read. Without the atmosphere tables
+  the sky and the ground are black. Vulkan on Windows (the 5060 Ti)
+  matches the Linux Vulkan set within 0.012 mean, and D3D12 on the 5060 Ti
+  could not be reached to compare, so whether D3D12 fails on other GPUs is
+  unknown. Next: read the debug layer's messages (DebugView, or SDL's
+  info queue), and decide whether a failed essential pipeline should send
+  the Windows build to Vulkan.
 - **x99's display.** The X550 (testsigned, XP-era driver) is the primary
   adapter on VGA, and the 5060 Ti is still installed.
   - SDL's D3D12 driver takes DXGI's first high-performance adapter, which is
