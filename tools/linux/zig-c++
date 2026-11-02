@@ -1,0 +1,9 @@
+#!/bin/bash
+# Zig's clang for the Linux release (cmake/zig-x86_64-linux.cmake): x86-64,
+# glibc 2.31 (Ubuntu 20.04, Debian 11) whatever the build machine has, libc++
+# linked in statically. The build machine's /usr/include comes after Zig's own
+# glibc headers (-idirafter), so X11, Wayland, Vulkan and the audio servers'
+# headers are found there and glibc's are not. The checkout's own path is
+# mapped to . so the build machine's home is not in the binary.
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+exec "${ZIG:-zig}" c++ -target x86_64-linux-gnu.2.31 -idirafter /usr/include -ffile-prefix-map="$root"=. "$@"
