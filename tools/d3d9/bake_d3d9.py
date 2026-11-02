@@ -307,7 +307,11 @@ def main():
         wine = os.environ.get("WINE") or shutil.which("wine")
         if not wine:
             sys.exit("needs Wine (set WINE to its bin/wine) to run d3dcompiler_47 on this host")
-        env = dict(os.environ, WINEDEBUG="-all", WINEDLLOVERRIDES="d3dcompiler_47=n")
+        # A plain PATH: Wine copies the Unix one into the program's
+        # environment, and with a long, odd entry in it (a session's scratch
+        # directory) it failed to start the compiler at all, c0000135, every
+        # time. The compiler needs nothing from PATH.
+        env = dict(os.environ, WINEDEBUG="-all", WINEDLLOVERRIDES="d3dcompiler_47=n", PATH="/usr/bin:/bin")
         # Wine wants Windows paths for the outputs.
         argv = [wine] + [a if not a.startswith("/") else "Z:" + a.replace("/", "\\") for a in argv]
         listing = run(argv, cwd=work, env=env)
