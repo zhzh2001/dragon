@@ -3,4 +3,6 @@
 # Raspberry Pi OS Bullseye), against build-pi/sysroot (tools/pi/build.sh).
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 sysroot=${DRAGON_PI_SYSROOT:-$here/../../build-pi/sysroot}
-exec zig cc -target arm-linux-gnueabihf.2.31 --sysroot="$sysroot" -mcpu=arm1176jzf_s -mfpu=vfp -mfloat-abi=hard "$@"
+# The checkout mapped to ., so the Mac's home is not in the binary.
+root=$(cd "$here/../.." && pwd)
+exec zig cc -target arm-linux-gnueabihf.2.31 --sysroot="$sysroot" -mcpu=arm1176jzf_s -mfpu=vfp -mfloat-abi=hard -ffile-prefix-map="$root"=. "$@"
