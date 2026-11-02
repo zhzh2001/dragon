@@ -64,35 +64,37 @@ local.
 
 **Loose ends a new session should know:**
 
-- **D3D12 draws a black world on x99's RX 580** (found 2026-11-01, the 0.3.0
-  Windows package). The X550 is gone from x99's adapter list; an RX 580
-  2048SP on AMD's driver 27.20.1034.6 (August 2020) is there instead, and
-  D3D12 takes it with or without `DRAGON_GPU_LOW_POWER=1` or Windows'
-  per-app GPU preference. Four pipelines fail at creation with
-  E_INVALIDARG: `foliage_prepass`, `atmosphere_transmittance`,
-  `atmosphere_multiscatter` and `atmosphere_frame`. `terrain_sun`, with an
-  identical pipeline description, builds, so the cause is in those
-  shaders' DXIL on this driver; the debug layer's messages go to the
-  debugger, not the log, and were not read. Without the atmosphere tables
-  the sky and the ground are black. Vulkan on Windows (the 5060 Ti)
-  matches the Linux Vulkan set within 0.012 mean, and D3D12 on the 5060 Ti
-  could not be reached to compare, so whether D3D12 fails on other GPUs is
-  unknown. Next: read the debug layer's messages (DebugView, or SDL's
-  info queue), and decide whether a failed essential pipeline should send
-  the Windows build to Vulkan.
-- **x99's display.** The X550 (testsigned, XP-era driver) is the primary
-  adapter on VGA, and the 5060 Ti is still installed.
-  - SDL's D3D12 driver takes DXGI's first high-performance adapter, which is
-    now the X550, and refuses the machine. `DRAGON_GPU_LOW_POWER=1` reaches
+- **A D3D12 pipeline links only if its fragment stage reads a prefix of
+  the vertex outputs** (found 2026-11-01, fixed 2026-11-02 in the 0.3.0
+  Windows package). The bake makes DXIL through SPIR-V. On that route a
+  fragment stage drops the inputs it does not read and renumbers the rest
+  from register 0. D3D12 refuses the pipeline with E_INVALIDARG when a
+  register differs from the vertex stage's. Metal and Vulkan link by
+  location and do not notice. Four pipelines failed this way, on the RTX
+  5060 Ti as well as the RX 580, and drew a black world: the three
+  atmosphere tables read only SV_Position, and `foliage_prepass` read only
+  two of five varyings. The tables now take the pixel from the uv, and the
+  foliage varyings put the uv and the material first.
+  `tools/release/check_dxil_linkage.py` reads every baked pair's
+  signatures, and `package_windows.sh` stops on a mismatch.
+- **x99's GPUs (2026-11-02).** The X550 is gone. An RX 580 2048SP (AMD
+  driver 31.0.21925.1001, May 2026) and the RTX 5060 Ti are in. D3D12 takes
+  the 5060 Ti with or without `DRAGON_GPU_LOW_POWER=1` or Windows' per-app
+  GPU preference, so D3D12 on the RX 580 is not tested. Vulkan on Windows
+  takes the RX 580 and passes `--loose` against Metal. The `d3d12` set is
+  recaptured from the 5060 Ti. The `d3d12-sm3` and `d3d12-sm2` sets
+  predate the sequenced random draws (`porting/PRESETS.md`, "A preset
+  renders the same on every backend") and fail strict until recaptured.
+- **x99's display before 2026-11-01.** The X550 (testsigned, XP-era driver)
+  was the primary adapter on VGA, beside the 5060 Ti.
+  - SDL's D3D12 driver takes DXGI's first high-performance adapter, which was
+    the X550, and refused the machine. `DRAGON_GPU_LOW_POWER=1` reaches
     the 5060 Ti anyway: with nothing to rank a WDDM 1.0 driver on, the
     low-power order is adapter order reversed, "the one not driving the
     display". Vulkan finds the 5060 Ti on its own.
   - D3D11 at 9_2 runs on the X550 (`--gpu-driver direct3d11:1` from the
     SSH session, `direct3d11:0` on the desktop: DXGI numbers the adapters
     per session).
-  - The `d3d12`, `d3d12-sm3` and `d3d12-sm2` golden sets predate the
-    sequenced random draws (`porting/PRESETS.md`, "A preset renders the
-    same on every backend") and fail strict until recaptured.
 - **The X550 can hang the machine.** Its driver model has no timeout
   recovery: a GPU hang freezes x99 outright. Do not run High or Ultra on
   it, and keep soaks short.
