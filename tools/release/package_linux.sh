@@ -36,7 +36,7 @@ done
 # The build: HEAD's sources, not the working tree's, unpacked over the
 # remote copy so its CMake cache and SDL build survive between packages.
 ssh "$host" "mkdir -p $remote"
-git archive HEAD src shaders cmake CMakeLists.txt third_party tools/linux | ssh "$host" "tar xf - -C $remote"
+git archive HEAD src shaders cmake CMakeLists.txt tools/linux | ssh "$host" "tar xf - -C $remote"
 ssh "$host" "cd $remote && export ZIG=$zig ZIG_GLOBAL_CACHE_DIR=\$PWD/zig-cache && \
   cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/zig-x86_64-linux.cmake -DCMAKE_BUILD_TYPE=Release \
     -DDRAGON_DEV_ROOTS=OFF -DDRAGON_FETCH_SDL=ON -DDRAGON_SHADERCROSS=OFF >/dev/null && \

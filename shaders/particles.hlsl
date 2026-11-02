@@ -66,6 +66,41 @@ float4 fs_main(VertexOut input) : SV_Target {
     // stage's input signature, between the diffuse and the uv it does use.
     return float4(saturate(input.diffuse.rgb * disc.Sample(disc_sampler, input.uv.xy).rgb) * saturate(input.fog), 1.0);
 }
+#elif defined(LDR_OUTPUT)
+// The SM2 tiers (D3D9 ps_2_0, and GLES): the same three shapes without the
+// noise. ps_2_0 has 64 arithmetic slots and no real branches, so every
+// pixel pays for all three kinds; the noised shader below came to 326.
+// Smoke is a soft disc, a flame tongue a disc that shrinks and cools as it
+// ages, a spark or a streak the hot-centred disc. The kind is chosen by weights.
+float4 fs_main(VertexOut input) : SV_Target {
+    float r = length(input.corner);
+    float age = input.shape.y;
+    float disc = saturate(1.0 - r);
+    // The kind (gfx::ParticleKind): a flame is 1, smoke 2; a disc (0) and a
+    // streak (3, stretched on the CPU) are the disc.
+    float is_flame = saturate(1.0 - abs(input.shape.z - 1.0));
+    float is_smoke = saturate(1.0 - abs(input.shape.z - 2.0));
+
+    float density = disc * 1.4 - age * 0.6;
+    // Linear ramps where the full shader has smoothsteps: they fit.
+    float body = saturate((density - 0.1) * (1.0 / 0.12));
+    float heat = saturate(saturate((density - 0.4) * (1.0 / 0.7)) * (1.25 - age * 1.6));
+    float young = saturate(1.0 - age * 1.4);
+    float flame_cover = body * young * young * input.color.a;
+    float3 flame_light = lerp(input.color.rgb * 0.6, input.color.rgb * float3(1.0, 1.3, 1.5), heat);
+    float flame_falloff = flame_cover * (0.45 + 5.5 * heat * heat);
+
+    float3 light = lerp(input.color.rgb * disc * disc, flame_light * flame_falloff, is_flame);
+    float cover = flame_cover * is_flame;
+    // Smoke is alpha-blended: its colour as it is, its alpha the disc's.
+    light = lerp(light, input.color.rgb, is_smoke);
+    cover = lerp(cover, saturate(disc * 2.0) * input.color.a, is_smoke);
+    // Without a float target each puff is finished on its own and the
+    // finished values add: brighter where puffs stack than the modern
+    // tonemap-after-sum, which is the price of eight bits. The fast
+    // encode: the full one's hue blend does not fit beside the shapes.
+    return float4(ldr_encode_fast(light, u.output_grade), cover);
+}
 #else
 float particle_hash(float2 p) {
     p = frac(p * float2(0.1031, 0.1030));
@@ -81,13 +116,9 @@ float particle_noise(float2 p) {
                 lerp(particle_hash(i + float2(0.0, 1.0)), particle_hash(i + float2(1.0, 1.0)), w.x), w.y);
 }
 
-// Billows: three octaves where there is room, one inside ps_2_0's 64.
+// Billows: three octaves.
 float particle_billow(float2 p) {
-#if defined(LDR_OUTPUT)
-    return particle_noise(p);
-#else
     return particle_noise(p) * 0.55 + particle_noise(p * 2.03 + 7.1) * 0.3 + particle_noise(p * 4.1 + 3.7) * 0.15;
-#endif
 }
 
 float4 fs_main(VertexOut input) : SV_Target {
@@ -104,11 +135,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         float body = saturate(1.0 - r) * 1.15 + (billow - 0.5) * 0.9;
         float alpha = smoothstep(0.1, 0.6, body) * input.color.a;
         float3 smoke = input.color.rgb * (0.8 + 0.4 * billow);
-#if defined(LDR_OUTPUT)
-        return float4(ldr_encode(smoke, u.output_grade), alpha);
-#else
         return float4(smoke, alpha);
-#endif
     }
     float falloff;
     float cover = 0.0;  // how much of what is behind it a puff hides
@@ -148,15 +175,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         falloff = saturate(1.0 - r);
         falloff *= falloff;
     }
-    input.color.rgb = light;
-#if defined(LDR_OUTPUT)
-    // Without a float target each puff is finished on its own and the
-    // finished values add: brighter where puffs stack than the modern
-    // tonemap-after-sum, which is the price of eight bits.
-    return float4(ldr_encode(input.color.rgb * falloff, u.output_grade), cover);
-#else
-    return float4(input.color.rgb * falloff, cover);
-#endif
+    return float4(light * falloff, cover);
 }
 #endif
 #endif

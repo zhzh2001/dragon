@@ -7,6 +7,7 @@
 # feels), and the model packs.
 #
 #   tools/pi/deploy.sh [SPECIES...]
+#   PI_STAGE_ONLY=1 tools/pi/deploy.sh   # stage in build-pi/stage, copy nothing
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
@@ -42,5 +43,7 @@ for s in $species; do models="$models${models:+,}$stage/assets/$s.glb"; done
 [ -x build/dragon ] || { echo "build/dragon is needed to bake the model packs" >&2; exit 1; }
 ./build/dragon --bake-packs --models "$models" >/dev/null 2>&1
 cp assets/props/*.glb.pack "$stage/assets/props/"
+# PI_STAGE_ONLY=1 stops here: tools/release/package_pi.sh packs the stage.
+[ -n "${PI_STAGE_ONLY:-}" ] && exit 0
 rsync -a --delete "$stage/" rpi:dragon/
 ssh rpi 'du -sh dragon'
