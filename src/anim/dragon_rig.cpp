@@ -357,6 +357,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(beat_pitch_deg),
     RIG_FLOAT_FIELD(beat_head_hold),
     RIG_FLOAT_FIELD(beat_variation),
+    RIG_FLOAT_FIELD(wing_level_share),
     RIG_FLOAT_FIELD(glide_breath_deg),
     RIG_FLOAT_FIELD(glide_breath_period),
     RIG_FLOAT_FIELD(glide_trim_deg),
@@ -720,6 +721,23 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
         // Up, not down: the fold's sign convention is written for an axis that
         // points the same way body up does.
         wing_fold_axis_[side] = normal.y < 0.0f ? normal * -1.0f : normal;
+
+        // The drape: the turn about the span (shoulder to the farthest wing
+        // joint) that carries the plane normal onto body up.
+        const int shoulder = joints_.wing_root[side].front();
+        const Vec3 origin = skeleton.world_bind(shoulder).translation_part();
+        Vec3 far = origin;
+        for (const Vec3& p : sample) {
+            if (core::length_sq(p - origin) > core::length_sq(far - origin)) far = p;
+        }
+        if (core::length_sq(far - origin) < 1e-8f) continue;
+        const Vec3 span = core::normalize(far - origin);
+        const Vec3 n = wing_fold_axis_[side] - span * core::dot(wing_fold_axis_[side], span);
+        const Vec3 up = Vec3::unit_y() - span * core::dot(Vec3::unit_y(), span);
+        if (core::length_sq(n) < 1e-8f || core::length_sq(up) < 1e-8f) continue;
+        wing_drape_[side] = std::atan2(core::dot(core::cross(n, up), span), core::dot(n, up));
+        const Quat bind = core::quat_from_matrix(skeleton.world_bind(shoulder));
+        wing_span_local_[side] = core::normalize(core::rotate(core::conjugate(bind), span));
     }
 
     // Feet and toes, with depth below their root, for the hanging curl. The
@@ -2686,6 +2704,20 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     drive_gestures();
     drive_life(state);
     drive_wings(state);
+    // Level the sculpted drape in flight (wing_level_share), in the
+    // shoulder's own frame so the turn rides on the flap rather than tilting
+    // the stroke.
+    {
+        const float level = core::saturate(tuning.wing_level_share) *
+                            (1.0f - core::saturate(state.wing_tuck)) *
+                            (1.0f - ground_contact_ * standing_share(state.airspeed));
+        for (int side = 0; side < 2 && level > 1e-4f; ++side) {
+            if (joints_.wing_root[side].empty() || std::fabs(wing_drape_[side]) < 1e-4f) continue;
+            Transform& shoulder = pose_.local[size_t(joints_.wing_root[side].front())];
+            shoulder.rotation = core::normalize(
+                shoulder.rotation * Quat::from_axis_angle(wing_span_local_[side], wing_drape_[side] * level));
+        }
+    }
     // The gesture layer on the root: pitch, roll and yaw in engine terms,
     // and the surge along the body's forward axis. Same sign conventions as
     // the body beat's pitch and the wings' roll lean.

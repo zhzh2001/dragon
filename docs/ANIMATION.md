@@ -671,15 +671,24 @@ the gesture layer, so the head hold can take exactly them back out. Tests
 that pin an exact pose fly in still air (`still_air` in `test_anim`);
 `test_life_in_flight` pins the three behaviours on Embercrest.
 
-**Still open: the wing hangs like a curtain at the bottom of the stroke.**
-Embercrest's tip drops only about 30 degrees below the shoulder, but its
-membrane is modelled draped about 35 degrees aft-down (the fitted plane above),
-so the lowered wing hangs nearly vertical below the belly for a third of the
-beat. A shallower stroke (-28 degrees, an even down/up split) changed
-almost nothing in a side sheet. The cure is in the asset: a rest pose with
-a level membrane. Two items from the research are also not done: the
-outside wing does not beat harder than the inside wing in a banked turn,
-and the take-off does not open with a burst of fast, deep beats.
+**The wing hung like a curtain at the bottom of the stroke.** Embercrest's
+tip drops only about 30 degrees below the shoulder, but its membrane is
+modelled draped about 35 degrees aft-down (the fitted plane above), so the
+lowered wing hung nearly vertical below the belly for a third of the beat.
+A shallower stroke (-28 degrees, an even down/up split) changed almost
+nothing in a side sheet. `wing_level_share` (0.7) is the cure: `init()`
+measures the turn about each wing's span that would bring its fitted plane
+level, and in flight the shoulder takes that share of it, post-multiplied
+in its own frame so the turn rides on the flap. It fades with the tuck and
+the standing stow, which fold about the modelled plane. The downloaded asset's
+wings are level already, so it changes nothing there. The cost is a few
+points of tip travel, because the outer joints' flap axes turn with the
+shoulder: Embercrest 82% to 78% of the commanded stroke, Stormsail 87% to
+84% (`test_wingtip_reaches_the_commanded_flap` now asks for 75%).
+
+Not done from the research: the outside wing does not beat harder than the
+inside wing in a banked turn, and a take-off does not open with a burst of
+fast, deep beats.
 
 ### The jaw bone may own the wrong half of the mouth
 

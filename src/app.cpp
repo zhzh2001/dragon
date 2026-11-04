@@ -3999,6 +3999,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("body pitch", &rig.beat_pitch_deg, 0.0f, 8.0f, "%.1f deg");
         ImGui::SliderFloat("head hold", &rig.beat_head_hold, 0.0f, 1.0f);
         ImGui::SliderFloat("beat variation", &rig.beat_variation, 0.0f, 0.3f);
+        ImGui::SliderFloat("level the membrane", &rig.wing_level_share, 0.0f, 1.0f);
         ImGui::SeparatorText("life in the glide");
         ImGui::SliderFloat("breath", &rig.glide_breath_deg, 0.0f, 5.0f, "%.1f deg");
         ImGui::SliderFloat("breath period", &rig.glide_breath_period, 1.0f, 8.0f, "%.1f s");

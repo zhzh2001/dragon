@@ -10,3 +10,14 @@
 - `roster-a.jpg`, `roster-b.jpg`: every release species after the change.
   Columns: the glide at frames 300 and 420 (`--studio 0`), the flap from the
   side and the front, the head close mid-beat, and a landing at foot level.
+
+The membrane leveling (`wing_level_share` 0.7), the same day:
+
+- `flap-side-level.jpg`: the studio flap again, Embercrest with the
+  modelled drape leveled. Compare frames 120-140 with `flap-side-after.jpg`.
+- `level-before-after.jpg`: top row without, bottom row with; the flap from
+  the front at 130 and 165, from above at 140, the glide from above and the
+  side at 300, the flap from behind at 150.
+- `roster-level-a.jpg`, `roster-level-b.jpg`: every release species with
+  it. Columns: the glide, the flap from the side and the front, the head
+  close, and a landing at foot level.

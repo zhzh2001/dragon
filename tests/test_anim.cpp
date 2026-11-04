@@ -1817,7 +1817,11 @@ void test_wingtip_reaches_the_commanded_flap() {
             measured_stroke_fraction(asset_skeleton, asset_joints, asset_tuning);
         std::printf("  %s: tip travels %.0f%% of the commanded stroke\n", name,
                     double(100.0f * asset_fraction));
-        CHECK(asset_fraction > 0.80f);
+        // 0.75, not 0.80: leveling the sculpted drape (wing_level_share)
+        // turns the outer joints' flap axes with the shoulder, and a few
+        // points of their swing go fore and aft -- Embercrest 82% -> 78%,
+        // Stormsail 87% -> 84%. The bug this pins delivered 43-49%.
+        CHECK(asset_fraction > 0.75f);
     }
 }
 

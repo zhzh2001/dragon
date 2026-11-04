@@ -227,6 +227,14 @@ struct RigTuning {
     //    still deterministic. A loop that repeats to the pixel is the
     //    clearest sign of a machine.
     float beat_variation = 0.07f;
+    // 7. A level membrane in flight. Generated sculpts carry the membrane
+    //    draped aft-down -- the fitted wing plane is 35 degrees off level on
+    //    Embercrest, 44 on Stormsail -- so a lowered wing hung below the belly
+    //    like a curtain. In flight the shoulder turns the whole wing about its
+    //    span by this share of that drape, trailing edge up. Fades with the
+    //    tuck and the standing stow, whose folds are measured on the
+    //    sculpted plane.
+    float wing_level_share = 0.7f;
 
     // Life in the air between beats. A glide that holds every bone still
     // reads as a statue on a wire, and a glide is most of a flight.
@@ -957,6 +965,11 @@ private:
     // shears the inner membrane through the flank; about the plane normal they
     // stay within 6. Measured in init(), model space, so no frame conversion.
     core::Vec3 wing_fold_axis_[2] = {core::Vec3::unit_y(), core::Vec3::unit_y()};
+    // The turn about each wing's span that would bring its fitted plane
+    // level, and that span axis in the shoulder's own bind frame
+    // (wing_level_share).
+    float wing_drape_[2] = {0.0f, 0.0f};
+    core::Vec3 wing_span_local_[2] = {core::Vec3::unit_x(), core::Vec3::unit_x()};
     Pose pose_;
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
