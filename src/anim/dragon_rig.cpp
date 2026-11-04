@@ -494,6 +494,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_brake_extend),
     RIG_FLOAT_FIELD(leg_brake_forward_deg),
     RIG_FLOAT_FIELD(leg_posture_sway),
+    RIG_FLOAT_FIELD(leg_brake_rate),
+    RIG_FLOAT_FIELD(leg_brake_damping),
+    RIG_FLOAT_FIELD(leg_brake_toe_spread_deg),
     RIG_FLOAT_FIELD(leg_dive_trail_deg),
     RIG_FLOAT_FIELD(foot_hang_deg),
     RIG_FLOAT_FIELD(toe_curl_deg),
@@ -921,7 +924,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float bank = core::clampf(state.control.z, -1.0f, 1.0f);
     const float bank_relief =
         1.0f - core::saturate(tuning.brake_bank_relief) * std::fabs(bank);
-    gesture_pitch_ += core::radians(tuning.brake_body_pitch_deg) * flare * bank_relief;
+    gesture_pitch_ += core::radians(tuning.brake_body_pitch_deg) * brake_body_ * bank_relief;
     // Past cruise the wings sweep back and part-fold on their own -- a stoop
     // is a shape speed makes, not only a button. The speed posture fills in
     // whatever the tuck has not already taken.
@@ -1583,6 +1586,7 @@ void DragonRig::hold_head() {
     const int head = joints_.head;
     if (!root_offset_active_ || hold <= 1e-4f || joints_.neck.empty() || head == NO_PARENT ||
         root == NO_PARENT) {
+        head_ride_ = head_ride_velocity_ = Vec3::zero();
         return;
     }
     // Where the head would be, and how it would face, without the beat and
@@ -1598,44 +1602,84 @@ void DragonRig::hold_head() {
     pose_.local[size_t(root)] = moved;
     compute_world_matrices(*skeleton_, pose_, world_);
 
-    // The neck bends to carry the head back toward where it was: a two-bone
-    // solve over the neck's base and middle joints, with the head as the end.
-    // A turn at the base alone only swings the head along an arc, and on an
-    // upright neck that arc is fore and aft -- the head kept riding the heave.
-    // The middle joint changes the base-to-head distance, which is what takes
-    // a vertical offset out.
+    // Where the head goes: still, plus the share of the body's motion the
+    // hold lets through, and that share through a soft spring tuned below
+    // the wingbeat, so what is left lags the body rather than riding it.
+    // Whooper swans hold the head to about a quarter of the body's heave,
+    // the neck flexing half a beat out of phase with it (Pete et al. 2015).
     const Vec3 head_now = world_[size_t(head)].col[3].xyz();
-    const Vec3 wanted = head_now + (head_still - head_now) * hold;
-    const int base = joints_.neck.front();
-    const int middle = joints_.neck.size() >= 2 ? joints_.neck[joints_.neck.size() / 2] : NO_PARENT;
-    if (middle != NO_PARENT && middle != base) {
-        const Vec3 a = world_[size_t(base)].col[3].xyz();
-        const Vec3 b = world_[size_t(middle)].col[3].xyz();
-        const float upper = core::length(b - a);
-        const float lower = core::length(head_now - b);
-        const float reach = core::clampf(core::length(wanted - a), std::fabs(upper - lower) + 1e-4f,
-                                         upper + lower - 1e-4f);
-        const Vec3 to_base = a - b;
-        const Vec3 to_head = head_now - b;
-        const Vec3 bend_axis = core::cross(to_head, to_base);
-        if (upper > 1e-6f && lower > 1e-6f && core::length_sq(bend_axis) > 1e-14f) {
-            const float now = std::acos(core::clampf(
-                core::dot(to_base, to_head) / (upper * lower), -1.0f, 1.0f));
-            const float target = std::acos(core::clampf(
-                (upper * upper + lower * lower - reach * reach) / (2.0f * upper * lower), -1.0f, 1.0f));
-            // A positive turn about to_head x to_base closes the joint.
-            rotate_joint_about(middle, bend_axis, now - target);
+    const Vec3 ride = (head_now - head_still) * (1.0f - hold);
+    {
+        const float omega = core::TWO_PI * 0.6f;
+        const float step = core::minf(plant_dt_, 1.0f / 30.0f);
+        head_ride_velocity_ += ((ride - head_ride_) * (omega * omega) - head_ride_velocity_ * (2.0f * omega)) * step;
+        head_ride_ += head_ride_velocity_ * step;
+        if (!std::isfinite(head_ride_.x + head_ride_.y + head_ride_.z)) {
+            head_ride_ = head_ride_velocity_ = Vec3::zero();
         }
     }
-    {
-        const Vec3 pivot = world_[size_t(base)].col[3].xyz();
-        const Vec3 from = world_[size_t(head)].col[3].xyz() - pivot;
-        const Vec3 to = wanted - pivot;
-        if (core::length_sq(from) > 1e-10f && core::length_sq(to) > 1e-10f) {
-            const Quat turn = core::rotation_between(core::normalize(from), core::normalize(to));
-            const Vec3 axis{turn.x, turn.y, turn.z};
-            if (core::length_sq(axis) > 1e-12f) {
-                rotate_joint_about(base, axis, 2.0f * std::acos(core::clampf(turn.w, -1.0f, 1.0f)));
+    const Vec3 wanted = head_still + head_ride_;
+    // The neck bends in the body's side plane, about model X, over its base
+    // and middle joints: signed angles in that plane, so the bend cannot flip
+    // the way a 3D cross product does as the neck straightens -- that popped
+    // the middle of the neck twice a beat. The beat and the gusts' pitch
+    // move the head in this plane; the roll is left to the head's turn below.
+    const int base = joints_.neck.front();
+    auto yz = [](Vec3 v) { return core::Vec2{v.z, v.y}; };
+    auto cross2 = [](core::Vec2 p, core::Vec2 q) { return p.x * q.y - p.y * q.x; };
+    auto len2 = [](core::Vec2 p) { return std::sqrt(p.x * p.x + p.y * p.y); };
+    auto angle_between = [&](core::Vec2 p, core::Vec2 q) {
+        return std::atan2(cross2(p, q), p.x * q.x + p.y * q.y);
+    };
+    // The middle of the solve is the neck joint with the deepest bend at
+    // rest: the S of the neck is where it has room to fold and to open.
+    // The joint halfway along was all but straight on Embercrest, so the
+    // neck could not reach the head's place for half of every beat.
+    auto rest_bend = [&](int joint) {
+        const core::Vec2 a = yz(skeleton_->world_bind(base).translation_part());
+        const core::Vec2 b = yz(skeleton_->world_bind(joint).translation_part());
+        const core::Vec2 c = yz(skeleton_->world_bind(head).translation_part());
+        return angle_between(core::Vec2{b.x - a.x, b.y - a.y}, core::Vec2{c.x - b.x, c.y - b.y});
+    };
+    int middle = NO_PARENT;
+    float deepest = 0.0f;
+    for (size_t i = 1; i < joints_.neck.size(); ++i) {
+        const float bend = std::fabs(rest_bend(joints_.neck[i]));
+        if (bend > deepest) { deepest = bend; middle = joints_.neck[i]; }
+    }
+    // Damped least squares over the base and the deepest joint: each step
+    // turns them by J^T (J J^T + lambda^2 I)^-1 times the head's error, J the
+    // head's motion per radian of each. Unlike an exact two-bone solve it has
+    // no singularity where the neck straightens: when the head's place is
+    // out of reach the damping lets the head ride a little instead of the
+    // neck snapping. That snap -- the law of cosines' angle running away near
+    // straight -- popped the middle of the neck twice a beat.
+    // A small turn theta about model X moves a point at r from the pivot by
+    // theta * (-r.z, r.y) in (y, z); in (z, y) coordinates that is (r.y, -r.z).
+    if (middle != NO_PARENT) {
+        const float lambda = 0.18f * len2(core::Vec2{
+            yz(world_[size_t(head)].col[3].xyz()).x - yz(world_[size_t(base)].col[3].xyz()).x,
+            yz(world_[size_t(head)].col[3].xyz()).y - yz(world_[size_t(base)].col[3].xyz()).y});
+        for (int iteration = 0; iteration < 3; ++iteration) {
+            const core::Vec2 h = yz(world_[size_t(head)].col[3].xyz());
+            const core::Vec2 e{yz(wanted).x - h.x, yz(wanted).y - h.y};
+            const int pivots[2] = {base, middle};
+            core::Vec2 col[2];
+            for (int k = 0; k < 2; ++k) {
+                const core::Vec2 p = yz(world_[size_t(pivots[k])].col[3].xyz());
+                const core::Vec2 r{h.x - p.x, h.y - p.y};
+                col[k] = core::Vec2{r.y, -r.x};
+            }
+            // J J^T + lambda^2 I, 2 x 2, symmetric.
+            const float a11 = col[0].x * col[0].x + col[1].x * col[1].x + lambda * lambda;
+            const float a12 = col[0].x * col[0].y + col[1].x * col[1].y;
+            const float a22 = col[0].y * col[0].y + col[1].y * col[1].y + lambda * lambda;
+            const float det = a11 * a22 - a12 * a12;
+            if (std::fabs(det) < 1e-12f) break;
+            const core::Vec2 w{(a22 * e.x - a12 * e.y) / det, (a11 * e.y - a12 * e.x) / det};
+            for (int k = 0; k < 2; ++k) {
+                const float turn = col[k].x * w.x + col[k].y * w.y;
+                rotate_joint_about(pivots[k], Vec3::unit_x(), core::clampf(turn, -0.3f, 0.3f));
             }
         }
     }
@@ -2052,12 +2096,33 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
     const float dive = core::saturate(state.wing_tuck);
     const float posture_sway = core::lerpf(1.0f, core::saturate(tuning.leg_posture_sway),
                                            core::maxf(brake, dive));
-    const float brake_extend = core::saturate(tuning.leg_brake_extend) * brake;
-    const float flight_fold = airborne * (1.0f - brake_extend);
-    const float tuck_angle = core::radians(tuning.leg_tuck_deg) * flight_fold;
-    const float brake_forward = core::radians(tuning.leg_brake_forward_deg) * brake * airborne;
+    // The cascade: hip toward the brake, knee toward the hip, talons toward
+    // the knee, each slower than the one before; the right side a little
+    // quicker than the left so the two legs are not mirror twins. Clamped
+    // steps keep a long frame from exploding the springs.
+    for (int side = 0; side < 2; ++side) {
+        float target = brake;
+        for (int stage = 0; stage < 3; ++stage) {
+            const float omega = core::maxf(tuning.leg_brake_rate, 0.5f) *
+                                (1.0f - 0.18f * float(stage)) * (side == 0 ? 1.0f : 0.92f);
+            const float zeta = core::clampf(tuning.leg_brake_damping, 0.2f, 2.0f);
+            float& x = leg_brake_stage_[side][stage];
+            float& v = leg_brake_stage_velocity_[side][stage];
+            const float step = core::minf(dt, 1.0f / 30.0f);
+            v += (omega * omega * (target - x) - 2.0f * zeta * omega * v) * step;
+            x += v * step;
+            if (!std::isfinite(x) || !std::isfinite(v)) x = v = 0.0f;
+            target = x;
+        }
+    }
     for (int side = 0; side < 2; ++side) {
         if (joints_.leg[side].empty()) continue;
+        const float hip_share = leg_brake_stage_[side][0];
+        const float knee_share = leg_brake_stage_[side][1];
+        const float brake_extend = core::saturate(tuning.leg_brake_extend) * core::clampf(knee_share, 0.0f, 1.2f);
+        const float flight_fold = airborne * (1.0f - brake_extend);
+        const float tuck_angle = core::radians(tuning.leg_tuck_deg) * flight_fold;
+        const float brake_forward = core::radians(tuning.leg_brake_forward_deg) * hip_share * airborne;
 
         const Vec3 hip = skeleton_->world_bind(joints_.leg[side].front()).translation_part() *
                          model_scale_;
@@ -2475,7 +2540,7 @@ void DragonRig::plant_limbs(float stance) {
             swing = forward_model * (-std::cos(phase) * 0.5f * tuning.stride_length_m * walking);
         }
         const Vec3 goal = world_[size_t(l.c)].col[3].xyz() + swing;
-        for (int iteration = 0; iteration < 2; ++iteration) {
+        for (int iteration = 0; iteration < 3; ++iteration) {
             const float e = contact_error(l) + lift_m;
             const Vec3 c = world_[size_t(l.c)].col[3].xyz();
             Vec3 across = goal - c;
@@ -2717,6 +2782,20 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
             shoulder.scale = shoulder.scale * wing_growth;
         }
     }
+    {
+        // The body's brake pitch and tail drop follow the brake through a
+        // spring rather than on the frame it changes; the legs' cascade
+        // (drive_legs) starts from the same signal, slower.
+        const float omega = 1.3f * core::maxf(tuning.leg_brake_rate, 0.5f);
+        const float zeta = core::clampf(tuning.leg_brake_damping, 0.2f, 2.0f);
+        const float step = core::minf(dt, 1.0f / 30.0f);
+        brake_body_velocity_ += (omega * omega * (core::saturate(state.wing_brake) - brake_body_) -
+                                 2.0f * zeta * omega * brake_body_velocity_) * step;
+        brake_body_ += brake_body_velocity_ * step;
+        if (!std::isfinite(brake_body_) || !std::isfinite(brake_body_velocity_)) {
+            brake_body_ = brake_body_velocity_ = 0.0f;
+        }
+    }
     drive_gestures();
     drive_life(state);
     drive_wings(state);
@@ -2770,7 +2849,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // control positions are already smoothed by the flight model.
     core::Vec2 tail_steer{
         state.control.x * tuning.tail_elevator_deg +
-            core::saturate(state.wing_brake) * tuning.brake_tail_drop_deg,
+            brake_body_ * tuning.brake_tail_drop_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
 
     // The neck leads the manoeuvre and lowers into the wind at speed -- and a
@@ -2905,9 +2984,13 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         if (claw_time_ < tuning.claw_duration) {
             clawing = std::sin(core::PI * claw_time_ / core::maxf(tuning.claw_duration, 1e-3f));
         }
+        // The flare opens them too, last in the brake cascade.
+        const float flare_spread = tuning.leg_brake_toe_spread_deg * 0.5f *
+                                   core::maxf(leg_brake_stage_[0][2] + leg_brake_stage_[1][2], 0.0f);
         const float curl_angle =
             core::radians(tuning.toe_curl_deg -
-                          tuning.attack_toe_spread_deg * core::maxf(breath_smoothed_, clawing)) *
+                          tuning.attack_toe_spread_deg * core::maxf(breath_smoothed_, clawing) -
+                          flare_spread) *
             airborne * model_forward_z_;
         for (const auto& [joint, depth] : foot_joints_) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);

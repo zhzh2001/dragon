@@ -726,6 +726,17 @@ struct RigTuning {
     // Active manoeuvres hold the limbs against gravity/inertial swing. Glide
     // retains the full pendulum; 1 restores freely hanging brake/dive legs.
     float leg_posture_sway = 0.2f;
+    // The brake posture is a cascade, not a switch: the hip's reach follows
+    // the brake through a spring, the knee's unfold follows the hip, and the
+    // talons follow the knee, each a little behind and slightly
+    // underdamped, so a flare reaches, overshoots and settles from the hip
+    // out instead of every joint snapping to a fixed angle on the frame the
+    // brake changes. Rate in radians per second for the hip (the knee and
+    // the talons are slower), damping ratio below 1.
+    float leg_brake_rate = 7.0f;
+    float leg_brake_damping = 0.6f;
+    // The talons open and reach in a flare, as a raptor's do before contact.
+    float leg_brake_toe_spread_deg = 28.0f;
     // Extra hip trail in a tuck, for species with a relaxed hanging glide.
     float leg_dive_trail_deg = 0.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
@@ -1080,6 +1091,14 @@ private:
     // and what the beat and the gusts did to the root, which the head hold
     // takes back out at the head.
     float life_wing_[2] = {0.0f, 0.0f};
+    // The brake cascade (leg_brake_rate): per side, the hip's, the knee's
+    // and the talons' share of the brake posture, and their rates.
+    float leg_brake_stage_[2][3] = {};
+    // The body's share of the brake: the same spring, quicker, because the
+    // body leads a flare and the legs follow it.
+    float brake_body_ = 0.0f;
+    float brake_body_velocity_ = 0.0f;
+    float leg_brake_stage_velocity_[2][3] = {};
     float life_beat_scale_[2] = {0.0f, 0.0f};
     float life_last_phase_ = 0.0f;
     int life_beat_count_ = 0;
@@ -1093,6 +1112,10 @@ private:
     // frame: a rotation composed on the left and a translation. hold_head
     // removes exactly these.
     core::Quat root_offset_rotation_{};
+    // The share of the body's motion the head hold lets through, after its
+    // soft spring (hold_head), and that spring's velocity.
+    core::Vec3 head_ride_{};
+    core::Vec3 head_ride_velocity_{};
     core::Vec3 root_offset_translation_{};
     bool root_offset_active_ = false;
     float clip_time_ = 0.0f;

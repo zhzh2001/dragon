@@ -690,6 +690,47 @@ Not done from the research: the outside wing does not beat harder than the
 inside wing in a banked turn, and a take-off does not open with a burst of
 fast, deep beats.
 
+### Arcs and spacing: the neck in the beat and the legs in the brake (2026-11-04)
+
+The playtest after the life layer: "flapping neck motion is kind of
+unnatural, and braking leg posture is still stiff". Both were found by
+reading motion the way animators do: `tools/rig_probes/trace_probe` dumps
+each joint's path a frame at a time and `plot_trace.py` draws an onion skin,
+heights over time and speed per frame. A spike in the speed panel is a pop,
+a square edge is a hard start, a flat stretch is a hold, and peaks on the
+same frame are parts moving in lockstep.
+
+**The neck rode the beat as a stick, and the first head hold popped it.**
+Without the hold every neck joint peaked on the chest's frame and the head
+swung furthest. With the first hold (an exact two-bone solve in 3D) the
+middle of the neck popped twice a beat. Three causes, found in turn by
+logging the solve: the bend direction came from a cross product that flipped
+where the neck passed straight; the solve bent at the joint halfway along,
+which on Embercrest is nearly straight at rest; and an exact solve's angle
+runs away near straight whatever the joint. The hold is now a damped least
+squares step (two turns about model X over the base and the joint with the
+deepest rest bend, damping 0.18 of the neck's span), which has no
+singularity and lets the head ride a little where its place is out of
+reach. The share the hold lets through goes through a soft spring tuned to
+0.6 Hz, below the wingbeat, so the head lags the body: whooper swans hold
+the head to about a quarter of the body's heave with the neck flexing out
+of phase (Pete et al. 2015). Head over chest, peak to peak through a beat:
+Embercrest 0.57, Stormsail 0.38; 1.2 without the hold.
+
+**The brake posture was a switch.** The hip's reach, the knee's unfold and
+the tuck were computed straight from the brake signal, so the legs moved on
+the frames it moved, at its speed: a hard start, a rigid hold, a hard stop,
+every joint on the same frame. They now follow a cascade of springs
+(`leg_brake_rate`, `leg_brake_damping`): the hip toward the brake, the knee
+toward the hip, the talons toward the knee, each slower, slightly
+underdamped, the two sides at slightly different rates. The talons spread
+in the flare (`leg_brake_toe_spread_deg`), as a raptor's do before
+contact, and the body's brake pitch and tail drop have a quicker spring of
+their own, so the body leads and the legs follow. `test_life_in_flight`
+pins both: no neck joint steps more than 2.5 times the chest, and the
+talons' speed never jumps more than 0.4 of its peak in a frame. Both
+checks fail on the code before.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on

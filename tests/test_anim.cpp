@@ -2836,6 +2836,66 @@ void test_life_in_flight() {
         CHECK(wrap_step < 0.35f * largest_step);
     }
 
+    // The neck flexes smoothly through the beat: no neck joint steps more
+    // than 2.5 times the chest's largest step. An exact two-bone solve
+    // popped the middle of the neck twice a beat (2.5x and more) where the
+    // neck neared straight.
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(13.6773f);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        still_air(rig.tuning);
+        std::vector<int> watched = joints.neck;
+        watched.push_back(joints.head);
+        std::vector<Vec3> last(watched.size());
+        Vec3 last_chest{};
+        float chest_step = 0.0f, neck_step = 0.0f;
+        for (int i = 0; i < 600; ++i) {
+            rig.update(game::studio_state(game::StudioScenario(1), float(i) / 60.0f, centre, 0.0f, 4.0f),
+                       1.0f / 60.0f);
+            const auto& w = rig.world_matrices();
+            const Vec3 chest = w[size_t(joints.chest)].col[3].xyz();
+            if (i > 120) chest_step = std::max(chest_step, length(chest - last_chest));
+            last_chest = chest;
+            for (size_t k = 0; k < watched.size(); ++k) {
+                const Vec3 p = w[size_t(watched[k])].col[3].xyz();
+                if (i > 120) neck_step = std::max(neck_step, length(p - last[k]));
+                last[k] = p;
+            }
+        }
+        std::printf("  neck: largest step %.4f, chest %.4f\n", double(neck_step), double(chest_step));
+        CHECK(neck_step < 2.5f * chest_step);
+    }
+
+    // The brake reaches through springs: the talons' speed never jumps by
+    // more than 0.4 of its peak in a frame. Driven straight from the brake,
+    // it went from rest to full speed in one.
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(13.6773f);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        still_air(rig.tuning);
+        const int foot = joints.leg[0].empty() ? joints.root : joints.leg[0].back();
+        Vec3 last{};
+        float last_speed = 0.0f, peak = 0.0f, jump = 0.0f;
+        for (int i = 0; i < 720; ++i) {
+            rig.update(game::studio_state(game::StudioScenario(7), float(i) / 60.0f, centre, 0.0f, 4.0f),
+                       1.0f / 60.0f);
+            const Vec3 p = rig.world_matrices()[size_t(foot)].col[3].xyz();
+            const float speed = length(p - last);
+            if (i > 2) {
+                peak = std::max(peak, speed);
+                jump = std::max(jump, std::fabs(speed - last_speed));
+            }
+            last = p;
+            last_speed = speed;
+        }
+        std::printf("  brake: talon speed jumps at most %.4f against a peak of %.4f\n", double(jump), double(peak));
+        CHECK(jump < 0.4f * peak);
+    }
+
     // Landing: the head hold removes only the beat's and the gusts' motion,
     // so with it on or off the landed head differs by no more than the gusts
     // move it. Restoring a saved root once undid part of the stance.
