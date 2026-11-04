@@ -35,7 +35,7 @@ they are records of what was already tried and why it is the way it is.
 | `AI_DISCLOSURE.md` | Every AI tool used and what it made. The Hunyuan agreement requires generated output to be labelled when published, so a new AI-made asset gets a line here |
 | `LICENSE`, `THIRD_PARTY_NOTICES.md` | MIT for our material; the libraries' licences |
 | `.claude/skills/concept-art/SKILL.md` | Generating concept art, HUD mockups and creature reference sheets from a ChatGPT/Gemini subscription -- which backend suits which job, and which quota each one burns |
-| `tools/codex_usage.py` | How much of the Codex 5-hour and weekly windows is left, read out of the logged-in browser. Run it before starting a `codex` task |
+| `tools/codex_usage.py` | The older usage check, read out of the logged-in browser. Use `codex-profiles usage` before starting a `codex` task |
 | `tools/rig_probes/` | Renderer-free probes that run the rig on a species and print numbers -- foot heights, sink below the floor, leg angles in the glide, leg swing through a manoeuvre, jaw direction -- and a candidate renderer. Ten milliseconds a candidate against two seconds a render: they decide what to render, they do not replace looking |
 
 ## Build & run
@@ -396,20 +396,18 @@ flight controls.
   session so the C++ and the asset do not get edited from two places at once,
   and scope each subagent to explicit paths -- the repo is shared.
 - **Check the usage windows before starting a `codex` task: run
-  `tools/codex_usage.py`.** It reads the account analytics page out of the
-  logged-in Chrome through `chrome-use` and prints how much of the 5-hour and
-  weekly windows is left, plus how many rigging tasks that buys:
+  `codex-profiles usage`** (the user's call, 2026-11-04). It prints the
+  5-hour and weekly windows of every Codex profile, `default` and `work`,
+  with what is left and when each resets:
 
   ```sh
-  tools/codex_usage.py            # 5-hour: 8.0% remaining (resets 20:00) ...
-  tools/codex_usage.py --json     # for a script
+  codex-profiles usage   # work: 7d limit 11% left (low), resets in 1h 6m ...
   ```
 
-  Nothing local knows this figure -- `codex exec` prints token counts but no
-  rate-limit data, nothing under `~/.codex` carries a live one, and even a
-  do-nothing `codex exec` burns **7.3 k tokens** of prompt overhead, so probing
-  by running something is not free. The page is the only source, and it needs
-  Chrome up and signed in to ChatGPT.
+  It reports the Codex CLI quota per profile, which may not be the same
+  account as a ChatGPT browser session. `tools/codex_usage.py` (the account
+  page read out of Chrome) is the older route; do not spend tokens probing
+  instead -- even a do-nothing `codex exec` burns **7.3 k tokens**.
 
   Measured on 2026-09-12, both substantive rigging tasks:
 
