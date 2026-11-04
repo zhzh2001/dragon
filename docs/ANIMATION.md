@@ -788,6 +788,56 @@ pins both: no neck joint steps more than 2.5 times the chest, and the
 talons' speed never jumps more than 0.4 of its peak in a frame. Both
 checks fail on the code before.
 
+### Limb physics: the legs as chains, not rotations (2026-11-04)
+
+The playtest after the brake cascade said a braking turn was still a statue,
+and the legs did not dangle outside the brake. Reading `drive_legs` showed
+why. The legs were rotations: a trail and a fold, and one pendulum angle at
+the hip, capped at 26 degrees. The knee and the foot never lagged, so the
+limb swung as one stick. A brake or a dive cut even that swing to a fifth
+(`leg_posture_sway` 0.2).
+
+Physics alone does not fix the statue. A held braking turn is a steady
+state. In a coordinated bank the turn's pull and gravity's tilt cancel, so
+the effective gravity stays along body-down and every force is constant. A
+constant force gives a constant pose. The side-by-side render
+(`artifacts/limb-physics/braking-turn.gif`) showed this: the first version
+of the layer was identical to the pendulum in that turn.
+
+The layer now has two parts. `drive_limb_physics` runs after the whole
+pose (trail, fold, brake reach, the claw, the feet's hang and curl) and
+before the stance takes over on the ground:
+
+- The physics. Each leg and foreleg is a chain of points: the hip, each
+  joint, and the foot's longest child as the tip. Each point springs toward
+  its posed offset from its simulated parent, so in effect each joint has an
+  angular spring. Stiffness tapers toward the foot (`limb_stiffness` 20,
+  `limb_tip_stiffness` 0.35), so a disturbance runs hip first and the foot
+  lags last. The points feel g beyond level flight (`limb_gravity`), the
+  frame's pseudo-forces (`limb_inertia`), and the heave of the beat through
+  the moving hip. A brake or a dive multiplies the stiffness by
+  1 + `limb_brace` instead of removing the motion. A bone stays within
+  `limb_range_deg` (45) of its posed direction. The step is implicit in the
+  spring and the damping, with up to four substeps.
+- The drives, forces on the feet for when the forces are steady.
+  `limb_turn_lean` (14 m/s^2 at a 15 m/s^2 turn) draws the inside feet up
+  and reaches the outside feet out and down, as a bird does in a bank.
+  `limb_turbulence` (3 m/s^2, 35% of it without the brake) is three
+  incommensurate waves per axis, on separate phases for each limb.
+  `limb_brake_paddle` (6 m/s^2) reaches the hind feet forward in turn at
+  0.7 Hz while braking.
+
+The hip pendulum fades out as `limb_physics` comes in, and the layer fades
+out with ground contact. Measured on Embercrest with `trace_probe`, the
+ankle's sideways travel in the studio s-turns is 3.0 m, against 1.9 m for
+the pendulum. In a held braking turn on the generated rig the foot travels
+0.6 m with the layer on and 5 mm without it (`test_limbs_live_in_a_braking_turn`).
+The sliders are at the top of the Dragon panel's leg block. Renders are in
+`artifacts/limb-physics/`.
+
+What it does not do yet: the body and the wings are still steady in a held
+braking turn. Only the limbs (and the tail and neck chains) now move there.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on

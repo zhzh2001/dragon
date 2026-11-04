@@ -489,6 +489,18 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_tuck_deg),
     RIG_FLOAT_FIELD(leg_sway_response),
     RIG_FLOAT_FIELD(leg_sway_max_deg),
+    RIG_FLOAT_FIELD(limb_physics),
+    RIG_FLOAT_FIELD(limb_stiffness),
+    RIG_FLOAT_FIELD(limb_tip_stiffness),
+    RIG_FLOAT_FIELD(limb_damping),
+    RIG_FLOAT_FIELD(limb_inertia),
+    RIG_FLOAT_FIELD(limb_gravity),
+    RIG_FLOAT_FIELD(limb_brace),
+    RIG_FLOAT_FIELD(limb_range_deg),
+    RIG_FLOAT_FIELD(limb_turn_lean),
+    RIG_FLOAT_FIELD(limb_turbulence),
+    RIG_FLOAT_FIELD(limb_turbulence_glide),
+    RIG_FLOAT_FIELD(limb_brake_paddle),
     RIG_FLOAT_FIELD(leg_sway_stiffness),
     RIG_FLOAT_FIELD(leg_sway_damping),
     RIG_FLOAT_FIELD(leg_trail_deg),
@@ -602,6 +614,7 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     action_ = RigAction{};
     spit_time_ = bite_time_ = claw_time_ = tail_time_ = 1e9f;
     neck_kick_ = tail_kick_ = PendingKick{};
+    setup_limbs();
     leg_brake_stage_[0][0] = leg_brake_stage_[0][1] = leg_brake_stage_[0][2] = 0.0f;
     leg_brake_stage_[1][0] = leg_brake_stage_[1][1] = leg_brake_stage_[1][2] = 0.0f;
     for (auto& stage : leg_brake_stage_velocity_) stage[0] = stage[1] = stage[2] = 0.0f;
@@ -2248,6 +2261,9 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // Filter the target, not the resulting pose, so releasing tuck/brake
         // keeps the spring's momentum instead of snapping the limb.
         desired = desired * (airborne * posture_sway);
+        // The limb physics (drive_limb_physics) does this and more, down the
+        // whole limb; the hip-only pendulum fades out as it comes in.
+        desired = desired * (1.0f - core::saturate(tuning.limb_physics));
 
         core::Vec2& swing = leg_swing_[side];
         core::Vec2& velocity = leg_swing_velocity_[side];
@@ -2320,6 +2336,166 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
                                  core::radians(tuning.claw_swing_deg) * 0.5f * rake * aft, true);
                 }
             }
+        }
+    }
+}
+
+void DragonRig::setup_limbs() {
+    for (auto& limb : limb_sim_) limb = LimbDynamics{};
+    if (!skeleton_) return;
+    const auto& all = skeleton_->joints();
+    for (int k = 0; k < 4; ++k) {
+        const std::vector<int>& chain = k < 2 ? joints_.leg[k] : joints_.front_leg[k - 2];
+        if (chain.size() < 2) continue;
+        LimbDynamics& limb = limb_sim_[k];
+        limb.joints = chain;
+        // The tip: the last joint's longest child, the foot or the middle
+        // toe, so the foot swings on the ankle rather than riding the shin.
+        const int last = chain.back();
+        int tip = NO_PARENT;
+        float longest = 0.0f;
+        for (size_t j = 0; j < all.size(); ++j) {
+            if (all[j].parent != last) continue;
+            const float length = core::length(skeleton_->world_bind(int(j)).translation_part() -
+                                              skeleton_->world_bind(last).translation_part());
+            if (length > longest) { longest = length; tip = int(j); }
+        }
+        if (tip != NO_PARENT) limb.joints.push_back(tip);
+        limb.position.assign(limb.joints.size(), Vec3::zero());
+        limb.velocity.assign(limb.joints.size(), Vec3::zero());
+    }
+}
+
+// The limbs as physics on top of their pose. Runs after the pose is complete
+// (trail, fold, brake reach, the claw, the feet's hang and curl) and before
+// the stance takes over on the ground. Each point after the hip springs
+// toward where the pose puts it RELATIVE TO ITS SIMULATED PARENT -- an
+// angular spring at each joint in effect -- so a disturbance runs down the
+// limb hip first and the foot, sprung most softly, lags and overshoots last.
+// Before this the legs were rotations: one pendulum angle at the hip, and a
+// brake or a dive held even that to a fifth, so a braking turn was a statue.
+void DragonRig::drive_limb_physics(const game::FlightState& state, Vec3 frame_acceleration,
+                                   Vec3 angular_acceleration, float dt) {
+    const float weight = core::saturate(tuning.limb_physics) * (1.0f - ground_contact_);
+    compute_world_matrices(*skeleton_, pose_, world_);
+    // g beyond level flight, in the model's frame: the effective gravity a
+    // limb feels is gravity less the frame's acceleration, and level flight's
+    // 1 g is what the pose is already shaped for.
+    const Vec3 gravity = core::rotate(core::conjugate(state.orientation), Vec3{0.0f, -9.81f, 0.0f});
+    const Vec3 effective = gravity - frame_acceleration;
+    const Vec3 extra_g = (effective - Vec3{0.0f, -9.81f, 0.0f}) * tuning.limb_gravity;
+    const Vec3 omega = state.angular_velocity;
+    const float brace = 1.0f + core::maxf(tuning.limb_brace, 0.0f) *
+                                   core::maxf(core::saturate(state.wing_brake), core::saturate(state.wing_tuck));
+    const float range = core::radians(core::clampf(tuning.limb_range_deg, 0.0f, 120.0f));
+    const int substeps = std::clamp(int(std::ceil(dt * 120.0f - 1e-3f)), 1, 4);
+    const float h = dt / float(substeps);
+    // The turn: the frame's acceleration toward the centre, which the
+    // differenced velocity makes noisy, so smoothed.
+    limb_turn_ = core::damp(limb_turn_, core::clampf(frame_acceleration.x / 15.0f, -1.0f, 1.0f), 0.15f, dt);
+    const float brake = core::saturate(state.wing_brake);
+    const float buffet = core::maxf(tuning.limb_turbulence, 0.0f) * core::saturate(state.airspeed / 40.0f) *
+                         core::lerpf(core::saturate(tuning.limb_turbulence_glide), 1.0f, brake);
+
+    for (int index = 0; index < 4; ++index) {
+        LimbDynamics& limb = limb_sim_[index];
+        const size_t n = limb.joints.size();
+        if (n < 2) continue;
+        std::vector<Vec3> target(n);
+        for (size_t i = 0; i < n; ++i) {
+            target[i] = world_[size_t(limb.joints[i])].col[3].xyz() * model_scale_;
+        }
+        if (!limb.live || weight <= 1e-3f) {
+            // Off, or just switched on: ride the pose so turning it on later
+            // starts from rest instead of from a stale shape.
+            limb.position = target;
+            std::fill(limb.velocity.begin(), limb.velocity.end(), Vec3::zero());
+            limb.live = weight > 1e-3f;
+            continue;
+        }
+        // The drive on this limb's foot, in model space.
+        const float out = target[0].x >= 0.0f ? 1.0f : -1.0f;  // which side the hip is on
+        Vec3 drive = Vec3::zero();
+        {
+            // Inside the turn the feet draw up toward the belly; outside they
+            // reach out and down -- a bird's balance in a bank, and the cue
+            // that the animal is in the turn rather than carried through it.
+            const float turn = std::fabs(limb_turn_);
+            const bool inside = (limb_turn_ >= 0.0f) == (out > 0.0f);
+            const Vec3 lean = inside ? Vec3{-0.3f * out, 1.0f, 0.0f} : Vec3{0.6f * out, -0.8f, 0.0f};
+            drive += lean * (tuning.limb_turn_lean * turn);
+            // Turbulence: three incommensurate waves per axis, each limb on
+            // its own phases, so no two feet and no two seconds match.
+            const float seed = 1.37f * float(index) + 0.4f;
+            drive += Vec3{life_wave(time_, 9.1f, 14.3f, 21.7f, seed),
+                          life_wave(time_, 8.3f, 12.9f, 19.1f, seed + 2.1f),
+                          life_wave(time_, 7.7f, 13.7f, 23.3f, seed + 4.3f)} *
+                     buffet;
+            // The brake paddle: hind feet reaching forward in turn, slowly.
+            if (index < 2) {
+                const float paddle = std::sin(core::TWO_PI * 0.7f * time_ + core::PI * float(index));
+                drive += Vec3{0.0f, 0.0f, model_forward_z_} * (tuning.limb_brake_paddle * brake * paddle);
+            }
+        }
+        for (int step = 0; step < substeps; ++step) {
+            limb.position[0] = target[0];
+            limb.velocity[0] = Vec3::zero();
+            for (size_t i = 1; i < n; ++i) {
+                const float share = n > 2 ? float(i - 1) / float(n - 2) : 1.0f;
+                const float k = core::maxf(tuning.limb_stiffness, 1.0f) * brace *
+                                core::lerpf(1.0f, core::clampf(tuning.limb_tip_stiffness, 0.05f, 1.0f), share);
+                const float c = 2.0f * core::clampf(tuning.limb_damping, 0.05f, 2.0f) * std::sqrt(k);
+                const Vec3 r = limb.position[i];
+                const Vec3 v = limb.velocity[i];
+                const Vec3 wanted = limb.position[i - 1] + (target[i] - target[i - 1]);
+                // The frame's pseudo-forces at this point, as the tail feels
+                // them: a turn slings the feet outward, a roll throws them.
+                const Vec3 inertial = (-core::cross(omega, core::cross(omega, r)) -
+                                       core::cross(angular_acceleration, r) - core::cross(omega, v) * 2.0f) *
+                                      tuning.limb_inertia;
+                // The loads are clamped: pseudo-forces grow with the square
+                // of the turn rate, and a tumble is not a reason to fling a leg.
+                Vec3 load = extra_g + inertial + drive * (float(i) / float(n - 1));
+                const float magnitude = core::length(load);
+                if (magnitude > 80.0f) load = load * (80.0f / magnitude);
+                // Implicit in the spring and the damping, so a stiff brace on
+                // a long frame cannot diverge: v' = v + h (k (wanted - r - h v')
+                // - c v' + load).
+                const Vec3 next_v = (v + ((wanted - r) * k + load) * h) / (1.0f + c * h + k * h * h);
+                limb.velocity[i] = next_v;
+                limb.position[i] = r + next_v * h;
+            }
+            // Bones keep their length, and none leaves its posed direction by
+            // more than the range; velocities follow what the constraints did.
+            for (size_t i = 1; i < n; ++i) {
+                const Vec3 before = limb.position[i];
+                const Vec3 posed = target[i] - target[i - 1];
+                const float length = core::length(posed);
+                const Vec3 posed_dir = core::normalize_or(posed, Vec3::unit_y() * -1.0f);
+                Vec3 dir = core::normalize_or(limb.position[i] - limb.position[i - 1], posed_dir);
+                const float off = std::acos(core::clampf(core::dot(dir, posed_dir), -1.0f, 1.0f));
+                if (off > range) {
+                    const Vec3 axis = core::cross(posed_dir, dir);
+                    dir = core::length_sq(axis) > 1e-10f
+                              ? core::rotate(Quat::from_axis_angle(core::normalize(axis), range), posed_dir)
+                              : posed_dir;
+                }
+                limb.position[i] = limb.position[i - 1] + dir * length;
+                limb.velocity[i] += (limb.position[i] - before) / h;
+                if (!std::isfinite(limb.position[i].x + limb.position[i].y + limb.position[i].z) ||
+                    !std::isfinite(limb.velocity[i].x + limb.velocity[i].y + limb.velocity[i].z)) {
+                    limb.position = target;
+                    std::fill(limb.velocity.begin(), limb.velocity.end(), Vec3::zero());
+                    break;
+                }
+            }
+        }
+        // Pose: aim each bone at its simulated child, hip first.
+        for (size_t i = 0; i + 1 < n; ++i) {
+            const Vec3 from = world_[size_t(limb.joints[i])].col[3].xyz() * model_scale_;
+            const Vec3 posed = world_[size_t(limb.joints[i + 1])].col[3].xyz() * model_scale_ - from;
+            const Vec3 simulated = limb.position[i + 1] - limb.position[i];
+            aim_bone(limb.joints[i], limb.joints[i + 1], core::lerp(posed, simulated, weight), 1.0f);
         }
     }
 }
@@ -3084,6 +3260,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
         }
     }
+
+    drive_limb_physics(state, frame_acceleration, angular_acceleration, dt);
 
     // On the ground the authored stance wins the WHOLE body -- wings, tail,
     // legs, neck -- not just the joints the rig never owned. A wyvern folds its

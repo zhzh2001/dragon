@@ -716,6 +716,30 @@ struct RigTuning {
     float leg_sway_max_deg = 26.0f;
     float leg_sway_stiffness = 16.0f;
     float leg_sway_damping = 6.0f;
+    // Limb physics (drive_limb_physics): after the pose, every leg and
+    // foreleg is a chain of points, each sprung toward its posed direction
+    // from its simulated parent and softer toward the foot. The chain feels
+    // what the body does to it -- the change in effective gravity under g,
+    // the sling of a turn, the heave of each wingbeat, the stop of a brake --
+    // so the limbs lag, swing and settle instead of riding the body like
+    // carved parts. The posed angles are only where each joint's muscle
+    // pulls; `limb_physics` 0 is the pose alone.
+    float limb_physics = 1.0f;
+    float limb_stiffness = 20.0f;       // 1/s^2 at the hip's child; the joint's pull
+    float limb_tip_stiffness = 0.35f;   // the foot's share of it: lower dangles more
+    float limb_damping = 0.45f;         // ratio of critical
+    float limb_inertia = 1.0f;          // how much the body's motion moves the limbs
+    float limb_gravity = 1.0f;          // how much g beyond level flight sags them
+    float limb_brace = 1.5f;            // extra stiffness at full brake or dive (x(1+brace))
+    float limb_range_deg = 45.0f;       // how far a bone may leave its posed direction
+    // What keeps the limbs moving when the forces are steady. A held braking
+    // turn is steady -- in a coordinated bank the turn's pull and gravity's
+    // tilt cancel -- so physics alone held the legs as still as the pose did.
+    // These are forces on the feet, in m/s^2, which the springs smooth:
+    float limb_turn_lean = 14.0f;      // the inside feet draw up, the outside reach out and down
+    float limb_turbulence = 3.0f;      // buffeting in the airflow, never periodic
+    float limb_turbulence_glide = 0.35f;  // its share without the brake
+    float limb_brake_paddle = 6.0f;    // the hind feet reach forward in turn while braking
     // In flight the legs trail: the whole limb rotates aft at the hip, then the
     // fold bends the knee. Trailing is what a flying quadruped actually does --
     // legs pressed back along the body -- where a pure fold leaves them dangling
@@ -1008,6 +1032,19 @@ private:
     // (lateral), in radians.
     core::Vec2 leg_swing_[2] = {};
     core::Vec2 leg_swing_velocity_[2] = {};
+    // The limb physics' chains: hind legs 0 and 1, forelegs 2 and 3. Points in
+    // metres in model space, the hip first, then each joint down the limb and
+    // the foot's longest child as the tip.
+    struct LimbDynamics {
+        std::vector<int> joints;
+        std::vector<core::Vec3> position, velocity;
+        bool live = false;  // false: snap to the pose next frame
+    };
+    LimbDynamics limb_sim_[4];
+    float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
+    void setup_limbs();
+    void drive_limb_physics(const game::FlightState& state, core::Vec3 frame_acceleration,
+                            core::Vec3 angular_acceleration, float dt);
     // Every joint under a foot root, with its depth below the root -- the toes,
     // for the hanging curl.
     std::vector<std::pair<int, int>> foot_joints_;

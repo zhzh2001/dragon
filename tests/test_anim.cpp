@@ -1960,6 +1960,50 @@ void test_rig_slider_extremes_stay_sane() {
         CHECK(core::degrees(turn) < 0.5f);
     }
 }
+// The limb physics keeps the legs alive in a held braking turn. That is a
+// steady state -- the turn's pull and gravity's tilt cancel in a coordinated
+// bank -- and the hip pendulum alone held every foot still through it: the
+// playtest's "statue". With the layer on, the feet move, stay finite, and
+// never leave their posed direction by more than the range allows.
+void test_limbs_live_in_a_braking_turn() {
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    anim::DragonJoints joints;
+    anim::build_dragon(anim::DragonShape{}, skeleton, joints, mesh);
+    const Quat bank = Quat::from_axis_angle(Vec3::unit_z(), radians(35.0f));
+    float travel[2] = {0.0f, 0.0f};
+    for (int on = 0; on < 2; ++on) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.limb_physics = float(on);
+        game::FlightState state;
+        state.ground_clearance = 300.0f;
+        state.wing_brake = 1.0f;
+        state.airspeed = 35.0f;
+        state.angular_velocity = Vec3{0.0f, 0.5f, 0.0f};
+        const int foot = joints.leg[0].back();
+        const int hip = joints.leg[0].front();
+        Vec3 lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+        for (int i = 0; i < 360; ++i) {
+            // A steady turn: the heading turns, the bank and the speed hold.
+            state.orientation = Quat::from_axis_angle(Vec3::unit_y(), 0.5f * float(i) / 60.0f) * bank;
+            state.velocity = rotate(state.orientation, Vec3::forward()) * state.airspeed;
+            rig.update(state, 1.0f / 60.0f);
+            const auto& w = rig.world_matrices();
+            const Vec3 rel = w[size_t(foot)].col[3].xyz() - w[size_t(hip)].col[3].xyz();
+            CHECK(std::isfinite(rel.x + rel.y + rel.z));
+            if (i < 120) continue;  // settled
+            lo = Vec3{std::min(lo.x, rel.x), std::min(lo.y, rel.y), std::min(lo.z, rel.z)};
+            hi = Vec3{std::max(hi.x, rel.x), std::max(hi.y, rel.y), std::max(hi.z, rel.z)};
+        }
+        travel[on] = length(hi - lo);
+    }
+    std::printf("  braking turn: the foot travels %.3f off, %.3f on (model units)\n", double(travel[0]),
+                double(travel[1]));
+    CHECK(travel[0] < 0.02f);
+    CHECK(travel[1] > 0.05f);
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -1982,6 +2026,9 @@ void test_legs_brace_during_active_postures() {
             for (auto* rig : {&fixed, &braced, &loose}) {
                 rig->init(skeleton, joints);
                 if (fs::exists(path)) anim::load_rig_tuning(rig->tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+                // The hip pendulum's brace dial, alone: the limb physics
+                // replaces the pendulum when it is on.
+                rig->tuning.limb_physics = 0.0f;
             }
             fixed.tuning.leg_posture_sway = 0.0f;
             braced.tuning.leg_posture_sway = 0.2f;
@@ -3038,6 +3085,7 @@ void test_life_in_flight() {
 int main() {
     test_life_in_flight();
     test_rig_slider_extremes_stay_sane();
+    test_limbs_live_in_a_braking_turn();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();
