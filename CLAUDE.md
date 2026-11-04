@@ -376,9 +376,12 @@ flight controls.
   `export_public.sh --ref COMMIT` exports `main` up to the last commit worth
   shipping. Ask before an export that moves the mirror.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
-  a one-liner -- to `codex exec -m gpt-6.1-sol -c model_reasoning_effort=high`
-  (the user's call, 2026-10-04; it replaces gpt-6-astra at medium below),
-  and never start it without checking usage first -- see below.** Do not delegate to Fable 5.1 any more
+  a one-liner -- to gpt-6-astra on the work account:
+  `codex-profiles cli work exec -m gpt-6-astra -c model_reasoning_effort=high
+  -s danger-full-access` (the user's call, 2026-11-04; it replaces
+  gpt-6.1-sol, 2026-10-04). Medium is enough for props and clips. The work
+  profile's own default is gpt-6.1-sol, so pass `-m`. Never start it without
+  checking usage first -- see below.** Do not delegate to Fable 5.1 any more
   (the user's call, 2026-09-26); when Codex has no headroom, do the work in
   the main session or wait for the reset.
 
@@ -455,8 +458,7 @@ flight controls.
   So: **gpt-6-astra, for well-specified, numerically checkable 3D, asset and
   animation work, only with usage headroom confirmed** -- and brief it to
   write the in-file record it tends to skip.
-  Run `codex exec -m gpt-6-astra -c model_reasoning_effort=medium -s
-  danger-full-access` -- the user's call on 2026-09-25: the default
+  Run it with `-s danger-full-access` -- the user's call on 2026-09-25: the default
   auto/workspace-write mode drained usage about twice as fast. Full access
   once reached outside its `-C` directory into the main checkout, so contain
   it: a **git worktree** (`git worktree add`) of its own, a brief that names
