@@ -250,6 +250,17 @@ struct RigTuning {
     // airspeed. Visual only, like the beat's heave.
     float gust_deg = 1.0f;
     float gust_heave_m = 0.10f;
+    // Work: a held brake or turn is a steady state, and a steady state held
+    // the body and wings as still as a statue. A real animal keeps working a
+    // hard manoeuvre -- small corrections in pitch and roll, each wing
+    // adjusting out of step with the other. Slow incommensurate waves, scaled
+    // by how hard it is working (the brake, or the turn rate over
+    // `work_turn_rate`) and by airspeed. The body's share goes through the
+    // root offset, which the head hold takes out of the head: the body works
+    // under a steady head.
+    float work_body_deg = 2.5f;
+    float work_wing_deg = 6.0f;
+    float work_turn_rate = 0.6f;  // rad/s of yaw for full work
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -725,9 +736,9 @@ struct RigTuning {
     // carved parts. The posed angles are only where each joint's muscle
     // pulls; `limb_physics` 0 is the pose alone.
     float limb_physics = 1.0f;
-    float limb_stiffness = 20.0f;       // 1/s^2 at the hip's child; the joint's pull
-    float limb_tip_stiffness = 0.35f;   // the foot's share of it: lower dangles more
-    float limb_damping = 0.45f;         // ratio of critical
+    float limb_stiffness = 35.0f;       // 1/s^2 at the hip's child; the joint's pull
+    float limb_tip_stiffness = 0.5f;    // the foot's share of it: lower dangles more
+    float limb_damping = 0.6f;          // ratio of critical
     float limb_inertia = 1.0f;          // how much the body's motion moves the limbs
     float limb_gravity = 1.0f;          // how much g beyond level flight sags them
     float limb_brace = 1.5f;            // extra stiffness at full brake or dive (x(1+brace))
@@ -736,10 +747,10 @@ struct RigTuning {
     // turn is steady -- in a coordinated bank the turn's pull and gravity's
     // tilt cancel -- so physics alone held the legs as still as the pose did.
     // These are forces on the feet, in m/s^2, which the springs smooth:
-    float limb_turn_lean = 14.0f;      // the inside feet draw up, the outside reach out and down
-    float limb_turbulence = 3.0f;      // buffeting in the airflow, never periodic
+    float limb_turn_lean = 10.0f;      // the inside feet draw up, the outside reach out and down
+    float limb_turbulence = 1.5f;      // buffeting in the airflow, never periodic
     float limb_turbulence_glide = 0.35f;  // its share without the brake
-    float limb_brake_paddle = 6.0f;    // the hind feet reach forward in turn while braking
+    float limb_brake_paddle = 4.0f;    // the hind feet reach forward in turn while braking
     // In flight the legs trail: the whole limb rotates aft at the hip, then the
     // fold bends the knee. Trailing is what a flying quadruped actually does --
     // legs pressed back along the body -- where a pure fold leaves them dangling

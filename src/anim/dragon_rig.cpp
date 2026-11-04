@@ -490,6 +490,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_sway_response),
     RIG_FLOAT_FIELD(leg_sway_max_deg),
     RIG_FLOAT_FIELD(limb_physics),
+    RIG_FLOAT_FIELD(work_body_deg),
+    RIG_FLOAT_FIELD(work_wing_deg),
+    RIG_FLOAT_FIELD(work_turn_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
     RIG_FLOAT_FIELD(limb_damping),
@@ -1609,6 +1612,22 @@ void DragonRig::drive_life(const game::FlightState& state) {
     life_pitch_ += core::radians(tuning.gust_deg) * 0.6f * gust *
                    life_wave(t, 0.61f, 1.61f, 2.90f, 1.3f);
     life_heave_m_ = tuning.gust_heave_m * gust * life_wave(t, 0.83f, 2.07f, 3.70f, 2.2f);
+
+    // Work through a held brake or turn (see `work_body_deg`): faster than
+    // the glide's trim (0.6 to 2 Hz), and each wing on its own phases.
+    const float turning = core::saturate(std::fabs(state.angular_velocity.y) /
+                                         core::maxf(tuning.work_turn_rate, 0.05f));
+    const float work = airborne * core::saturate(state.airspeed / 25.0f) *
+                       core::maxf(core::saturate(state.wing_brake), turning) *
+                       (1.0f - core::saturate(state.wing_tuck));
+    if (work > 1e-4f) {
+        life_pitch_ += core::radians(tuning.work_body_deg) * work * life_wave(t, 4.1f, 6.7f, 10.3f, 0.9f);
+        life_roll_ += core::radians(tuning.work_body_deg) * 1.4f * work * life_wave(t, 3.7f, 7.3f, 11.9f, 2.6f);
+        for (int side = 0; side < 2; ++side) {
+            life_wing_[side] += core::radians(tuning.work_wing_deg) * work *
+                                life_wave(t, 3.3f, 5.9f, 9.7f, side == 0 ? 0.5f : 3.4f);
+        }
+    }
 }
 
 void DragonRig::add_kick(PendingKick& kick, Vec3 velocity) {

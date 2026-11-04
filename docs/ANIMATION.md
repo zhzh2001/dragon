@@ -856,6 +856,30 @@ no knee-bend limit and no collision with the body. Two opposite deviations
 can straighten a shallow knee past its pose. The renders show no reversed
 knee at the defaults.
 
+#### Tighter limbs, and the body and wings at work
+
+The playtest liked the direction but found the limbs too loose, and could
+not find the sliders. The defaults are now stiffer: `limb_stiffness` 35
+(was 20), `limb_tip_stiffness` 0.5 (0.35), `limb_damping` 0.6 (0.45),
+`limb_turbulence` 1.5 (3), `limb_turn_lean` 10 (14), `limb_brake_paddle`
+4 (6). The ankle's sideways travel in the studio s-turns is 2.2 m, against
+3.0 m loose and 1.9 m for the old pendulum. The sliders moved to their own
+header at the top of the Dragon panel, "Limbs, body and wings: life", open
+by default.
+
+The same steady-state problem held the body and the wings still. `drive_life`
+now adds work in a held brake or turn: `work_body_deg` (2.5) of pitch and
+1.4 times that of roll, and `work_wing_deg` (6) on each wing's raise, out
+of phase between the wings. Each is three incommensurate waves at 0.6 to
+2 Hz. The amount is the larger of the brake and the turn rate over
+`work_turn_rate` (0.6 rad/s), times airspeed over 25 m/s, and it fades in a
+tuck. The body's share goes through the root offset, which `hold_head`
+removes from the head, so the body works under a steady head. In the studio
+brake the wing tip's height range rose from 0.53 m to 1.19 m and the tail
+tip's sideways range from 0.07 m to 0.36 m, with smooth speed curves
+(`artifacts/limb-physics/held-brake-*.jpg`).
+`test_body_and_wings_work_in_a_held_brake` pins it.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on

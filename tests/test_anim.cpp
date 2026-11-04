@@ -36,6 +36,9 @@ void still_air(anim::RigTuning& tuning) {
     tuning.glide_trim_deg = 0.0f;
     tuning.gust_deg = 0.0f;
     tuning.gust_heave_m = 0.0f;
+    tuning.work_body_deg = 0.0f;
+    tuning.work_wing_deg = 0.0f;
+    tuning.limb_turbulence = 0.0f;
 }
 
 int g_failures = 0;
@@ -2125,6 +2128,47 @@ void test_limbs_keep_their_feet() {
         CHECK(worst < 0.05f);
     }
 }
+// The body and the wings work through a held brake: the wing tips move
+// relative to the chest, and more than with the work dials at zero. A held
+// brake is a steady state, and before this only the limbs moved through it.
+void test_body_and_wings_work_in_a_held_brake() {
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    anim::DragonJoints joints;
+    anim::build_dragon(anim::DragonShape{}, skeleton, joints, mesh);
+    int tip = joints.wing_root[0].back();
+    size_t longest = 0;
+    for (const auto& f : joints.wing_fingers[0])
+        if (f.size() > longest) { longest = f.size(); tip = f.back(); }
+    float travel[2] = {0.0f, 0.0f};
+    for (int on = 0; on < 2; ++on) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.work_body_deg = on ? 2.5f : 0.0f;
+        rig.tuning.work_wing_deg = on ? 6.0f : 0.0f;
+        game::FlightState state;
+        state.ground_clearance = 300.0f;
+        state.wing_brake = 1.0f;
+        state.airspeed = 35.0f;
+        state.velocity = Vec3{0, 0, -35};
+        float lo = 1e9f, hi = -1e9f;
+        for (int i = 0; i < 480; ++i) {
+            rig.update(state, 1.0f / 60.0f);
+            if (i < 120) continue;
+            const auto& w = rig.world_matrices();
+            const float y = w[size_t(tip)].col[3].y - w[size_t(joints.chest)].col[3].y;
+            CHECK(std::isfinite(y));
+            lo = std::min(lo, y);
+            hi = std::max(hi, y);
+        }
+        travel[on] = hi - lo;
+    }
+    std::printf("  held brake: the wing tip rises and falls %.3f without work, %.3f with it\n",
+                double(travel[0]), double(travel[1]));
+    CHECK(travel[0] < 0.01f);
+    CHECK(travel[1] > 0.1f);
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -3208,6 +3252,7 @@ int main() {
     test_rig_slider_extremes_stay_sane();
     test_limbs_live_in_a_braking_turn();
     test_limbs_keep_their_feet();
+    test_body_and_wings_work_in_a_held_brake();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

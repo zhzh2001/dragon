@@ -3914,6 +3914,29 @@ void App::build_dragon_ui() {
         }
     }
 
+    // Open and first: these decide whether the body reads as alive or as a
+    // statue in a held brake or turn, and the playtest could not find them
+    // inside "Flight response".
+    if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SeparatorText("limb physics");
+        ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
+        ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
+        ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
+        ImGui::SliderFloat("limb damping", &rig.limb_damping, 0.05f, 1.5f);
+        ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
+        ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
+        ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
+        ImGui::SliderFloat("limb range", &rig.limb_range_deg, 5.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
+        ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
+        ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
+        ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
+        ImGui::SeparatorText("work in a held brake or turn");
+        ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
+        ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
+        ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
+    }
+
     if (ImGui::CollapsingHeader("Landing weight")) {
         ImGui::SliderFloat("downwash on grass", &downwash_push_, 0.0f, 4.0f, "%.1f m");
         ImGui::SliderFloat("touchdown jolt", &touchdown_kick_, 0.0f, 8.0f, "%.1f deg");
@@ -4083,19 +4106,6 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("wing load flex", &rig.wing_load_flex_deg, 0.0f, 20.0f, "%.0f deg/g");
         ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
-        // The limb physics first: it decides whether the legs read as alive.
-        ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
-        ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
-        ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
-        ImGui::SliderFloat("limb damping", &rig.limb_damping, 0.05f, 1.5f);
-        ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
-        ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
-        ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
-        ImGui::SliderFloat("limb range", &rig.limb_range_deg, 5.0f, 90.0f, "%.0f deg");
-        ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
-        ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
-        ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
-        ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
         ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
         ImGui::SliderFloat("brake leg extend", &rig.leg_brake_extend, 0.0f, 1.0f);
