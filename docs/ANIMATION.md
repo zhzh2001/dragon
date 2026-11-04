@@ -276,6 +276,40 @@ fractions of the swing; delayed envelopes still finish at the original end.
 Neck/tail impulses release at the end of anticipation. Reinitialising a rig
 cancels any pending attack, so switching does not inherit a half-finished swing.
 
+### Weight in the strike (2026-11-04)
+
+The playtest called the melee "brisk and a bit comical". The trace
+(`tools/rig_probes/trace_probe` on studio 10, `artifacts/arcs/melee-before.jpg`)
+showed why. The head peaked at 104 m/s and the root at 36 m/s. Each velocity
+kick landed in one frame, so speed rose in a square edge. The strike curve
+went out and straight back with no time at full reach. Tanaka's rules for
+giant characters and fighting-game hitstop (133-267 ms) both ask for the
+opposite: a big animal accelerates into a blow, stays at the contact, and
+settles with some overshoot. The changes:
+
+- The strike accelerates out (x squared over the first 30% after the wind-up)
+  and holds at full reach for 12% of the swing. The return is
+  `(1-w)^2(1+2w) - 1.2 w^2 (1-w)`: it passes through rest and overshoots
+  before it settles.
+- The body's pitch, surge, roll, yaw and sway follow one envelope,
+  `gesture_body`. It is zero at the press, stays loaded through the wind-up,
+  and releases late. The neck channels trail it by 6% of the swing.
+- The bite, spit and tail kicks ramp in as a half sine over
+  `gesture_kick_ramp` (0.1 s) instead of in one frame. The neck kick is
+  weighted by the joint's place along the chain, the tail kick by its square.
+- Through the hold, `gesture_impact_deg` (0.8 degrees at 14 Hz, fading)
+  shudders the body's pitch on a bite and its roll on a claw. This is the
+  rig's half of a hit-stop. The combat half (a freeze on a real hit) needs a
+  hit signal from combat and is not built.
+- `bite_duration` and `claw_duration` are 0.55 s (were 0.42 and 0.45), and
+  `tail_impulse` is 11 m/s (was 18).
+
+After: the head peaks at 63 m/s and the root at 19 m/s in `test_anim`
+(the Embercrest melee check, limits 70 and 24), and every speed curve is a
+bell (`artifacts/arcs/melee-after.jpg`). The tail tip's speed is still
+jagged through the whip. Renders of the bite, claw and tail on the roster
+are in `artifacts/melee-weight/`.
+
 Studio's speed now scales the rig as well as its scenario clock; use
 `--studio-speed 0.5` or the speed slider. Scenarios 8/10/11/12 expose the
 body, timing, wing brace and extremity controls with the profile save button.

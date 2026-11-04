@@ -154,18 +154,20 @@ moving on a still body weak and mechanical, and it was.
 
 - **Bite** (`RigAction::bite`): the neck lunges forward and down --
   `bite_lunge_deg` 38 with a `bite_impulse` 14 m/s kick through the chain, out
-  in the first third of `bite_duration` (0.42 s) and back in the rest -- and
-  the jaw gapes on the way out and snaps shut at the end of the lunge. The
-  first cut, 24 degrees and 5 m/s over half a second, could not be told from
-  the breath's thrust; the second, 36 degrees over the same half second, read
-  as calmly eating. A strike is fast out and slow back.
+  over `bite_duration` (0.55 s), and the jaw gapes on the way out and snaps
+  shut at the end of the lunge. The first cut, 24 degrees and 5 m/s over half
+  a second, could not be told from the breath's thrust; the second, 36 degrees
+  over the same half second, read as calmly eating. The third, 0.42 s with
+  the kick released in one frame, read as brisk and comical: the head peaked
+  at 104 m/s. A strike now accelerates out, holds at full reach, and
+  overshoots on the way back (`ANIMATION.md`, "Weight in the strike").
 - **Claw** (`RigAction::claw`, `side`): the near foreleg (hind leg on a
   wyvern) rakes forward `claw_swing_deg` 95 and out `claw_out_deg` 35 with
-  the talons spread, over `claw_duration` 0.45 s. The outward component is
+  the talons spread, over `claw_duration` 0.55 s. The outward component is
   what makes it visible: straight forward it stayed under the wing from every
   angle but below.
 - **Tail** (`RigAction::tail`, `side`): a lateral whip toward the mark --
-  `tail_whip_deg` 85 of steer and an `tail_impulse` 18 m/s kick weighted to
+  `tail_whip_deg` 85 of steer and an `tail_impulse` 11 m/s kick weighted to
   the tip -- across and back over `tail_duration` 0.75 s.
 
 **Studio scenarios 10-12** are the bench: 10 "melee" cycles bite, claw, tail

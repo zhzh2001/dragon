@@ -3858,6 +3858,8 @@ void App::build_studio_ui() {
             scenario == game::StudioScenario::Tail || scenario == game::StudioScenario::Attack) {
             ImGui::SeparatorText("whole-body melee");
             ImGui::SliderFloat("wind-up share", &rig.gesture_anticipation, 0.0f, 0.6f);
+            ImGui::SliderFloat("kick ramp", &rig.gesture_kick_ramp, 0.0f, 0.3f, "%.2f s");
+            ImGui::SliderFloat("contact shudder", &rig.gesture_impact_deg, 0.0f, 3.0f, "%.1f deg");
             ImGui::SliderFloat("bite body pitch", &rig.gesture_body_pitch_deg, 0.0f, 30.0f, "%.0f deg");
             ImGui::SliderFloat("strike body roll", &rig.gesture_body_roll_deg, 0.0f, 45.0f, "%.0f deg");
             ImGui::SliderFloat("strike body turn", &rig.gesture_body_yaw_deg, 0.0f, 60.0f, "%.0f deg");

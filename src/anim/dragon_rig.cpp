@@ -463,6 +463,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tail_duration),
     RIG_FLOAT_FIELD(tail_impulse),
     RIG_FLOAT_FIELD(gesture_anticipation),
+    RIG_FLOAT_FIELD(gesture_kick_ramp),
+    RIG_FLOAT_FIELD(gesture_impact_deg),
     RIG_FLOAT_FIELD(gesture_body_pitch_deg),
     RIG_FLOAT_FIELD(gesture_body_roll_deg),
     RIG_FLOAT_FIELD(gesture_body_yaw_deg),
@@ -599,6 +601,14 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     clip_time_ = 0.0f;
     action_ = RigAction{};
     spit_time_ = bite_time_ = claw_time_ = tail_time_ = 1e9f;
+    neck_kick_ = tail_kick_ = PendingKick{};
+    leg_brake_stage_[0][0] = leg_brake_stage_[0][1] = leg_brake_stage_[0][2] = 0.0f;
+    leg_brake_stage_[1][0] = leg_brake_stage_[1][1] = leg_brake_stage_[1][2] = 0.0f;
+    for (auto& stage : leg_brake_stage_velocity_) stage[0] = stage[1] = stage[2] = 0.0f;
+    brake_body_ = brake_body_velocity_ = 0.0f;
+    head_ride_ = head_ride_velocity_ = Vec3::zero();
+    life_last_phase_ = 0.0f;
+    life_beat_count_ = 0;
     breath_smoothed_ = jaw_open_ = 0.0f;
     tail_flow_amount_ = tail_flow_phase_ = 0.0f;
 
@@ -1382,11 +1392,48 @@ float gesture_wind(float u, float a) {
     const float peak = a + (1.0f - a) * 0.3f;
     return core::smoothstep(0.0f, a, u) * (1.0f - core::smoothstep(a, peak, u));
 }
+// The strike, after the wind-up: out accelerating and stopped hard at full
+// reach (a heavy body cannot start abruptly, but it can stop), held there
+// for the contact, then a long ease back with one small overshoot past rest.
+// The old curve eased out of the wind-up and straight back again, the same
+// speed both ways: a rubber snap.
+constexpr float kStrikeOut = 0.3f;   // share of the post-wind-up time going out
+constexpr float kStrikeHold = 0.12f; // share held at full reach
 float gesture_strike(float u, float a) {
     if (u < a || u >= 1.0f) return 0.0f;
     const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
-    return v < 0.3f ? core::smoothstep(0.0f, 0.3f, v)
-                    : 1.0f - core::smoothstep(0.3f, 1.0f, v);
+    if (v < kStrikeOut) {
+        const float x = v / kStrikeOut;
+        return x * x;
+    }
+    if (v < kStrikeOut + kStrikeHold) return 1.0f;
+    const float w = (v - kStrikeOut - kStrikeHold) / (1.0f - kStrikeOut - kStrikeHold);
+    // Smoothstep's complement, less a dip that crosses rest late in the
+    // recovery (about 7% below it at w = 0.85) and returns to rest at w = 1.
+    return (1.0f - w) * (1.0f - w) * (1.0f + 2.0f * w) - 1.2f * w * w * (1.0f - w);
+}
+// The body's share of a gesture: broad and slow, from late in the wind-up
+// through the strike and back, so the body leads and the limb or the jaws
+// are the fast part. On the strike curve the whole body yawed 32 degrees in
+// a twelfth of a second and threw the head two metres in a frame.
+float gesture_body(float u, float a) {
+    if (u < 0.0f || u >= 1.0f) return 0.0f;
+    const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
+    // Zero at the press: the smoothstep alone started a tenth up and every
+    // joint jumped on the gesture's first frame.
+    // It starts just before the strike, not earlier: begun across the
+    // wind-up it cancelled the wind-up's turn away, and the anticipation
+    // with it.
+    return core::smoothstep(0.0f, a, u) * core::smoothstep(-0.1f, 0.4f, v) *
+           (1.0f - core::smoothstep(0.45f, 1.0f, v));
+}
+// How far into the contact hold the strike is: 1 at its start, fading out
+// through it; 0 elsewhere. Drives the impact shudder.
+float gesture_impact(float u, float a) {
+    if (u < a || u >= 1.0f) return 0.0f;
+    const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
+    if (v < kStrikeOut || v >= kStrikeOut + kStrikeHold) return 0.0f;
+    return 1.0f - (v - kStrikeOut) / kStrikeHold;
 }
 // Overlap the extremities behind the torso, but still finish at u == 1.
 float gesture_trail(float u, float a, float lag) {
@@ -1413,31 +1460,41 @@ void DragonRig::drive_gestures() {
         const float u = bite_time_ / core::maxf(tuning.bite_duration, 1e-3f);
         const float wind = gesture_wind(u, a);
         const float strike = gesture_strike(u, a);
-        gesture_pitch_ += body_pitch * (0.4f * wind - strike);
-        gesture_surge_ += tuning.gesture_surge_m * (strike - 0.3f * wind);
+        const float body = gesture_body(u, a);
+        gesture_pitch_ += body_pitch * (0.4f * wind - body);
+        gesture_surge_ += tuning.gesture_surge_m * (body - 0.3f * wind);
         gesture_wing_raise_[0] += wing * (wind - 0.3f * strike);
         gesture_wing_raise_[1] += wing * (wind - 0.3f * strike);
         gesture_wing_sweep_deg_ += tuning.gesture_wing_deg * gesture_trail(u, a, 0.08f);
-        gesture_neck_pitch_deg_ += tuning.bite_lunge_deg * (0.45f * wind - strike);
+        // The neck follows the body into the lunge rather than leading it.
+        gesture_neck_pitch_deg_ += tuning.bite_lunge_deg * (0.45f * wind - gesture_trail(u, a, 0.06f));
+        // Contact: a short, fast shudder through the body, the
+        // high-frequency detail a slow, heavy strike otherwise loses.
+        const float impact = gesture_impact(u, a);
+        gesture_pitch_ += core::radians(tuning.gesture_impact_deg) * impact *
+                          std::sin(core::TWO_PI * 14.0f * bite_time_);
     }
     // Claw: away, then roll and yaw into the strike side; the near wing
     // drops, the far one rises, the head dips to the mark, the tail balances.
     if (claw_time_ < tuning.claw_duration) {
         const float u = claw_time_ / core::maxf(tuning.claw_duration, 1e-3f);
         const float wind = gesture_wind(u, a);
-        const float strike = gesture_strike(u, a);
         const float side = claw_side_;
-        gesture_roll_ += body_roll * side * (strike - 0.4f * wind);
-        gesture_yaw_ += body_yaw * side * (strike - 0.65f * wind);
-        gesture_pitch_ -= body_pitch * 0.3f * strike;
-        gesture_sway_ += tuning.gesture_sway_m * side * (strike - 0.3f * wind);
-        gesture_surge_ += tuning.gesture_surge_m * 0.35f * (strike - 0.3f * wind);
+        const float body = gesture_body(u, a);
+        gesture_roll_ += body_roll * side * (body - 0.4f * wind);
+        gesture_yaw_ += body_yaw * side * (body - 0.65f * wind);
+        gesture_pitch_ -= body_pitch * 0.3f * body;
+        gesture_sway_ += tuning.gesture_sway_m * side * (body - 0.3f * wind);
+        gesture_surge_ += tuning.gesture_surge_m * 0.35f * (body - 0.3f * wind);
         const int near = side >= 0.0f ? 0 : 1;
         const float brace = gesture_trail(u, a, 0.08f) - 0.35f * wind;
         gesture_wing_raise_[near] -= wing * brace;
         gesture_wing_raise_[1 - near] += wing * 0.6f * brace;
-        gesture_neck_yaw_deg_ += tuning.gesture_neck_deg * side * strike;
-        gesture_neck_pitch_deg_ -= tuning.gesture_neck_deg * 0.5f * strike;
+        const float neck = gesture_trail(u, a, 0.06f);
+        gesture_neck_yaw_deg_ += tuning.gesture_neck_deg * side * neck;
+        gesture_neck_pitch_deg_ -= tuning.gesture_neck_deg * 0.5f * neck;
+        gesture_roll_ += core::radians(tuning.gesture_impact_deg) * gesture_impact(u, a) *
+                         std::sin(core::TWO_PI * 14.0f * claw_time_);
         gesture_tail_yaw_deg_ -= tuning.gesture_tail_counter_deg * side *
                                  (gesture_trail(u, a, 0.12f) - 0.4f * wind);
         gesture_limb_rake_ = gesture_trail(u, a, 0.04f) - 0.22f * wind;
@@ -1449,9 +1506,10 @@ void DragonRig::drive_gestures() {
         const float wind = gesture_wind(u, a);
         const float strike = gesture_strike(u, a);
         const float side = tail_side_;
-        gesture_yaw_ += body_yaw * 1.6f * side * (0.65f * wind - strike);
-        gesture_roll_ += body_roll * 0.6f * side * strike;
-        gesture_neck_yaw_deg_ -= tuning.gesture_neck_deg * side * strike;
+        const float body = gesture_body(u, a);
+        gesture_yaw_ += body_yaw * 1.6f * side * (0.65f * wind - body);
+        gesture_roll_ += body_roll * 0.6f * side * body;
+        gesture_neck_yaw_deg_ -= tuning.gesture_neck_deg * side * gesture_trail(u, a, 0.06f);
         const int near = side >= 0.0f ? 0 : 1;
         gesture_wing_raise_[near] -= wing * 0.6f * strike;
         gesture_wing_raise_[1 - near] += wing * 0.4f * strike;
@@ -1526,6 +1584,32 @@ void DragonRig::drive_life(const game::FlightState& state) {
     life_pitch_ += core::radians(tuning.gust_deg) * 0.6f * gust *
                    life_wave(t, 0.61f, 1.61f, 2.90f, 1.3f);
     life_heave_m_ = tuning.gust_heave_m * gust * life_wave(t, 0.83f, 2.07f, 3.70f, 2.2f);
+}
+
+void DragonRig::add_kick(PendingKick& kick, Vec3 velocity) {
+    // Whatever the last kick had not yet delivered rides on with this one.
+    const float ramp = core::maxf(tuning.gesture_kick_ramp, 1e-3f);
+    const float delivered = kick.time < ramp ? 0.5f * (1.0f - std::cos(core::PI * kick.time / ramp)) : 1.0f;
+    kick.velocity = kick.velocity * (1.0f - delivered) + velocity;
+    kick.time = 0.0f;
+}
+
+void DragonRig::apply_kick(PendingKick& kick, ChainDynamics& sim, int weight_power, float dt) {
+    const float ramp = core::maxf(tuning.gesture_kick_ramp, 1e-3f);
+    if (kick.time >= ramp || sim.velocity.size() < 2) {
+        kick.time = 1e9f;
+        return;
+    }
+    // A half-sine rate that integrates to one kick over the ramp.
+    const float t0 = kick.time, t1 = core::minf(kick.time + dt, ramp);
+    const float share = 0.5f * (std::cos(core::PI * t0 / ramp) - std::cos(core::PI * t1 / ramp));
+    kick.time += dt;
+    const size_t points = sim.velocity.size();
+    for (size_t i = 1; i < points; ++i) {
+        const float progress = float(i) / float(points - 1);
+        const float weight = weight_power == 2 ? progress * progress : progress;
+        sim.velocity[i] += kick.velocity * (share * weight);
+    }
 }
 
 void DragonRig::drive_body_beat(const game::FlightState& state) {
@@ -2681,13 +2765,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         // The snap: kick the neck's points up and back, more toward the head.
         // Engine body frame (up +Y, aft +Z), carried into model space like
         // every other frame vector.
-        const Vec3 kick = core::rotate(body_to_model_, Vec3{0.0f, 0.6f, 0.8f}) *
-                          tuning.spit_impulse;
-        const size_t points = neck_sim_.velocity.size();
-        for (size_t i = 1; i < points; ++i) {
-            const float progress = float(i) / float(points - 1);
-            neck_sim_.velocity[i] += kick * progress;
-        }
+        add_kick(neck_kick_, core::rotate(body_to_model_, Vec3{0.0f, 0.6f, 0.8f}) * tuning.spit_impulse);
     } else {
         spit_time_ += dt;
     }
@@ -2701,13 +2779,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     if ((action_.bite && bite_launch <= 0.0f) ||
         (!action_.bite && bite_time_ >= bite_launch && bite_time_ - dt < bite_launch)) {
         // Release the neck AFTER loading, not on the input edge.
-        const Vec3 kick = core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) *
-                          tuning.bite_impulse;
-        const size_t points = neck_sim_.velocity.size();
-        for (size_t i = 1; i < points; ++i) {
-            const float progress = float(i) / float(points - 1);
-            neck_sim_.velocity[i] += kick * progress;
-        }
+        add_kick(neck_kick_, core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) * tuning.bite_impulse);
     }
     action_.bite = false;
     if (action_.claw) {
@@ -2729,15 +2801,16 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         // The whip: kick the tail's points sideways toward the mark, more
         // toward the tip. Engine body frame (right +X), carried into model
         // space like every other frame vector.
-        const Vec3 kick = core::rotate(body_to_model_, Vec3{tail_side_, 0.15f, 0.0f}) *
-                          tuning.tail_impulse;
-        const size_t points = tail_sim_.velocity.size();
-        for (size_t i = 1; i < points; ++i) {
-            const float progress = float(i) / float(points - 1);
-            tail_sim_.velocity[i] += kick * progress * progress;
-        }
+        add_kick(tail_kick_, core::rotate(body_to_model_, Vec3{tail_side_, 0.15f, 0.0f}) * tuning.tail_impulse);
     }
     action_.tail = false;
+    // The kicks ramp in over gesture_kick_ramp seconds rather than landing
+    // in one frame: a large mass cannot start abruptly (Tanaka's rules for
+    // giant characters), and the instant tail kick put the tip through 120
+    // m/s in a frame. The neck takes its kick in proportion along the
+    // chain, the tail weighted to the tip.
+    apply_kick(neck_kick_, neck_sim_, 1, dt);
+    apply_kick(tail_kick_, tail_sim_, 2, dt);
 
     // Wing load flex reads the g excess, smoothed because g_load is assembled
     // from this frame's forces and single-frame spikes would make the wings

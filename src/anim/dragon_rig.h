@@ -631,12 +631,12 @@ struct RigTuning {
     // curved neck down arcs the head back as it drops. The forward travel of
     // a bite comes from the body's surge (gesture_surge_m) and pitch.
     float bite_lunge_deg = 24.0f;
-    float bite_duration = 0.42f;  // a quarter of it the wind-up (gesture_anticipation)
+    float bite_duration = 0.55f;  // a quarter of it the wind-up (gesture_anticipation)
     float bite_impulse = 14.0f;
     // Claw: the near foreleg (hind leg on a wyvern) rakes forward and down
     // with the talons spread, and returns.
     float claw_swing_deg = 95.0f;
-    float claw_duration = 0.45f;
+    float claw_duration = 0.55f;
     // The rake also carries the limb OUT from the body: a swing straight
     // forward stayed under the wing and read as nothing from every angle
     // but below.
@@ -645,7 +645,7 @@ struct RigTuning {
     // chain like the spit's.
     float tail_whip_deg = 85.0f;
     float tail_duration = 0.75f;
-    float tail_impulse = 18.0f;
+    float tail_impulse = 11.0f;
 
     // ---- the gesture layer: a swing is the whole animal ----
     //
@@ -662,6 +662,12 @@ struct RigTuning {
     //         whips; the head swings opposite; the near wing dips
     // All of it is additive on the flight pose and gone within the gesture.
     float gesture_anticipation = 0.25f;       // fraction of each gesture spent winding up
+    // The neck's and the tail's velocity kicks (bite, spit, whip) ramp in
+    // over this many seconds instead of landing in one frame.
+    float gesture_kick_ramp = 0.1f;
+    // The contact shudder: the body's pitch or roll at 14 Hz through the
+    // strike's hold at full reach, in degrees, fading out across it.
+    float gesture_impact_deg = 0.8f;
     float gesture_body_pitch_deg = 14.0f;     // bite: nose down into the lunge
     float gesture_body_roll_deg = 26.0f;      // claw: into the strike; tail: counter-roll
     float gesture_body_yaw_deg = 32.0f;       // claw: nose to the mark; tail: counter-turn
@@ -879,6 +885,13 @@ private:
     // turbulence. Computes the wings' share (life_wing_) before drive_wings
     // and the root's (applied by drive_body_beat).
     void drive_life(const game::FlightState& state);
+    // A velocity kick into a chain, ramped in over gesture_kick_ramp.
+    struct PendingKick {
+        core::Vec3 velocity{};
+        float time = 1e9f;  // since the kick began; past the ramp when spent
+    };
+    void add_kick(PendingKick& kick, core::Vec3 velocity);
+    void apply_kick(PendingKick& kick, ChainDynamics& sim, int weight_power, float dt);
     void drive_body_beat(const game::FlightState& state);
     // The neck takes back the share of the beat's and the gusts' root motion
     // that beat_head_hold names, at the head, and the head turns back level.
@@ -1094,6 +1107,8 @@ private:
     // The brake cascade (leg_brake_rate): per side, the hip's, the knee's
     // and the talons' share of the brake posture, and their rates.
     float leg_brake_stage_[2][3] = {};
+    PendingKick neck_kick_{};
+    PendingKick tail_kick_{};
     // The body's share of the brake: the same spring, quicker, because the
     // body leads a flare and the legs follow it.
     float brake_body_ = 0.0f;

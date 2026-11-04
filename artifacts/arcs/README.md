@@ -17,3 +17,6 @@ the brake". Drawn by `tools/rig_probes/plot_trace.py` from `trace_probe`.
 - `roster-brake-a.jpg`, `roster-brake-b.jpg`: every release species in the
   brake (frames 60 and 100, and from below the front), the flap, the head
   close, and a landing.
+- `melee-after.jpg`: the same melee after the weight pass (`ANIMATION.md`,
+  "Weight in the strike"). Speed curves are bells, about 60% of the old
+  peaks. The tail tip is still jagged through the whip.

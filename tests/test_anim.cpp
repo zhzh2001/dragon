@@ -2560,13 +2560,18 @@ void test_melee_gestures_move_the_body() {
     };
     const anim::RigTuning t;
     const float a = t.gesture_anticipation;
+    // The middle of the strike's hold at full reach (0.3 out, 0.12 held, of
+    // the time after the wind-up), for a channel trailing the body by 0.04.
+    auto strike_peak = [&](float duration) {
+        return duration * (0.04f + 0.96f * (a + (1.0f - a) * 0.36f));
+    };
 
     // Claw, right side, at the strike peak.
     {
         anim::RigAction claw;
         claw.claw = true;
         claw.side = 1.0f;
-        const float peak = t.claw_duration * (a + (1.0f - a) * 0.3f);
+        const float peak = strike_peak(t.claw_duration);
         const auto [before, at] = sample(claw, peak);
         // Roll into the strike: the right wingtip lower, the left higher.
         CHECK(at.right_tip.y < before.right_tip.y - 0.05f);
@@ -2582,7 +2587,7 @@ void test_melee_gestures_move_the_body() {
         anim::RigAction whip;
         whip.tail = true;
         whip.side = 1.0f;
-        const float peak = t.tail_duration * (a + (1.0f - a) * 0.3f);
+        const float peak = strike_peak(t.tail_duration);
         const auto [before, at] = sample(whip, peak);
         std::printf("  tail tip x %.2f -> %.2f, head x %.2f -> %.2f\n", before.tail_tip.x,
                     at.tail_tip.x, before.head.x, at.head.x);
@@ -2594,7 +2599,7 @@ void test_melee_gestures_move_the_body() {
     {
         anim::RigAction bite;
         bite.bite = true;
-        const float peak = t.bite_duration * (a + (1.0f - a) * 0.3f);
+        const float peak = strike_peak(t.bite_duration);
         const auto [before, at] = sample(bite, peak);
         std::printf("  head %.2f,%.2f -> %.2f,%.2f  root z %.2f -> %.2f\n", before.head.y,
                     before.head.z, at.head.y, at.head.z, before.root.z, at.root.z);
@@ -2894,6 +2899,40 @@ void test_life_in_flight() {
         }
         std::printf("  brake: talon speed jumps at most %.4f against a peak of %.4f\n", double(jump), double(peak));
         CHECK(jump < 0.4f * peak);
+    }
+
+    // Melee has weight: through the studio's bite, claw and tail the head
+    // stays under 70 m/s and the body root under 24. When the whole body
+    // yawed and rolled on the strike curve and the kicks landed in one
+    // frame they reached 104 and 36: a cartoon snap.
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(13.6773f);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        still_air(rig.tuning);
+        const auto melee = game::StudioScenario(10);
+        Vec3 last_head{}, last_root{};
+        float head_peak = 0.0f, root_peak = 0.0f, previous = 0.0f;
+        for (int i = 0; i < 720; ++i) {
+            const float t = float(i) / 60.0f;
+            rig.set_aim_target(game::studio_melee_target(t, centre));
+            rig.set_action(game::studio_action(melee, previous, t));
+            previous = t;
+            rig.update(game::studio_state(melee, t, centre, 0.0f, 4.0f), 1.0f / 60.0f);
+            const auto& w = rig.world_matrices();
+            const Vec3 head = w[size_t(joints.head)].col[3].xyz() * 13.6773f;
+            const Vec3 root = w[size_t(joints.root)].col[3].xyz() * 13.6773f;
+            if (i > 60) {
+                head_peak = std::max(head_peak, length(head - last_head) * 60.0f);
+                root_peak = std::max(root_peak, length(root - last_root) * 60.0f);
+            }
+            last_head = head;
+            last_root = root;
+        }
+        std::printf("  melee: head peaks at %.0f m/s, root at %.0f m/s\n", double(head_peak), double(root_peak));
+        CHECK(head_peak < 70.0f);
+        CHECK(root_peak < 24.0f);
     }
 
     // Landing: the head hold removes only the beat's and the gusts' motion,
