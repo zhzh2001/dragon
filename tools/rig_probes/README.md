@@ -14,6 +14,7 @@ rendered inspection CLAUDE.md requires; it decides what to render.
 | `sink_probe <model.glb>...` | Grounded: skins the mesh on the CPU and reports how far its lowest vertex sits below the bind floor, and which bone owns it -- the `ground_lift_m` a profile needs |
 | `leg_probe <model.glb> <cfg>...` | Glide: thigh and shin angles, the hind foot's height and distance behind the hip |
 | `leg_swing_probe <model.glb> <scenario> <cfg>...` | Runs a studio scenario (4 s-turns, 7 brake, 2 turn) through the rig and prints the range of the thigh's fore-aft and lateral angles and the foot's path length: how much the legs MOVE, not where they hang |
+| `beat_probe <model.glb> <scenario> [cfg [metres_per_unit]]` | Runs a studio scenario and prints, over the last two beats, the wing tip's elevation and how far the chest, the head and the tail tip move, in percent of the body length: how much of the animal answers the beat, and whether a glide moves at all |
 | `jaw_probe <model.glb>...` | Flight and ground: does the jaw tip drop in the head frame with the breath held |
 | `render_candidate.py <species> <name> < overrides.cfg` | Symlinks the asset into a scratch dir, appends the overrides to a copy of its rig profile, renders side/front/rear/top with `--studio 9` and stitches them (`RIG_PROBE_OUT` sets the scratch dir) |
 

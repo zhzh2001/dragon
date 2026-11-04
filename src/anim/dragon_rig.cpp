@@ -355,6 +355,13 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(beat_heave_m),
     RIG_FLOAT_FIELD(beat_heave_lag),
     RIG_FLOAT_FIELD(beat_pitch_deg),
+    RIG_FLOAT_FIELD(beat_head_hold),
+    RIG_FLOAT_FIELD(beat_variation),
+    RIG_FLOAT_FIELD(glide_breath_deg),
+    RIG_FLOAT_FIELD(glide_breath_period),
+    RIG_FLOAT_FIELD(glide_trim_deg),
+    RIG_FLOAT_FIELD(gust_deg),
+    RIG_FLOAT_FIELD(gust_heave_m),
     RIG_FLOAT_FIELD(ground_stow_sweep_deg),
     RIG_FLOAT_FIELD(ground_stow_fold_deg),
     RIG_FLOAT_FIELD(ground_stow_wrist_deg),
@@ -1150,7 +1157,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                           core::saturate(state.flap_amplitude) * (delayed_beat - current_beat)
                     : 0.0f;
             // The gesture layer's brace is a posture term like the load flex.
-            float local_base = base + delayed_flap + gesture_wing_raise_[side];
+            float local_base = base + delayed_flap + gesture_wing_raise_[side] + life_wing_[side];
             if (tuning.wing_flap_limit_deg > 0.0f) {
                 // The ceiling applies to the complete delayed cyclic sample,
                 // while load flex and droop remain additive posture terms.
@@ -1431,32 +1438,181 @@ void DragonRig::drive_gestures() {
     }
 }
 
+namespace {
+
+// A smooth wobble in about [-1, 1] that never repeats: three sines at
+// incommensurate rates. Deterministic in time, so headless runs and the
+// goldens stay reproducible.
+float life_wave(float t, float a, float b, float c, float offset) {
+    return 0.5f * std::sin(t * a + offset) + 0.3f * std::sin(t * b + 1.7f * offset) +
+           0.2f * std::sin(t * c + 2.3f * offset);
+}
+
+// One uniform draw in [0, 1] per integer: what makes beat N differ from beat
+// N + 1 without a random generator whose sequence depends on call order.
+float life_hash(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return float(x & 0xffffffu) / float(0xffffffu);
+}
+
+}  // namespace
+
+void DragonRig::drive_life(const game::FlightState& state) {
+    life_wing_[0] = life_wing_[1] = 0.0f;
+    life_pitch_ = life_roll_ = life_heave_m_ = 0.0f;
+    const float airborne = 1.0f - ground_contact_;
+    // A new beat starts where the phase wraps; each beat draws its own
+    // per-wing scale. Drawn on the first frame too, so beat 0 is not exact.
+    const float phase = wrapped_phase(state.flap_phase);
+    if (phase < life_last_phase_ - 0.5f) ++life_beat_count_;
+    life_last_phase_ = phase;
+    const float variation = core::clampf(tuning.beat_variation, 0.0f, 0.3f);
+    for (int side = 0; side < 2; ++side) {
+        life_beat_scale_[side] =
+            (2.0f * life_hash(uint32_t(life_beat_count_) * 2u + uint32_t(side)) - 1.0f) * variation;
+    }
+    const float beat = core::saturate(state.flap_amplitude) *
+                       (1.0f - core::saturate(state.wing_tuck)) * airborne;
+    // Calm: gliding, not beating, not pulling hard. The breath and the trim
+    // live here; under a beat or a hard turn the animal is busy.
+    const float calm = airborne * (1.0f - core::saturate(intensity_smoothed_)) * (1.0f - beat) *
+                       (1.0f - core::saturate(state.wing_tuck));
+    const float t = time_;
+    for (int side = 0; side < 2; ++side) {
+        const float scaled_beat = state.wing_angle * life_beat_scale_[side] * beat;
+        const float trim = core::radians(tuning.glide_trim_deg) * calm *
+                           life_wave(t, 0.53f, 1.37f, 2.71f, side == 0 ? 0.0f : 2.1f);
+        life_wing_[side] = scaled_beat + trim;
+    }
+    const float breath_period = core::maxf(tuning.glide_breath_period, 0.5f);
+    life_pitch_ = core::radians(tuning.glide_breath_deg) * calm *
+                  std::sin(core::TWO_PI * t / breath_period);
+    // Gusts grow with airspeed and stay in a tuck at half strength: the air
+    // is rougher the faster it passes.
+    const float gust = airborne * core::saturate(state.airspeed / 40.0f) *
+                       (1.0f - 0.5f * core::saturate(state.wing_tuck));
+    life_roll_ = core::radians(tuning.gust_deg) * gust * life_wave(t, 0.71f, 1.93f, 3.10f, 0.4f);
+    life_pitch_ += core::radians(tuning.gust_deg) * 0.6f * gust *
+                   life_wave(t, 0.61f, 1.61f, 2.90f, 1.3f);
+    life_heave_m_ = tuning.gust_heave_m * gust * life_wave(t, 0.83f, 2.07f, 3.70f, 2.2f);
+}
+
 void DragonRig::drive_body_beat(const game::FlightState& state) {
     // The body rises on the downstroke and sinks on the recovery, and the nose
-    // lifts a little with each push. Visual only, on the root joint: the
-    // flight model's position is the truth the camera and the combat read, and
-    // a chase camera that bobbed with every beat would be unwatchable. Gated
-    // on the beat and on being airborne, so a standing or gliding dragon is
-    // exactly where the flight model put it.
+    // lifts a little with each push; on top, the life layer's breath and
+    // gusts. Visual only, on the root joint: the flight model's position is
+    // the truth the camera and the combat read, and a chase camera that bobbed
+    // with every beat would be unwatchable. The beat is gated on being
+    // airborne and beating; the life terms gate themselves (drive_life).
+    root_offset_m_ = root_offset_pitch_ = root_offset_roll_ = 0.0f;
+    root_offset_active_ = false;
     const int root = joints_.root;
     if (root == NO_PARENT || size_t(root) >= pose_.local.size()) return;
+    root_pre_offset_ = pose_.local[size_t(root)];
     const float beat = core::saturate(state.flap_amplitude) *
                        (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
-    if (beat <= 1e-4f) return;
-    const float down = core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
-    const float phase = wrapped_phase(state.flap_phase);
-    // wingbeat_curve is +1 with the wing at the top, so its negative is the
-    // body's height: lowest as the downstroke begins, highest after it ends.
-    // The lag is the body still rising on its momentum when the wing reverses.
-    const float heave = -wingbeat_curve(phase - tuning.beat_heave_lag, down);
-    const float pitch = -wingbeat_curve(phase - 0.5f * tuning.beat_heave_lag, down);
+    float heave_m = life_heave_m_;
+    float pitch = life_pitch_;
+    if (beat > 1e-4f) {
+        const float down = core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
+        const float phase = wrapped_phase(state.flap_phase);
+        // wingbeat_curve is +1 with the wing at the top, so its negative is
+        // the body's height: lowest as the downstroke begins, highest after
+        // it ends. The lag is the body still rising on its momentum when the
+        // wing reverses.
+        const float heave = -wingbeat_curve(phase - tuning.beat_heave_lag, down);
+        const float nod = -wingbeat_curve(phase - 0.5f * tuning.beat_heave_lag, down);
+        heave_m += tuning.beat_heave_m * heave * beat;
+        pitch += core::radians(tuning.beat_pitch_deg) * nod * beat;
+    }
+    if (std::fabs(heave_m) < 1e-5f && std::fabs(pitch) < 1e-6f && std::fabs(life_roll_) < 1e-6f) {
+        return;
+    }
     // Root translation is in the model's own units; the tuning is in metres.
     Transform& local = pose_.local[size_t(root)];
-    local.position += Vec3::unit_y() * (tuning.beat_heave_m * heave * beat / model_scale_);
+    local.position += Vec3::unit_y() * (heave_m / model_scale_);
     // Nose up in engine terms is a rotation about model X whose sign follows
-    // the facing, the same convention the neck and tail steer use.
-    rotate_joint(root, Vec3::unit_x(),
-                 core::radians(tuning.beat_pitch_deg) * pitch * beat * -model_forward_z_, true);
+    // the facing, the same convention the neck and tail steer use; roll right
+    // is the gesture layer's convention.
+    root_offset_m_ = heave_m;
+    root_offset_pitch_ = pitch * -model_forward_z_;
+    root_offset_roll_ = life_roll_ * model_forward_z_;
+    rotate_joint(root, Vec3::unit_x(), root_offset_pitch_, true);
+    if (std::fabs(root_offset_roll_) > 1e-6f) rotate_joint(root, Vec3::unit_z(), root_offset_roll_, true);
+    root_offset_active_ = true;
+}
+
+void DragonRig::hold_head() {
+    const float hold = core::saturate(tuning.beat_head_hold) * (1.0f - ground_contact_);
+    const int root = joints_.root;
+    const int head = joints_.head;
+    if (!root_offset_active_ || hold <= 1e-4f || joints_.neck.empty() || head == NO_PARENT ||
+        root == NO_PARENT) {
+        return;
+    }
+    // Where the head would be, and how it would face, without the beat and
+    // the gusts: the same pose with the root as it was before them.
+    const Transform moved = pose_.local[size_t(root)];
+    pose_.local[size_t(root)] = root_pre_offset_;
+    compute_world_matrices(*skeleton_, pose_, world_);
+    const Vec3 head_still = world_[size_t(head)].col[3].xyz();
+    const Quat facing_still = core::quat_from_matrix(world_[size_t(head)]);
+    pose_.local[size_t(root)] = moved;
+    compute_world_matrices(*skeleton_, pose_, world_);
+
+    // The neck bends to carry the head back toward where it was: a two-bone
+    // solve over the neck's base and middle joints, with the head as the end.
+    // A turn at the base alone only swings the head along an arc, and on an
+    // upright neck that arc is fore and aft -- the head kept riding the heave.
+    // The middle joint changes the base-to-head distance, which is what takes
+    // a vertical offset out.
+    const Vec3 head_now = world_[size_t(head)].col[3].xyz();
+    const Vec3 wanted = head_now + (head_still - head_now) * hold;
+    const int base = joints_.neck.front();
+    const int middle = joints_.neck.size() >= 2 ? joints_.neck[joints_.neck.size() / 2] : NO_PARENT;
+    if (middle != NO_PARENT && middle != base) {
+        const Vec3 a = world_[size_t(base)].col[3].xyz();
+        const Vec3 b = world_[size_t(middle)].col[3].xyz();
+        const float upper = core::length(b - a);
+        const float lower = core::length(head_now - b);
+        const float reach = core::clampf(core::length(wanted - a), std::fabs(upper - lower) + 1e-4f,
+                                         upper + lower - 1e-4f);
+        const Vec3 to_base = a - b;
+        const Vec3 to_head = head_now - b;
+        const Vec3 bend_axis = core::cross(to_head, to_base);
+        if (upper > 1e-6f && lower > 1e-6f && core::length_sq(bend_axis) > 1e-14f) {
+            const float now = std::acos(core::clampf(
+                core::dot(to_base, to_head) / (upper * lower), -1.0f, 1.0f));
+            const float target = std::acos(core::clampf(
+                (upper * upper + lower * lower - reach * reach) / (2.0f * upper * lower), -1.0f, 1.0f));
+            // A positive turn about to_head x to_base closes the joint.
+            rotate_joint_about(middle, bend_axis, now - target);
+        }
+    }
+    {
+        const Vec3 pivot = world_[size_t(base)].col[3].xyz();
+        const Vec3 from = world_[size_t(head)].col[3].xyz() - pivot;
+        const Vec3 to = wanted - pivot;
+        if (core::length_sq(from) > 1e-10f && core::length_sq(to) > 1e-10f) {
+            const Quat turn = core::rotation_between(core::normalize(from), core::normalize(to));
+            const Vec3 axis{turn.x, turn.y, turn.z};
+            if (core::length_sq(axis) > 1e-12f) {
+                rotate_joint_about(base, axis, 2.0f * std::acos(core::clampf(turn.w, -1.0f, 1.0f)));
+            }
+        }
+    }
+    // And the head turns back by the same share, so the gaze stays level.
+    const Quat facing_now = core::quat_from_matrix(world_[size_t(head)]);
+    Quat back = core::normalize(core::slerp(facing_now, facing_still, hold) * core::conjugate(facing_now));
+    if (back.w < 0.0f) back = Quat{-back.x, -back.y, -back.z, -back.w};
+    const Vec3 axis{back.x, back.y, back.z};
+    if (core::length_sq(axis) > 1e-12f) {
+        rotate_joint_about(head, axis, 2.0f * std::acos(core::clampf(back.w, -1.0f, 1.0f)));
+    }
 }
 
 void DragonRig::setup_chain(ChainDynamics& sim, const std::vector<int>& chain) const {
@@ -2528,8 +2684,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         }
     }
     drive_gestures();
+    drive_life(state);
     drive_wings(state);
-    drive_body_beat(state);
     // The gesture layer on the root: pitch, roll and yaw in engine terms,
     // and the surge along the body's forward axis. Same sign conventions as
     // the body beat's pitch and the wings' roll lean.
@@ -2553,6 +2709,9 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
                               (gesture_surge_ / model_scale_);
         }
     }
+    // The beat and the gusts last on the root, after the gestures, so the
+    // head hold can take exactly them back out (hold_head).
+    drive_body_beat(state);
 
     std::vector<int> neck_with_head = joints_.neck;
     if (joints_.head != NO_PARENT) neck_with_head.push_back(joints_.head);
@@ -2735,6 +2894,7 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     }
 
     compute_world_matrices(*skeleton_, pose_, world_);
+    hold_head();
     // The head aim needs posed world matrices to measure against, and changing
     // the head changes its subtree, so the matrices are rebuilt afterwards. Two
     // passes over the hierarchy is nothing next to the skinning it feeds.

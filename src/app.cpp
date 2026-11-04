@@ -3997,6 +3997,14 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("body heave", &rig.beat_heave_m, 0.0f, 1.5f, "%.2f m");
         ImGui::SliderFloat("heave lag", &rig.beat_heave_lag, 0.0f, 0.5f, "%.2f cycles");
         ImGui::SliderFloat("body pitch", &rig.beat_pitch_deg, 0.0f, 8.0f, "%.1f deg");
+        ImGui::SliderFloat("head hold", &rig.beat_head_hold, 0.0f, 1.0f);
+        ImGui::SliderFloat("beat variation", &rig.beat_variation, 0.0f, 0.3f);
+        ImGui::SeparatorText("life in the glide");
+        ImGui::SliderFloat("breath", &rig.glide_breath_deg, 0.0f, 5.0f, "%.1f deg");
+        ImGui::SliderFloat("breath period", &rig.glide_breath_period, 1.0f, 8.0f, "%.1f s");
+        ImGui::SliderFloat("wing trim", &rig.glide_trim_deg, 0.0f, 10.0f, "%.1f deg");
+        ImGui::SliderFloat("gusts", &rig.gust_deg, 0.0f, 5.0f, "%.1f deg");
+        ImGui::SliderFloat("gust heave", &rig.gust_heave_m, 0.0f, 0.5f, "%.2f m");
         ImGui::SeparatorText("stroke");
         ImGui::SliderFloat("flap amplitude", &rig.flap_shoulder_deg, 0.0f, 90.0f, "%.0f deg");
         ImGui::SliderFloat("outboard decay", &rig.outboard_decay, 0.0f, 2.0f);

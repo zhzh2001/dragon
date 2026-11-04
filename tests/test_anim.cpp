@@ -26,6 +26,18 @@ using anim::Skeleton;
 
 namespace {
 
+// The life layer (DragonRig::drive_life) keeps a flying body moving:
+// gusts, the glide's breath and trim, a different amplitude every beat.
+// A test that pins an exact pose, or compares two moments for equality,
+// flies in still air.
+void still_air(anim::RigTuning& tuning) {
+    tuning.beat_variation = 0.0f;
+    tuning.glide_breath_deg = 0.0f;
+    tuning.glide_trim_deg = 0.0f;
+    tuning.gust_deg = 0.0f;
+    tuning.gust_heave_m = 0.0f;
+}
+
 int g_failures = 0;
 int g_checks = 0;
 
@@ -1390,6 +1402,7 @@ void test_attack_posture() {
 
     anim::DragonRig rig;
     rig.init(skeleton, joints);
+    still_air(rig.tuning);
     // Jaw tip in model space: the deepest joint under the jaw.
     int tip = joints.jaw;
     for (int i = 0; i < skeleton.count(); ++i) {
@@ -1490,6 +1503,7 @@ void test_speed_posture() {
 
     anim::DragonRig cruise;
     cruise.init(skeleton, joints);
+    still_air(cruise.tuning);
     fly(cruise, 30.0f, 0.0f, 60);
     const Vec3 cruise_tip = tip_of(cruise);
     fly(cruise, 30.0f, 0.0f, 1);
@@ -1531,6 +1545,7 @@ void test_speed_posture() {
     // With the speed posture dialled to zero, speed changes nothing.
     anim::DragonRig still;
     still.init(skeleton, joints);
+    still_air(still.tuning);
     still.tuning.speed_sweep_deg = 0.0f;
     still.tuning.speed_fold_deg = 0.0f;
     still.tuning.flutter_deg = 0.0f;
@@ -1728,6 +1743,7 @@ float measured_stroke_fraction(const Skeleton& skeleton, const anim::DragonJoint
         rig.init(skeleton, joints);
         rig.tuning = tuning;
         rig.tuning.upstroke_fold_deg = 0.0f;
+        still_air(rig.tuning);
         game::FlightState s;
         s.velocity = Vec3{0.0f, 0.0f, -30.0f};
         s.airspeed = 30.0f;
@@ -2610,6 +2626,7 @@ void test_melee_load_recovery_and_switch() {
             anim::DragonRig rig;
             rig.init(skeleton, joints); rig.set_model_scale(scale);
             anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+            still_air(rig.tuning);
             for (int i=0; i<120; ++i) rig.update(state, 1.0f/120.0f);
             const auto rest = rig.world_matrices()[size_t(joints.root)];
             const float duration = kind == 0 ? rig.tuning.bite_duration :
@@ -2712,7 +2729,80 @@ void test_tail_flow_is_continuous_and_releases_on_landing() {
     CHECK(std::fabs(rig->tail_sim().position.back().x) < 1e-5f);
 }
 
+// The life layer (drive_life, hold_head), on a real asset through the
+// studio: a glide is not a statue, still air is, the head rides the beat
+// less than the body does, and no two beats are alike while a rerun is.
+void test_life_in_flight() {
+    std::printf("a glide moves, the head holds through the beat, beats vary\n");
+    namespace fs = std::filesystem;
+    const fs::path path = test_source_root() / "assets/embercrest.glb";
+    if (!fs::is_regular_file(path)) {
+        std::printf("  embercrest absent; skipped\n");
+        return;
+    }
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    CHECK(anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok);
+    const anim::DragonJoints joints = anim::map_dragon_joints(skeleton);
+    CHECK(joints.head != anim::NO_PARENT && joints.chest != anim::NO_PARENT);
+    if (joints.head == anim::NO_PARENT || joints.chest == anim::NO_PARENT) return;
+    const Vec3 centre{0.0f, 200.0f, 0.0f};
+    // Peak-to-peak height of a joint over the last two seconds of ten, and
+    // the whole trace for comparing runs.
+    struct Run { float chest = 0.0f, head = 0.0f; std::vector<float> trace; };
+    auto run = [&](game::StudioScenario scenario, auto&& tune) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(13.6773f);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        tune(rig.tuning);
+        float lo[2] = {1e9f, 1e9f}, hi[2] = {-1e9f, -1e9f};
+        Run out;
+        for (int i = 0; i < 600; ++i) {
+            const float t = float(i) / 60.0f;
+            rig.update(game::studio_state(scenario, t, centre, 0.0f, 4.0f), 1.0f / 60.0f);
+            if (i < 480) continue;
+            const auto& w = rig.world_matrices();
+            const float y[2] = {w[size_t(joints.chest)].col[3].y, w[size_t(joints.head)].col[3].y};
+            for (int k = 0; k < 2; ++k) { lo[k] = std::min(lo[k], y[k]); hi[k] = std::max(hi[k], y[k]); }
+            out.trace.push_back(y[1]);
+        }
+        out.chest = hi[0] - lo[0];
+        out.head = hi[1] - lo[1];
+        return out;
+    };
+    auto as_is = [](anim::RigTuning&) {};
+    // A glide moves: breath, trim and gusts, a few hundredths of a unit
+    // on a body of 0.9; in still air it holds to the float.
+    const Run glide = run(game::StudioScenario(0), as_is);
+    const Run calm = run(game::StudioScenario(0), [](anim::RigTuning& t) { still_air(t); });
+    CHECK(glide.chest > 0.003f);
+    CHECK(calm.chest < 1e-5f && calm.head < 1e-5f);
+    // Through a beat the neck takes back the head's ride on the body: with
+    // the hold the head moves less than the chest, without it more.
+    const Run held = run(game::StudioScenario(1), [](anim::RigTuning& t) { still_air(t); });
+    const Run loose = run(game::StudioScenario(1), [](anim::RigTuning& t) {
+        still_air(t);
+        t.beat_head_hold = 0.0f;
+    });
+    std::printf("  beat: chest %.3f, head %.3f held, %.3f loose\n", double(held.chest),
+                double(held.head), double(loose.head));
+    CHECK(held.head < held.chest);
+    CHECK(loose.head > loose.chest);
+    // No two beats alike, and the same run twice is the same to the bit.
+    const Run varied = run(game::StudioScenario(1), as_is);
+    const Run again = run(game::StudioScenario(1), as_is);
+    CHECK(varied.trace == again.trace);
+    const size_t beat_frames = 54;  // the studio's 0.9 s beat at 60 Hz
+    float differ = 0.0f;
+    for (size_t i = 0; i + beat_frames < varied.trace.size(); ++i) {
+        differ = std::max(differ, std::fabs(varied.trace[i] - varied.trace[i + beat_frames]));
+    }
+    CHECK(differ > 1e-3f);
+}
+
 int main() {
+    test_life_in_flight();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

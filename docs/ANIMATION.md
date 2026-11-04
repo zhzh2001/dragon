@@ -626,6 +626,61 @@ mid-upstroke, further forward at the bottom and further aft at the top, the
 leading edge lower going down and higher going up, the root higher after the
 downstroke -- and none of it survives a tuck.
 
+### The glide was a statue, and the head rode the beat (2026-11-04)
+
+The playtester called the flight "kind of unnatural" without a specific.
+Contact sheets and `tools/rig_probes/beat_probe` found three measurable
+causes on Embercrest. The checklist they were measured against came from
+web research on large-flyer biomechanics and film dragon pipelines
+(Weta's and Rodeo FX's for House of the Dragon, DreamWorks' for How to
+Train Your Dragon, Pixomondo's for Game of Thrones).
+
+- **A glide held every bone still.** The chest, the head, the tail and the
+  wing angle moved by exactly 0.00 in the studio glide. A glide is most of
+  a flight, so the player mostly watched a statue on a wire.
+- **The head bobbed more than the body.** Over a beat the head moved 7.6%
+  of the body length against the chest's 6.1%: it rode the nod on a long
+  lever. A flyer holds its head steady (pigeons do so in all three axes)
+  and the neck takes up the body's motion.
+- **Every beat was the same beat.** Two beats a cycle apart agreed to 0.01%,
+  and the two sides were exact mirrors. A loop that repeats to the pixel is
+  the clearest sign of a machine.
+
+The life layer answers them (`drive_life`, `hold_head`; sliders under Wings,
+"wingbeat" and "life in the glide"):
+
+- `beat_head_hold` (0.75): after the neck chain is posed, a two-bone solve
+  over the neck's base and middle joints carries the head back toward
+  where it would be without the beat and the gusts, and the head turns back
+  by the same share. A turn at the base alone only swung the head fore and
+  aft on Embercrest's upright neck, so the middle joint changes the
+  base-to-head distance. Head bob over a beat: 0.065 units without, 0.033
+  with, against the chest's 0.051.
+- `beat_variation` (0.07): each beat's stroke amplitude, per wing, drawn
+  from a hash of the beat count. Deterministic, so headless runs and the
+  goldens reproduce.
+- `glide_breath_deg` and `glide_breath_period` (1.2, 3.4 s): a slow body
+  pitch while calm. `glide_trim_deg` (2.5): each wing's own slow trim.
+  Both fade with flight intensity, with a beat and with the tuck.
+- `gust_deg` and `gust_heave_m` (1.0, 0.10 m): root roll, pitch and heave
+  from sums of sines at incommensurate rates, growing with airspeed.
+
+All of it is visual, on the root and the wings, like the beat's heave; the
+flight model is untouched. The beat and the gusts now go onto the root after
+the gesture layer, so the head hold can take exactly them back out. Tests
+that pin an exact pose fly in still air (`still_air` in `test_anim`);
+`test_life_in_flight` pins the three behaviours on Embercrest.
+
+**Still open: the wing hangs like a curtain at the bottom of the stroke.**
+Embercrest's tip drops only about 30 degrees below the shoulder, but its
+membrane is modelled draped about 35 degrees aft-down (the fitted plane above),
+so the lowered wing hangs nearly vertical below the belly for a third of the
+beat. A shallower stroke (-28 degrees, an even down/up split) changed
+almost nothing in a side sheet. The cure is in the asset: a rest pose with
+a level membrane. Two items from the research are also not done: the
+outside wing does not beat harder than the inside wing in a banked turn,
+and the take-off does not open with a burst of fast, deep beats.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on

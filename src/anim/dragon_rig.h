@@ -215,6 +215,33 @@ struct RigTuning {
     float beat_heave_m = 0.30f;
     float beat_heave_lag = 0.12f;
     float beat_pitch_deg = 2.0f;
+    // 5. The head holds still. A flyer carries its eyes on a steady platform:
+    //    the neck takes up the body's heave and nod, and the head turns back
+    //    so the gaze stays level (pigeons hold the head still in all three
+    //    axes while the body rotates under it). The share of the body's beat
+    //    and gust motion the neck cancels at the head, 0 to 1. Without it the
+    //    head bobbed MORE than the chest, riding the nod on a long lever.
+    float beat_head_hold = 0.75f;
+    // 6. No two beats alike. Each beat's stroke amplitude, per wing, varies by
+    //    up to this fraction, drawn from the beat count so a headless run is
+    //    still deterministic. A loop that repeats to the pixel is the
+    //    clearest sign of a machine.
+    float beat_variation = 0.07f;
+
+    // Life in the air between beats. A glide that holds every bone still
+    // reads as a statue on a wire, and a glide is most of a flight.
+    // The breath: the body pitches by this much, nose up on the in-breath,
+    // over this period. Fades with flight intensity.
+    float glide_breath_deg = 1.2f;
+    float glide_breath_period = 3.4f;
+    // Each wing's own slow trim, in degrees of elevation, independent per
+    // side: a soaring bird is never symmetric for long.
+    float glide_trim_deg = 2.5f;
+    // Turbulence on the body: roll and pitch in degrees and heave in metres,
+    // smooth and non-repeating (incommensurate sines), stronger with
+    // airspeed. Visual only, like the beat's heave.
+    float gust_deg = 1.0f;
+    float gust_heave_m = 0.10f;
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -829,7 +856,15 @@ private:
                       float angle_b);
 
     void drive_wings(const game::FlightState& state);
+    // The life layer: per-beat variation, the glide's breath and trim, and
+    // turbulence. Computes the wings' share (life_wing_) before drive_wings
+    // and the root's (applied by drive_body_beat).
+    void drive_life(const game::FlightState& state);
     void drive_body_beat(const game::FlightState& state);
+    // The neck takes back the share of the beat's and the gusts' root motion
+    // that beat_head_hold names, at the head, and the head turns back level.
+    // Needs posed world matrices; leaves them current.
+    void hold_head();
     // The jaw, the breath tremor and the talons -- after the aim, because the
     // aim would otherwise correct the tremor away.
     void drive_attack(float airborne);
@@ -1027,6 +1062,24 @@ private:
     float jaw_open_sign_ = 1.0f;
     // Running time for the flutter oscillators.
     float time_ = 0.0f;
+    // The life layer (drive_life): the wings' extra elevation this frame,
+    // per side, in radians; the beat counter and this beat's per-side scale;
+    // and what the beat and the gusts did to the root, which the head hold
+    // takes back out at the head.
+    float life_wing_[2] = {0.0f, 0.0f};
+    float life_beat_scale_[2] = {0.0f, 0.0f};
+    float life_last_phase_ = 0.0f;
+    int life_beat_count_ = 0;
+    float root_offset_m_ = 0.0f;        // vertical, metres
+    float root_offset_pitch_ = 0.0f;    // radians about model X, as applied
+    float root_offset_roll_ = 0.0f;     // radians about model Z, as applied
+    float life_pitch_ = 0.0f;           // this frame's breath and gust, radians
+    float life_roll_ = 0.0f;
+    float life_heave_m_ = 0.0f;
+    // The root's local transform before the beat and the gusts moved it:
+    // where the head would be without them.
+    core::Transform root_pre_offset_{};
+    bool root_offset_active_ = false;
     float clip_time_ = 0.0f;
     // Previous frame's motion, for deriving the accelerations the chains feel.
     core::Vec3 previous_velocity_ = core::Vec3::zero();
