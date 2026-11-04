@@ -289,8 +289,8 @@ settles with some overshoot. The changes:
 
 - The strike accelerates out (x squared over the first 30% after the wind-up)
   and holds at full reach for 12% of the swing. The return is
-  `(1-w)^2(1+2w) - 1.2 w^2 (1-w)`: it passes through rest and overshoots
-  before it settles.
+  `(1-w)^2 (1+2w-6w^2)`: it passes through rest, overshoots by 5%, and
+  lands at rest with no speed (a double root at w = 1).
 - The body's pitch, surge, roll, yaw and sway follow one envelope,
   `gesture_body`. It is zero at the press, stays loaded through the wind-up,
   and releases late. The neck channels trail it by 6% of the swing.
@@ -309,6 +309,29 @@ After: the head peaks at 63 m/s and the root at 19 m/s in `test_anim`
 bell (`artifacts/arcs/melee-after.jpg`). The tail tip's speed is still
 jagged through the whip. Renders of the bite, claw and tail on the roster
 are in `artifacts/melee-weight/`.
+
+A read-only Codex review (gpt-6-astra) of this pass and the neck and brake
+pass found seven defects, all fixed the same day:
+
+- The brake springs used an explicit step. At the sliders' top (rate 20,
+  damping 1.5) on a 30 Hz frame they ran away and turned the body 178
+  degrees. They now take an implicit step (`spring_step`), stable at any rate.
+- A neck straight at rest had no deepest bend, so `hold_head` skipped the
+  positional solve. It now takes the joint halfway along, and a one-joint
+  neck solves over its base alone.
+- The head ride's spring lag held the head almost still at any hold above
+  zero. The correction now fades in over the first quarter of
+  `beat_head_hold`.
+- With `gesture_anticipation` 0 the body envelope started at a tenth of the
+  swing. It now starts at zero.
+- The recovery stopped dead at its end, and the contact shudder started at
+  two thirds of its size. Both now start and end at zero.
+- A kick read its ramp from the slider every frame, so a change mid-kick
+  delivered up to 135% of it. The ramp is now fixed when the kick begins.
+- The melee speed test passed a NaN. It now checks each position is finite.
+
+`test_rig_slider_extremes_stay_sane` covers the first and the fourth; both
+fail on the code before the fixes.
 
 Studio's speed now scales the rig as well as its scenario clock; use
 `--studio-speed 0.5` or the speed slider. Scenarios 8/10/11/12 expose the

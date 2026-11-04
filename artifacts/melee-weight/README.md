@@ -9,3 +9,10 @@ roster, rendered after the change:
 - `roster.jpg`: the bite, the head close, the claw and the tail on every species.
 
 The traces before and after are in `artifacts/arcs/melee-*.jpg`.
+
+After the review fixes (`ANIMATION.md`, the end of "Weight in the strike"):
+
+- `roster-melee.jpg`: per species, the bite, the bite 21 frames later in its
+  return, the head close in the bite, the claw and the tail.
+- `roster-brake.jpg`: per species, the brake from the side and the front,
+  the head in the flap, and a landing.

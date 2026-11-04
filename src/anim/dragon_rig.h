@@ -889,6 +889,7 @@ private:
     struct PendingKick {
         core::Vec3 velocity{};
         float time = 1e9f;  // since the kick began; past the ramp when spent
+        float ramp = 0.1f;  // gesture_kick_ramp when the kick began
     };
     void add_kick(PendingKick& kick, core::Vec3 velocity);
     void apply_kick(PendingKick& kick, ChainDynamics& sim, int weight_power, float dt);

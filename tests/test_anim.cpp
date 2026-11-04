@@ -1906,6 +1906,60 @@ void test_legs_swing_with_the_frame() {
 
 // Compare braced limbs to the same pose with zero passive sway. Local thigh
 // directions isolate the leg response from the root's brake flare and neck.
+// The sliders' corners stay sane (from a review of the 2026-11-04 rig work).
+// At the brake sliders' top (rate 20, damping 1.5) on a 30 Hz frame the
+// explicit springs ran away to hundreds of radians; with no wind-up at all
+// (`gesture_anticipation` 0) a claw rolled the body a tenth of its swing on
+// the press frame.
+void test_rig_slider_extremes_stay_sane() {
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    anim::DragonJoints joints;
+    anim::build_dragon(anim::DragonShape{}, skeleton, joints, mesh);
+    game::FlightState state;
+    state.velocity = Vec3{0, 0, -30};
+    state.airspeed = 30;
+    state.ground_clearance = 300;
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.leg_brake_rate = 20.0f;
+        rig.tuning.leg_brake_damping = 1.5f;
+        for (int i = 0; i < 30; ++i) rig.update(state, 1.0f / 30.0f);
+        const auto level = core::quat_from_matrix(rig.world_matrices()[size_t(joints.root)]);
+        state.wing_brake = 1.0f;
+        // A runaway angle wraps, so positions stay finite: the check is the
+        // body's turn, which the brake keeps to its pitch dial.
+        float worst = 0.0f;
+        for (int i = 0; i < 120; ++i) {
+            rig.update(state, 1.0f / 30.0f);
+            const auto now = core::quat_from_matrix(rig.world_matrices()[size_t(joints.root)]);
+            worst = std::max(worst, core::degrees(2.0f * std::acos(std::min(1.0f, std::fabs(core::dot(now, level))))));
+        }
+        std::printf("  brake at the sliders' top: the body turns at most %.1f degrees\n", double(worst));
+        CHECK(worst < rig.tuning.brake_body_pitch_deg * 1.5f + 5.0f);
+        state.wing_brake = 0.0f;
+    }
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.gesture_anticipation = 0.0f;
+        for (int i = 0; i < 120; ++i) rig.update(state, 1.0f / 120.0f);
+        const auto rest = core::quat_from_matrix(rig.world_matrices()[size_t(joints.root)]);
+        anim::RigAction action;
+        action.claw = true;
+        action.side = 1.0f;
+        rig.set_action(action);
+        rig.update(state, 1.0f / 120.0f);
+        const auto pressed = core::quat_from_matrix(rig.world_matrices()[size_t(joints.root)]);
+        const float turn = 2.0f * std::acos(std::min(1.0f, std::fabs(core::dot(pressed, rest))));
+        std::printf("  no wind-up: the claw turns the body %.3f degrees on the press frame\n",
+                    double(core::degrees(turn)));
+        CHECK(core::degrees(turn) < 0.5f);
+    }
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -2923,6 +2977,8 @@ void test_life_in_flight() {
             const auto& w = rig.world_matrices();
             const Vec3 head = w[size_t(joints.head)].col[3].xyz() * 13.6773f;
             const Vec3 root = w[size_t(joints.root)].col[3].xyz() * 13.6773f;
+            // A NaN would slip past std::max and pass the speed limits.
+            CHECK(std::isfinite(head.x + head.y + head.z + root.x + root.y + root.z));
             if (i > 60) {
                 head_peak = std::max(head_peak, length(head - last_head) * 60.0f);
                 root_peak = std::max(root_peak, length(root - last_root) * 60.0f);
@@ -2981,6 +3037,7 @@ void test_life_in_flight() {
 
 int main() {
     test_life_in_flight();
+    test_rig_slider_extremes_stay_sane();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

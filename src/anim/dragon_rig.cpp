@@ -1409,8 +1409,10 @@ float gesture_strike(float u, float a) {
     if (v < kStrikeOut + kStrikeHold) return 1.0f;
     const float w = (v - kStrikeOut - kStrikeHold) / (1.0f - kStrikeOut - kStrikeHold);
     // Smoothstep's complement, less a dip that crosses rest late in the
-    // recovery (about 7% below it at w = 0.85) and returns to rest at w = 1.
-    return (1.0f - w) * (1.0f - w) * (1.0f + 2.0f * w) - 1.2f * w * w * (1.0f - w);
+    // recovery (5% below it at w = 0.75). The double root at w = 1 lands it
+    // at rest with no speed: the earlier dip, 1.2 w^2 (1 - w), was still
+    // moving there and stopped dead on the gesture's last frame.
+    return (1.0f - w) * (1.0f - w) * (1.0f + 2.0f * w - 6.0f * w * w);
 }
 // The body's share of a gesture: broad and slow, from late in the wind-up
 // through the strike and back, so the body leads and the limb or the jaws
@@ -1424,16 +1426,29 @@ float gesture_body(float u, float a) {
     // It starts just before the strike, not earlier: begun across the
     // wind-up it cancelled the wind-up's turn away, and the anticipation
     // with it.
-    return core::smoothstep(0.0f, a, u) * core::smoothstep(-0.1f, 0.4f, v) *
+    // (The floor on a keeps it zero at the press with no wind-up at all.)
+    return core::smoothstep(0.0f, core::maxf(a, 0.02f), u) * core::smoothstep(-0.1f, 0.4f, v) *
            (1.0f - core::smoothstep(0.45f, 1.0f, v));
 }
-// How far into the contact hold the strike is: 1 at its start, fading out
-// through it; 0 elsewhere. Drives the impact shudder.
-float gesture_impact(float u, float a) {
+// The impact shudder through the contact hold: 14 Hz, its clock started at
+// the hold so it begins at zero, fading to nothing by the hold's end. Timed
+// from the gesture's start it jumped to two thirds of its size on the
+// hold's first frame. `duration` is the whole gesture's, in seconds.
+float gesture_impact(float u, float a, float duration) {
     if (u < a || u >= 1.0f) return 0.0f;
     const float v = (u - a) / core::maxf(1.0f - a, 1e-3f);
     if (v < kStrikeOut || v >= kStrikeOut + kStrikeHold) return 0.0f;
-    return 1.0f - (v - kStrikeOut) / kStrikeHold;
+    const float held = (v - kStrikeOut) * (1.0f - a) * duration;
+    return (1.0f - (v - kStrikeOut) / kStrikeHold) * std::sin(core::TWO_PI * 14.0f * held);
+}
+// One step of a damped spring, x toward target, implicit in the spring and
+// the damping so no rate, damping or frame length can make it diverge. The
+// explicit step ran away at the sliders' top (rate 20, damping 1.5) on a
+// 30 Hz frame.
+void spring_step(float& x, float& v, float target, float omega, float zeta, float dt) {
+    v = (v + dt * omega * omega * (target - x)) / (1.0f + 2.0f * zeta * omega * dt + omega * omega * dt * dt);
+    x += v * dt;
+    if (!std::isfinite(x) || !std::isfinite(v)) x = v = 0.0f;
 }
 // Overlap the extremities behind the torso, but still finish at u == 1.
 float gesture_trail(float u, float a, float lag) {
@@ -1470,9 +1485,7 @@ void DragonRig::drive_gestures() {
         gesture_neck_pitch_deg_ += tuning.bite_lunge_deg * (0.45f * wind - gesture_trail(u, a, 0.06f));
         // Contact: a short, fast shudder through the body, the
         // high-frequency detail a slow, heavy strike otherwise loses.
-        const float impact = gesture_impact(u, a);
-        gesture_pitch_ += core::radians(tuning.gesture_impact_deg) * impact *
-                          std::sin(core::TWO_PI * 14.0f * bite_time_);
+        gesture_pitch_ += core::radians(tuning.gesture_impact_deg) * gesture_impact(u, a, tuning.bite_duration);
     }
     // Claw: away, then roll and yaw into the strike side; the near wing
     // drops, the far one rises, the head dips to the mark, the tail balances.
@@ -1493,8 +1506,7 @@ void DragonRig::drive_gestures() {
         const float neck = gesture_trail(u, a, 0.06f);
         gesture_neck_yaw_deg_ += tuning.gesture_neck_deg * side * neck;
         gesture_neck_pitch_deg_ -= tuning.gesture_neck_deg * 0.5f * neck;
-        gesture_roll_ += core::radians(tuning.gesture_impact_deg) * gesture_impact(u, a) *
-                         std::sin(core::TWO_PI * 14.0f * claw_time_);
+        gesture_roll_ += core::radians(tuning.gesture_impact_deg) * gesture_impact(u, a, tuning.claw_duration);
         gesture_tail_yaw_deg_ -= tuning.gesture_tail_counter_deg * side *
                                  (gesture_trail(u, a, 0.12f) - 0.4f * wind);
         gesture_limb_rake_ = gesture_trail(u, a, 0.04f) - 0.22f * wind;
@@ -1588,14 +1600,17 @@ void DragonRig::drive_life(const game::FlightState& state) {
 
 void DragonRig::add_kick(PendingKick& kick, Vec3 velocity) {
     // Whatever the last kick had not yet delivered rides on with this one.
-    const float ramp = core::maxf(tuning.gesture_kick_ramp, 1e-3f);
-    const float delivered = kick.time < ramp ? 0.5f * (1.0f - std::cos(core::PI * kick.time / ramp)) : 1.0f;
+    const float delivered =
+        kick.time < kick.ramp ? 0.5f * (1.0f - std::cos(core::PI * kick.time / kick.ramp)) : 1.0f;
     kick.velocity = kick.velocity * (1.0f - delivered) + velocity;
     kick.time = 0.0f;
+    // The ramp is fixed when the kick begins: read from the slider each
+    // frame, a change mid-kick delivered up to 135% of it, or dropped the rest.
+    kick.ramp = core::maxf(tuning.gesture_kick_ramp, 1e-3f);
 }
 
 void DragonRig::apply_kick(PendingKick& kick, ChainDynamics& sim, int weight_power, float dt) {
-    const float ramp = core::maxf(tuning.gesture_kick_ramp, 1e-3f);
+    const float ramp = kick.ramp;
     if (kick.time >= ramp || sim.velocity.size() < 2) {
         kick.time = 1e9f;
         return;
@@ -1702,7 +1717,10 @@ void DragonRig::hold_head() {
             head_ride_ = head_ride_velocity_ = Vec3::zero();
         }
     }
-    const Vec3 wanted = head_still + head_ride_;
+    // Faded in over the first quarter of the hold: the spring's lag alone
+    // would hold the head almost still at any hold above zero, and the
+    // correction would switch off with a jump at the threshold.
+    const Vec3 wanted = core::lerp(head_now, head_still + head_ride_, core::smoothstep(0.0f, 0.25f, hold));
     // The neck bends in the body's side plane, about model X, over its base
     // and middle joints: signed angles in that plane, so the bend cannot flip
     // the way a 3D cross product does as the neck straightens -- that popped
@@ -1731,6 +1749,10 @@ void DragonRig::hold_head() {
         const float bend = std::fabs(rest_bend(joints_.neck[i]));
         if (bend > deepest) { deepest = bend; middle = joints_.neck[i]; }
     }
+    // A neck straight at rest (the generated test rig's) has no deepest bend:
+    // take the joint halfway along, which the damping keeps from snapping.
+    // A one-joint neck solves over its base alone.
+    if (middle == NO_PARENT && joints_.neck.size() >= 2) middle = joints_.neck[joints_.neck.size() / 2];
     // Damped least squares over the base and the deepest joint: each step
     // turns them by J^T (J J^T + lambda^2 I)^-1 times the head's error, J the
     // head's motion per radian of each. Unlike an exact two-bone solve it has
@@ -1740,7 +1762,8 @@ void DragonRig::hold_head() {
     // straight -- popped the middle of the neck twice a beat.
     // A small turn theta about model X moves a point at r from the pivot by
     // theta * (-r.z, r.y) in (y, z); in (z, y) coordinates that is (r.y, -r.z).
-    if (middle != NO_PARENT) {
+    {
+        const int count = middle != NO_PARENT ? 2 : 1;
         const float lambda = 0.18f * len2(core::Vec2{
             yz(world_[size_t(head)].col[3].xyz()).x - yz(world_[size_t(base)].col[3].xyz()).x,
             yz(world_[size_t(head)].col[3].xyz()).y - yz(world_[size_t(base)].col[3].xyz()).y});
@@ -1748,8 +1771,8 @@ void DragonRig::hold_head() {
             const core::Vec2 h = yz(world_[size_t(head)].col[3].xyz());
             const core::Vec2 e{yz(wanted).x - h.x, yz(wanted).y - h.y};
             const int pivots[2] = {base, middle};
-            core::Vec2 col[2];
-            for (int k = 0; k < 2; ++k) {
+            core::Vec2 col[2] = {};
+            for (int k = 0; k < count; ++k) {
                 const core::Vec2 p = yz(world_[size_t(pivots[k])].col[3].xyz());
                 const core::Vec2 r{h.x - p.x, h.y - p.y};
                 col[k] = core::Vec2{r.y, -r.x};
@@ -1761,7 +1784,7 @@ void DragonRig::hold_head() {
             const float det = a11 * a22 - a12 * a12;
             if (std::fabs(det) < 1e-12f) break;
             const core::Vec2 w{(a22 * e.x - a12 * e.y) / det, (a11 * e.y - a12 * e.x) / det};
-            for (int k = 0; k < 2; ++k) {
+            for (int k = 0; k < count; ++k) {
                 const float turn = col[k].x * w.x + col[k].y * w.y;
                 rotate_joint_about(pivots[k], Vec3::unit_x(), core::clampf(turn, -0.3f, 0.3f));
             }
@@ -2192,10 +2215,7 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
             const float zeta = core::clampf(tuning.leg_brake_damping, 0.2f, 2.0f);
             float& x = leg_brake_stage_[side][stage];
             float& v = leg_brake_stage_velocity_[side][stage];
-            const float step = core::minf(dt, 1.0f / 30.0f);
-            v += (omega * omega * (target - x) - 2.0f * zeta * omega * v) * step;
-            x += v * step;
-            if (!std::isfinite(x) || !std::isfinite(v)) x = v = 0.0f;
+            spring_step(x, v, target, omega, zeta, core::minf(dt, 1.0f / 30.0f));
             target = x;
         }
     }
@@ -2861,13 +2881,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         // (drive_legs) starts from the same signal, slower.
         const float omega = 1.3f * core::maxf(tuning.leg_brake_rate, 0.5f);
         const float zeta = core::clampf(tuning.leg_brake_damping, 0.2f, 2.0f);
-        const float step = core::minf(dt, 1.0f / 30.0f);
-        brake_body_velocity_ += (omega * omega * (core::saturate(state.wing_brake) - brake_body_) -
-                                 2.0f * zeta * omega * brake_body_velocity_) * step;
-        brake_body_ += brake_body_velocity_ * step;
-        if (!std::isfinite(brake_body_) || !std::isfinite(brake_body_velocity_)) {
-            brake_body_ = brake_body_velocity_ = 0.0f;
-        }
+        spring_step(brake_body_, brake_body_velocity_, core::saturate(state.wing_brake), omega, zeta,
+                    core::minf(dt, 1.0f / 30.0f));
     }
     drive_gestures();
     drive_life(state);
