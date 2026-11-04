@@ -835,6 +835,10 @@ private:
         anim::SkinnedMesh mesh;
         std::vector<rhi::Texture*> textures;
         std::vector<anim::AnimationClip> animations;
+        // assets/clips/<stem>.brake_bank.glb, when present: the keyframed
+        // overlay for a held braking turn, left and right (-1 when absent).
+        std::vector<anim::AnimationClip> overlay_clips;
+        int brake_bank_clip[2] = {-1, -1};
         // Which clip serves as the ground idle, and whether it is held at one time.
         int idle_clip = -1;
         float idle_clip_hold = -1.0f;

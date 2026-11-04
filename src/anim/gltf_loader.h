@@ -51,4 +51,11 @@ struct GltfLoadResult {
 GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
                                  SkinnedMeshData& out_mesh);
 
+// The animations in a clip file -- an armature with no mesh, such as
+// assets/clips/<model>.brake_bank.glb -- matched onto `target` by joint NAME.
+// Keys become deltas from each node's rest rotation, as in load_skinned_gltf,
+// so the file's rest pose must be the model's. Tracks for names the target
+// lacks are dropped. Empty on any failure.
+std::vector<AnimationClip> load_clip_file(const char* path, const Skeleton& target);
+
 }  // namespace anim

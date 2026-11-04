@@ -40,3 +40,15 @@ void AnimationClip::sample(float time, Pose& pose) const {
 }
 
 }  // namespace anim
+
+void anim::AnimationClip::sample_additive(float time, Pose& pose, float weight) const {
+    if (duration <= 0.0f || weight <= 1e-5f) return;
+    float local = std::fmod(time, duration);
+    if (local < 0.0f) local += duration;
+    for (const RotationTrack& track : tracks) {
+        if (track.joint < 0 || size_t(track.joint) >= pose.local.size()) continue;
+        core::Quat& rotation = pose.local[size_t(track.joint)].rotation;
+        const core::Quat delta = core::slerp(core::Quat::identity(), track.sample(local), weight);
+        rotation = core::normalize(rotation * delta);
+    }
+}

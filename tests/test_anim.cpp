@@ -2169,6 +2169,60 @@ void test_body_and_wings_work_in_a_held_brake() {
     CHECK(travel[0] < 0.01f);
     CHECK(travel[1] > 0.1f);
 }
+// The keyframed brake-bank overlay: the clip file maps onto Embercrest by
+// joint name, and the rig adds it only under the brake.
+void test_brake_bank_overlay() {
+    namespace fs = std::filesystem;
+    const fs::path root = test_source_root();
+    const fs::path model = root / "assets/embercrest.glb";
+    const fs::path clip_file = root / "assets/clips/embercrest.brake_bank.glb";
+    if (!fs::exists(model) || !fs::exists(clip_file)) return;
+    Skeleton skeleton;
+    anim::SkinnedMeshData mesh;
+    CHECK(anim::load_skinned_gltf(model.string().c_str(), skeleton, mesh).ok);
+    const auto joints = anim::map_dragon_joints(skeleton);
+    const auto clips = anim::load_clip_file(clip_file.string().c_str(), skeleton);
+    CHECK(clips.size() == 2);
+    if (clips.size() != 2) return;
+    for (const auto& clip : clips) {
+        CHECK(clip.tracks.size() == size_t(skeleton.count()));
+        CHECK(std::fabs(clip.duration - 2.4f) < 1e-3f);
+    }
+    // Two rigs, one with the overlay at zero; the root's rotation and a
+    // wing tip's position are compared after a held brake, and in a glide.
+    for (int brake = 0; brake < 2; ++brake) {
+        anim::DragonRig with, without;
+        for (auto* rig : {&with, &without}) {
+            rig->init(skeleton, joints);
+            rig->set_model_scale(13.6773f);
+            anim::load_rig_tuning(rig->tuning, anim::profile_path(model.string(), ".rig.cfg").c_str());
+            still_air(rig->tuning);
+            rig->set_brake_bank_clips(&clips[0], &clips[1]);
+        }
+        without.tuning.clip_overlay = 0.0f;
+        game::FlightState state;
+        state.ground_clearance = 300.0f;
+        state.wing_brake = float(brake);
+        state.airspeed = 35.0f;
+        state.velocity = Vec3{0, 0, -35};
+        float worst = 0.0f;
+        for (int i = 0; i < 240; ++i) {
+            with.update(state, 1.0f / 60.0f);
+            without.update(state, 1.0f / 60.0f);
+            for (size_t j = 0; j < with.world_matrices().size(); ++j) {
+                worst = std::max(worst, length(with.world_matrices()[j].col[3].xyz() -
+                                               without.world_matrices()[j].col[3].xyz()) * 13.6773f);
+            }
+        }
+        std::printf("  brake-bank overlay, brake %d: joints differ by up to %.3f m\n", brake, double(worst));
+        if (brake) {
+            CHECK(worst > 0.05f);
+            CHECK(worst < 3.0f);
+        } else {
+            CHECK(worst < 1e-4f);
+        }
+    }
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -3253,6 +3307,7 @@ int main() {
     test_limbs_live_in_a_braking_turn();
     test_limbs_keep_their_feet();
     test_body_and_wings_work_in_a_held_brake();
+    test_brake_bank_overlay();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

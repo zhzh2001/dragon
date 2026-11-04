@@ -55,7 +55,7 @@ cp build-xp-release/dragon.exe "$stage/"
 for tier in sm3 sm2 sm2-noshadows ff; do
   python3 tools/d3d9/bake_d3d9.py "$stage/shaders" --tier "$tier"
 done
-cp -R assets/textures assets/fonts assets/species "$stage/assets/"
+cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
 cp assets/props/*.glb "$stage/assets/props/"
 staged_models=""
 for s in $species; do

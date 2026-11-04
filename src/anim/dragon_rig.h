@@ -261,6 +261,10 @@ struct RigTuning {
     float work_body_deg = 2.5f;
     float work_wing_deg = 6.0f;
     float work_turn_rate = 0.6f;  // rad/s of yaw for full work
+    // The keyframed brake-bank overlay (set_brake_bank_clips): its weight at
+    // full brake (0 off, above 1 exaggerated) and its playback rate.
+    float clip_overlay = 1.0f;
+    float clip_overlay_rate = 1.0f;
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -872,6 +876,15 @@ public:
         clip_hold_time_ = hold_at;
     }
     bool has_base_clip() const { return base_clip_ && base_clip_->valid(); }
+    // Keyframed overlays for a held braking turn (assets/clips/<model>.brake_bank.glb):
+    // `left` banks left (the left wing inside), `right` right. Either may be
+    // null. Added on top of the procedural pose, weighted by the brake and
+    // split by the turn's direction; the limb physics then smooths the limbs.
+    void set_brake_bank_clips(const AnimationClip* left, const AnimationClip* right) {
+        brake_bank_clip_[0] = left;
+        brake_bank_clip_[1] = right;
+    }
+    bool has_brake_bank_clips() const { return brake_bank_clip_[0] || brake_bank_clip_[1]; }
     void update(const game::FlightState& state, float dt);
 
     // A chain simulated as point masses in the dragon's own frame.
@@ -1053,6 +1066,8 @@ private:
         bool live = false;  // false: snap to the pose next frame
     };
     LimbDynamics limb_sim_[4];
+    const AnimationClip* brake_bank_clip_[2] = {nullptr, nullptr};
+    float overlay_time_ = 0.0f;
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();
     void drive_limb_physics(const game::FlightState& state, core::Vec3 frame_acceleration,

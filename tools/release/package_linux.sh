@@ -49,7 +49,7 @@ mkdir -p "$stage/assets"
 scp -q "$host:$remote/build/dragon-stripped" "$stage/dragon"
 chmod +x "$stage/dragon"
 tools/release/bake_shaders.sh "$stage/shaders" spv
-cp -R assets/textures assets/fonts assets/species "$stage/assets/"
+cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
 mkdir -p "$stage/assets/props"
 cp assets/props/*.glb "$stage/assets/props/"
 for s in $species; do

@@ -493,6 +493,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(work_body_deg),
     RIG_FLOAT_FIELD(work_wing_deg),
     RIG_FLOAT_FIELD(work_turn_rate),
+    RIG_FLOAT_FIELD(clip_overlay),
+    RIG_FLOAT_FIELD(clip_overlay_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
     RIG_FLOAT_FIELD(limb_damping),
@@ -612,6 +614,8 @@ void DragonRig::init(const Skeleton& skeleton, const DragonJoints& joints) {
     // stance and a jaw rotating about whatever that index happened to be.
     // The caller sets a clip again if the new model has one.
     base_clip_ = nullptr;
+    brake_bank_clip_[0] = brake_bank_clip_[1] = nullptr;
+    overlay_time_ = 0.0f;
     clip_hold_time_ = -1.0f;
     clip_time_ = 0.0f;
     action_ = RigAction{};
@@ -3267,6 +3271,24 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
                                 core::TWO_PI);
     }
     drive_stance(ground_contact_ * standing_share(state.airspeed));
+
+    // The keyframed overlay, on the finished procedural pose and before the
+    // limb physics, so the limbs take its motion as their target and smooth
+    // it. Split between the left and right clips by the turn: the smoothed
+    // lateral pull, in model space, made the dragon's own right.
+    if (has_brake_bank_clips()) {
+        overlay_time_ += dt * core::clampf(tuning.clip_overlay_rate, 0.0f, 4.0f);
+        const float weight = core::maxf(tuning.clip_overlay, 0.0f) * core::saturate(state.wing_brake) *
+                             (1.0f - ground_contact_) * (1.0f - core::saturate(state.wing_tuck));
+        if (weight > 1e-4f) {
+            const float right = core::clampf(limb_turn_ * -model_forward_z_ * 2.0f, -1.0f, 1.0f);
+            const float share[2] = {0.5f - 0.5f * right, 0.5f + 0.5f * right};
+            for (int k = 0; k < 2; ++k) {
+                const AnimationClip* clip = brake_bank_clip_[k] ? brake_bank_clip_[k] : brake_bank_clip_[1 - k];
+                if (clip) clip->sample_additive(overlay_time_, pose_, weight * share[k]);
+            }
+        }
+    }
 
     // The limb physics before the feet are anchored: a foot parented to the
     // body is placed at the end of its leg by attach_feet, and placed before

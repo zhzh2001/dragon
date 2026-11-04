@@ -49,7 +49,7 @@ tools/release/bake_shaders.sh "$stage/shaders" dxil spv
 python3 tools/release/check_dxil_linkage.py "$stage/shaders"
 # assets/species/: the profiles of models not distributed (the gold and
 # silver studies), so a player who has one can drop it in beside them.
-cp -R assets/textures assets/fonts assets/species "$stage/assets/"
+cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
 mkdir -p "$stage/assets/props"
 cp assets/props/*.glb "$stage/assets/props/"
 staged_models=""

@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include <chrono>
+#include <filesystem>
 
 #ifdef __linux__
 #include <sys/resource.h>  // setpriority: the next valley's thread
@@ -3935,6 +3936,10 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
         ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
         ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
+        ImGui::SeparatorText("keyframed overlay (brake bank)");
+        if (!dragon_rig_.has_brake_bank_clips()) ImGui::TextDisabled("this species has no clip");
+        ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
+        ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
     }
 
     if (ImGui::CollapsingHeader("Landing weight")) {
@@ -4305,9 +4310,15 @@ void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const 
     // skeleton's indices are a different creature's bones.
     if (model.idle_clip < 0 || size_t(model.idle_clip) >= model.animations.size()) {
         rig.set_base_clip(nullptr);
-        return;
+    } else {
+        rig.set_base_clip(&model.animations[size_t(model.idle_clip)], model.idle_clip_hold);
     }
-    rig.set_base_clip(&model.animations[size_t(model.idle_clip)], model.idle_clip_hold);
+    // The overlay is per skeleton too; a model without one clears it.
+    auto overlay = [&](int k) {
+        const int i = model.brake_bank_clip[k];
+        return i >= 0 && size_t(i) < model.overlay_clips.size() ? &model.overlay_clips[size_t(i)] : nullptr;
+    };
+    rig.set_brake_bank_clips(overlay(0), overlay(1));
 }
 
 void App::find_wingtips(LoadedModel& model) {
@@ -4500,6 +4511,18 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     if (!loaded.animations.empty()) {
         out.animations = loaded.animations;
         choose_idle_clip(out);
+    }
+    {
+        // A keyframed overlay beside the roster, by the model's stem.
+        const std::string stem = std::filesystem::path(out.path).stem().string();
+        const std::string clip_path = core::paths::asset("clips/" + stem + ".brake_bank.glb");
+        if (out.joints.valid() && std::filesystem::exists(clip_path)) {
+            out.overlay_clips = anim::load_clip_file(clip_path.c_str(), out.skeleton);
+            for (size_t i = 0; i < out.overlay_clips.size(); ++i) {
+                if (out.overlay_clips[i].name == "brake_bank_l") out.brake_bank_clip[0] = int(i);
+                if (out.overlay_clips[i].name == "brake_bank_r") out.brake_bank_clip[1] = int(i);
+            }
+        }
     }
 
     // A model may carry a rig profile and a handling profile beside its glTF.

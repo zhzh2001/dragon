@@ -38,6 +38,10 @@ struct AnimationClip {
     // mention untouched -- so it layers over a bind pose rather than replacing
     // it wholesale. Call it on a pose freshly reset to bind.
     void sample(float time, Pose& pose) const;
+    // The same deltas scaled by `weight` (0 none, 1 as authored, above 1
+    // exaggerated) and composed onto whatever the pose holds: an overlay on a
+    // finished procedural pose rather than a base under it.
+    void sample_additive(float time, Pose& pose, float weight) const;
 };
 
 }  // namespace anim

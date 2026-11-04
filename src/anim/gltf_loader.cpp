@@ -508,4 +508,55 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
     return result;
 }
 
+std::vector<AnimationClip> load_clip_file(const char* path, const Skeleton& target) {
+    std::vector<AnimationClip> clips;
+    cgltf_options options = {};
+    cgltf_data* data = nullptr;
+    if (cgltf_parse_file(&options, path, &data) != cgltf_result_success) return clips;
+    if (cgltf_load_buffers(&options, data, path) != cgltf_result_success) {
+        cgltf_free(data);
+        return clips;
+    }
+    for (size_t a = 0; a < data->animations_count; ++a) {
+        const cgltf_animation* animation = &data->animations[a];
+        AnimationClip clip;
+        clip.name = animation->name ? animation->name : ("clip_" + std::to_string(a));
+        for (size_t c = 0; c < animation->channels_count; ++c) {
+            const cgltf_animation_channel* channel = &animation->channels[c];
+            if (channel->target_path != cgltf_animation_path_type_rotation) continue;
+            if (!channel->target_node || !channel->sampler || !channel->target_node->name) continue;
+            const int joint = target.find(channel->target_node->name);
+            if (joint == NO_PARENT) continue;
+            const cgltf_node* node = channel->target_node;
+            const Quat rest = node->has_rotation
+                                  ? core::normalize(Quat{node->rotation[0], node->rotation[1],
+                                                         node->rotation[2], node->rotation[3]})
+                                  : Quat::identity();
+            const Quat rest_inverse = core::conjugate(rest);
+            const cgltf_animation_sampler* sampler = channel->sampler;
+            RotationTrack track;
+            track.joint = joint;
+            track.step = sampler->interpolation == cgltf_interpolation_type_step;
+            for (size_t k = 0; k < sampler->input->count; ++k) {
+                float t = 0.0f;
+                float q[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                cgltf_accessor_read_float(sampler->input, k, &t, 1);
+                cgltf_accessor_read_float(sampler->output, k, q, 4);
+                track.times.push_back(t);
+                track.rotations.push_back(
+                    core::normalize(rest_inverse * core::normalize(Quat{q[0], q[1], q[2], q[3]})));
+                clip.duration = core::maxf(clip.duration, t);
+            }
+            if (!track.times.empty()) clip.tracks.push_back(std::move(track));
+        }
+        if (clip.valid()) {
+            LOG_INFO("clip file '%s': '%s', %zu tracks, %.2f s", path, clip.name.c_str(), clip.tracks.size(),
+                     clip.duration);
+            clips.push_back(std::move(clip));
+        }
+    }
+    cgltf_free(data);
+    return clips;
+}
+
 }  // namespace anim

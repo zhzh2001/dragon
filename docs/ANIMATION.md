@@ -880,6 +880,48 @@ tip's sideways range from 0.07 m to 0.36 m, with smooth speed curves
 (`artifacts/limb-physics/held-brake-*.jpg`).
 `test_body_and_wings_work_in_a_held_brake` pins it.
 
+### A keyframed overlay: the brake-bank trial (2026-11-04)
+
+The question was whether hand-keyframed motion adds what the procedural
+layers cannot, before committing to clips for every species. The trial is
+one clip, in two mirrored versions, for Embercrest's held braking turn.
+
+Codex (gpt-6-astra, high, about 100k tokens) keyframed it in Blender with a
+script (`tools/clips/make_brake_bank.py`) and checked it with a second
+(`tools/clips/check_clip.py`). The output is
+`assets/clips/embercrest.brake_bank.glb`, an armature with no mesh, 184 KB.
+It holds `brake_bank_l` and `brake_bank_r`, 2.4 s loops at 30 fps, rotation
+keys only, with Embercrest's exact rest pose. The motion is layered curves:
+the shoulders lead the wrists and fingers, the neck works under a steadier
+head, a wave runs down the tail, and the hind feet paddle with the knee and
+ankle behind the thigh. Peaks are 2 to 6 degrees per joint, within limits
+set in the brief (6 degrees for the body up to 25 for the toes).
+
+The engine side:
+
+- `anim::load_clip_file` reads a clip file's animations onto a model's
+  skeleton by joint name. Keys become deltas from each node's rest
+  rotation, as for a model's own clips.
+- `AnimationClip::sample_additive` composes the deltas, scaled by a weight,
+  onto a finished pose.
+- `DragonRig::set_brake_bank_clips` takes the two clips. In `update` they
+  are added after the stance and before the limb physics, so the limbs take
+  the clip as their target and smooth it. The weight is `clip_overlay` (1)
+  times the brake, faded by ground contact and the tuck. The turn splits it
+  between the two clips: the smoothed lateral pull, in the dragon's own
+  right, sends a right turn to `brake_bank_r`.
+- The app loads `assets/clips/<model stem>.brake_bank.glb` beside each
+  model. A species without one clears the overlay. The packagers carry
+  `assets/clips/`.
+
+In the held braking turn the overlay moves joints by up to 0.42 m
+(`test_brake_bank_overlay`) and changes 3,000 to 6,000 pixels a frame at
+480x300: a subtle layer at its authored size. At three times its size the
+directions read correctly and nothing inverts
+(`artifacts/clip-trial/studio-brake-clip-x3.jpg`). The "clip overlay" and
+"clip rate" sliders are in the Dragon panel's first header. Whether it is
+worth a clip per species is the playtest's call.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on
