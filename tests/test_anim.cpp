@@ -2003,6 +2003,127 @@ void test_limbs_live_in_a_braking_turn() {
                 double(travel[1]));
     CHECK(travel[0] < 0.02f);
     CHECK(travel[1] > 0.05f);
+
+    // The sliders' corner from the review: no damping to speak of, three
+    // times the inertia, a fast roll. The explicit Coriolis term grew a
+    // disturbance there; the limb's motion late in the run must not exceed
+    // its motion early on.
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.limb_stiffness = 30.0f;
+        rig.tuning.limb_tip_stiffness = 1.0f;
+        rig.tuning.limb_damping = 0.05f;
+        rig.tuning.limb_inertia = 3.0f;
+        rig.tuning.limb_turbulence = 0.0f;
+        rig.tuning.limb_turn_lean = 0.0f;
+        game::FlightState state;
+        state.ground_clearance = 300.0f;
+        state.airspeed = 35.0f;
+        state.angular_velocity = Vec3{0.0f, 0.0f, 3.0f};
+        const int foot = joints.leg[0].back();
+        const int hip = joints.leg[0].front();
+        float early = 0.0f, late = 0.0f;
+        Vec3 last{};
+        for (int i = 0; i < 1800; ++i) {
+            state.orientation = Quat::from_axis_angle(Vec3::unit_z(), 3.0f * float(i) / 60.0f);
+            state.velocity = Vec3{0, 0, -35};
+            rig.update(state, 1.0f / 60.0f);
+            const auto& w = rig.world_matrices();
+            const Vec3 rel = w[size_t(foot)].col[3].xyz() - w[size_t(hip)].col[3].xyz();
+            CHECK(std::isfinite(rel.x + rel.y + rel.z));
+            const float step = i > 0 ? length(rel - last) : 0.0f;
+            last = rel;
+            if (i >= 300 && i < 600) early = std::max(early, step);
+            if (i >= 1500) late = std::max(late, step);
+        }
+        std::printf("  fast roll at the sliders' corner: the foot's largest step %.4f early, %.4f late\n",
+                    double(early), double(late));
+        CHECK(late <= early * 1.2f + 1e-3f);
+    }
+}
+
+// Every release species in a braking turn: the limbs stay finite, and a foot
+// the skeleton parents to the body stays on the end of its leg. attach_feet
+// ran before the limb physics, and such a foot stayed where the pose had put
+// the ankle while the physics moved the leg away from it.
+void test_limbs_keep_their_feet() {
+    namespace fs = std::filesystem;
+    const fs::path root = test_source_root();
+    for (const char* name : {"dragon", "embercrest", "rimefang", "frostvein", "blightmaw", "ironroot",
+                             "stormsail", "tidewrack"}) {
+        const fs::path path = root / (std::string("assets/") + name + ".glb");
+        if (!fs::exists(path)) continue;
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        CHECK(anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok);
+        const auto joints = anim::map_dragon_joints(skeleton);
+        // The feet the rig re-anchors (DragonRig::init): foot roots that do
+        // not hang off a leg, each kept at its bind offset from the nearest
+        // leg end. (foot, leg end, bind distance)
+        struct Anchored { int foot, end; float distance; };
+        std::vector<Anchored> anchored;
+        std::vector<int> ends;
+        for (int side = 0; side < 2; ++side) {
+            if (!joints.leg[side].empty()) ends.push_back(joints.leg[side].back());
+            if (!joints.front_leg[side].empty()) ends.push_back(joints.front_leg[side].back());
+        }
+        for (const int foot : joints.foot_roots) {
+            const Vec3 at = skeleton.world_bind(foot).translation_part();
+            if (length_sq(at) < 1e-4f || ends.empty()) continue;
+            bool on_a_leg = false;
+            for (int p = skeleton.joint(foot).parent; p != anim::NO_PARENT; p = skeleton.joint(p).parent) {
+                for (const int end : ends) on_a_leg = on_a_leg || end == p;
+            }
+            if (on_a_leg) continue;
+            Anchored best{foot, ends.front(), 1e9f};
+            for (const int end : ends) {
+                const float d = length(skeleton.world_bind(end).translation_part() - at);
+                if (d < best.distance) best = Anchored{foot, end, d};
+            }
+            anchored.push_back(best);
+        }
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        float scale = 13.6773f;
+        {
+            float lo = 1e9f, hi = -1e9f;
+            for (const auto& v : mesh.vertices) { lo = std::min(lo, v.position.x); hi = std::max(hi, v.position.x); }
+            scale = 19.0f / (hi - lo);
+        }
+        rig.set_model_scale(scale);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        still_air(rig.tuning);
+        game::FlightState state;
+        state.ground_clearance = 300.0f;
+        state.wing_brake = 1.0f;
+        state.airspeed = 35.0f;
+        state.angular_velocity = Vec3{0.0f, 0.5f, 0.0f};
+        const Quat bank = Quat::from_axis_angle(Vec3::unit_z(), radians(35.0f));
+        float worst = 0.0f;
+        for (int i = 0; i < 240; ++i) {
+            state.orientation = Quat::from_axis_angle(Vec3::unit_y(), 0.5f * float(i) / 60.0f) * bank;
+            state.velocity = rotate(state.orientation, Vec3::forward()) * state.airspeed;
+            rig.update(state, 1.0f / 60.0f);
+            const auto& w = rig.world_matrices();
+            for (int side = 0; side < 2; ++side) {
+                for (const auto* chain : {&joints.leg[side], &joints.front_leg[side]}) {
+                    for (const int j : *chain) {
+                        const Vec3 p = w[size_t(j)].col[3].xyz();
+                        CHECK(std::isfinite(p.x + p.y + p.z));
+                    }
+                }
+            }
+            for (const Anchored& f : anchored) {
+                const float d = length(w[size_t(f.foot)].col[3].xyz() - w[size_t(f.end)].col[3].xyz());
+                worst = std::max(worst, std::fabs(d - f.distance) * scale);
+            }
+        }
+        std::printf("  %s: %zu body-parented feet, at most %.3f m off their leg ends\n", name, anchored.size(),
+                    double(worst));
+        CHECK(worst < 0.05f);
+    }
 }
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
@@ -3086,6 +3207,7 @@ int main() {
     test_life_in_flight();
     test_rig_slider_extremes_stay_sane();
     test_limbs_live_in_a_braking_turn();
+    test_limbs_keep_their_feet();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

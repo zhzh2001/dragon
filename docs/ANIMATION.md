@@ -838,6 +838,24 @@ The sliders are at the top of the Dragon panel's leg block. Renders are in
 What it does not do yet: the body and the wings are still steady in a held
 braking turn. Only the limbs (and the tail and neck chains) now move there.
 
+A read-only Codex review (gpt-6-astra, medium) found three defects, fixed
+the same day:
+
+- `attach_feet` ran before the layer. A foot parented to the body
+  (`dragon.glb` has four) stayed where the pose had put the ankle, 0.5 m off
+  the leg in a braking turn. The layer now runs before the feet are anchored
+  (`test_limbs_keep_their_feet`).
+- The Coriolis term depends on the velocity being solved for. Taken
+  explicitly, it pumped energy at the sliders' corner (damping 0.05,
+  inertia 3, a 3 rad/s roll). It is dropped; at a limb's speeds it is small.
+- A model switch kept the smoothed turn, which is in model space, so a model
+  facing the other way leaned the wrong legs for a moment.
+
+Known limit: each bone's range is a cone about its own posed direction, with
+no knee-bend limit and no collision with the body. Two opposite deviations
+can straighten a shallow knee past its pose. The renders show no reversed
+knee at the defaults.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on

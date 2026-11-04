@@ -1038,6 +1038,7 @@ private:
     struct LimbDynamics {
         std::vector<int> joints;
         std::vector<core::Vec3> position, velocity;
+        std::vector<core::Vec3> target;  // this frame's pose, kept to avoid an allocation
         bool live = false;  // false: snap to the pose next frame
     };
     LimbDynamics limb_sim_[4];

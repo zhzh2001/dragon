@@ -2342,6 +2342,8 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
 
 void DragonRig::setup_limbs() {
     for (auto& limb : limb_sim_) limb = LimbDynamics{};
+    // The turn is in model space, and the next model may face the other way.
+    limb_turn_ = 0.0f;
     if (!skeleton_) return;
     const auto& all = skeleton_->joints();
     for (int k = 0; k < 4; ++k) {
@@ -2401,7 +2403,8 @@ void DragonRig::drive_limb_physics(const game::FlightState& state, Vec3 frame_ac
         LimbDynamics& limb = limb_sim_[index];
         const size_t n = limb.joints.size();
         if (n < 2) continue;
-        std::vector<Vec3> target(n);
+        std::vector<Vec3>& target = limb.target;
+        target.resize(n);
         for (size_t i = 0; i < n; ++i) {
             target[i] = world_[size_t(limb.joints[i])].col[3].xyz() * model_scale_;
         }
@@ -2450,8 +2453,12 @@ void DragonRig::drive_limb_physics(const game::FlightState& state, Vec3 frame_ac
                 const Vec3 wanted = limb.position[i - 1] + (target[i] - target[i - 1]);
                 // The frame's pseudo-forces at this point, as the tail feels
                 // them: a turn slings the feet outward, a roll throws them.
+                // No Coriolis term: it depends on the velocity being solved
+                // for, and taken explicitly it pumped energy into a limb at
+                // the sliders' corners (low damping, high inertia, a fast
+                // roll). At a limb's speeds relative to the body it is small.
                 const Vec3 inertial = (-core::cross(omega, core::cross(omega, r)) -
-                                       core::cross(angular_acceleration, r) - core::cross(omega, v) * 2.0f) *
+                                       core::cross(angular_acceleration, r)) *
                                       tuning.limb_inertia;
                 // The loads are clamped: pseudo-forces grow with the square
                 // of the turn rate, and a tumble is not a reason to fling a leg.
@@ -2475,10 +2482,17 @@ void DragonRig::drive_limb_physics(const game::FlightState& state, Vec3 frame_ac
                 Vec3 dir = core::normalize_or(limb.position[i] - limb.position[i - 1], posed_dir);
                 const float off = std::acos(core::clampf(core::dot(dir, posed_dir), -1.0f, 1.0f));
                 if (off > range) {
-                    const Vec3 axis = core::cross(posed_dir, dir);
-                    dir = core::length_sq(axis) > 1e-10f
-                              ? core::rotate(Quat::from_axis_angle(core::normalize(axis), range), posed_dir)
-                              : posed_dir;
+                    // Turned back onto the cone's edge. Pointing (almost)
+                    // opposite the pose the cross product has no direction;
+                    // the edge is then taken in the plane the point is
+                    // moving in, so it does not jump across the cone.
+                    Vec3 axis = core::cross(posed_dir, dir);
+                    if (core::length_sq(axis) < 1e-8f) {
+                        axis = core::cross(posed_dir, core::normalize_or(limb.velocity[i], Vec3::unit_x()));
+                    }
+                    if (core::length_sq(axis) < 1e-8f) axis = core::cross(posed_dir, Vec3::unit_x());
+                    if (core::length_sq(axis) < 1e-8f) axis = core::cross(posed_dir, Vec3::unit_z());
+                    dir = core::rotate(Quat::from_axis_angle(core::normalize(axis), range), posed_dir);
                 }
                 limb.position[i] = limb.position[i - 1] + dir * length;
                 limb.velocity[i] += (limb.position[i] - before) / h;
@@ -3235,6 +3249,11 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     }
     drive_stance(ground_contact_ * standing_share(state.airspeed));
 
+    // The limb physics before the feet are anchored: a foot parented to the
+    // body is placed at the end of its leg by attach_feet, and placed before
+    // the physics moved the leg it stayed where the pose had the ankle.
+    drive_limb_physics(state, frame_acceleration, angular_acceleration, dt);
+
     // Feet: first anchor them to the posed legs (needs world matrices), then
     // the relaxed hang and claw curl compose on top.
     compute_world_matrices(*skeleton_, pose_, world_);
@@ -3260,8 +3279,6 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
             rotate_joint(joint, Vec3::unit_x(), depth == 0 ? root_angle : curl_angle, true);
         }
     }
-
-    drive_limb_physics(state, frame_acceleration, angular_acceleration, dt);
 
     // On the ground the authored stance wins the WHOLE body -- wings, tail,
     // legs, neck -- not just the joints the rig never owned. A wyvern folds its
