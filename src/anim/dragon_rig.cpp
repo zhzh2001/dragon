@@ -1488,10 +1488,16 @@ void DragonRig::drive_life(const game::FlightState& state) {
     const float phase = wrapped_phase(state.flap_phase);
     if (phase < life_last_phase_ - 0.5f) ++life_beat_count_;
     life_last_phase_ = phase;
+    // The scale blends from this beat's draw to the next one's across the
+    // beat, so it is continuous at the wrap: switching draws there jumped the
+    // raised wing by up to 3 degrees at the top of every stroke.
     const float variation = core::clampf(tuning.beat_variation, 0.0f, 0.3f);
+    const float blend = core::smoothstep(0.0f, 1.0f, phase);
     for (int side = 0; side < 2; ++side) {
-        life_beat_scale_[side] =
-            (2.0f * life_hash(uint32_t(life_beat_count_) * 2u + uint32_t(side)) - 1.0f) * variation;
+        const uint32_t key = uint32_t(side);
+        const float now = 2.0f * life_hash(uint32_t(life_beat_count_) * 2u + key) - 1.0f;
+        const float next = 2.0f * life_hash(uint32_t(life_beat_count_ + 1) * 2u + key) - 1.0f;
+        life_beat_scale_[side] = core::lerpf(now, next, blend) * variation;
     }
     const float beat = core::saturate(state.flap_amplitude) *
                        (1.0f - core::saturate(state.wing_tuck)) * airborne;
@@ -1530,7 +1536,6 @@ void DragonRig::drive_body_beat(const game::FlightState& state) {
     root_offset_active_ = false;
     const int root = joints_.root;
     if (root == NO_PARENT || size_t(root) >= pose_.local.size()) return;
-    root_pre_offset_ = pose_.local[size_t(root)];
     const float beat = core::saturate(state.flap_amplitude) *
                        (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
     float heave_m = life_heave_m_;
@@ -1559,8 +1564,16 @@ void DragonRig::drive_body_beat(const game::FlightState& state) {
     root_offset_m_ = heave_m;
     root_offset_pitch_ = pitch * -model_forward_z_;
     root_offset_roll_ = life_roll_ * model_forward_z_;
+    const Quat before = local.rotation;
     rotate_joint(root, Vec3::unit_x(), root_offset_pitch_, true);
     if (std::fabs(root_offset_roll_) > 1e-6f) rotate_joint(root, Vec3::unit_z(), root_offset_roll_, true);
+    // What the beat and the gusts did, and only that: rotate_joint composes
+    // in the parent's frame, so the offset is the left factor. hold_head
+    // takes exactly this back out of whatever the root is by then -- the
+    // stance and the ground blend change it afterwards, and restoring a
+    // saved root undid them too.
+    root_offset_rotation_ = core::normalize(pose_.local[size_t(root)].rotation * core::conjugate(before));
+    root_offset_translation_ = Vec3::unit_y() * (heave_m / model_scale_);
     root_offset_active_ = true;
 }
 
@@ -1575,7 +1588,10 @@ void DragonRig::hold_head() {
     // Where the head would be, and how it would face, without the beat and
     // the gusts: the same pose with the root as it was before them.
     const Transform moved = pose_.local[size_t(root)];
-    pose_.local[size_t(root)] = root_pre_offset_;
+    Transform still = moved;
+    still.position -= root_offset_translation_;
+    still.rotation = core::normalize(core::conjugate(root_offset_rotation_) * moved.rotation);
+    pose_.local[size_t(root)] = still;
     compute_world_matrices(*skeleton_, pose_, world_);
     const Vec3 head_still = world_[size_t(head)].col[3].xyz();
     const Quat facing_still = core::quat_from_matrix(world_[size_t(head)]);

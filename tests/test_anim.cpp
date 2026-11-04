@@ -2803,6 +2803,81 @@ void test_life_in_flight() {
         differ = std::max(differ, std::fabs(varied.trace[i] - varied.trace[i + beat_frames]));
     }
     CHECK(differ > 1e-3f);
+
+    // The variation is continuous where one beat hands over to the next:
+    // the tip's step at the wrap, where the wing is slowest, is no spike.
+    {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(13.6773f);
+        anim::load_rig_tuning(rig.tuning, anim::profile_path(path.string(), ".rig.cfg").c_str());
+        still_air(rig.tuning);
+        rig.tuning.beat_variation = 0.3f;  // the slider's top, to make a jump obvious
+        int tip = joints.wing_root[1].back();
+        size_t longest = 0;
+        for (const auto& finger : joints.wing_fingers[1])
+            if (finger.size() > longest) { longest = finger.size(); tip = finger.back(); }
+        Vec3 last{};
+        float wrap_step = 0.0f, largest_step = 0.0f, last_phase = 0.0f;
+        for (int i = 0; i < 600; ++i) {
+            const game::FlightState st =
+                game::studio_state(game::StudioScenario(1), float(i) / 60.0f, centre, 0.0f, 4.0f);
+            rig.update(st, 1.0f / 60.0f);
+            const Vec3 p = rig.world_matrices()[size_t(tip)].col[3].xyz();
+            if (i > 120) {
+                const float step = length(p - last);
+                largest_step = std::max(largest_step, step);
+                if (st.flap_phase < last_phase) wrap_step = std::max(wrap_step, step);
+            }
+            last = p;
+            last_phase = st.flap_phase;
+        }
+        std::printf("  tip step at the wrap %.4f, largest %.4f\n", double(wrap_step), double(largest_step));
+        CHECK(wrap_step < 0.35f * largest_step);
+    }
+
+    // Landing: the head hold removes only the beat's and the gusts' motion,
+    // so with it on or off the landed head differs by no more than the gusts
+    // move it. Restoring a saved root once undid part of the stance.
+    // Stormsail, whose standing pose pitches the root 20 degrees: the
+    // stance has to move the root for the old fault to show.
+    const fs::path wyvern = test_source_root() / "assets/stormsail.glb";
+    Skeleton wyvern_skeleton;
+    anim::SkinnedMeshData wyvern_mesh;
+    if (fs::is_regular_file(wyvern) &&
+        anim::load_skinned_gltf(wyvern.string().c_str(), wyvern_skeleton, wyvern_mesh).ok) {
+        const anim::DragonJoints wyvern_joints = anim::map_dragon_joints(wyvern_skeleton);
+        auto land = [&](float hold) {
+            anim::DragonRig rig;
+            rig.init(wyvern_skeleton, wyvern_joints);
+            rig.set_model_scale(13.6773f);
+            anim::load_rig_tuning(rig.tuning, anim::profile_path(wyvern.string(), ".rig.cfg").c_str());
+            rig.tuning.beat_head_hold = hold;
+            rig.tuning.gust_deg = 3.0f;
+            std::vector<Vec3> heads;
+            game::FlightState st;
+            st.velocity = Vec3{0.0f, 0.0f, -30.0f};
+            st.airspeed = 30.0f;
+            st.ground_clearance = 50.0f;
+            for (int i = 0; i < 240; ++i) {
+                if (i >= 120) {  // touch down and slow to a stand
+                    st.grounded = true;
+                    st.ground_clearance = 0.0f;
+                    st.airspeed = std::max(0.0f, 30.0f - float(i - 120) * 0.5f);
+                    st.velocity = Vec3{0.0f, 0.0f, -st.airspeed};
+                }
+                rig.update(st, 1.0f / 60.0f);
+                if (i >= 120) heads.push_back(rig.world_matrices()[size_t(wyvern_joints.head)].col[3].xyz());
+            }
+            return heads;
+        };
+        const std::vector<Vec3> held = land(0.75f), free = land(0.0f);
+        float apart = 0.0f;
+        for (size_t i = 0; i < held.size(); ++i) apart = std::max(apart, length(held[i] - free[i]));
+        std::printf("  landing: head with and without the hold differs by %.4f units\n", double(apart));
+        // 0.0038 with the offset removed; restoring a saved root gave 0.0159.
+        CHECK(apart < 0.008f);
+    }
 }
 
 int main() {

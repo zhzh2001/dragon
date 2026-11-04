@@ -1089,9 +1089,11 @@ private:
     float life_pitch_ = 0.0f;           // this frame's breath and gust, radians
     float life_roll_ = 0.0f;
     float life_heave_m_ = 0.0f;
-    // The root's local transform before the beat and the gusts moved it:
-    // where the head would be without them.
-    core::Transform root_pre_offset_{};
+    // What the beat and the gusts did to the root's local transform this
+    // frame: a rotation composed on the left and a translation. hold_head
+    // removes exactly these.
+    core::Quat root_offset_rotation_{};
+    core::Vec3 root_offset_translation_{};
     bool root_offset_active_ = false;
     float clip_time_ = 0.0f;
     // Previous frame's motion, for deriving the accelerations the chains feel.
