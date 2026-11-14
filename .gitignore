@@ -80,3 +80,4 @@ build-mobile-bench/
 build-android/
 build-gles/
 build-pi/
+build-rockkit-cache/
