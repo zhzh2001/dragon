@@ -9,16 +9,17 @@ Art direction for this engine is **generated, not commissioned**. The loop is:
 generate a target, look at it, implement toward it, screenshot the engine
 (`--headless --frames N --screenshot`), compare.
 
-Tool: `chatgpt-imagegen` — a single self-contained Python file, installed at
-`~/.local/bin/chatgpt-imagegen` on the machine this was set up on. Check health
-with `chatgpt-imagegen doctor`: it prints every backend's readiness and which
-one `auto` would pick.
+Tool: `image-use` (0.34.7 on 2026-11-14), the renamed `chatgpt-imagegen`. It is
+one self-contained Python file at `~/.local/bin/image-use`; the old name is a
+shim. Check health with `image-use doctor --profile relay`: it prints every
+backend's readiness and which one `auto` would pick. Read `image-use --help`
+before a session, because the flags change between versions.
 
 If it is missing (fresh machine), install the one file and authenticate:
 
 ```sh
 git clone https://github.com/leeguooooo/chatgpt-imagegen /tmp/cgi
-install -m 755 /tmp/cgi/chatgpt-imagegen ~/.local/bin/chatgpt-imagegen
+install -m 755 /tmp/cgi/image-use ~/.local/bin/image-use
 codex login          # OAuth, writes ~/.codex/auth.json — no API key involved
 ```
 
@@ -38,10 +39,46 @@ not by which is "better" — they lose to each other in different ways.
 | GPT Image 2 when `web` is rate-limited | `--backend codex --model gpt-5.6-luna` | GPT Image 2 |
 
 ```sh
-chatgpt-imagegen "prompt" --backend web -o docs/concept/name.png
-chatgpt-imagegen "prompt" --backend agy -o docs/concept/name.png
-chatgpt-imagegen "prompt" --backend codex --model gpt-5.6-luna -o docs/concept/name.png
+image-use "prompt" --backend web --profile relay -o docs/concept/name.png
+image-use "prompt" --backend agy -o docs/concept/name.png
+image-use "prompt" --backend codex -o docs/concept/name.png
 ```
+
+The table's model names are from 2026-09. The `codex` backend now takes
+`--image-model` (`gpt-image-2.5-sunburst` for precise edits,
+`gpt-image-2.5-flare` for speed) and `--quality`, and its driver model
+defaults to `gpt-5.6-luna`. A `gemini` backend exists and needs
+`IMAGE_USE_GEMINI_PROFILE`; it was not tested here.
+
+## Reference images
+
+A target that must match an engine frame takes the frame as a reference:
+
+```sh
+./build/dragon --headless --frames 240 --hide-ui --size 1920x1080 --screenshot /tmp/clean.bmp
+sips -s format png -Z 1536 /tmp/clean.bmp --out /tmp/clean.png
+image-use "prompt, with the art style last" --backend web --profile relay \
+  --composition-ref /tmp/clean.png --size 1536x864 -o docs/concept/name.png
+```
+
+`--composition-ref` keeps the framing and replaces the content.
+`--style-ref` keeps a look. `-i` with `--ref-role subject` keeps a subject.
+One prompt body with three style endings gave the three comparable targets
+of `docs/SHOWCASE.md`, 36 seconds each.
+
+If a `web` run with a reference fails with "ChatGPT composer is not empty;
+references not uploaded", the previous run left its prompt as a draft.
+Clear the draft, then retry:
+
+```sh
+chrome-use open https://chatgpt.com/
+chrome-use click 'form div.ProseMirror'
+chrome-use press "Meta+a"
+chrome-use press Backspace
+```
+
+Run this between every two `web` generations in a script. Two of three
+failed without it (2026-11-14).
 
 **GPT Image 2 ignores style specifications it considers a downgrade.** Asked for
 "clean flat vector style" for a HUD mockup it returned a photoreal cinematic

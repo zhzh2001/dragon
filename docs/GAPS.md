@@ -856,6 +856,10 @@ Ring, Lair), endless circling (Skyrim), and empty worlds or long grinds
 
 ## 6. Order
 
+Superseded on 2026-11-14 for the modern tier's picture: `SHOWCASE.md` is the
+second study and holds the current order (S0-S9). The table below is the
+record of G1-G9.
+
 By what each buys per session, with the tier each reaches. The F phases in
 `FIDELITY.md` stay as they are; F3's CDLOD mesh is still the way to the
 1 m triangles that 1.1 needs up close.

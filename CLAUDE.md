@@ -31,6 +31,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/RELEASE.md` | How the public GitHub mirror is exported (`tools/release/export_public.sh`, never a push of this repo) and what a release package carries |
 | `docs/RETRO.md` | The ranked list of what to build next; its D3D9 port study is superseded by `PORTING.md` |
 | `docs/GAPS.md` | The build against Century: Age of Ashes, other dragon and flight games, and period games on the retro hardware: the gaps in picture, weight and play, which of them reach D3D9 and fixed function, and the G1-G8 order. Its targets are in `docs/concept/gaps/` |
+| `docs/SHOWCASE.md` | The second gap study (2026-11-14): why the frame reads as three art styles, the user's decisions (realistic as assets allow, one hero dragon, authored clips under the procedural rig, one vertical slice), the two targets in `docs/concept/showcase/`, and the S0-S9 order that replaces G1-G9 for the modern tier |
 | `ATTRIBUTION.md` | The models, their licences, how to obtain them, and **what may ship where** (public repo, public release, personal copy) |
 | `AI_DISCLOSURE.md` | Every AI tool used and what it made. The Hunyuan agreement requires generated output to be labelled when published, so a new AI-made asset gets a line here |
 | `LICENSE`, `THIRD_PARTY_NOTICES.md` | MIT for our material; the libraries' licences |
