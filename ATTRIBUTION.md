@@ -46,6 +46,15 @@ publishes everything under CC0: no attribution is required, and this note
 is a courtesy and a record of where they came from. They may go anywhere
 the rest of the repository goes.
 
+## Poly Haven rock scans (2026-11-14)
+
+`assets/props/rockkit/` is eight rock and cliff pieces built from Poly
+Haven models, all CC0: `boulder_01`, `namaqualand_boulder_03`, `_04` and
+`_05`, `rock_09`, `rock_face_01`, `rock_face_02` and `mountainside`.
+`tools/build_rockkit.py` downloads, decimates, re-bakes and grades them,
+and `tools/rockkit.md` records what was done to each. CC0 needs no credit
+and has no limit on where the files ship.
+
 ## Hunyuan 3D: the generated roster
 
 `assets/embercrest.glb`, `stormsail`, `ashcoil`, `cragjaw`, `mossback`,

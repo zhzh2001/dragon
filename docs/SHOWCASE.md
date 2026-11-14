@@ -216,6 +216,49 @@ frame and the user asked for it first. S6 comes before S7 because the walls
 cover more of the frame than the forest. S0 and S1 are one round and start
 now.
 
+## S1, as built (2026-11-14): the worker trial
+
+One brief went to both workers, each in its own worktree: eight rock and
+cliff pieces from Poly Haven's CC0 scans, three levels of detail, PBR maps,
+a rebuild script, a verifier and three renders. The brief is in
+`tools/rockkit.md`'s history; the kit that was kept is
+`assets/props/rockkit/`.
+
+| | Codex `gpt-6-astra`, high, work account | Claude subagent (Mythos 5.2) |
+|---|---|---|
+| Wall time | 37 minutes | 62 minutes |
+| Tokens | 184,803 | about 280,000 |
+| Verifier | Passed. Albedo spread 0.4% | Passed. Albedo spread 1.3% |
+| Kit size | 75.5 MB | 70.5 MB |
+| Own wall render | Three rectangular panels standing on a flat plane | Cliff pieces set into a slope above a scree fan of 5,200 instances. It iterated the wall four times |
+| Pieces | Clean shapes. The grade removed the scans' colour, so the strata are faint and every piece is one pale grey | The scans' strata, fractures and lichen survive the grade. Cliff rims are bent behind the slope so no free edge shows |
+| Weaknesses it reported | Two lines | Thirteen, with numbers, and one loosened verifier limit that it disclosed |
+
+`artifacts/showcase-s1/kits-same-scene.jpg` has both kits in one scene the
+main session rendered, with the same sun and camera: Codex above, Claude
+below. `codex-wall.jpg` and `claude-wall.jpg` are each worker's own render.
+
+The Claude kit is the one that was merged. The difference is plain in the
+shared scene: its cliffs read as layered rock from 330 m and Codex's read
+as grey panels. This is the same result as the hide trial of 2026-11-13.
+Codex is faster and cheaper and meets every number. The Claude worker
+looks at its renders and keeps working until the picture is right.
+
+The Claude worker's cost was inflated by waiting. It ran each Blender build
+in the background and waited for it, and every wait longer than five
+minutes re-wrote its prompt cache. Two changes follow. The project's
+`.claude/settings.local.json` now sets `subagentPromptCacheTtl` to `1h`.
+A brief to a Claude worker says to run Blender in the foreground.
+
+The rule from here:
+
+- Work judged by the eye goes to a Claude subagent: the hero dragon's
+  retopology and materials, the clips, foliage, anything with a target
+  image.
+- Work judged by numbers goes to Codex: decimation, levels of detail,
+  format conversion, a rig refit to measured landmarks, batch rebuilds.
+- Either way the main session renders the result itself before it merges.
+
 ## The hero dragon's design (2026-11-14)
 
 Three redesigns of Embercrest were generated from an engine render as the
