@@ -176,6 +176,26 @@ in `artifacts/showcase-*/`.
   on a target, and a skim over the river.
 - The budget: 60 frames a second at 1440p on the M5 at the Ultra preset.
 
+### S0, as built (2026-11-14)
+
+`tools/showcase/capture.sh OUT_DIR` renders the eight shots with the HUD
+off. The slice is hoard-run seed 3 with the sun 19 degrees up at azimuth
+235. Six seeds were rendered in that light; seed 3 has a wide floor, a
+sunlit far wall, a steep near wall and a river bend in one view. Seeds 19,
+23 and 42 start inside a gorge whose walls show the stretched texture
+worst, and are the test cases for S6.
+
+The baselines are in `artifacts/showcase-s0/`. The GPU's median time a
+frame at 1080p on the M5 was 9.0 to 14.5 ms for seven shots and 21.4 ms
+for the river skim. The 1440p budget of 16.7 ms is therefore already
+missed, and S8 starts with the river's cost.
+
+Three shots do not yet show what they are for. The banked turn frames sky
+instead of a cliff. The breath shot's flame leaves the frame and a
+training dummy fills the left edge. The skim shot has a course ring in it.
+Each is fixed when its round begins, because the fix is a camera path and
+the camera path depends on what the round builds.
+
 ## Order
 
 | # | Work | Who | Rounds |
