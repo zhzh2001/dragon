@@ -202,7 +202,7 @@ the camera path depends on what the round builds.
 |---|---|---|---|
 | S0 | The slice's seed, hour and shot list as one script. A capture mode without the HUD. Baselines of all eight shots | main | 0.5 |
 | S1 | The worker trial: one rock and cliff kit brief to both workers | both | 0.5 |
-| S2 | The hero dragon's design: a reference sheet with scale plates, an eye, horn and claw materials, and wing fingers. Then the asset to the specification below | delegate, main judges | 2 |
+| S2 | The hero dragon. The design and its four views are done. Next: one generation on each current generator, compared in the engine at the head and the wing; then retopology, baking and the rig, to the specification below | delegate, main judges | 2 |
 | S3 | The creature shader: a membrane material with thickness and veins, an eye with a cornea highlight, a clear-coat lobe for horn and claw | main | 1 |
 | S4 | The clip system: a clip player, a state machine for the flight and ground states, additive layers, and the procedural rig as the last layer | main | 2 |
 | S5 | The clips: glide, flap, bank, dive, brake, land, take off, idle with acting, walk, bite, breath | delegate, main judges | 2 |
@@ -215,6 +215,29 @@ S2 to S5 come before the world because the dragon fills the centre of every
 frame and the user asked for it first. S6 comes before S7 because the walls
 cover more of the frame than the forest. S0 and S1 are one round and start
 now.
+
+## The hero dragon's design (2026-11-14)
+
+Three redesigns of Embercrest were generated from an engine render as the
+subject reference: faithful, armoured and expressive
+(`artifacts/showcase-study/dragon-design-sheet.jpg`). The user chose the
+expressive one: a slightly larger head and eye, a mobile brow, cleaner
+large shapes, a pale plated belly and a long neck and tail. It is
+`concept/showcase/hero-dragon-design.png`.
+
+`concept/showcase/hero-dragon-views/` has four orthographic views generated
+from that design: side, front, top and rear. The front, top and rear views
+are a T-pose with the wings spread level. The side view raises the wing
+above the body so the body and legs are not covered. That mismatch between
+views is a known risk for a multi-view generator
+(`MODEL_GENERATION.md`, "Image-to-image drift compounds"), and the first
+generation decides whether the side view is redrawn.
+
+The user asked for the generators to be compared again before one is
+chosen, because the 2026-09 survey is two months old. The free tier of
+Hunyuan 3D now gives 5 generations a day, not the 30 that
+`MODEL_GENERATION.md` records. S2 therefore starts with one generation of
+these views on each current generator.
 
 ## The hero dragon, as a specification
 
