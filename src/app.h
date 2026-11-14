@@ -352,6 +352,12 @@ private:
         return studio_active_ ? studio_state_ : flight_.state();
     }
     void build_studio_ui();
+    // The one panel open by default: the knobs the current playtest needs --
+    // the creature, the animation studio and the life layers. The older
+    // tuning panels stay one checkbox away (show_tuning_panels_).
+    void build_playtest_ui();
+    void studio_controls();
+    void life_controls();
     // Hand the chase camera this frame's head and the species' eye offsets.
     void feed_first_person_head(float dt);
     // Replace the targets with the training room's dummies, laid out ahead of
@@ -804,6 +810,7 @@ private:
     // Master switch for every ImGui panel. The tuning UI covers most of the
     // screen, which is fine while tuning and useless while playing.
     bool show_panels_ = true;
+    bool show_tuning_panels_ = false;
     // An imported asset arrives in whatever scale and orientation its author
     // used. Rather than guess at load time, the correction is a live transform
     // so it can be aligned by eye and then written down.

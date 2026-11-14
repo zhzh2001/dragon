@@ -2997,6 +2997,11 @@ void App::build_ui(float dt) {
     ImGui::GetForegroundDrawList()->AddText(ImVec2(12.0f, ImGui::GetIO().DisplaySize.y - 22.0f),
                                             IM_COL32(200, 210, 225, 110), "F1  hide panels");
 
+    build_playtest_ui();
+    // The older panels held every dial the game has, eight windows deep, and
+    // the playtest could not find the ones that mattered. They stay behind
+    // one checkbox in the Playtest panel.
+    if (!show_tuning_panels_) return;
     build_flight_ui();
     build_rally_ui();
     build_dragon_ui();
@@ -3705,7 +3710,11 @@ void App::build_studio_ui() {
     // the rest stay one click away.
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("Studio");
+    studio_controls();
+    ImGui::End();
+}
 
+void App::studio_controls() {
     if (ImGui::Checkbox("animation studio", &studio_active_) && studio_active_) {
         studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
         studio_time_ = 0.0f;
@@ -3833,6 +3842,7 @@ void App::build_studio_ui() {
             ImGui::SliderFloat("tuck sweep", &rig.tuck_sweep_deg, 0.0f, 120.0f, "%.0f deg");
             ImGui::SliderFloat("tuck fold", &rig.tuck_fold_deg, 0.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("tuck droop", &rig.tuck_droop_deg, 0.0f, 60.0f, "%.0f deg");
+            ImGui::SliderFloat("tuck fan close", &rig.tuck_converge_deg, 0.0f, 120.0f, "%.0f deg");
             ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
             ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
             ImGui::SeparatorText("legs");
@@ -3884,6 +3894,46 @@ void App::build_studio_ui() {
     } else {
         ImGui::TextDisabled("scripted manoeuvres for inspecting the rig");
     }
+}
+
+void App::life_controls() {
+    anim::RigTuning& rig = dragon_rig_.tuning;
+    ImGui::SeparatorText("limb physics");
+    ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
+    ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
+    ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
+    ImGui::SliderFloat("limb damping", &rig.limb_damping, 0.05f, 1.5f);
+    ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
+    ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
+    ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
+    ImGui::SliderFloat("limb range", &rig.limb_range_deg, 5.0f, 90.0f, "%.0f deg");
+    ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
+    ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
+    ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
+    ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
+    ImGui::SeparatorText("work in a held brake or turn");
+    ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
+    ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
+    ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
+    ImGui::SeparatorText("keyframed overlay (brake bank)");
+    if (!dragon_rig_.has_brake_bank_clips()) ImGui::TextDisabled("this species has no clip");
+    ImGui::TextDisabled("plays only while braking (Ctrl / LT, or the studio's brake)");
+    ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
+    ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
+}
+
+void App::build_playtest_ui() {
+    // Top right, open, and the only panel shown by default.
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 402.0f, 52.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Playtest");
+    ImGui::Checkbox("show the older tuning panels", &show_tuning_panels_);
+    if (ImGui::CollapsingHeader("Animation studio", ImGuiTreeNodeFlags_DefaultOpen)) {
+        studio_controls();
+    }
+    if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
+        life_controls();
+    }
     ImGui::End();
 }
 
@@ -3919,27 +3969,7 @@ void App::build_dragon_ui() {
     // statue in a held brake or turn, and the playtest could not find them
     // inside "Flight response".
     if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SeparatorText("limb physics");
-        ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
-        ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
-        ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
-        ImGui::SliderFloat("limb damping", &rig.limb_damping, 0.05f, 1.5f);
-        ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
-        ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
-        ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
-        ImGui::SliderFloat("limb range", &rig.limb_range_deg, 5.0f, 90.0f, "%.0f deg");
-        ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
-        ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
-        ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
-        ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
-        ImGui::SeparatorText("work in a held brake or turn");
-        ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
-        ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
-        ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
-        ImGui::SeparatorText("keyframed overlay (brake bank)");
-        if (!dragon_rig_.has_brake_bank_clips()) ImGui::TextDisabled("this species has no clip");
-        ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
-        ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
+        life_controls();
     }
 
     if (ImGui::CollapsingHeader("Landing weight")) {

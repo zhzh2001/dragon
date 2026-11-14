@@ -160,7 +160,7 @@ rivals are specks:
 ./build/dragon --bots 6 --bot-range 95 --combat
 ```
 
-Panels worth knowing: **Graphics** (first, collapsed) has the renderer, the tier, the preset and each content setting (a `*` needs a restart), the window size and the fps readout, saved per user in `graphics.cfg` and ignored by headless runs; **Dragon** has the rig and the hide colour, **Flight**
+Panels worth knowing: **Playtest** is the only one shown by default (2026-11-13): the animation studio, the creature on the stand and the life layers, with a checkbox that brings back the older panels below. **Graphics** (first, collapsed) has the renderer, the tier, the preset and each content setting (a `*` needs a restart), the window size and the fps readout, saved per user in `graphics.cfg` and ignored by headless runs; **Dragon** has the rig and the hide colour, **Flight**
 has the tuning presets, `heft` and the aerobatics dials, **Terrain > Vegetation** has the trees and
 grass, **Combat** has the difficulty dials and the bots, **Studio** drives the
 animation scenarios and picks which creature is on the stand. Every panel except Combat starts collapsed.
@@ -333,6 +333,13 @@ flight controls.
      `--cycle-models`), switch onto it from the default player (Embercrest; from
      Rimefang when the change is Embercrest's) and look once more.
   Put the renders that matter beside the report in `artifacts/`, tracked.
+- **A change the playtester cannot see is not done.** Before reporting a
+  visual change, crop the before and after to the creature, put them side by
+  side at full size, and say in numbers how much moved. If the difference
+  is not plain at that size, say so and make it larger or drop it. A GIF of
+  whole frames scaled down hid a change that was really there, and a 2 to
+  6 degree clip read as nothing (2026-11-13, `docs/ANIMATION.md`, "A
+  keyframed overlay").
 - **Every gameplay constant belongs behind an ImGui slider.** Feel is found by
   dragging sliders while playing, not by planning. A dial that decides whether
   the game is fun (aim assist, bot spread) belongs at the TOP of its panel,

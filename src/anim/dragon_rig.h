@@ -114,6 +114,11 @@ struct RigTuning {
     // dihedral and the membrane drapes below the body -- half-folded, not a
     // stoop.
     float tuck_droop_deg = 22.0f;
+    // The fan shuts in the tuck: each finger rib swings toward the leading
+    // one, so the membrane collapses along the arm instead of draping. With
+    // the fan open, a swept and drooped wing laid its trailing membrane
+    // through the flank and the thighs in every dive.
+    float tuck_converge_deg = 0.0f;
     float brake_flare_deg = 30.0f;
     // The flare itself. A landing bird rotates its WHOLE BODY nose-up and
     // brings the wings forward and up -- protracted, cupped, the tail spread

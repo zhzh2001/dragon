@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <unordered_map>
 
 #include "test_paths.h"
 #include "anim/animation.h"
@@ -2051,6 +2052,114 @@ void test_limbs_live_in_a_braking_turn() {
 // the skeleton parents to the body stays on the end of its leg. attach_feet
 // ran before the limb physics, and such a foot stayed where the pose had put
 // the ankle while the physics moved the leg away from it.
+// Skins the mesh and returns the share of wing vertices (past the shoulder)
+// that sit inside the body: behind the surface normal of the nearest body
+// vertex within half a metre. Writes the deepest one, in metres.
+// tools/rig_probes/wing_clash_probe.cpp is the same measure as a probe.
+float wing_inside_body_share(const anim::DragonRig& rig, const Skeleton& skeleton,
+                             const anim::SkinnedMeshData& mesh, const anim::DragonJoints& joints,
+                             float scale, float* deepest_out) {
+    std::vector<int> part(size_t(skeleton.count()), 0);  // 0 body, 1 wing, 2 ignored
+    for (int side = 0; side < 2; ++side) {
+        for (size_t k = 0; k < joints.wing_root[side].size(); ++k)
+            part[size_t(joints.wing_root[side][k])] = k ? 1 : 2;
+        for (const auto& finger : joints.wing_fingers[side])
+            for (int joint : finger) part[size_t(joint)] = 1;
+    }
+    const auto& skin = rig.skinning_matrices();
+    std::vector<Vec3> body_p, body_n, wing_p;
+    for (const auto& v : mesh.vertices) {
+        int best = 0;
+        for (int k = 1; k < 4; ++k) if (v.weights[k] > v.weights[best]) best = k;
+        const int owner = part[v.joints[best]];
+        if (owner == 2) continue;
+        Vec3 p{0, 0, 0}, n{0, 0, 0};
+        for (int k = 0; k < 4; ++k) {
+            if (v.weights[k] <= 0.0f) continue;
+            p = p + core::transform_point(skin[v.joints[k]], v.position) * v.weights[k];
+            n = n + (skin[v.joints[k]] * core::Vec4{v.normal, 0.0f}).xyz() * v.weights[k];
+        }
+        p = p * scale;
+        if (owner == 1) {
+            wing_p.push_back(p);
+        } else {
+            body_p.push_back(p);
+            body_n.push_back(normalize(n));
+        }
+    }
+    const float cell = 0.25f;
+    auto key = [](int x, int y, int z) {
+        return (int64_t(x + (1 << 20)) << 42) | (int64_t(y + (1 << 20)) << 21) | int64_t(z + (1 << 20));
+    };
+    std::unordered_map<int64_t, std::vector<int>> grid;
+    for (size_t i = 0; i < body_p.size(); ++i) {
+        const Vec3& p = body_p[i];
+        grid[key(int(std::floor(p.x / cell)), int(std::floor(p.y / cell)), int(std::floor(p.z / cell)))]
+            .push_back(int(i));
+    }
+    int inside = 0;
+    float deepest = 0.0f;
+    for (const Vec3& w : wing_p) {
+        const int cx = int(std::floor(w.x / cell)), cy = int(std::floor(w.y / cell)),
+                  cz = int(std::floor(w.z / cell));
+        float best = 0.5f;
+        int nearest = -1;
+        for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dz = -1; dz <= 1; ++dz) {
+                    auto it = grid.find(key(cx + dx, cy + dy, cz + dz));
+                    if (it == grid.end()) continue;
+                    for (int i : it->second) {
+                        const float d = length(w - body_p[size_t(i)]);
+                        if (d < best) { best = d; nearest = i; }
+                    }
+                }
+        if (nearest < 0) continue;
+        const float depth = -dot(w - body_p[size_t(nearest)], body_n[size_t(nearest)]);
+        if (depth > 0.02f) {
+            ++inside;
+            deepest = std::fmax(deepest, depth);
+        }
+    }
+    if (deepest_out) *deepest_out = deepest;
+    return wing_p.empty() ? 0.0f : float(inside) / float(wing_p.size());
+}
+
+// The dive's folded wing stays outside the body on every shipped species.
+// With the finger fan open, the swept and drooped membrane passed through the
+// flank and the thighs: 5-14% of the wing's vertices, up to 0.49 m deep.
+void test_dive_wings_clear_the_body() {
+    namespace fs = std::filesystem;
+    const fs::path root = test_source_root();
+    for (const char* name : {"embercrest", "rimefang", "frostvein", "blightmaw", "ironroot",
+                             "stormsail", "tidewrack"}) {
+        const fs::path path = root / (std::string("assets/") + name + ".glb");
+        if (!fs::exists(path)) continue;
+        Skeleton skeleton;
+        anim::SkinnedMeshData mesh;
+        CHECK(anim::load_skinned_gltf(path.string().c_str(), skeleton, mesh).ok);
+        const auto joints = anim::map_dragon_joints(skeleton);
+        float lo = 1e9f, hi = -1e9f;
+        for (const auto& v : mesh.vertices) { lo = std::fmin(lo, v.position.x); hi = std::fmax(hi, v.position.x); }
+        const float scale = 19.0f / (hi - lo);
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        rig.set_model_scale(scale);
+        anim::load_rig_tuning(rig.tuning, (path.string() + ".rig.cfg").c_str());
+        const Vec3 centre{0.0f, 200.0f, 0.0f};
+        for (int i = 0; i <= 180; ++i) {
+            rig.update(game::studio_state(game::StudioScenario::Dive, float(i) / 60.0f, centre, 0.0f, 4.0f),
+                       1.0f / 60.0f);
+        }
+        float deepest = 0.0f;
+        const float share = wing_inside_body_share(rig, skeleton, mesh, joints, scale, &deepest);
+        std::printf("  %s: %.1f%% of the wing inside the body in the dive, deepest %.2f m\n", name,
+                    double(share * 100.0f), double(deepest));
+        CHECK(share < 0.01f);
+        CHECK(deepest < 0.2f);
+    }
+}
+
 void test_limbs_keep_their_feet() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -3306,6 +3415,7 @@ int main() {
     test_rig_slider_extremes_stay_sane();
     test_limbs_live_in_a_braking_turn();
     test_limbs_keep_their_feet();
+    test_dive_wings_clear_the_body();
     test_body_and_wings_work_in_a_held_brake();
     test_brake_bank_overlay();
     test_tail_flow_is_continuous_and_releases_on_landing();

@@ -332,6 +332,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tuck_sweep_deg),
     RIG_FLOAT_FIELD(tuck_fold_deg),
     RIG_FLOAT_FIELD(tuck_droop_deg),
+    RIG_FLOAT_FIELD(tuck_converge_deg),
     RIG_FLOAT_FIELD(brake_flare_deg),
     RIG_FLOAT_FIELD(brake_body_pitch_deg),
     RIG_FLOAT_FIELD(brake_raise_deg),
@@ -1330,10 +1331,12 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             // The fan shuts: each rib swings toward the innermost one, by a
             // share of the full closure. Applied at the finger's BASE so the
             // whole rib and its membrane come with it.
-            if (stow > 1e-4f && finger_index > 0 && index_in_chain == 0 &&
+            const float converge_deg = tuning.ground_stow_converge_deg * stow +
+                                       tuning.tuck_converge_deg * tuck * (1.0f - stow);
+            if (converge_deg > 1e-3f && finger_index > 0 && index_in_chain == 0 &&
                 finger_count > 1) {
-                close -= core::radians(tuning.ground_stow_converge_deg) * stow *
-                         float(finger_index) / float(finger_count - 1);
+                close -= core::radians(converge_deg) * float(finger_index) /
+                         float(finger_count - 1);
             }
             const float fold = (core::radians(fold_deg) + upstroke_fold * progress +
                                 flap_fold + recovery_fold) *

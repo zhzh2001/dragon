@@ -922,6 +922,51 @@ directions read correctly and nothing inverts
 "clip rate" sliders are in the Dragon panel's first header. Whether it is
 worth a clip per species is the playtest's call.
 
+The playtest's call (2026-11-13): no visible difference while dragging the
+slider, and the two side-by-side GIFs looked the same. Both are true. The
+layer is 2 to 6 degrees a joint on a 19 m animal, and the largest part of
+it, the leg paddle, goes into the limb physics as a target and is smoothed
+away. The GIFs were whole frames scaled down, so the dragon was a few
+hundred pixels of each. The trial's result is negative for this use: a
+small additive clip under the procedural layers does not read. Keyframes
+remain the route for a set-piece motion that IS the whole motion (a roar, a
+landing, a strike), not for texture under a procedural pose. The clip and
+its sliders stay; the sliders are labelled with when the clip plays.
+
+### The dive's folded wing went through the body (2026-11-13)
+
+The playtest reported wings overlapping the body in the dive.
+`tools/rig_probes/wing_clash_probe` measures it: it skins the mesh on the
+CPU at a studio time, takes the wing's vertices past the shoulder, and
+counts those behind the surface of the nearest body vertex. In the studio
+dive at 3 s, before the fix:
+
+| species | wing inside the body | deepest |
+|---|---|---|
+| embercrest | 14.2% | 0.49 m |
+| ironroot | 9.0% | 0.48 m |
+| blightmaw | 6.9% | 0.44 m |
+| rimefang | 6.4% | 0.41 m |
+| stormsail | 5.4% | 0.32 m |
+| tidewrack | 5.4% | 0.48 m |
+| frostvein | 0.1% | 0.03 m |
+
+Most of it went into the chest, the root and the thighs. The tuck sweeps
+the arm back and droops it, and the finger fan stayed open, so the trailing
+membrane lay through the flank. Less droop and less sweep cleared some
+species, but the clean settings stood the wing up like a sail, which does
+not read as a dive either (`artifacts/dive-tuck/`).
+
+The fix closes the fan in the tuck. `tuck_converge_deg` swings each finger
+rib toward the leading one, at its base, by its share of the full angle,
+the same way `ground_stow_converge_deg` does on the ground. The membrane
+collapses along the arm. Each profile carries its value (20 to 80 degrees),
+and Embercrest and Rimefang also droop 20 degrees instead of 30. Ironroot,
+which had the code's default sweep, now sweeps 60 and folds 30. After it,
+no species has more than 0.2% of its wing inside, or deeper than 0.11 m.
+`test_dive_wings_clear_the_body` holds every shipped species under 1% and
+0.2 m. The slider is "tuck fan close" in the studio's dive controls.
+
 ### The jaw bone may own the wrong half of the mouth
 
 Three species were reported with a wrong attack jaw, and the bone was right on
