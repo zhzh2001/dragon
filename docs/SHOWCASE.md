@@ -239,6 +239,27 @@ Hunyuan 3D now gives 5 generations a day, not the 30 that
 `MODEL_GENERATION.md` records. S2 therefore starts with one generation of
 these views on each current generator.
 
+### The first candidate: Hunyuan's one-shot (2026-11-14)
+
+`tools/hunyuan_oneshot.py run artifacts/showcase-study/hero-plates
+assets/embercrest-cand-hero-hunyuan.glb` took about 12 minutes. The plates
+are the front, rear and side views, with the side view mirrored for the
+right. The result is 1,500,000 triangles, one material and three 4K maps.
+`artifacts/showcase-study/hero-cand-hunyuan.jpg` shows it from six views.
+
+- The body is right. The proportions, the pale belly plates, the back
+  spines, the tail and the wing fingers match the design. The wings came
+  out level, so the raised wing in the side plate did no harm and the plate
+  stays.
+- The head is not usable as generated. The texture on the muzzle and the
+  brow is smeared, there is no eye in the mesh or in the texture, and the
+  mouth is a closed crease. The horns are clean.
+
+This repeats the September finding that a generator gives a sculpt, not a
+face. Whichever generator wins, the eye, the eyelids, the mouth interior
+and the head's texture are built by hand in Blender. Tripo, Rodin and
+TRELLIS.2 are still to run on the same plates.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
