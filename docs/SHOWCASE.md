@@ -220,8 +220,8 @@ now.
 
 One brief went to both workers, each in its own worktree: eight rock and
 cliff pieces from Poly Haven's CC0 scans, three levels of detail, PBR maps,
-a rebuild script, a verifier and three renders. The brief is in
-`tools/rockkit.md`'s history; the kit that was kept is
+a rebuild script, a verifier and three renders. The brief is
+`tools/showcase/rockkit-brief.md`. The kit that was kept is
 `assets/props/rockkit/`.
 
 | | Codex `gpt-6-astra`, high, work account | Claude subagent (Mythos 5.2) |
