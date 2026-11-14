@@ -50,6 +50,39 @@ The table's model names are from 2026-09. The `codex` backend now takes
 defaults to `gpt-5.6-luna`. A `gemini` backend exists and needs
 `IMAGE_USE_GEMINI_PROFILE`; it was not tested here.
 
+## Codex on the work account, against the web backend (2026-11-14)
+
+Every Codex job runs on the work profile. `image-use` reads
+`~/.codex/auth.json` whatever `CODEX_HOME` says, so give it a home
+directory whose `.codex` links to the work profile:
+
+```sh
+D=/tmp/codex-work-home; mkdir -p $D; ln -sfn ~/.codex-work $D/.codex
+HOME=$D image-use "prompt" --backend codex -i ref.png --ref-role subject -o out.png
+```
+
+One head plate of the hero dragon was generated three ways from the same
+prompt and subject reference (`artifacts/showcase-study/imagegen-backends.jpg`):
+
+| Backend | Time | What came back |
+|---|---|---|
+| `codex`, `--image-model gpt-image-2.5-flare --quality high` | 33 s | The server ran `gpt-image-2-codex` at quality low. 4,740 tokens |
+| `codex`, `--image-model gpt-image-2.5-sunburst --quality high` | 52 s | The server ran `gpt-image-2-codex` at quality medium. 4,834 tokens |
+| `web` | 76 s | The ChatGPT conversation's image model |
+
+The three pictures are the same quality to the eye: the same eye, scale
+plates, horns and throat. The server replaced the requested image model
+and quality in both Codex runs, so those two flags choose less than their
+names say. The work profile's weekly window read 54% before and after five
+Codex images.
+
+Use the Codex backend for a scripted batch. It needs no browser, it has no
+leftover-draft failure, and two runs can go in parallel. Use `web` when the
+Codex window is short. Two differences to plan for: asked for a "left side
+profile", `web` drew the head facing left and Codex drew it facing right,
+and two generations of one view are never the same design, so mirror one
+side plate for the other side instead of generating both.
+
 ## Reference images
 
 A target that must match an engine frame takes the frame as a reference:
