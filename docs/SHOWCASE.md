@@ -331,6 +331,45 @@ dense enough that skinning them will need care.
 The same method is open for the feet and the wing hand if they need it.
 Three of the day's five Hunyuan generations are used.
 
+### The same head on x99's local models (2026-11-14)
+
+The user asked for the local route to be tested with the new input. Both
+local Hunyuan checkpoints on x99 ran through ComfyUI at
+`octree_resolution` 512, on the RTX 5060 Ti, with the plates flood-filled
+to a white background.
+
+| Model | Input | Time | Peak VRAM | Triangles | Texture |
+|---|---|---|---|---|---|
+| Hunyuan 3D cloud one-shot (3.x) | four head plates | about 12 min | -- | 1,498,976 | 4K PBR set |
+| Hunyuan3D-2mv, local | the same four plates | 330 s | 5.2 GB | 3,165,356 | none |
+| Hunyuan3D 2.1, local | one three-quarter plate | 332 s | not read | 2,624,730 | none |
+
+`artifacts/showcase-study/hero-head-cloud-vs-local.jpg` has the three as
+untextured clay under one light, cloud on top, 2mv in the middle, 2.1 at
+the bottom.
+
+- The cloud head has crisp separate plates on the muzzle, a modelled brow
+  and lid, and the design's narrow wedge.
+- The 2mv head is wider and flatter than the plates, close to a toad from
+  the front. The muzzle is smooth, the eye is a shallow ring, and the
+  frill's spines are blunt.
+- The 2.1 head has better proportions than 2mv and clean plates on the
+  throat, from one image. The eye is a closed slit and the surface is
+  softer than the cloud's.
+
+Head-only plates help the local models as they helped the cloud, but they
+do not close the gap between model generations. The order is cloud, then
+2.1, then 2mv. Neither local model makes a texture. So the cloud head
+stays the hero's head. The local 2.1 model is free and takes five and a
+half minutes, which makes it the tool for shapes that will be re-textured
+anyway: a foot, a wing hand, a rock, a prop.
+
+Two notes for the next local run. The multi-view template ships with front
+and back inputs only; `left` and `right` are added to
+`Hunyuan3Dv2ConditioningMultiView` by hand, each through its own
+`CLIPVisionEncode`. The checkpoint on disk is
+`hunyuan3d-dit-v2-mv.safetensors`, not the `_fp16` name in the template.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
