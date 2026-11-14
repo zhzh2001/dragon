@@ -1,0 +1,21 @@
+ok   the same top-level keys
+ok   asset: JSON equal (1)
+ok   scene: JSON equal (1)
+ok   scenes: JSON equal (1)
+ok   nodes: JSON equal (64)
+ok   skins: JSON equal (1)
+ok   meshes: JSON equal (1)
+ok   materials: JSON equal (1)
+ok   textures: JSON equal (3)
+ok   samplers: JSON equal (1)
+ok   images: JSON equal (3)
+ok   accessors: JSON equal (8)
+ok   extensionsUsed: JSON equal (1)
+ok   accessors: data bytes equal (8 of 8, sha256 19eb6b01141fdae2)
+ok   bufferViews: the same count
+ok   bufferViews that are not images: JSON and bytes equal (8 of 8)
+ok   image 0: the same size and mode (4096x4096 RGB PNG)
+ok   image 1: the same size and mode (4096x4096 RGB PNG)
+ok   image 2: the same size and mode (4096x4096 RGB PNG)
+
+MESH CHECK PASSED: the candidate differs from the shipped model only in the pixels of its images

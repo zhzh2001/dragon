@@ -1,0 +1,88 @@
+{
+  "rear": {
+    "crop_xyxy": [
+      270,
+      175,
+      1188,
+      552
+    ],
+    "before": {
+      "pixels": 65680,
+      "mean_luminance": 0.04319177422635706,
+      "mean_saturation": 0.4163963301517777,
+      "mean_display_luma": 0.2067926930811301
+    },
+    "after": {
+      "pixels": 65680,
+      "mean_luminance": 0.1004035617830725,
+      "mean_saturation": 0.6937233118159036,
+      "mean_display_luma": 0.3061132037448353
+    }
+  },
+  "side": {
+    "crop_xyxy": [
+      0,
+      0,
+      1280,
+      720
+    ],
+    "before": {
+      "pixels": 352414,
+      "mean_luminance": 0.014289287600902707,
+      "mean_saturation": 0.5799373093264395,
+      "mean_display_luma": 0.10921868734822468
+    },
+    "after": {
+      "pixels": 352414,
+      "mean_luminance": 0.03154416542218315,
+      "mean_saturation": 0.7860543049246659,
+      "mean_display_luma": 0.1588331943902431
+    }
+  },
+  "belly": {
+    "crop_xyxy": [
+      52,
+      143,
+      1233,
+      720
+    ],
+    "before": {
+      "pixels": 144789,
+      "mean_luminance": 0.02119606137698568,
+      "mean_saturation": 0.5034212667634888,
+      "mean_display_luma": 0.13123937490647308
+    },
+    "after": {
+      "pixels": 144789,
+      "mean_luminance": 0.04905734294916982,
+      "mean_saturation": 0.7026003045893969,
+      "mean_display_luma": 0.19782885742999376
+    }
+  },
+  "run": {
+    "crop_xyxy": [
+      518,
+      315,
+      764,
+      455
+    ],
+    "before": {
+      "pixels": 6883,
+      "mean_luminance": 0.012760413836167415,
+      "mean_saturation": 0.45189280664318343,
+      "mean_display_luma": 0.10195717485250674
+    },
+    "after": {
+      "pixels": 6883,
+      "mean_luminance": 0.02782643478821407,
+      "mean_saturation": 0.6713321836653414,
+      "mean_display_luma": 0.15718695814923386
+    }
+  },
+  "target": {
+    "pixels": 219985,
+    "mean_luminance": 0.07671326431204563,
+    "mean_saturation": 0.5451644974535915,
+    "mean_display_luma": 0.25338055388268454
+  }
+}

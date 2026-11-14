@@ -1,0 +1,11 @@
+rear_200_14_20   before  luminance 0.209  saturation 0.413  hue  20.1  luma p10/p90 0.110/0.316  pixels 67693
+rear_200_14_20   after   luminance 0.335  saturation 0.606  hue  17.7  luma p10/p90 0.196/0.476  pixels 67693
+side_90_10_5     before  luminance 0.111  saturation 0.576  hue  15.5  luma p10/p90 0.052/0.152  pixels 356841
+side_90_10_5     after   luminance 0.182  saturation 0.738  hue  13.0  luma p10/p90 0.095/0.240  pixels 356841
+below_0_12_-30   before  luminance 0.134  saturation 0.498  hue  10.9  luma p10/p90 0.046/0.240  pixels 148688
+below_0_12_-30   after   luminance 0.224  saturation 0.618  hue  13.7  luma p10/p90 0.090/0.377  pixels 148688
+run7             before  luminance 0.111  saturation 0.428  hue   5.8  luma p10/p90 0.046/0.186  pixels 7580
+run7             after   luminance 0.183  saturation 0.559  hue  13.3  luma p10/p90 0.096/0.268  pixels 7580
+all four views   before  luminance 0.128  saturation 0.535  hue  14.9  luma p10/p90 0.053/0.220  pixels 580802
+all four views   after   luminance 0.211  saturation 0.689  hue  13.6  luma p10/p90 0.099/0.346  pixels 580802
+run-target.png   target  luminance 0.269  saturation 0.548  hue  14.3  luma p10/p90 0.119/0.473  pixels 234981

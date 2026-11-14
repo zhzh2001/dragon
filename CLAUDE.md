@@ -460,6 +460,12 @@ flight controls.
     Deeper measurement write-up and richer in-file documentation, closer to
     house style. It also changed a constant it was not asked about
     (`wing_bind_level_deg` 35 -> 40), which moved the wingspan 8%.
+  A second comparison, on 2026-11-13, at the user's request: one texture
+  brief (Embercrest's hide) to gpt-6-astra and to a Claude Fable 5.2
+  subagent, each in its own worktree. Codex took 102 k tokens and about 12
+  minutes and gave a clean but flat result that broke one constraint (the
+  horns); Fable took 178 k and about 15 minutes and gave the result that
+  was used (`docs/MODEL_GENERATION.md`, "A warmer hide for Embercrest").
   So: **gpt-6-astra, for well-specified, numerically checkable 3D, asset and
   animation work, only with usage headroom confirmed** -- and brief it to
   write the in-file record it tends to skip.

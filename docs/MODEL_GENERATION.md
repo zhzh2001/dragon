@@ -1494,6 +1494,43 @@ it passed across all five changes above — 5.122274160385132e-08 and
 throwaway `--stem`: the real stem would overwrite the shipping
 `assets/embercrest.glb` with an unrepaired rebuild.
 
+## A warmer hide for Embercrest, and two workers on one brief (2026-11-13)
+
+Embercrest read on screen as a dark brown silhouette. The Hunyuan base
+colour is dark and near grey: the back's median albedo is 0.03 linear, so
+the sun times the albedo rendered close to black, and the scales, plates
+and membrane sat within one stop of each other. The art target
+(`docs/concept/gaps/run-target.png`) is a rust-orange dragon whose scale
+ridges catch the sun.
+
+The fix is textures only: `tools/hide/build_hide.py` rebuilds the three
+images from `assets/embercrest-prehide.glb` (the textures as first shipped,
+kept locally) in about 30 s, deterministically. It lifts the base
+luminance, raises the scale detail to a power so it separates, moves the
+hue toward rust, and treats the membrane, belly plates, horns and claws as
+regions found from the skin weights. It strengthens the normal map 1.5
+times and softens the occlusion channel. `tools/hide/check_mesh.py` proves
+that only image pixels differ. Copy the output over `assets/embercrest.glb`
+to install it.
+
+The same brief went to two workers, each in its own worktree:
+
+| | Codex, gpt-6-astra high | Claude Fable 5.2 subagent |
+|---|---|---|
+| tokens | 102 k | 178 k |
+| wall time | about 12 min | about 15 min |
+| method | three monotonic sRGB curves, one per channel; roughness down up to 0.055; normal map untouched | luminance lift, detail power, hue shift toward rust, per-region rules from the mesh, normal map x1.5 |
+| dragon luminance, flight frame | x2.18 | x1.65 (display luma) |
+| result | clean, even orange; the horns turned orange too, against the brief | more scale contrast, dark horn tips kept, reads as weathered rust; grainier close up |
+| stayed in its worktree | yes | yes |
+
+Both overshoot the target's saturation. Fable's is installed because it
+kept the detail and the dark horns the brief asked for. Codex's is kept
+locally as `assets/embercrest-cand-hide-codex.glb` for a comparison with
+`--model`; its scripts are on the `hide-codex` branch. The renders of all
+three, side by side, are `artifacts/hide/now-codex-fable.jpg`, and each
+worker's report is beside it.
+
 ## Open questions
 
 Answered ones have been removed; the sections above hold the results. What is

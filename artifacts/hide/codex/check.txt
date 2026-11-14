@@ -1,0 +1,5 @@
+PASS: 8 accessors and 8 non-image bufferViews matched byte-for-byte.
+PASS: 64 nodes, 1 skin, meshes, materials, textures, samplers, and all remaining JSON matched.
+PASS: Normal PNG bytes matched. Three images retained 4096 x 4096 dimensions.
+SHA256: ad2c8e48320c47506e4f983e57008d249b4b8397fd8127bc0f536187020d9d59
+PASS: independent rebuild matched every GLB byte.
