@@ -631,6 +631,38 @@ aerial-perspective froxels instead of per fragment, the far cascades of
 the shadow map refreshed every other frame, and dynamic resolution aiming
 at the display's refresh rather than at 60.
 
+### The frame against the target, first round (2026-11-13): light, camera, hide
+
+Side by side with `docs/concept/gaps/run-target.png`, the run's frame
+missed it in three ways that cover most of the screen: a grey-blue wash
+with no sun direction, a dragon a fifth of the frame wide, and a hide that
+rendered brown-black. The details of the terrain, the forest and the river
+are smaller gaps than these.
+
+- **The hour.** The morning sun at 12-16 degrees, ahead and to the right,
+  left the walls that face the camera in their own shadow, and the full
+  morning mist laid a grey sheet over the whole first valley. The morning
+  is now 16-20 degrees with 0.35 of the mist, and the evening 14-17 with
+  0.25 (`game/time_of_day.cpp`). The afternoon is unchanged.
+- **The camera.** The chase default came in from 22 m plus 0.09 m per m/s
+  to 10 m plus 0.03, 2.8 m up, aiming 30 m ahead and 4 m above the line so
+  the dragon sits low in the frame with the valley above it, at a 58 degree
+  view plus 0.12 per m/s (`game/chase_camera.h`). The action preset came in
+  to 7 m so it stays the closest. On the ground the arm adds 8 m: the close
+  framing cropped a standing dragon's wings.
+- **The hide.** Embercrest's textures were regraded
+  (`docs/MODEL_GENERATION.md`, "A warmer hide for Embercrest").
+
+All of it is in the Playtest panel's "Camera and light" header. `--chase`
+and `--grade` set the camera's and the grade's dials from the command line.
+`artifacts/light-pass/` has the three valleys before and after, and the
+afternoon beside the target.
+
+What is still short of the target: the HUD's bottom-centre plate now sits
+on the dragon's belly and the target markers land on its back, the
+mountains are smooth slopes without cliffs and scree, the forest reads as a
+carpet, and the river is a dull strip.
+
 ## 2. Century: Age of Ashes
 
 Playwing, UE4, free to play, PvP dragon combat, released December 2021.

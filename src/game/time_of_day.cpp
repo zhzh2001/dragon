@@ -28,6 +28,11 @@ float unit(uint32_t& state) {
 // whole floor in the walls' shadow. The afternoon spans the build's tuned
 // 19 / 235, and has no mist: at 0.12 a raised camera looking 2-3 km across
 // the floor saw it milky, the arena's tuned picture with it.
+// 2026-11-13: the morning rose from 12-16 to 16-20 degrees and its mist fell
+// from 1 to 0.35. At 14 degrees the backlit walls facing the camera sat in
+// their own shadow, and the full mist laid a grey sheet over the whole first
+// valley; the frame read as gloom, not as the target's low warm light. The
+// evening rose two degrees for the same reason.
 struct Key {
     const char* name;
     float elevation_lo, elevation_hi;
@@ -35,9 +40,9 @@ struct Key {
     float mist;
 };
 constexpr Key KEYS[3] = {
-    {"morning", 12.0f, 16.0f, 135.0f, 155.0f, 1.0f},
+    {"morning", 16.0f, 20.0f, 135.0f, 155.0f, 0.35f},
     {"afternoon", 19.0f, 26.0f, 205.0f, 235.0f, 0.0f},
-    {"evening", 12.0f, 15.0f, 218.0f, 236.0f, 0.4f},
+    {"evening", 14.0f, 17.0f, 218.0f, 236.0f, 0.25f},
 };
 
 // Earth's air per km (gfx/atmosphere.cpp, Hillaire 2020).

@@ -71,6 +71,8 @@ struct Options {
     std::string graphics;
     // --atmosphere key=value,... over the atmosphere's dials (gfx/atmosphere.h).
     std::string atmosphere;
+    std::string grade;  // --grade key=value,... over gfx::PostSettings
+    std::string chase;  // --chase key=value,... over the chase camera's tuning
     std::string clouds;  // --clouds key=value,... (gfx/clouds.h)
     std::string terrain;  // --terrain key=value,... (game/terrain.h)
     // --aa off|fxaa|taa (--no-taa is off): the modern tier's anti-aliasing,

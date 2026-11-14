@@ -20,17 +20,24 @@ class Terrain;
 // inside of a mountain. Full roll inheritance is deliberately unavailable: it is
 // nauseating, and it hides the horizon, which is the player's main reference for
 // reading their own attitude.
+// The default framing (2026-11-13) is the art target's
+// (docs/concept/gaps/run-target.png): the dragon large and low in the frame,
+// the valley ahead above it. At 22 m back plus 0.09 m per m/s and a 62-71
+// degree view, the dragon was a small dark shape a fifth of the frame wide.
 struct ChaseCameraTuning {
     // ---- arm geometry ----
-    float distance = 22.0f;             // metres behind at rest
-    float distance_speed_gain = 0.09f;  // extra metres per m/s of airspeed
-    float height = 5.2f;                // metres above the dragon
+    float distance = 10.0f;             // metres behind at rest
+    float distance_speed_gain = 0.03f;  // extra metres per m/s of airspeed
+    float height = 2.8f;                // metres above the dragon
+    // Added on the ground: the close flight framing cropped a standing
+    // dragon's raised wings out of the frame.
+    float ground_distance = 8.0f;
     float pivot_forward = 2.0f;         // pivot ahead of the body centre
 
     // ---- aim ----
-    float look_ahead = 12.0f;      // metres ahead of the dragon
+    float look_ahead = 30.0f;      // metres ahead of the dragon
     float look_ahead_turn = 9.0f;  // extra lead per rad/s of turn rate
-    float look_down_bias = 0.0f;   // metres; negative aims lower
+    float look_down_bias = 4.0f;   // metres; negative aims lower
 
     // ---- lag, in seconds of half-life ----
     // Position lags more than aim, so the dragon leads the frame during hard
@@ -44,8 +51,8 @@ struct ChaseCameraTuning {
     float roll_inheritance = 0.32f;
 
     // ---- field of view ----
-    float fov_base_deg = 62.0f;
-    float fov_speed_gain = 0.22f;  // degrees per m/s -- most of the felt speed
+    float fov_base_deg = 58.0f;
+    float fov_speed_gain = 0.12f;  // degrees per m/s -- most of the felt speed
     float fov_max_deg = 92.0f;
 
     // ---- terrain collision ----

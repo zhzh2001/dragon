@@ -27,9 +27,10 @@ ChaseCameraTuning camera_preset_action() {
     ChaseCameraTuning t;
     // Close, tight, and committed to the turn. Reads speed and intent best, and
     // is the one most likely to make people motion sick.
-    t.distance = 14.0f;
-    t.distance_speed_gain = 0.05f;
-    t.height = 3.4f;
+    // Still the closest of the three after the default came in to 10 m.
+    t.distance = 7.0f;
+    t.distance_speed_gain = 0.03f;
+    t.height = 1.8f;
     t.look_ahead = 16.0f;
     t.look_ahead_turn = 13.0f;
     t.position_lag = 0.07f;
@@ -137,7 +138,8 @@ void ChaseCamera::place_first_person(const FlightState& state) {
 void ChaseCamera::snap_to(const FlightState& state) {
     free_look_ = Vec2{0.0f, 0.0f};
     pivot_ = compute_pivot(state);
-    requested_arm_ = tuning.distance + state.airspeed * tuning.distance_speed_gain;
+    requested_arm_ = tuning.distance + state.airspeed * tuning.distance_speed_gain +
+                     (state.grounded ? tuning.ground_distance : 0.0f);
     arm_ = requested_arm_;
     position_ = pivot_ + compute_arm_direction(state) * arm_;
     aim_ = compute_aim(state);
@@ -186,7 +188,8 @@ void ChaseCamera::update(const FlightState& state, const Terrain* terrain, Vec2 
     // ---- arm ----
     pivot_ = compute_pivot(state);
     const Vec3 direction = compute_arm_direction(state);
-    requested_arm_ = tuning.distance + state.airspeed * tuning.distance_speed_gain;
+    requested_arm_ = tuning.distance + state.airspeed * tuning.distance_speed_gain +
+                     (state.grounded ? tuning.ground_distance : 0.0f);
 
     const float clear_arm = sweep_arm(pivot_, direction, requested_arm_, terrain);
     // Shorten quickly, extend slowly.

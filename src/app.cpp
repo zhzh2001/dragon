@@ -84,6 +84,8 @@ std::vector<std::string> App::roster_paths(const Options& options) {
     return roster;
 }
 
+void parse_dials(const std::string& list, std::initializer_list<std::pair<const char*, float*>> fields);
+
 bool App::bake_packs(const Options& options) {
     // Every model-detail level's near and far budget, from the tier that may
     // pick any of them (sm3 allows Full through 2.5K), and the largest cap a
@@ -183,6 +185,10 @@ Options parse_options(int argc, char** argv) {
             options.graphics = argv[++i];
         } else if (arg == "--atmosphere" && i + 1 < argc) {
             options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
+        } else if (arg == "--grade" && i + 1 < argc) {
+            options.grade = argv[++i];  // key=value,... (gfx/post.h)
+        } else if (arg == "--chase" && i + 1 < argc) {
+            options.chase = argv[++i];  // key=value,... (game/chase_camera.h)
         } else if (arg == "--clouds" && i + 1 < argc) {
             options.clouds = argv[++i];  // key=value,... (gfx/clouds.h)
         } else if (arg == "--terrain" && i + 1 < argc) {
@@ -567,6 +573,17 @@ bool App::init(const Options& options) {
         post_settings_.exposure = 1.18f;
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
+    if (!options.grade.empty()) {
+        gfx::PostSettings& g = post_settings_;
+        parse_dials(options.grade, {{"exposure", &g.exposure}, {"contrast", &g.contrast},
+                                    {"saturation", &g.saturation}, {"bloom", &g.bloom_strength},
+                                    {"threshold", &g.bloom_threshold}, {"vignette", &g.vignette},
+                                    {"temperature", &g.temperature}, {"tint", &g.tint},
+                                    {"lift", &g.lift}, {"gamma", &g.gamma},
+                                    {"shadows", &g.shadows_strength},
+                                    {"highlights", &g.highlights_strength},
+                                    {"glare", &g.sun_glare}, {"flare", &g.lens_flare}});
+    }
     if (!options.clouds.empty()) cloud_settings_.parse(options.clouds);
     if (!options.terrain.empty()) terrain_settings_.parse(options.terrain);
     if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
@@ -987,12 +1004,41 @@ core::Vec2 App::read_free_look(float dt) const {
     return look;
 }
 
+// key=value[,key=value...] onto named float dials; unknown keys are logged.
+void parse_dials(const std::string& list, std::initializer_list<std::pair<const char*, float*>> fields) {
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find(',', start);
+        if (end == std::string::npos) end = list.size();
+        const std::string item = list.substr(start, end - start);
+        start = end + 1;
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = item.substr(0, eq);
+        bool found = false;
+        for (const auto& [name, value] : fields) {
+            if (key == name) {
+                *value = float(std::atof(item.c_str() + eq + 1));
+                found = true;
+            }
+        }
+        if (!found) SDL_Log("unknown dial '%s' skipped", key.c_str());
+    }
+}
+
 void App::apply_camera_preset(int index) {
     camera_preset_ = index;
     switch (index) {
         case 1: chase_.tuning = game::camera_preset_action(); break;
         case 2: chase_.tuning = game::camera_preset_cinematic(); break;
         default: chase_.tuning = game::camera_preset_chase(); break;
+    }
+    if (!options_.chase.empty()) {
+        game::ChaseCameraTuning& c = chase_.tuning;
+        parse_dials(options_.chase, {{"distance", &c.distance}, {"speed_gain", &c.distance_speed_gain},
+                                     {"height", &c.height}, {"look_ahead", &c.look_ahead},
+                                     {"look_down", &c.look_down_bias}, {"fov", &c.fov_base_deg},
+                                     {"fov_speed", &c.fov_speed_gain}, {"pivot", &c.pivot_forward}});
     }
     // The boost FOV surge rides on top of whatever the preset chose, so the
     // preset's own base is recorded here and re-applied each frame.
@@ -3930,6 +3976,30 @@ void App::build_playtest_ui() {
     ImGui::Checkbox("show the older tuning panels", &show_tuning_panels_);
     if (ImGui::CollapsingHeader("Animation studio", ImGuiTreeNodeFlags_DefaultOpen)) {
         studio_controls();
+    }
+    if (ImGui::CollapsingHeader("Camera and light", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // The framing and the light the art target is judged in
+        // (docs/concept/gaps/run-target.png). The chase preset's own dials;
+        // 1/2/3 reload a preset over them.
+        game::ChaseCameraTuning& c = chase_.tuning;
+        ImGui::SeparatorText("chase camera");
+        ImGui::SliderFloat("distance", &c.distance, 4.0f, 40.0f, "%.1f m");
+        ImGui::SliderFloat("distance per m/s", &c.distance_speed_gain, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("extra distance on the ground", &c.ground_distance, 0.0f, 30.0f, "%.1f m");
+        ImGui::SliderFloat("height", &c.height, 0.0f, 10.0f, "%.1f m");
+        ImGui::SliderFloat("look ahead", &c.look_ahead, 0.0f, 60.0f, "%.0f m");
+        ImGui::SliderFloat("aim above (dragon lower)", &c.look_down_bias, -10.0f, 15.0f, "%.1f m");
+        if (ImGui::SliderFloat("field of view", &c.fov_base_deg, 40.0f, 90.0f, "%.0f deg")) {
+            base_fov_ = c.fov_base_deg;
+        }
+        ImGui::SliderFloat("field of view per m/s", &c.fov_speed_gain, 0.0f, 0.4f, "%.2f deg");
+        ImGui::SeparatorText("light");
+        ImGui::SliderFloat("sun elevation", &lighting_.sun_elevation_deg, 2.0f, 60.0f, "%.0f deg");
+        ImGui::SliderFloat("sun azimuth", &lighting_.sun_azimuth_deg, 0.0f, 360.0f, "%.0f deg");
+        ImGui::SliderFloat("valley mist", &time_of_day_.mist, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("exposure", &post_settings_.exposure, 0.5f, 2.5f, "%.2f");
+        ImGui::SliderFloat("contrast", &post_settings_.contrast, 0.8f, 1.5f, "%.2f");
+        ImGui::SliderFloat("warmth", &post_settings_.temperature, -0.2f, 0.2f, "%.2f");
     }
     if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
         life_controls();
