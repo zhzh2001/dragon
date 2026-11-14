@@ -303,6 +303,34 @@ face. Whichever generator wins, the eye, the eyelids, the mouth interior
 and the head's texture are built by hand in Blender. Tripo, Rodin and
 TRELLIS.2 are still to run on the same plates.
 
+### The head, generated on its own (2026-11-14)
+
+The user ruled out the other generators for now: TRELLIS.2 was worse than
+Hunyuan in September and has not changed, and the paid services wait for a
+discount. The route is Hunyuan plus Blender.
+
+A generator spreads its triangles and its texture over the whole subject,
+and the head is a twentieth of a dragon. So the head was generated alone.
+Four head plates are in `artifacts/showcase-study/hero-head-plates/`:
+front and rear views, and one side view mirrored for the other side, all
+from the Codex image backend with the design as the subject reference.
+The first rear plate showed the pale throat on the back of the neck and
+was redrawn.
+
+`assets/embercrest-cand-hero-head-hunyuan.glb` is the result, and
+`artifacts/showcase-study/hero-cand-head-hunyuan.jpg` shows it from six
+directions. It has an amber eye under a modelled brow and lids, separate
+scale plates from the muzzle to the frill, four clean horns, a lip line
+with teeth, and a plated throat. Beside the full-body candidate's head
+the difference needs no measurement.
+
+What it lacks: the mouth is closed and has no interior, the eye is part of
+the hide's surface and not a separate ball, and the frill's spines are
+dense enough that skinning them will need care.
+
+The same method is open for the feet and the wing hand if they need it.
+Three of the day's five Hunyuan generations are used.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
