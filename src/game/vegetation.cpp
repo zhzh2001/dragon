@@ -556,6 +556,9 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
             const float pick = hash.next();
             GrassKind kind = GrassKind::Tuft;
             const float near_water = core::saturate(1.0f - (height - t.water_level) / 14.0f);
+            // A braided river's gravel stands up to two metres over the
+            // water, and little grows on it: one plant in five, a reed.
+            if (t.river_braid > 0.0f && height < t.water_level + 2.2f && pick > 0.2f) continue;
             if (pick < near_water * 0.8f) {
                 kind = GrassKind::Reed;
             } else if (pick > 0.93f) {

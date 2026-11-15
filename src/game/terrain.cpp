@@ -35,6 +35,10 @@ void Terrain::generate(const TerrainSettings& settings, const Terrain& eroded) {
     build_mesh();
 }
 
+// The gravel bed of a braided river, in half widths of the channel it
+// replaces (TerrainSettings::river_braid).
+constexpr float kRiverGravel = 2.0f;
+
 // The share of the cliff bands the ground keeps where no crest is known:
 // past the erosion's grid, and with the erosion off.
 constexpr float kCliffKeepOutside = 0.6f;
@@ -223,6 +227,7 @@ void TerrainSettings::parse(const std::string& list) {
                                 {"spur_spacing", &spur_spacing}, {"erosion_strength", &erosion_strength},
                                 {"talus", &erosion_params.talus}, {"thermal_rate", &erosion_params.thermal_rate},
                                 {"erodibility", &erosion_params.erodibility},
+                                {"braid", &river_braid},
                                 {"cliffs", &cliff_period},    {"cliff_share", &cliff_share},
                                 {"cliff_bench", &cliff_bench}, {"cliff_strength", &cliff_strength}};
         bool found = false;
@@ -252,6 +257,22 @@ float Terrain::river_center_x(float z) const {
     // valley floor rather than tracing its axis.
     const float t = z / core::maxf(settings_.valley_period, 1.0f);
     return valley_center_x(z) + settings_.river_wander * std::sin(t * core::TWO_PI * 1.7f + 0.6f);
+}
+
+Terrain::RiverThread Terrain::river_main_thread(float z) const {
+    const float half = settings_.river_half_width;
+    RiverThread thread;
+    thread.width = half * (0.75f + 0.3f * (0.5f + 0.5f * noise_.fbm(z / 310.0f + 9.1f, 0.37f, 2)));
+    // From bank to bank of the gravel every 560 m, the swing itself slower
+    // and faster by turns so the bends are not a sine's.
+    thread.centre = (half * kRiverGravel - thread.width) * 0.8f *
+                    std::sin(z * core::TWO_PI / 560.0f + 1.3f + 0.9f * std::sin(z * core::TWO_PI / 1490.0f + 0.4f));
+    return thread;
+}
+
+float Terrain::river_thread_x(float z) const {
+    if (settings_.river_braid <= 0.0f) return river_center_x(z);
+    return river_center_x(z) + river_main_thread(z).centre;
 }
 
 float Terrain::valley_mask(float x, float z) const {
@@ -322,7 +343,7 @@ float Terrain::cliff_bands(float h, float x, float z) const {
     // and the next is nearly plain. At full strength everywhere each spur
     // carried the same stair at the same height.
     const float patch = noise_.fbm(x / 1300.0f + 19.0f, z / 1300.0f - 31.0f, 2);
-    strength *= core::lerpf(0.8f, 1.0f, core::smoothstep(0.35f, 0.6f, patch));
+    strength *= core::lerpf(0.8f, 1.0f, core::smoothstep(-0.2f, 0.2f, patch));
     // The beds dip to the north-east and wander: by some tens of metres
     // over a kilometre, and by a few over the width of a spur.
     const float wander = noise_.fbm(x / 900.0f - 7.0f, z / 900.0f + 23.0f, 3);
@@ -421,8 +442,44 @@ float Terrain::base_height_at(float x, float z) const {
     // inside the channel, with banks a couple of widths across. Only where the
     // corridor is (the mask is 0), so the river never climbs a mountain.
     if (settings_.river_half_width > 0.0f && mask < 0.999f) {
-        const float distance = std::fabs(x - river_center_x(z));
         const float half = settings_.river_half_width;
+        if (settings_.river_braid > 0.0f) {
+            const float d = x - river_center_x(z);
+            const float gravel = half * kRiverGravel;
+            if (std::fabs(d) > gravel * 1.6f) return ground;
+            const float open = 1.0f - mask;
+            // The gravel bed: cobbles a hand to a metre over the water,
+            // higher toward the banks, which rise from it to the floor over
+            // the same reach the canal's did.
+            // Low swells, not bumps: 0.9 m of relief over 19 m threw a
+            // blotch of shadow from every one under a low sun.
+            const float cobble = 0.5f + 0.5f * noise_.fbm(x / 34.0f + 5.3f, z / 34.0f - 2.1f, 2);
+            const float shelf = settings_.water_level + 0.3f + 0.4f * cobble +
+                                0.8f * core::smoothstep(gravel * 0.7f, gravel * 1.3f, std::fabs(d));
+            const float in_bed = 1.0f - core::smoothstep(gravel, gravel * 1.55f, std::fabs(d));
+            float h = core::lerpf(ground, core::minf(ground, shelf), in_bed * open * settings_.river_braid);
+            // A thread: a flat bed `depth` under the water, its banks
+            // rising to the gravel over the outer half of its width.
+            const auto carve = [&](float centre, float width, float depth) {
+                if (width < 0.5f) return;
+                const float t = 1.0f - core::smoothstep(width * 0.45f, width * 1.1f, std::fabs(d - centre));
+                h = core::lerpf(h, core::minf(h, settings_.water_level - depth), t * open);
+            };
+            // The main thread: pools where it is deep, riffles between.
+            const RiverThread main = river_main_thread(z);
+            const float pool = 0.5f + 0.5f * noise_.fbm(z / 170.0f - 3.3f, 1.91f, 2);
+            carve(main.centre, main.width,
+                  core::lerpf(1.3f, core::maxf(settings_.river_depth * 0.75f, 1.3f), core::smoothstep(0.35f, 0.7f, pool)));
+            // The second: there for a few hundred metres at a time, on a
+            // shorter swing, so it leaves the main one and joins it again.
+            const float present =
+                core::smoothstep(0.42f, 0.6f, 0.5f + 0.5f * noise_.fbm(z / 640.0f + 21.0f, 4.4f, 2));
+            const float second_width = half * 0.34f * present;
+            const float second = (gravel - second_width) * 0.8f * std::sin(z * core::TWO_PI / 350.0f + 4.0f);
+            carve(second, second_width, core::lerpf(0.5f, 1.4f, cobble));
+            return h;
+        }
+        const float distance = std::fabs(x - river_center_x(z));
         const float channel = 1.0f - core::smoothstep(half, half * 2.6f, distance);
         const float bed = settings_.water_level - settings_.river_depth;
         return core::lerpf(ground, core::minf(ground, bed), channel * (1.0f - mask));

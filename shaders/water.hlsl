@@ -334,7 +334,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         float visibility = sun_visibility(input.world_position, float3(0.0, 1.0, 0.0), shadow_map, shadow_map_sampler);
         float3 sky_in = ambient_light(float3(0.0, 1.0, 0.0)) * terrain_sky(input.world_position);
         float3 bed = scene.palette[PALETTE_SAND].rgb * 0.5 * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + sky_in);
-        float3 through = exp(-depth * float3(1.2, 0.75, 0.65));
+        // Reds first and fast: a metre of water over pale gravel is
+        // blue-green, three metres the water's own colour.
+        float3 through = exp(-depth * float3(1.5, 0.5, 0.42));
         const float3 DEEP_M = scene.palette[PALETTE_WATER_DEEP].rgb * (sky_in + 0.3 * visibility);
         float3 under = lerp(DEEP_M, bed, through);
 

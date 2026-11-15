@@ -1562,6 +1562,57 @@ ended with no grounding, 3 kills and 5 bites swung, and `--run 7 --autopilot
 --frames 8700` banked the first valley at 112 s and lost the second in a
 fight 370 m over the ground. Neither pilot touched a wall.
 
+### A braided river (15:45)
+
+The critic on the river frame: "a flat navy plane with tiny sparkles", "no
+colour change toward the shallows", "a hard edge where grass meets water,
+with no gravel". The slice target's river is blue-green water winding
+between pale gravel bars.
+
+The river was a canal: one channel 52 m wide and 7 m deep from head to
+pass, so the water was 80 m across at the line and near black everywhere.
+Now (`TerrainSettings::river_braid`, `--terrain braid=0` for the canal):
+
+- The canal's footprint is a gravel bed, 104 m wide, 0.3 to 1.5 m over the
+  water, with low swells in it.
+- The water runs in it as a main thread, 40 to 55 m wide, that swings from
+  bank to bank every 560 m. Its bed is 1.3 m under the water on the riffles
+  and 5 m in the pools.
+- A second thread, 18 m wide and under 1.4 m deep, is there for a few
+  hundred metres at a time. Where the two part there is a bar between them.
+- `Terrain::river_thread_x` is the middle of the main thread. The skim spawn
+  and the reed test use it: the bed's centre line is not always wet.
+- On the gravel one plant in five grows, a reed. Trees, rocks and the sward
+  already kept off ground that low.
+- A grid coarser than 8 m keeps the canal (`App::tier_terrain`): it draws
+  threads this narrow as a string of ponds.
+
+The modern tier's colours changed with it. Its gravel is pale grey cobble
+(`Sand` 0.50, 0.49, 0.46) where the table's is a beach's sand. Its water is
+blue-green (`WaterDeep` 0.03, 0.12, 0.15), and the light through it loses
+its red in the first metre (`exp(-depth * (1.5, 0.5, 0.42))`), so a riffle
+over pale gravel is turquoise and a pool is the water's own colour. The
+terrain shader keeps a bar gravel to its top: with grass blending in from
+0.3 m by the patch noise, every bar was blotched.
+
+Two things tried on the way. A thread 32 m wide in an 88 m bed read as
+puddles on a gravel flat from skim height. And 0.9 m of relief over 19 m on
+the bars threw a blotch of shadow from every swell under the 19 degree sun.
+The darker patches that remain on a bar are the bank trees' shadows.
+
+The pairs: `artifacts/showcase-critic/river-above-before-after.jpg` and
+`river-chase-before-after.jpg`, and the skim view as it is now,
+`river-skim-after.jpg`.
+
+The demo pilot on both grounds, 7.5 minutes each from one seed
+(`--demo --seed 11 --frames 27000`, and the same with `--terrain
+cliffs=0,braid=0`): two runs each, three of the four lost to rivals in the
+second valley and one, on the new ground, in the first. No run ended on a
+wall or in the river.
+
+Not done: no froth line where a riffle breaks, the gravel has no cobbles at
+close range, and the spray reads as round balls of light.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

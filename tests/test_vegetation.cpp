@@ -187,7 +187,7 @@ void test_grass_follows_the_camera() {
     // Reeds crowd the river. Stand on its bank and there are reeds; stand on
     // the dry floor well away from it and there are none.
     std::vector<game::PlantInstance> bank[gfx::GRASS_KINDS];
-    const float river_x = terrain.river_center_x(0.0f);
+    const float river_x = terrain.river_thread_x(0.0f);
     vegetation.grass_around(terrain, settings,
                             core::Vec3{river_x, terrain.surface_at(river_x, 0.0f), 0.0f}, bank);
     CHECK(!bank[int(gfx::GrassKind::Reed)].empty());

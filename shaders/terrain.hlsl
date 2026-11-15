@@ -254,8 +254,18 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     // turned the whole floor pale beige; the bar is 3 m now, ragged with the
     // patch noise so it reads as bars rather than a contour.
     float bar_top = water_level + 1.0 + 3.0 * patches;
+#ifdef ATMOSPHERE
+    // The modern tier's river is braided (TerrainSettings::river_braid): its
+    // gravel stands 0.3 to 1.5 m over the water, and is gravel to the top.
+    // With the grass coming in from 0.3 m by the patch noise, every bar was
+    // blotched with it.
+    float bar_from = water_level + 1.5 + 0.5 * patches;
+    bar_top = bar_from + 0.6 + 1.2 * patches;
+#else
+    float bar_from = water_level + 0.3;
+#endif
     float3 albedo = lerp(SAND * modulate(detail.ground.b, strength), grass,
-                         smoothstep(water_level + 0.3, bar_top, height));
+                         smoothstep(bar_from, bar_top, height));
 
     // Rock takes over on anything steep, and earlier at altitude where there is
     // less soil to hold on.
@@ -270,7 +280,7 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     float altitude_rockiness = smoothstep(snow_line * 0.7, snow_line * 1.2, height) * 0.35;
     float alpine = smoothstep(water_level + 80.0, snow_line, height);
     albedo = lerp(albedo, lerp(albedo, GRASS_DRY * modulate(detail.ground.g, strength), 0.35),
-                  alpine * smoothstep(water_level + 0.3, bar_top, height));
+                  alpine * smoothstep(bar_from, bar_top, height));
 #else
     float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, height) * 0.6;
 #endif
@@ -468,7 +478,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     if (ground_scans > 0.001) {
         float fine = 1.0 - smoothstep(40.0, 150.0, camera_distance);
         float water = scene.terrain_params.x;
-        float bar = 1.0 - smoothstep(water + 0.6, water + 3.5, input.world_position.y);
+        float bar = 1.0 - smoothstep(water + 1.6, water + 3.5, input.world_position.y);
         float litter = saturate(canopy_cover * 1.6) * (1.0 - bar);
         float meadow = (1.0 - bar) * (1.0 - litter);
         float4 scan = (float4)0.0;

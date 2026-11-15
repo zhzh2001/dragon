@@ -118,6 +118,15 @@ struct TerrainSettings {
     float river_half_width = 26.0f;
     float river_depth = 7.0f;
     float river_wander = 110.0f;
+    // A braided river: the channel above becomes a gravel bed, twice as
+    // wide, a little over the water line, and the water runs in it as a
+    // main thread that swings from bank to bank, with pools and riffles
+    // along it, and in places a second, shallow thread. Where the threads
+    // part there is a bar between them. Before it the river was a canal:
+    // one width, one depth and one colour from head to pass (the blind
+    // critic, 2026-11-15: "a flat navy plane"). 0 is the canal; a grid
+    // coarser than the threads asks for it (App::tier_terrain).
+    float river_braid = 1.0f;
 
     // Beyond the playable extent the same function continues as a coarse
     // "skirt" mesh out to this multiple of the half extent, so there is
@@ -192,8 +201,18 @@ public:
     float clearance_at(core::Vec3 position) const {
         return position.y - surface_at(position.x, position.z);
     }
-    // Centre line of the river at a given Z.
+    // Centre line of the river at a given Z: of its gravel bed, when the
+    // river is braided, which is not always under water.
     float river_center_x(float z) const;
+    // The middle of the river's main thread at a given Z: water, always.
+    float river_thread_x(float z) const;
+    // The main thread of a braided river: its centre, across from
+    // river_center_x, and its half width at the gravel.
+    struct RiverThread {
+        float centre = 0.0f;
+        float width = 0.0f;
+    };
+    RiverThread river_main_thread(float z) const;
 
     // Centre of the valley corridor at a given Z. Useful for placing courses,
     // spawns, and the initial camera.

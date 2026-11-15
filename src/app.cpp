@@ -582,6 +582,11 @@ bool App::init(const Options& options) {
         // low sun turned red: "the tree trunks are saturated red" (the same
         // critic), the brightest hue in a stand of trees.
         lighting_.palette[gfx::PaletteEntry::Bark] = core::Vec4{0.15f, 0.125f, 0.105f, 0.0f};
+        // Its gravel is pale grey cobble, the river's bars in the slice
+        // target, where the table's is a beach's sand. And its water is a
+        // mountain river's blue-green where the table's is near black.
+        lighting_.palette[gfx::PaletteEntry::Sand] = core::Vec4{0.50f, 0.49f, 0.46f, 0.0f};
+        lighting_.palette[gfx::PaletteEntry::WaterDeep] = core::Vec4{0.03f, 0.12f, 0.15f, 0.0f};
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (!options.grade.empty()) {
@@ -903,8 +908,8 @@ void App::respawn_dragon() {
     if (options_.skim) {
         const float z = -terrain_settings_.half_extent * 0.4f;
         const float water = terrain_settings_.water_level;
-        spawn = core::Vec3{terrain_.river_center_x(z), water + 6.0f, z};
-        look = core::Vec3{terrain_.river_center_x(z + 120.0f), water + 6.0f, z + 120.0f};
+        spawn = core::Vec3{terrain_.river_thread_x(z), water + 6.0f, z};
+        look = core::Vec3{terrain_.river_thread_x(z + 120.0f), water + 6.0f, z + 120.0f};
     }
     flight_.reset(spawn, core::look_rotation(look - spawn, core::Vec3::up()), 42.0f);
     chase_.snap_to(flight_.state());
@@ -1688,6 +1693,9 @@ game::TerrainSettings App::tier_terrain(const game::TerrainSettings& base) const
     if (tier_.fixed_function) {
         settings.river_half_width = core::maxf(settings.river_half_width, 1.25f * settings.cell_size);
     }
+    // And a braided river's threads are 30 m and 15 m across: a grid past
+    // 8 m draws them as a string of ponds, so there the river is the canal.
+    if (settings.cell_size > 8.0f) settings.river_braid = 0.0f;
     // Minimal's skirt coarser again: the far horizon, under the fog.
     if (tier_.fixed_function && tier_.budget.terrain_cell_scale >= 8.0f) settings.skirt_cell_size *= 2.0f;
     // The vertex-lit tiers erode on a grid twice as coarse: a quarter of the
