@@ -2,6 +2,8 @@
 
 #include "core/math.h"
 
+#include <string>
+
 namespace game {
 
 class Terrain;
@@ -289,5 +291,8 @@ FlightTuning tuning_preset_heavy();
 // trivially diffable, and hand-editable while the game is running.
 bool save_tuning(const FlightTuning& tuning, const char* path);
 bool load_tuning(FlightTuning& tuning, const char* path);
+// key=value,... over a tuning, by the file's names: a capture's way to try
+// a value (--flight). Returns how many keys it knew.
+int apply_tuning(FlightTuning& tuning, const std::string& list);
 
 }  // namespace game

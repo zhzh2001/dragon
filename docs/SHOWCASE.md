@@ -1873,7 +1873,7 @@ alone, then five, then forty, would show where the orange is lost. The
 smoke at the flame's tip exists (`smoke_for`) and was out of the critic's
 frame; `--breathe --inspect 100 60 8` shows it.
 
-## Feedback 0013 to 0015, and the turn to the dragon (2026-11-15, 17:30)
+## Feedback 0013 to 0015, and the turn to the dragon (2026-11-15, 17:20)
 
 The user's direction after round 3: the visual showcase first and gameplay
 later; ignore what is not in the final arena or run (the course rings, the
@@ -1893,7 +1893,7 @@ Three feedback reports came with it, six marks:
 | 0015 | "malformed wing claw" | the same Codex job |
 | 0015 | "wings can have a larger flapping range" | open, after the reference study |
 
-### The hind legs hang (17:30)
+### The hind legs hang (17:20)
 
 The fore legs hung and the hind shin lay level along the tail: the dangle
 was hip 30, knee 20, hock 30, every joint turned aft. Now hip 8, knee -45,

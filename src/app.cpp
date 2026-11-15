@@ -187,6 +187,8 @@ Options parse_options(int argc, char** argv) {
             options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
         } else if (arg == "--grade" && i + 1 < argc) {
             options.grade = argv[++i];  // key=value,... (gfx/post.h)
+        } else if (arg == "--flight" && i + 1 < argc) {
+            options.flight = argv[++i];  // key=value,... (game::FlightTuning, by the file's names)
         } else if (arg == "--rig" && i + 1 < argc) {
             options.rig = argv[++i];  // key=value,... (anim::RigTuning, by the profile's names)
         } else if (arg == "--chase" && i + 1 < argc) {
@@ -717,6 +719,7 @@ bool App::init(const Options& options) {
     if (game::load_tuning(flight_.tuning, model_tuning_path_.c_str())) {
         LOG_INFO("loaded model handling from %s", model_tuning_path_.c_str());
     }
+    if (!options.flight.empty()) game::apply_tuning(flight_.tuning, options.flight);
 
     // A unit-radius torus scaled per ring: one mesh, any checkpoint size.
     // Coarser on the fixed-function tier: twelve 400-vertex rings through a
@@ -5149,6 +5152,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
     game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
+    if (!options_.flight.empty()) game::apply_tuning(out.flight_tuning, options_.flight);
     out.breath_file = game::load_breath_profile(out.breath, out.breath_path.c_str());
     return true;
 }

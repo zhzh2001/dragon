@@ -602,6 +602,30 @@ bool save_tuning(const FlightTuning& tuning, const char* path) {
     return true;
 }
 
+int apply_tuning(FlightTuning& tuning, const std::string& list) {
+    int applied = 0;
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find(',', start);
+        if (end == std::string::npos) end = list.size();
+        const std::string item = list.substr(start, end - start);
+        start = end + 1;
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = item.substr(0, eq);
+        bool found = false;
+        for (const Field& field : FIELDS) {
+            if (key != field.name) continue;
+            tuning.*field.member = float(SDL_atof(item.c_str() + eq + 1));
+            found = true;
+            ++applied;
+            break;
+        }
+        if (!found) LOG_WARN("--flight: no flight tuning field named '%s'", key.c_str());
+    }
+    return applied;
+}
+
 bool load_tuning(FlightTuning& tuning, const char* path) {
     size_t size = 0;
     void* data = SDL_LoadFile(path, &size);

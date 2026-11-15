@@ -74,6 +74,7 @@ struct Options {
     std::string atmosphere;
     std::string grade;  // --grade key=value,... over gfx::PostSettings
     std::string rig;    // --rig key=value,... over every loaded model's rig profile
+    std::string flight; // --flight key=value,... over the player's flight tuning
     std::string chase;  // --chase key=value,... over the chase camera's tuning
     std::string clouds;  // --clouds key=value,... (gfx/clouds.h)
     std::string terrain;  // --terrain key=value,... (game/terrain.h)
