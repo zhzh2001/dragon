@@ -1,13 +1,26 @@
 # The hero dragon's static mesh
 
-`tools/build_hero.py` builds `assets/embercrest-hero-static.glb` from two
+`tools/build_hero.py` builds `assets/embercrest-hero-static.glb` from three
 Hunyuan sculpts. It was built and tested with Blender 5.3.0 on macOS (Metal).
 The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
-Both sculpts are AI-generated (Hunyuan 3D). `AI_DISCLOSURE.md` must list the
-file if it is published.
+This is version 2. Version 1 took the body and the wings from one sculpt. Its
+body had soft, smeared scales. Version 2 takes each part from the sculpt that
+makes it best:
+
+| Part | Sculpt | Name in the script |
+|---|---|---|
+| Torso, neck, legs, feet, tail | `assets/embercrest-cand-hero-body-hunyuan.glb`, generated without wings | `body2_src` |
+| Wing arms, fingers, membranes | `assets/embercrest-cand-hero-hunyuan.glb`, the first whole dragon | `body_src`, then `wing_src` |
+| Head and collar | `assets/embercrest-cand-hero-head-hunyuan.glb` | `head_src` |
+
+In this file "the old body" is the first whole-dragon sculpt, and "the new
+body" is the wingless sculpt.
+
+All three sculpts are AI-generated (Hunyuan 3D). `AI_DISCLOSURE.md` must list
+the file if it is published.
 
 ## Commands
 
@@ -15,29 +28,32 @@ file if it is published.
 blender -b --factory-startup --python tools/build_hero.py                    # every stage, then verify
 blender -b --factory-startup --python tools/build_hero.py -- --stage maps,export
 blender -b --factory-startup --python tools/build_hero.py -- --verify-only
-blender -b --factory-startup --python tools/build_hero.py -- --render        # all seven sheets
-blender -b --factory-startup --python tools/build_hero.py -- --render eye,mouth
+blender -b --factory-startup --python tools/build_hero.py -- --render        # all nine sheets
+blender -b --factory-startup --python tools/build_hero.py -- --render seam,body
+blender -b --factory-startup --python tools/build_hero.py -- --landmarks     # the table in "Alignment"
 ```
 
 Each stage reads the cache of the stage before it from `build-hero-cache/`
-(1.8 GB, ignored by git) and writes its own. A change needs only its own
+(3.7 GB, ignored by git) and writes its own. A change needs only its own
 stage and the stages after it.
 
 | Stage | What it does | Time |
 |---|---|---:|
-| `import` | Reads each sculpt once into a `.blend`. | 13 s |
-| `align` | Puts both in the build frame, and tapers the head sculpt's neck. | 1 s |
-| `low_parts` | Cuts the body sculpt's head off. Decimates each sculpt. | 65 s |
-| `join` | Unions the two reduced sculpts into one closed surface. | 2 s |
-| `head` | Cuts the lips, builds the lids, the eye sockets, the eyeballs, the mouth. | 3 s |
-| `parts` | Cuts the joint loops. Splits hide, membrane and horn. Thins the membrane. | 15 s |
-| `uv` | Separates the three parts and unwraps each. | 35 s |
-| `bake` | Bakes the sculpts onto the three parts. Saves the raw bakes. | 160 s |
-| `maps` | Grades the raw bakes and writes the maps. | 45 s |
-| `export` | Paints the eye and the mouth. Writes the file. | 5 s |
+| `import` | Reads each sculpt once into a `.blend`. | 8 s |
+| `align` | Puts the old body and the head sculpt in the build frame, as version 1 did. | 1 s |
+| `low_parts` | Decimates the head sculpt. | 11 s |
+| `align2` | Fits the new body to the old body's frame. Moves the head's collar. Cuts the wings out of the old body. | 3 s |
+| `low2` | Cuts the new body's head off. Decimates the new body and the wings. | 20 s |
+| `join` | Unions body, wings and head into one closed surface. Cuts off slivers. Smooths the wing seam. | 2 s |
+| `head` | Cuts the lips, builds the lids, the eye sockets, the eyeballs, the mouth. | 2 s |
+| `parts` | Splits long wing edges. Cuts the joint loops. Splits hide, membrane and horn. Thins the membrane. | 5 s |
+| `uv` | Separates the three parts and unwraps each. | 4 s |
+| `bake` | Bakes the three sculpts onto the three parts. Saves the raw bakes. | 189 s |
+| `maps` | Grades the raw bakes and writes the maps. | 37 s |
+| `export` | Paints the eye. Bakes the mouth's relief. Writes the file. | 4 s |
 
-All the stages ran in this order to make the delivered file. The run with no
-arguments, all stages in one process, was not timed.
+The run with no arguments made the delivered file. It ran every stage from
+the three inputs and the verifier in 4 minutes 47 seconds.
 
 ## File contract
 
@@ -58,48 +74,120 @@ arguments, all stages in one process, was not timed.
 
 | Mesh | Triangles | Map size | Roughness |
 |---|---:|---:|---|
-| `hide` | 100,773 | 4096 | 0.50 to 0.69, from the sculpt's own map |
-| `membrane` | 6,340 | 2048 | 0.55 to 0.62 |
-| `horn` | 7,803 | 1024 | 0.22 to 0.38 |
+| `hide` | 104,616 | 4096 | 0.50 to 0.70, from each sculpt's own map |
+| `membrane` | 4,429 | 2048 | 0.55 to 0.62 |
+| `horn` | 7,337 | 1024 | 0.22 to 0.35 |
 | `eye_l`, `eye_r` | 1,024 each | 512 | 0.05 on the cornea, 0.15 at the rim |
-| `mouth` | 4,686 | 1024 | gums 0.35, tongue 0.45, teeth 0.25 |
+| `mouth` | 4,476 | 1024 | gums 0.16, tongue 0.24, teeth 0.20; up to 0.10 more in a crease |
 
-Hide, membrane and horn together are 114,916 triangles. The head and its
-collar have 35,937 of them (31.3%). The file is 21.8 MB.
+Hide, membrane and horn together are 116,382 triangles. The head and its
+collar have 36,088 of them (31.0%). The file is 25.5 MB.
 
 ## What the script does
 
 Inside the script the axes are Blender's: +Z up, the nose at +Y. All numbers
-in this section are in that frame. "For the rigging step" gives glTF numbers.
+in this section are in that frame, unless a table says glTF. "For the rigging
+step" gives glTF numbers.
 
-### 1. Join
+### 1. Alignment
 
-- The body sculpt is scaled by 16.198 (19 m over its 1.173 unit span). The head
-  sculpt is scaled by 3.0 m per unit. At that scale its four horns lie on the
-  body sculpt's horns. A scale-free fit (ICP) drifted from 3.03 to 2.79 and was
-  not used. The snout tips are matched: Y 4.495, Z 4.60.
-- The necks did not agree. The head sculpt's neck is 1.5 m deep and 1.33 m wide
-  at its lower end. The body's neck is 1.1 m by 0.95 m there. Below Z 4.40 the
-  head sculpt is scaled about the neck axis, more with depth, to 0.62 at its
-  lower rim (Z 3.58). The collar becomes a cone and its rim ends inside the
-  body's neck.
-- The body sculpt loses everything above Z 4.0 in the neck's column (its own
-  head, 198,736 triangles). The cut is capped. The cap is inside the head
-  sculpt's neck.
-- Both sculpts are closed manifolds after a weld. The two reduced meshes are
-  joined with an exact boolean union. The seam is the line where the head
-  sculpt's lowest scales come out of the body's neck. It is a real
-  intersection, not a bridged ring, so the surface is closed and has no
-  hidden faces.
-- Colour: the head sculpt's neck takes a gain toward the body's neck colour.
-  The script measures one gain on the dark back and one on the pale front
-  (measured 0.70, 0.70, 0.96 and 1.39, 1.45, 1.45; both hit the clamps of 0.7
-  and 1.45). The gain is full at Z 4.0 and fades to 40% at Z 4.9.
+The old body sets the frame, because the rig is being fitted to version 1.
 
-### 2. Game mesh
+- The old body is scaled by 16.198 (19 m over its 1.173 unit span), as in
+  version 1.
+- The new body is scaled by 13.037 and shifted 0.010 m in Y. The script
+  computes both from the feet: the distance from the fore feet to the hind
+  feet is the same on both bodies (2.87 m), and the fore feet have the same Y.
+- With that one scale the two torsos agree. The belly, the back and the flanks
+  lie within 0.1 m of each other. The same picture guided both generations.
+- The new tail was 0.55 m longer and up to 0.57 m lower. Behind Y -1.5 the
+  script scales the tail's Y by 0.937, so the tips agree. It then lifts the
+  tail until its belly line lies on the old belly line.
+- The new hind legs stood 0.15 m closer together. Below Z 2.5 the script moves
+  them out by 0.15 m. The move fades to nothing between Z 1.9 and 2.5.
+- The wings are not moved at all. The old body is the frame, so every wing
+  landmark keeps its version 1 position.
+- The head sculpt keeps its version 1 scale and place. The eyes, the lips and
+  the jaw hinge keep their version 1 numbers.
 
-- Body: 1,301,264 to 68,000 triangles. Head: 1,498,976 to 31,000. Blender's
-  collapse decimation. No retopology.
+The table compares landmarks on the old body with the same landmarks in
+version 2. Coordinates are the file's: glTF, +Y up, -Z forward, metres, right
+side. The leg joints are the centres of the joint loops. They were read off
+side renders by eye on each body, and X is the middle of the limb there. The
+other rows are measured by the script (`--landmarks`).
+
+| Landmark (right side) | Old X, Y, Z | New X, Y, Z | Difference |
+|---|---|---|---|
+| fore shoulder joint | 0.79, 2.30, -1.84 | 0.63, 2.30, -1.85 | -0.16, +0.00, -0.01 |
+| fore elbow joint | 0.67, 1.92, -1.72 | 0.62, 1.90, -1.82 | -0.05, -0.02, -0.10 |
+| fore wrist joint | 0.63, 0.98, -2.04 | 0.52, 0.95, -2.04 | -0.11, -0.03, +0.00 |
+| fore foot joint | 0.57, 0.40, -2.25 | 0.53, 0.40, -2.20 | -0.05, +0.00, +0.05 |
+| hind hip joint | 0.82, 2.25, 0.05 | 0.74, 2.30, 0.50 | -0.08, +0.05, +0.45 |
+| hind knee joint | 0.92, 1.83, -0.00 | 0.97, 1.85, 0.33 | +0.05, +0.02, +0.33 |
+| hind hock joint | 0.96, 1.43, 0.96 | 1.02, 1.10, 0.98 | +0.06, -0.33, +0.02 |
+| hind foot joint | 1.06, 0.45, 0.84 | 1.03, 0.45, 0.78 | -0.02, +0.00, -0.06 |
+| fore foot, centre of the sole | 0.59, 0.13, -2.34 | 0.51, 0.13, -2.33 | -0.08, +0.01, +0.00 |
+| hind foot, centre of the sole | 1.07, 0.12, 0.54 | 1.10, 0.13, 0.53 | +0.02, +0.02, -0.01 |
+| wing shoulder | 1.25, 3.61, -1.10 | 1.25, 3.61, -1.10 | +0.00, +0.00, +0.00 |
+| wing elbow | 2.64, 4.49, -0.45 | 2.64, 4.49, -0.45 | +0.00, +0.00, +0.00 |
+| wing wrist | 3.43, 5.73, -0.71 | 3.43, 5.73, -0.71 | +0.00, +0.00, +0.00 |
+| wing tip | 9.50, 4.52, 1.02 | 9.50, 4.52, 1.02 | +0.00, +0.00, +0.00 |
+| tail root, belly | 0.00, 1.82, 1.50 | 0.00, 1.91, 1.50 | +0.00, +0.10, +0.00 |
+| tail middle, belly | 0.00, 1.66, 5.50 | 0.00, 1.65, 5.50 | +0.00, -0.01, +0.00 |
+| tail tip | 0.02, 1.11, 9.73 | 0.01, 1.22, 9.73 | -0.02, +0.11, +0.00 |
+| belly between the legs | 0.00, 1.95, -0.70 | 0.00, 1.90, -0.70 | +0.00, -0.05, +0.00 |
+| eyes, jaw hinge, lip line | as version 1 | as version 1 | 0 |
+
+Three rows need a refit larger than 0.2 m. All three are the hind leg. The
+new hind leg stands more upright. Its thigh is 0.9 m wide where the old thigh
+was 1.5 m, and it sits further back. So the hip is 0.45 m and the knee 0.33 m
+further back, and the hock is 0.33 m lower. The feet are in the same place.
+The script does not shear the thigh to hide this. A shear of 0.45 m over the
+0.7 m between the hip and the flank would stretch the flank's plates.
+
+### 2. Join
+
+- Neck. The new body's neck is thicker than the old one. It matches the head
+  sculpt's own neck: both throats are at Y 3.25 to 3.29. The head sculpt's
+  collar still tapers to 0.62 at its lower rim (Z 3.58), but about an axis
+  0.27 m further forward (Y 2.67, was 2.40). The rim then sits inside the new
+  neck on every side.
+- The script decimates the head in version 1's taper and then moves the
+  reduced collar. So the head's triangles are the same in both versions. Only
+  points below Z 4.40 move. The eyes, lids, lips and jaw do not.
+- The new body's neck narrows to 0.80 between Z 3.55 and 4.0. Its cut at Z 4.0
+  then stays inside the head sculpt. The new body loses its own head above
+  the cut (about 278,000 triangles).
+- Wings. The wing piece is the old body outside X 0.30, above Z 2.70 and
+  between Y -1.30 and 1.95. Outside X 1.75 everything is wing. Four planes
+  make the cut, and the cut is capped. All caps end inside the new body.
+- The old body's shoulder is 0.25 to 0.35 m bigger than the new one. A wing
+  piece that kept it would leave a hump of smeared scales and an open ledge.
+  So the script deforms the root before the union:
+  - Sink. Inside X 0.90 the root's top slopes down toward the spine, by up to
+    0.45 m at X 0.40. The top of the root then enters the new back at about
+    X 0.47.
+  - Tuck. Under the root, the old flank is drawn in toward X 0.30. The pull
+    is full 0.35 m below a line that rises from Z 3.05 at the membrane's root
+    to Z 3.60 at the front of the shoulder. The root's underside becomes a
+    ramp into the new flank.
+- The wing arm leaves the new body at X 0.5 to 0.65, as in the old sculpt. The
+  membrane's inner edge meets the flank at Z 3.15.
+- The three reduced meshes are closed manifolds. Two exact boolean unions
+  join them. Each seam is a real intersection line. The surface is closed and
+  has no hidden faces.
+- Where two sculpts cross at a shallow angle, small islands of one poke
+  through the other. Ten islands under 150 faces, at the neck and at one wing
+  root, are cut off and the holes closed.
+- The wing seam has 886 vertices. They and two rings round them are smoothed
+  four times.
+
+### 3. Game mesh
+
+- New body: 1,222,142 to 52,000 triangles. Wings: 666,440 to 20,000. Head:
+  1,498,976 to 31,000. Blender's collapse decimation. No retopology.
+- The decimation left the flat membrane with edges up to 1.17 m. The script
+  splits every wing edge longer than 0.45 m (327 edges, three passes).
 - Regions with real loops:
   - The lip line. The cut itself is an edge loop from corner to corner round
     the snout. Two more loops run 18 mm and 45 mm above it, and two below.
@@ -110,15 +198,17 @@ in this section are in that frame. "For the rigging step" gives glTF numbers.
   - The joints. Three parallel loops, 100 mm apart, at each shoulder, elbow,
     wrist, hip, knee, hock and foot joint, and at the wing's shoulder, elbow
     and wrist. Two loops, 100 mm apart, at one knuckle on each wing finger
-    (two knuckles on the leading finger). 62 planes in all.
+    (two knuckles on the leading finger). 62 planes in all. The leg planes
+    are at the new legs' joints.
 - Everything else is decimated: the frill, the neck, the body, the tail, the
   limbs between joints, the wing bones and the membrane. The loops are planar
   cuts through decimated triangles. They give each joint rings of vertices to
   weight. They do not give quads.
-- The joint loops cost 13,000 triangles, so the body's decimation target is
-  68,000, not 76,000.
 
-### 3. Parts
+### 4. Parts
+
+The head's parts are built as in version 1, by the same code on the same
+triangles.
 
 - Eyes. Each eyeball is a sphere of radius 140 mm with a cornea bulge of 8 mm
   over the front 26 degrees. Its centre is 140 mm behind the sculpt's painted
@@ -126,62 +216,77 @@ in this section are in that frame. "For the rigging step" gives glTF numbers.
   ball turns freely. The opening is 187 mm long and 78 mm high. A socket
   behind the lid's edge closes the view into the hollow head. The sculpt's
   painted eye is painted over with the colour of the skin beside it.
-- The lid patch is laid out as seen from 19 degrees below the eye's normal.
-  From the normal itself the brow ridge hides the upper lid.
 - Mouth. The sculpt has an overbite: the upper lip ends in a shelf 15 to 45 mm
-  wide. The cut runs 8 mm under the shelf on the lower jaw's wall. A cut on
-  the shelf's own height grazed it and left loose pieces.
+  wide. The cut runs 8 mm under the shelf on the lower jaw's wall.
 - The sculpt has two fangs a side that hang from the upper lip and are fused
-  to the lower jaw's wall. Below the cut, whatever lies outside the wall
-  between Y 4.262 and 4.398 is fang and stays on the upper jaw. The cut runs
-  down each fang's seam. Each fang gets a flat back face and the wall gets a
-  face of the same outline. Four seams were closed.
-- The mouth interior is one mesh. Two gum sheets start on the lip's own
-  vertices and dome into the head (up to 85 mm up, 55 mm down). A throat of
-  three rings closes the back. 67 teeth, 23 to 76 mm long, stand 28 mm (upper)
-  and 36 mm (lower) inside the lips. A tongue lies on the floor. Every part is
-  kept inside the closed head, so nothing shows when the jaw is shut. A tooth
-  that would show through the jaw is shortened and leaned in.
+  to the lower jaw's wall. They stay on the upper jaw. The cut runs down each
+  fang's seam. Four seams were closed.
+- The mouth interior is one mesh: two gum sheets, a throat of three rings, 62
+  teeth of 23 to 76 mm, and a tongue. Every part is kept inside the closed
+  head, so nothing shows when the jaw is shut.
 - Membrane. A wing vertex is membrane where the sculpt is thinner than 135 mm
-  along its normal. The membrane measures 70 to 130 mm, the bones 150 mm and
-  up. The histogram has no clean gap, so the border follows the threshold.
-  Each side of the membrane then moves in by 30% of the thickness. The
-  membrane is a closed two-sided sheet, about 30 to 50 mm thick.
-- Horn. The four horns are found by colour: the sculpt's horns are grey-brown
-  (saturation under 0.45) and its frill is red-brown. Each seed grows over the
-  horn's smooth tube and stops at the crease where it meets the head. The
-  body sculpt's claws have the hide's colour, so claws are found by position:
-  the toe tips under Z 0.30, and five circles on each wing.
+  along its normal. Only faces from the wing piece can be membrane. Each side
+  of the membrane then moves in by 30% of the thickness. The membrane is a
+  closed two-sided sheet, about 30 to 50 mm thick.
+- Horn. The four horns are found by colour on the head sculpt, as in version 1.
+  The wing claws are five circles on each wing. The toe claws are the new
+  body's faces under Z 0.36 with Y over 2.50 (fore) or between -0.42 and 0.25
+  (hind).
 
-### 4. Maps
+### 5. Maps
 
 - UVs: Blender's smart projection at 76 degrees, packed with rotation. The
-  hide has 5,752 islands and uses 38% of its atlas. The head's islands are
-  scaled by 1.4 before the pack. The head then has 30% of the used area.
+  hide has 8,889 islands. The crisp plates make more islands than version 1's
+  smooth body did (5,752).
+- The pack now uses an added margin of 0.0004 (1.6 texels) in place of a
+  margin that is a fraction of the islands' size. The hide uses 46.7% of its
+  atlas. With version 1's setting the islands used about 37%.
+- Before the pack the head's islands are scaled by 1.43 and the wing's by 0.8.
+  Of the hide's texels, the new body has 50%, the head 34% and the wing arms
+  and fingers 16%.
 - The bake is Cycles, selected to active, one pass per map and per sculpt.
-  A body face reads the body sculpt only, and a head face the head sculpt
-  only. Cage 35 mm (membrane 70 mm, because it was thinned).
-- Texels that miss (the lids, the sockets, the fang backs: 42,134 on the hide)
-  take the nearest baked texel in space.
-- Baked light. The script fits log luminance against the surface direction.
-  It found (x, y, z) = (-0.03, 0.11, -0.63) on the body and (-0.01, 0.55,
-  -0.16) on the head. The Z and Y terms are the pale belly and the pale
-  throat, which are the design. A sun would also give an X term, and X is
-  0.03. So the script removes the X term only. In effect it changes nothing:
-  these sculpts carry no directional light to remove.
+  A face reads only the sculpt it came from. The wing sculpt gets the same
+  sink and tuck as the game mesh. Cage 35 mm (membrane 70 mm).
+- Texels that miss (the lids, the sockets, the fang backs, the smoothed seam:
+  58,554 on the hide) take the nearest baked texel in space.
+- Baked light. The script fits log luminance against the surface direction,
+  for each sculpt. The X terms are 0.003 (new body), 0.000 (head) and -0.043
+  (wing). A sun would give an X term. The script removes the X term only. The
+  Y and Z terms are the pale belly and throat, which are the design.
+- Neck colour, first step, as in version 1: the head sculpt's neck takes a
+  gain toward the body's, one for the back and one for the front (0.70, 0.70,
+  0.87 and 1.44, 1.45, 1.45; the clamps are 0.7 and 1.45). The gain is full at
+  Z 4.0 and fades to 40% at Z 4.9.
+- Neck colour, second step, new: the script measures what difference is left
+  in six directions round the neck, from the throat to the nape. The body is
+  darker than the collar by a factor of 0.63 to 0.95 in red. Each side moves
+  half way to the other. The head's share fades out between Z 3.9 and 4.5,
+  the body's between Z 3.5 and 2.9.
+- Wing colour. The script measures one gain where the wing's root meets the
+  body: 0.645, 0.635, 0.641. The old sculpt's arm is lighter and browner than
+  the new body's dark back plates. The wing's hide takes the full gain inside
+  X 1.6 and 60% of it from X 4.0 out. The membrane takes the full gain at the
+  root and none from X 4.0 out.
+- Roughness. Each sculpt's texels are centred on the material's mean before
+  the clamp. So no step in gloss shows where two sculpts meet.
 - Occlusion: the hide gets a Cycles occlusion bake of the game mesh at 2K,
   scaled to 0.35 to 1. The other materials have occlusion 1.
 - Thickness map: 0.45 x (sculpt thickness / 160 mm) + 0.55 x exp(-distance to
-  the nearest bone / 0.45 m). It is thin between the fingers (0.23) and thick
+  the nearest bone / 0.45 m). It is thin between the fingers (0.25) and thick
   at the bones (1.0).
 - The eye is painted by the script: an amber iris with radial fibres, a
   vertical slit pupil, a dark rim. The UV centre is the pupil.
 - The mouth is coloured from vertex attributes (gum, tongue or tooth, and
-  depth). Its normal map is flat.
+  depth). New: a height field gives it relief. The gums and palate have
+  ridges across the mouth, 5 mm deep, with fine noise. The tongue has
+  papillae. The teeth have faint grain. Cycles bakes the height's bump into
+  the tangent-space normal map. The creases are about half as bright as the
+  crests.
+  The mouth is wet: roughness 0.16 to 0.34.
 
-### 5. Check
+### 6. Check
 
-`--verify-only` reads the file and runs 84 checks. It fails with a non-zero
+`--verify-only` reads the file and runs 86 checks. It fails with a non-zero
 exit and a list of the failed checks. It checks:
 
 - file size, no Draco, no skin, six meshes, five materials, three maps per
@@ -190,6 +295,7 @@ exit and a list of the failed checks. It checks:
 - the triangle budget (80,000 to 120,000 for hide, membrane and horn
   together) and the head's share (at least 25%);
 - wingspan, feet height, forward direction;
+- new: the feet and the tail tip are within 0.1 m of the old body's in Z;
 - each eyeball is a sphere within 8 mm, no vertex of any other mesh is within
   the ball's reach, the ball stays clear of the lids when turned 25 degrees
   each way about two axes (4.7 mm), and the lids are open over the pupil;
@@ -197,11 +303,23 @@ exit and a list of the failed checks. It checks:
   directions. With the jaw open 35 degrees by `_JAW`, the interior shows and
   the chin drops 0.55 m.
 
+### 7. Renders
+
+`artifacts/hero-build/`, 1920 x 1080, a sun at 30 degrees and a sky light:
+`turnaround`, `head`, `eye`, `mouth`, `seam`, `wire`, `compare`, and two new
+sheets. `body.png` shows the back from above, a flank with a fore leg, and the
+tail. `graft.png` shows one wing root from above, from the front and from
+behind.
+
 ## For the rigging step
 
 All positions here are in the file's coordinates: glTF, +Y up, -Z forward,
 metres.
 
+- Unchanged from version 1: the jaw hinge, the mouth corners, the lip line,
+  `_JAW`, the eye centres, the lids, and every wing joint.
+- Changed: the leg joints (the table below and the table in "Alignment"), the
+  neck's girth, and the tail's surface. The tail's centre line is the old one.
 - Jaw hinge: the axis is parallel to X through Y 4.640, Z -3.420. The renders
   open the jaw 35 degrees about it.
 - Mouth corners: Z -3.600, Y 4.580, X -0.372 and +0.350. The slit ends there.
@@ -223,7 +341,7 @@ metres.
   The socket vertices (radius 0.156 m) must stay with the skull.
 - Joint loops, right side (mirror X for the left). Each is a plane through the
   point with the normal given. Wing joints are in (X, Z), the planes are
-  vertical:
+  vertical. They are version 1's:
 
   | Joint | X | Z | Normal (X, Z) |
   |---|---:|---:|---|
@@ -236,63 +354,83 @@ metres.
   | finger 3 | 4.74 | 0.63 | (0.60, 0.80) |
   | finger 4 | 2.74 | 0.43 | (0.10, 1.00) |
 
-  Leg joints are in (Y, Z), the planes contain the X axis. The legs are at
-  X about 0.75 (fore) and 0.85 (hind):
+  Leg joints are in (Y, Z), the planes contain the X axis. They are new. The
+  fore leg is at X 0.52 to 0.63 and the hind leg at X 0.74 to 1.03:
 
   | Joint | Y | Z | Normal (Y, Z) |
   |---|---:|---:|---|
-  | hind hip | 2.25 | 0.05 | (-1.00, -0.30) |
-  | hind knee | 1.83 | 0.00 | (-0.87, 0.50) |
-  | hind hock | 1.43 | 0.96 | (-0.86, 0.50) |
-  | hind foot | 0.45 | 0.84 | (-1, 0) |
-  | fore shoulder | 2.30 | -1.84 | (-1.00, 0.20) |
-  | fore elbow | 1.92 | -1.72 | (-1.00, -0.10) |
-  | fore wrist | 0.98 | -2.04 | (-1.00, -0.30) |
-  | fore foot | 0.40 | -2.25 | (-1, 0) |
+  | hind hip | 2.30 | 0.50 | (-1.00, -0.30) |
+  | hind knee | 1.85 | 0.33 | (-0.87, 0.50) |
+  | hind hock | 1.10 | 0.98 | (-0.86, 0.50) |
+  | hind foot | 0.45 | 0.78 | (-1, 0) |
+  | fore shoulder | 2.30 | -1.85 | (-1.00, 0.20) |
+  | fore elbow | 1.90 | -1.82 | (-1.00, -0.10) |
+  | fore wrist | 0.95 | -2.04 | (-1.00, -0.30) |
+  | fore foot | 0.40 | -2.20 | (-1, 0) |
 
-  The joint positions were read off orthographic renders by eye. Expect an
-  error of 50 to 100 mm. The loops are 100 mm apart, so a joint still lands
-  between loops.
-- The neck seam is at Y 3.6 to 4.2. The head sculpt's collar is rigid scales
+  The leg joint positions were read off orthographic renders by eye. Expect
+  an error of 50 to 100 mm. The loops are 100 mm apart, so a joint still
+  lands between loops.
+- The wing's root. The wing piece meets the body along a line round X 0.5 to
+  0.65, from about Z -1.75 (front) to Z 0.2 (the membrane's rear end), at
+  Y 3.1 to 3.6. Inside X 0.9 the root's surface is not the old sculpt's: it slopes
+  into the back. Weight the root between the wing shoulder bone and the
+  spine. The wing shoulder joint itself (X 1.25) did not move.
+- The neck seam is at Y 3.6 to 4.0. The head sculpt's collar is rigid scales
   over the neck. Weight the collar to the neck bones under it.
 - The wing claws and toe claws are in `horn`. The neck, tail and spine have
   no loops.
 
 ## What is weak
 
-- The seam can be found. The geometry is closed and the colours are close, but
-  the head sculpt has crisp separate plates and the body sculpt has soft,
-  smeared scales. The change of detail shows at 3 m (`seam.png`). The brief
-  asked for a seam that cannot be found. This build does not reach that. The
-  body sculpt's neck would need the same quality as the head, for example a
-  neck generated on its own.
+- The neck seam is better and not gone. Both sides now have crisp plates of
+  about the same size, and the colours meet. From the 3 m views in `seam.png`
+  the seam reads as the lower edge of the frill. A close look still finds it:
+  the head sculpt's plates are flat with sharp edges, and the new body's are
+  rounder with dark creases. The brief asks for a seam that cannot be found.
+  This build is close to that from 3 m and does not reach it from 1 m.
+- The second neck colour step compares each direction as a whole. In the
+  direction next to the throat the head has orange scales where the body has
+  pale plates, and the blue gain hits its clamp (1.65). Both sides shift
+  toward each other there by more than the scales alone would need.
+- The wing arms and membranes are still the old sculpt's soft surface. The
+  graft is clean in shape (`graft.png`): no step, no ledge, and the colour
+  matches the dark back. The surface quality changes at the root, from crisp
+  body plates to the smeared arm. The line where the root's underside meets
+  the flank shows as a dark crease from the front.
+- The sink and tuck stretch the old sculpt's texture over the root's slopes.
+  The stretched band is about 0.4 m wide on each side of each root.
+- The hind hip and knee are 0.33 to 0.45 m behind their version 1 positions
+  and the hock is 0.33 m lower (see "Alignment"). The rig's hind leg needs
+  more than a small refit. Everything else is within 0.16 m.
+- The leg joint centres in the comparison were read by eye on both bodies.
 - The topology is decimated triangles with loops cut in. It is not a
-  retopology. The frill is dense thin spikes, and skinning it will need care.
-- The hide atlas is 38% used, in 5,752 islands. The head has 30% of the used
-  area, which is 11.5% of the whole atlas. A hand-made unwrap would double the
-  texel density.
+  retopology. The frill and the back plates are dense thin spikes, and
+  skinning them will need care.
+- The hide atlas is 46.7% used, in 8,889 islands. A hand-made unwrap would
+  still do much better. The margin between islands is 3 texels, so the lowest
+  mip levels will bleed a little between islands.
+- The membrane has 4,429 triangles, fewer than version 1's 6,340. Its edges
+  are at most 0.45 m. The border between membrane and bone follows decimated
+  triangles and is jagged. The thickness map is a model, not a measurement.
 - The lids are one flat colour where the sculpt's painted eye was. From close
-  they read as a smooth band (`eye.png`). The gap between lid edge and ball is
-  12 mm, which the eye needs to turn 25 degrees. A step in the cheek below
-  the right eye shows as a small dark notch where the lid patch meets the
-  decimated mesh.
-- The teeth are small. The lower jaw is 70 to 100 mm deep at the front, and a
-  tooth must hide inside it when the jaw is shut. The mouth's colours are
-  ramps, not painted detail, and its normal map is flat. The fangs have flat
-  backs.
+  they read as a smooth band (`eye.png`). A step in the cheek below the right
+  eye shows as a small dark notch.
+- The teeth are small, because a tooth must hide inside the shut jaw. The
+  mouth's relief is a pattern, not anatomy. The fangs have flat backs.
+- The number of teeth changes by a few between builds (62 now, 67 in version
+  1). The teeth are fitted with rays against the whole joined mesh, and the
+  neck's triangles changed. The teeth's rule did not change.
 - The mouth's palate comes within 2 mm of the right eyeball's reach. Both are
   hidden. A rig that moves the palate must keep it clear.
 - The hide has 3 non-manifold edges and the slit along the lips. Both come
-  from the lip cut near the fangs. `wire.png` shows a few long thin lines:
-  sliver triangles that the plane cuts left.
-- The border between membrane and bone follows decimated triangles and is
-  jagged. The membrane's unwrap has 740 islands. The thickness map is a
-  model, not a measurement.
+  from the lip cut near the fangs.
 - The toe claws are found by a height and two Y ranges. They include a little
-  of each toe.
-- No baked light was removed, because the fit found none. If a later sculpt
-  has a baked sun on its centre plane (from the front or from above), this
-  fit cannot tell it from the pale belly.
+  of each toe. The new body also has a small rear claw on each foot. It stays
+  in `hide`.
+- The new body has a spike that hangs from the chest between the fore legs
+  (X 0, Y 0.17 to 1.4, Z -1.9). It is the sculpt's. It will swing with the
+  chest bone.
 - The normal maps are JPEG at quality 95. Occlusion is baked for the hide
   only.
 - The membrane's thinning takes 6 mm off the span: 18.994 m, not 19.
@@ -302,16 +440,28 @@ metres.
 
 ## Decisions
 
-- Union, not a bridged ring. The head sculpt's collar is wider than the body's
-  neck, and both are spiky. A ring cut through spikes makes many loops. A
-  union of two closed meshes has one answer.
-- The head sculpt is tapered, not the body widened. The body's proportions
-  match the design.
+- The old body is the frame, and the wings do not move. The two bodies agree
+  after one scale, so the wings need no placement. The rig's wing bones stay
+  valid.
+- The new body's tail is fitted to the old tail's length and belly line. The
+  change is a 6% squeeze and a lift of at most 0.57 m over 8 m. It keeps the
+  rig's tail chain valid, and it cannot be seen on the plates.
+- The hind legs are moved out, not sheared back. The first is a 0.15 m shift
+  with a gentle fade. The second would distort the flank.
+- The wing root is deformed, not cut at a ring and bridged. The old arm
+  leaves the body in a broad flare, not a tube. A ring cut at the first clean
+  section (X 1.25) would leave 0.6 m to bridge with made-up surface.
+- Union, not a bridged ring, at the neck too. Both sides are spiky. A union
+  of two closed meshes has one answer.
+- The head's collar moves forward after the decimation, so the head's
+  triangles, eyes, lids and mouth are the ones version 1 made.
 - The fangs stay in the hide and on the upper jaw, as in the design's inset.
-  The mouth mesh adds teeth behind them.
-- The eyeball's clearance is a sphere, not a swept test. A lid that is outside
-  the ball's bounding sphere clears every rotation, not just 25 degrees.
+- The eyeball's clearance is a sphere, not a swept test.
 - The membrane is thinned in the game mesh. The brief asks for a thin
   membrane, and the sculpt's is 70 to 130 mm.
+- The atlas fix is the pack's margin only, and the mouth fix is a baked
+  procedural relief. Both were cheap. A better unwrap was not.
+- Version 1 is not kept. `stage_align` and `stage_low_parts` still run,
+  because the frame and the head's triangles come from them.
 - `assets/*.glb` is ignored by this repository. The file is not committed.
   It stays in the worktree's `assets/` for the main session to collect.
