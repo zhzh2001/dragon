@@ -488,6 +488,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         equal_pipeline_ = pipelines_->create(equal);
     }
     if (shadow_map->available()) depth_pipeline_ = pipelines_->create(make_foliage_depth_desc(shadow_map->format()));
+    kit_.init(device, pipelines, shadow_map);  // the modern tier's alone; the caller loads it
     // DRAGON_FOLIAGE_BATCH=0: the per-instance draws regardless, to compare.
     const char* batch_env = SDL_getenv("DRAGON_FOLIAGE_BATCH");
     batch_ = !device->rhi().instances_in_one_draw() && !(batch_env && batch_env[0] == '0');
@@ -591,6 +592,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
 }
 
 void Foliage::shutdown(Device& device) {
+    kit_.shutdown(device);
     device.rhi().destroy(impostor_albedo_);
     device.rhi().destroy(impostor_normal_);
     device.rhi().destroy(impostor_depth_);
@@ -645,9 +647,18 @@ void Foliage::set_rocks(Device& device, int kind, const std::vector<FoliageInsta
 }
 
 uint32_t Foliage::rock_count() const {
-    uint32_t total = 0;
+    uint32_t total = kit_.count();
     for (const StaticSet& set : rocks_) total += set.count;
     return total;
+}
+
+void Foliage::prepare_rocks(Device& device, const SceneUniforms& scene) {
+    RockKit::Reach reach;
+    reach.small = rock_draw_distance * rock_distance_scale;
+    reach.big = big_rock_draw_distance * rock_distance_scale;
+    reach.fade_band = tree_fade_band;
+    reach.shadow = rock_shadow_distance;
+    kit_.prepare(device, scene, reach);
 }
 
 void Foliage::fill_static(Device& device, StaticSet& set, const std::vector<FoliageInstance>& items,
@@ -992,6 +1003,11 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
     if (impostors_active()) draw_impostors(device, pass, scene, frustum, reach);
     // The rocks after: their pipeline again, and the slots it reads.
     if (crowns != pipeline || impostors_active()) bind_crown_slots(device, pass, pipeline, scene);
+    // The scanned kit, on the modern tier: its own pipeline and maps.
+    if (kit_.loaded()) {
+        kit_.draw(device, pass, scene, atmosphere_);
+        return;
+    }
     // The rocks: the same shader, no sway (a nominal height no rock reaches
     // makes the sway's height fraction nothing), no card LOD.
     for (int k = 0; k < ROCK_KINDS; ++k) {
@@ -1301,6 +1317,11 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
                 crown_vertices_shadow_ += uint64_t(indices) * cell.count;
             }
         }
+    }
+    if (kit_.loaded()) {
+        kit_.draw_depth(device, pass, light_view_proj);
+        // Back to the plants' pipeline for the impostor quads after.
+        device.rhi().bind_pipeline(pass, pipeline);
     }
     for (int k = 0; k < ROCK_KINDS; ++k) {
         const StaticSet& set = rocks_[k];

@@ -72,6 +72,7 @@ target_sources(dragon PRIVATE
   src/gfx/prelit.cpp
   src/gfx/particles.cpp
   src/gfx/foliage.cpp
+  src/gfx/rock_kit.cpp
   src/game/vegetation.cpp
   src/audio/audio.cpp
   src/anim/skeleton.cpp

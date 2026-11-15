@@ -154,6 +154,8 @@ skirt_trees_behind_start.png` is the view back over the spawn.
   1.4 km, the big ones at 2.6 km, their shadows are cast within 600 m, and
   the spacing is 48 m (3,250 rocks): about 16.5 s. The detail tile's five
   samples a pixel measured as nothing.
+  **Since 2026-11-15 this is the retro tiers' rocks only.** The modern tier
+  draws the scanned kit instead; see "The scanned rock kit" below.
 - **Detail tile** (`assets/textures/terrain_detail.png`, 1024 RGBA, R rock,
   G grass, B dirt, A snow, each averaging 0.5, seamless): the terrain shader
   modulates each material by its channel, sampled at 16 m and 97 m and
@@ -168,3 +170,61 @@ skirt_trees_behind_start.png` is the view back over the spawn.
   the bots' ten-minute soak into a spur: their ground recovery braked at any
   speed, and at 36 m/s into a rising slope that bled the climb. It brakes
   only when fast now.
+
+## The scanned rock kit (2026-11-15)
+
+On the modern tier the rocks are the eight scanned pieces of
+`assets/props/rockkit/` (`tools/rockkit.md`): three boulders, two slabs and
+three cliff pieces, each at three levels of detail. The retro tiers keep the
+Row 7 rocks above, unchanged; `App::vegetation_for_tier` turns the kit on
+only when the tier is modern and the 24 files loaded.
+
+- **Drawing** (`gfx::RockKit`, `src/gfx/rock_kit.h`, owned by
+  `gfx::Foliage`): `shaders/rock.hlsl` reads the base colour, the normal map
+  and the occlusion-roughness map and lights through the shared path
+  (`sun_visibility`, `direct_sun`, `local_light`, `ambient_light` times
+  `terrain_sky`, `apply_fog`, `scene_out`), with one rough GGX lobe as
+  `skinned.hlsl` has. `shaders/rock_depth.hlsl` casts the shadow. Each frame
+  `Foliage::prepare_rocks` tests every piece against the frustum and the
+  rock draw distances on the CPU, picks its level by distance in its own
+  radii (LOD1 from 22, LOD2 from 80), and streams the survivors sorted by
+  piece and level: 24 instanced draws, plus the shadow list within
+  `rock_shadow_distance`. A piece shrinks into the ground over the last
+  15% of its reach, as a tree does.
+- **Maps**: the 1024 maps of each `_lod1` file serve all three levels (one
+  atlas layout per piece). Uncompressed with mips that is 8 x 3 x 5.6 MB =
+  134 MB; the 2048 maps would be 537 MB, so they are not loaded. The kit
+  loads in about 230 ms.
+- **Cull**: none. A cliff piece is an open shell, and where its rim stands
+  out of the ground its back is lit as the face toward the viewer.
+- **Colour**: each piece's mean linear albedo is measured at load and
+  scaled per channel to the terrain's rock (palette `RockDark` to `Rock` at
+  `tone` 0.6, times `brightness`), which keeps the scan's contrast. The
+  terrain's warm and cool broken-rock drift (`terrain.hlsl`) is applied
+  across the world, moss and grass lie on up-facing parts near the valley
+  floor, and the last 0.6 m above the ground plane blends to the ground's
+  own colour and darkens, so the join is not a cut.
+- **Placement** (`Vegetation::place_kit`, `src/gfx/rock_piece.h` for the
+  data): boulders and slabs in loose groups, one candidate per 72 m cell, a
+  large one and a few small ones beside it, more of them downhill, each sunk
+  15 to 30% of its height and leaning 60% of the way to the slope. Cliff
+  pieces stand only where the plane fitted to the ground over their width is
+  steeper than `cliff_slope`, from a 64 m grid gathered into bands by noise,
+  their mounting plane on that ground and their face (+Z) out along the fall
+  line. Every piece is then lowered until a set of check points measured from
+  LOD2 (a boulder's base outline, a cliff's open rim and foot) is under the
+  terrain; a cliff's rim above its foot may stand up to 2 m out. A piece that
+  would have to sink too far (60% of a boulder, 35% of a cliff) is left out.
+  `test_vegetation` checks every point of every piece.
+- **What a cliff piece can be here.** The face of each shell stands only 2 to
+  8 m out of its own rim. The terrain's steep faces are 45 to 62 degrees, so
+  a piece whose foot is buried shows 45 to 55% of its vertices with 3 to 8 m
+  of relief at scale 1 (simulated on planar slopes before it was built), and
+  less on curved ground, where it sinks 7 m on average. They read as
+  outcrops of the face from the air and close up, not as walls. A wall needs
+  the terrain to have one: S6's mesh cliffs.
+- **Dials**: Terrain > Vegetation > Rocks: the draw and shadow distances,
+  the look (colour match, tone, brightness, terrain tint, moss, contact band
+  and strength, the LOD distances) and the placement (group spacing, cover,
+  size, spread, scale, sink, lean; cliff slope, spacing, cover, scale, bury,
+  rim showing).

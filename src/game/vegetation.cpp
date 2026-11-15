@@ -51,6 +51,7 @@ size_t Vegetation::tree_count() const {
 size_t Vegetation::rock_count() const {
     size_t n = 0;
     for (const auto& list : rocks_) n += list.size();
+    for (const auto& list : kit_rocks_) n += list.size();
     return n;
 }
 
@@ -58,7 +59,13 @@ size_t Vegetation::rock_count() const {
 // 3 crag, 4 scree cluster, 5 outcrop.
 void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& settings) {
     for (auto& list : rocks_) list.clear();
+    for (auto& list : kit_rocks_) list.clear();
+    kit_extra_sink_ = 0.0f;
     if (!settings.rocks) return;
+    if (settings.rock_kit) {
+        place_kit(terrain, settings);
+        return;
+    }
     const TerrainSettings& t = terrain.settings();
     const float extent = t.half_extent * core::maxf(settings.rock_extent, 0.1f);
     const float spacing = core::maxf(settings.rock_spacing, 8.0f);
@@ -97,6 +104,265 @@ void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& s
             rocks_[kind].push_back(rock);
         }
     }
+}
+
+namespace {
+
+// The kit's pieces by role (gfx/rock_piece.h order).
+constexpr int KIT_BOULDERS[3] = {0, 1, 2};
+// slab_a (3) is left out: its scan has a hollow under one side that reads
+// as a black cave at any sink (docs/SHOWCASE.md, S6). Both entries slab_b.
+constexpr int KIT_SLABS[2] = {4, 4};
+constexpr int KIT_CLIFFS[3] = {5, 6, 7};
+
+// A piece's radius on the ground at scale 1: half its larger footprint side.
+float footprint_radius(int piece) {
+    const core::Vec3 size = gfx::rock_piece(piece).size;
+    return 0.5f * core::maxf(size.x, size.z);
+}
+
+core::Vec4 to_vec4(core::Quat q) { return core::Vec4{q.x, q.y, q.z, q.w}; }
+
+}  // namespace
+
+// Lowers `rock` until every check point of its piece is at least `margin`
+// under the ground; returns how far it had to go (0 when it already was).
+// A cliff's rim points above its foot (2 m up the piece) may stand up to
+// `rim_tolerance` over the ground: its face stands only 2 to 5 m proud of
+// its own rim, and burying the whole rim buried the face with it.
+static float bury_check_points(const Terrain& terrain, gfx::RockInstance& rock, int piece, float margin,
+                               float rim_tolerance = 0.0f) {
+    const gfx::RockPieceInfo& info = gfx::rock_piece(piece);
+    const core::Quat q{rock.rotation.x, rock.rotation.y, rock.rotation.z, rock.rotation.w};
+    const core::Vec3 origin = rock.position_scale.xyz();
+    float excess = 0.0f;
+    for (int i = 0; i < info.check_count; ++i) {
+        const core::Vec3 p = origin + core::rotate(q, info.check[i] * rock.position_scale.w);
+        const float allowed = info.cliff && info.check[i].y > 2.0f ? rim_tolerance : -margin;
+        excess = core::maxf(excess, p.y - (terrain.height_at(p.x, p.z) + allowed));
+    }
+    rock.position_scale.y -= excess;
+    return excess;
+}
+
+// The kit (gfx/rock_piece.h), placed to read as geology. Boulders and slabs
+// gather in loose groups -- a large one, a few small ones beside it, more of
+// them downhill -- each sunk 15 to 30% of its height and leaning part of
+// the way to the slope. Cliff pieces stand only on the steep faces, their
+// reference plane laid on the slope averaged over their footprint, their
+// face (+Z) out along the fall line, sunk until the rim and the foot are
+// under the ground. Every piece is then lowered until its check points are
+// all under the terrain, so nothing floats however the ground curves.
+void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& settings) {
+    const TerrainSettings& t = terrain.settings();
+    const float extent = t.half_extent * core::maxf(settings.rock_extent, 0.1f);
+    const float floor = t.valley_floor;
+    // Moss and grass on what faces up, near the floor (rock.hlsl): the
+    // amount by height, from the floor to a few hundred metres up.
+    const auto moss_at = [&](float y, float roll) {
+        return (1.0f - core::smoothstep(floor + 60.0f, floor + 320.0f, y)) * (0.45f + 0.55f * roll);
+    };
+    const auto ground_plane = [&](float x, float z) {
+        const core::Vec3 n = terrain.normal_at(x, z);
+        const core::Vec3 p{x, terrain.height_at(x, z), z};
+        return core::Vec4{n.x, n.y, n.z, core::dot(n, p)};
+    };
+
+    // ---- cliff pieces, first: the boulders keep out of their footprints.
+    struct Footprint {
+        float x, z, r;
+    };
+    std::vector<Footprint> cliffs;
+    float cliff_sink_sum = 0.0f;
+    {
+        const float spacing = core::maxf(settings.cliff_spacing, 24.0f);
+        const int cells = int((2.0f * extent) / spacing);
+        for (int iz = 0; iz < cells; ++iz) {
+            for (int ix = 0; ix < cells; ++ix) {
+                CellHash hash(ix, iz, settings.seed * 13u + 5u);
+                const float jx = hash.next();
+                const float jz = hash.next();
+                const float x = -extent + (float(ix) + 0.2f + 0.6f * jx) * spacing;
+                const float z = -extent + (float(iz) + 0.2f + 0.6f * jz) * spacing;
+                const float keep = hash.next();
+                // Gathered into bands by the same broad noise as the
+                // boulders, so the faces are not dotted on a grid.
+                const float field = core::saturate(0.6f + forest_.fbm(x / 260.0f + 17.0f, z / 260.0f - 5.0f, 2));
+                if (keep > settings.cliff_cover * (0.2f + 1.2f * field * field)) continue;
+                const float height = terrain.height_at(x, z);
+                if (height < t.water_level + 4.0f) continue;
+                const int piece = KIT_CLIFFS[int(hash.next() * 2.999f)];
+                const float scale_roll = hash.next();
+                const float scale = settings.cliff_scale * (0.8f + 0.4f * scale_roll);
+                const float half_width = 0.5f * gfx::rock_piece(piece).size.x * scale;
+                // The slope over the footprint: a plane fitted to the
+                // ground's heights on a 5 x 5 grid a piece's width across,
+                // so a curved face sinks the piece no more than it must.
+                double sum_h = 0.0, sum_hx = 0.0, sum_hz = 0.0, sum_xx = 0.0;
+                for (int gz = -2; gz <= 2; ++gz) {
+                    for (int gx = -2; gx <= 2; ++gx) {
+                        const float dx = float(gx) * 0.5f * half_width;
+                        const float dz = float(gz) * 0.5f * half_width;
+                        const double h = double(terrain.height_at(x + dx, z + dz));
+                        sum_h += h;
+                        sum_hx += h * double(dx);
+                        sum_hz += h * double(dz);
+                        sum_xx += double(dx) * double(dx);
+                    }
+                }
+                const float fitted = float(sum_h / 25.0);
+                const float gradient_x = float(sum_hx / sum_xx);
+                const float gradient_z = float(sum_hz / sum_xx);
+                const core::Vec3 n = core::normalize(core::Vec3{-gradient_x, 1.0f, -gradient_z});
+                if (1.0f - n.y < settings.cliff_slope) continue;
+                // A cliff is steep all across, not a steep patch on a shoulder.
+                if (1.0f - terrain.normal_at(x, z).y < settings.cliff_slope * 0.8f) continue;
+                const float yaw_roll = hash.next();
+                const core::Vec3 strike = core::normalize_or(core::cross(core::Vec3::up(), n), core::Vec3::right());
+                const core::Vec3 upslope = core::cross(n, strike);
+                // The piece's mounting plane (gfx::RockPieceInfo) onto the
+                // slope: its frame (x along the plane, up the plane, the
+                // plane's normal) to the slope's (strike, up-slope, normal).
+                // look_rotation(-n, u) is the rotation whose columns are
+                // (cross(u, n), u, n).
+                const gfx::RockPieceInfo& info = gfx::rock_piece(piece);
+                const core::Vec3 mn = core::normalize(info.mount_normal);
+                const core::Vec3 mx = core::normalize(core::Vec3::right() - mn * mn.x);
+                const core::Vec3 my = core::cross(mn, mx);
+                const core::Quat world = core::look_rotation(-n, upslope);
+                const core::Quat piece_frame = core::look_rotation(-mn, my);
+                const core::Quat jitter = core::Quat::from_axis_angle(n, (yaw_roll - 0.5f) * core::radians(24.0f));
+                const core::Quat q = core::normalize(jitter * world * core::conjugate(piece_frame));
+                // The plane's centre on the ground, `cliff_bury` under it;
+                // then sunk until every rim and foot point is under the
+                // ground, which is as deep as the piece must go and no deeper
+                // (its face stands only 2 to 5 m out of its own rim).
+                const core::Vec3 site{x, fitted, z};
+                const core::Vec3 centre = core::rotate(q, info.mount_centre * scale);
+                gfx::RockInstance rock;
+                const core::Vec3 origin = site - centre - n * settings.cliff_bury;
+                rock.position_scale = core::Vec4{origin.x, origin.y, origin.z, scale};
+                rock.rotation = to_vec4(q);
+                const float extra = bury_check_points(terrain, rock, piece, 0.15f, settings.cliff_rim_tolerance);
+                cliff_sink_sum += extra;
+                // A piece that had to sink by more than a third of its
+                // height did not fit this ground; leave the face bare.
+                if (extra > 0.35f * info.size.y * scale) continue;
+                kit_extra_sink_ = core::maxf(kit_extra_sink_, extra);
+                // The fitted plane is the ground the piece is set into.
+                rock.ground = core::Vec4{n.x, n.y, n.z, core::dot(n, site)};
+                const float shade_roll = hash.next();
+                const float moss_roll = hash.next();
+                const float hash_roll = hash.next();
+                rock.params = core::Vec4{0.92f + 0.16f * shade_roll, moss_at(height, moss_roll) * 0.5f, hash_roll, 0.0f};
+                kit_rocks_[piece].push_back(rock);
+                cliffs.push_back(Footprint{x, z, half_width * 1.1f});
+            }
+        }
+    }
+
+    // ---- boulder groups.
+    const float spacing = core::maxf(settings.rock_group_spacing, 12.0f);
+    const int cells = int((2.0f * extent) / spacing);
+    const auto in_cliff = [&](float x, float z) {
+        for (const Footprint& f : cliffs) {
+            if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < f.r * f.r) return true;
+        }
+        return false;
+    };
+    // One rock: oriented, sunk, checked, pushed. `slope_n` the ground's normal.
+    const auto place_one = [&](int piece, float x, float z, float scale, float yaw, float lean_roll, float lean_dir,
+                               float sink_roll, float shade_roll, float moss_roll, float hash_roll) {
+        const float height = terrain.height_at(x, z);
+        if (height < t.water_level + 1.0f) return;
+        if (in_cliff(x, z)) return;
+        const core::Vec3 n = terrain.normal_at(x, z);
+        const core::Vec3 up = core::normalize_or(core::lerp(core::Vec3::up(), n, settings.rock_tilt), core::Vec3::up());
+        // A few degrees of its own lean, so a group is not one tilt.
+        const core::Vec3 wobble_axis{std::cos(lean_dir), 0.0f, std::sin(lean_dir)};
+        const core::Quat wobble = core::Quat::from_axis_angle(wobble_axis, (lean_roll - 0.5f) * core::radians(14.0f));
+        const core::Quat q = core::normalize(wobble * core::rotation_between(core::Vec3::up(), up) *
+                                             core::Quat::from_axis_angle(core::Vec3::up(), yaw));
+        const gfx::RockPieceInfo& info = gfx::rock_piece(piece);
+        const float sink = info.size.y * scale *
+                           core::lerpf(settings.rock_sink_min, settings.rock_sink_max, sink_roll);
+        gfx::RockInstance rock;
+        rock.position_scale = core::Vec4{x, height - sink, z, scale};
+        rock.rotation = to_vec4(q);
+        const float extra = bury_check_points(terrain, rock, piece, 0.04f * scale + 0.02f);
+        // Sunk past 60% of its height to bury the base: on this ground the
+        // piece would be a pebble on a bump; leave it out.
+        if (sink + extra > 0.6f * info.size.y * scale) return;
+        kit_extra_sink_ = core::maxf(kit_extra_sink_, extra);
+        rock.ground = ground_plane(x, z);
+        rock.params = core::Vec4{0.9f + 0.2f * shade_roll, moss_at(height, moss_roll), hash_roll, 0.0f};
+        kit_rocks_[piece].push_back(rock);
+    };
+    for (int iz = 0; iz < cells; ++iz) {
+        for (int ix = 0; ix < cells; ++ix) {
+            CellHash hash(ix, iz, settings.seed * 7u + 3u);
+            const float jx = hash.next();
+            const float jz = hash.next();
+            const float x = -extent + (float(ix) + jx) * spacing;
+            const float z = -extent + (float(iz) + jz) * spacing;
+            const float height = terrain.height_at(x, z);
+            if (height < t.water_level + 1.5f) continue;
+            const Vec3 normal = terrain.normal_at(x, z);
+            const float slope = 1.0f - normal.y;
+            const float field = core::saturate(0.6f + forest_.fbm(x / 300.0f - 40.0f, z / 300.0f + 11.0f, 2));
+            const float keep = core::lerpf(settings.rock_group_floor_cover, settings.rock_group_slope_cover,
+                                           core::smoothstep(0.06f, 0.4f, slope)) * (0.4f + field);
+            const float keep_roll = hash.next();
+            if (keep_roll > keep) continue;
+            // The large one: slabs on the gentler ground, boulders anywhere.
+            const float pick = hash.next();
+            const bool slab = slope < 0.2f && pick < 0.4f;
+            const float which = hash.next();
+            const int large = slab ? KIT_SLABS[int(which * 1.999f)] : KIT_BOULDERS[int(which * 2.999f)];
+            const float scale_roll = hash.next();
+            const float large_scale = settings.rock_large_scale * (0.75f + 0.6f * scale_roll);
+            const float yaw = hash.next() * core::TWO_PI;
+            const float lean = hash.next();
+            const float lean_dir = hash.next() * core::TWO_PI;
+            const float sink = hash.next();
+            const float shade = hash.next();
+            const float moss = hash.next();
+            const float id = hash.next();
+            place_one(large, x, z, large_scale, yaw, lean, lean_dir, sink, shade, moss, id);
+            // The small ones beside it, more of them downhill where they
+            // rolled, on steeper ground more of them.
+            const float count_roll = hash.next();
+            const int small = int(count_roll * (2.0f * settings.rock_group_size + 1.0f) * (0.7f + slope));
+            const core::Vec2 downhill = core::Vec2{normal.x, normal.z} * (1.0f / core::maxf(std::sqrt(normal.x * normal.x + normal.z * normal.z), 1e-3f));
+            const float radius = footprint_radius(large) * large_scale;
+            for (int i = 0; i < small; ++i) {
+                const float angle = hash.next() * core::TWO_PI;
+                const float reach = hash.next();
+                const float piece_roll = hash.next();
+                const int piece = KIT_BOULDERS[int(piece_roll * 2.999f)];
+                const float small_roll = hash.next();
+                const float small_scale = large_scale * (0.22f + 0.3f * small_roll);
+                const float distance = radius * (0.9f + settings.rock_group_spread * reach) +
+                                       footprint_radius(piece) * small_scale;
+                core::Vec2 offset{std::cos(angle) * distance, std::sin(angle) * distance};
+                // Downhill bias: on a slope the spread leans down the fall line.
+                offset = offset + downhill * (distance * 0.8f * core::saturate(slope * 3.0f));
+                const float small_yaw = hash.next() * core::TWO_PI;
+                const float small_lean = hash.next();
+                const float small_dir = hash.next() * core::TWO_PI;
+                const float small_sink = hash.next();
+                const float small_shade = hash.next();
+                const float small_moss = hash.next();
+                const float small_id = hash.next();
+                place_one(piece, x + offset.x, z + offset.y, small_scale, small_yaw, small_lean, small_dir, small_sink,
+                          small_shade, small_moss, small_id);
+            }
+        }
+    }
+    size_t total = 0;
+    for (const auto& list : kit_rocks_) total += list.size();
+    LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims), worst extra sink %.2f m",
+             total, cliffs.size(), double(cliff_sink_sum / float(cliffs.empty() ? 1 : cliffs.size())), double(kit_extra_sink_));
 }
 
 void Vegetation::plant(const Terrain& terrain, const VegetationSettings& settings) {

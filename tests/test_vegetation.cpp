@@ -236,9 +236,58 @@ void test_rocks_lie_on_the_slopes() {
     CHECK(vegetation.rock_count() == 0);
 }
 
+void test_rock_kit_is_set_into_the_ground() {
+    std::printf("rock kit: pieces in groups and on the steep faces, every check point under the ground\n");
+    game::Terrain terrain;
+    terrain.generate(small_terrain());
+    game::Vegetation vegetation;
+    game::VegetationSettings settings;
+    settings.rock_kit = true;
+    vegetation.plant(terrain, settings);
+    int boulders = 0, cliffs = 0, floating = 0;
+    for (int p = 0; p < gfx::ROCK_PIECES; ++p) {
+        const gfx::RockPieceInfo& info = gfx::rock_piece(p);
+        for (const gfx::RockInstance& r : vegetation.kit_rocks(p)) {
+            const core::Quat q{r.rotation.x, r.rotation.y, r.rotation.z, r.rotation.w};
+            CHECK(std::fabs(core::dot(q, q) - 1.0f) < 1e-3f);
+            CHECK(std::isfinite(r.position_scale.y) && r.position_scale.w > 0.0f);
+            // Nothing floats: each check point under the ground (a cliff's
+            // rim above its foot within the tolerance it is allowed).
+            for (int i = 0; i < info.check_count; ++i) {
+                const core::Vec3 c = r.position_scale.xyz() + core::rotate(q, info.check[i] * r.position_scale.w);
+                const float allowed = info.cliff && info.check[i].y > 2.0f ? settings.cliff_rim_tolerance : 0.0f;
+                if (c.y > terrain.height_at(c.x, c.z) + allowed + 0.01f) ++floating;
+            }
+            CHECK(terrain.height_at(r.position_scale.x, r.position_scale.z) > terrain.settings().water_level);
+            if (info.cliff) {
+                ++cliffs;
+                // Only on the steep faces.
+                CHECK(1.0f - r.ground.y >= settings.cliff_slope * 0.8f - 1e-4f);
+            } else {
+                ++boulders;
+                // Sunk at least 15% of its height: its origin, the base's
+                // centre, is under the ground by that much.
+                const float ground = terrain.height_at(r.position_scale.x, r.position_scale.z);
+                CHECK(r.position_scale.y <= ground - settings.rock_sink_min * info.size.y * r.position_scale.w + 0.02f);
+            }
+        }
+    }
+    std::printf("  %d boulders and slabs, %d cliff pieces, worst extra sink %.2f m, %d floating check points\n",
+                boulders, cliffs, double(vegetation.kit_extra_sink()), floating);
+    CHECK(boulders > 100);
+    CHECK(cliffs > 5);
+    CHECK(floating == 0);
+    // The legacy kinds are empty with the kit on.
+    for (int k = 0; k < gfx::ROCK_KINDS; ++k) CHECK(vegetation.rocks(k).empty());
+    settings.rocks = false;
+    vegetation.plant(terrain, settings);
+    CHECK(vegetation.rock_count() == 0);
+}
+
 int main() {
     test_surface_query_matches_mesh();
     test_rocks_lie_on_the_slopes();
+    test_rock_kit_is_set_into_the_ground();
     test_trees_stand_where_trees_can();
     test_grass_follows_the_camera();
     std::printf("\n%d checks, %d failures\n", checks, failures);

@@ -1299,6 +1299,14 @@ void App::load_rocks() {
         }
         LOG_INFO("rocks: %d kind(s) from rocks.glb%s, %d generated", from_file,
                  loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
+        // The modern tier's scanned kit (gfx/rock_kit.h), once: the old
+        // kinds above stay loaded as its fallback.
+        if (tier_.tier == gfx::Tier::Modern && !foliage_.rock_kit().loaded()) {
+            const uint64_t start = SDL_GetTicks();
+            if (foliage_.rock_kit().load(device_)) {
+                LOG_INFO("rock kit: loaded in %llu ms", (unsigned long long)(SDL_GetTicks() - start));
+            }
+        }
 }
 
 // Puts `next` in force: what applies live is read next frame, what needs a
@@ -1577,6 +1585,7 @@ game::VegetationSettings App::vegetation_for_tier() const {
     v.stand_contrast = tier_.tier == gfx::Tier::Modern ? stand_contrast_ : 0.0f;
     v.grass_radius *= tier_.budget.grass_radius_scale;
     v.grass = v.grass && tier_.budget.grass_radius_scale > 0.0f;
+    v.rock_kit = tier_.tier == gfx::Tier::Modern && foliage_.rock_kit().loaded();
     return v;
 }
 
@@ -1586,6 +1595,7 @@ void App::replant() {
         foliage_.set_trees(device_, gfx::TreeKind(k), vegetation_.trees(gfx::TreeKind(k)));
     }
     for (int k = 0; k < gfx::ROCK_KINDS; ++k) foliage_.set_rocks(device_, k, vegetation_.rocks(k));
+    for (int p = 0; p < gfx::ROCK_PIECES; ++p) foliage_.rock_kit().set_instances(p, vegetation_.kit_rocks(p));
     LOG_INFO("rocks: %zu placed", vegetation_.rock_count());
     foliage_.wind = vegetation_settings_.wind;
     upload_canopy();
@@ -3539,6 +3549,49 @@ void App::build_ui(float dt) {
                     ImGui::SliderFloat("impostor depth shade", &foliage_.impostor_depth_shade, 0.0f, 0.9f, "%.2f");
                     if (ImGui::IsItemDeactivatedAfterEdit()) foliage_.rebake_impostors();
                 }
+            }
+            if (ImGui::TreeNode("Rocks")) {
+                // The draw distances, every tier's.
+                ImGui::SliderFloat("rock draw distance", &foliage_.rock_draw_distance, 200.0f, 4000.0f, "%.0f m");
+                ImGui::SliderFloat("big rock draw distance", &foliage_.big_rock_draw_distance, 200.0f, 6000.0f, "%.0f m");
+                ImGui::SliderFloat("rock shadows within", &foliage_.rock_shadow_distance, 0.0f, 2000.0f, "%.0f m");
+                gfx::RockKit& kit = foliage_.rock_kit();
+                if (kit.loaded()) {
+                    // The scanned kit (gfx/rock_kit.h): its look, live.
+                    ImGui::SeparatorText("scanned kit: look");
+                    ImGui::SliderFloat("colour match", &kit.colour_match, 0.0f, 1.0f, "%.2f");
+                    ImGui::SetItemTooltip("Each scan's mean albedo pulled to the terrain's rock; 0 the scan as it is");
+                    ImGui::SliderFloat("rock tone", &kit.tone, 0.0f, 1.0f, "%.2f dark..light");
+                    ImGui::SliderFloat("rock brightness", &kit.brightness, 0.5f, 1.6f, "%.2f");
+                    ImGui::SliderFloat("terrain tint", &kit.terrain_tint, 0.0f, 1.0f, "%.2f");
+                    ImGui::SliderFloat("moss", &kit.moss, 0.0f, 2.0f, "%.2f");
+                    ImGui::SliderFloat("contact band", &kit.contact_height, 0.05f, 2.0f, "%.2f m");
+                    ImGui::SliderFloat("contact strength", &kit.contact, 0.0f, 1.0f, "%.2f");
+                    ImGui::SliderFloat("LOD1 from", &kit.lod1_radii, 2.0f, 100.0f, "%.0f radii");
+                    ImGui::SliderFloat("LOD2 from", &kit.lod2_radii, 10.0f, 300.0f, "%.0f radii");
+                    ImGui::TextDisabled("%u pieces, %u drawn, %u triangles", kit.count(), kit.drawn(),
+                                        kit.drawn_triangles());
+                    // Its placement (game::Vegetation::place_kit): replants.
+                    ImGui::SeparatorText("scanned kit: placement");
+                    game::VegetationSettings& v = vegetation_settings_;
+                    replant_now |= ImGui::SliderFloat("group spacing", &v.rock_group_spacing, 24.0f, 200.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("groups on steep ground", &v.rock_group_slope_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("groups on the floor", &v.rock_group_floor_cover, 0.0f, 1.0f, "%.3f");
+                    replant_now |= ImGui::SliderFloat("small ones a group", &v.rock_group_size, 0.0f, 6.0f, "%.1f");
+                    replant_now |= ImGui::SliderFloat("group spread", &v.rock_group_spread, 0.0f, 5.0f, "%.1f radii");
+                    replant_now |= ImGui::SliderFloat("large one's scale", &v.rock_large_scale, 0.3f, 3.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("sink from", &v.rock_sink_min, 0.0f, 0.6f, "%.2f of height");
+                    replant_now |= ImGui::SliderFloat("sink to", &v.rock_sink_max, 0.0f, 0.6f, "%.2f of height");
+                    replant_now |= ImGui::SliderFloat("lean to slope", &v.rock_tilt, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("cliff slope", &v.cliff_slope, 0.1f, 0.9f, "%.2f (1 - normal y)");
+                    replant_now |= ImGui::SliderFloat("cliff spacing", &v.cliff_spacing, 24.0f, 300.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("cliff cover", &v.cliff_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("cliff scale", &v.cliff_scale, 0.4f, 2.5f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("cliff bury", &v.cliff_bury, 0.0f, 6.0f, "%.1f m");
+                    replant_now |= ImGui::SliderFloat("cliff rim showing", &v.cliff_rim_tolerance, 0.0f, 6.0f, "%.1f m");
+                    ImGui::SetItemTooltip("How far a cliff piece's rim may stand out of the ground; its foot is always buried");
+                }
+                ImGui::TreePop();
             }
             ImGui::TextDisabled("%u trees (%u drawn), %u grass tufts near the camera", foliage_.tree_count(),
                                 foliage_.trees_drawn(),
@@ -9200,6 +9253,8 @@ void App::render() {
     // The trees' impostors, once, on the first frame (gfx::Foliage): outside
     // any pass, with this frame's palette.
     foliage_.bake_impostors(device_, scene);
+    // The rock kit's frame: culled and streamed before the shadow pass.
+    foliage_.prepare_rocks(device_, scene);
 
     foliage_.reset_crown_counts();
     // Shadow pass first: the main pass samples what it writes.
