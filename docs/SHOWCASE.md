@@ -870,6 +870,11 @@ the front, the dive, the brake, a landing and the stand. The Dragon
 panel has "flight pose by joint" and its seven sliders under "front leg
 tuck".
 
+From behind, the chase camera's side, the trailing hind feet sat wide of
+the tail. `leg_flight_splay_deg` is -18: the legs lie along the tail's
+root without touching it. `flight-legs-splay-candidates.jpg` has -10, -18
+and -26 from behind, above and the front.
+
 Open: from the front the fore paws show their spread claws under the
 chin. The trailing-fore variant (candidates Q5 and Q6) is the other
 natural choice if the tuck reads wrong in play.
