@@ -971,7 +971,7 @@ on into valley 2. The Metal goldens were captured again. Not done: the
 surface is still smooth. Cliff bands and rock faces are S6's rock work,
 and the rocks of report 0011 with them.
 
-## Bushes of leaf cards, fuller tufts (2026-11-15, 12:50)
+## Bushes of leaf cards, fuller tufts (2026-11-15, 12:27)
 
 Report 0009. A bush was two faceted lumps, a green boulder on the grass.
 It is now two clumps of leaf cards over a dark core, built by the same
@@ -984,6 +984,35 @@ view and a lower one, before on the left. The frame costs the same within
 
 The lawn is still clumps on a painted ground. Cover dense enough to hide
 it, in short grass, is S7's ground work.
+
+## Where a frame's time goes (2026-11-15, 12:45)
+
+Report 0008 also marked the frame rate: 37 fps beside the river, and 46
+to 68 in the other reports. A paired profile at 1080p, each pass switched
+on and off inside one run of a frozen frame, is recorded in
+`~/src/gpu-hist/research/dragon-m5/runs/20261115-1730-mac-m5-dragon-pass-ablation-showcase/`.
+The Mac was loaded by two workers' builds and renders throughout, so the
+plain medians moved between 11 and 26 ms and only the paired differences
+count.
+
+| Pass | chase in a run | river filling the view | meadow |
+|---|---:|---:|---:|
+| water | 0.1 ms | 4.3 ms | 0.3 ms |
+| trees | 2.3 | within noise | within noise |
+| terrain, near | 0.8 | 1.7 | 1.0 |
+| tree and terrain shadows | 0.5 | 0.9 | 1.0 |
+| mist | 0.6 | within noise | within noise |
+| every listed pass together | 7.8 of 12.0 | | |
+
+- No one pass is the frame except the water when it fills the view, and
+  that is 4.3 ms after the trim against about 16 before it.
+- With every listed pass off, 4 ms remains at 1080p and 2.8 at 540p. On a
+  loaded machine part of that is waiting, not work; it needs a quiet
+  machine to split.
+- The playtest's frame rates were read while two workers rendered in the
+  background. A fair reading needs the workers stopped. With vsync on a
+  99 Hz display, a frame over 10.1 ms waits for the next refresh, so 12 ms
+  of work shows as 49.5 fps.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
