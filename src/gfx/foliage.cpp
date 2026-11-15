@@ -1294,6 +1294,7 @@ void Foliage::draw_impostors(Device& device, rhi::Pass* pass, const SceneUniform
 void Foliage::draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
     for (int k = 0; k < GRASS_KINDS; ++k) {
         const bool sward = GrassKind(k) == GrassKind::Sward;
+        if (sward && !draw_sward) continue;
         draw(device, pass, scene, grass_[k].mesh, grass_[k].instances, grass_[k].uploaded,
              sward ? sward_fade_start : grass_fade_start, sward ? sward_fade_end : grass_fade_end,
              grass_height(GrassKind(k)));

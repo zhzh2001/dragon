@@ -9510,6 +9510,7 @@ void App::render() {
     if (!options_.hide_vegetation) {
         CORE_PROFILE("vegetation draws");
         if (!ablated("trees")) foliage_.draw_trees(device_, pass, world_.scene());
+        foliage_.draw_sward = !ablated("sward");
         if (!ablated("grass")) foliage_.draw_grass(device_, pass, world_.scene());
     }
     {

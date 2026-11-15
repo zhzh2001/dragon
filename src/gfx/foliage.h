@@ -114,6 +114,7 @@ public:
     // And the sward's, much nearer: its blades are under a pixel past it.
     float sward_fade_start = 30.0f;
     float sward_fade_end = 46.0f;
+    bool draw_sward = true;  // off under DRAGON_ABLATE=sward, to time it
     // Past this camera distance a crown's detail cards are dropped and its
     // coarse cards carry it: the impostor, without a second mesh or a second
     // draw. Dithered over a band so trees do not pop.

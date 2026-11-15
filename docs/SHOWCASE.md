@@ -1285,7 +1285,7 @@ Not done: the tutorial line under the run's top bar still reads as debug
 text, and the bottom plate still covers the dragon's hind legs in the chase
 view.
 
-### The sward: short grass edge to edge near the camera (13:50)
+### The sward: short grass edge to edge near the camera (13:43)
 
 The critic's ground-cover blocker: "sparse, spiky low-poly blades and paper
 bushes spaced out on bare flat green". The tufts are clumps 1.5 m tall on a
@@ -1301,9 +1301,12 @@ only. Pair: `artifacts/showcase-critic/sward-before-after.jpg`.
 - The first blades were 20 to 75 cm, up to 6.5 cm wide, laid over by up to
   half their height, with tips at 1.75 of the ground's colour. They read as
   cut straw. Upright, under 4 cm wide and tips at 1.3 read as turf.
-- Cost: 10.3 to 11.7 ms GPU in the landed view at 1080p (one run each, the
-  machine otherwise idle). About 2,300 patches, 460,000 triangles. None from
-  higher than 46 m over the ground, so flight pays nothing.
+- Cost, paired on one frozen frame at 1080p (`DRAGON_ABLATE_ALTERNATE=sward`):
+  +0.64 and +0.83 ms GPU in the landed view, +0.78 ms in the meadow view.
+  The record is in gpu-hist, `20261115-1844-mac-m5-dragon-sward-cost`. Two
+  single runs before it had read 10.3 and 11.7 ms; the pair is the number.
+  About 2,300 patches, 460,000 triangles. None from higher than 46 m over
+  the ground, so flight pays nothing.
 - The motion number of the meadow view (`tools/showcase/motion.py`) went
   from 9.5% to 17.6% of the frame in a second.
 - Open: the sward stops at a visible edge at its radius, and the tufts above
