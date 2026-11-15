@@ -31,6 +31,13 @@ struct SkinnedVertex {
 };
 
 // A run of indices sharing one material, so each can bind its own texture.
+// The surface classes a creature's materials are sorted into.
+enum SkinSurface { SURFACE_HIDE = 0, SURFACE_MEMBRANE = 1, SURFACE_HORN = 2, SURFACE_EYE = 3, SURFACE_MOUTH = 4 };
+
+// By the material's name, in any case: "eye_l" is an eye, "horn" and "claw"
+// are horn, "membrane" and "mouth" themselves. Anything else is hide.
+int surface_from_name(const char* name);
+
 struct SkinnedSubmesh {
     uint32_t index_offset = 0;
     uint32_t index_count = 0;
@@ -40,6 +47,11 @@ struct SkinnedSubmesh {
     int normal_texture = -1;
     // glTF packs occlusion in R, roughness in G, metallic in B of one image.
     int orm_texture = -1;
+    // What the surface is, from the glTF material's name (surface_from_name):
+    // skinned.hlsl gives horn a clear coat, the eye a cornea, and the hide a
+    // rim against the light. Not in a model pack: the retro tiers that load
+    // packs have none of those terms.
+    int surface = 0;
     // Empty: the vertices index the skeleton directly. Otherwise the global
     // joints this batch uses, in the order its vertices index them
     // (anim/skin_partition.h) -- the draw pushes only these matrices.

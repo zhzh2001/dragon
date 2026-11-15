@@ -547,14 +547,16 @@ struct RigTuning {
     float tail_flow_stream_end = 95.0f;   // m/s, fully streamed
     float tail_flow_stream_scale = 0.35f; // amplitude retained at high speed
     float tail_flow_attack_scale = 0.15f; // amplitude retained during a whip
-    // The tail answers the wingbeat. A flying animal's tail is its
-    // counterweight: the body pitches up on each downstroke and the tail
-    // base swings down against it, then up through the recovery, and the
-    // chain's own lag carries that down the length as a wave in time with
-    // the wings. Degrees at the base; the lag is a fraction of one beat.
-    // Zero keeps a tail that ignores the beat, as every species had.
+    // The tail answers the wingbeat, at the wingbeat's own frequency. A
+    // flying animal's tail is its counterweight: it swings down as the wings
+    // push and up as they recover, and the swing travels to the tip. Degrees
+    // of pitch summed over the tail (the tip's swing, about); the lag is a
+    // fraction of one beat behind the wings; the cycles are how much of a
+    // wave lies along the tail at once (0 swings it as one rod). Zero
+    // degrees keeps a tail that ignores the beat, as every species had.
     float tail_beat_deg = 0.0f;
     float tail_beat_lag = 0.18f;
+    float tail_beat_cycles = 0.45f;
     // Hard articulation limits, total deviation from the rest shape. The neck
     // is tight -- big head turns are the aim system's job, not the sim's; the
     // tail keeps room to whip.
@@ -1126,6 +1128,7 @@ private:
     float ground_contact_ = 0.0f;
     float tail_flow_amount_ = 0.0f;
     float tail_flow_phase_ = 0.0f;
+    float tail_beat_amount_ = 0.0f;
     core::Vec3 aim_target_ = core::Vec3::zero();
     bool aim_active_ = false;
     // The head's own forward axis, in its local frame, measured from the bind

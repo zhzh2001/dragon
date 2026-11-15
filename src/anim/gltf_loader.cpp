@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cctype>
+#include <string>
 #include <utility>
 
 #include "core/log.h"
@@ -322,6 +324,7 @@ GltfLoadResult load_skinned_gltf(const char* path, Skeleton& out_skeleton,
             submesh.index_count = uint32_t(out_mesh.indices.size()) - index_start;
             if (primitive->material) {
                 const cgltf_material* material = primitive->material;
+                submesh.surface = surface_from_name(material->name);
                 if (material->has_pbr_metallic_roughness) {
                     const cgltf_pbr_metallic_roughness& pbr = material->pbr_metallic_roughness;
                     submesh.base_color_texture =
@@ -557,6 +560,18 @@ std::vector<AnimationClip> load_clip_file(const char* path, const Skeleton& targ
     }
     cgltf_free(data);
     return clips;
+}
+
+int surface_from_name(const char* name) {
+    if (!name) return SURFACE_HIDE;
+    std::string lower(name);
+    for (char& c : lower) c = char(std::tolower(static_cast<unsigned char>(c)));
+    auto has = [&lower](const char* word) { return lower.find(word) != std::string::npos; };
+    if (has("eye")) return SURFACE_EYE;
+    if (has("membrane")) return SURFACE_MEMBRANE;
+    if (has("horn") || has("claw")) return SURFACE_HORN;
+    if (has("mouth")) return SURFACE_MOUTH;
+    return SURFACE_HIDE;
 }
 
 }  // namespace anim

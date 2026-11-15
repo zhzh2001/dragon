@@ -432,6 +432,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tail_flow_attack_scale),
     RIG_FLOAT_FIELD(tail_beat_deg),
     RIG_FLOAT_FIELD(tail_beat_lag),
+    RIG_FLOAT_FIELD(tail_beat_cycles),
     RIG_FLOAT_FIELD(neck_range_deg),
     RIG_FLOAT_FIELD(tail_range_deg),
     RIG_FLOAT_FIELD(tail_rudder_deg),
@@ -3157,18 +3158,6 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         state.control.x * tuning.tail_elevator_deg +
             brake_body_ * tuning.brake_tail_drop_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
-    // In time with the wings (tail_beat_deg): the same gate and the same
-    // curve as the body's heave (drive_body_beat), so the tail swings on the
-    // beat that lifts the body and is still in a glide.
-    if (tuning.tail_beat_deg != 0.0f) {
-        const float beat = core::saturate(state.flap_amplitude) *
-                           (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
-        if (beat > 1e-4f) {
-            const float down = core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
-            const float phase = wrapped_phase(state.flap_phase);
-            tail_steer.x += tuning.tail_beat_deg * beat * wingbeat_curve(phase - tuning.tail_beat_lag, down);
-        }
-    }
 
     // The neck leads the manoeuvre and lowers into the wind at speed -- and a
     // deliberate tuck streamlines regardless of how fast the dive is yet, the
@@ -3271,6 +3260,33 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
 
     drive_chain(tail_sim_, joints_.tail, state, frame_acceleration, angular_acceleration,
                 tail_steer, tail_feel, dt);
+    // The tail in time with the wings (tail_beat_deg). Laid on the bones
+    // after the chain has run, not fed to it: the chain's spring is soft
+    // (6 /s^2) and a wingbeat is fast (about 80 /s^2), so a beat sent
+    // through the spring arrived at a fifteenth of its size, which the
+    // playtest called too minor. Each vertebra pitches by its share of a
+    // wave that travels base to tip once per beat, growing toward the tip.
+    // The gate is the body's heave's (drive_body_beat): beating, not tucked,
+    // not on the ground.
+    if (tuning.tail_beat_deg != 0.0f && !joints_.tail.empty()) {
+        const float beat = core::saturate(state.flap_amplitude) *
+                           (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
+        tail_beat_amount_ = core::damp(tail_beat_amount_, beat, 0.15f, dt);
+        if (tail_beat_amount_ > 1e-4f) {
+            const float count = float(joints_.tail.size());
+            const float phase = wrapped_phase(state.flap_phase) - tuning.tail_beat_lag;
+            const float per_joint = core::radians(tuning.tail_beat_deg) * tail_beat_amount_ / count;
+            for (size_t i = 0; i < joints_.tail.size(); ++i) {
+                const float u = (float(i) + 0.5f) / count;
+                const float wave = std::sin(core::TWO_PI * (phase - tuning.tail_beat_cycles * u));
+                // Twice the share at the tip as at the base, the same sum.
+                const float envelope = (0.5f + u) ;
+                rotate_joint(joints_.tail[i], Vec3::unit_x(), pitch_sign * per_joint * envelope * wave, true);
+            }
+        }
+    } else {
+        tail_beat_amount_ = 0.0f;
+    }
     drive_chain(neck_sim_, neck_with_head, state, frame_acceleration, angular_acceleration,
                 neck_steer, neck_feel, dt);
     drive_legs(state, frame_acceleration, angular_acceleration, dt);

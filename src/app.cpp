@@ -3588,6 +3588,11 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
         if (atmosphere_.available()) ImGui::SliderFloat("sky in the hide", &lighting_.sky_reflection, 0.0f, 3.0f, "%.2f");
         if (tier_.tier == gfx::Tier::Modern) {
+            ImGui::SliderFloat("hide rim", &lighting_.hide_rim, 0.0f, 4.0f, "%.2f");
+            ImGui::SliderFloat("horn clear coat", &lighting_.clear_coat, 0.0f, 4.0f, "%.2f");
+            ImGui::SliderFloat("cornea", &lighting_.cornea, 0.0f, 4.0f, "%.2f");
+        }
+        if (tier_.tier == gfx::Tier::Modern) {
             ImGui::SliderFloat("breath light", &local_light_strength_, 0.0f, 1500.0f, "%.0f");
             ImGui::SliderFloat("membrane glow", &membrane_glow_, 0.0f, 8.0f, "%.2f");
         }
@@ -4247,6 +4252,19 @@ void App::studio_controls() {
 
 void App::life_controls() {
     anim::RigTuning& rig = dragon_rig_.tuning;
+    // First, because the playtest looked for it and could not find it in
+    // the Dragon panel behind the older-panels checkbox.
+    ImGui::SeparatorText("tail");
+    ImGui::SliderFloat("tail on the wingbeat", &rig.tail_beat_deg, -90.0f, 90.0f, "%.0f deg");
+    ImGui::SliderFloat("tail beat lag", &rig.tail_beat_lag, 0.0f, 1.0f, "%.2f of a beat");
+    ImGui::SliderFloat("tail beat wave", &rig.tail_beat_cycles, 0.0f, 1.5f, "%.2f cycles");
+    ImGui::SliderFloat("tail sway in the glide", &rig.tail_flow_deg, 0.0f, 45.0f, "%.0f deg");
+    ImGui::SliderFloat("tail sway period", &rig.tail_flow_period, 0.5f, 8.0f, "%.1f s");
+    ImGui::SeparatorText("air");
+    ImGui::SliderFloat("gusts", &rig.gust_deg, 0.0f, 6.0f, "%.1f deg");
+    ImGui::SliderFloat("gust heave", &rig.gust_heave_m, 0.0f, 0.6f, "%.2f m");
+    ImGui::SliderFloat("membrane flutter", &rig.flutter_deg, 0.0f, 8.0f, "%.1f deg");
+    ImGui::SliderFloat("flutter from speed", &rig.flutter_speed_start, 5.0f, 80.0f, "%.0f m/s");
     ImGui::SeparatorText("limb physics");
     ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
     ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
@@ -4493,8 +4511,6 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("tail tip stiffness", &rig.tail_tip_stiffness, 0.05f, 1.0f);
         ImGui::SliderFloat("tail flow", &rig.tail_flow_deg, 0.0f, 45.0f, "%.1f deg");
         ImGui::SliderFloat("tail flow period", &rig.tail_flow_period, 0.5f, 8.0f, "%.2f s");
-        ImGui::SliderFloat("tail on the beat", &rig.tail_beat_deg, -30.0f, 30.0f, "%.1f deg");
-        ImGui::SliderFloat("tail beat lag", &rig.tail_beat_lag, 0.0f, 0.5f, "%.2f of a beat");
         ImGui::SliderFloat("tail flow cycles", &rig.tail_flow_cycles, 0.25f, 2.0f);
         ImGui::SliderFloat("tail flow vertical", &rig.tail_flow_vertical, 0.0f, 1.0f);
         ImGui::SliderFloat("tail flow half-life", &rig.tail_flow_half_life, 0.05f, 2.0f, "%.2f s");

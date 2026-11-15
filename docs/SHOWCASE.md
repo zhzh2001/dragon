@@ -702,6 +702,26 @@ What changed in answer, besides the report:
 - The fore paw: no hang, half the toe curl, and a tuck of 50 degrees.
   Below 42 the legs trail long under the body.
 
+The user's second look (2026-11-15, 00:00): the tail's beat was too
+minor, and the slider could not be found. Both were true. The swing went
+through the tail's spring, whose stiffness is 6 /s^2 against a wingbeat's
+80, so a fifteenth of it arrived. The slider was in the Dragon panel,
+which is behind the older-panels checkbox. The beat is now laid on the
+tail's bones after the chain has run: one swing a beat, 40 degrees at the
+tip, with `tail_beat_cycles` of a wave along the tail.
+`artifacts/showcase-anim/tail-on-the-beat.jpg` has the first version above
+and this one below. The Playtest panel's life section now begins with
+"tail" and "air": the beat, its lag and wave, the glide's sway, the gusts
+and the flutter.
+
+The same look said the legs still stretch back too far beside the older
+models, and that the leg joints are strange, and that the generated model
+may be to blame. It is. The body's plates asked for "four straight legs",
+so the sculpt's legs are columns with no visible knee, elbow or hock. The
+rig's joints were placed on them by eye, and a tuck that folds a bent leg
+only swings a straight one backward. The body is generated again from
+plates with the legs bent as a standing animal's are.
+
 The mesh and weight rows are the next asset round: wings generated alone,
 the flank given more of the atlas, the chest spike and the thigh plate
 removed, and the shoulder's weights smoothed. The rig is then rebuilt with
@@ -733,6 +753,60 @@ extension is in two of them. Reopened after a quit, Chrome came up on the
 third, and `chrome-use` reported an unresponsive session. A window opened
 with `--profile-directory=Default` brought the relay back.
 `tools/hunyuan_oneshot.md` should say this when it is next edited.
+
+## The body, generated again with bent legs (2026-11-15, 00:15)
+
+The plates are in `artifacts/showcase-study/hero-body2-plates/`, from the
+Codex image backend with the design's three views as subject references.
+The prompt asks for a standing quadruped predator with every leg joint
+bent and visible, and names each joint. Hunyuan's generation is
+`assets/embercrest-cand-hero-body2-hunyuan.glb`, and
+`artifacts/showcase-study/hero-cand-body2-vs-body.jpg` shows the old sculpt
+and the new one from the side.
+
+- The fore leg has a shoulder mass, an elbow that points back, a wrist and
+  a paw. The hind leg has a haunch, a knee that points forward and a raised
+  hock. The old sculpt had none of these.
+- The stance is wider and lower: 0.336 by 1.167 by 0.399 in the
+  generator's units against 0.218 by 1.145 by 0.476.
+- The scales are the same size and as crisp. The belly band is cleaner.
+
+The mesh worker's brief grew a second stage: build from this body, place
+each leg joint on the joint the sculpt shows, and deliver pairs from the
+playtester's side view.
+
+## S3, as built: the rim, the clear coat and the cornea (2026-11-15)
+
+A submesh now carries a surface class (`anim::SkinSurface`), read from the
+glTF material's name by `surface_from_name`: hide, membrane, horn (and
+claw), eye, mouth. `world_renderer.cpp` passes it in `material.w`, and
+`skinned.hlsl` adds three terms.
+
+- The rim. With the sun beyond the creature, the edges of the hide take
+  its light: grazing angle squared, times how far the view looks toward
+  the sun. The body's own shadow dims it to 40% and does not remove it,
+  because the shadow map cannot tell a scale's lit edge from the flank
+  behind it. Before this, a dragon seen against the sun was a black
+  cut-out. A model with one material gets the rim too.
+- The clear coat. Horn and claw wear a second, tight lobe (roughness 0.22)
+  on the face normal, and reflect the sky through it.
+- The cornea. The eye wears the same coat at roughness 0.11 and reflects
+  the sky at 2.5 times the horn's share, so it has a window of sky in it
+  from most angles.
+
+The gains are "hide rim", "horn clear coat" and "cornea" in the Engine
+panel's lighting section, beside "sky in the hide". They ride in
+`scene.clouds2.yzw`, which was unused.
+`artifacts/showcase-s3/rim-coat-cornea-before-after.jpg` has the head
+against the sun and the body from below, before on the left.
+
+The Metal goldens were captured again: every difference was on the
+dragon. The Vulkan, D3D12 and D3D11 sets are stale until x99 next runs
+`golden.py capture`. The retro tiers do not have these terms, and a model
+pack does not store the surface class.
+
+Not done in S3: the membrane's thickness and veins wait for mesh version
+3's wing textures.
 
 ## Open questions
 

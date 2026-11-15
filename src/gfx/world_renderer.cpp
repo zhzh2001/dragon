@@ -530,6 +530,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
         submesh_model.material.x = base_colour && sampler ? 1.0f : 0.0f;
         submesh_model.material.y = normal_map && sampler ? 1.0f : 0.0f;
         submesh_model.material.z = orm_map && sampler ? 1.0f : 0.0f;
+        submesh_model.material.w = float(submesh.surface);  // anim::SkinSurface
         device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &submesh_model, sizeof(ModelUniforms));
         device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &submesh_model, sizeof(ModelUniforms));
 

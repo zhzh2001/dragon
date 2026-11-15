@@ -35,6 +35,8 @@ SceneUniforms make_scene_uniforms(const Camera& camera, float aspect, const Ligh
     uniforms.shadow_params = Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     uniforms.light_params =
         Vec4{lighting.sun_wrap, lighting.foliage_translucency, lighting.ground_bounce, lighting.sky_reflection};
+    // x is the volumetric clouds' flag, which the caller sets.
+    uniforms.clouds2 = Vec4{0.0f, lighting.hide_rim, lighting.clear_coat, lighting.cornea};
     for (int i = 0; i < PALETTE_COUNT; ++i) uniforms.palette[i] = lighting.palette.colors[i];
     return uniforms;
 }

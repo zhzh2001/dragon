@@ -254,6 +254,25 @@ float4 fs_main(VertexOut input) : SV_Target {
     float3 fresnel = f0 + (1.0 - f0) * pow(1.0 - saturate(dot(half_vector, to_camera)), 5.0);
     float3 specular = fresnel * distribution * saturate(dot(normal, to_sun)) * 0.25;
 
+    // The surface class (anim::SkinSurface, from the material's name): 2 is
+    // horn and claw, 3 the eye. Both wear a smooth coat over whatever is
+    // under it -- keratin's polish, the cornea -- so the coat's lobe uses the
+    // face and not the normal map, and is far tighter than the base's.
+    const float is_horn = abs(model.material.w - 2.0) < 0.5 ? 1.0 : 0.0;
+    const float is_eye = abs(model.material.w - 3.0) < 0.5 ? 1.0 : 0.0;
+    const float coat = is_horn * scene.clouds2.z + is_eye * scene.clouds2.w;
+    const float face_dot_v = saturate(dot(face, to_camera));
+    float coat_fresnel = 0.04 + 0.96 * pow(1.0 - face_dot_v, 5.0);
+    if (coat > 0.0) {
+        float coat_alpha = is_eye > 0.5 ? 0.012 : 0.05;  // roughness 0.11 and 0.22, squared
+        float f_dot_h = saturate(dot(face, half_vector));
+        float coat_denominator = f_dot_h * f_dot_h * (coat_alpha * coat_alpha - 1.0) + 1.0;
+        float coat_lobe = (coat_alpha * coat_alpha) / max(3.14159265 * coat_denominator * coat_denominator, 1e-4);
+        // The lobe of a surface this smooth is thousands at its peak: the
+        // bloom takes it from there, so it is capped where a highlight reads.
+        specular += min(coat_lobe, 60.0) * coat_fresnel * saturate(dot(face, to_sun)) * 0.25 * coat;
+    }
+
     // Metals have no diffuse response.
     float3 diffuse = albedo * (1.0 - metallic);
     float3 lit_color = diffuse * (direct + ambient * occlusion) +
@@ -265,6 +284,21 @@ float4 fs_main(VertexOut input) : SV_Target {
     if (transmitted > 0.0) {
         float3 hue = albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 0.02);
         lit_color += diffuse * hue * scene.sun_color.rgb * scene.sun.w * (transmitted * 0.5);
+    }
+    // The sun raking the edge of the hide (docs/SHOWCASE.md, S3). Scales
+    // stand up from the skin, and at a grazing angle with the sun beyond the
+    // creature their edges pass its light forward: the lit outline every
+    // backlit animal has. Without it a dragon seen against the sun was a
+    // black cut-out. Not on the membrane, which transmits instead.
+    if (scene.clouds2.y > 0.0) {
+        float graze = 1.0 - saturate(dot(normal, to_camera));
+        float against = saturate(dot(-to_camera, to_sun) * 0.5 + 0.5);
+        float reach = saturate(dot(normal, to_sun) + 0.75);  // the edge is side-on to the sun
+        // The body's own shadow only dims it: the map cannot tell the lit
+        // edge of a scale from the dark flank a texel behind it.
+        float rim = graze * graze * against * against * reach * (0.4 + 0.6 * visibility) * (1.0 - membrane);
+        float3 hue = albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 0.02);
+        lit_color += (0.35 * hue + 0.05) * scene.sun_color.rgb * scene.sun.w * (rim * 1.3 * scene.clouds2.y);
     }
 #ifdef USE_ATMOSPHERE
     // The sky in the hide (F4): what the reflected ray sees -- the sky above
@@ -285,6 +319,13 @@ float4 fs_main(VertexOut input) : SV_Target {
         sky_seen *= terrain_sky(input.world_position);
 #endif
         lit_color += environment * env_fresnel * gloss * sky_seen * scene.light_params.w;
+        // And in the coat: the sky's window in an eye, the sheen along a horn.
+        if (coat > 0.0) {
+            float3 coat_r = reflect(-to_camera, face);
+            float3 coat_seen = lerp(ground_seen, sky_color(normalize(float3(coat_r.x, max(coat_r.y, 0.0), coat_r.z))),
+                                    smoothstep(-0.15, 0.1, coat_r.y));
+            lit_color += coat_seen * coat_fresnel * sky_seen * coat * (is_eye > 0.5 ? 2.5 : 1.0);
+        }
     }
 #endif
 
