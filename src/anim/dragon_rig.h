@@ -776,6 +776,12 @@ struct RigTuning {
     // beneath it like landing gear.
     float leg_trail_deg = 38.0f;
     float front_leg_trail_deg = 30.0f;
+    // The fore legs' own fold. At kFrontTuckInherit (every profile without
+    // the key) they take leg_tuck_deg, as they always did. A model whose bind
+    // pose has bent legs needs the pair apart: the hero's hind leg folds on a
+    // negative tuck, which opens its elbow.
+    static constexpr float kFrontTuckInherit = 999.0f;
+    float front_leg_tuck_deg = kFrontTuckInherit;
     // During an air-brake a flying animal begins to unfold its landing limbs
     // and lets them float into the airflow: a partial extension and an
     // engine-forward hip offset. Every shipped profile carries its own pair;

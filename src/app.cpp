@@ -4200,7 +4200,7 @@ void App::studio_controls() {
             ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
             ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
             ImGui::SeparatorText("legs");
-            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 110.0f, "%.0f deg");
+            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 110.0f, "%.0f deg");
             ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
                                "%.0f deg");
@@ -4214,7 +4214,7 @@ void App::studio_controls() {
             ImGui::SliderFloat("stroke plane tilt", &rig.stroke_plane_tilt_deg, -45.0f, 45.0f,
                                "%.0f deg");
             ImGui::SeparatorText("legs");
-            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 110.0f, "%.0f deg");
+            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 110.0f, "%.0f deg");
             ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
             ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
                                "%.0f deg");
@@ -4547,7 +4547,13 @@ void App::build_dragon_ui() {
     }
 
     if (ImGui::CollapsingHeader("Legs & authored motion")) {
-        ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, 0.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 120.0f, "%.0f deg");
+        {
+            // The fore legs' own fold; until it is touched they follow "leg tuck".
+            float front = rig.front_leg_tuck_deg >= anim::RigTuning::kFrontTuckInherit - 1.0f ? rig.leg_tuck_deg
+                                                                                              : rig.front_leg_tuck_deg;
+            if (ImGui::SliderFloat("front leg tuck", &front, -60.0f, 120.0f, "%.0f deg")) rig.front_leg_tuck_deg = front;
+        }
         if (dragon_rig_.has_base_clip()) {
             ImGui::TextDisabled("clip '%s'%s", player_model().animations[size_t(player_model().idle_clip)].name.c_str(),
                                 player_model().idle_clip_hold >= 0.0f ? " (held at its last frame)" : "");

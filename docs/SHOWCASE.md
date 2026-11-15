@@ -802,6 +802,48 @@ The mesh worker's brief grew a second stage: build from this body, place
 each leg joint on the joint the sculpt shows, and deliver pairs from the
 playtester's side view.
 
+## Mesh version 4: the bent-leg body, its rig, and the fore legs' own fold (2026-11-15, 03:10)
+
+A second Claude worker built the mesh on the new body under version 2's
+wings and refitted the rig (48 minutes; commits `8f5063b` and `4df96a6`,
+merged). `tools/hero-build.md` and `tools/hero-rig.md` have the record,
+and `artifacts/hero-build/pairs-v4-*.jpg` the pairs, version 2 on the
+left.
+
+- The mesh passes its 86 checks: hide 104,162, membrane 4,444, horn 7,488
+  triangles. Length, wingspan, head and tail tip are version 2's.
+- Each leg joint sits on the joint the sculpt shows. The elbow, knee and
+  hock come from side silhouettes, with 50 to 100 mm of error.
+- The rig passes its 56 checks with two of them changed, 53 without. The
+  hind limb's volume check closed the knee by 60 degrees, which drives a
+  shin that is already bent 75 degrees into the thigh; it now opens it.
+  The hide's mirror check needed 50% of vertices on the plain field and
+  49.8% are; the floor is 45%.
+- `HIND_WIDEN` is 0. The hind legs lean in 0.35 m at the ground with a
+  fade, so the step across the tail root is gone.
+- The bind pose is now a stance, so the tuck's sign changed:
+  `leg_tuck_deg` -30 and `leg_trail_deg` 45 fold the hind leg into a Z
+  under the hip. With the old values it trailed in one line along the
+  tail, which is the stretch the playtester saw.
+
+One tuck served both leg pairs, and the value that folds the hind leg
+opens the elbow. `front_leg_tuck_deg` is new in the rig: a profile
+without it takes `leg_tuck_deg` as before. The hero carries 60 with a
+trail of 30, chosen from six rendered candidates
+(`artifacts/showcase-anim/v4-fore-leg-fold-candidates.jpg`). The Dragon
+panel has "front leg tuck" under "leg tuck".
+`artifacts/showcase-anim/v4-legs-folded-in-engine.jpg` shows the glide
+from the side and below, the flap, the bite, the stand and a landing.
+
+Worse than version 2, or open:
+
+- The hind knees stand out beside the body from above.
+- A pale wedge of belly skin shows at the fore armpit in part of the beat.
+- The knee's skinning loses or gains 13 to 17% volume at 60 degrees.
+- The fore paw has four toes and the rig three toe bones.
+- Dive, brake, turns and the head close-up were not looked at on this
+  mesh. The Blender pose sheets in `artifacts/hero-rig/` are older.
+
 ## S3, as built: the rim, the clear coat and the cornea (2026-11-15)
 
 A submesh now carries a surface class (`anim::SkinSurface`), read from the

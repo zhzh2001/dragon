@@ -514,6 +514,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_sway_damping),
     RIG_FLOAT_FIELD(leg_trail_deg),
     RIG_FLOAT_FIELD(front_leg_trail_deg),
+    RIG_FLOAT_FIELD(front_leg_tuck_deg),
     RIG_FLOAT_FIELD(leg_brake_extend),
     RIG_FLOAT_FIELD(leg_brake_forward_deg),
     RIG_FLOAT_FIELD(leg_posture_sway),
@@ -2319,7 +2320,11 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
         // factor keeps them aft on a model facing the other way. The pendulum
         // swing is already in model space and needs no help.
         const float aft = model_forward_z_;
-        auto drive_limb = [&](const std::vector<int>& chain, float trail_angle) {
+        const float front_tuck_angle =
+            tuning.front_leg_tuck_deg >= RigTuning::kFrontTuckInherit - 1.0f
+                ? tuck_angle
+                : core::radians(tuning.front_leg_tuck_deg) * flight_fold;
+        auto drive_limb = [&](const std::vector<int>& chain, float trail_angle, float tuck_angle) {
             float sign = 1.0f;
             bool first = true;
             for (const int joint : chain) {
@@ -2337,10 +2342,11 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
                 sign *= -1.15f;
             }
         };
-        drive_limb(joints_.leg[side], trail);
+        drive_limb(joints_.leg[side], trail, tuck_angle);
         drive_limb(joints_.front_leg[side],
                    (core::radians(tuning.front_leg_trail_deg) +
-                    core::radians(tuning.leg_dive_trail_deg) * dive) * flight_fold);
+                    core::radians(tuning.leg_dive_trail_deg) * dive) * flight_fold,
+                   front_tuck_angle);
 
         // The claw: the near limb rakes forward and down and returns. The
         // foreleg where there is one, the hind leg on a wyvern. Side 0 is
