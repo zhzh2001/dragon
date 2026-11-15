@@ -414,6 +414,26 @@ What follows from it:
   that happens.
 - The rig starts now on this mesh.
 
+### The body, generated without its wings (2026-11-14)
+
+The wings are about half of the dragon's surface, so a whole-body
+generation spends half its texture on membrane. Three plates of the design
+with the wings removed are in
+`artifacts/showcase-study/hero-body-plates/`, and
+`assets/embercrest-cand-hero-body-hunyuan.glb` is the generation from
+them. `artifacts/showcase-study/hero-cand-body-hunyuan.jpg` shows it whole
+and in close-up.
+
+The back now has rows of separate keeled plates from the shoulders to the
+tail tip, the flanks and thighs have distinct scales with a gloss on each,
+and the belly has broad pale plates. This is the surface the head already
+has, so the collar no longer marks a change of quality.
+
+The static mesh is rebuilt from three sculpts: this body, the head, and
+the wings of the first whole-body generation. The rig is refitted
+afterwards with the same script. Four of the day's five cloud generations
+are used.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
