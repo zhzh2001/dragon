@@ -370,6 +370,50 @@ and back inputs only; `left` and `right` are added to
 `CLIPVisionEncode`. The checkpoint on disk is
 `hunyuan3d-dit-v2-mv.safetensors`, not the `_fp16` name in the template.
 
+### The static mesh, as built (2026-11-14)
+
+A Claude subagent built `assets/embercrest-hero-static.glb` from the two
+cloud sculpts, to `tools/showcase/hero-build-brief.md`. It took 2 hours 24
+minutes and about 498,000 tokens, with every Blender run in the
+foreground. `tools/build_hero.py` rebuilds it, `tools/hero-build.md` is
+its record, and `artifacts/hero-build/` has its seven renders. The file is
+21.8 MB and git ignores it, as it does every `assets/*.glb`.
+
+| Part | Triangles | Maps |
+|---|---|---|
+| `hide` | 100,773 | 4K |
+| `membrane` | 6,340 | 2K, plus a thickness map |
+| `horn` (horns and claws) | 7,803 | 1K |
+| `eye_l`, `eye_r` | 1,024 each | 512 |
+| `mouth` (gums, 67 teeth, tongue, throat) | 4,686 | 1K |
+
+The main session's reading of the renders:
+
+- The head is the result this round wanted. `head.png` and `eye.png` show
+  a separate amber eyeball with a slit pupil under an open lid, plates
+  that read one by one, and horns that are glossy where the hide is not.
+  The eyes turn 25 degrees each way and stay 4.7 mm clear of the lids.
+- The jaw opens 35 degrees (`mouth.png`). The interior is there, and it is
+  flat: the gums and tongue are ramps of pink with no relief. It holds at
+  chase distance and not in a close-up of a roar.
+- The neck seam fails the brief, and the worker said so. The geometry is
+  closed. What shows in `seam.png` is two surfaces: the head sculpt's
+  crisp plates stop at the collar and the body sculpt's soft, smeared
+  scales begin. The body's texture is now the weakest part of the dragon.
+- The topology is a decimation with loops cut in at the lips, the lids and
+  62 joint planes (`wire.png`). It is not a retopology, and the frill's
+  thin spikes will be hard to skin.
+- The frill hides most of the neck, so the dragon reads shorter in the
+  neck than the design.
+
+What follows from it:
+
+- The body gets the head's treatment. The neck and chest, a foreleg, a
+  hindleg and the tail are each generated alone, and their textures are
+  baked onto this same mesh. The geometry and the rig do not change when
+  that happens.
+- The rig starts now on this mesh.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
