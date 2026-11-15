@@ -1613,6 +1613,40 @@ wall or in the river.
 Not done: no froth line where a riffle breaks, the gravel has no cobbles at
 close range, and the spray reads as round balls of light.
 
+### The ward stone (16:00)
+
+The flying sentinel and the training target were a plain sphere 7 m in
+radius, a placeholder since combat was first built. In the fire frame it
+filled a third of the picture, and the critic scored that frame "without
+the placeholder ball". The design call was listed for the user; with
+"continue autonomously" it was taken here, and it is one prop to swap back.
+
+`assets/props/ward_stone.glb` (`tools/props.md`, built by
+`tools/build_props.py`; gpt-6-astra on the work account, medium, 76 k
+tokens, one unattended pass in a worktree): seven basalt shards with rune
+grooves, held by two studded iron bands around an empty socket, a long
+shard down as a keel. 3,108 triangles. The socket is clear to 4.38 m, and
+52% of rays from its centre leave between the shards.
+
+In the engine (`App::ward_stone_matrix` and the sentinel loop of the world
+pass):
+
+- The stone turns about its own axis, 20 degrees a second, each from its
+  own angle, and casts a shadow.
+- The core in the socket is the health readout the inner sphere was: it
+  shrinks with damage. It takes the sentinel's element colour, and it is
+  what flashes on a hit. The cage warms on a hit and rimes when frozen, as
+  a tower does.
+- An unlit mesh now has a hot middle and a limb in its own colour
+  (`mesh.hlsl`: 0.45 at the limb to 2.1 facing the eye, a mean near one).
+  One flat colour across a sphere was a paper disc. This reaches the
+  brazier fires and the fireballs as well.
+- At 2.6 times its colour the core threw two vertical pillars of glare
+  beside the stone. It is 1.7.
+
+The pair, from 26 m: `artifacts/showcase-critic/ward-stone-before-after.jpg`.
+`--training` now logs where its line starts, for a `--cam` on it.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

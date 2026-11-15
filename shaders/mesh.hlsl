@@ -129,7 +129,16 @@ float4 fs_main(VertexOut input) : SV_Target {
     // no sun or ambient term at all. Fire needs this: adding two units of
     // sunlight on top of a flame turns it into a white balloon.
     float3 lit_color = input.albedo * input.emissive;
-    if (input.unlit < 0.5) lit_color += input.albedo * (direct + ambient);
+    if (input.unlit < 0.5) {
+        lit_color += input.albedo * (direct + ambient);
+    } else {
+        // A light has a hot middle and a limb in its own colour. One flat
+        // colour across it was a paper disc: a ward stone's core, a
+        // brazier's fire and a fireball each read as a sticker on the frame.
+        // Over a sphere the mean of this is about one, so it is no brighter.
+        float facing = saturate(dot(normal, to_camera));
+        lit_color *= 0.45 + 1.65 * facing * facing * facing;
+    }
 
     float3 fogged = apply_fog(lit_color, input.world_position);
     return float4(scene_out(fogged), input.unlit < 0.5 ? occlusion_share(ambient, direct + ambient) : 0.0);

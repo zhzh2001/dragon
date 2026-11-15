@@ -473,6 +473,13 @@ private:
     // second cache, so a valley is not one repeated shape; and the grazer, a
     // skinned prey animal with three baked clips (tools/grazer.md).
     PropModel spire_prop_, trove_prop_, grazer_prop_;
+    // The ward stone (tools/props.md): the flying sentinel and the training
+    // target, a cage of basalt shards about the glowing core the engine
+    // draws. Before it both were a plain sphere.
+    PropModel ward_prop_;
+    // The ward stone's place and turn: about its own axis, slowly, each one
+    // from its own angle.
+    core::Mat4 ward_stone_matrix(const game::Sentinel& sentinel, int index) const;
     rhi::Texture* terrain_detail_texture_ = nullptr;
     rhi::Texture* terrain_rock_texture_ = nullptr;
     rhi::Texture* terrain_scree_texture_ = nullptr;

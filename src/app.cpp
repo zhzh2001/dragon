@@ -63,7 +63,7 @@ namespace {
 // The props a run places (tools/props.md): loaded at start, baked by
 // --bake-packs. Indexed by load order in App::init.
 const char* const kPropFiles[] = {"props/watchtower.glb", "props/hoard_pile.glb", "props/spire_tower.glb",
-                                  "props/hoard_trove.glb", "props/grazer.glb"};
+                                  "props/hoard_trove.glb", "props/grazer.glb", "props/ward_stone.glb"};
 
 }  // namespace
 
@@ -726,6 +726,7 @@ bool App::init(const Options& options) {
     load_prop(core::paths::asset(kPropFiles[1]).c_str(), hoard_prop_, "prop_hoard");
     load_prop(core::paths::asset(kPropFiles[2]).c_str(), spire_prop_, "prop_spire");
     load_prop(core::paths::asset(kPropFiles[3]).c_str(), trove_prop_, "prop_trove");
+    load_prop(core::paths::asset(kPropFiles[5]).c_str(), ward_prop_, "prop_ward");
     if (load_prop(core::paths::asset(kPropFiles[4]).c_str(), grazer_prop_, "prop_grazer", &grazer_clips_)) {
         static const char* const names[3] = {"graze", "walk", "run"};
         for (int c = 0; c < 3; ++c) {
@@ -1971,6 +1972,7 @@ void App::shutdown() {
         release_prop(spire_prop_);
         release_prop(trove_prop_);
         release_prop(grazer_prop_);
+        release_prop(ward_prop_);
         device_.rhi().destroy(terrain_detail_texture_);
         terrain_detail_texture_ = nullptr;
         device_.rhi().destroy(terrain_rock_texture_);
@@ -2529,6 +2531,9 @@ void App::spawn_training_room() {
     const game::FlightState& s = flight_.state();
     combat_.spawn_training(s.position, s.forward(), s.right());
     LOG_INFO("training room: six passive dummies laid out ahead; R to fly the line again");
+    // Where, for a capture of them (--cam): the first is 60 m along the heading.
+    LOG_INFO("training room: from %.0f,%.0f,%.0f heading %.2f,%.2f", double(s.position.x), double(s.position.y),
+             double(s.position.z), double(s.forward().x), double(s.forward().z));
 }
 
 void App::update(float dt) {
@@ -5351,6 +5356,14 @@ void App::mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skel
     LOG_INFO("membranes: %zu of %zu vertices", marked, mesh.vertices.size());
 }
 
+core::Mat4 App::ward_stone_matrix(const game::Sentinel& sentinel, int index) const {
+    // Built for a sentinel 7 m in radius (tools/props.md).
+    const float scale = combat_.tuning.sentinel_radius / 7.0f;
+    const core::Quat turn =
+        core::Quat::from_axis_angle(core::Vec3::up(), time_seconds_ * 0.35f + 2.4f * float(index));
+    return core::Mat4::trs(sentinel.position, turn, core::Vec3{scale, scale, scale});
+}
+
 bool App::load_prop(const char* path, PropModel& out, const char* tag,
                     std::vector<anim::AnimationClip>* clips) {
     anim::SkinnedMeshData data;
@@ -8058,14 +8071,34 @@ void App::draw_combat(rhi::Pass* pass) {
             continue;
         }
         const bool frozen = sentinel.status.frozen > 0.0f;
-        const core::Vec3 base = frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::Vec3{0.72f, 0.24f, 0.18f};
-        const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, frozen ? 0.0f : flash);
         // The flash is for range. At full strength up close, a target held
         // in the breath was a flat orange disc with no shading, a third of
         // the frame at 15 m (the blind critic, 2026-11-15).
         const float flash_reach =
             core::lerpf(0.35f, 1.6f, core::smoothstep(40.0f, 300.0f,
                                                       core::distance(active_camera().position, sentinel.position)));
+        if (ward_prop_.ok) {
+            // The ward stone: the cage warmed by a hit and rimed by frost,
+            // as a tower is, and in its socket the core. The core is the
+            // health readout the inner sphere was (it shrinks with damage),
+            // in the sentinel's element, and it is what flashes.
+            const int index = int(&sentinel - combat_.sentinels().data());
+            gfx::ModelUniforms ward;
+            ward.model = ward_stone_matrix(sentinel, index);
+            ward.tint = core::Vec4{1.35f + 0.6f * flash, 1.3f + 0.3f * flash, 1.25f, flash * 0.4f};
+            if (frozen) ward.tint = core::Vec4{0.8f, 1.0f, 1.4f, 0.15f};
+            world_.draw_skinned(device_, pass, ward_prop_.mesh, ward, ward_prop_.joints, ward_prop_.textures,
+                                model_sampler_);
+            const core::Vec3 own = sentinel.element != game::Element::None ? game::element_colour(sentinel.element)
+                                                                           : core::Vec3{1.0f, 0.52f, 0.12f};
+            const float pulse = 1.0f + 0.05f * std::sin(time_seconds_ * 5.0f + float(index));
+            draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health * pulse * (1.0f + 0.12f * flash),
+                      frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::lerp(own, core::Vec3{1.0f, 0.75f, 0.3f}, flash),
+                      1.7f + 2.0f * flash * flash_reach, true);
+            continue;
+        }
+        const core::Vec3 base = frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::Vec3{0.72f, 0.24f, 0.18f};
+        const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, frozen ? 0.0f : flash);
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
                   colour, frozen ? 0.25f : 0.18f + flash * flash_reach);
         // A smaller inner sphere shrinks as it takes damage: a health readout
@@ -9425,6 +9458,17 @@ void App::render() {
                 world_.draw_skinned_depth(device_, shadow_pass, worn.mesh,
                                           shadow_.light_view_proj(), bot_model,
                                           bot->rig.skinning_matrices());
+            }
+            // The ward stones' shadows, on the ground and on each other.
+            if (ward_prop_.ok && !ablated("towers")) {
+                for (size_t i = 0; i < combat_.sentinels().size(); ++i) {
+                    const game::Sentinel& s = combat_.sentinels()[i];
+                    if (!s.alive || s.ground || s.external) continue;
+                    gfx::ModelUniforms m;
+                    m.model = ward_stone_matrix(s, int(i));
+                    world_.draw_skinned_depth(device_, shadow_pass, ward_prop_.mesh, shadow_.light_view_proj(), m,
+                                              ward_prop_.joints);
+                }
             }
             // The run's props cast shadows: a tower's shadow on the slope is how
             // its height reads from the air.
