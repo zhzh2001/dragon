@@ -117,7 +117,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float3 direct = direct_sun(normal, visibility) + local_light(input.world_position, normal);
-    float3 ambient = ambient_light(normal);
+    float3 ambient = ambient_light_at(normal, input.world_position);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // down in a gully, less sky
 #endif

@@ -1156,6 +1156,85 @@ round is judged by: the blind critic on six fixed views, then the motion
 number. Then the techniques in the table's order, with rows 2, 4 and 10
 after the rock worker's branch merges, because they touch the same files.
 
+## The blind critic, round 1 (2026-11-15, 13:15)
+
+Eight fixed 1080p views went to an agent that saw the renders and the two
+slice targets and nothing else. The views, their flags and the whole report
+are in `artifacts/showcase-critic/round1/`. Run the same eight views for
+every later round, so rounds compare.
+
+Its verdict: the build is "well short of target-floor", the dragon is "the
+best asset in the game", and the frame reads as four styles (a semi-realistic
+dragon, low-poly plants, "smooth procedural clay terrain", toy rings and
+clouds). Its ten fixes, in its order:
+
+| # | Fix | State |
+|---|---|---|
+| 1 | Rock and cliff surfaces on the valley walls: "one sandy noise texture", no strata, no gullies with scree | the rock worker's branch, then row 4 of the technique table |
+| 2 | The fire frame: a flat orange disc over a third of the picture | not fire: a training target's hit flash, see below |
+| 3 | Square edges on the spray | fixed, see below |
+| 4 | Ground cover: "sparse spiky blades on a bare green plane" | open (S7) |
+| 5 | Trees: low-poly, "lollipop" broadleaves, an even tree line with no clearings | open |
+| 6 | Gate rings: the later gates show as grey rings inside the next one, and a near gate is a filled grey disc | open, a design call |
+| 7 | White streaks across the sky and slopes, also when landed | they are the thermals' wind lines, see below |
+| 8 | Water: no gravel bars, no depth colour, hard grass banks | open (S8, row 8) |
+| 9 | HUD markers overlap and clip at the screen edge; the tutorial line reads as debug text | open (S9) |
+| 10 | Exposure and haze differ from view to view; shade is too dark and cold | open (S9) |
+
+It also said: from behind, the hero's head is "a shaggy spiky mop with no
+readable skull or horns"; the landed wings hang "half-open like a cape"; the
+wing membrane close up is "smooth, glossy and plastic"; the lone clouds are
+"cotton-ball sprites"; the pebbles on the slopes are stickers with no contact
+shadow.
+
+What this session never flagged and the critic saw at once: the spray's
+squares, the target's flat disc, the wind lines read as scratches, the gates
+dominating four of eight frames, and the label pile-up in combat.
+
+### Fixed in this round
+
+- The spray (`artifacts/showcase-critic/spray-edges-before-after.jpg`). Two
+  causes. A strong billow alone carried the smoke's body past the alpha
+  threshold at the quad's edge, so the quad's corners showed; the smoke now
+  closes by r = 1. And a billboard that crossed the river was cut by the
+  depth test along a straight line; a particle now carries `floor`, the
+  height of the surface it rises off, and the smoke fades toward it. The
+  floor is the drawn plane, which stands 0.5 m over the water line on the
+  modern tier. The first try used the water line and changed nothing.
+- Report 0011, read again. The mark is on a tree in the mountain's shadow.
+  The plants there were warm and bright on dark blue ground. Cause: a
+  plant's cards stand upright, so half their ambient is the ground bounce,
+  and the bounce was the sun's full colour whether or not the ground there
+  was in sun. `ambient_light_at` (scene_common.hlsl) cuts nine tenths of
+  the bounce where `ground_sun` says the ground in that column is shaded by
+  the terrain or a cloud. Every lit world shader calls it. In the report's
+  view the mean changed by 0.4% of full scale and the spruces went from
+  olive to blue-green (`artifacts/showcase-critic/shade-bounce-before-after.jpg`).
+  It is a moderate change, not the whole answer.
+- A training target held in the breath flashed at full emissive, which was
+  tuned to be seen at 500 m. Within 40 m the flash is now 0.35 of that. The
+  target is still a plain ball. It needs a prop.
+
+### Still open from report 0011
+
+A tree in the mountain's shadow has nothing under it, so it floats. It needs
+shade from the sky, not the sun: a soft blot under each crown. The terrain's
+canopy map has 7 m texels and fades in past 150 m. The route is a top-down
+target around the camera, drawn from the tree instances as soft discs, which
+the terrain and the grass read into their ambient. It touches
+`gfx/foliage.*`, so it waits for the rock branch.
+
+The bark is saturated red-brown in shade (the critic: "the tree trunks at
+the left are saturated red").
+
+### Not changed, because they are design calls
+
+- The white streaks are the thermals' wind lines, made a metre wide on
+  purpose so a pilot can pick a column from 400 m. To a viewer who does not
+  know that, they are scratches on the picture.
+- The course's gates are in every arena frame. The later gates draw grey
+  through the next one.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

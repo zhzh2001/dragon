@@ -7895,8 +7895,14 @@ void App::draw_combat(rhi::Pass* pass) {
         const bool frozen = sentinel.status.frozen > 0.0f;
         const core::Vec3 base = frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::Vec3{0.72f, 0.24f, 0.18f};
         const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, frozen ? 0.0f : flash);
+        // The flash is for range. At full strength up close, a target held
+        // in the breath was a flat orange disc with no shading, a third of
+        // the frame at 15 m (the blind critic, 2026-11-15).
+        const float flash_reach =
+            core::lerpf(0.35f, 1.6f, core::smoothstep(40.0f, 300.0f,
+                                                      core::distance(active_camera().position, sentinel.position)));
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
-                  colour, frozen ? 0.25f : 0.18f + flash * 1.6f);
+                  colour, frozen ? 0.25f : 0.18f + flash * flash_reach);
         // A smaller inner sphere shrinks as it takes damage: a health readout
         // that needs no UI and works at any distance or angle.
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health,

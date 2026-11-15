@@ -116,7 +116,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float translucency = scene.light_params.y * saturate(baked.a);
-    float3 ambient = ambient_light(normal);
+    float3 ambient = ambient_light_at(normal, input.world_position);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);
 #endif

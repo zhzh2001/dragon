@@ -356,7 +356,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     // not: sun leaking through it from behind.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
     float translucency = material == FOLIAGE_MAT_BARK ? 0.0 : scene.light_params.y;
-    float3 ambient = ambient_light(normal);
+    float3 ambient = ambient_light_at(normal, input.world_position);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // a stand in a gully sees less sky
 #endif

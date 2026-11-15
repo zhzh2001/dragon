@@ -489,7 +489,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
-    float3 ambient = ambient_light(normal);
+    float3 ambient = ambient_light_at(normal, input.world_position);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // the gully sees less sky than the ridge
 #endif
