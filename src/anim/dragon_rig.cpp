@@ -578,6 +578,35 @@ std::string profile_path(const std::string& model, const char* suffix) {
     return std::ifstream(species).good() ? species : beside;
 }
 
+int apply_rig_tuning(RigTuning& tuning, const std::string& list) {
+    int applied = 0;
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find(',', start);
+        if (end == std::string::npos) end = list.size();
+        const std::string item = list.substr(start, end - start);
+        start = end + 1;
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = item.substr(0, eq);
+        const float value = float(std::atof(item.c_str() + eq + 1));
+        bool found = false;
+        for (const RigField& field : RIG_FIELDS) {
+            if (key != field.name) continue;
+            if (field.float_member != nullptr) {
+                tuning.*field.float_member = value;
+            } else {
+                tuning.*field.int_member = static_cast<int>(value);
+            }
+            found = true;
+            ++applied;
+            break;
+        }
+        if (!found) LOG_WARN("--rig: no rig field named '%s'", key.c_str());
+    }
+    return applied;
+}
+
 bool load_rig_tuning(RigTuning& tuning, const char* path) {
     std::ifstream input(path);
     if (!input) return false;

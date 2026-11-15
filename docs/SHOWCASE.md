@@ -1873,6 +1873,45 @@ alone, then five, then forty, would show where the orange is lost. The
 smoke at the flame's tip exists (`smoke_for`) and was out of the critic's
 frame; `--breathe --inspect 100 60 8` shows it.
 
+## Feedback 0013 to 0015, and the turn to the dragon (2026-11-15, 17:30)
+
+The user's direction after round 3: the visual showcase first and gameplay
+later; ignore what is not in the final arena or run (the course rings, the
+placeholder sphere); for the dragon's animation, study established media
+(Spyro, Glyde and others) so the wingbeat and the strikes look natural;
+and the breath and the projectiles are "still too simplistic", so look at
+classic fire implementations and papers.
+
+Three feedback reports came with it, six marks:
+
+| Report | Mark | State |
+|---|---|---|
+| 0013 | "transparent artifacts?" on the membrane's root panel | a Codex asset job, running |
+| 0013 | "prefer to dangle like front legs as well" on the hind leg | done, below |
+| 0014 | "legs are ragdoll in melee attacks" | open, after the reference study |
+| 0014 | "tail too" | open, after the reference study |
+| 0015 | "malformed wing claw" | the same Codex job |
+| 0015 | "wings can have a larger flapping range" | open, after the reference study |
+
+### The hind legs hang (17:30)
+
+The fore legs hung and the hind shin lay level along the tail: the dangle
+was hip 30, knee 20, hock 30, every joint turned aft. Now hip 8, knee -45,
+hock 45: the thigh a little aft of where it stands, the knee opened so the
+shin hangs straight down, the foot turned aft at the hock. The feet hang
+2.3 m under the hips where they trailed 0.9 m under them. Chosen from six
+rendered candidates (`artifacts/showcase-feedback/
+0013-hind-legs-candidates.jpg`). The old values are the Dragon panel's
+"dangle, hind legs trailing" preset.
+
+The pair, from the playtester's own view and from the front:
+`0013-hind-legs-hang-before-after.jpg`. The glide from behind and above,
+the beat, the brake, the dive and the chase camera:
+`0013-hind-legs-hang-other-views.jpg`.
+
+`--rig key=value,...` is new: it sets rig profile fields for one run, by
+the profile's own names. The six candidates were six commands.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

@@ -843,6 +843,10 @@ struct RigTuning {
 // built-in defaults untouched.
 bool save_rig_tuning(const RigTuning& tuning, const char* path);
 bool load_rig_tuning(RigTuning& tuning, const char* path);
+// key=value,... over a profile, by the names the profile file uses: how a
+// capture tries a pose without editing the file (--rig). Returns how many
+// keys it knew; an unknown key is logged.
+int apply_rig_tuning(RigTuning& tuning, const std::string& list);
 
 // Where a model's profile (`suffix` ".rig.cfg", ".flight.cfg" or
 // ".breath.cfg") is: beside the model, or else in `species/` beside it -- the

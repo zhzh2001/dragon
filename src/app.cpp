@@ -187,6 +187,8 @@ Options parse_options(int argc, char** argv) {
             options.atmosphere = argv[++i];  // key=value,... (gfx/atmosphere.h)
         } else if (arg == "--grade" && i + 1 < argc) {
             options.grade = argv[++i];  // key=value,... (gfx/post.h)
+        } else if (arg == "--rig" && i + 1 < argc) {
+            options.rig = argv[++i];  // key=value,... (anim::RigTuning, by the profile's names)
         } else if (arg == "--chase" && i + 1 < argc) {
             options.chase = argv[++i];  // key=value,... (game/chase_camera.h)
         } else if (arg == "--clouds" && i + 1 < argc) {
@@ -4675,7 +4677,8 @@ void App::build_dragon_ui() {
             // flight"): a starting point for any model with bent legs at bind.
             struct Posture { const char* name; float on, hip, knee, hock, shoulder, elbow, wrist, splay; };
             static const Posture kPostures[] = {
-                {"dangle", 1.0f, 30.0f, 20.0f, 30.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+                {"dangle", 1.0f, 8.0f, -45.0f, 45.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+                {"dangle, hind legs trailing", 1.0f, 30.0f, 20.0f, 30.0f, 25.0f, -20.0f, 45.0f, -6.0f},
                 {"trail and tuck", 1.0f, 45.0f, 5.0f, 35.0f, 65.0f, -140.0f, 105.0f, -18.0f},
                 {"trail both", 1.0f, 45.0f, 5.0f, 35.0f, 40.0f, 60.0f, 30.0f, -18.0f},
                 {"fold (tuck and trail)", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
@@ -5140,7 +5143,9 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     out.rig_tuning_path = anim::profile_path(cfg_stem, ".rig.cfg");
     out.flight_tuning_path = anim::profile_path(cfg_stem, ".flight.cfg");
     out.breath_path = anim::profile_path(cfg_stem, ".breath.cfg");
-    if (anim::load_rig_tuning(out.rig_tuning, out.rig_tuning_path.c_str())) {
+    const bool rig_loaded = anim::load_rig_tuning(out.rig_tuning, out.rig_tuning_path.c_str());
+    if (!options_.rig.empty()) anim::apply_rig_tuning(out.rig_tuning, options_.rig);
+    if (rig_loaded) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
     game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
