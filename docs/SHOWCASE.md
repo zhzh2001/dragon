@@ -896,7 +896,7 @@ adjustments".
 | 0009 | "vegetation quality can be improved": the bushes and the grass | plants | open: S7 |
 | 0011 | no tree shadow inside the mountain's shadow | lighting | open; one route tried and ruled out, below |
 | 0011 | "rocks look unnatural" | rock | open: S6 |
-| 0012 | "mountain shapes seem weird" | terrain | open: S6 |
+| 0012 | "mountain shapes seem weird" | terrain | first step done: the spurs, below |
 
 The dangle is the hero's default again: hind 30, 20, 30, fore 25, -20, 45,
 splay -6. The legs hang a little aft of where they stand with the feet
@@ -955,6 +955,21 @@ Routes left: a second, trees-only depth in the cascade (one more target),
 or a blob of sky occlusion per tree drawn from the vegetation's own
 instance list, which also works past the cascades. The canopy map is too
 coarse up close (7 m texels paint blots; `terrain.hlsl` already says so).
+
+## The valley walls: fewer, larger buttresses (2026-11-15, 12:17)
+
+Report 0012. From its camera a wall was a row of like rounded cones: the
+spurs, 380 m apart and 420 m high. Six sets of the terrain's dials are in
+`artifacts/showcase-s6/terrain-shape-candidates.jpg`. The defaults are now
+`spur_spacing` 700, `spur_height` 300, `ridge_height` 240 and
+`strata_strength` 0.6: a wall is a few large buttresses with gullies
+between. `terrain-shape-before-after.jpg` has a run valley from the chase
+camera and from above, and the arena's wall, the old shape on the left.
+
+The 26 suites pass, and the autopilot banked valley 1 of seed 3 and went
+on into valley 2. The Metal goldens were captured again. Not done: the
+surface is still smooth. Cliff bands and rock faces are S6's rock work,
+and the rocks of report 0011 with them.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 

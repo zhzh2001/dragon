@@ -37,11 +37,11 @@ struct TerrainSettings {
     // `strata_strength` -- so rock faces carry horizontal banding as
     // geometry, not tint. Both only where the mountain term is well up, so
     // the valley floor is untouched.
-    float ridge_height = 160.0f;
+    float ridge_height = 240.0f;  // 160 until 2026-11-15: see spur_spacing
     float ridge_scale = 450.0f;
     int ridge_octaves = 2;
     float strata_step = 22.0f;
-    float strata_strength = 0.3f;
+    float strata_strength = 0.6f;
 
     // The mountains' shape past the noise (docs/GAPS.md, G1). The walls were
     // broad ramps under a straight-combed noise, smooth cones from the chase
@@ -63,8 +63,12 @@ struct TerrainSettings {
     // down the walls rather than along them -- the buttresses and the gullies
     // between them that make a wall read as a mountainside. Strongest on the
     // upper wall; 0 turns it off.
-    float spur_height = 420.0f;   // metres
-    float spur_spacing = 380.0f;  // metres between spurs, along the valley
+    float spur_height = 300.0f;   // metres
+    // 380 m apart and 420 m high, the spurs stood along each wall as a row of
+    // like cones (feedback report 0012, "mountain shapes seem weird"). Wider
+    // apart and lower, under more ridge and more strata, a wall is a few
+    // large buttresses with gullies between.
+    float spur_spacing = 700.0f;  // metres between spurs, along the valley
 
     // key=value,... over these fields, for captures (--terrain): the shape
     // dials by the names their sliders use.
