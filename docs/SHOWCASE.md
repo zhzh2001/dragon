@@ -458,11 +458,16 @@ four views of it in the valley.
 - In the glide from the side, the left wing is pulled out into one long
   spike past the wrist. On the ground the same spike stands up behind the
   head. This is what the failed mirror check measured.
-- The hide is close to black in the head view, where Blender shows
-  orange. The view is backlit, but the old Embercrest in the same shot is
-  brown. The baked occlusion and roughness reach the engine's shader
-  differently from Blender's, which is S3's first job.
-- The eye is there and catches no light.
+- The hide is close to black in the head view. That view looks at the
+  shadowed side with the sun behind. Lit from the front the hide is the
+  orange Blender shows: `hero-head-old-vs-new-in-engine.jpg` has the old
+  Embercrest and the new head in the engine, same camera, sun at 30
+  degrees on the near side. The new head has an eye, separate plates and
+  dark glossy horns where the old one has a brown crust.
+- The shadowed side is darker than the old model's. The new hide carries
+  baked occlusion between its plates and the old one carried almost none.
+  S3 decides how much of it the ambient term keeps.
+- The eye has no highlight yet. That is S3's cornea.
 
 The rig is refitted when the mesh of three sculpts lands. The refit's
 brief names the wing spike and the invalid weights as the things to fix
