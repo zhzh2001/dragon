@@ -589,7 +589,8 @@ bool App::init(const Options& options) {
                                     {"lift", &g.lift}, {"gamma", &g.gamma},
                                     {"shadows", &g.shadows_strength},
                                     {"highlights", &g.highlights_strength},
-                                    {"glare", &g.sun_glare}, {"flare", &g.lens_flare}});
+                                    {"glare", &g.sun_glare}, {"flare", &g.lens_flare},
+                                    {"shade_lift", &shade_lift_stops_}});
     }
     if (!options.clouds.empty()) cloud_settings_.parse(options.clouds);
     if (!options.terrain.empty()) terrain_settings_.parse(options.terrain);
@@ -2529,6 +2530,7 @@ void App::update(float dt) {
         airborne_before_ = airborne_time_;
         update_downwash(dt);
         update_spray(dt);
+        update_shade_exposure(dt);
         emit_thermal_motes(dt);
         // The pounce: while an elder's boost is locked onto a target, the
         // flight is turned onto it -- velocity and nose together, at the
@@ -3682,6 +3684,9 @@ void App::build_ui(float dt) {
             }
         }
         ImGui::SliderFloat("exposure", &g.exposure, 0.3f, 3.0f, "%.2f");
+        ImGui::SliderFloat("shade lift", &shade_lift_stops_, 0.0f, 1.5f, "%.2f stops");
+        ImGui::SetItemTooltip("Exposure gained where the ground in view is in a mountain's shadow.\nNow: %.0f%% in shade.",
+                              double(shade_seen_ * 100.0f));
         ImGui::SliderFloat("contrast", &g.contrast, 0.6f, 1.6f, "%.2f");
         ImGui::SliderFloat("saturation", &g.saturation, 0.0f, 1.8f, "%.2f");
         ImGui::SliderFloat("temperature", &g.temperature, -0.3f, 0.3f, "%.2f");
@@ -7607,6 +7612,54 @@ void App::update_downwash(float dt) {
     foliage_.downwash = core::Vec4{s.position.x, 16.0f * growth_scale_, s.position.z, downwash_ * downwash_push_};
 }
 
+// The eye opens in shade. One exposure for the whole valley left a view in a
+// mountain's shadow at a third of the sunlit level, "a dark green-navy murk"
+// to the blind critic (SHOWCASE.md, "The blind critic, round 1"). A camera
+// or an eye there would open up. Measured by place, not from the picture:
+// rays to the sun from the ground ahead of the camera, against the terrain.
+// A histogram of the frame would also answer to fire and to snow, and needs
+// a readback or a mip chain; this is twenty height lookups a point.
+void App::update_shade_exposure(float dt) {
+    if (!atmosphere_.available() || shade_lift_stops_ <= 0.0f) {
+        shade_seen_ = 0.0f;
+        return;
+    }
+    const gfx::Camera& camera = active_camera();
+    const core::Vec3 sun = lighting_.sun_direction();
+    const core::Vec3 look = camera.forward();
+    const core::Vec3 ahead = core::normalize_or(core::Vec3{look.x, 0.0f, look.z}, core::Vec3::forward());
+    const core::Vec3 side{-ahead.z, 0.0f, ahead.x};
+    auto shaded = [&](core::Vec3 from) {
+        if (sun.y < 0.02f) return 1.0f;
+        float t = 8.0f;
+        for (int i = 0; i < 22; ++i) {
+            const core::Vec3 p = from + sun * t;
+            if (terrain_.height_at(p.x, p.z) > p.y + 1.0f) return 1.0f;
+            t *= 1.3f;  // to 2.6 km
+        }
+        return 0.0f;
+    };
+    // The ground the view rests on: near, middle and far, and to both sides.
+    const float along[] = {30.0f, 90.0f, 220.0f, 500.0f, 160.0f, 160.0f};
+    const float across[] = {0.0f, 0.0f, 0.0f, 0.0f, -110.0f, 110.0f};
+    float sum = shaded(camera.position);
+    for (int i = 0; i < 6; ++i) {
+        core::Vec3 at = camera.position + ahead * along[i] + side * across[i];
+        at.y = terrain_.height_at(at.x, at.z) + 2.0f;
+        sum += shaded(at);
+    }
+    const float target = sum / 7.0f;
+    // A second to adapt; at once on the first frame, so a capture is settled.
+    shade_seen_ = shade_seen_valid_ ? core::damp(shade_seen_, target, 0.7f, dt) : target;
+    shade_seen_valid_ = true;
+}
+
+// A view a quarter in shade is a sunlit view and keeps its exposure; from
+// there the lift comes in, whole by 85%.
+float App::shade_exposure() const {
+    return std::exp2(shade_lift_stops_ * core::smoothstep(0.25f, 0.85f, shade_seen_));
+}
+
 // Spray off the river (GAPS.md 1.4): the same kit as the touchdown's dust,
 // over water. Low and fast, the dragon's wake throws a sheet up beside and
 // behind it; low and slow, its wingbeat (the downwash) blows a ring off the
@@ -9556,6 +9609,7 @@ void App::render() {
         // The modern tier's (SM3 runs this composite too, and keeps its picture).
         post.fxaa = aa_mode_ == 1 && taa_.available();
         if (ablated("lens")) post.lens_flare = post.sun_glare = 0.0f;
+        post.exposure *= shade_exposure();
         // Where the sun is on the screen, for its glare (post_composite.hlsl).
         {
             const gfx::Camera& camera = active_camera();
@@ -9882,6 +9936,10 @@ void App::run() {
         LOG_INFO("gpu a/b: median %.2f ms as set, %.2f ms without %s: %+.2f ms (%zu and %zu frames)", double(with),
                  double(without), SDL_getenv("DRAGON_ABLATE_ALTERNATE"), double(with - without), gpu_with.size(),
                  gpu_without.size());
+    }
+    if (atmosphere_.available()) {
+        LOG_INFO("shade: %.0f%% of the view's ground in the terrain's shadow, exposure x%.2f", double(shade_seen_ * 100.0f),
+                 double(shade_exposure()));
     }
     if (gpu_ms.size() > 60) {
         std::vector<float> g(gpu_ms.begin() + 60, gpu_ms.end());

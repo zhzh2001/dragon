@@ -1246,6 +1246,37 @@ jointing and no ledge anywhere, because a heightfield at 6 m cells over a
 12 m erosion grid cannot hold one. That is the rock kit's job (mesh cliffs on
 the steep bands) and row 4 of the technique table.
 
+### The eye opens in shade (13:40)
+
+The critic's frame 6, a meadow in a mountain's shadow, was "a dark green-navy
+murk", a blocker. One exposure served the whole valley, so a view in shade
+sat at about a third of the sunlit level. `App::update_shade_exposure` casts
+rays to the sun from the camera and from six points on the ground ahead of
+it, against the terrain, and smooths the shaded share over a second. From a
+quarter in shade the exposure rises, to `shade lift` stops (1.0, the Grade
+panel, `--grade shade_lift=`) by 85%. A sunlit view is unchanged: seven of
+the eight goldens did not move. The morning valley of a run is 88% in shade
+and gains 0.97 stops (`artifacts/showcase-critic/shade-exposure-before-after.jpg`).
+
+It is measured by place and not from the picture. A histogram would also
+answer to fire and snow, and it needs a mip chain or a readback.
+
+### The claws on the wing (13:40)
+
+The critic saw "bead-like spheres on the bone" of the wing. They are the
+thumb claws. The horn coat reflected the sky at the full Fresnel, so a claw
+seen edge-on against the sun's haze took all of it and read as glass. The
+horn's grazing reflection now stops at 0.46, what a surface of its roughness
+returns. The cornea keeps the full term. The change is small
+(`artifacts/showcase-critic/horn-coat-before-after.jpg`): the claws are
+darker and still pale, because their texture is pale.
+
+### Tried and dropped: more haze
+
+`--atmosphere aerial=7.5,haze=0.8` against the defaults (5 and 1.2), for the
+critic's "no aerial perspective" in the chase view. In two valleys of a run
+the difference was a slightly bluer far wall. Not plain, so not kept.
+
 ### Still open from report 0011
 
 A tree in the mountain's shadow has nothing under it, so it floats. It needs

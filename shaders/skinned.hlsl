@@ -324,7 +324,14 @@ float4 fs_main(VertexOut input) : SV_Target {
             float3 coat_r = reflect(-to_camera, face);
             float3 coat_seen = lerp(ground_seen, sky_color(normalize(float3(coat_r.x, max(coat_r.y, 0.0), coat_r.z))),
                                     smoothstep(-0.15, 0.1, coat_r.y));
-            lit_color += coat_seen * coat_fresnel * sky_seen * coat * (is_eye > 0.5 ? 2.5 : 1.0);
+            // A cornea is a mirror. Horn is polished, not glass: at the full
+            // Fresnel a claw seen edge-on against the sun's haze took the
+            // whole of that sky and read as a glass bead on the wing (the
+            // blind critic, 2026-11-15). Its grazing reflection stops at
+            // what a surface of its roughness (0.22) returns, as the hide's
+            // does above.
+            float horn_fresnel = 0.04 + 0.42 * pow(1.0 - face_dot_v, 5.0);
+            lit_color += coat_seen * sky_seen * coat * (is_eye > 0.5 ? coat_fresnel * 2.5 : horn_fresnel);
         }
     }
 #endif

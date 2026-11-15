@@ -755,6 +755,8 @@ private:
     // or beating its wings low over it, throws up a sheet of it. Puffs a
     // second at full strength (Dragon panel, "Landing weight").
     void update_spray(float dt);
+    void update_shade_exposure(float dt);
+    float shade_exposure() const;
     float spray_rate_ = 140.0f;
     float spray_carry_ = 0.0f;
     // Rising air (game/thermals.h): placed with each terrain, read by every
@@ -781,6 +783,12 @@ private:
     core::Vec3 sun_colour_key_{-1000.0f, 0.0f, 0.0f};
     core::Vec3 sun_colour_ratio_{1.0f, 1.0f, 1.0f};
     float downwash_ = 0.0f;
+    // The eye's adaptation to shade (App::update_shade_exposure): the share
+    // of the ground in view that the terrain shades, smoothed over a second,
+    // and the stops of exposure a view wholly in shade gains.
+    float shade_seen_ = 0.0f;
+    bool shade_seen_valid_ = false;
+    float shade_lift_stops_ = 1.0f;
     float airborne_time_ = 0.0f, airborne_before_ = 0.0f;
     // Landing weight (Dragon panel): the grass's push under the wings (m at
     // a blade's tip), the camera's jolt on touchdown (degrees, at a hard
