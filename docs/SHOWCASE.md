@@ -1853,6 +1853,26 @@ tuft, 1.47 and 2.00 ms with the broad one, paired. No cost shows
 Not done: the bushes are still faceted, and nothing grows in drifts or
 flowers.
 
+### After round 3, tried and dropped: a softer flame (16:40)
+
+The critic on the breath: "flat cel-shaded orange and cream blobs with hard
+edges". Two changes to `particles.hlsl` were rendered and neither is kept.
+
+- The puff's cover coming in over 0.38 of its density, not 0.12. No plain
+  difference: the outline is the fringe's dark colour, not the alpha's
+  edge.
+- The body as a gradient under the tonemap's ceiling (0.35 to 2.0 times
+  the hue), a fringe that is thin and not dark, the core from a lower
+  heat. The outlines went, and so did the orange: the jet was pale cream
+  again, because the cores of forty stacked puffs sum and the grade is
+  20% per-channel.
+
+What this leaves for the next attempt: the flame's look is decided by how
+stacked puffs sum, more than by one puff's colours. A test of one puff
+alone, then five, then forty, would show where the orange is lost. The
+smoke at the flame's tip exists (`smoke_for`) and was out of the critic's
+frame; `--breathe --inspect 100 60 8` shows it.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
