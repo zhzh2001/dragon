@@ -6,10 +6,12 @@
     blender -b --factory-startup --python tools/build_hero.py -- --stage low2,join
     blender -b --factory-startup --python tools/build_hero.py -- --landmarks
 
-Version 3. The torso, neck, legs and tail come from the body sculpt that was
-generated without wings. Both wings come from a sculpt of one wing, fitted to
-version 2's wing skeleton by the `wing` stage. The head comes from the head
-sculpt. The first whole-body sculpt only sets the frame.
+Version 4. The torso, neck, legs and tail come from a body sculpt that was
+generated without wings (HERO_BODY names it). The wings come from the first
+whole-body sculpt, as in version 2, and that sculpt sets the frame. The head
+comes from the head sculpt. HERO_WING=v3 takes both wings from a sculpt of
+one wing through the `wing` stage instead; that wing is not the default
+because it tears in the engine.
 
 The default run executes every stage, then verifies. Each stage reads the
 cache of the stage before it from build-hero-cache/ and writes its own, so
@@ -42,6 +44,13 @@ HEAD_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-head-hunyuan.glb")
 # The wingless body sculpt. HERO_BODY names another one; see "Swapping the body" in tools/hero-build.md.
 BODY2_IN = os.environ.get("HERO_BODY") or os.path.join(ROOT, "assets", "embercrest-cand-hero-body-hunyuan.glb")
 WING2_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing-hunyuan.glb")
+# Which wings the build uses. "v2" (the default) cuts them out of the first whole-body sculpt and
+# unions them with the body. "v3" takes them from the wing sculpt through the `wing` stage; in the
+# engine that wing looks torn mid-beat and fails five rig checks (tools/hero-build.md).
+WING_SOURCE = os.environ.get("HERO_WING", "v2")
+if WING_SOURCE not in ("v2", "v3"):
+    raise SystemExit("HERO_WING must be v2 or v3")
+WING_V3 = WING_SOURCE == "v3"
 OUT_GLB = os.path.join(ROOT, "assets", "embercrest-hero-static.glb")
 OUT_THICK = os.path.join(ROOT, "assets", "embercrest-hero-membrane-thickness.png")
 DESIGN = os.path.join(ROOT, "docs", "concept", "showcase", "hero-dragon-design.png")
@@ -370,8 +379,8 @@ def ortho_shot(sc, cam, path, centre, direction, width, w=1400, h=1000, dist=40.
 
 def stage_import():
     """Read each sculpt once and keep it as a .blend."""
-    for src, name in ((BODY_IN, "body_src"), (HEAD_IN, "head_src"), (BODY2_IN, "body2_src"),
-                      (WING2_IN, "wing2_src")):
+    for src, name in ((BODY_IN, "body_src"), (HEAD_IN, "head_src"), (BODY2_IN, "body2_src")) + (
+            ((WING2_IN, "wing2_src"),) if WING_V3 else ()):
         reset_scene()
         obj = import_scan(src, name)
         co = coords(obj)
@@ -1088,7 +1097,8 @@ def cut_neck(body):
     """The body loses everything above the neck cut: its own head."""
     bm = bmesh.new()
     bm.from_mesh(body.data)
-    box = [f for f in bm.faces if all(v.co.y > 1.5 and abs(v.co.x) < 1.4 and v.co.z > NECK_CUT_Z - 0.5
+    back = FIT.get("neck_box_y", 1.5)
+    box = [f for f in bm.faces if all(v.co.y > back and abs(v.co.x) < 1.4 and v.co.z > NECK_CUT_Z - 0.5
                                       for v in f.verts)]
     geom = set(box)
     for f in box:
@@ -1096,7 +1106,7 @@ def cut_neck(body):
         geom.update(f.verts)
     bmesh.ops.bisect_plane(bm, geom=list(geom), dist=1e-6, plane_co=(0, 0, NECK_CUT_Z),
                            plane_no=(0, 0, 1), clear_outer=False, clear_inner=False)
-    kill = [v for v in bm.verts if v.co.z > NECK_CUT_Z + 1e-5 and v.co.y > 1.5 and abs(v.co.x) < 1.4]
+    kill = [v for v in bm.verts if v.co.z > NECK_CUT_Z + 1e-5 and v.co.y > back and abs(v.co.x) < 1.4]
     bmesh.ops.delete(bm, geom=kill, context="VERTS")
     edges = [e for e in bm.edges if e.is_boundary and all(abs(v.co.z - NECK_CUT_Z) < 1e-4 for v in e.verts)]
     log("neck cut: boundary edges", len(edges))
@@ -1135,7 +1145,31 @@ TAIL_WARP_Y = -1.5                  # behind this the new tail is fitted to the 
 TAPER2_AXIS_BOTTOM = 2.67           # the head sculpt's collar now tapers about an axis further forward
 NECK2_TOP_SCALE = 0.80              # the new neck narrows to this at the cut, so its cap stays inside the head
 NECK2_AXIS_Y = 2.62
-HIND_WIDEN = 0.15                   # the new hind legs move out this far, to the old stance
+HIND_WIDEN = 0.15                   # body A: the hind legs move out this far, to the first sculpt's stance
+# How each wingless body sculpt goes into the frame. Body A (version 2) has four straight legs,
+# and is scaled and placed by its feet. Body B (version 4) stands with bent legs, lower, and
+# carries its neck forward, so its feet say nothing about its scale. Its numbers were fitted by
+# eye on side silhouettes of both bodies (tools/hero-build.md, "Version 4"):
+#   scale, y_shift   body A's scale, and the generator's own Y: the two torsos then coincide in plan
+#   z_scale          body B's back is 0.25 m lower; 1.07 puts its back and its belly on body A's
+#   neck_*           the neck leans 45 degrees forward where the head sculpt's collar stands at 75.
+#                    Past a band across the neck's base everything turns about the pivot.
+#   hind_widen       0: body B already stands wider than the first sculpt. Body A's move also left
+#                    a step across the tail root, because its box ended at Y -1.7 with no fade.
+#   hind_narrow      the hind feet come in this far (see stage_align2)
+#   neck_box_y       the neck cut's box reaches back to here: the turned head's horns end at Y 1.4
+#   tail_lift_y      the tail's lift starts behind the hind feet, which reach back to Y -1.75
+BODY_FIT = {
+    "embercrest-cand-hero-body-hunyuan.glb": dict(hind_widen=HIND_WIDEN, tail_lift_y=TAIL_WARP_Y),
+    "embercrest-cand-hero-body2-hunyuan.glb": dict(
+        scale=13.037, y_shift=0.0, z_scale=1.07, neck_pivot=(2.3, 3.1), neck_dir_deg=45.0, neck_band=1.4,
+        neck_turn_deg=30.0, neck_shift=(0.2, 0.0), hind_widen=0.0, hind_narrow=0.35, tail_lift_y=-1.8, neck_box_y=0.8),
+}
+BODY_KEY = os.path.basename(BODY2_IN)
+if BODY_KEY not in BODY_FIT:
+    raise SystemExit("no BODY_FIT entry for " + BODY_KEY + ": measure the body first (tools/hero-build.md)")
+FIT = BODY_FIT[BODY_KEY]
+BODY_B = BODY_KEY == "embercrest-cand-hero-body2-hunyuan.glb"
 # The wing piece of the first sculpt: outside WING_XC, and near the body only
 # above WING_FLOOR and between WING_Y. Past WING_FREE_X everything is wing.
 WING_XC = 0.30
@@ -1221,10 +1255,26 @@ def stage_align2():
     split = (unit[:, 1].min() + unit[:, 1].max()) / 2
     uf, uh = unit[unit[:, 1] > split][:, 1].mean(), unit[unit[:, 1] <= split][:, 1].mean()
     of, oh, _, _ = foot_centres(oc)
-    scale = (of - oh) / (uf - uh)
+    if "scale" in FIT:
+        scale, shift = FIT["scale"], FIT["y_shift"]
+    else:
+        scale = (of - oh) / (uf - uh)
+        shift = of - uf * scale
     c *= scale
-    c[:, 1] += of - uf * scale
-    log("body2 scale", round(float(scale), 4), "Y shift", round(float(of - uf * scale), 4))
+    c[:, 1] += shift
+    log("body2 scale", round(float(scale), 4), "Y shift", round(float(shift), 4))
+    if "z_scale" in FIT:
+        c[:, 2] *= FIT["z_scale"]
+    if "neck_turn_deg" in FIT:
+        # Stand the neck up under the head sculpt's collar.
+        pivot = np.array(FIT["neck_pivot"])
+        d = np.array([math.cos(math.radians(FIT["neck_dir_deg"])), math.sin(math.radians(FIT["neck_dir_deg"]))])
+        rel = c[:, 1:3] - pivot
+        t = smoothstep((rel @ d) / FIT["neck_band"] + 0.5) * (c[:, 1] > 0.8)
+        ang = math.radians(FIT["neck_turn_deg"]) * t
+        cs, sn = np.cos(ang), np.sin(ang)
+        c[:, 1] = pivot[0] + rel[:, 0] * cs - rel[:, 1] * sn + FIT["neck_shift"][0] * t
+        c[:, 2] = pivot[1] + rel[:, 0] * sn + rel[:, 1] * cs + FIT["neck_shift"][1] * t
     # The tail: the same length as the old tail, and its belly on the old belly.
     tip_new, tip_old = c[:, 1].min(), oc[:, 1].min()
     k = (tip_old - TAIL_WARP_Y) / (tip_new - TAIL_WARP_Y)
@@ -1233,7 +1283,7 @@ def stage_align2():
     ys = np.arange(tip_old + 0.5, TAIL_WARP_Y + 0.01, 0.25)
     dz = belly_line(oc, ys) - belly_line(c, ys)
     dz = np.convolve(np.pad(dz, 2, mode="edge"), np.ones(5) / 5, mode="valid")
-    lift = np.interp(c[:, 1], ys, dz) * smoothstep((TAIL_WARP_Y - c[:, 1]) / 1.0)
+    lift = np.interp(c[:, 1], ys, dz) * smoothstep((FIT["tail_lift_y"] - c[:, 1]) / 1.0)
     c[:, 2] += lift
     log("tail: Y scale", round(float(k), 4), "lift", round(float(dz.min()), 3), "to", round(float(dz.max()), 3))
     # The neck narrows a little toward the cut, so the head sculpt's collar covers it.
@@ -1244,16 +1294,91 @@ def stage_align2():
     # The hind legs stand as wide as the old ones.
     leg = (c[:, 1] > -1.7) & (c[:, 1] < 0.9) & (c[:, 2] < 2.5)
     a = np.abs(c[leg, 0])
-    c[leg, 0] += np.sign(c[leg, 0]) * HIND_WIDEN * smoothstep((a - 0.30) / 0.25) * (1.0 - smoothstep((c[leg, 2] - 1.9) / 0.6))
+    c[leg, 0] += np.sign(c[leg, 0]) * FIT["hind_widen"] * smoothstep((a - 0.30) / 0.25) * (1.0 - smoothstep((c[leg, 2] - 1.9) / 0.6))
+    if "hind_narrow" in FIT:
+        # Body B's hind legs splay: the feet stand 1.7 m from the centre plane under hips at 0.8.
+        # Lean each leg in below the thigh. The move grows from nothing at Z 2.4 to the full
+        # amount at the ground, and only outside the body's own half width, so no step is left.
+        f = np.clip((2.4 - c[:, 2]) / 2.4, 0.0, 1.0) ** 1.5
+        w = smoothstep((np.abs(c[:, 0]) - 0.55) / 0.3) * (1.0 - smoothstep((c[:, 1] + 0.1) / 0.4))
+        c[:, 0] -= np.sign(c[:, 0]) * FIT["hind_narrow"] * f * w
     c[:, 2] -= c[:, 2].min()
     set_coords(b2, c)
     log("body2 bounds", c.min(0).round(3), c.max(0).round(3))
 
     set_coords(head, retaper_head(coords(head)))
 
-    # The first sculpt only set the frame. Version 3 takes nothing else from it.
-    bpy.data.objects.remove(old)
+    if WING_V3:
+        # The first sculpt only set the frame. The version 3 wing takes nothing else from it.
+        bpy.data.objects.remove(old)
+        save_blend("src2.blend")
+        return
+    # The wings: drop the rest of the first sculpt, then move the root.
+    keep = wing_region(oc)
+    old.data.vertices.foreach_set("select", ~keep)
+    activate(old)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    old.data.vertices.foreach_set("select", ~keep)
+    old.data.polygons.foreach_set("select", np.zeros(len(old.data.polygons), bool))
+    old.data.edges.foreach_set("select", np.zeros(len(old.data.edges), bool))
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.delete(type="VERT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    set_coords(old, wing_deform(coords(old)))
+    old.name = "wing_src"
+    old.data.name = "wing_src"
+    log("wing source: triangles", tri_count(old))
     save_blend("src2.blend")
+
+
+def low2_wings_v2():
+    """Version 2's wings: both cut out of the first sculpt as one capped piece, then reduced."""
+    wing = append_object("src_aligned.blend", "body_src")
+    wing.name = wing.data.name = "wing_low"
+    strip_layers(wing)
+    weld(wing)
+    co = coords(wing)
+    drop = ~wing_region(co, eps=0.25)
+    wing.data.vertices.foreach_set("select", drop)
+    activate(wing)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    wing.data.vertices.foreach_set("select", drop)
+    wing.data.polygons.foreach_set("select", np.zeros(len(wing.data.polygons), bool))
+    wing.data.edges.foreach_set("select", np.zeros(len(wing.data.edges), bool))
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.delete(type="VERT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bm = bmesh.new()
+    bm.from_mesh(wing.data)
+
+    def near_faces():
+        return [f for f in bm.faces if all(abs(v.co.x) < WING_FREE_X for v in f.verts)]
+
+    for side in (1, -1):
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-6,
+                               plane_co=(side * WING_XC, 0, 0), plane_no=(1, 0, 0))
+    for pco, pno in (((0, 0, WING_FLOOR), (0, 0, 1)), ((0, WING_Y[0], 0), (0, 1, 0)), ((0, WING_Y[1], 0), (0, 1, 0))):
+        bmesh.ops.bisect_plane(bm, geom=face_geom(near_faces()), dist=1e-6, plane_co=pco, plane_no=pno)
+    e = 1e-5
+    kill = [v for v in bm.verts
+            if not (abs(v.co.x) > WING_XC - e and (abs(v.co.x) > WING_FREE_X or (
+                v.co.z > WING_FLOOR - e and WING_Y[0] - e < v.co.y < WING_Y[1] + e)))]
+    bmesh.ops.delete(bm, geom=kill, context="VERTS")
+    edges = [e_ for e_ in bm.edges if e_.is_boundary]
+    log("wing cut: boundary edges", len(edges))
+    bmesh.ops.holes_fill(bm, edges=edges, sides=0)
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(wing.data)
+    bm.free()
+    set_coords(wing, wing_deform(coords(wing)))
+    topo_report(wing, "wings cut")
+    decimate_to(wing, WING_TRIS)
+    topo_report(wing, "wings decimated")
 
 
 def stage_low2():
@@ -1268,8 +1393,11 @@ def stage_low2():
     decimate_to(body, BODY2_TRIS)
     topo_report(body, "body2 decimated")
 
-    for name in ("wing_low", "wing_low_left"):
-        topo_report(append_object("wing2.blend", name), name + " from the wing stage")
+    if WING_V3:
+        for name in ("wing_low", "wing_low_left"):
+            topo_report(append_object("wing2.blend", name), name + " from the wing stage")
+    else:
+        low2_wings_v2()
 
     head = append_object("low_parts.blend", "head_low")
     set_coords(head, retaper_head(coords(head)))
@@ -1281,22 +1409,60 @@ def stage_join():
     open_blend("low2.blend")
     body = bpy.data.objects["body_low"]
     head = bpy.data.objects["head_low"]
-    wings = [bpy.data.objects["wing_low"], bpy.data.objects["wing_low_left"]]
+    wings = [bpy.data.objects[n] for n in (("wing_low", "wing_low_left") if WING_V3 else ("wing_low",))]
     # Material slots carry the origin of every face through the union.
-    # The wing brings three slots of its own: from_wing (its hide), from_wing_membrane and from_wing_horn.
-    for obj, name in ((body, "from_body"), (head, "from_head")):
+    # The version 3 wing brings three slots of its own: from_wing (its hide), from_wing_membrane and
+    # from_wing_horn. Version 2's wing is one closed piece with one slot, and is unioned like the head.
+    for obj, name in ((body, "from_body"), (head, "from_head")) + (() if WING_V3 else ((wings[0], "from_wing"),)):
         obj.data.materials.clear()
         obj.data.materials.append(bpy.data.materials.new(name))
-    for i, m in enumerate(wings[0].data.materials):
-        m.name = m.name.split(".")[0]
-        wings[1].data.materials[i] = m
-    for other in (head,):
+    if WING_V3:
+        for i, m in enumerate(wings[0].data.materials):
+            m.name = m.name.split(".")[0]
+            wings[1].data.materials[i] = m
+    for other in ((head,) if WING_V3 else (wings[0], head)):
+        before = body.data.copy()
+        span = coords(body)[:, 1].max() - coords(body)[:, 1].min()
         mod = body.modifiers.new("union", "BOOLEAN")
         mod.operation = "UNION"
         mod.object = other
         mod.solver = "EXACT"
         mod.material_mode = "TRANSFER"
         apply_modifier(body, mod)
+        if coords(body)[:, 1].max() - coords(body)[:, 1].min() < span - 0.5:
+            # The exact solver lost the body: with body B it returns one wing alone. The manifold
+            # solver joins them, once the wing piece's ten edges with four faces are collapsed.
+            log("the exact union lost the body; using the manifold solver")
+            body.data = before
+            bm = bmesh.new()
+            bm.from_mesh(other.data)
+            for _ in range(3):
+                bad = [e for e in bm.edges if not e.is_manifold]
+                if not bad:
+                    break
+                bmesh.ops.collapse(bm, edges=bad)
+                bmesh.ops.dissolve_degenerate(bm, dist=1e-6, edges=bm.edges)
+            bm.to_mesh(other.data)
+            bm.free()
+            mod = body.modifiers.new("union", "BOOLEAN")
+            mod.operation = "UNION"
+            mod.object = other
+            mod.solver = "MANIFOLD"
+            trees = [BVHTree.FromPolygons([v.co[:] for v in m.vertices], [p.vertices[:] for p in m.polygons])
+                     for m in (before, other.data)]
+            apply_modifier(body, mod)
+            # That solver does not carry the operand's material. A face is the wing's where the
+            # wing piece's surface is nearer than the body's.
+            wing_mat = other.data.materials[0]
+            if wing_mat.name not in [m.name for m in body.data.materials]:
+                body.data.materials.append(wing_mat)
+            slot = [m.name for m in body.data.materials].index(wing_mat.name)
+            n = 0
+            for poly in body.data.polygons:
+                if trees[1].find_nearest(poly.center)[3] < trees[0].find_nearest(poly.center)[3]:
+                    poly.material_index = slot
+                    n += 1
+            log("faces given to", other.data.materials[0].name, n)
         bpy.data.objects.remove(other)
         topo_report(body, "after a union")
     body.name = "low"
@@ -1362,17 +1528,31 @@ def stage_join():
         dropped += 1
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     log("slivers cut off:", dropped, "of", len(islands), "small islands")
+    if not WING_V3:
+        # Soften the crease where each wing's root comes out of the body.
+        ring = set()
+        for e in bm.edges:
+            if len(e.link_faces) == 2 and (e.link_faces[0].material_index in wing_slots) != (
+                    e.link_faces[1].material_index in wing_slots):
+                ring.update(e.verts)
+        seam = len(ring)
+        for _ in range(WING_SEAM_SMOOTH[0]):
+            ring |= {e.other_vert(v) for v in ring for e in v.link_edges}
+        for _ in range(WING_SEAM_SMOOTH[1]):
+            bmesh.ops.smooth_vert(bm, verts=list(ring), factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+        log("wing seam: vertices on it", seam, "smoothed", len(ring))
     bm.to_mesh(body.data)
     bm.free()
     # The wings are not unioned. A reduced membrane is a sheet 40 mm thick whose two faces
     # touch here and there, and the exact solver drops such a mesh or, told to repair it,
     # tears the sheet into two thousand pieces. Each wing keeps its own closed surface: its
     # arm and the root of its membrane end inside the body.
-    activate(body, wings)
-    bpy.ops.object.join()
+    if WING_V3:
+        activate(body, wings)
+        bpy.ops.object.join()
     names = [m.name for m in body.data.materials]
     nb, nm = topo_report(body, "joined")
-    for label in ("from_head", "from_wing", "from_wing_membrane", "from_wing_horn"):
+    for label in ("from_head", "from_wing") + (("from_wing_membrane", "from_wing_horn") if WING_V3 else ()):
         n = sum(1 for p in body.data.polygons if names[p.material_index] == label)
         log("triangles", label, n, "share", round(n / len(body.data.polygons), 3))
     save_blend("joined.blend")
@@ -2163,6 +2343,18 @@ def build_mouth(chain_co, bvh):
         faces.append((prev[m], prev[(m + 1) % 8], tip, 9.0))
 
     me = bpy.data.meshes.new("mouth")
+    # The palate's top comes within a few millimetres of an eyeball's reach, and which side of
+    # the limit it lands on changes with the neck's triangles. Push it clear.
+    reach = EYE_R + EYE_CORNEA + 0.003
+    pushed = 0
+    for side in (1, -1):
+        c = eye_frame(side)[4]
+        for i, v in enumerate(verts):
+            d = Vector(v) - c
+            if d.length < reach:
+                verts[i] = tuple(c + d.normalized() * reach)
+                pushed += 1
+    log("mouth vertices pushed clear of the eyeballs:", pushed)
     me.from_pydata([tuple(v) for v in verts], [], [f[:3] for f in faces])
     obj = bpy.data.objects.new("mouth", me)
     bpy.context.scene.collection.objects.link(obj)
@@ -2242,7 +2434,18 @@ def stage_head():
 # across the limb. Positions were read off orthographic renders.
 # Wing joints: (name, X, Y, direction X, direction Y, radius), right wing; the
 # left wing mirrors X. The planes are vertical.
-WING_JOINTS = [
+WING_JOINTS_V2 = [
+    ("wing_shoulder", 1.25, 1.10, 0.90, -0.45, 0.75),
+    ("wing_elbow", 2.64, 0.45, 1.00, 0.00, 0.60),
+    ("wing_wrist", 3.43, 0.71, 1.00, 0.00, 0.60),
+    ("finger1_a", 6.31, 0.45, 0.97, -0.20, 0.24),
+    ("finger1_b", 7.95, -0.07, 0.92, -0.38, 0.22),
+    ("finger2_a", 5.85, -0.37, 0.90, -0.44, 0.22),
+    ("finger3_a", 4.74, -0.63, 0.60, -0.80, 0.22),
+    ("finger4_a", 2.74, -0.43, 0.10, -1.00, 0.22),
+]
+# With the version 3 wing the loops are at the rig's joints.
+WING_JOINTS_V3 = [
     ("wing_shoulder", 1.15, 0.88, 0.87, -0.50, 0.75),
     ("wing_elbow", 2.62, 0.03, 0.98, -0.20, 0.60),
     ("wing_wrist", 3.43, 0.58, 0.83, 0.56, 0.60),
@@ -2252,9 +2455,10 @@ WING_JOINTS = [
     ("finger3_a", 4.74, -0.63, 0.68, -0.73, 0.22),
     ("finger4_a", 2.76, -0.43, 0.20, -0.98, 0.22),
 ]
+WING_JOINTS = WING_JOINTS_V3 if WING_V3 else WING_JOINTS_V2
 # Leg joints: (name, Y, Z, direction Y, direction Z, radius). The planes
 # contain the X axis. Both sides are cut.
-LEG_JOINTS = [
+LEG_JOINTS_A = [
     ("hind_hip", -0.50, 2.30, 0.30, -1.00, 0.75),
     ("hind_knee", -0.33, 1.85, -0.50, -0.87, 0.60),
     ("hind_hock", -0.98, 1.10, -0.50, -0.86, 0.45),
@@ -2264,15 +2468,30 @@ LEG_JOINTS = [
     ("fore_wrist", 2.04, 0.95, 0.30, -1.00, 0.42),
     ("fore_foot", 2.20, 0.40, 0.00, -1.00, 0.45),
 ]
+# Body B's legs are bent, so each plane's normal bisects the two segments that meet at the joint.
+# Centres: section midpoints of the forearm, the paw and the metatarsus; the elbow, the knee and
+# the hock read off side silhouettes of the placed sculpt (tools/hero-rig.md has the table).
+LEG_JOINTS_B = [
+    ("hind_hip", -0.60, 2.90, 0.26, -0.96, 0.75),
+    ("hind_knee", -0.35, 1.80, -0.42, -0.91, 0.60),
+    ("hind_hock", -1.40, 1.25, -0.43, -0.90, 0.45),
+    ("hind_foot", -1.20, 0.35, 0.78, -0.63, 0.45),
+    ("fore_shoulder", 2.35, 2.75, -0.66, -0.75, 0.65),
+    ("fore_elbow", 1.70, 1.95, -0.14, -0.99, 0.50),
+    ("fore_wrist", 2.20, 0.80, 0.50, -0.86, 0.42),
+    ("fore_foot", 2.55, 0.28, 0.89, -0.46, 0.45),
+]
+LEG_JOINTS = LEG_JOINTS_B if BODY_B else LEG_JOINTS_A
 # The first build's leg joints, on the first body sculpt. The record's table compares them.
 LEG_JOINTS_V1 = {"hind_hip": (-0.05, 2.25), "hind_knee": (0.00, 1.83), "hind_hock": (-0.96, 1.43),
                  "hind_foot": (-0.84, 0.45), "fore_shoulder": (1.84, 2.30), "fore_elbow": (1.72, 1.92),
                  "fore_wrist": (2.04, 0.98), "fore_foot": (2.25, 0.40)}
-TOE_CLAWS = ((2.50, 9.0), (-0.42, 0.25))    # Y ranges of the fore and hind claws, under TOE_CLAW_Z
-TOE_CLAW_Z = 0.36
+# Y ranges of the fore and hind claws, under TOE_CLAW_Z. Body B's paws reach further forward.
+TOE_CLAWS = ((2.98, 9.0), (-0.62, 0.25)) if BODY_B else ((2.50, 9.0), (-0.42, 0.25))
+TOE_CLAW_Z = 0.40 if BODY_B else 0.36
 JOINT_LOOP_SPACING = 0.10
 MEMBRANE_MAX_THICKNESS = 0.135      # the sculpt's membrane is 70 to 130 mm thick, its bones 150 mm and up
-MEMBRANE_MAX_EDGE = 0.60            # longer wing edges are split in two
+MEMBRANE_MAX_EDGE = 0.60 if WING_V3 else 0.45    # longer wing edges are split in two
 MEMBRANE_THIN = 0.30                # each side of the membrane moves in by this share of the thickness
 WING_MIN_X = 1.3
 # Claws by position: (X, Y, radius) of the wing's claws, right wing.
@@ -2372,7 +2591,8 @@ def stage_parts():
     head_slot = [m.name for m in low.data.materials].index("from_head")
     slot_names = [m.name for m in low.data.materials]
     wing_slots = {i for i, n in enumerate(slot_names) if n.startswith("from_wing")}
-    memb_slot, claw_slot = slot_names.index("from_wing_membrane"), slot_names.index("from_wing_horn")
+    memb_slot = slot_names.index("from_wing_membrane") if WING_V3 else -1
+    claw_slot = slot_names.index("from_wing_horn") if WING_V3 else -1
     head_src = append_object("src_aligned.blend", "head_src")
     hcol = source_colours(head_src)
     hco = coords(head_src)
@@ -2402,10 +2622,11 @@ def stage_parts():
     thick_layer = bm.verts.layers.float.new("thick")
     cut_joint_loops(bm)
     # A loop cut can leave a wing vertex 2 mm from another. The rig's fold stretches such an edge forty times.
-    close = [v for v in bm.verts if v.link_faces and all(f.material_index in wing_slots for f in v.link_faces)]
-    before = len(bm.verts)
-    bmesh.ops.remove_doubles(bm, verts=close, dist=0.006)
-    log("wing vertices merged within 6 mm:", before - len(bm.verts))
+    if WING_V3:
+        close = [v for v in bm.verts if v.link_faces and all(f.material_index in wing_slots for f in v.link_faces)]
+        before = len(bm.verts)
+        bmesh.ops.remove_doubles(bm, verts=close, dist=0.006)
+        log("wing vertices merged within 6 mm:", before - len(bm.verts))
     bmesh.ops.dissolve_degenerate(bm, dist=2e-4, edges=bm.edges)
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     bm.verts.ensure_lookup_table()
@@ -2422,7 +2643,24 @@ def stage_parts():
             if hit[0] is not None:
                 t = hit[3] + 0.004
         v[thick_layer] = t
-    memb = {f: f.material_index == memb_slot for f in bm.faces}
+
+    def near_claw(c):
+        return any((abs(c.x) - x) ** 2 + (c.y - y) ** 2 < r * r for x, y, r in WING_CLAWS)
+
+    if WING_V3:
+        memb = {f: f.material_index == memb_slot for f in bm.faces}
+    else:
+        # Version 2's wing: the membrane is the thin sheet of the wing piece.
+        memb = {}
+        for f in bm.faces:
+            c = f.calc_center_median()
+            thin = sum(1 for v in f.verts if v[thick_layer] < MEMBRANE_MAX_THICKNESS)
+            memb[f] = (f.material_index in wing_slots and thin >= 2 and abs(c.x) > WING_MIN_X and c.z > 2.0
+                       and not near_claw(c))
+        memb = majority(bm, memb, 3)
+        memb = drop_small(bm, memb, 60)
+        inv = drop_small(bm, {f: not memb[f] for f in bm.faces}, 60)
+        memb = {f: not inv[f] for f in bm.faces}
 
     # Horns: the head sculpt's grey-brown parts above the frill. Claws: by position.
     horn, sat_of = {}, {}
@@ -2463,9 +2701,19 @@ def stage_parts():
             continue
         toe = c.z < TOE_CLAW_Z and abs(c.x) < 2.0 and f.material_index not in wing_slots and any(
             lo < c.y < hi for lo, hi in TOE_CLAWS)
-        if toe or f.material_index == claw_slot:
+        if toe or f.material_index == claw_slot or (
+                not WING_V3 and f.material_index in wing_slots and near_claw(c) and c.z > 2.0 and not memb[f]):
             horn[f] = True
     log("faces: membrane", sum(memb.values()), "horn", n_horn, "claw", sum(horn.values()) - n_horn)
+
+    if not WING_V3:
+        # Thin the membrane: both faces of the sheet move toward its middle.
+        moved = 0
+        for v in bm.verts:
+            if v.link_faces and all(memb[f] for f in v.link_faces) and v[thick_layer] < MEMBRANE_MAX_THICKNESS:
+                v.co -= v.normal * (v[thick_layer] * MEMBRANE_THIN)
+                moved += 1
+        log("membrane vertices thinned:", moved)
 
     for f in bm.faces:
         f[src_layer] = 1 if f.material_index == head_slot else 0
@@ -2493,7 +2741,7 @@ MAP_SIZE = {"hide": 4096, "membrane": 2048, "horn": 1024, "eye": 512, "mouth": 1
 UV_ANGLE = 76.0
 MEMBRANE_UV_ANGLE = 88.0
 HEAD_UV_SHARE = 0.30                # of the hide atlas's used area
-WING_UV_SCALE = 1.0                 # the wing's arm and fingers get shorter texels than the body
+WING_UV_SCALE = 1.0 if WING_V3 else 0.8    # the wing's arm and fingers get shorter texels than the body
 
 
 def uv_array(me):
@@ -2609,7 +2857,7 @@ def stage_uv():
         obj = bpy.data.objects[name]
         # The membrane is two faces of one sheet: a wide angle keeps each face in a few islands.
         unwrap(obj, 0.0004 if name == "hide" else 0.0015, HEAD_UV_SHARE if name == "hide" else None,
-               MEMBRANE_UV_ANGLE if name == "membrane" else UV_ANGLE)
+               MEMBRANE_UV_ANGLE if name == "membrane" and WING_V3 else UV_ANGLE)
         topo_report(obj, name)
 
     # The membrane's thickness: the sculpt's own, and thicker near a bone.
@@ -2640,9 +2888,14 @@ def stage_uv():
 LUMA = np.array([0.2126, 0.7152, 0.0722])
 # The wing's colour moves toward the new body's. Share of the gain at the
 # root and far out along the wing, per material.
-WING_GRADE = {"hide": (1.0, 0.0), "membrane": (0.5, 0.0), "horn": (0.0, 0.0)}
-WING_GRADE_NEAR = 0.9               # half width inside which the gain is full
-WING_GRADE_FADE = 1.0
+if WING_V3:
+    WING_GRADE = {"hide": (1.0, 0.0), "membrane": (0.5, 0.0), "horn": (0.0, 0.0)}
+    WING_GRADE_NEAR = 0.9           # half width inside which the gain is full
+    WING_GRADE_FADE = 1.0
+else:
+    WING_GRADE = {"hide": (1.0, 0.6), "membrane": (1.0, 0.0), "horn": (0.0, 0.0)}
+    WING_GRADE_NEAR = 1.6
+    WING_GRADE_FADE = 2.4
 ROUGH_SPREAD = 0.6
 ROUGH = {"hide": (0.60, 0.50, 0.70), "membrane": (0.60, 0.55, 0.65), "horn": (0.30, 0.22, 0.38)}
 
@@ -2816,7 +3069,7 @@ def stage_bake():
     sc = bpy.context.scene
     body_src = append_object("src2.blend", "body2_src")
     head_src = append_object("src2.blend", "head_src")
-    wing_src = append_object("wing2.blend", "wing_src")
+    wing_src = append_object("wing2.blend" if WING_V3 else "src2.blend", "wing_src")
     src = {}
     for o in (body_src, head_src, wing_src):
         src[o.name] = (o,) + source_material(o)
@@ -2852,7 +3105,7 @@ def stage_bake():
             out[kind] = acc
         # Where each wing texel lies on the wing sculpt's plan, and on which face.
         plan = np.zeros((size, size, 3), np.float32)
-        if wing.any():
+        if wing.any() and WING_V3:
             so, sm, simgs = src["wing_src"]
             source_mode(sm, simgs, "plan")
             a = bake_image(sc, obj, "plan", size, source=so, extrusion=extrusion, samples=1)
@@ -2968,13 +3221,13 @@ def stage_maps():
         # direction. Only the X term is removed: the dragon is symmetric in
         # X, so an X term can only be light. The Y and Z terms are the
         # design's pale belly and throat, and they stay.
-        for label, region in (("body", body), ("head", head)):
+        for label, region in (("body", body), ("head", head)) + (() if WING_V3 else (("wing", wing),)):
             if region.sum() > 1000:
                 _, b = delight(base, onrm, region)
                 stats[f"{name}_{label}_light_xyz"] = b
                 base[region] = (base * np.exp(-(onrm[..., 0] * b[0]))[..., None])[region]
                 log(name, label, "luminance against direction (x, y, z):", b, "- removed x")
-        if wing.any():
+        if wing.any() and WING_V3:
             base, tn = grade_wing(name, base, tn, wing, raw["plan"], onrm, stats)
         if name == "hide":
             # The head sculpt's neck takes the body sculpt's colour where
@@ -3561,7 +3814,10 @@ def render_all(only=None):
 # ------------------------------------------------------------------ the verifier
 
 TRI_BUDGET = (80000, 120000)
-OLD_FEET_Y = (2.334, -0.538)        # the first body sculpt's fore and hind feet, build frame
+# Where the soles' centres must be, fore and hind, build frame. Body A: the first body sculpt's.
+# Body B: its own, measured on the placed sculpt; its paws stand 0.49 m further forward and its
+# hind feet 0.34 m further back, because its legs are bent.
+OLD_FEET_Y = (2.828, -0.875) if BODY_B else (2.334, -0.538)
 OLD_TAIL_TIP_Y = -9.734
 SIZE_LIMIT = 60 * 1000 * 1000
 HEAD_TRI_SHARE = 0.25
@@ -3798,7 +4054,7 @@ def landmarks():
     reset_scene()
     old = coords(append_object("src_aligned.blend", "body_src"))
     new = coords(append_object("src2.blend", "body2_src"))
-    wing = coords(append_object("wing2.blend", "wing_src"))
+    wing = coords(append_object("wing2.blend" if WING_V3 else "src2.blend", "wing_src"))
     rows = []
 
     def gltf(p):
@@ -3875,6 +4131,8 @@ def main():
             table[s]()
         return
     for name, fn in STAGES:
+        if name == "wing" and not WING_V3:
+            continue
         log("stage", name)
         fn()
     verify()
