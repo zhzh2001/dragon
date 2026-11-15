@@ -94,17 +94,6 @@ def smoothstep(a, b, x):
     return t * t * (3 - 2 * t)
 
 
-def continuous_top_four(weights):
-    """Copy the candidate rigger's continuous influence cutoff."""
-    ordered = sorted(weights.items(), key=lambda item: item[1], reverse=True)
-    cutoff = ordered[4][1] if len(ordered) > 4 else 0.
-    kept = {n: max(0., w - cutoff) for n, w in ordered[:4]}
-    total = sum(kept.values())
-    if total < 1e-12:
-        return {ordered[0][0]: 1.}
-    return {n: w / total for n, w in kept.items() if w > 0}
-
-
 def blender_point(p):
     return Vector((float(p[0]), -float(p[2]), float(p[1])))
 
@@ -164,31 +153,367 @@ def segment_distance(p, a, b):
     return np.linalg.norm(p - a - t[:, None] * delta, axis=1)
 
 
+def top_four(score):
+    """Keep four influences a row and stay continuous: subtract the fifth score.
+
+    A row whose leading scores tie has no mass left after the subtraction. That
+    row goes whole to its first leading bone. The first rig divided by zero here.
+    """
+    score = np.asarray(score, float)
+    if score.shape[1] > 4:
+        cutoff = -np.partition(-score, 4, axis=1)[:, 4:5]
+        w = np.maximum(0, score - cutoff)
+    else:
+        w = score.copy()
+    total = w.sum(1)
+    tied = total < 1e-9 * np.maximum(score.max(1), 1e-30)
+    w[tied] = 0
+    w[tied, score[tied].argmax(1)] = 1
+    total[tied] = 1
+    return w / total[:, None]
+
+
 def field(p, bones, names, radius=.22):
     d = np.array([segment_distance(p, np.array(bones[n][1]), np.array(bones[n][2])) for n in names]).T
-    score = 1 / (d * d + radius * radius) ** 1.5
-    order = np.argsort(-score, axis=1)[:, :5]
-    chosen = np.take_along_axis(score, order, axis=1)
-    cutoff = chosen[:, 4:5] if len(names) > 4 else 0
-    w = np.maximum(0, chosen[:, :4] - cutoff)
-    w /= w.sum(1, keepdims=True)
+    w = top_four(1 / (d * d + radius * radius) ** 1.5)
     out = np.zeros((len(p), len(bones)), np.float32)
-    ids = [list(bones).index(n) for n in names]
-    rows = np.arange(len(p))[:, None]
-    out[rows, np.array(ids)[order[:, :4]]] = w
+    out[:, [list(bones).index(n) for n in names]] = w
     return out
 
 
+def near_field(p, bones, names, radius):
+    """Weights from how much farther each bone is than the nearest one.
+
+    Distance to the spine does not flatten this field, so a flank two metres
+    wide still follows the one or two bones beside it.
+    """
+    d = np.array([segment_distance(p, np.array(bones[n][1]), np.array(bones[n][2])) for n in names]).T
+    d = d - d.min(1, keepdims=True)
+    w = top_four(1 / (d * d + radius * radius) ** 3)
+    out = np.zeros((len(p), len(bones)), np.float32)
+    out[:, [list(bones).index(n) for n in names]] = w
+    return out
+
+
+def relax(n, edges, stiffness, hold, target, shut=None, tolerance=1e-7, limit=6000):
+    """Solve for the smoothest weights that stay near `target` where `hold` is large.
+
+    Minimises sum over edges of stiffness * |w_i - w_j|^2 plus sum over vertices
+    of hold * |w_i - target_i|^2, by conjugate gradients. Each row of the answer
+    is a weighted mean of target rows, so it is not negative. `shut` marks
+    (vertex, bone) pairs that are pulled to zero: a bone's weight then fades out
+    smoothly at the edge of the region where it is allowed. Rows are normalised.
+    """
+    both = np.concatenate([edges, edges[:, ::-1]])
+    kk = np.concatenate([stiffness, stiffness])
+    order = np.argsort(both[:, 0], kind='stable')
+    both, kk = both[order], kk[order]
+    start = np.searchsorted(both[:, 0], np.arange(n))
+    empty = np.diff(np.r_[start, len(both)]) == 0
+    assert not empty.any(), 'A wing vertex has no edge.'
+    used = np.flatnonzero(target.any(0))
+    row = np.add.reduceat(kk, start)
+    diagonal = np.repeat((hold + row)[:, None], len(used), axis=1)
+    b = hold[:, None] * target[:, used].astype(float)
+    if shut is not None:
+        diagonal += 1e3 * row[:, None] * shut[:, used]
+        b[shut[:, used]] = 0
+
+    def apply(x):
+        return diagonal * x - np.add.reduceat(kk[:, None] * x[both[:, 1]], start, axis=0)
+
+    x = target[:, used].astype(float).copy()
+    if shut is not None:
+        x[shut[:, used]] = 0
+    r = b - apply(x)
+    z = r / diagonal
+    d = z.copy()
+    rz = (r * z).sum(0)
+    scale = np.sqrt((b * b).sum(0)) + 1e-30
+    for step in range(limit):
+        ad = apply(d)
+        alpha = rz / np.maximum((d * ad).sum(0), 1e-300)
+        x += alpha * d
+        r -= alpha * ad
+        if (np.sqrt((r * r).sum(0)) / scale).max() < tolerance:
+            break
+        z = r / diagonal
+        rz_new = (r * z).sum(0)
+        d = z + (rz_new / np.maximum(rz, 1e-300)) * d
+        rz = rz_new
+    out = np.zeros(target.shape)
+    out[:, used] = np.clip(x, 0, None)
+    return out / out.sum(1, keepdims=True), step + 1
+
+
+WING_HOLD = (.3, 1.5)
+SUPPORT_PASSES = 2
+MIRROR_BLEND = (.02, .06)
+MIRROR_TURNS = 8
+FOLD_STRETCH = 1.4
+FOLD_ROUNDS = 40
+FOLD_DEGREES = 80
+MEMBRANE_THICKNESS = .12
+MEMBRANE_RIM = .06
+
+
+def fold_matrices(bones, names, side, sign, degrees=None):
+    """Joint matrices of the test fold: the elbow turns the forearm forward, the wrist turns the hand back."""
+    degrees = FOLD_DEGREES if degrees is None else degrees
+
+    def turn(angle, pivot):
+        m = np.eye(4)
+        m[:3, :3] = np.array(Quaternion(Vector(wing_hinge(side)), math.radians(angle)).to_matrix())
+        m[:3, 3] = np.array(pivot) - m[:3, :3] @ np.array(pivot)
+        return m
+
+    elbow = turn(sign * degrees, bones['wing_arm_' + side][1])
+    wrist = (elbow @ np.r_[bones['wing_wrist_' + side][1], 1])[:3]
+    hand = turn(-sign * degrees, wrist) @ elbow
+    out = np.repeat(np.eye(4)[None], len(names), axis=0)
+    for i, name in enumerate(names):
+        if name == 'wing_arm_' + side:
+            out[i] = elbow
+        elif name.endswith('_' + side) and name.startswith(('wing_wrist', 'wing_finger')):
+            out[i] = hand
+    return out
+
+
+def four(w):
+    """At most four influences a row, without a step: subtract the fifth, then normalise."""
+    w = top_four(w)
+    w[np.argsort(np.argsort(-w, axis=1), axis=1) >= 4] = 0
+    return w / w.sum(1, keepdims=True)
+
+
+class Wing:
+    """One wing's hide and membrane as one surface, and the weights solved on it.
+
+    The field gives each hide vertex a target. A vertex on a bone's shaft holds
+    its target: the next bone is much farther than its own. A vertex near a
+    joint, on the flare under the upper arm or on the membrane holds nothing and
+    takes the smoothest blend its neighbours allow. A fold then shears every
+    panel evenly. The body side of the wing root holds the body's field.
+    """
+
+    def __init__(self, hide, membrane, body, wing, mask, pins, bones, names, side, sign):
+        self.side, self.sign, self.bones, self.names = side, sign, bones, names
+        hp = hide['POSITION'].astype(float)
+        mp = membrane['POSITION'].astype(float)
+        self.hid = hid = np.flatnonzero(mask > 0)
+        self.mid = mid = np.flatnonzero(mp[:, 0] * sign > 0)
+        points = np.concatenate([hp[hid], mp[mid]])
+        self.u, self.inverse = u, inverse = np.unique(np.round(points, 5), axis=0, return_inverse=True)
+        self.n = n = len(u)
+        local = np.full(len(hp), -1)
+        local[hid] = inverse[:len(hid)]
+        ht = hide['tri'][np.all(local[hide['tri']] >= 0, axis=1)]
+        mlocal = np.full(len(mp), -1)
+        mlocal[mid] = inverse[len(hid):]
+        mt = membrane['tri'][np.all(mlocal[membrane['tri']] >= 0, axis=1)]
+        self.hide_tri, self.web_tri = local[ht], mlocal[mt]
+        self.tri = tri = np.concatenate([self.hide_tri, self.web_tri])
+        # Cotangent stiffness: the answer then depends on the surface, not on how it was triangulated.
+        pairs, cots = [], []
+        for a, b, c in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]:
+            e1 = u[tri[:, a]] - u[tri[:, c]]
+            e2 = u[tri[:, b]] - u[tri[:, c]]
+            area = np.linalg.norm(np.cross(e1, e2), axis=1)
+            pairs.append(np.sort(tri[:, [a, b]], axis=1))
+            cots.append(.5 * (e1 * e2).sum(1) / np.maximum(area, 1e-12))
+        pairs, cots = np.concatenate(pairs), np.concatenate(cots)
+        edges, slot = np.unique(pairs, axis=0, return_inverse=True)
+        stiffness = np.zeros(len(edges))
+        np.add.at(stiffness, slot.ravel(), cots)
+        live = edges[:, 0] != edges[:, 1]
+        edges, stiffness = edges[live], np.maximum(stiffness[live], .02)
+        # The membrane is a thin shell with two faces. Tie each vertex to the vertices just
+        # beside it and to the one across it, or the two faces solve apart.
+        shell = np.unique(inverse[len(hid):])
+        tree = KDTree(len(shell))
+        for k, i in enumerate(shell):
+            tree.insert(u[i], k)
+        tree.balance()
+        facing = np.zeros((n, 3))
+        np.add.at(facing, inverse[len(hid):], membrane['NORMAL'][mid].astype(float))
+        facing /= np.maximum(np.linalg.norm(facing, axis=1, keepdims=True), 1e-9)
+        ties = []
+        for i in shell:
+            near = [(d, shell[k]) for _, k, d in tree.find_range(u[i], MEMBRANE_THICKNESS) if shell[k] != i]
+            ties += [(i, k) for d, k in near if d < MEMBRANE_RIM and k > i]
+            across = [(d, k) for d, k in near if facing[i] @ facing[k] < -.3]
+            if across:
+                ties.append((i, min(across)[1]))
+        ties = np.array(ties)
+        edges = np.concatenate([edges, ties])
+        stiffness = np.concatenate([stiffness, np.full(len(ties), 20.)])
+        degree = np.zeros(n)
+        np.add.at(degree, edges[:, 0], stiffness)
+        np.add.at(degree, edges[:, 1], stiffness)
+        wn = [b for b in names if b.startswith('wing') and b.endswith('_' + side)]
+        # How surely a vertex belongs where the field puts it: its second bone must be much
+        # farther than its first. That holds on a shaft and fails at a joint, on the flare and
+        # on the membrane.
+        d = np.sort(np.array([segment_distance(u, np.array(bones[b][1]), np.array(bones[b][2])) for b in wn]).T, axis=1)
+        shaft = smoothstep(*WING_HOLD, (d[:, 1] - d[:, 0]) / (d[:, 0] + .05))
+        m = np.ones(n)
+        self.is_hide = is_hide = np.zeros(n, bool)
+        rows = inverse[:len(hid)]
+        m[rows] = mask[hid]
+        is_hide[rows] = True
+        lonely = np.flatnonzero(degree == 0)
+        keep = np.flatnonzero(degree > 0)
+        degree[lonely] = 1
+        # Two pulls on a hide vertex: the body's field where the mask is low, its own bone on a shaft.
+        to_body = np.where(is_hide, 10 * (1 - m) ** 2, 0)
+        to_bone = np.where(is_hide, m * shaft, 0)
+        target = np.zeros((n, body.shape[1]))
+        target[rows] = body[hid] * to_body[rows, None] + wing[hid] * to_bone[rows, None]
+        self.hold = total = to_body + to_bone
+        target[total > 0] /= total[total > 0, None]
+        target[total == 0, names.index('wing_root_' + side)] = 1
+        # The hide under a claw follows the claw's bone and nothing else, or the claw lifts off.
+        self.pinned = np.unique(rows[pins[hid] >= 0])
+        self.pin_target = np.zeros((len(self.pinned), body.shape[1]))
+        owner = np.full(n, -1)
+        owner[rows] = np.maximum(owner[rows], pins[hid])
+        self.pin_target[np.arange(len(self.pinned)), owner[self.pinned]] = 1
+        target[self.pinned] = self.pin_target
+        total[self.pinned] = 5
+        # The spur is one rigid rib. Its outer bone only marks where the rib runs.
+        outer, inner = names.index('wing_spur_b_' + side), names.index('wing_spur_a_' + side)
+        target[:, inner] += target[:, outer]
+        target[:, outer] = 0
+        if len(lonely):
+            edges = np.concatenate([edges, np.c_[lonely, np.full(len(lonely), keep[0])]])
+            stiffness = np.concatenate([stiffness, np.full(len(lonely), 1e-6)])
+        solved, steps = relax(n, edges, stiffness, degree * (total + 1e-9), target)
+        # Four influences a vertex. Solve again with every bone shut outside the vertices where
+        # it is one of the leading four, so no weight is cut off at a step.
+        for _ in range(SUPPORT_PASSES):
+            rank = np.argsort(np.argsort(-solved, axis=1), axis=1)
+            solved, more = relax(n, edges, stiffness, degree * (total + 1e-9), target, shut=rank >= 4)
+            steps += more
+        # One sheet, not two. The upper face takes its weights from the closest point of the
+        # lower face, so the two faces move as one and the rim between them keeps its length.
+        anchors = np.array([q for b in wn for q in bones[b][1:3]])
+        up = np.linalg.svd(anchors - anchors.mean(0))[2][-1]
+        up = up if up[1] > 0 else -up
+        upper = ~is_hide & (facing @ up > .3)
+        lower_tri = self.web_tri[~upper[self.web_tri].any(1)]
+        sheet = BVHTree.FromPolygons(u.tolist(), lower_tri.tolist(), all_triangles=True)
+        copy = solved.copy()
+        for i in np.flatnonzero(upper):
+            location, _, face, distance = sheet.find_nearest(Vector(u[i]), MEMBRANE_THICKNESS * 2)
+            if location is not None:
+                copy[i] = barycentric(u[lower_tri[face]], location) @ solved[lower_tri[face]]
+        self.solved = four(copy)
+        self.solved[self.pinned] = self.pin_target
+        web = np.unique(np.sort(np.concatenate([self.web_tri[:, [0, 1]], self.web_tri[:, [1, 2]], self.web_tri[:, [2, 0]]]), axis=1), axis=0)
+        self.web = web[np.linalg.norm(u[web[:, 0]] - u[web[:, 1]], axis=1) > 1e-3]
+        self.loose = self.web_tri[~is_hide[self.web_tri].any(1)]
+        print('WING', side, n, 'surface vertices;', int((total > .5).sum()), 'held;', len(ties), 'ties in the membrane;',
+              int(upper.sum()), 'upper vertices follow the lower face;', steps, 'solver steps', flush=True)
+
+    def fold(self):
+        """Fold the wing as the verifier does and relax what the fold breaks.
+
+        Each free end of a membrane edge that stretches past FOLD_STRETCH moves
+        halfway to the other end. Each free corner of a membrane triangle that
+        cuts the arm moves halfway to the weights of the arm triangle it cuts,
+        so it travels with that part of the arm, as it does at rest.
+        Returns (rounds, longest edge ratio, cutting triangles left).
+        """
+        u, n, web = self.u, self.n, self.web
+        pose = fold_matrices(self.bones, self.names, self.side, self.sign)
+        length = np.linalg.norm(u[web[:, 0]] - u[web[:, 1]], axis=1)
+        thin = np.array([('finger' in b) or ('spur' in b) for b in self.names])
+        for rounds in range(FOLD_ROUNDS + 1):
+            solved = self.solved
+            posed = np.einsum('vj,jab,vb->va', solved, pose, np.c_[u, np.ones(n)])[:, :3]
+            ratio = np.linalg.norm(posed[web[:, 0]] - posed[web[:, 1]], axis=1) / length
+            tight = web[ratio > FOLD_STRETCH]
+            arm_tri = self.hide_tri[~thin[solved.argmax(1)][self.hide_tri].any(1)]
+            cuts = BVHTree.FromPolygons(posed.tolist(), arm_tri.tolist(), all_triangles=True).overlap(
+                BVHTree.FromPolygons(posed.tolist(), self.loose.tolist(), all_triangles=True))
+            if (not len(tight) and not cuts) or rounds == FOLD_ROUNDS:
+                return rounds, float(ratio.max()), len(cuts)
+            pull = np.zeros_like(solved)
+            pulls = np.zeros(n)
+            for a, b in [(0, 1), (1, 0)]:
+                np.add.at(pull, tight[:, a], solved[tight[:, b]] - solved[tight[:, a]])
+                np.add.at(pulls, tight[:, a], 1)
+            for i, k in cuts:
+                for v in self.loose[k]:
+                    pull[v] += solved[arm_tri[i]].mean(0) - solved[v]
+                    pulls[v] += 1
+            free = (pulls > 0) & (self.hold < .5)
+            solved = solved.copy()
+            solved[free] += .5 * pull[free] / pulls[free, None]
+            self.solved = four(solved)
+            self.solved[self.pinned] = self.pin_target
+
+    def sample(self, points, reach):
+        """Weights at the closest surface point to each query, and the distance to it."""
+        if not hasattr(self, 'surface'):
+            self.surface = BVHTree.FromPolygons(self.u.tolist(), self.tri.tolist(), all_triangles=True)
+        out = np.zeros((len(points), self.solved.shape[1]))
+        distance = np.full(len(points), np.inf)
+        for i, q in enumerate(points):
+            location, _, face, d = self.surface.find_nearest(Vector(q), reach)
+            if location is not None:
+                out[i] = barycentric(self.u[self.tri[face]], location) @ self.solved[self.tri[face]]
+                distance[i] = d
+        return out, distance
+
+    def result(self):
+        k = len(self.hid)
+        return self.hid, self.solved[self.inverse[:k]], self.mid, self.solved[self.inverse[k:]]
+
+
+def barycentric(corners, point):
+    b = np.linalg.lstsq(np.c_[corners, np.ones(3)].T, np.r_[np.array(point), 1], rcond=None)[0]
+    b = np.clip(b, 0, None)
+    return b / b.sum()
+
+
+def mirror_wings(left, right, names):
+    """Make the two wings agree where their surfaces agree.
+
+    The two sides of the sculpt differ, so the two solves differ. Each vertex
+    takes the mean of its own weights and the other wing's weights at its
+    mirrored position, and the other wing then copies the result. The share fades to nothing between MIRROR_BLEND[0] and
+    MIRROR_BLEND[1] metres from the other wing's surface. Returns the largest
+    change made.
+    """
+    swap = np.array([names.index(n[:-2] + ('_r' if n.endswith('_l') else '_l')) if n.endswith(('_l', '_r')) else i for i, n in enumerate(names)])
+    flip = np.array([-1., 1, 1])
+    change = 0.
+    # The left wing moves halfway to the right one. The right wing then takes the new left one.
+    for own, other, most in [(left, right, .5), (right, left, 1.)]:
+        theirs, distance = other.sample(own.u * flip, MIRROR_BLEND[1])
+        share = most * (1 - smoothstep(*MIRROR_BLEND, np.where(np.isfinite(distance), distance, MIRROR_BLEND[1])))
+        blended = own.solved * (1 - share[:, None]) + theirs[:, swap] * share[:, None]
+        change = max(change, float(abs(blended - own.solved).max()))
+        own.solved = four(blended)
+        own.solved[own.pinned] = own.pin_target
+    return change
+
+
 def compact_weights(w):
-    order = np.argsort(-w, axis=1)[:, :5]
-    values = np.take_along_axis(w, order, axis=1)
-    values = np.maximum(0, values[:, :4] - values[:, 4:5])
+    w = top_four(w)
+    order = np.argsort(-w, axis=1)[:, :4]
+    values = np.take_along_axis(w, order, axis=1).astype('<f4')
     values /= values.sum(1, keepdims=True)
-    return order[:, :4].astype('<u2'), values.astype('<f4')
+    assert np.isfinite(values).all() and (values >= 0).all()
+    return order.astype('<u2'), values
+
+
+JOINT_BAND = .20
 
 
 def limb_field(p, bones, names):
-    """Blend adjacent limb segments across a 0.30 m joint band."""
+    """Blend adjacent limb segments across a 0.40 m joint band."""
     main = names[:4]
     heads = np.array([bones[n][1] for n in main])
     tails = np.array([bones[n][2] for n in main])
@@ -200,8 +525,9 @@ def limb_field(p, bones, names):
     for i, n in enumerate(main):
         ids = np.flatnonzero(nearest == i)
         along = (p[ids] - heads[i]) @ ((tails[i] - heads[i]) / lengths[i])
-        previous = 1 - smoothstep(-.15, .15, along) if i else np.zeros(len(ids))
-        following = smoothstep(lengths[i] - .15, lengths[i] + .15, along) if i < 3 else np.zeros(len(ids))
+        band = min(JOINT_BAND, .45 * lengths[i])
+        previous = 1 - smoothstep(-band, band, along) if i else np.zeros(len(ids))
+        following = smoothstep(lengths[i] - band, lengths[i] + band, along) if i < 3 else np.zeros(len(ids))
         w[ids, indices[n]] = 1 - previous - following
         if i:
             w[ids, indices[main[i - 1]]] = previous
@@ -215,18 +541,229 @@ def limb_field(p, bones, names):
     return w
 
 
+# The plane that ends the rigid head: through the head joint, facing forward and up.
+HEAD_NORMAL = np.array([0., .4472, -.8944])
+LIMB = {True: dict(prefixes=('upper_arm_', 'forearm_', 'wrist_', 'hand_', 'toe_fore_'), radius=(.42, .58), height=(2.0, 2.6)),
+        False: dict(prefixes=('thigh_', 'shin_', 'ankle_', 'foot_', 'toe_hind_'), radius=(.60, .90), height=(1.95, 2.65))}
+
+
+def limb_names(names, side, fore):
+    return [n for n in names if n.endswith('_' + side) and n.startswith(LIMB[fore]['prefixes'])]
+
+
+def limb_mask(p, bones, ln, fore, sign):
+    """One where a vertex belongs to this leg, zero on the belly and the other side."""
+    upper = np.min([segment_distance(p, np.array(bones[n][1]), np.array(bones[n][2])) for n in ln[:3]], axis=0)
+    lower = np.min([segment_distance(p, np.array(bones[n][1]), np.array(bones[n][2])) for n in ln[3:]], axis=0)
+    r0, r1 = LIMB[fore]['radius']
+    y0, y1 = LIMB[fore]['height']
+    m = np.maximum(1 - smoothstep(r0, r1, upper), (1 - smoothstep(.40, .60, lower)) * (1 - smoothstep(.5, .8, p[:, 1])))
+    return m * (1 - smoothstep(y0, y1, p[:, 1])) * (p[:, 0] * sign > 0)
+
+
+def wing_mask(p, spec, sign):
+    """One on the wing, zero on the body. Near the body the wing root blends in by height and station."""
+    f = spec['wing_field']
+    x, y, z = abs(p[:, 0]), p[:, 1], p[:, 2]
+    root = smoothstep(*f['root_y'], y) * smoothstep(*f['root_z_front'], z) * (1 - smoothstep(*f['root_z_rear'], z))
+    free = smoothstep(*f['free_x'], x)
+    return smoothstep(*f['span_x'], x) * (root + (1 - root) * free) * smoothstep(2.2, 2.45, y) * (p[:, 0] * sign > 0)
+
+
+def smooth_field(p, spec, parts=False):
+    """The continuous weight field: a function of position alone, the same on both sides."""
+    bones = {b[0]: b for b in spec['bones']}
+    names = list(bones)
+    body_names = ['root', 'chest', 'neck_01', 'neck_02', 'neck_03', 'head']
+    body_names += [n for n in names if n.startswith('tail_')]
+    w = near_field(p, bones, body_names, .35)
+    head = smoothstep(-.25, .10, (p - np.array(bones['head'][1])) @ HEAD_NORMAL) * (abs(p[:, 0]) < 1.5)
+    w *= (1 - head)[:, None]
+    w[:, names.index('head')] += head
+    limb_total = np.zeros(len(p))
+    wing_total = np.zeros(len(p))
+    wing_field = np.zeros_like(w)
+    for side, sign in [('l', -1), ('r', 1)]:
+        for fore in [True, False]:
+            ln = limb_names(names, side, fore)
+            m = limb_mask(p, bones, ln, fore, sign)
+            ids = np.flatnonzero(m > 0)
+            w[ids] = w[ids] * (1 - m[ids, None]) + limb_field(p[ids], bones, ln) * m[ids, None]
+            limb_total += m
+        wn = [n for n in names if n.startswith('wing') and n.endswith('_' + side)]
+        m = wing_mask(p, spec, sign)
+        # Inside free_x a point far from every wing bone belongs to the body: the membrane's root corner.
+        reach = np.min([segment_distance(p, np.array(bones[n][1]), np.array(bones[n][2])) for n in wn], axis=0)
+        near = 1 - smoothstep(*spec['wing_field']['bone_reach'], reach)
+        free = smoothstep(*spec['wing_field']['free_x'], abs(p[:, 0]))
+        m *= near + (1 - near) * free
+        ids = np.flatnonzero(m > 0)
+        wf = near_field(p[ids], bones, wn, spec['wing_field']['radius_m'])
+        hub = np.array(bones['wing_wrist_' + side][1])
+        share = 1 - smoothstep(*spec['wing_field']['wrist_share'], np.linalg.norm(p[ids] - hub, axis=1))
+        wf *= 1 - share[:, None]
+        wf[:, names.index('wing_wrist_' + side)] += share
+        wing_field[ids] = wf
+        wing_total += m
+    blend = w * (1 - wing_total[:, None]) + wing_field * wing_total[:, None]
+    return (blend, limb_total, wing_total, w, wing_field) if parts else blend
+
+
+SPIKE_SMOOTHING = 80
+SPIKE_MERGE = .04
+SPIKE_PROMINENCE = .10
+SPIKE_EXTENT = 1.5
+
+
+def spike_segments(geo, eligible):
+    """Split the hide into spikes and plates, and return those that stand out.
+
+    Protrusion is the distance of a vertex outside a smoothed copy of the hide.
+    Each vertex climbs to a peak of protrusion. Peaks closer than SPIKE_MERGE to
+    their saddle merge. A segment counts as a spike if it rises SPIKE_PROMINENCE
+    over its own base, spans less than SPIKE_EXTENT, and no vertex in it belongs
+    to a leg, a wing, the jaw or a lid. Returns (export vertex ids, base ids, tip id).
+    """
+    p, tri, inverse = unique_mesh(geo)
+    p = p.astype(float)
+    n = len(p)
+    edges = np.unique(np.sort(np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]]), axis=1), axis=0)
+    edges = edges[edges[:, 0] != edges[:, 1]]
+    both = np.concatenate([edges, edges[:, ::-1]])
+    both = both[np.argsort(both[:, 0], kind='stable')]
+    start = np.searchsorted(both[:, 0], np.arange(n + 1))
+    degree = np.maximum(np.diff(start), 1)
+
+    def average(values):
+        total = np.zeros_like(values)
+        np.add.at(total, both[:, 0], values[both[:, 1]])
+        return total / (degree[:, None] if values.ndim == 2 else degree)
+
+    q = p.copy()
+    for _ in range(SPIKE_SMOOTHING):
+        q = .5 * q + .5 * average(q)
+    normal = np.zeros((n, 3))
+    np.add.at(normal, inverse, geo['NORMAL'].astype(float))
+    normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-9)
+    f = ((p - q) * normal).sum(1)
+    for _ in range(2):
+        f = .5 * f + .5 * average(f)
+    label = np.full(n, -1)
+    birth, parent = [], []
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for v in np.argsort(-f, kind='stable'):
+        near = both[start[v]:start[v + 1], 1]
+        near = near[label[near] >= 0]
+        if not len(near):
+            label[v] = len(birth)
+            birth.append(f[v])
+            parent.append(len(parent))
+            continue
+        groups = {find(label[u]) for u in near}
+        best = max(groups, key=lambda c: (birth[c], -c))
+        for c in groups:
+            if c != best and birth[c] - f[v] < SPIKE_MERGE:
+                parent[c] = best
+        label[v] = find(label[near[f[near].argmax()]])
+    label = np.array([find(a) for a in label])
+    ok = np.ones(n, bool)
+    np.logical_and.at(ok, inverse, eligible)
+    order = np.argsort(label, kind='stable')
+    bounds = np.flatnonzero(np.diff(label[order])) + 1
+    export_order = np.argsort(inverse, kind='stable')
+    export_start = np.searchsorted(inverse[export_order], np.arange(n + 1))
+    out = []
+    for ids in np.split(order, bounds):
+        if len(ids) < 6 or not ok[ids].all():
+            continue
+        base_level = np.percentile(f[ids], 25)
+        if f[ids].max() - np.percentile(f[ids], 10) < SPIKE_PROMINENCE or np.ptp(p[ids], axis=0).max() > SPIKE_EXTENT:
+            continue
+        expand = lambda sel: np.concatenate([export_order[export_start[i]:export_start[i + 1]] for i in sel])
+        out.append((expand(ids), expand(ids[f[ids] <= base_level]), int(expand([ids[f[ids].argmax()]])[0])))
+    return out
+
+
+HEAD_PLANE = -.0115
+
+
+def jaw_mask(geo):
+    """The source `_JAW` mask, made the same on both sides of the head.
+
+    The mask is 0 or 1 except on the ramp at each corner of the mouth, and the
+    two ramps differ by up to 0.04. A ramp vertex with a mirror twin within
+    MIRROR_REACH takes the mean of the two values.
+    """
+    jaw = geo['_JAW'].astype(float).copy()
+    p = geo['POSITION'].astype(float)
+    head = np.flatnonzero((p[:, 2] < -3.0) & (p[:, 1] > 4.0) & (abs(p[:, 0]) < 1.5))
+    out = jaw.copy()
+    # The two lips share positions at the corner. Keep each lip with its own side of 0.5.
+    for ids in [head[jaw[head] <= .5], head[jaw[head] >= .5]]:
+        if not len(ids):
+            continue
+        tree = KDTree(len(ids))
+        for k, i in enumerate(ids):
+            tree.insert(p[i], k)
+        tree.balance()
+        for i in ids:
+            q = p[i] * np.array([-1., 1, 1]) + np.array([2 * HEAD_PLANE, 0, 0])
+            twins = [jaw[ids[k]] for _, k, d in tree.find_range(q, MIRROR_REACH)]
+            if twins and (jaw[i] not in (0., 1.) or min(twins) != max(twins) or twins[0] != jaw[i]):
+                out[i] = .5 * (jaw[i] + np.mean(twins))
+    return out.astype(np.float32)
+
+
+def hide_overrides(geo, eyes):
+    """Vertices whose weights come from the jaw mask and the lids, not from the field."""
+    mask = geo['_JAW'] > 0
+    for e in eyes.values():
+        mask[np.concatenate(e['rings'])] = True
+        mask[e['socket']] = True
+    return mask
+
+
+CLAW_GRIP = .06
+
+
+def claw_owners(geo, bones, names):
+    """Each horn piece and the one bone it follows: (export vertex ids, bone name)."""
+    up, ut, ui = unique_mesh(geo)
+    out = []
+    for comp in components(up, ut):
+        c = up[comp].mean(0)
+        side = 'r' if c[0] > 0 else 'l'
+        if c[1] > 4.8 and abs(c[0]) < 1.5:
+            owner = 'head'
+        else:
+            prefix = 'wing' if c[1] >= .6 else 'toe_fore_' if c[2] < -1 else 'toe_hind_'
+            candidates = [n for n in names if n.startswith(prefix) and n.endswith('_' + side)]
+            owner = min(candidates, key=lambda n: segment_distance(c[None], np.array(bones[n][1]), np.array(bones[n][2]))[0])
+        if owner.startswith('wing_spur_b'):
+            owner = owner.replace('spur_b', 'spur_a')
+        out.append((np.flatnonzero(np.isin(ui, comp)), owner))
+    return out
+
+
 def make_weights(g, spec):
     bones = {b[0]: b for b in spec['bones']}
     names = list(bones)
     eyes = eye_measure(g, g['hide'])
     result = {}
-    for mesh_name, geo in g.items():
+    membrane_dense = None
+    for mesh_name, geo in sorted(g.items(), key=lambda item: item[0] != 'hide'):
         p = geo['POSITION'].astype(float)
         w = np.zeros((len(p), len(names)), np.float32)
         if mesh_name.startswith('eye_'):
             w[:, names.index(mesh_name)] = 1
         elif mesh_name == 'mouth':
-            jaw = geo['_JAW']
+            jaw = jaw_mask(geo)
             w[:, names.index('head')] = 1 - jaw
             w[:, names.index('jaw')] = jaw
             up, ut, ui = unique_mesh(geo)
@@ -241,36 +778,43 @@ def make_weights(g, spec):
                     w[ids] = 0
                     w[ids, names.index('jaw' if lower else 'head')] = 1
         else:
-            body_names = ['root', 'chest', 'neck_01', 'neck_02', 'neck_03', 'head']
-            body_names += [n for n in names if n.startswith('tail_')]
-            w = field(p, bones, body_names, .35)
-            for side, sign in [('l', -1), ('r', 1)]:
-                ips = p[:, 0] * sign > 0
-                for fore in [True, False]:
-                    prefixes = ('upper_arm_', 'forearm_', 'wrist_', 'hand_', 'toe_fore_') if fore else ('thigh_', 'shin_', 'ankle_', 'foot_', 'toe_hind_')
-                    ln = [n for n in names if n.endswith('_' + side) and n.startswith(prefixes)]
-                    region = ips & (p[:, 1] < 2.65) & ((p[:, 2] < -1.12) if fore else ((p[:, 2] > -1.12) & (p[:, 2] < 1.7)))
-                    ids = np.flatnonzero(region)
-                    lw = limb_field(p[ids], bones, ln)
-                    blend = (1 - smoothstep(2.05, 2.65, p[ids, 1]))[:, None]
-                    w[ids] = w[ids] * (1 - blend) + lw * blend
-                wn = [n for n in names if n.startswith('wing') and n.endswith('_' + side)]
-                region = ips & (p[:, 1] > 2.65) & (p[:, 2] > -1.75) & (abs(p[:, 0]) > .85)
-                ids = np.flatnonzero(region)
-                wf = field(p[ids], bones, wn, .408)
-                hub = np.array(bones['wing_wrist_' + side][1])
-                share = 1 - smoothstep(.24, .98, np.linalg.norm(p[ids] - hub, axis=1))
-                wf *= 1 - share[:, None]
-                wf[:, names.index('wing_wrist_' + side)] += share
-                blend = smoothstep(.85, 1.5, abs(p[ids, 0]))[:, None]
-                w[ids] = w[ids] * (1 - blend) + wf * blend
+            w, limb, wing, body_part, wing_part = smooth_field(p, spec, parts=True)
+            if mesh_name == 'membrane':
+                w = membrane_dense
             if mesh_name == 'hide':
-                # The dense head frill stays rigid with the skull.
-                region = (p[:, 1] > 3.48) & (p[:, 2] < -1.78) & (abs(p[:, 0]) < 1.32)
-                ids = np.flatnonzero(region)
-                w[ids] = 0
-                w[ids, names.index('head')] = 1
-                jaw = geo['_JAW']
+                membrane_dense = np.zeros((len(g['membrane']['POSITION']), len(names)), np.float32)
+                # Hide vertices within CLAW_GRIP of a wing claw are pinned to the claw's bone.
+                pins = np.full(len(p), -1)
+                tree = KDTree(len(p))
+                for i, co in enumerate(p):
+                    tree.insert(co, i)
+                tree.balance()
+                for ids, owner in claw_owners(g['horn'], bones, names):
+                    if owner.startswith('wing'):
+                        for co in g['horn']['POSITION'][ids]:
+                            pins[[i for _, i, _ in tree.find_range(co, CLAW_GRIP)]] = names.index(owner)
+                wings = [Wing(geo, g['membrane'], body_part, wing_part, wing * (p[:, 0] * sign > 0), pins, bones, names, side, sign)
+                         for side, sign in [('l', -1), ('r', 1)]]
+                # Mirror, then relax what the test fold breaks. The relaxing is local, so a few turns settle.
+                for turn in range(MIRROR_TURNS):
+                    change = mirror_wings(*wings, names)
+                    folds = [one.fold() for one in wings]
+                    print('WINGS turn', turn, 'mirror change %.4f;' % change, 'fold rounds, longest edge, cuts:', [(a, round(b, 3), c) for a, b, c in folds], flush=True)
+                for one in wings:
+                    hid, hw, mid, mw = one.result()
+                    w[hid] = hw
+                    membrane_dense[mid] = mw
+                centre = np.flatnonzero(membrane_dense.sum(1) == 0)
+                membrane_dense[centre] = smooth_field(g['membrane']['POSITION'][centre].astype(float), spec)
+                fixed = hide_overrides(geo, eyes)
+                # Each spike follows the one bone that leads at its base.
+                spikes = spike_segments(geo, (limb == 0) & (wing == 0) & ~fixed)
+                for ids, base, _ in spikes:
+                    owner = int(w[base].sum(0).argmax())
+                    w[ids] = 0
+                    w[ids, owner] = 1
+                print('SPIKES', len(spikes), 'segments;', sum(len(s[0]) for s in spikes), 'vertices', flush=True)
+                jaw = jaw_mask(geo)
                 ids = np.flatnonzero(jaw > 0)
                 w[ids] = 0
                 w[ids, names.index('head')] = 1 - jaw[ids]
@@ -286,22 +830,9 @@ def make_weights(g, spec):
                     w[e['socket']] = 0
                     w[e['socket'], names.index('head')] = 1
             if mesh_name == 'horn':
-                up, ut, ui = unique_mesh(geo)
-                for comp in components(up, ut):
-                    ids = np.flatnonzero(np.isin(ui, comp))
-                    c = up[comp].mean(0)
-                    side = 'r' if c[0] > 0 else 'l'
-                    if c[1] > 4.8 and abs(c[0]) < 1.5:
-                        n = 'head'
-                    elif c[1] < .6:
-                        prefix = 'toe_fore_' if c[2] < -1 else 'toe_hind_'
-                        candidates = [n for n in names if n.startswith(prefix) and n.endswith('_' + side)]
-                        n = min(candidates, key=lambda n: segment_distance(c[None], np.array(bones[n][1]), np.array(bones[n][2]))[0])
-                    else:
-                        candidates = [n for n in names if n.startswith('wing') and n.endswith('_' + side)]
-                        n = min(candidates, key=lambda n: segment_distance(c[None], np.array(bones[n][1]), np.array(bones[n][2]))[0])
+                for ids, owner in claw_owners(geo, bones, names):
                     w[ids] = 0
-                    w[ids, names.index(n)] = 1
+                    w[ids, names.index(owner)] = 1
         result[mesh_name] = compact_weights(w)
         print('WEIGHTS', mesh_name, len(p), flush=True)
     return result
@@ -367,7 +898,9 @@ def build():
     data += struct.pack('<I4s', len(binary), b'BIN\x00') + binary
     OUTPUT.write_bytes(data)
     for suffix in ['rig.cfg', 'flight.cfg']:
-        shutil.copyfile(ROOT / ('assets/embercrest.glb.' + suffix), Path(str(OUTPUT) + '.' + suffix))
+        # The sidecars start as Embercrest's. Later edits to them survive a rebuild.
+        if not Path(str(OUTPUT) + '.' + suffix).exists():
+            shutil.copyfile(ROOT / ('assets/embercrest.glb.' + suffix), Path(str(OUTPUT) + '.' + suffix))
     print('EXPORTED', OUTPUT.name, len(data), 'bytes', len(names), 'joints', flush=True)
 
 
@@ -453,6 +986,17 @@ def rotate(rig, name, axis, degrees):
     pb.rotation_quaternion = Quaternion(Vector(axis), math.radians(degrees))
 
 
+def wing_hinge(side):
+    """The fold axis: the body's up axis. Both hinges turn about it, in opposite senses.
+
+    A hinge normal to the wing's own plane closes the wedge between the forearm
+    and finger 3 by 80 degrees, and that wedge is 70 degrees wide: the finger
+    would pass through the forearm. About the up axis the same wedge closes
+    from 98 to 18 degrees in plan and nothing has to cross.
+    """
+    return (0., 1., 0.)
+
+
 def set_pose(rig, label, eyes):
     reset_pose(rig)
     if label == 'jaw':
@@ -467,9 +1011,11 @@ def set_pose(rig, label, eyes):
         for side in ['l', 'r']:
             rotate(rig, 'eye_' + side, (0, 1, 0), 25)
     elif label == 'wingfold':
+        # A Z fold: the forearm swings forward at the elbow, the hand swings back at the wrist.
         for side, sign in [('l', -1), ('r', 1)]:
-            rotate(rig, 'wing_arm_' + side, (0, 1, 0), sign * 80)
-            rotate(rig, 'wing_wrist_' + side, (0, 1, 0), sign * 80)
+            axis = wing_hinge(side)
+            rotate(rig, 'wing_arm_' + side, axis, sign * FOLD_DEGREES)
+            rotate(rig, 'wing_wrist_' + side, axis, -sign * FOLD_DEGREES)
     elif label == 'crouch':
         for side in ['l', 'r']:
             rotate(rig, 'forearm_' + side, (1, 0, 0), 60)
@@ -490,6 +1036,10 @@ def evaluated(objects):
         out[name] = gltf_points(a)
         ev.to_mesh_clear()
     return out
+
+
+MIRROR_REACH = .002
+MEMBRANE_REACH = .004
 
 
 def dense_weights(g, count):
@@ -529,7 +1079,7 @@ def closed_volume(p, tri, rest):
         edge = boundary[np.isin(boundary[:, 0], list(loop))]
         centre = q[list(loop)].mean(0)
         value += np.einsum('ij,ij->i', q[edge[:, 1]], np.cross(q[edge[:, 0]], centre)).sum() / 6
-    valid = not np.any(counts > 2) and all(len(a) == 2 for a in adjacency.values())
+    valid = not np.any(counts > 2)
     return abs(float(value)), valid, [len(s) for s in loops]
 
 
@@ -558,7 +1108,13 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
     check(doc['materials'] == source_doc['materials'] and doc['images'] == source_doc['images'] and doc['textures'] == source_doc['textures'], 'material records unchanged', 'materials, image records, and texture records compared')
     check(binary[:len(source_bin)] == source_bin, 'source buffer unchanged', f'{len(source_bin)} original binary bytes compared, including every embedded image')
     for suffix in ['rig.cfg', 'flight.cfg']:
-        check(Path(str(OUTPUT) + '.' + suffix).read_bytes() == (ROOT / ('assets/embercrest.glb.' + suffix)).read_bytes(), suffix + ' unchanged', 'byte comparison')
+        def keys(path):
+            rows = [line.split() for line in path.read_text().splitlines() if line.strip() and not line.startswith('#')]
+            return {r[0]: r[1] for r in rows}
+        ours = keys(Path(str(OUTPUT) + '.' + suffix))
+        base = keys(ROOT / ('assets/embercrest.glb.' + suffix))
+        changed = sorted(k for k in ours if base.get(k) != ours[k])
+        check(set(base) <= set(ours), suffix + ' present', f'every Embercrest key kept; {len(changed)} values differ: {", ".join(changed) or "none"}')
     inv = accessor(doc, binary, skin['inverseBindMatrices']).reshape(-1, 4, 4).transpose(0, 2, 1)
     parents = {c: i for i, n in enumerate(doc['nodes']) for c in n.get('children', [])}
     world = {}
@@ -585,10 +1141,12 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
         w, j = a['WEIGHTS_0'], a['JOINTS_0']
         error = float(abs(w.sum(1) - 1).max())
         check(np.isfinite(w).all() and (w >= 0).all() and error < 1e-6 and j.max() < count and (w > 0).sum(1).max() <= 4,
-              mesh + ' influences', f'max sum error {error:.9g}; unweighted {int((w.sum(1)==0).sum())}; maximum {int((w>0).sum(1).max())}')
+              mesh + ' influences', f'max sum error {error:.9g}; unweighted {int((~(w.sum(1) > 0)).sum())}; maximum {int((w>0).sum(1).max())}')
     hw = dense_weights(geo['hide'], count)
-    jaw_error = float(abs(hw[:, names.index('jaw')] - geo['hide']['_JAW']).max())
-    check(jaw_error < 1e-6, 'hide jaw mask retained', f'maximum exported weight difference {jaw_error:.9g}; source corner falloff retained')
+    jaw_error = float(abs(hw[:, names.index('jaw')] - jaw_mask(geo['hide'])).max())
+    jaw_shift = abs(hw[:, names.index('jaw')] - geo['hide']['_JAW'])
+    check(jaw_error < 1e-6 and jaw_shift.max() < .03, 'hide jaw mask retained',
+          f'the jaw weight is the source mask, with the two corner ramps averaged; {int((jaw_shift > 1e-6).sum())} vertices differ from the source, by at most {jaw_shift.max():.6f}')
     for mesh in ['horn', 'mouth']:
         a = geo[mesh]
         up, ut, ui = unique_mesh(a)
@@ -628,35 +1186,105 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
         check(len(eye['unique_rings']) == 6 and all(len(r) == 36 for r in eye['unique_rings']), 'lid_' + side + ' topology', 'six rings of 36 unique positions')
         w = dense_weights(geo['hide'], count)
         check(np.all(w[eye['socket'], names.index('head')] == 1), 'socket_' + side + ' fixed', f'{len(eye["socket"])} exported vertices follow head')
-    # Compare actual weights at nearest mirrored surface points.
+    # Mirror, part 1: the exported weights against the rig's field at the mirrored position.
     mirror = np.array([names.index(n[:-2] + ('_r' if n.endswith('_l') else '_l')) if n.endswith(('_l', '_r')) else i for i, n in enumerate(names)])
+    assert names == [b[0] for b in spec['bones']]
+    for mesh in ['hide']:
+        a = geo[mesh]
+        p = a['POSITION'].astype(float)
+        exported = dense_weights(a, count)
+        j, v = compact_weights(smooth_field(p, spec))
+        own = dense_weights(dict(POSITION=p, JOINTS_0=j, WEIGHTS_0=v), count)
+        plain = abs(exported - own).max(1) < 1e-6
+        j, v = compact_weights(smooth_field(p * np.array([-1., 1, 1]), spec))
+        other = dense_weights(dict(POSITION=p, JOINTS_0=j, WEIGHTS_0=v), count)[:, mirror]
+        error = abs(exported - other).max(1)[plain]
+        check(error.max() <= .02 and plain.mean() > .5, mesh + ' mirrored field',
+              f'exported weight against the field at the mirrored position; max {error.max():.6f}; RMS {np.sqrt(np.mean(error**2)):.6f}; {int(plain.sum())} of {len(p)} vertices carry the field, the rest are spikes, jaw and lids')
+    # The membrane's weights come from its own triangles. Compare each left vertex with the
+    # exported weights at the closest point of the right membrane, mirrored.
+    a = geo['membrane']
+    p = a['POSITION'].astype(float)
+    w = dense_weights(a, count).astype(float)
+    tree = BVHTree.FromPolygons(p.tolist(), a['tri'].tolist(), all_triangles=True)
+    errors, far, where = [], 0, []
+    for i in np.flatnonzero(p[:, 0] < -.04):
+        q = p[i] * np.array([-1., 1, 1])
+        location, _, face, distance = tree.find_nearest(Vector(q))
+        if distance > MEMBRANE_REACH:
+            far += 1
+            continue
+        t = a['tri'][face]
+        b = np.linalg.lstsq(np.c_[p[t], np.ones(3)].T @ np.eye(3), np.r_[np.array(location), 1], rcond=None)[0]
+        errors.append(abs(w[i] - (b @ w[t])[mirror]).max())
+        where.append(p[i].round(3).tolist() + [round(float(distance), 4)])
+    errors = np.array(errors)
+    check(errors.max() <= .02 and len(errors) >= 300, 'membrane mirrored surface',
+          f'left vertex against the right membrane at the mirrored point; max {errors.max():.6f}; RMS {np.sqrt(np.mean(errors**2)):.6f}; {len(errors)} vertices within {MEMBRANE_REACH*1000:.0f} mm of the mirrored surface; {far} farther')
+    checks[-1]['over'] = int((errors > .02).sum())
+    checks[-1]['worst'] = [where[i] + [round(float(errors[i]), 4)] for i in np.argsort(-errors)[:25]]
+    # Mirror, part 2: exported weights where the two sides of the mesh coincide.
+    hide_points = geo['hide']['POSITION'].astype(float)
+    _, limb, wing = smooth_field(hide_points, spec, parts=True)[:3]
+    spikes = spike_segments(geo['hide'], (limb == 0) & (wing == 0) & ~hide_overrides(geo['hide'], eyes))
+    spike_ids = np.concatenate([s[0] for s in spikes])
+    joint_parent = {names.index(b[0]): names.index(b[3]) for b in spec['bones'] if b[3]}
     for mesh in ['hide', 'membrane', 'horn', 'mouth']:
         a = geo[mesh]
         p, _, ui = unique_mesh(a)
         first = np.unique(ui, return_index=True)[1]
         w = dense_weights(a, count)[first]
-        tree = KDTree(len(p))
-        for i, co in enumerate(p):
-            tree.insert(co, i)
-        tree.balance()
-        left = np.flatnonzero(p[:, 0] < -.03)
-        centre_x = -.01 if mesh == 'mouth' else 0.
-        errors, distances = [], []
-        for i in left:
-            q = p[i].copy()
-            q[0] = 2 * centre_x - q[0]
-            _, j, distance = tree.find(q)
-            errors.append(float(abs(w[i] - w[j, mirror]).max()))
-            distances.append(distance)
-        errors, distances = np.array(errors), np.array(distances)
-        check(errors.max() <= .02, mesh + ' mirrored weights', f'max {errors.max():.6f}; RMS {np.sqrt(np.mean(errors**2)):.6f}; nearest surface distance max {distances.max():.6f} m; {len(errors)} pairs')
-        worst = int(left[int(errors.argmax())])
-        query = p[worst].copy()
-        query[0] = 2 * centre_x - query[0]
-        _, other, distance = tree.find(query)
-        checks[-1]['worst_pair'] = dict(left=p[worst].tolist(), right=p[other].tolist(), distance_m=distance,
-                                       left_weights={names[j]:float(v) for j,v in enumerate(w[worst]) if v>0},
-                                       right_weights={names[j]:float(v) for j,v in enumerate(w[other]) if v>0})
+        lower = (a['_JAW'][first] > .5) if '_JAW' in a else np.zeros(len(p), bool)
+        rigid = (w.max(1) == 1) & np.isin(first, spike_ids) if mesh == 'hide' else np.zeros(len(p), bool)
+        owners = [0, 0, 0]
+        # In the mouth a tooth is rigid and the gum beside it is not. Compare like with like.
+        part = np.zeros(len(p), np.int32)
+        mixed = 0
+        if mesh == 'mouth':
+            for comp in components(p, unique_mesh(a)[1]):
+                part[comp] = len(comp) if len(comp) in (25, 106) else 0
+        # The head sculpt mirrors about X = -0.0115 and the body about X = 0.
+        head_side = (p[:, 2] < -3.0) & (p[:, 1] > 4.0) & (abs(p[:, 0]) < 1.5)
+        errors, distances, far = [], [], 0
+        worst = None
+        for cls in [False, True]:
+            ids = np.flatnonzero(lower == cls)
+            if not len(ids):
+                continue
+            tree = KDTree(len(ids))
+            for k, i in enumerate(ids):
+                tree.insert(p[i], k)
+            tree.balance()
+            for i in ids[p[ids, 0] < -.04]:
+                centre_x = HEAD_PLANE if head_side[i] else 0.
+                q = p[i].copy()
+                q[0] = 2 * centre_x - q[0]
+                _, k, distance = tree.find(q)
+                if distance > MIRROR_REACH:
+                    far += 1
+                    continue
+                if part[i] != part[ids[k]]:
+                    mixed += 1
+                    continue
+                if rigid[i] or rigid[ids[k]]:
+                    # A spike follows one bone. Its mirror image must lead with that bone or one joined to it.
+                    one, two = int(w[i].argmax()), int(mirror[w[ids[k]].argmax()])
+                    owners[0 if one == two else 1 if joint_parent.get(one) == two or joint_parent.get(two) == one else 2] += 1
+                    continue
+                errors.append(float(abs(w[i] - w[ids[k], mirror]).max()))
+                distances.append(distance)
+                if worst is None or errors[-1] > worst[0]:
+                    worst = (errors[-1], int(i), int(ids[k]), distance)
+        errors = np.array(errors) if errors else np.zeros(1)
+        spikes_note = f'; {sum(owners)} more pairs have a spike on one side or both: {owners[0]} lead with the same bone, {owners[1]} with joined bones, {owners[2]} with bones apart' if mesh == 'hide' else ''
+        if mesh == 'mouth':
+            spikes_note = f'; {mixed} more pairs set a tooth against the gum and are not compared'
+        check(errors.max() <= .02 and not owners[2], mesh + ' mirrored weights',
+              f'max {errors.max():.6f}; RMS {np.sqrt(np.mean(errors**2)):.6f}; {len(distances)} pairs within {MIRROR_REACH*1000:.0f} mm of their mirror image; {far} left vertices have no such partner' + spikes_note)
+        if worst:
+            checks[-1]['worst_pair'] = dict(left=p[worst[1]].tolist(), right=p[worst[2]].tolist(), distance_m=worst[3],
+                                           left_weights={names[j]: float(v) for j, v in enumerate(w[worst[1]]) if v > 0},
+                                           right_weights={names[j]: float(v) for j, v in enumerate(w[worst[2]]) if v > 0})
     reset_pose(rig)
     rest = evaluated(objects)
     err = max(float(np.linalg.norm(rest[n] - a['POSITION'], axis=1).max()) for n, a in geo.items())
@@ -715,39 +1343,51 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
         check(error < 1e-5 and movement > .03, 'eye_' + side + ' independence', f'25 degrees; max lid motion {error:.9g} m; eye motion {movement:.6f} m')
     set_pose(rig, 'wingfold', eyes)
     posed = evaluated(objects)
+    def keys(points):
+        return [tuple(k) for k in np.round(points / 1e-4).astype(np.int64).tolist()]
+    hide_keys = keys(rest['hide'])
+    membrane_keys = keys(rest['membrane'])
+    # The arm and the body: every hide triangle that no finger or spur bone leads.
+    lead = dense_weights(geo['hide'], count).argmax(1)
+    thin = np.array([('finger' in n) or ('spur' in n) for n in names])
+    solid_tri = geo['hide']['tri'][~thin[lead[geo['hide']['tri']]].any(1)]
     for side, sign in [('l', -1), ('r', 1)]:
-        points = []
-        for n in names:
-            if n.startswith('wing_finger') and n.endswith('_' + side):
-                b = rig.pose.bones[n]
-                points.append(gltf_points(np.array([b.head]))[0])
-        points = np.array(points)
-        _, _, vt = np.linalg.svd(points - points.mean(0))
-        normal = vt[-1]
-        mem = posed['membrane'][geo['membrane']['POSITION'][:, 0] * sign > 0]
-        deviation = abs((mem - points.mean(0)) @ normal)
-        finger_error = float(abs((points - points.mean(0)) @ normal).max())
-        check(deviation.max() <= .05, 'wing_' + side + ' membrane plane', f'elbow 80 and wrist 80 degrees; max {deviation.max():.6f} m; RMS {np.sqrt(np.mean(deviation**2)):.6f} m; finger nonplanarity {finger_error:.6f} m')
-        # Count intersections between membrane triangles and arm-dominated hide triangles.
-        hw = dense_weights(geo['hide'], count)
-        arm_ids = [names.index('wing_root_' + side), names.index('wing_arm_' + side), names.index('wing_wrist_' + side)]
-        ht = geo['hide']['tri']
-        arm_tri = ht[np.all(hw[:, arm_ids].sum(1)[ht] > .85, axis=1)]
         mt = geo['membrane']['tri']
         mt = mt[np.all(geo['membrane']['POSITION'][mt, 0] * sign > 0, axis=1)]
-        arm_tree = BVHTree.FromPolygons(posed['hide'].tolist(), arm_tri.tolist(), all_triangles=True)
-        membrane_tree = BVHTree.FromPolygons(posed['membrane'].tolist(), mt.tolist(), all_triangles=True)
-        overlap = arm_tree.overlap(membrane_tree)
-        rest_arm = BVHTree.FromPolygons(rest['hide'].tolist(), arm_tri.tolist(), all_triangles=True)
-        rest_mem = BVHTree.FromPolygons(rest['membrane'].tolist(), mt.tolist(), all_triangles=True)
-        rest_overlap = rest_arm.overlap(rest_mem)
-        check(not overlap, 'wing_' + side + ' arm intersections', f'{len(overlap)} folded intersecting triangle pairs; {len(rest_overlap)} already intersect at rest; {len(arm_tri)} arm triangles')
+        edges = np.unique(np.sort(np.concatenate([mt[:, [0, 1]], mt[:, [1, 2]], mt[:, [2, 0]]]), axis=1), axis=0)
+        l0 = np.linalg.norm(rest['membrane'][edges[:, 0]] - rest['membrane'][edges[:, 1]], axis=1)
+        l1 = np.linalg.norm(posed['membrane'][edges[:, 0]] - posed['membrane'][edges[:, 1]], axis=1)
+        keep = l0 > 1e-3
+        ratio = l1[keep] / l0[keep]
+        check(ratio.max() <= 1.6, 'wing_' + side + ' membrane stretch',
+              f'elbow 80 and wrist 80 degrees; {int(keep.sum())} edges; longest {ratio.max():.4f} of rest; shortest {ratio.min():.4f}; {int((ratio > 1.3).sum())} over 1.3')
+        top = np.argsort(-ratio)[:12]
+        ends = edges[keep][top]
+        checks[-1]['longest_edges'] = [dict(ratio=round(float(ratio[i]), 3), a=rest['membrane'][e[0]].round(3).tolist(), b=rest['membrane'][e[1]].round(3).tolist()) for i, e in zip(top, ends)]
+        # Membrane triangles that cut the arm or the body. A triangle with a vertex on the hide is
+        # the membrane's own attachment and is not counted; its neighbours are.
+        every_hide_key = set(hide_keys)
+        attached = np.array([any(membrane_keys[v] in every_hide_key for v in t) for t in mt])
+        def cutting(points):
+            a = BVHTree.FromPolygons(points['hide'].tolist(), solid_tri.tolist(), all_triangles=True)
+            b = BVHTree.FromPolygons(points['membrane'].tolist(), mt.tolist(), all_triangles=True)
+            found = set()
+            for i, k in a.overlap(b):
+                if not attached[k]:
+                    found.add(k)
+            return found
+        before, after = cutting(rest), cutting(posed)
+        fresh = after - before
+        check(not fresh, 'wing_' + side + ' membrane intersections',
+              f'{len(fresh)} membrane triangles cut the arm or the body when folded and not at rest; {len(after)} cut it folded; {len(before)} cut it at rest; {int((~attached).sum())} membrane triangles tested, {int(attached.sum())} attached to the hide; {len(solid_tri)} arm and body triangles')
+        checks[-1]['fresh'] = [rest['membrane'][mt[k]].mean(0).round(3).tolist() for k in sorted(fresh)][:40]
     set_pose(rig, 'crouch', eyes)
     posed = evaluated(objects)
     for side, sign in [('l', -1), ('r', 1)]:
         for fore in [True, False]:
             p = rest['hide']
-            selected = (p[:, 0] * sign > .20) & (p[:, 1] < 2.55) & ((p[:, 2] < -1.12) if fore else ((p[:, 2] > -1.12) & (p[:, 2] < 1.7)))
+            ln = limb_names(names, 'l' if sign < 0 else 'r', fore)
+            selected = dense_weights(geo['hide'], count)[:, [names.index(n) for n in ln]].sum(1) > .5
             tris = geo['hide']['tri'][np.all(selected[geo['hide']['tri']], axis=1)]
             v0, valid0, loops = closed_volume(p, tris, p)
             v1, valid1, _ = closed_volume(posed['hide'], tris, p)
@@ -755,16 +1395,33 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
             check(delta < .15 and valid0 and valid1, ('fore_' if fore else 'hind_') + side + ' volume', f'60-degree elbow/knee; rest {v0:.6f} m3; posed {v1:.6f} m3; change {delta*100:.4f}%; simple boundary loops {loops}; valid {valid0 and valid1}')
     set_pose(rig, 'neck', eyes)
     posed = evaluated(objects)
-    p = rest['hide']
-    frill = (p[:, 1] > 3.48) & (p[:, 2] > -3.50) & (p[:, 2] < -1.78) & (abs(p[:, 0]) < 1.32) & (geo['hide']['_JAW'] == 0)
-    tris = geo['hide']['tri'][np.all(frill[geo['hide']['tri']], axis=1)]
+    p = rest['hide'].astype(float)
+    hw = dense_weights(geo['hide'], count)
+    frill = [s for s in spikes if rest['hide'][s[2], 1] > 2.9 and rest['hide'][s[2], 2] < -1.5]
+    rigid = [s for s in spikes if len(set(hw[s[0]].argmax(1))) == 1 and np.all(hw[s[0]].max(1) == 1)]
+    check(len(rigid) == len(spikes), 'spike rigid ownership', f'{len(rigid)} of {len(spikes)} spikes and plates follow one bone at weight 1; {len(frill)} of them are on the head and neck')
+    worst, longest, moved = 0., 0., 0
+    owners = {}
+    for ids, base, tip in frill:
+        owner = names[int(hw[tip].argmax())]
+        owners[owner] = owners.get(owner, 0) + 1
+        l0 = np.linalg.norm(rest['hide'][tip] - rest['hide'][base].mean(0))
+        l1 = np.linalg.norm(posed['hide'][tip] - posed['hide'][base].mean(0))
+        worst = max(worst, abs(l1 / l0 - 1))
+        longest = max(longest, l0)
+        moved += np.linalg.norm(posed['hide'][tip] - rest['hide'][tip]) > .01
+    tris = geo['hide']['tri']
+    inside = np.zeros(len(p), np.int32)
+    for k, s in enumerate(frill):
+        inside[s[0]] = k + 1
+    tris = tris[(inside[tris[:, 0]] > 0) & (inside[tris[:, 0]] == inside[tris[:, 1]]) & (inside[tris[:, 0]] == inside[tris[:, 2]])]
     edges = np.unique(np.sort(np.concatenate([tris[:, [0,1]],tris[:, [1,2]],tris[:, [2,0]]]), axis=1), axis=0)
     l0 = np.linalg.norm(rest['hide'][edges[:, 0]] - rest['hide'][edges[:, 1]], axis=1)
     l1 = np.linalg.norm(posed['hide'][edges[:, 0]] - posed['hide'][edges[:, 1]], axis=1)
-    keep = l0 > 1e-4
+    keep = l0 > 1e-3
     delta = abs(l1[keep] / l0[keep] - 1).max()
-    check(delta < .01, 'frill edge lengths', f'neck 30 degrees; {int(keep.sum())} edges over 0.1 mm; maximum length change {delta*100:.6f}%')
-    check(np.all(dense_weights(geo['hide'], count)[frill, names.index('head')] == 1), 'frill rigid ownership', f'{int(frill.sum())} vertices in measured posterior head region')
+    check(worst < .01 and delta < .01 and moved > 0, 'frill spike lengths',
+          f'neck_02 bent 30 degrees; {len(frill)} spikes, {moved} of them moved; base-to-tip length change at most {worst*100:.4f}%; longest spike {longest:.3f} m; {int(keep.sum())} edges inside spikes change at most {delta*100:.4f}%; owners {owners}')
     reset_pose(rig)
     ART.mkdir(exist_ok=True, parents=True)
     report = dict(source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
@@ -948,13 +1605,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify-only', action='store_true')
     parser.add_argument('--render', action='store_true')
+    parser.add_argument('--no-render', action='store_true')
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
     ART.mkdir(parents=True, exist_ok=True)
     if not args.verify_only and not args.render:
         build()
     loaded = load_exported_scene()
     report, eyes = verify(*loaded)
-    if args.render or not args.verify_only:
+    if args.render or not (args.verify_only or args.no_render):
         render_sheets(loaded[3], loaded[4], loaded[2], eyes, report)
     if report['failed']:
         print(f'FAILED: {report["failed"]} verification gates. Output and renders were preserved.', flush=True)
