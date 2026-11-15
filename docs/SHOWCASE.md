@@ -620,6 +620,55 @@ The capture is in `App::build_feedback_ui`. A save takes two frames with
 the world held still, one for each picture, and no panel is drawn on
 either.
 
+## The first playtest of the hero, and the profile pass (2026-11-14)
+
+The user flew the hero and reported: clearer shapes, but the animation has
+not caught up. The legs are too loose, most of all when swinging in an
+attack. There is a texture or geometry artifact at "the back joint". The
+glide is stiff beside other dragon games, which shake slightly and swing
+the tail. The attacks read lazy and mechanical.
+
+`tools/showcase/strip.sh` renders one studio scenario at evenly spaced
+frames and lays the crops side by side. A screenshot shows a pose and a
+strip shows timing, which is what these complaints are about.
+
+What the strips showed, and what changed in
+`assets/embercrest-hero.glb.rig.cfg`. No engine code changed.
+
+- The legs. `artifacts/showcase-anim/bite-legs-before-after.jpg` is the
+  bite, frames 14 to 58, before above and after below. After the strike's
+  surge the legs dropped to vertical and swung there for half a second.
+  The sculpt's legs are long straight columns and the code's limb physics
+  (stiffness 35, a 45 degree range) is tuned for the old folded legs.
+  Stiffness is now 110, the foot is 0.85 as stiff as the hip, the range is
+  14 degrees, and less of the body's motion is passed on. In frames 42 to
+  58 the legs now hold their tuck.
+- The tail. `tail-sway-before-after.jpg` is the glide from above, seven
+  frames over three seconds. The travelling wave was off in this profile.
+  Turning it on did nothing, at 9 degrees and at 40: the wave bends the
+  spring's target, and the tail's spring is a quarter as stiff at the tip
+  as at the base, so the tip never caught up with a 3 second wave. With
+  the tip as stiff as the base and a 38 degree wave, the tip moves a
+  tail's width to each side.
+- The air. Gusts are doubled (2 degrees of roll and pitch, 0.18 m of
+  heave), each wing trims 3.5 degrees on its own, and the membrane's
+  flutter starts at 26 m/s, where it started at 55, above the 40 m/s
+  cruise. These do not show in a still. A frame with them and a frame
+  without differ by 3.8% RMS.
+
+Not fixed by this pass:
+
+- The attacks. The bite's strip shows a wind-up, a surge and a return,
+  all present and all the same weight. The head barely leaves the frill,
+  so the bite has no reach, and nothing snaps. The gesture layer is
+  already a set of dials and has had two rounds of tuning. This is the
+  case the user's decision on authored clips was made for, and it is S4
+  and S5.
+- The artifact at the back joint. The likeliest place is the wing root,
+  where the worker reported a 0.4 m band of stretched texture and a dark
+  crease, but "back joint" can also mean the hind hip. The user is asked
+  to mark it with F2.
+
 ## Open questions
 
 - The hero dragon's design. Embercrest's current silhouette can stay, or a
