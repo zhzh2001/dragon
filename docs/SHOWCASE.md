@@ -907,7 +907,7 @@ flap, from behind, in the bite, the dive and landed. The other postures
 are the Dragon panel's "flight leg posture" presets (dangle, trail and
 tuck, trail both, fold), and their numbers are in the profile's comment.
 
-## The river's streaks and whirls (2026-11-15, 12:20)
+## The river's streaks and whirls (2026-11-15, 11:55)
 
 Reports 0008 and 0010. Close to the river on a bend, the whole surface
 was straight streaks from the far bank to the camera, and from a distance
@@ -938,7 +938,7 @@ the chop was right, which is why it had passed.
 The water is still 12 ms of such a frame. S8 has the rest: a cheaper
 reflection, and the look of the surface.
 
-## Trees in a mountain's shadow: what does not work (2026-11-15, 12:40)
+## Trees in a mountain's shadow: what does not work (2026-11-15, 12:05)
 
 Report 0011: inside the mountain's shadow a tree casts nothing and stands
 on the grass like a cut-out. The sun's term is zero there, so the shadow
