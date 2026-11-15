@@ -547,6 +547,41 @@ float3 ambient_light(float3 normal) {
     return lerp(bounce, sky, sky_amount) * scene.terrain_params.w;
 }
 
+// The share of the sun the ground under a point takes: the terrain's shadow
+// at the ground's own height in this column, and the clouds'. The bounce is
+// light off that ground, so it goes where the ground's sun goes.
+float ground_sun(float3 world_position) {
+    float lit = 1.0;
+#ifdef USE_TERRAIN_SUN
+    float half_extent = scene.view_params.w;
+    float2 uv = world_position.xz / max(half_extent, 1.0) * 0.5 + 0.5;
+    if (scene.atmosphere.x > 0.0 && all(uv >= 0.0) && all(uv <= 1.0)) {
+        float4 column = terrain_sun_map.SampleLevel(terrain_sun_map_sampler, uv, 0.0);
+        float penumbra = 4.0 + column.y * 0.017;
+        lit = smoothstep(column.x - penumbra, column.x + penumbra, column.w + 1.5);
+    }
+#endif
+#ifdef USE_ATMOSPHERE
+    if (atmosphere_on()) lit *= cloud_shadow(world_position);
+#endif
+    return lit;
+}
+
+// The ambient at a place: ambient_light with the bounce cut where the
+// ground there is in shade. A plant's cards stand upright, so half their
+// ambient was the bounce, at the sun's full colour: in a mountain's shadow
+// the ground went blue and dark and every tuft, bush and crown on it stayed
+// warm and bright, as if lit (the playtest's report 0011, and the blind
+// critic's "grass blades inside the shadows glow yellow").
+float3 ambient_light_at(float3 normal, float3 world_position) {
+    float sky_amount = saturate(normal.y * 0.5 + 0.5);
+    float3 bounce = scene.palette[PALETTE_GROUND_BOUNCE].rgb * scene.light_params.z *
+                    scene.sun_color.rgb * saturate(scene.sun.y * 4.0);
+    // A tenth stays: shade is lit by the sunlit slope across the valley too.
+    float3 lost = bounce * (1.0 - sky_amount) * 0.9 * (1.0 - ground_sun(world_position));
+    return max(ambient_light(normal) - lost * scene.terrain_params.w, 0.0);
+}
+
 // Sunlight leaking through a thin thing lit from behind: a crown, a blade, a
 // wing. Zero for solid surfaces. Reads as the glow of foliage against a low
 // sun, which the wrap alone cannot give because the wrap never exceeds the

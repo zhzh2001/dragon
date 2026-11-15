@@ -47,10 +47,16 @@ WING2_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing-hunyuan.glb")
 # Which wings the build uses. "v2" (the default) cuts them out of the first whole-body sculpt and
 # unions them with the body. "v3" takes them from the wing sculpt through the `wing` stage; in the
 # engine that wing looks torn mid-beat and fails five rig checks (tools/hero-build.md).
+# "v5" takes them from the second wing sculpt, whose plates were drawn along the skeleton's own
+# wing bones, through the `wing5` stage: one membrane sheet with an offset second face, and the
+# sculpt's bones over it (tools/hero-build.md, "Version 5").
 WING_SOURCE = os.environ.get("HERO_WING", "v2")
-if WING_SOURCE not in ("v2", "v3"):
-    raise SystemExit("HERO_WING must be v2 or v3")
+if WING_SOURCE not in ("v2", "v3", "v5"):
+    raise SystemExit("HERO_WING must be v2, v3 or v5")
 WING_V3 = WING_SOURCE == "v3"
+WING_V5 = WING_SOURCE == "v5"
+WING5_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing2-hunyuan.glb")
+SKELETON = os.path.join(ROOT, "tools", "skeletons", "embercrest-hero.json")
 OUT_GLB = os.path.join(ROOT, "assets", "embercrest-hero-static.glb")
 OUT_THICK = os.path.join(ROOT, "assets", "embercrest-hero-membrane-thickness.png")
 DESIGN = os.path.join(ROOT, "docs", "concept", "showcase", "hero-dragon-design.png")
@@ -380,7 +386,7 @@ def ortho_shot(sc, cam, path, centre, direction, width, w=1400, h=1000, dist=40.
 def stage_import():
     """Read each sculpt once and keep it as a .blend."""
     for src, name in ((BODY_IN, "body_src"), (HEAD_IN, "head_src"), (BODY2_IN, "body2_src")) + (
-            ((WING2_IN, "wing2_src"),) if WING_V3 else ()):
+            ((WING2_IN, "wing2_src"),) if WING_V3 else ()) + (((WING5_IN, "wing5_src"),) if WING_V5 else ()):
         reset_scene()
         obj = import_scan(src, name)
         co = coords(obj)
@@ -1003,6 +1009,860 @@ def stage_wing():
     save_blend("wing2.blend")
 
 
+# ----------------------------------------------------------------- stage: wing5
+#
+# Version 5 takes both wings from the second wing sculpt. Its plates were drawn
+# along a flat projection of the skeleton's own wing bones, so its arm, three
+# fingers and rib are the skeleton's, with no stub bones.
+#
+# The sculpt lies nearly flat. The stage turns it into its own plane (the
+# vertices' principal axes) and works in "plan": a picture of it seen from
+# above, 800 px across, px to the right (out along the wing) and py down
+# (toward the trailing edge). Every plan number below is on that 800 px grid.
+#
+# The fit is piecewise. Each membrane panel is a polygon of the two bone lines
+# that bound it and its trailing edge, and mean value coordinates carry the
+# polygon onto the same bones in 3D, so a panel follows its own two bones and
+# nothing else. Near a bone a point moves rigidly with the bone instead.
+#
+# The membrane is rebuilt as one sheet: a constrained Delaunay triangulation
+# in plan, mapped, then copied along its normals to make the second face. The
+# two faces have the same triangles and a rim joins them, so skinning cannot
+# push one through the other. The sculpt's bones stay as real geometry over
+# the sheet.
+
+W5_N = 1200                         # raster cells across the plan
+W5_SHEET = 0.020                    # m between the sheet's two faces
+W5_EDGE = 16.0                      # px between sheet vertices: about 0.17 m
+W5_BONE_T = 0.0080                  # sculpt units: thicker than this is bone; the membrane is 0.006
+W5_BILLOW = 0.6                     # share of the sculpt's billow the sheet keeps
+W5_BONE_TRIS = 7000                 # one wing's bones and claws, reduced: hide near version 4's 104k
+W5_REACH = 2.2                      # the rigid bone map fades out between r0 and this times r0
+# Bone lines: chain -> (r0 in px, [(px, py, skeleton point or None), ...]). A
+# point with a name lands on that skeleton point; the others are spread along
+# the chain by length. The points were read off the sculpt's thickness and
+# are moved onto the ridge of the bone by `w5_snap`.
+W5_HUB = (292.0, 56.0)
+W5_CHAINS = {
+    "arm": (24, [(2, 192, "start"), (60, 196, None), (120, 206, "shoulder"), (176, 234, "elbow")]),
+    "fore": (11, [(176, 234, "elbow"), (230, 142, None), (284, 52, "wrist"), (292, 56, "hub")]),
+    "f1": (8, [(292, 56, "hub"), (400, 60, None), (520, 72, "f1a"), (650, 125, "f1b"), (712, 182, None), (772, 245, "f1c")]),
+    "f2": (8, [(292, 56, "hub"), (380, 122, None), (470, 192, "f2a"), (550, 282, None), (630, 378, "f2b")]),
+    "f3": (8, [(292, 56, "hub"), (335, 140, None), (373, 225, "f3a"), (400, 320, None), (415, 460, "f3b")]),
+    "spur": (8, [(176, 234, "elbow"), (170, 282, "spa"), (160, 360, None), (150, 445, "spb")]),
+}
+# The claw at each chain's end: plan tip. It maps straight on along the chain's last segment.
+W5_CLAWS = {"f1": (790, 277), "f2": (642, 415), "f3": (408, 493), "spur": (128, 482)}
+# The two thumb claws above the wrist ride rigidly on the forearm's last segment.
+W5_THUMB = ((283, 0), (350, 46))    # plan box
+W5_SNAP = {"arm": False}
+# One stub the brief did not expect: a short rib from the wrist knob, 1 m long, between the forearm
+# and finger 3. It is flattened into the membrane: (start, end, half width px), and finger 3's line
+# keeps this far clear of it.
+W5_STUB = ((296.0, 72.0), (318.0, 172.0), 7.0, 8.0)            # the upper arm is a wide flat band: its line is not snapped
+# Points of the skeleton that are not bone ends, build frame. `start` is where
+# the sculpt's arm stump ends, inside the body on the line from the elbow
+# through the shoulder. The membrane's inner edge is laid on the flank
+# between flank_a and flank_b, inside body B (`tools/hero-build.md`).
+W5_START_DEPTH = 0.90                # the arm's stump ends this far inside the body, past the shoulder
+W5_FLANK = {"flank_a": (0.50, 0.50, 3.22), "flank_b": (0.62, -0.30, 3.02)}
+# The membrane's colour, linear, measured on version 4's membrane (version 2's
+# wing): geometric mean of the texels on faces that face up, and down. Version 4's
+# wing bones and wing claws likewise.
+W5_COLOUR = {"upper": (0.529, 0.112, 0.029), "lower": (0.492, 0.108, 0.030),
+             "bone": (0.138, 0.027, 0.010), "claw": (0.107, 0.031, 0.015)}
+# The root panel (body to rib) is not fitted from the sculpt: its sculpt panel turns back along the
+# flank and the fit folds. It is a ruled patch P(s, t) = A(t) + s (B(t) - A(t)) between the wing's
+# edge B (the upper arm from the shoulder to the elbow, then the rib to its tip) and an attachment
+# line A on body B's flank, which cannot fold. W5_ROOT_PATH is A as (Y, Z) stations; its X is the
+# flank's, read by rays from the side, minus W5_ROOT_SINK. Above Z 3.2 the flank is smooth; below it
+# the haunch bulges to X 1.4 between Y -0.2 and -1.0.
+W5_ROOT_PATH = ((1.00, 3.40), (0.40, 3.35), (-0.40, 3.45), (-0.80, 3.40), (-1.20, 3.25))
+W5_ROOT_SINK = 0.025                # m: the attachment line lies this far inside the flank
+W5_ROOT_SAG = 0.05                  # m: the patch sags this far at its middle, as a sine across it
+W5_ROOT_SCALLOP = 0.35              # m: depth of the trailing edge's scallop between the flank and the rib's tip
+W5_ROOT_AP = 0.85                   # share of the sculpt's inner edge, from the stump, that is A in plan
+W5_CONTRAST = 1.15                  # the washed sculpt's veins are faint: a little more contrast in log colour
+
+
+def w5_targets():
+    """The right wing's skeleton points in the build frame (X out, Y forward, Z up)."""
+    with open(SKELETON) as f:
+        spec = json.load(f)
+    b = {x[0]: x for x in spec["bones"]}
+
+    def build(p):
+        return np.array([p[0], -p[2], p[1]], float)
+
+    t = {"shoulder": build(b["wing_root_r"][1]), "elbow": build(b["wing_root_r"][2]),
+         "wrist": build(b["wing_arm_r"][2]), "hub": build(b["wing_wrist_r"][2]),
+         "f1a": build(b["wing_finger_1a_r"][2]), "f1b": build(b["wing_finger_1b_r"][2]),
+         "f1c": build(b["wing_finger_1c_r"][2]), "f2a": build(b["wing_finger_2a_r"][2]),
+         "f2b": build(b["wing_finger_2b_r"][2]), "f3a": build(b["wing_finger_3a_r"][2]),
+         "f3b": build(b["wing_finger_3b_r"][2]), "spa": build(b["wing_spur_a_r"][2]),
+         "spb": build(b["wing_spur_b_r"][2])}
+    d = t["shoulder"] - t["elbow"]
+    t["start"] = t["shoulder"] + d / np.linalg.norm(d) * W5_START_DEPTH
+    for k, v in W5_FLANK.items():
+        t[k] = np.array(v, float)
+    return t
+
+
+class W5Plan:
+    """The sculpt's own plane and the 800 px plan over it."""
+
+    def __init__(self, co):
+        self.c0 = co.mean(0)
+        r = np.linalg.svd((co - self.c0)[::20], full_matrices=False)[2].copy()
+        if r[2, 2] < 0:
+            r[2] *= -1
+        if r[0, 0] < 0:
+            r[0] *= -1
+        r[1] = np.cross(r[2], r[0])
+        self.R = r
+        rc = self.flat(co)
+        self.lo = rc.min(0)[:2] - 0.01
+        self.hi = rc.max(0)[:2] + 0.01
+        self.k = float(max(self.hi - self.lo)) / 800.0       # sculpt units per px
+
+    def flat(self, co):
+        return (co - self.c0) @ self.R.T
+
+    def px(self, xy):
+        xy = np.asarray(xy, float)
+        return np.stack([(xy[..., 0] - self.lo[0]) / self.k, (self.hi[1] - xy[..., 1]) / self.k], axis=-1)
+
+    def xy(self, px):
+        px = np.asarray(px, float)
+        return np.stack([self.lo[0] + px[..., 0] * self.k, self.hi[1] - px[..., 1] * self.k], axis=-1)
+
+
+def w5_sample(raster, px):
+    """Bilinear sample of a W5_N raster at 800 px plan positions."""
+    return w2_sample_n(raster, np.asarray(px, float) * (W5_N / 800.0))
+
+
+def w2_sample_n(raster, cells):
+    n = raster.shape[0]
+    x = np.clip(cells[..., 0] - 0.5, 0, n - 1.001)
+    y = np.clip(cells[..., 1] - 0.5, 0, n - 1.001)
+    x0, y0 = x.astype(int), y.astype(int)
+    fx, fy = x - x0, y - y0
+    return (raster[y0, x0] * (1 - fx) * (1 - fy) + raster[y0, x0 + 1] * fx * (1 - fy)
+            + raster[y0 + 1, x0] * (1 - fx) * fy + raster[y0 + 1, x0 + 1] * fx * fy)
+
+
+def w5_rasters(obj, plan):
+    """The flat sculpt's upper and lower surface over the plan, by rays from above and below."""
+    tree = bvh_of(obj)
+    zup = np.full((W5_N, W5_N), np.nan)
+    zlo = np.full((W5_N, W5_N), np.nan)
+    up, down = Vector((0, 0, 1)), Vector((0, 0, -1))
+    g = (np.arange(W5_N) + 0.5) * (800.0 / W5_N)
+    for j in range(W5_N):
+        y = plan.hi[1] - g[j] * plan.k
+        for i in range(W5_N):
+            x = plan.lo[0] + g[i] * plan.k
+            hit = tree.ray_cast(Vector((x, y, 1.0)), down)
+            if hit[0] is not None:
+                zup[j, i] = hit[0].z
+                zlo[j, i] = tree.ray_cast(Vector((x, y, -1.0)), up)[0].z
+    return zup, zlo
+
+
+def w5_snap(p, thick, direction):
+    """Move one plan point across `direction` onto the ridge of the bone's thickness."""
+    d = np.asarray(direction, float)
+    n = np.array([d[1], -d[0]]) / np.hypot(*d)
+    off = np.arange(-14, 15)
+    w = np.maximum(w5_sample(thick, np.asarray(p, float) + off[:, None] * n) - W5_BONE_T, 0)
+    return np.asarray(p, float) + (n * float((w * off).sum() / w.sum()) if w.sum() > 1e-6 else 0)
+
+
+def w5_lines(thick, tgt):
+    """Each chain as plan points and their 3D targets, every 10 px, after the snap."""
+    out = {}
+    for name, (r0, pts) in W5_CHAINS.items():
+        p = np.array([q[:2] for q in pts], float)
+        if W5_SNAP.get(name, True):
+            for i in range(1, len(p)):
+                if pts[i][2] in ("hub", "elbow"):
+                    continue
+                d = p[min(i + 1, len(p) - 1)] - p[i - 1]
+                p[i] = w5_snap(p[i], thick, d)
+        # Knots carry their skeleton point; the rest are spread by length between knots.
+        seg = np.hypot(*np.diff(p, axis=0).T)
+        cum = np.r_[0, np.cumsum(seg)]
+        knots = [i for i, q in enumerate(pts) if q[2]]
+        n = max(2, int(round(cum[-1] / 10.0)) + 1)
+        at = np.unique(np.concatenate([np.linspace(0, cum[-1], n), cum[knots]]))
+        line = np.stack([np.interp(at, cum, p[:, 0]), np.interp(at, cum, p[:, 1])], axis=1)
+        t3 = np.stack([np.interp(at, cum[knots], [tgt[pts[i][2]][c] for i in knots]) for c in range(3)], axis=1)
+        out[name] = (line, t3, r0)
+    # Lines that meet share their point exactly.
+    hub = np.array(W5_HUB)
+    for name in ("f1", "f2", "f3"):
+        out[name][0][0] = hub
+    out["fore"][0][-1] = hub
+    out["spur"][0][0] = out["arm"][0][-1]
+    out["fore"][0][0] = out["arm"][0][-1]
+    return out
+
+
+def w5_curve(points, frac):
+    """Points along a polyline at fractions of its length."""
+    points = np.asarray(points, float)
+    cum = np.r_[0, np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))]
+    f = np.clip(np.asarray(frac, float), 0, 1) * cum[-1]
+    return np.stack([np.interp(f, cum, points[:, c]) for c in range(points.shape[1])], axis=-1)
+
+
+class W5Root:
+    """The root panel as a ruled patch, in 3D and in the sculpt's plan."""
+
+    def __init__(self, wmap, lines, body, rib_plan, rib3):
+        arm_line, arm_t3, _ = lines["arm"]
+        k = int(np.argmin(np.linalg.norm(arm_t3 - wmap.tgt["shoulder"], axis=1)))
+        # B: the arm from the shoulder to the elbow, resampled about every W5_EDGE, then the outer
+        # sheet's own vertices along the rib, so the two sheets share them.
+        alen = float(np.linalg.norm(np.diff(arm_t3[k:], axis=0), axis=1).sum())
+        f = np.linspace(0, 1, max(2, int(round(alen / 0.17))) + 1)[:-1]
+        self.n_arm = len(f)
+        self.Bp = np.vstack([w5_curve(arm_line[k:], f), rib_plan])
+        self.B3 = np.vstack([w5_curve(arm_t3[k:], f), rib3])
+        cum = np.r_[0, np.cumsum(np.linalg.norm(np.diff(self.B3, axis=0), axis=1))]
+        self.VB = float(cum[-1])
+        self.tB = cum / cum[-1]
+        # A: stations on the flank of body B.
+        tree = bvh_of(body)
+        path = w5_curve(np.array(W5_ROOT_PATH), np.linspace(0, 1, 41))
+        xs = []
+        for y, z in path:
+            hit = tree.ray_cast(Vector((3.0, y, z)), Vector((-1.0, 0, 0)))
+            xs.append(hit[0].x if hit[0] is not None else 0.6)
+        xs = np.array(xs)
+        for _ in range(6):
+            xs[1:-1] = (xs[:-2] + 2 * xs[1:-1] + xs[2:]) / 4
+        self.A3 = np.c_[xs - W5_ROOT_SINK, path]
+        # A in plan: the sculpt's inner edge from the arm's stump down, its first W5_ROOT_AP.
+        edge = wmap.root_edge[0][::-1]
+        self.Ap = w5_curve(edge, np.linspace(0, W5_ROOT_AP, 41))
+        log("wing5 root: A from", np.round(self.A3[0], 2).tolist(), "to", np.round(self.A3[-1], 2).tolist(),
+            "B", round(self.VB, 2), "m long,", len(self.B3), "samples")
+        # The inverse of the plan patch, by a grid and a tree.
+        ss, tt = np.meshgrid(np.linspace(-0.05, 1.05, 111), np.linspace(-0.1, 1.15, 251))
+        self.grid_st = np.c_[ss.ravel(), tt.ravel()]
+        gp = self.plan_point(self.grid_st[:, 0], self.grid_st[:, 1])
+        self.kd = KDTree(len(gp))
+        for i, q in enumerate(gp):
+            self.kd.insert((q[0], q[1], 0.0), i)
+        self.kd.balance()
+
+    def _at(self, curve, tcurve, t):
+        t = np.clip(t, 0, 1)
+        return np.stack([np.interp(t, tcurve, curve[:, c]) for c in range(curve.shape[1])], axis=-1)
+
+    def plan_point(self, s, t):
+        a = w5_curve(self.Ap, t)
+        b = self._at(self.Bp, self.tB, t)
+        return a + np.asarray(s)[:, None] * (b - a)
+
+    def point(self, s, t):
+        a = w5_curve(self.A3, t)
+        b = self._at(self.B3, self.tB, t)
+        s = np.asarray(s, float)
+        out = a + s[:, None] * (b - a)
+        out[:, 2] -= W5_ROOT_SAG * np.sin(np.pi * np.clip(s, 0, 1))
+        return out
+
+    def normal(self, s, t, e=1e-3):
+        dt = self.point(s, t + e) - self.point(s, t - e)
+        ds = self.point(s + e, t) - self.point(s - e, t)
+        n = np.cross(dt, ds)
+        n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+        n[n[:, 2] < 0] *= -1
+        return n
+
+    def st_of_plan(self, p):
+        st = np.array([self.grid_st[self.kd.find((q[0], q[1], 0.0))[1]] for q in p])
+        return np.clip(st[:, 0], 0, 1), np.clip(st[:, 1], 0, 1)
+
+
+def w5_root_sheet(root):
+    """The root patch as a triangulation of (u, v): v along B in metres, u across, u = s L(v)."""
+    from mathutils.geometry import delaunay_2d_cdt
+    h = 0.17
+    vB = root.tB * root.VB
+    L = np.linalg.norm(root.B3 - w5_curve(root.A3, root.tB), axis=1)
+    Lv = lambda v: np.interp(v, vB, L)
+    ring = [np.c_[L, vB]]                                  # B, front to tip
+    n = max(2, int(np.ceil(L[-1] / h)))
+    u = np.linspace(L[-1], 0, n + 1)[1:-1]
+    ring.append(np.c_[u, root.VB - W5_ROOT_SCALLOP * np.sin(np.pi * u / L[-1])])
+    n = max(2, int(np.ceil(root.VB / h)))
+    ring.append(np.c_[np.zeros(n + 1), np.linspace(root.VB, 0, n + 1)])     # A, tip to front
+    n = max(2, int(np.ceil(L[0] / h)))
+    ring.append(np.c_[np.linspace(0, L[0], n + 1)[1:-1], np.zeros(n - 1)])
+    ring = np.concatenate(ring)
+    nb = len(ring)
+    xs = np.arange(0, L.max(), h)
+    ys = np.arange(0, root.VB, h * math.sqrt(3) / 2)
+    grid = np.array([(x + (h / 2 if j % 2 else 0), y) for j, y in enumerate(ys) for x in xs])
+    grid = grid[w5_inside(grid, ring)]
+    near = np.min([w2_segment(grid, ring[i], ring[(i + 1) % nb])[2] for i in range(nb)], axis=0)
+    grid = grid[near > 0.55 * h]
+    verts = [Vector(p) for p in ring] + [Vector(p) for p in grid]
+    res = delaunay_2d_cdt(verts, [(i, (i + 1) % nb) for i in range(nb)], [list(range(nb))], 1, 1e-6)
+    uv = np.array([tuple(v) for v in res[0]])
+    tris = np.array([f for f in res[2] if len(f) == 3])
+    tris = tris[w5_inside(uv[tris].mean(1), ring)]
+    t = uv[:, 1] / root.VB
+    sv = np.clip(uv[:, 0] / np.maximum(Lv(uv[:, 1]), 1e-6), 0, 1)
+    co = root.point(sv, t)
+    # Vertices on B: which sample each is.
+    on_b = np.full(len(uv), -1)
+    for i, q in enumerate(np.c_[L, vB]):
+        d = np.hypot(uv[:, 0] - q[0], uv[:, 1] - q[1])
+        j = int(d.argmin())
+        if d[j] < 1e-5:
+            on_b[j] = i
+            co[j] = root.B3[i]
+    return co, tris, sv, on_b
+
+
+def w5_stub(p, lines):
+    """Plan points on the stub rib, and not on finger 3."""
+    a, b, half, clear = W5_STUB
+    on = w2_segment(p, np.array(a), np.array(b))[2] < half
+    f3 = lines["f3"][0]
+    away = np.min([w2_segment(p, f3[i], f3[i + 1])[2] for i in range(len(f3) - 1)], axis=0) > clear
+    return on & away & (p[:, 1] > a[1] + 4)
+
+
+def w5_mvc(points, poly):
+    """Mean value coordinates of plan points in a closed polygon (V, 2). Returns (M, V)."""
+    s = poly[None, :, :] - points[:, None, :]
+    r = np.maximum(np.hypot(s[..., 0], s[..., 1]), 1e-6)
+    s1 = np.roll(s, -1, axis=1)
+    r1 = np.roll(r, -1, axis=1)
+    cross = s[..., 0] * s1[..., 1] - s[..., 1] * s1[..., 0]
+    dot = (s * s1).sum(-1)
+    tan_half = cross / np.maximum(r * r1 + dot, 1e-9)
+    w = (np.roll(tan_half, 1, axis=1) + tan_half) / r
+    return w / w.sum(1, keepdims=True)
+
+
+def w5_inside(points, poly):
+    inside = np.zeros(len(points), bool)
+    gx, gy = points[:, 0], points[:, 1]
+    for i in range(len(poly)):
+        (x0, y0), (x1, y1) = poly[i], poly[(i + 1) % len(poly)]
+        if y0 != y1:
+            inside ^= ((y0 > gy) != (y1 > gy)) & (gx < x0 + (gy - y0) * (x1 - x0) / (y1 - y0))
+    return inside
+
+
+class W5Map:
+    """Plan position and sculpt height to the build frame, right wing."""
+
+    def __init__(self, plan, lines, mid, have, tgt, scale):
+        self.plan, self.lines, self.mid, self.scale = plan, lines, mid, scale
+        self.up = np.array([0.0, 0.0, 1.0])
+        L = {k: v for k, v in lines.items()}
+        rev = lambda a: a[::-1]
+        # The sculpt's trailing edge between two finger ends, and the inner edge of the root panel.
+        self.edges = {}
+        for a, b in (("f1", "f2"), ("f2", "f3"), ("f3", "spur")):
+            pa, pb = L[a][0][-1], L[b][0][-1]
+            ta, tb = L[a][1][-1], L[b][1][-1]
+            n = max(2, int(np.hypot(*(pb - pa)) / 10.0))
+            f = np.linspace(0, 1, n + 1)[1:-1]
+            self.edges[a + b] = (pa + f[:, None] * (pb - pa), ta + f[:, None] * (tb - ta))
+        # Root panel: the sculpt's inner edge, from the rib's end up to the arm's stump, found row by row.
+        rows = np.arange(L["spur"][0][-1][1] - 6, L["arm"][0][0][1] + 24, -10.0)
+        edge = []
+        for py in rows:
+            cells = w5_sample(have.astype(np.float32), np.stack([np.arange(0, 400.0), np.full(400, py)], axis=1))
+            xs = np.flatnonzero(cells > 0.5)
+            edge.append((float(xs[0]) if len(xs) else 0.0, py))
+        edge = np.array(edge + [tuple(L["arm"][0][0] + (0, 18))])
+        # Its targets: the trailing part from the rib's end to flank_b, then the flank to flank_a and the stump.
+        path = np.array([L["spur"][1][-1], tgt["flank_b"], tgt["flank_a"], tgt["start"]])
+        plen = np.r_[0, np.cumsum(np.linalg.norm(np.diff(path, axis=0), axis=1))]
+        elen = np.r_[0, np.cumsum(np.hypot(*np.diff(np.vstack([L["spur"][0][-1], edge]), axis=0).T))]
+        f = elen[1:] / elen[-1] * plen[-1]
+        self.root_edge = (edge, np.stack([np.interp(f, plen, path[:, c]) for c in range(3)], axis=1))
+        # Panels: closed plan polygons and the 3D point of every corner.
+        def poly(parts):
+            p = np.concatenate([q[0] for q in parts])
+            t = np.concatenate([q[1] for q in parts])
+            keep = np.r_[True, np.hypot(*np.diff(p, axis=0).T) > 1e-6]
+            p, t = p[keep], t[keep]
+            if np.hypot(*(p[-1] - p[0])) < 1e-6:
+                p, t = p[:-1], t[:-1]
+            return p, t
+        self.panels = {
+            "root": poly([L["arm"], (L["spur"][0][1:], L["spur"][1][1:]), self.root_edge]),
+            "spur_f3": poly([L["fore"], (L["f3"][0][1:], L["f3"][1][1:]), self.edges["f3spur"],
+                             (rev(L["spur"][0])[:-1], rev(L["spur"][1])[:-1])]),
+            "f3_f2": poly([L["f2"], self.edges["f2f3"], (rev(L["f3"][0])[:-1], rev(L["f3"][1])[:-1])]),
+            "f2_f1": poly([L["f1"], self.edges["f1f2"], (rev(L["f2"][0])[:-1], rev(L["f2"][1])[:-1])]),
+        }
+        # Rigid segments: every bone line, each claw, and the thumb piece.
+        self.segs = []          # (a, b, za, zb, A, B, r0, chain)
+        for name, (line, t3, r0) in L.items():
+            z = w5_sample(mid, line)
+            for i in range(len(line) - 1):
+                self.segs.append([line[i], line[i + 1], z[i], z[i + 1], t3[i], t3[i + 1], r0, name])
+            if name in W5_CLAWS:
+                tip = np.array(W5_CLAWS[name], float)
+                d3 = t3[-1] - t3[-2]
+                d3 /= np.linalg.norm(d3)
+                length = np.hypot(*(tip - line[-1])) * plan.k * scale
+                zt = float(w5_sample(mid, tip[None])[0])
+                self.segs.append([line[-1], tip, z[-1], zt, t3[-1], t3[-1] + d3 * length, r0, name + "_claw"])
+        self.claw_shorten = 0.0
+        # Each segment's frame. Its normal is the panel surface's beside it.
+        for s in self.segs:
+            d = s[5] - s[4]
+            d = d / np.linalg.norm(d)
+            mp = (s[0] + s[1]) / 2
+            u = (s[1] - s[0]) / np.hypot(*(s[1] - s[0]))
+            left = np.array([u[1], -u[0]])
+            ns = []
+            for sgn in (1, -1):
+                q = (mp + sgn * (s[6] + 6) * left)[None]
+                n = self.panel_normal(q)
+                if n is not None:
+                    ns.append(n[0])
+            n = np.mean(ns, axis=0) if ns else self.up
+            n = n - (n @ d) * d
+            n /= np.linalg.norm(n)
+            s.append(d)
+            s.append(n)
+            s.append(np.cross(n, d))        # the 3D left, matching the plan's left seen from above
+
+    def which_panel(self, p):
+        out = np.full(len(p), -1)
+        for k, (poly, _) in enumerate(self.panels.values()):
+            out[(out < 0) & w5_inside(p, poly)] = k
+        return out
+
+    def panel_point(self, p, k):
+        poly, t3 = list(self.panels.values())[k]
+        return w5_mvc(p, poly) @ t3
+
+    def panel_normal(self, p, eps=2.0):
+        k = self.which_panel(p)
+        if (k < 0).any():
+            return None
+        out = np.zeros((len(p), 3))
+        for kk in np.unique(k):
+            sel = k == kk
+            q = p[sel]
+            dx = self.panel_point(q + (eps, 0), kk) - self.panel_point(q - (eps, 0), kk)
+            dy = self.panel_point(q - (0, eps), kk) - self.panel_point(q + (0, eps), kk)
+            n = np.cross(dx, dy)
+            out[sel] = n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+        return out
+
+    def bone_distance(self, p):
+        """Distance to the nearest bone segment in units of that segment's r0, and the segment."""
+        best = np.full(len(p), np.inf)
+        which = np.zeros(len(p), int)
+        for i, s in enumerate(self.segs):
+            d = w2_segment(p, s[0], s[1])[2] / s[6]
+            closer = d < best
+            best[closer], which[closer] = d[closer], i
+        return best, which
+
+    def rigid(self, p, z, only=None):
+        acc = np.zeros((len(p), 3))
+        total = np.zeros(len(p))
+        for i, s in enumerate(self.segs):
+            if only is not None and i not in only:
+                continue
+            t, sd, d = w2_segment(p, s[0], s[1])
+            w = 1.0 / (d * d + 9.0) ** 2
+            zl = s[2] + np.clip(t, 0, 1) * (s[3] - s[2])
+            q = (s[4] + t[:, None] * (s[5] - s[4]) + (sd * self.plan.k * self.scale)[:, None] * s[10]
+                 + ((z - zl) * self.scale)[:, None] * s[9])
+            acc += w[:, None] * q
+            total += w
+        return acc / total[:, None]
+
+    def __call__(self, p, z, billow=W5_BILLOW, chunk=20000):
+        out = np.zeros((len(p), 3))
+        thumb = [i for i, s in enumerate(self.segs) if s[7] == "fore"][-1:]
+        for lo in range(0, len(p), chunk):
+            q, zz = p[lo:lo + chunk], z[lo:lo + chunk]
+            m = w5_sample(self.mid, q)
+            k = self.which_panel(q)
+            dist, _ = self.bone_distance(q)
+            w = 1.0 - smoothstep((dist - 1.0) / (W5_REACH - 1.0))
+            w[k < 0] = 1.0
+            res = np.zeros((len(q), 3))
+            need = w > 0
+            if need.any():
+                res[need] = self.rigid(q[need], zz[need])
+            box = (q[:, 0] > W5_THUMB[0][0]) & (q[:, 0] < W5_THUMB[1][0]) & (q[:, 1] > W5_THUMB[0][1]) \
+                & (q[:, 1] < W5_THUMB[1][1]) & (q[:, 1] < 46 + 0.0 * q[:, 0])
+            if box.any():
+                res[box] = self.rigid(q[box], zz[box], only=thumb)
+                w[box] = 1.0
+            for kk in np.unique(k[k >= 0]):
+                sel = (k == kk) & (w < 1.0)
+                if not sel.any():
+                    continue
+                if kk == 0 and getattr(self, "root", None) is not None:
+                    sr, tr = self.root.st_of_plan(q[sel])
+                    pan = self.root.point(sr, tr) + ((zz[sel] - m[sel]) * self.scale)[:, None] * self.root.normal(sr, tr)
+                    res[sel] = w[sel, None] * res[sel] + (1 - w[sel, None]) * pan
+                    continue
+                poly, t3 = list(self.panels.values())[kk]
+                base = w5_mvc(q[sel], poly)
+                pt = base @ t3
+                hb = m[sel] - base @ w5_sample(self.mid, poly)
+                n = self.panel_normal(q[sel])
+                n[(n @ self.up) < 0] *= -1
+                pan = pt + ((billow * hb + (zz[sel] - m[sel])) * self.scale)[:, None] * n
+                res[sel] = w[sel, None] * res[sel] + (1 - w[sel, None]) * pan
+            out[lo:lo + chunk] = res
+        return out
+
+
+def w5_sheet(wmap):
+    """The membrane's mid-surface as a plan triangulation: (plan points, triangles, boundary loop)."""
+    from mathutils.geometry import delaunay_2d_cdt
+    L = wmap.lines
+
+    def resample(p, step):
+        p = np.asarray(p, float)
+        seg = np.hypot(*np.diff(p, axis=0).T)
+        cum = np.r_[0, np.cumsum(seg)]
+        n = max(1, int(round(cum[-1] / step)))
+        at = np.linspace(0, cum[-1], n + 1)
+        return np.stack([np.interp(at, cum, p[:, 0]), np.interp(at, cum, p[:, 1])], axis=1)
+
+    root_edge = wmap.root_edge[0]
+    outline = [resample(L["arm"][0], W5_EDGE), resample(L["fore"][0], W5_EDGE)[1:], resample(L["f1"][0], W5_EDGE)[1:]]
+    # The trailing edge between two finger ends: the sculpt's own scallop, found along the chord.
+    have = wmap.have
+    for a, b in (("f1", "f2"), ("f2", "f3"), ("f3", "spur")):
+        pa, pb = L[a][0][-1], L[b][0][-1]
+        chord = resample(np.array([pa, pb]), W5_EDGE)
+        u = (pb - pa) / np.hypot(*(pb - pa))
+        inward = np.array([-u[1], u[0]])
+        if (W5_HUB - (pa + pb) / 2) @ inward < 0:
+            inward = -inward
+        scal = []
+        for c in chord[1:-1]:
+            steps = np.arange(0, 200.0, 1.0)
+            pts = c + steps[:, None] * inward
+            h = w5_sample(have.astype(np.float32), pts) > 0.5
+            first = np.flatnonzero(h)
+            scal.append(pts[first[0] + 2] if len(first) else c)
+        outline.append(np.vstack([scal, [pb]]) if scal else np.array([pb]))
+    # The root panel is built apart (W5Root): the outline runs back up the rib to the elbow.
+    rib = resample(L["spur"][0], W5_EDGE)
+    outline[0] = outline[0][-1:]                  # the arm's line is the root panel's: keep only the elbow
+    outline.append(rib[::-1][1:-1])
+    ring = np.concatenate(outline)
+    keep = np.r_[True, np.hypot(*np.diff(ring, axis=0).T) > 3.0]
+    ring = ring[keep]
+    if np.hypot(*(ring[-1] - ring[0])) < 3.0:
+        ring = ring[:-1]
+    # Inner bone lines as constraints, so a row of vertices lies on each bone.
+    inner = [resample(L[n][0], W5_EDGE) for n in ("f2", "f3")]
+    verts = [tuple(p) for p in ring]
+    nb = len(ring)
+    edges = [(i, (i + 1) % nb) for i in range(nb)]
+    for line in inner:
+        start = len(verts)
+        for p in line:
+            verts.append(tuple(p))
+        edges += [(start + i, start + i + 1) for i in range(len(line) - 1)]
+    # Interior points on a triangular grid, clear of every line.
+    h = W5_EDGE
+    xs = np.arange(ring[:, 0].min(), ring[:, 0].max(), h)
+    ys = np.arange(ring[:, 1].min(), ring[:, 1].max(), h * math.sqrt(3) / 2)
+    grid = np.array([(x + (h / 2 if j % 2 else 0), y) for j, y in enumerate(ys) for x in xs])
+    grid = grid[w5_inside(grid, ring)]
+    lines = [ring] + inner
+    near = np.full(len(grid), np.inf)
+    for line in lines:
+        closed = line is ring
+        for i in range(len(line) - (0 if closed else 1)):
+            near = np.minimum(near, w2_segment(grid, line[i], line[(i + 1) % len(line)])[2])
+    grid = grid[near > 0.55 * h]
+    verts += [tuple(p) for p in grid]
+    res = delaunay_2d_cdt([Vector(v) for v in verts], edges, [list(range(nb))], 1, 1e-4)
+    co = np.array([tuple(v) for v in res[0]])
+    tris = [f for f in res[2] if len(f) == 3]
+    tris = np.array(tris)
+    cen = co[tris].mean(1)
+    tris = tris[w5_inside(cen, ring)]
+    used = np.unique(tris)
+    remap = np.full(len(co), -1)
+    remap[used] = np.arange(len(used))
+    out = co[used]
+    rib_ids = []
+    for q in rib:
+        d = np.hypot(out[:, 0] - q[0], out[:, 1] - q[1])
+        rib_ids.append(int(d.argmin()))
+        assert d.min() < 1e-3, "a rib vertex is missing from the sheet"
+    return out, remap[tris], np.array(rib_ids)
+
+
+def stage_wing5():
+    """The second wing sculpt fitted panel by panel to the skeleton's wing bones.
+    Writes wing5.blend: `wing_src` (both wings in full detail, for the bake),
+    `wing_low` and `wing_low_left` (the bones and claws, reduced), and
+    `wing_sheet` and `wing_sheet_left` (the membrane, one sheet with two faces).
+    Reads one thing from the body: the flank of body B (src2.blend), where the root panel attaches."""
+    open_blend("wing5_src_raw.blend")
+    src = bpy.data.objects["wing5_src"]
+    if src.data.has_custom_normals:
+        activate(src)
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    plan = W5Plan(coords(src))
+    flat = plan.flat(coords(src))
+    set_coords(src, flat)
+    zup, zlo = w5_rasters(src, plan)
+    have = ~np.isnan(zup)
+    thick = np.where(have, zup - zlo, 0.0)
+    mid = w2_fill(np.where(have, (zup + zlo) / 2, 0.0), have, 40, 60)
+    tgt = w5_targets()
+    lines = w5_lines(thick, tgt)
+    # Metres per sculpt unit across a bone: the skeleton's bone length over the sculpt's.
+    sk = sum(np.linalg.norm(np.diff(lines[n][1], axis=0), axis=1).sum() for n in lines)
+    sc = sum(np.hypot(*np.diff(lines[n][0], axis=0).T).sum() for n in lines) * plan.k
+    scale = float(sk / sc)
+    log("wing5: plan", round(plan.k * 800, 4), "units across; scale", round(scale, 3), "m per unit; membrane",
+        round(float(np.median(thick[have & (thick < W5_BONE_T)])) * scale * 1000), "mm thick")
+    # Thin the membrane about its middle to the sheet's thickness. Bones keep theirs.
+    px_all = plan.px(flat[:, :2])
+    t_v = w5_sample(np.where(have, thick, 0.0), px_all)
+    m_v = w5_sample(mid, px_all)
+    bone_v = smoothstep((t_v - 0.0068) / 0.004)
+    bone_v *= ~w5_stub(px_all, lines)
+    sheet_half = W5_SHEET / 2 / scale
+    f = np.where(t_v > 1e-4, np.minimum(1.0, sheet_half / np.maximum(t_v / 2, 1e-6)), 1.0)
+    f = f + (1.0 - f) * bone_v
+    flat[:, 2] = m_v + (flat[:, 2] - m_v) * f
+    set_coords(src, flat)
+    wmap = W5Map(plan, lines, mid, have, tgt, scale)
+    wmap.tgt = tgt
+    wmap.have = have
+    # Panel widths, plan against skeleton: the gap between the two bones' ends, and their angle at the root.
+    for name, (poly, t3) in wmap.panels.items():
+        log("  panel", name, "corners", len(poly))
+    for a, b in (("f1", "f2"), ("f2", "f3"), ("f3", "spur")):
+        pa, pb = lines[a][0][-1], lines[b][0][-1]
+        ta, tb = lines[a][1][-1], lines[b][1][-1]
+        log("  panel %s-%s: trailing gap in the sculpt %.2f m, in the skeleton %.2f m (%.0f%%)" % (
+            a, b, np.hypot(*(pa - pb)) * plan.k * scale, np.linalg.norm(ta - tb),
+            100 * (np.hypot(*(pa - pb)) * plan.k * scale / np.linalg.norm(ta - tb) - 1)))
+
+    # The bones: the sculpt with the membrane taken out, reduced while flat.
+    low = duplicate(src, "wing_low")
+    strip_layers(low)
+    weld(low)
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    cen = np.array([f.calc_center_median()[:] for f in bm.faces])
+    cp = plan.px(cen[:, :2])
+    tf = w5_sample(np.where(have, thick, 0.0), cp)
+    dist, which = wmap.bone_distance(cp)
+    claw = np.zeros(len(cp), bool)
+    for name, tip in W5_CLAWS.items():
+        base = lines[name][0][-1]
+        t, s, d = w2_segment(cp, base, np.array(tip, float))
+        claw |= (t > -0.15) & (d < 16)
+    thumb = (cp[:, 0] > W5_THUMB[0][0]) & (cp[:, 0] < W5_THUMB[1][0]) & (cp[:, 1] < W5_THUMB[1][1])
+    keep = ((tf > W5_BONE_T) | claw | thumb) & ~w5_stub(cp, lines)
+    bmesh.ops.delete(bm, geom=[f for f, k in zip(bm.faces, keep) if not k], context="FACES")
+    loose = [v for v in bm.verts if not v.link_faces]
+    bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    # Islands of a few faces are scraps of the membrane's rim.
+    seen, drop = set(), []
+    for fc in bm.faces:
+        if fc in seen:
+            continue
+        stack, comp = [fc], [fc]
+        seen.add(fc)
+        while stack:
+            a = stack.pop()
+            for e in a.edges:
+                for g in e.link_faces:
+                    if g not in seen:
+                        seen.add(g)
+                        stack.append(g)
+                        comp.append(g)
+        if len(comp) < 400:
+            drop += comp
+    bmesh.ops.delete(bm, geom=drop, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(low.data)
+    bm.free()
+    topo_report(low, "wing5 bones cut out")
+    decimate_to(low, W5_BONE_TRIS)
+    topo_report(low, "wing5 bones decimated")
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    # The bones' open rims sink to the sheet's middle, inside the sheet.
+    rim = [v for v in bm.verts if v.is_boundary]
+    for v in rim:
+        v.co.z = float(w5_sample(mid, plan.px(np.array([[v.co.x, v.co.y]])))[0])
+    cen = np.array([f.calc_center_median()[:] for f in bm.faces])
+    cp = plan.px(cen[:, :2])
+    horn = np.zeros(len(cp), bool)
+    for name, tip in W5_CLAWS.items():
+        base = lines[name][0][-1]
+        t, s, d = w2_segment(cp, base, np.array(tip, float))
+        horn |= (t > 0.05) & (d < 16)
+    horn |= (cp[:, 0] > W5_THUMB[0][0] + 4) & (cp[:, 0] < W5_THUMB[1][0]) & (cp[:, 1] < 38)
+    for fc, h_ in zip(bm.faces, horn):
+        fc.material_index = 2 if h_ else 0
+        fc.smooth = True
+    bm.to_mesh(low.data)
+    bm.free()
+    log("wing5 bones: rim vertices", len(rim), "claw faces", int(horn.sum()), "of", len(horn))
+    low.data.materials.clear()
+    for name in ("from_wing", "from_wing_membrane", "from_wing_horn"):
+        low.data.materials.append(bpy.data.materials.new(name))
+    low.data.polygons.foreach_set("material_index", np.where(horn, 2, 0).astype(np.int32))
+
+    # The sheet.
+    sp, stri, rib_ids = w5_sheet(wmap)
+    smid = w5_sample(mid, sp)
+    s3 = wmap(sp, smid)
+    # The root panel: a ruled patch between the flank and the arm and rib, welded on the rib's vertices.
+    body = append_object("src2.blend", "body2_src")
+    root = W5Root(wmap, lines, body, sp[rib_ids], s3[rib_ids])
+    bpy.data.objects.remove(body)
+    wmap.root = root
+    rco, rtri, rs, on_b = w5_root_sheet(root)
+    rmap = np.full(len(rco), -1)
+    for j, i in enumerate(on_b):
+        if i >= root.n_arm:
+            rmap[j] = rib_ids[i - root.n_arm]
+    new = rmap < 0
+    rmap[new] = len(s3) + np.arange(int(new.sum()))
+    sheet_s = np.r_[np.full(len(s3), -1.0), rs[new]]
+    s3 = np.vstack([s3, rco[new]])
+    stri = np.vstack([stri, rmap[rtri]])
+    log("wing5 root patch: vertices", int(new.sum()), "triangles", len(rtri), "welded on the rib", int((~new).sum()))
+    sheet_me = bpy.data.meshes.new("wing_sheet")
+    sheet_me.from_pydata(s3.tolist(), [], stri.tolist())
+    sheet = bpy.data.objects.new("wing_sheet", sheet_me)
+    bpy.context.collection.objects.link(sheet)
+    bm = bmesh.new()
+    bm.from_mesh(sheet_me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
+    if np.mean([f.normal.z for f in bm.faces]) < 0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+        bm.normal_update()
+    nv = len(bm.verts)
+    nrm = np.array([v.normal[:] for v in bm.verts])
+    pos = np.array([v.co[:] for v in bm.verts])
+    upper_faces = [[v.index for v in f.verts] for f in bm.faces]
+    boundary = [e for e in bm.edges if e.is_boundary]
+    # Each boundary edge in the upper face's winding order.
+    bedges = []
+    for e in boundary:
+        f = e.link_faces[0]
+        vs = [v.index for v in f.verts]
+        a, b = e.verts[0].index, e.verts[1].index
+        i = vs.index(a)
+        bedges.append((a, b) if vs[(i + 1) % 3] == b else (b, a))
+    bm.free()
+    half = W5_SHEET / 2
+    co = np.concatenate([pos + nrm * half, pos - nrm * half])
+    faces = [tuple(f) for f in upper_faces] + [tuple(nv + i for i in reversed(f)) for f in upper_faces]
+    for a, b in bedges:
+        faces.append((b, a, nv + a))
+        faces.append((b, nv + a, nv + b))
+    n_face = len(upper_faces)
+    sheet_me = bpy.data.meshes.new("wing_sheet2")
+    sheet_me.from_pydata(co.tolist(), [], faces)
+    sheet.data = sheet_me
+    sheet.data.name = "wing_sheet"
+    for name in ("from_wing", "from_wing_membrane", "from_wing_horn"):
+        sheet_me.materials.append(bpy.data.materials.new(name))
+    sheet_me.polygons.foreach_set("material_index", np.ones(len(faces), np.int32))
+    up = sheet_me.attributes.new("wing_upper", "FLOAT", "FACE")
+    up.data.foreach_set("value", np.r_[np.ones(n_face), np.zeros(n_face), np.full(2 * len(bedges), 0.5)].astype(np.float32))
+    for p in sheet_me.polygons:
+        p.use_smooth = True
+    sa = sheet_me.attributes.new("sheet_s", "FLOAT", "POINT")
+    sa.data.foreach_set("value", np.r_[sheet_s, sheet_s].astype(np.float32))
+    # Folds at rest: neighbouring triangles of one face that turn past 60 degrees.
+    fn = np.cross(co[np.array(upper_faces)[:, 1]] - co[np.array(upper_faces)[:, 0]],
+                  co[np.array(upper_faces)[:, 2]] - co[np.array(upper_faces)[:, 0]])
+    fn /= np.linalg.norm(fn, axis=1, keepdims=True)
+    pairs = {}
+    for fi, f in enumerate(upper_faces):
+        for a_, b_ in ((f[0], f[1]), (f[1], f[2]), (f[2], f[0])):
+            pairs.setdefault((min(a_, b_), max(a_, b_)), []).append(fi)
+    folds = [(v[0], v[1]) for v in pairs.values() if len(v) == 2 and fn[v[0]] @ fn[v[1]] < 0.5]
+    in_root = [x for x in folds if any(sheet_s[i] >= 0 for i in upper_faces[x[0]])]
+    log("wing5 sheet folds past 60 degrees at rest:", len(folds), "of them in the root patch:", len(in_root))
+    el = np.concatenate([[np.linalg.norm(s3[t[i]] - s3[t[(i + 1) % 3]]) for i in range(3)] for t in stri])
+    log("wing5 sheet: vertices a face", nv, "triangles a face", n_face, "rim", 2 * len(bedges),
+        "edge length m: median", round(float(np.median(el)), 3), "5%", round(float(np.percentile(el, 5)), 3),
+        "95%", round(float(np.percentile(el, 95)), 3), "max", round(float(el.max()), 3))
+    topo_report(sheet, "wing5 sheet")
+
+    # Into the build frame.
+    lc = coords(low)
+    lo3 = wmap(plan.px(lc[:, :2]), lc[:, 2])
+    hi3 = wmap(px_all, flat[:, 2])
+    # The tip claw must end at version 2's half span: the claw and the outer finger move in along the finger.
+    span = max(float(lo3[:, 0].max()), float(hi3[:, 0].max()))
+    over = span - WINGSPAN / 2
+    log("wing5: tip at X", round(span, 3), "before the span fit")
+    if abs(over) > 1e-4:
+        for c in (lo3, hi3, ):
+            c[:, 0] -= over * smoothstep((c[:, 0] - 7.6) / (span - 7.6))
+        sco = coords(sheet)
+        sco[:, 0] -= over * smoothstep((sco[:, 0] - 7.6) / (span - 7.6))
+        set_coords(sheet, sco)
+    set_coords(low, lo3)
+    set_coords(src, hi3)
+    plan_attr = src.data.attributes.new("plan", "FLOAT_VECTOR", "POINT")
+    plan_attr.data.foreach_set("vector", np.stack([px_all[:, 0] / 800, px_all[:, 1] / 800, np.zeros(len(px_all))], 1).ravel())
+    for p in low.data.polygons:
+        p.use_smooth = True
+    for name, (line, t3, r0) in lines.items():
+        log("  bone line", name, "from", np.round(t3[0], 2).tolist(), "to", np.round(t3[-1], 2).tolist())
+    np.savez(cache("wing5_plan.npz"), have=have, thick=thick.astype(np.float32), mid=mid.astype(np.float32),
+             **{"line_" + k: v[0] for k, v in lines.items()}, **{"target_" + k: v[1] for k, v in lines.items()})
+    # The left wing is the mirror.
+    for obj in (src, low, sheet):
+        other = duplicate(obj, obj.name + "_left")
+        c = coords(other)
+        c[:, 0] *= -1
+        set_coords(other, c)
+        activate(other)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.flip_normals()
+        bpy.ops.object.mode_set(mode="OBJECT")
+        if obj is src:
+            activate(obj, [other])
+            bpy.ops.object.join()
+    src.name = src.data.name = "wing_src"
+    for o in list(bpy.data.objects):
+        if o.name.endswith("_left") and o.name.startswith("wing_low"):
+            o.name = o.data.name = "wing_low_left"
+        if o.name.endswith("_left") and o.name.startswith("wing_sheet"):
+            o.name = o.data.name = "wing_sheet_left"
+    log("wing5 objects", sorted(o.name for o in bpy.data.objects))
+    save_blend("wing5.blend")
+
+
 # ----------------------------------------------------------------- stage: align
 
 # The sculpts come out of the generator with the nose at -Y, one unit long.
@@ -1308,8 +2168,8 @@ def stage_align2():
 
     set_coords(head, retaper_head(coords(head)))
 
-    if WING_V3:
-        # The first sculpt only set the frame. The version 3 wing takes nothing else from it.
+    if WING_V3 or WING_V5:
+        # The first sculpt only set the frame. The version 3 and 5 wings take nothing else from it.
         bpy.data.objects.remove(old)
         save_blend("src2.blend")
         return
@@ -1396,6 +2256,9 @@ def stage_low2():
     if WING_V3:
         for name in ("wing_low", "wing_low_left"):
             topo_report(append_object("wing2.blend", name), name + " from the wing stage")
+    elif WING_V5:
+        for name in ("wing_low", "wing_low_left", "wing_sheet", "wing_sheet_left"):
+            topo_report(append_object("wing5.blend", name), name + " from the wing5 stage")
     else:
         low2_wings_v2()
 
@@ -1409,18 +2272,22 @@ def stage_join():
     open_blend("low2.blend")
     body = bpy.data.objects["body_low"]
     head = bpy.data.objects["head_low"]
-    wings = [bpy.data.objects[n] for n in (("wing_low", "wing_low_left") if WING_V3 else ("wing_low",))]
+    wings = [bpy.data.objects[n] for n in (("wing_low", "wing_low_left") if WING_V3 else
+                                           ("wing_low", "wing_low_left", "wing_sheet", "wing_sheet_left") if WING_V5
+                                           else ("wing_low",))]
+    SHEET_WING = WING_V3 or WING_V5
     # Material slots carry the origin of every face through the union.
     # The version 3 wing brings three slots of its own: from_wing (its hide), from_wing_membrane and
     # from_wing_horn. Version 2's wing is one closed piece with one slot, and is unioned like the head.
-    for obj, name in ((body, "from_body"), (head, "from_head")) + (() if WING_V3 else ((wings[0], "from_wing"),)):
+    for obj, name in ((body, "from_body"), (head, "from_head")) + (() if SHEET_WING else ((wings[0], "from_wing"),)):
         obj.data.materials.clear()
         obj.data.materials.append(bpy.data.materials.new(name))
-    if WING_V3:
+    if SHEET_WING:
         for i, m in enumerate(wings[0].data.materials):
             m.name = m.name.split(".")[0]
-            wings[1].data.materials[i] = m
-    for other in ((head,) if WING_V3 else (wings[0], head)):
+            for w in wings[1:]:
+                w.data.materials[i] = m
+    for other in ((head,) if SHEET_WING else (wings[0], head)):
         before = body.data.copy()
         span = coords(body)[:, 1].max() - coords(body)[:, 1].min()
         mod = body.modifiers.new("union", "BOOLEAN")
@@ -1528,7 +2395,7 @@ def stage_join():
         dropped += 1
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     log("slivers cut off:", dropped, "of", len(islands), "small islands")
-    if not WING_V3:
+    if not SHEET_WING:
         # Soften the crease where each wing's root comes out of the body.
         ring = set()
         for e in bm.edges:
@@ -1547,12 +2414,12 @@ def stage_join():
     # touch here and there, and the exact solver drops such a mesh or, told to repair it,
     # tears the sheet into two thousand pieces. Each wing keeps its own closed surface: its
     # arm and the root of its membrane end inside the body.
-    if WING_V3:
+    if SHEET_WING:
         activate(body, wings)
         bpy.ops.object.join()
     names = [m.name for m in body.data.materials]
     nb, nm = topo_report(body, "joined")
-    for label in ("from_head", "from_wing") + (("from_wing_membrane", "from_wing_horn") if WING_V3 else ()):
+    for label in ("from_head", "from_wing") + (("from_wing_membrane", "from_wing_horn") if SHEET_WING else ()):
         n = sum(1 for p in body.data.polygons if names[p.material_index] == label)
         log("triangles", label, n, "share", round(n / len(body.data.polygons), 3))
     save_blend("joined.blend")
@@ -2455,7 +3322,7 @@ WING_JOINTS_V3 = [
     ("finger3_a", 4.74, -0.63, 0.68, -0.73, 0.22),
     ("finger4_a", 2.76, -0.43, 0.20, -0.98, 0.22),
 ]
-WING_JOINTS = WING_JOINTS_V3 if WING_V3 else WING_JOINTS_V2
+WING_JOINTS = WING_JOINTS_V3 if (WING_V3 or WING_V5) else WING_JOINTS_V2
 # Leg joints: (name, Y, Z, direction Y, direction Z, radius). The planes
 # contain the X axis. Both sides are cut.
 LEG_JOINTS_A = [
@@ -2520,7 +3387,7 @@ def source_colours(obj):
     return vc
 
 
-def cut_joint_loops(bm):
+def cut_joint_loops(bm, skip_slot=None):
     made = 0
     for name, x, y, dx, dy, r in WING_JOINTS:
         for side in (1, -1):
@@ -2528,8 +3395,8 @@ def cut_joint_loops(bm):
             n = Vector((dx * side, dy, 0)).normalized()
             for k in ((-0.5, 0.5) if name.startswith("finger") else (-1, 0, 1)):
                 pc = c + n * (k * JOINT_LOOP_SPACING)
-                faces = [f for f in bm.faces
-                         if all((Vector((v.co.x, v.co.y, 0)) - c).length < r and v.co.z > 3.0 for v in f.verts)]
+                faces = [f for f in bm.faces if f.material_index != skip_slot
+                         and all((Vector((v.co.x, v.co.y, 0)) - c).length < r and v.co.z > 3.0 for v in f.verts)]
                 if faces:
                     bmesh.ops.bisect_plane(bm, geom=face_geom(faces), dist=1e-5, plane_co=pc, plane_no=n)
                     made += 1
@@ -2591,8 +3458,8 @@ def stage_parts():
     head_slot = [m.name for m in low.data.materials].index("from_head")
     slot_names = [m.name for m in low.data.materials]
     wing_slots = {i for i, n in enumerate(slot_names) if n.startswith("from_wing")}
-    memb_slot = slot_names.index("from_wing_membrane") if WING_V3 else -1
-    claw_slot = slot_names.index("from_wing_horn") if WING_V3 else -1
+    memb_slot = slot_names.index("from_wing_membrane") if (WING_V3 or WING_V5) else -1
+    claw_slot = slot_names.index("from_wing_horn") if (WING_V3 or WING_V5) else -1
     head_src = append_object("src_aligned.blend", "head_src")
     hcol = source_colours(head_src)
     hco = coords(head_src)
@@ -2611,8 +3478,10 @@ def stage_parts():
     # Split them, so the membrane can fold.
     split = 0
     for _ in range(3):
+        # Version 5's membrane is one sheet whose two faces share their triangles: it is not touched.
         long_edges = [e for e in bm.edges if e.calc_length() > MEMBRANE_MAX_EDGE
-                      and all(f.material_index in wing_slots for f in e.link_faces)]
+                      and all(f.material_index in wing_slots and not (WING_V5 and f.material_index == memb_slot)
+                              for f in e.link_faces)]
         if not long_edges:
             break
         split += len(long_edges)
@@ -2620,10 +3489,11 @@ def stage_parts():
         bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     log("wing edges split:", split)
     thick_layer = bm.verts.layers.float.new("thick")
-    cut_joint_loops(bm)
+    cut_joint_loops(bm, skip_slot=memb_slot if WING_V5 else None)
     # A loop cut can leave a wing vertex 2 mm from another. The rig's fold stretches such an edge forty times.
-    if WING_V3:
-        close = [v for v in bm.verts if v.link_faces and all(f.material_index in wing_slots for f in v.link_faces)]
+    if WING_V3 or WING_V5:
+        close = [v for v in bm.verts if v.link_faces and all(f.material_index in wing_slots for f in v.link_faces)
+                 and not any(f.material_index == memb_slot for f in v.link_faces)]
         before = len(bm.verts)
         bmesh.ops.remove_doubles(bm, verts=close, dist=0.006)
         log("wing vertices merged within 6 mm:", before - len(bm.verts))
@@ -2647,7 +3517,7 @@ def stage_parts():
     def near_claw(c):
         return any((abs(c.x) - x) ** 2 + (c.y - y) ** 2 < r * r for x, y, r in WING_CLAWS)
 
-    if WING_V3:
+    if WING_V3 or WING_V5:
         memb = {f: f.material_index == memb_slot for f in bm.faces}
     else:
         # Version 2's wing: the membrane is the thin sheet of the wing piece.
@@ -2702,11 +3572,11 @@ def stage_parts():
         toe = c.z < TOE_CLAW_Z and abs(c.x) < 2.0 and f.material_index not in wing_slots and any(
             lo < c.y < hi for lo, hi in TOE_CLAWS)
         if toe or f.material_index == claw_slot or (
-                not WING_V3 and f.material_index in wing_slots and near_claw(c) and c.z > 2.0 and not memb[f]):
+                not (WING_V3 or WING_V5) and f.material_index in wing_slots and near_claw(c) and c.z > 2.0 and not memb[f]):
             horn[f] = True
     log("faces: membrane", sum(memb.values()), "horn", n_horn, "claw", sum(horn.values()) - n_horn)
 
-    if not WING_V3:
+    if not (WING_V3 or WING_V5):
         # Thin the membrane: both faces of the sheet move toward its middle.
         moved = 0
         for v in bm.verts:
@@ -2741,7 +3611,7 @@ MAP_SIZE = {"hide": 4096, "membrane": 2048, "horn": 1024, "eye": 512, "mouth": 1
 UV_ANGLE = 76.0
 MEMBRANE_UV_ANGLE = 88.0
 HEAD_UV_SHARE = 0.30                # of the hide atlas's used area
-WING_UV_SCALE = 1.0 if WING_V3 else 0.8    # the wing's arm and fingers get shorter texels than the body
+WING_UV_SCALE = 1.0 if (WING_V3 or WING_V5) else 0.8    # the wing's arm and fingers get shorter texels than the body
 
 
 def uv_array(me):
@@ -2857,7 +3727,7 @@ def stage_uv():
         obj = bpy.data.objects[name]
         # The membrane is two faces of one sheet: a wide angle keeps each face in a few islands.
         unwrap(obj, 0.0004 if name == "hide" else 0.0015, HEAD_UV_SHARE if name == "hide" else None,
-               MEMBRANE_UV_ANGLE if name == "membrane" and WING_V3 else UV_ANGLE)
+               MEMBRANE_UV_ANGLE if name == "membrane" and (WING_V3 or WING_V5) else UV_ANGLE)
         topo_report(obj, name)
 
     # The membrane's thickness: the sculpt's own, and thicker near a bone.
@@ -2888,7 +3758,11 @@ def stage_uv():
 LUMA = np.array([0.2126, 0.7152, 0.0722])
 # The wing's colour moves toward the new body's. Share of the gain at the
 # root and far out along the wing, per material.
-if WING_V3:
+if WING_V5:
+    WING_GRADE = {"hide": (1.0, 0.0), "membrane": (0.0, 0.0), "horn": (0.0, 0.0)}
+    WING_GRADE_NEAR = 0.9
+    WING_GRADE_FADE = 1.0
+elif WING_V3:
     WING_GRADE = {"hide": (1.0, 0.0), "membrane": (0.5, 0.0), "horn": (0.0, 0.0)}
     WING_GRADE_NEAR = 0.9           # half width inside which the gain is full
     WING_GRADE_FADE = 1.0
@@ -3069,7 +3943,7 @@ def stage_bake():
     sc = bpy.context.scene
     body_src = append_object("src2.blend", "body2_src")
     head_src = append_object("src2.blend", "head_src")
-    wing_src = append_object("wing2.blend" if WING_V3 else "src2.blend", "wing_src")
+    wing_src = append_object("wing5.blend" if WING_V5 else "wing2.blend" if WING_V3 else "src2.blend", "wing_src")
     src = {}
     for o in (body_src, head_src, wing_src):
         src[o.name] = (o,) + source_material(o)
@@ -3112,6 +3986,8 @@ def stage_bake():
             a, _ = dilate_fill(a[..., :3], a[..., 3] > 0.5, 24)
             plan[wing] = a[wing]
             # The face of the wing comes from the reduced mesh: in a fold a ray can reach the other face.
+            plan[..., 2] = bake_image(sc, obj, "mask", size, attribute="wing_upper")[..., 0]
+        if wing.any() and WING_V5 and name == "membrane":
             plan[..., 2] = bake_image(sc, obj, "mask", size, attribute="wing_upper")[..., 0]
         ao = None
         if name == "hide":
@@ -3181,6 +4057,50 @@ def grade_wing(name, base, tn, wing, plan, onrm, stats):
     return np.clip(out, 0.0, 1.0), tn
 
 
+def grade_wing5(name, base, wing, plan, stats):
+    """Version 5: each face of the membrane, the bones and the claws move to version 4's colour.
+    The shift is one log gain per part, so the sculpt's own veins and rings keep their contrast."""
+    logc = np.log(np.maximum(base, 1e-4))
+    out = base.copy()
+    if name == "membrane":
+        upper = plan[..., 2] > 0.25
+        parts = (("upper", wing & upper), ("lower", wing & ~upper))
+    else:
+        parts = ((("bone" if name == "hide" else "claw"), wing),)
+    for key, sel in parts:
+        if sel.sum() < 500:
+            continue
+        mean = logc[sel].mean(axis=0)
+        k = W5_CONTRAST if name == "membrane" else 1.0
+        target = np.log(np.array(W5_COLOUR[key], np.float32))
+        out[sel] = np.exp(target + k * (logc[sel] - mean))
+        stats[f"{name}_wing5_{key}"] = {"source": [round(float(x), 4) for x in np.exp(mean)],
+                                        "target": list(W5_COLOUR[key]), "texels": int(sel.sum())}
+        log(name, "wing5", key, "source mean", np.exp(mean).round(4), "to", W5_COLOUR[key])
+    return np.clip(out, 0.0, 1.0)
+
+
+W5_ROOT_TEXTURE_X = (2.25, 2.60)    # m: the root patch's texels are replaced inside the first, faded out by the second
+
+
+def smooth_root5(base, tn, wing, plan, pos):
+    """The root patch's bake source is the sculpt's root panel carried onto the patch, and where that panel
+    reaches past the patch it collapses and bakes streaks. Its texels take each face's target colour with a
+    gentle variation in space instead, and a flat normal. The fade ends before the rib."""
+    x = np.abs(pos[..., 0])
+    w = (1.0 - smoothstep((x - W5_ROOT_TEXTURE_X[0]) / (W5_ROOT_TEXTURE_X[1] - W5_ROOT_TEXTURE_X[0]))) * wing
+    upper = plan[..., 2] > 0.25
+    y, z = pos[..., 1], pos[..., 2]
+    vary = (np.sin(x * 3.1 + y * 1.7) * np.sin(y * 4.3 - z * 2.1) + 0.5 * np.sin(x * 7.9 - y * 6.2 + z * 3.3)) / 1.5
+    out = base.copy()
+    for key, sel in (("upper", upper), ("lower", ~upper)):
+        col = np.exp(np.log(np.array(W5_COLOUR[key], np.float32))[None, None, :] + 0.10 * vary[..., None])
+        out = np.where(sel[..., None], base * (1 - w[..., None]) + col * w[..., None], out)
+    tn = tn * (1 - w[..., None]) + np.array([0, 0, 1], np.float32) * w[..., None]
+    log("membrane root patch texels replaced:", int((w > 0.99).sum()), "faded:", int(((w > 0) & (w <= 0.99)).sum()))
+    return out.astype(np.float32), tn
+
+
 def stage_maps():
     """Grade the raw bakes and write each part's three maps."""
     reset_scene()
@@ -3221,7 +4141,7 @@ def stage_maps():
         # direction. Only the X term is removed: the dragon is symmetric in
         # X, so an X term can only be light. The Y and Z terms are the
         # design's pale belly and throat, and they stay.
-        for label, region in (("body", body), ("head", head)) + (() if WING_V3 else (("wing", wing),)):
+        for label, region in (("body", body), ("head", head)) + (() if (WING_V3 or WING_V5) else (("wing", wing),)):
             if region.sum() > 1000:
                 _, b = delight(base, onrm, region)
                 stats[f"{name}_{label}_light_xyz"] = b
@@ -3229,6 +4149,10 @@ def stage_maps():
                 log(name, label, "luminance against direction (x, y, z):", b, "- removed x")
         if wing.any() and WING_V3:
             base, tn = grade_wing(name, base, tn, wing, raw["plan"], onrm, stats)
+        if wing.any() and WING_V5:
+            base = grade_wing5(name, base, wing, raw["plan"], stats)
+            if name == "membrane":
+                base, tn = smooth_root5(base, tn, wing, raw["plan"], pos)
         if name == "hide":
             # The head sculpt's neck takes the body sculpt's colour where
             # they meet: one gain for the dark back, one for the pale front.
@@ -3578,7 +4502,7 @@ def stage_export():
         me.materials.append(mats[mname])
         for p in me.polygons:
             p.use_smooth = True
-        keep = {"jaw": "_JAW"} if oname in ("hide", "mouth") else {}
+        keep = {"jaw": "_JAW"} if oname in ("hide", "mouth") else {"sheet_s": "_SHEET_S"} if oname == "membrane" else {}
         for a in list(me.attributes):
             if a.is_internal or a.is_required or a.name in ("UVMap", "custom_normal", "sharp_face", "material_index"):
                 continue
@@ -4054,7 +4978,7 @@ def landmarks():
     reset_scene()
     old = coords(append_object("src_aligned.blend", "body_src"))
     new = coords(append_object("src2.blend", "body2_src"))
-    wing = coords(append_object("wing2.blend" if WING_V3 else "src2.blend", "wing_src"))
+    wing = coords(append_object("wing5.blend" if WING_V5 else "wing2.blend" if WING_V3 else "src2.blend", "wing_src"))
     rows = []
 
     def gltf(p):
@@ -4107,7 +5031,7 @@ def landmarks():
 
 
 STAGES = [("import", stage_import), ("wing", stage_wing), ("align", stage_align), ("low_parts", stage_low_parts),
-          ("align2", stage_align2), ("low2", stage_low2), ("join", stage_join), ("head", stage_head), ("parts", stage_parts), ("uv", stage_uv),
+          ("align2", stage_align2), ("wing5", stage_wing5), ("low2", stage_low2), ("join", stage_join), ("head", stage_head), ("parts", stage_parts), ("uv", stage_uv),
           ("bake", stage_bake), ("maps", stage_maps), ("export", stage_export)]
 
 
@@ -4132,6 +5056,8 @@ def main():
         return
     for name, fn in STAGES:
         if name == "wing" and not WING_V3:
+            continue
+        if name == "wing5" and not WING_V5:
             continue
         log("stage", name)
         fn()

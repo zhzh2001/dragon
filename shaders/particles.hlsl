@@ -10,7 +10,7 @@ struct VertexIn {
     float4 color    : TEXCOORD1;
     float2 corner   : TEXCOORD2;
 #ifndef FIXED_FUNCTION
-    float4 shape    : TEXCOORD3;  // x seed, y age over life, z kind
+    float4 shape    : TEXCOORD3;  // x seed, y age over life, z kind, w height over its floor
 #endif
 };
 
@@ -133,7 +133,13 @@ float4 fs_main(VertexOut input) : SV_Target {
         // Smoke: a billowed disc, its edge eaten by the noise, rolling slowly.
         float billow = particle_billow(p * 1.3 + seed * 11.0 - float2(0.0, age * 0.8));
         float body = saturate(1.0 - r) * 1.15 + (billow - 0.5) * 0.9;
-        float alpha = smoothstep(0.1, 0.6, body) * input.color.a;
+        // Closed inside the quad: a strong billow alone carried the body past
+        // 0.4 at r = 1, and the quad's straight edges and corners showed as
+        // squares in every cloud of spray (the blind critic, 2026-11-15).
+        // And faded into the surface it rises off (shape.w: the height over
+        // it, in fade lengths), where the depth test cut it along a line.
+        float alpha = smoothstep(0.1, 0.6, body) * (1.0 - smoothstep(0.72, 1.0, r)) * saturate(input.shape.w) *
+                      input.color.a;
         float3 smoke = input.color.rgb * (0.8 + 0.4 * billow);
         return float4(smoke, alpha);
     }

@@ -571,6 +571,13 @@ bool App::init(const Options& options) {
     if (atmosphere_.available()) {
         lighting_.sun_elevation_deg = 19.0f;
         post_settings_.exposure = 1.18f;
+        // And its rock is grey. The shared brown-grey, under a warm low sun
+        // and beside dry grass, read as earth: the blind critic saw "sand"
+        // on every wall (SHOWCASE.md, "The blind critic, round 1"). The
+        // slice target's faces are pale grey granite. The retro tiers keep
+        // the table's, which their pre-lit ground was tuned on.
+        lighting_.palette[gfx::PaletteEntry::Rock] = core::Vec4{0.36f, 0.35f, 0.345f, 0.0f};
+        lighting_.palette[gfx::PaletteEntry::RockDark] = core::Vec4{0.19f, 0.19f, 0.195f, 0.0f};
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (!options.grade.empty()) {
@@ -1690,7 +1697,9 @@ void App::regenerate_terrain() {
     // built, since the fixed-function tier bakes it into their colours.
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
-    material_.rock_slope = 0.62f;
+    // The modern tier's walls are grass with rock breaking through
+    // (terrain.hlsl, terrain_albedo): rock from about 50 degrees, not 40.
+    material_.rock_slope = tier_.tier == gfx::Tier::Modern ? 0.48f : 0.62f;
     // The terrain shader dissolves the ground into the sky over the outermost
     // band of this extent. It is the SKIRT's edge, not the playable one: the
     // fade predates the skirt, and left at the playable extent it began 500 m
@@ -7629,6 +7638,8 @@ void App::on_touchdown(float sink) {
         p.color_start = colour;
         p.color_end = colour * 1.15f;
         p.brightness = 0.2f + 0.25f * hard;
+        // The ground slopes; the river does not. Its drawn plane, as the spray's.
+        if (water) p.floor = surface + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
         particles_.spawn(p);
     }
 }
@@ -7694,6 +7705,9 @@ void App::update_spray(float dt) {
         p.color_start = spray_colour_;
         p.color_end = spray_colour_ * 1.1f;
         p.brightness = 0.25f + 0.2f * amount;
+        // The plane the river is drawn on, which on the modern tier stands
+        // half a metre over the line (build_water_mesh).
+        p.floor = water + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
         particles_.spawn(p);
         // And a drop thrown higher and faster, catching the light.
         gfx::Particle drop;
@@ -7943,8 +7957,14 @@ void App::draw_combat(rhi::Pass* pass) {
         const bool frozen = sentinel.status.frozen > 0.0f;
         const core::Vec3 base = frozen ? core::Vec3{0.55f, 0.8f, 1.0f} : core::Vec3{0.72f, 0.24f, 0.18f};
         const core::Vec3 colour = core::lerp(base, core::Vec3{1.0f, 0.55f, 0.10f}, frozen ? 0.0f : flash);
+        // The flash is for range. At full strength up close, a target held
+        // in the breath was a flat orange disc with no shading, a third of
+        // the frame at 15 m (the blind critic, 2026-11-15).
+        const float flash_reach =
+            core::lerpf(0.35f, 1.6f, core::smoothstep(40.0f, 300.0f,
+                                                      core::distance(active_camera().position, sentinel.position)));
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * (1.0f + 0.18f * flash),
-                  colour, frozen ? 0.25f : 0.18f + flash * 1.6f);
+                  colour, frozen ? 0.25f : 0.18f + flash * flash_reach);
         // A smaller inner sphere shrinks as it takes damage: a health readout
         // that needs no UI and works at any distance or angle.
         draw_ball(sentinel.position, combat_.tuning.sentinel_radius * 0.55f * health,

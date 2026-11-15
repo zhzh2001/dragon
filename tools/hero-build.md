@@ -6,6 +6,144 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 5b: the root panel by construction (2026-11-15)
+
+Version 5b replaces version 5's root panel, the membrane between the body and the rib. The outer three panels are version 5's, built by the same code. The section below on version 5 still holds for them.
+
+### State
+
+- `assets/embercrest-hero-static.glb`: 25.6 MB, 86 of 86 checks pass (`artifacts/hero-build/verification-v5.txt`). Hide 104,665, membrane 7,992, horn 6,758 triangles: 119,415, under the budget of 120,000.
+- `assets/embercrest-hero.glb`: 56 of 56 rig checks pass, none changed (`tools/hero-rig.md`, "Mesh version 5b").
+- The membrane is one closed manifold: 4,000 positions, 11,988 edges each used by two triangles, and each position has one twin 19.8 mm away.
+- No sheet edge folds past 60 degrees at rest, in the root patch or anywhere else. Version 5 had 16 a face past 100 degrees.
+- `wing5` now runs after `align2`, because it reads body B's flank from `src2.blend`.
+
+### The ruled patch (`W5Root`)
+
+- B(t) is the wing's own edge: the upper arm's bone line from the shoulder to the elbow, resampled about every 0.17 m, then the outer sheet's own vertices along the rib to its tip. The two sheets share those 14 rib vertices, so they are welded. B is 3.77 m long. t is arc length along B.
+- A(t) is the attachment line. It runs through the stations in `W5_ROOT_PATH`: (Y, Z) from (1.00, 3.40) to (-1.20, 3.25). Its X is body B's flank, read by rays from the side, smoothed six times, and moved 25 mm inward. A runs from (0.37, 1.00, 3.40) to (0.47, -1.20, 3.25).
+  - The flank above Z 3.2 is smooth. Below Z 3.0 the haunch bulges to X 1.0 to 1.4 between Y -0.2 and -1.0, so A stays above it.
+  - A was not taken from version 4's membrane. Version 4's membrane ends at X 1.13 on the old wing's root, not on the body.
+- P(s, t) = A(t) + s (B(t) - A(t)), with a sag of 50 mm at s = 0.5 (a sine in s).
+- The trailing edge from A(1) to the rib's tip is scalloped 0.35 m deep.
+- The patch is triangulated in (u, v), with v the length along B and u = s |B - A|, at the same 0.17 m spacing as the other panels. The second face is the same offset copy as the rest.
+- The sculpt (the bake source) is carried the same way. A sculpt point in the root panel takes the (s, t) of the nearest point of the same ruled patch in plan, between the sculpt's own arm-and-rib edge and the first 85% of its own inner edge.
+- The exported membrane carries `_SHEET_S`: s on the root patch, -1 elsewhere. The rig reads it.
+
+### Texture
+
+The baked root texture streaked. Sculpt points beyond the plan patch clamp to its edge and collapse, so the bake rays hit folded source.
+In the maps stage (`smooth_root5`), the membrane texels inside X 2.25 take each face's target colour, with a variation of plus or minus 10% in log colour that changes slowly over the wing. Their normal is flat. The replacement fades out by X 2.60, before the rib.
+The root panel therefore has no veins. The outer panels keep the sculpt's.
+
+### The arm's root
+
+The arm's stump now ends 0.90 m inside the body past the shoulder (`W5_START_DEPTH`, was 0.55). It was not closed with a collar: the bones are open shells over the sheet. The arm still meets the back as an intersection. From `--inspect 300 6 10` the join reads as the arm going into the back, without a step.
+
+### Engine pairs
+
+`artifacts/hero-build/pairs-v5b-*.jpg`, version 4 on the left, in this worktree's engine at 1600 x 900, cropped and not scaled.
+
+| File | View | What it shows |
+|---|---|---|
+| `pairs-v5b-glide-top.jpg` | `--studio 0 --frames 120 --inspect 90 14 85` | The root panel covers the flank beside the hips, as version 4 does. Ringed fingers and claws. |
+| `pairs-v5b-rootTop.jpg` | `--inspect 90 7 85` | The root panel close: one smooth sheet from the arm to the flank. Plain, no veins. |
+| `pairs-v5b-root.jpg` | `--inspect 300 6 10` | The far wing's root: smooth, attached to the flank. The near arm goes into the back. |
+| `pairs-v5b-flap790-rear.jpg` to `-flap812-rear.jpg` | `--studio 1`, frames 790 to 812, from behind | The membrane is whole through the beat. |
+| `pairs-v5b-flap790-side.jpg` to `-flap812-side.jpg` | the same, `--inspect 270 10 0` | The root panel is a smooth wall from the arm to the flank. |
+| `pairs-v5b-dive-side.jpg` | `--studio 5 --frames 200 --inspect 270 10 0` | The folded wings lie along the back. Nothing pokes through the body or the hind leg. |
+| `pairs-v5b-stand-side.jpg`, `-stand-rear.jpg` | `--studio 9 --frames 200 --inspect 270 11 4`, `0 12 6` | Folded on the ground. No tear, nothing through the body. |
+
+### What is still weak
+
+- The root panel has a smoothed colour and no veins or normal detail. Close up it reads as plain skin beside veined panels.
+- The arm meets the back as an intersection, not a blend.
+- The outer panel is 28% compressed across (see version 5).
+- The fade from the smooth root colour to the baked texture leaves a few faint dark smears near the rib (`pairs-v5b-rootTop.jpg`).
+
+## Version 5: wings from the skeleton-guided wing sculpt (2026-11-15, not delivered)
+
+Version 5 replaces both wings of version 4 with wings from `assets/embercrest-cand-hero-wing2-hunyuan.glb`.
+Its plates were drawn along a flat projection of the skeleton's wing bones.
+The body and the head are version 4's. Version 4 stays the delivered mesh: the root panel of the new wing creases (below).
+
+### State
+
+- Build: `HERO_WING=v5 HERO_BODY=$PWD/assets/embercrest-cand-hero-body2-hunyuan.glb blender -b --factory-startup --python tools/build_hero.py`. The default run now runs the `wing5` stage when `HERO_WING=v5`.
+- `assets/embercrest-hero-static.glb`: 25.7 MB, 86 of 86 checks pass (`artifacts/hero-build/verification-v5.txt`). Hide 104,533, membrane 6,320, horn 6,775 triangles: 117,628.
+- `assets/embercrest-hero.glb`: 56 of 56 rig checks pass, with no check changed (`tools/hero-rig.md`, "Mesh version 5").
+- Version 4's files are kept in `build-hero-cache/ref-v4/` (ignored by git).
+- The first build with 9,000 bone triangles a wing failed one check: 121,454 triangles against the budget of 120,000. The wings now have 7,000 a wing.
+
+### The panels against the skeleton
+
+The sculpt's bone points were read off a thickness picture in plan and moved onto each bone's ridge.
+With one scale of 7.205 m per sculpt unit (the skeleton's bone length over the sculpt's), the gap between the bone ends of each panel is:
+
+| Panel | Sculpt | Skeleton | Difference |
+|---|---:|---:|---:|
+| finger 1 to finger 2 | 2.06 m | 1.61 m | +28% |
+| finger 2 to finger 3 | 2.46 m | 2.51 m | -2% |
+| finger 3 to rib | 2.90 m | 2.90 m | 0% |
+
+The outer panel is 28% wider at the trailing edge and its angle at the hub is 22 degrees against 15. The brief's limit was about 15%.
+The build went on, because the sheet is rebuilt from a smooth map and is not the sculpt's billow squeezed. The panel's texture is 22 to 30% shorter across the panel than along it.
+Version 3's outer panel was 3.5 times too wide.
+
+### The `wing5` stage
+
+`--stage wing5` reads `wing5_src_raw.blend` (written by `import`) and nothing from the body. It writes `wing5.blend` and `wing5_plan.npz`. It takes about 35 seconds.
+
+1. The sculpt turns into its own plane (the principal axes of its vertices). Plan is an 800 px picture over it; a raster of 1,200 cells gives the upper and lower surfaces.
+2. `W5_CHAINS` holds each bone line in plan with the skeleton point that each knot lands on. Skeleton points come from `tools/skeletons/embercrest-hero.json`.
+3. One stub was found: a rib 1 m long from the wrist knob between the forearm and finger 3 (`W5_STUB`). It is flattened into the membrane.
+4. The membrane thins to the sheet's 20 mm about its middle. Bones keep their thickness.
+5. `W5Map` carries plan to the build frame. Four panels (root, rib to finger 3, finger 3 to 2, finger 2 to 1) are polygons of their bounding bone lines and trailing edge. Mean value coordinates carry each polygon onto the same bones in 3D. Within a reach of each bone (2.2 times its half width) a point moves rigidly with the bone, and the two maps blend. The panel keeps 60% of the sculpt's billow.
+6. The root panel's inner edge runs from the rib's end to `flank_b`, then along the flank to `flank_a` and the arm's stump, inside body B.
+7. The sheet is a constrained Delaunay triangulation in plan: the outline, the bone lines of fingers 2 and 3 and the rib as constraints, and a triangular grid 16 px apart. It is mapped, then copied 10 mm each way along the vertex normals, and a rim joins the two faces. Edges: median 0.17 m, 95% under 0.29 m.
+8. The bones are the sculpt with every face thinner than 0.008 units removed, reduced to 7,000 triangles a wing. Their open rims sink to the sheet's middle, inside the sheet. Faces past each finger's end and the two thumb claws are `horn`.
+9. The finger 1 claw ended at X 9.68. Points past X 7.6 move in along X so that the tip is at 9.50.
+10. The left wing is the mirror.
+
+In the exported file the membrane is one closed manifold: 3,164 positions, 9,480 edges, each used by two triangles. Each position has exactly one twin, 19.8 mm away.
+The later stages leave the sheet alone: no long-edge split, no joint loops and no merge on membrane faces. The wings are joined, not unioned.
+
+### Colour
+
+The sculpt's membrane is (0.64, 0.09, 0.003) in linear, on both faces. Each part moves by one log gain to version 4's geometric mean, measured on the reference file.
+The membrane's detail gets 1.15 times its contrast.
+
+| Part | Target, linear |
+|---|---|
+| membrane, upper face | 0.529, 0.112, 0.029 |
+| membrane, lower face | 0.492, 0.108, 0.030 |
+| wing bones (`hide`) | 0.138, 0.027, 0.010 |
+| wing claws (`horn`) | 0.107, 0.031, 0.015 |
+
+### What is wrong with version 5
+
+- The root panel creases at rest. Between the body and the rib, 16 sheet edges a face fold past 100 degrees, along a line from (0.61, 0.93, 3.58) to (2.40, -0.80, 3.24) in the build frame. In the engine the panel looks crumpled and torn from above and mid-beat (`pairs-v5-rootTop.jpg`, `pairs-v5-glide-top.jpg`, `pairs-v5-flap805-side.jpg`). This is version 3's failure in one panel.
+- Three changes were tried, and none removed the crease: a narrower rigid zone for the upper arm (42 folds a wing), no forced upward panel normal (42), and the shoulder knot moved to its place by length (44). The cause is the root panel's mean value map. Its target polygon is not convex: the inner edge turns back along the flank under the arm. Mean value coordinates are not one-to-one on such a polygon. The next try is a harmonic map of that panel, or a root panel whose inner edge stays the sculpt's free edge and does not attach to the flank.
+- The other three panels have no fold at rest, and in the engine they stay whole in the glide, the beat, the dive and the stand.
+- The arm meets the back as an intersection, not a union. The bones are open shells over the sheet, so the exact boolean cannot take them.
+- The outer panel is 28% compressed across.
+- The finger 1 claw end moved in by up to 0.18 m. The finger's bone ends 0.15 m inside the claw.
+
+### Engine pairs
+
+Old is version 4 (`build-hero-cache/ref-v4/embercrest-hero.glb` with version 4's sidecars), new is version 5, in this worktree's engine at 1600 x 900. Each pair is cropped and not scaled.
+
+| File | View | What it shows |
+|---|---|---|
+| `pairs-v5-glide-top.jpg` | `--studio 0 --frames 120 --inspect 90 14 85` | New: ringed fingers, veins, claws at each tip. The root panel beside the hips is crumpled. |
+| `pairs-v5-rootTop.jpg` | `--inspect 90 7 85` | The root panel close from above: jagged and bunched, on both sides. |
+| `pairs-v5-glide-side.jpg`, `-glide-rear.jpg` | `--inspect 270 10 0`, `0 12 12` | The spread wing is whole from the side and from behind. |
+| `pairs-v5-flap790-rear.jpg` to `-flap812-rear.jpg` | `--studio 1`, frames 790, 797, 805, 812, from behind | The outer membrane stays whole through the beat. No pale side shows through. |
+| `pairs-v5-flap790-side.jpg` to `-flap812-side.jpg` | the same frames, `--inspect 270 10 0` | The outer membrane is whole. Below the arm the root panel bunches. |
+| `pairs-v5-dive-side.jpg` | `--studio 5 --frames 200 --inspect 270 10 0` | The folded wings lie along the back. No tear. |
+| `pairs-v5-stand-side.jpg`, `-stand-rear.jpg` | `--studio 9 --frames 200 --inspect 270 11 4`, `0 12 6` | The folded wings on the ground. No tear. |
+| `pairs-v5-root.jpg` | `--studio 0 --frames 120 --inspect 300 6 10` | The far wing's root: the crumpled root panel shows pale. |
+
 ## Version 4: the bent-leg body under version 2's wings (2026-11-15)
 
 Version 4 is the delivered mesh. It takes the body from a new sculpt and keeps version 2's wings and head.

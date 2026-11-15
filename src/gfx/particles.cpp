@@ -242,12 +242,18 @@ void ParticleSystem::upload(Device& device, const core::Mat4& view_proj, Vec3 ca
                     right = side * size;
                 }
             }
-            const Vec4 shape{p.seed, t, float(int(p.kind)), 0.0f};
+            // w: a corner's height over the particle's floor, in fade lengths
+            // (a third of the puff's size), which the smoke shader fades by.
+            const float fade_length = core::maxf(size * 0.35f, 0.01f);
+            auto corner = [&](Vec3 position, Vec2 uv) {
+                const float over = core::clampf((position.y - p.floor) / fade_length, -8.0f, 8.0f);
+                return Vertex{position, packed, uv, Vec4{p.seed, t, float(int(p.kind)), over}};
+            };
             const Vertex corners[4] = {
-                {p.position - right - up, packed, Vec2{-1.0f, -1.0f}, shape},
-                {p.position + right - up, packed, Vec2{1.0f, -1.0f}, shape},
-                {p.position + right + up, packed, Vec2{1.0f, 1.0f}, shape},
-                {p.position - right + up, packed, Vec2{-1.0f, 1.0f}, shape},
+                corner(p.position - right - up, Vec2{-1.0f, -1.0f}),
+                corner(p.position + right - up, Vec2{1.0f, -1.0f}),
+                corner(p.position + right + up, Vec2{1.0f, 1.0f}),
+                corner(p.position - right + up, Vec2{-1.0f, 1.0f}),
             };
             vertices_.push_back(corners[0]);
             vertices_.push_back(corners[1]);

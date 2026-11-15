@@ -49,6 +49,11 @@ struct Particle {
     // A streak's length and direction in the world (m): the quad is drawn
     // this long along it, whatever its velocity.
     core::Vec3 stretch = core::Vec3::zero();
+    // Smoke: the height of the surface the puff rises off (the river, the
+    // ground). The puff fades out toward it over a third of its size. A
+    // billboard that crossed the water was cut along a straight line, and a
+    // cloud of spray showed a ruled edge under every puff.
+    float floor = -1.0e9f;
 };
 
 class ParticleSystem {

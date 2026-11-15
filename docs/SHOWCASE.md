@@ -971,7 +971,7 @@ on into valley 2. The Metal goldens were captured again. Not done: the
 surface is still smooth. Cliff bands and rock faces are S6's rock work,
 and the rocks of report 0011 with them.
 
-## Bushes of leaf cards, fuller tufts (2026-11-15, 12:50)
+## Bushes of leaf cards, fuller tufts (2026-11-15, 12:27)
 
 Report 0009. A bush was two faceted lumps, a green boulder on the grass.
 It is now two clumps of leaf cards over a dark core, built by the same
@@ -984,6 +984,287 @@ view and a lower one, before on the left. The frame costs the same within
 
 The lawn is still clumps on a painted ground. Cover dense enough to hide
 it, in short grass, is S7's ground work.
+
+## Where a frame's time goes (2026-11-15, 12:45)
+
+Report 0008 also marked the frame rate: 37 fps beside the river, and 46
+to 68 in the other reports. A paired profile at 1080p, each pass switched
+on and off inside one run of a frozen frame, is recorded in
+`~/src/gpu-hist/research/dragon-m5/runs/20261115-1730-mac-m5-dragon-pass-ablation-showcase/`.
+The Mac was loaded by two workers' builds and renders throughout, so the
+plain medians moved between 11 and 26 ms and only the paired differences
+count.
+
+| Pass | chase in a run | river filling the view | meadow |
+|---|---:|---:|---:|
+| water | 0.1 ms | 4.3 ms | 0.3 ms |
+| trees | 2.3 | within noise | within noise |
+| terrain, near | 0.8 | 1.7 | 1.0 |
+| tree and terrain shadows | 0.5 | 0.9 | 1.0 |
+| mist | 0.6 | within noise | within noise |
+| every listed pass together | 7.8 of 12.0 | | |
+
+- No one pass is the frame except the water when it fills the view, and
+  that is 4.3 ms after the trim against about 16 before it.
+- With every listed pass off, 4 ms remains at 1080p and 2.8 at 540p. On a
+  loaded machine part of that is waiting, not work; it needs a quiet
+  machine to split.
+- The playtest's frame rates were read while two workers rendered in the
+  background. A fair reading needs the workers stopped. With vsync on a
+  99 Hz display, a frame over 10.1 ms waits for the next refresh, so 12 ms
+  of work shows as 49.5 fps.
+
+## Mesh version 5b: wings from the skeleton-guided sculpt (2026-11-15, 13:10)
+
+Version 3's wing sculpt had a finger fan the skeleton did not, and its
+membrane tore. For this one the plates were drawn along the skeleton's
+own wing bones laid flat (`artifacts/showcase-study/hero-wing2-guide.png`,
+`hero-wing2-plates.jpg`), Hunyuan made the sculpt
+(`hero-cand-wing2-hunyuan.jpg`: three fingers, one rib, no stub bones),
+and an Opus worker built the wings from it in two passes (branch
+`hero-wing2`, merged; `tools/hero-build.md`, "Version 5" and "5b").
+
+- The sculpt's panels are within 2% of the skeleton's, except the outer
+  one, 28% wide, whose texture is compressed across.
+- The membrane is one sheet with a second face of the same triangles
+  19.8 mm away, so skinning cannot push one face through the other.
+- The mesh passes its 86 checks and the rig its 56, none changed. The
+  longest folded membrane edge is 1.40 of rest against a limit of 1.6;
+  version 3's was 4.08.
+- The first pass left the panel between the body and the rib creased: its
+  target shape turns back under the arm, and a fit onto that is not
+  one-to-one. The second pass builds that panel by construction, a ruled
+  sheet between the flank and the arm-and-rib line. It has no fold past
+  60 degrees at rest.
+
+`artifacts/hero-build/pairs-v5b-*.jpg` are the worker's pairs, version 4
+on the left; `artifacts/showcase-s2/v5b-wings-in-game.jpg` is the merged
+model in a run, the glide, the flap, standing, landed and the bite.
+
+Worse than version 4, known:
+
+- The root panel has a smoothed colour and no veins. Mid-beat from the
+  side it reads as a plain wall between the arm and the flank.
+- The arm meets the back as an intersection, not a blended join.
+- Folded on the ground, the forearm and the thumb claw stand higher over
+  the back.
+
+Version 4 is kept beside it on this machine as
+`assets/embercrest-hero-v4.glb` with its profiles, for a comparison in
+play (`--models assets/embercrest-hero.glb,assets/embercrest-hero-v4.glb`
+and `M`).
+
+## What other showcases do that this build does not (2026-11-15, 12:55)
+
+The user pointed at three sources: `../crimson-loong` (two serpent dragons
+over a karst lake, a 90-second film in three.js), `../abyssal-garden` (an
+underwater garden, WebGL) and `../awesome-fable-5.2` (an index of 288 works,
+no prompt text). Three read-only agents studied them. Nothing was built or
+run. The costs below are the agents' estimates from reading shader code, not
+measurements.
+
+### Licences
+
+- Crimson Loong (github.com/ChetasLua/crimson-loong) has no licence file.
+  Its code is all rights reserved. Ideas and constants can be reimplemented
+  in our own code. No file, shader text or leaf-drawing routine can be
+  copied.
+- Abyssal Garden is MIT, "Copyright (c) 2026 Maksymilian Dendura". A port of
+  its code needs the notice in `THIRD_PARTY_NOTICES.md`.
+- Unsung Vale (github.com/Leonxlnx/unsung-vale) is MIT. Thousand Peaks
+  (github.com/0xCodez/thousand-peaks) and Ryu (github.com/seeconever/ryu)
+  were read for method only.
+
+### What the engine already has
+
+The check was a grep on 2026-11-15. The engine has the split tone and the
+vignette (`post_composite.hlsl`), cloud shadows in every lit shader
+(`cloud_shadow` in `scene_common.hlsl`), the terrain's shadow at any distance
+(`terrain_sun.hlsl`) and in the air (`atmo_air_shadow`), a foliage wind sway,
+a wind-up and a recoil on procedural strikes, ray-marched water reflections,
+half-resolution ambient occlusion, adaptive resolution, and TAA.
+
+The engine does not have light shafts, a dither or grain after the grade,
+crown-centre normals on leaf cards, a spring answer to gusts, jointed rock,
+detail that keeps its size on screen, a number for how much a frame moves,
+or a critic that sees only renders.
+
+### Method: the part all three agree on
+
+1. A blind visual critic. Abyssal Garden's prompt requires "a separate
+   subagent that sees ONLY the your renders, never your code or reasoning",
+   six fixed camera poses plus a fly-through, and "Iterate until it reports
+   nothing above 'minor'". Thousand Peaks compares each frame with a
+   reference still and writes "the three biggest gaps", for "15+ rounds".
+   This build's rounds were judged by the session that wrote the change,
+   which knows what the change was meant to do. That is the largest gap in
+   method.
+2. One key frame approved before the rest (Thousand Peaks). `docs/concept/`
+   holds targets, but no round ended with a side-by-side against one.
+3. A motion number. Crimson Loong's `motion.py` freezes the camera, renders
+   time T and T+DT, shrinks both eight times and reports the share of pixels
+   that changed, whole frame and a 3 by 3 grid. A photograph scores 0. It
+   turns "stiff" and "dead world" into numbers. `DRAGON_FREEZE_AT` freezes
+   the world, not the camera alone, so this needs a small flag.
+4. A stated noise floor for image differences (its `imgdiff.py`: the same
+   frame captured twice differs by 0 to 0.6 mean, a real change is above 1).
+5. Ryu's two lessons: "Stills lied about the render" and "Showing a draft
+   to a person found what no agent had flagged".
+
+### Techniques, ranked by what the playtester would see against the work
+
+| # | Technique | Source | Answers |
+|---|---|---|---|
+| 1 | Light shafts: a half-resolution march through the shadow map, 12 to 34 jittered steps, phase `0.2 + 2 mu^3`, depth-aware upsample; dust particles lit by the same shadow map so a shaft reads as volume | Abyssal Garden; Crimson Loong marches 14 steps at quarter resolution and also samples its cloud field | the flat frame (S9) |
+| 2 | Leaf-card normals blended toward the direction out of the crown centre (`0.5 card + 0.62 outward + 0.16 up`, card share 0.40 for a broadleaf and 0.12 for a pine), self-shade baked per spray from the spray area above it, a fill that is warm from below and sky from above, cards seen edge-on faded out | Crimson Loong, Unsung Vale, Harappa | toy-like trees (0009), part of the shade complaint (0011) |
+| 3 | Strikes as impulses: draw back over 0.5 s, strike in 0.18 s, a recoil pulse (attack 0.16 s, release 0.38 s), each spine joint delayed by its distance from the head over a whip speed, with a Gaussian reach | Crimson Loong | lazy attacks (S5) |
+| 4 | Rock: jointed blocks (Voronoi columns that lean with height, beds of varying thickness with a gentle dip) run once for displacement and again per pixel, crack lines at least a pixel wide, shade under overhangs, stains below them, a cool fill on the shadow side; boulders as noisy icospheres clipped by four planes, power-law sizes, sunk 30% | Crimson Loong, Abyssal Garden, Thousand Peaks | smooth mountains and unnatural rocks (0011, 0012) |
+| 5 | Detail grain that keeps its size on screen: pick the octave from the pixel footprint, sample one map at two scales, blend and renormalise | Crimson Loong | terrain that is mush far away and wallpaper close |
+| 6 | Plants as damped springs: a gust is a plane front crossing the valley, each plant overshoots, rings and settles (maple 4.3 rad/s damping 0.17, pine 5.2 and 0.20, bush 9 and 0.24, grass 15 and 0.42), leaves show a pale side in the gust, the shadow pass bends too; a dragon's pass is a push in a ring buffer | Crimson Loong | a dead world; the dragon has no effect on it |
+| 7 | Head and neck: gaze target smoothed over five past samples, a neck bend that peaks one neck-length back, head turn capped at 62 degrees, idle drift, blinks every 4.7 s, a 1.8% breath swell | Crimson Loong | stiff motion (S4) |
+| 8 | Water: a shore distance field jump-flooded once per valley, wavelets and a broken foam line along it, the bed seen through shallow water with per-channel absorption, ripples smaller than a pixel faded out of the reflection, foam drawn in travel-time coordinates along the flow | Crimson Loong | artificial water (0008, 0010) |
+| 9 | Grade: a luminance-only S-curve, highlight desaturation, a triangular dither or grain of about 0.009 after the tonemap, weak bloom (6 to 8% mix) | both | banding in the sky, the amateur frame |
+| 10 | Clustered planting with clearings, plants on walls, grass never thinner than a pixel | Abyssal Garden, Crimson Loong | S7 ground cover |
+| 11 | Camera: look-at as a weighted blend of the player and the target, a framing offset of about 14 by 6 degrees off the subject, handheld drift of 0.004 rad, shake as event pulses | Crimson Loong | the chase camera in combat |
+
+Abyssal Garden also uses one fog function in every shader, with extinction
+per channel and a forward-scatter lobe. This engine's atmosphere already does
+that job.
+
+### What does not transfer
+
+- Crimson Loong is a film. Its wake, wetness and gust tables come from
+  walking both dragons' rails through all 90 seconds at load. A game needs
+  ring buffers of recent events.
+- Its body is "the last 172 metres of the head's path". That suits a
+  serpent. For a winged quadruped the idea survives for the neck and tail
+  only.
+- Its one 4096 shadow map covers a 300 by 340 metre set, and its planting
+  follows two fixed lens positions. A valley is kilometres long and the
+  camera is free.
+- Its clouds are four fisheye layers marched once. They hold from one
+  viewpoint. The volumetric clouds here are the better tool.
+- Alpha-to-coverage needs MSAA. This engine resolves with FXAA or TAA, so a
+  coverage fraction must be a dither.
+- Neither source addresses large terrain form. Their rock is parametric
+  pillars and SDF walls. Report 0012 stays a heightfield problem.
+
+### Order
+
+The method comes first because it is cheap and it changes what every later
+round is judged by: the blind critic on six fixed views, then the motion
+number. Then the techniques in the table's order, with rows 2, 4 and 10
+after the rock worker's branch merges, because they touch the same files.
+
+## The blind critic, round 1 (2026-11-15, 13:15)
+
+Eight fixed 1080p views went to an agent that saw the renders and the two
+slice targets and nothing else. The views, their flags and the whole report
+are in `artifacts/showcase-critic/round1/`. Run the same eight views for
+every later round, so rounds compare.
+
+Its verdict: the build is "well short of target-floor", the dragon is "the
+best asset in the game", and the frame reads as four styles (a semi-realistic
+dragon, low-poly plants, "smooth procedural clay terrain", toy rings and
+clouds). Its ten fixes, in its order:
+
+| # | Fix | State |
+|---|---|---|
+| 1 | Rock and cliff surfaces on the valley walls: "one sandy noise texture", no strata, no gullies with scree | the rock worker's branch, then row 4 of the technique table |
+| 2 | The fire frame: a flat orange disc over a third of the picture | not fire: a training target's hit flash, see below |
+| 3 | Square edges on the spray | fixed, see below |
+| 4 | Ground cover: "sparse spiky blades on a bare green plane" | open (S7) |
+| 5 | Trees: low-poly, "lollipop" broadleaves, an even tree line with no clearings | open |
+| 6 | Gate rings: the later gates show as grey rings inside the next one, and a near gate is a filled grey disc | open, a design call |
+| 7 | White streaks across the sky and slopes, also when landed | they are the thermals' wind lines, see below |
+| 8 | Water: no gravel bars, no depth colour, hard grass banks | open (S8, row 8) |
+| 9 | HUD markers overlap and clip at the screen edge; the tutorial line reads as debug text | open (S9) |
+| 10 | Exposure and haze differ from view to view; shade is too dark and cold | open (S9) |
+
+It also said: from behind, the hero's head is "a shaggy spiky mop with no
+readable skull or horns"; the landed wings hang "half-open like a cape"; the
+wing membrane close up is "smooth, glossy and plastic"; the lone clouds are
+"cotton-ball sprites"; the pebbles on the slopes are stickers with no contact
+shadow.
+
+What this session never flagged and the critic saw at once: the spray's
+squares, the target's flat disc, the wind lines read as scratches, the gates
+dominating four of eight frames, and the label pile-up in combat.
+
+### Fixed in this round
+
+- The spray (`artifacts/showcase-critic/spray-edges-before-after.jpg`). Two
+  causes. A strong billow alone carried the smoke's body past the alpha
+  threshold at the quad's edge, so the quad's corners showed; the smoke now
+  closes by r = 1. And a billboard that crossed the river was cut by the
+  depth test along a straight line; a particle now carries `floor`, the
+  height of the surface it rises off, and the smoke fades toward it. The
+  floor is the drawn plane, which stands 0.5 m over the water line on the
+  modern tier. The first try used the water line and changed nothing.
+- Report 0011, read again. The mark is on a tree in the mountain's shadow.
+  The plants there were warm and bright on dark blue ground. Cause: a
+  plant's cards stand upright, so half their ambient is the ground bounce,
+  and the bounce was the sun's full colour whether or not the ground there
+  was in sun. `ambient_light_at` (scene_common.hlsl) cuts nine tenths of
+  the bounce where `ground_sun` says the ground in that column is shaded by
+  the terrain or a cloud. Every lit world shader calls it. In the report's
+  view the mean changed by 0.4% of full scale and the spruces went from
+  olive to blue-green (`artifacts/showcase-critic/shade-bounce-before-after.jpg`).
+  It is a moderate change, not the whole answer.
+- A training target held in the breath flashed at full emissive, which was
+  tuned to be seen at 500 m. Within 40 m the flash is now 0.35 of that. The
+  target is still a plain ball. It needs a prop.
+
+### The valley walls: grass with grey rock, not one tan (13:25)
+
+The critic's first fix, and the playtest's report 0012. Pairs:
+`artifacts/showcase-critic/walls-{1-chase,5-mountains,8-run}-before-after.jpg`.
+
+A render of the shader's masks as colours showed the cause. Scree covered
+nearly the whole wall. The erosion's thermal passes move material wherever a
+slope is over the talus angle, and at `talus` 0.9 (42 degrees) that was every
+wall, so every wall slid to one even slope and the shader painted all of it
+with the scree colour, a pale tan, at 85%. Rock by height added 60% rock
+above 200 m whatever the slope. The result was one tan from the valley floor
+to the snow.
+
+Four changes, the first three on the modern tier only:
+
+- Scree shows where the talus layer is over 0.3 of its scale (was 0.08), and
+  its colour is the rock's with 18% sand (was 35%).
+- Rock by height starts at 0.7 of the snow line and counts for 0.35 (was 0.5
+  and 0.6). `rock_slope` is 0.48, rock from about 50 degrees (was 0.62).
+  The grass takes 35% of the dry colour as it climbs.
+- The rock palette is grey, 0.36 0.35 0.345 and 0.19 0.19 0.195 (was the
+  shared brown-grey 0.26 0.23 0.20 and 0.15 0.13 0.12). Set in `App::init`
+  beside the modern tier's sun, so the retro tiers keep the table's.
+- `talus` is 1.5 (56 degrees) on every tier. Clefts and faces stay steeper
+  than the fans under them. Every valley's shape changes a little.
+
+What it does not do: the walls are still smooth. There is no cliff band, no
+jointing and no ledge anywhere, because a heightfield at 6 m cells over a
+12 m erosion grid cannot hold one. That is the rock kit's job (mesh cliffs on
+the steep bands) and row 4 of the technique table.
+
+### Still open from report 0011
+
+A tree in the mountain's shadow has nothing under it, so it floats. It needs
+shade from the sky, not the sun: a soft blot under each crown. The terrain's
+canopy map has 7 m texels and fades in past 150 m. The route is a top-down
+target around the camera, drawn from the tree instances as soft discs, which
+the terrain and the grass read into their ambient. It touches
+`gfx/foliage.*`, so it waits for the rock branch.
+
+The bark is saturated red-brown in shade (the critic: "the tree trunks at
+the left are saturated red").
+
+### Not changed, because they are design calls
+
+- The white streaks are the thermals' wind lines, made a metre wide on
+  purpose so a pilot can pick a column from 400 m. To a viewer who does not
+  know that, they are scratches on the picture.
+- The course's gates are in every arena frame. The later gates draw grey
+  through the next one.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
