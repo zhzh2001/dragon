@@ -3,7 +3,8 @@ import os
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-CACHE = ROOT / 'build-hero-rig-cache'
+# Keep delegated builds in their configured cache. The old fixed path escaped the task's write scope.
+CACHE = Path(os.environ.get('HERO_RIG_CACHE', ROOT / 'build-hero-rig-cache'))
 CACHE.mkdir(exist_ok=True)
 sys.pycache_prefix = str(CACHE / 'pycache')
 sys.dont_write_bytecode = True
@@ -25,7 +26,8 @@ bpy.context.preferences.filepaths.temporary_directory = str(CACHE)
 SOURCE = ROOT / 'assets/embercrest-hero-static.glb'
 OUTPUT = ROOT / 'assets/embercrest-hero.glb'
 SPEC = ROOT / 'tools/skeletons/embercrest-hero.json'
-ART = ROOT / 'artifacts/hero-rig'
+# A caller can contain reports without overwriting unrelated inspection artifacts.
+ART = Path(os.environ.get('HERO_RIG_ART', ROOT / 'artifacts/hero-rig'))
 SHEET_SPEC = json.loads(SPEC.read_text())
 DTYPES = {5126: '<f4', 5125: '<u4', 5123: '<u2', 5121: 'u1'}
 WIDTHS = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
@@ -493,8 +495,24 @@ class Wing:
                         kd.insert(hp[i], k)
                     kd.balance()
                     wa = np.array([body[flank[kd.find(Vector(x))[1]]] for x in q], float)
+                    # Nearest body vertices differ across the sculpt. Average mirrored samples before fixing the seam.
+                    other=np.flatnonzero((mask<.02)&(hp[:,0]*sign<-.3))
+                    other_tree=KDTree(len(other))
+                    for k,i in enumerate(other):other_tree.insert(hp[i],k)
+                    other_tree.balance()
+                    mirror=np.array([names.index(n[:-2]+('_r' if n.endswith('_l') else '_l')) if n.endswith(('_l','_r')) else i for i,n in enumerate(names)])
+                    opposite=np.array([body[other[other_tree.find(Vector(x*np.array([-1,1,1])))[1]]] for x in q],float)
+                    wa=.5*(wa+opposite[:,mirror])
                     s_ = sv[shell][root][:, None]
                     self.sheet_w[root] = four(s_ * wb + (1 - s_) * wa)
+                    # Fold relaxation moved the flank boundary away from the body. Pin both faces to the body row.
+                    edge_value=np.zeros(n)
+                    if '_SHEET_EDGE' in membrane:
+                        edge_value[inverse[len(hid):]]=membrane['_SHEET_EDGE'][mid]
+                    boundary=edge_value[shell[root]]>.5
+                    fixed = shell[root][boundary]
+                    self.pinned = np.r_[self.pinned, fixed]
+                    self.pin_target = np.vstack([self.pin_target, four(wa[boundary])])
                     print('WING', side, 'root patch:', int(root.sum()), 'vertices from the flank to the arm and rib', flush=True)
             self.solved[shell] = self.sheet_w
             # Twins by surface row: the fold relaxing below moves a pair together.
@@ -849,7 +867,10 @@ def claw_owners(geo, bones, names):
     for comp in components(up, ut):
         c = up[comp].mean(0)
         side = 'r' if c[0] > 0 else 'l'
-        if c[1] > 4.8 and abs(c[0]) < 1.5:
+        # The small thumb must use the wrist. Nearest-bone selection could assign its curved tip to a finger.
+        if 3.0 < abs(c[0]) < 4.2 and c[1] > 5.45 and c[2] < -.55:
+            owner = 'wing_wrist_' + side
+        elif c[1] > 4.8 and abs(c[0]) < 1.5:
             owner = 'head'
         else:
             prefix = 'wing' if c[1] >= .6 else 'toe_fore_' if c[2] < -1 else 'toe_hind_'
@@ -1196,6 +1217,58 @@ def closed_volume(p, tri, rest):
     return abs(float(value)), valid, [len(s) for s in loops]
 
 
+# The old gates did not measure the flank seam or require a wrist owner for the thumb.
+# A nearby scale can face an interior point. Lateral crossings distinguish enclosure from a real seam gap.
+def lateral_seam_gap(tree, point):
+    side=1 if point[0]>0 else -1
+    origin=Vector((side*1.6,float(point[1]),float(point[2])))
+    direction=Vector((-side,0,0));inside=0
+    for _ in range(32):
+        hit=tree.ray_cast(origin,direction,3.2)
+        if hit[0] is None:
+            return 0.0 if inside else float('inf')
+        if hit[0].x*side<=abs(point[0]):
+            return 0.0 if inside else abs(point[0])-hit[0].x*side
+        inside=max(0,inside+(1 if hit[1].x*side>0 else -1))
+        origin=hit[0]+direction*.00001
+    raise RuntimeError('The flank ray crossed too many surfaces. Inspect the attachment.')
+
+
+def verify_wing_repairs(geo, rest, posed, names, check, label):
+    tree=BVHTree.FromPolygons(posed['hide'].tolist(),geo['hide']['tri'].tolist(),all_triangles=True)
+    m=geo['membrane']; sel=m['_SHEET_EDGE']>.5
+    edges=np.unique(np.sort(np.concatenate([m['tri'][:,[0,1]],m['tri'][:,[1,2]],m['tri'][:,[2,0]]]),axis=1),axis=0)
+    edges=edges[np.all(sel[edges],axis=1)]
+    p=posed['membrane']
+    samples=np.concatenate([p[sel]]+[p[edges[:,0]]*(1-t)+p[edges[:,1]]*t for t in np.linspace(.1,.9,9)])
+    gap=max(lateral_seam_gap(tree,q) for q in samples)
+    check(gap<.001,'root seam '+label,f'maximum lateral gap {gap*1000:.3f} mm across {len(samples)} samples')
+    horn=geo['horn'];up,ut,ui=unique_mesh(horn)
+    weights=dense_weights(horn,len(names))
+    for side,sign in [('l',-1),('r',1)]:
+        comps=[c for c in components(up,ut) if len(c)>10 and 3<up[c,0].mean()*sign<4.5 and up[c,1].mean()>5.2]
+        check(len(comps)==1,'wrist_'+side+' count '+label,f'{len(comps)} connected claws')
+        if len(comps)!=1:continue
+        ids=np.flatnonzero(np.isin(ui,comps[0]));q=rest['horn'][ids]
+        owner=names.index('wing_wrist_'+side)
+        check(np.all(weights[ids,owner]==1),'wrist_'+side+' owner '+label,'all thumb vertices follow wing_wrist_'+side)
+        a,b=int(q[:,0].argmin()),int(q[:,0].argmax());base=(q[a]+q[b])/2
+        tip=int(np.linalg.norm(q-base,axis=1).argmax());length=float(np.linalg.norm(q[tip]-base))
+        pq=posed['horn'][ids];pbase=(pq[a]+pq[b])/2;plength=float(np.linalg.norm(pq[tip]-pbase))
+        check(abs(plength-length)<1e-5,'wrist_'+side+' rigid length '+label,f'{length:.4f} m rest, {plength:.4f} m posed')
+        ring=np.abs(np.linalg.norm(q-base,axis=1)-np.ptp(q[:,0])/2)<1e-5
+        # Measure cover along the posed wrist's forward direction, rather than a sign on an open shell.
+        rotation=np.linalg.lstsq(q-q.mean(0),pq-pq.mean(0),rcond=None)[0]
+        forward=np.array([0,0,-1.])@rotation
+        forward/=np.linalg.norm(forward)
+        gaps=[]
+        for x in pq[ring]:
+            hit=tree.ray_cast(Vector(x+.3*forward),Vector(-forward),.6)
+            gaps.append(max(0,float((Vector(x)-hit[0]).dot(Vector(forward)))) if hit[0] is not None else float('inf'))
+        gap=max(gaps)
+        check(gap<.001,'wrist_'+side+' seated '+label,f'maximum base gap {gap*1000:.3f} mm')
+
+
 def verify(doc, binary, geo, rig, objects, imported_armatures):
     checks = []
     def check(ok, name, detail):
@@ -1404,6 +1477,8 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
     rest = evaluated(objects)
     err = max(float(np.linalg.norm(rest[n] - a['POSITION'], axis=1).max()) for n, a in geo.items())
     check(err < 1e-5, 'Blender bind pose', f'max vertex displacement {err:.9g} m')
+    if '_SHEET_EDGE' in geo['membrane']:
+        verify_wing_repairs(geo,rest,rest,names,check,'bind')
     set_pose(rig, 'jaw', eyes)
     posed = evaluated(objects)
     hp = geo['hide']['POSITION']
@@ -1458,6 +1533,8 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
         check(error < 1e-5 and movement > .03, 'eye_' + side + ' independence', f'25 degrees; max lid motion {error:.9g} m; eye motion {movement:.6f} m')
     set_pose(rig, 'wingfold', eyes)
     posed = evaluated(objects)
+    if '_SHEET_EDGE' in geo['membrane']:
+        verify_wing_repairs(geo,rest,posed,names,check,'fold')
     def keys(points):
         return [tuple(k) for k in np.round(points / 1e-4).astype(np.int64).tolist()]
     hide_keys = keys(rest['hide'])

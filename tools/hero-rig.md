@@ -9,6 +9,50 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 5c (2026-11-15)
+
+The mesh now has one curved thumb claw per wrist. All three finger claws remain and measure less than 0.35 m.
+`tools/hero-build.md`, "Version 5c", records the source measurements, geometry changes, and membrane material repair.
+
+The thumb follows `wing_wrist_l` or `wing_wrist_r` at weight 1.
+Nearest-bone selection could assign the curved tip to a finger, so the thumb has an explicit wrist rule.
+The existing 60 mm hide grip keeps its base attached during the fold.
+No bone name changes.
+
+The root attachment initially copied weights from the nearest body vertex.
+Fold relaxation could move those rows away from the flank.
+The builder now pins both membrane faces along the actual flank boundary.
+The new `_SHEET_EDGE` attribute excludes default-zero `_SHEET_S` values at unrelated bone borders.
+
+The sculpt's left and right nearest body vertices differ.
+Averaging mirrored body samples before pinning preserves symmetric weights without loosening either original mirror check.
+The rest of the fold relaxation keeps its existing limits and twin constraints.
+
+All original 56 rig checks remain unchanged.
+New checks require one wrist claw, its explicit wrist owner, preserved length, and a seated base in bind and fold.
+They measure wrist cover along the posed forward direction, because an open bone shell has no signed inside.
+They also measure the root's lateral seam gap against the posed hide.
+Signed nearest-face distance was unsuitable inside overlapping scale shells; lateral ray crossings test actual enclosure.
+
+`HERO_RIG_CACHE` and `HERO_RIG_ART` can direct temporary files and reports to the task's allowed paths.
+The default paths remain unchanged.
+
+The final rig passes 74 of 74 checks, including all original 56 checks.
+All 77 bone names remain unchanged. No original claw check changes its name or threshold.
+The new wrist checks supplement `horn component ownership`.
+Both thumbs follow their wrist bone at weight 1 and retain their 0.4152 m base-to-tip length during the fold.
+
+The root and both thumb bases have maximum gaps of 0.000 mm in bind and fold.
+The root check samples 2,688 exported attachment positions.
+The longest folded membrane edge measures 1.3978 times rest on both wings, below the original 1.6 limit.
+Neither wing adds a membrane intersection during the fold.
+Both membrane mirror checks have maximum weight error 0.000001.
+
+`artifacts/hero-rig/verification.txt` contains the final report.
+All seven final engine pairs were opened and reviewed at their original crop size.
+The claw remains seated in glide, and the root seam remains closed in glide and flap.
+Standing retains the folded wings and grounded feet. `artifacts/hero-claws/review.md` records the visual review.
+
 ## Mesh version 5b (2026-11-15)
 
 The root panel is now a ruled patch from the flank (s = 0) to the arm and rib (s = 1) (`tools/hero-build.md`, "Version 5b"). The mesh's membrane carries `_SHEET_S`. 56 of 56 checks pass, none changed.

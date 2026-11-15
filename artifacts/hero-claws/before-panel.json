@@ -1,0 +1,17 @@
+{
+  "seam_samples": 2652,
+  "root_normal_xy_rms": 0.0039633517153561115,
+  "neighbor_normal_xy_rms": 0.11448389291763306,
+  "material_alpha_mode": "OPAQUE",
+  "twins": 4000,
+  "positions": 4000,
+  "sheet_thickness_mm": 19.99995994567871,
+  "nearest_face_signed_gap_mm": 71.145452093333,
+  "seam_max_lateral_gap_mm": 222.2447276115418,
+  "seam_lateral_samples": 2652,
+  "seam_lateral_worst_gltf": [
+    -0.5425176501274109,
+    3.425088596343994,
+    0.5189194083213806
+  ]
+}
