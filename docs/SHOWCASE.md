@@ -1312,6 +1312,32 @@ only. Pair: `artifacts/showcase-critic/sward-before-after.jpg`.
 - Open: the sward stops at a visible edge at its radius, and the tufts above
   it are still the large pale clumps.
 
+### Crowns lit as masses, and no more lollipops (13:49)
+
+The critic on the trees: "low-poly", "a lollipop or palm shape on a bare
+pole". Three changes in `gfx/foliage.cpp`, one in `foliage.hlsl`
+(`artifacts/showcase-critic/crowns-before-after.jpg`):
+
+- A crown's card is lit by `crown_normal`: half its own face, half the
+  direction out of its crown, a little up. The shader no longer turns a
+  crown card's normal toward the viewer. Before, each card took the sun at
+  its own angle, and a crown was a pile of bright and dark cards. Now a
+  crown has a lit side, a shaded side and a dark underside.
+- A card's brightness falls toward the underside and the middle of its
+  crown (0.8 to 1.12 by height, 0.9 to 1.02 by depth). The first try ran
+  0.68 to 1.0 with the normal at 0.62 outward, and the whole forest went a
+  murky olive.
+- The broadleaf's crown is four lobes, one at the end of each limb (45
+  cards, was 34 on one ellipsoid). The pine's is three flat boughs at
+  different heights (28 cards, was 22 on one disc).
+
+The trees' paired cost in the run view did not move: +2.19 and +2.14 ms
+(`DRAGON_ABLATE_ALTERNATE=trees`, two runs, logs not kept), against 2.3 ms
+before.
+
+The forest is darker than it was on its shaded side. That is the point of
+the change, and it is also the first thing a playtester may dislike.
+
 ### Tried and dropped: more haze
 
 `--atmosphere aerial=7.5,haze=0.8` against the defaults (5 and 1.2), for the

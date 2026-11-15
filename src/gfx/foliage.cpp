@@ -190,8 +190,10 @@ void bar(MeshData& out, Vec3 a, Vec3 b, float radius_a, float radius_b, Vec3 col
 // triangles, four vertices, UV 0..1; the alpha in the card's texture cuts the
 // leaves out of it. `material` names the texture (FOLIAGE_MAT_LEAF or
 // FOLIAGE_MAT_NEEDLE), plus FOLIAGE_DETAIL for a card the distance LOD drops.
+// `shading` is the normal the card is lit by, when it is not its face's: a
+// crown's cards are lit as parts of one rounded mass (crown_normal).
 void card(MeshData& out, Vec3 centre, Vec3 normal, float roll, float width, float height,
-          Vec3 color, int material) {
+          Vec3 color, int material, Vec3 shading = Vec3::zero()) {
     const Vec3 n = core::normalize_or(normal, Vec3::up());
     Vec3 right = core::normalize_or(core::cross(n, std::fabs(n.y) > 0.9f ? Vec3::right() : Vec3::up()),
                                     Vec3::right());
@@ -210,7 +212,7 @@ void card(MeshData& out, Vec3 centre, Vec3 normal, float roll, float width, floa
     for (int i = 0; i < 4; ++i) {
         MeshVertex v;
         v.position = corners[i];
-        v.normal = n;
+        v.normal = core::normalize_or(shading, n);
         v.color = colour;
         v.uv = uvs[i];
         out.vertices.push_back(v);
@@ -221,6 +223,16 @@ void card(MeshData& out, Vec3 centre, Vec3 normal, float roll, float width, floa
     out.indices.push_back(first);
     out.indices.push_back(first + 2);
     out.indices.push_back(first + 3);
+}
+
+// The normal a crown's card is lit by: mostly the direction out of the crown,
+// part its own face, a little up. Lit by its face alone, each card took the
+// sun at its own angle and a crown was a pile of bright and dark cards, flat
+// from every side; lit as one mass, it has a sunlit side, a shaded side and
+// a dark underside, and reads as a volume (SHOWCASE.md, "What other
+// showcases do", row 2: the idea is common to several of them).
+Vec3 crown_normal(Vec3 face, Vec3 outward) {
+    return core::normalize_or(face * 0.5f + outward * 0.5f + Vec3{0.0f, 0.2f, 0.0f}, outward);
 }
 
 // A crown of cards scattered over an ellipsoid shell around `centre`. The
@@ -249,8 +261,14 @@ void card_crown(MeshData& out, Vec3 centre, Vec3 radii, int count, int coarse, f
         // in is the compiler's choice, and GCC and clang choose differently.
         const float spin = unit() * core::PI;
         const float shade = 0.85f + 0.3f * std::fabs(unit());
-        card(out, p, n, spin, card_size, card_size * 0.85f, palette_dim(color, shade),
-             material + (is_coarse ? 0 : FOLIAGE_DETAIL));
+        // The crown shades itself: darker underneath and toward its middle,
+        // where the cards above and outside a card keep the sky off it.
+        // About 1 on average, so a crown keeps its brightness: at 0.68 to 1
+        // the whole forest went a murky olive.
+        const float self_shade = core::lerpf(0.8f, 1.12f, core::saturate(d.y * 0.6f + 0.5f)) *
+                                 core::lerpf(0.9f, 1.02f, (shell - 0.75f) * 4.0f);
+        card(out, p, n, spin, card_size, card_size * 0.85f, palette_dim(color, shade * self_shade),
+             material + (is_coarse ? 0 : FOLIAGE_DETAIL), crown_normal(n, d));
     }
 }
 
@@ -363,8 +381,10 @@ MeshData make_tree_mesh(TreeKind kind) {
                     const Vec3 n = core::normalize_or(out_dir + Vec3{0.0f, -0.55f, 0.0f}, out_dir);
                     const float spin = unit() * 0.4f;  // one draw per statement (card_crown)
                     const float shade = 0.85f + 0.3f * std::fabs(unit());
+                    // The skirt is lit as part of the cone: out and a little up.
                     card(mesh, p, n, spin, radius * 1.5f, radius * 1.1f, palette_dim(needles, shade),
-                         FOLIAGE_MAT_NEEDLE + FOLIAGE_DETAIL);
+                         FOLIAGE_MAT_NEEDLE + FOLIAGE_DETAIL,
+                         crown_normal(n, core::normalize(out_dir + Vec3{0.0f, 0.35f, 0.0f})));
                 }
             }
             break;
@@ -376,8 +396,14 @@ MeshData make_tree_mesh(TreeKind kind) {
                  ring(mesh, sides, Vec3{0.0f, 7.0f, 0.0f}, 0.28f, bark), sides);
             bar(mesh, Vec3{0.0f, 6.2f, 0.0f}, Vec3{2.6f, 7.6f, 0.8f}, 0.2f, 0.08f, bark);
             bar(mesh, Vec3{0.0f, 6.6f, 0.0f}, Vec3{-2.2f, 8.0f, -1.4f}, 0.2f, 0.08f, bark);
-            card_crown(mesh, Vec3{0.0f, 8.3f, 0.0f}, Vec3{3.7f, 1.5f, 3.5f}, 22, 5, 3.0f, needles,
+            // Three flat boughs at different heights, not one disc: on one
+            // disc it was a lollipop (the blind critic, 2026-11-15).
+            card_crown(mesh, Vec3{0.0f, 8.7f, 0.0f}, Vec3{3.0f, 1.1f, 2.9f}, 12, 3, 2.8f, needles,
                        FOLIAGE_MAT_NEEDLE, 23u);
+            card_crown(mesh, Vec3{2.1f, 7.4f, 0.7f}, Vec3{2.2f, 0.9f, 2.0f}, 8, 2, 2.4f, needles,
+                       FOLIAGE_MAT_NEEDLE, 29u);
+            card_crown(mesh, Vec3{-1.8f, 7.8f, -1.3f}, Vec3{2.1f, 0.9f, 1.9f}, 8, 2, 2.4f, needles,
+                       FOLIAGE_MAT_NEEDLE, 31u);
             break;
         }
         case TreeKind::Broadleaf: {
@@ -389,8 +415,16 @@ MeshData make_tree_mesh(TreeKind kind) {
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{1.9f, 6.0f, 0.6f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 3.8f, 0.0f}, Vec3{-1.5f, 5.9f, -1.2f}, 0.28f, 0.14f, bark);
             bar(mesh, Vec3{0.0f, 4.6f, 0.0f}, Vec3{0.4f, 7.4f, 1.4f}, 0.22f, 0.10f, bark);
-            card_crown(mesh, Vec3{0.0f, 7.0f, 0.0f}, Vec3{3.2f, 2.3f, 3.0f}, 34, 7, 3.0f, leaves,
+            // A crown in four lobes, one at the end of each limb: one
+            // ellipsoid on a pole was a lollipop (the blind critic).
+            card_crown(mesh, Vec3{0.0f, 7.2f, 0.0f}, Vec3{2.6f, 2.0f, 2.5f}, 18, 4, 2.8f, leaves,
                        FOLIAGE_MAT_LEAF, 41u);
+            card_crown(mesh, Vec3{2.2f, 6.2f, 0.7f}, Vec3{1.9f, 1.4f, 1.8f}, 10, 2, 2.3f, leaves,
+                       FOLIAGE_MAT_LEAF, 43u);
+            card_crown(mesh, Vec3{-1.8f, 6.1f, -1.4f}, Vec3{1.8f, 1.4f, 1.7f}, 10, 2, 2.3f, leaves,
+                       FOLIAGE_MAT_LEAF, 47u);
+            card_crown(mesh, Vec3{0.5f, 8.4f, 1.5f}, Vec3{1.6f, 1.2f, 1.5f}, 7, 1, 2.1f, palette_dim(leaves, 1.08f),
+                       FOLIAGE_MAT_LEAF, 53u);
             break;
         }
         case TreeKind::Dead:

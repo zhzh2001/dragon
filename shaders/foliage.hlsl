@@ -350,7 +350,11 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     float3 normal = geometric_normal;
     float3 to_camera = normalize(scene.camera_position.xyz - input.world_position);
-    if (dot(normal, to_camera) < 0.0) normal = -normal;
+    // A crown's cards carry the crown's normal, not their face's (gfx
+    // foliage.cpp, crown_normal): the far side of a crown stays the far side.
+    // Everything else is two-sided and lit on the face toward the viewer.
+    const bool crown_card = material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE;
+    if (!crown_card && dot(normal, to_camera) < 0.0) normal = -normal;
 
     // The shared lighting path, plus the one thing a crown has that rock does
     // not: sun leaking through it from behind.
