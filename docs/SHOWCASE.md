@@ -1215,6 +1215,37 @@ dominating four of eight frames, and the label pile-up in combat.
   tuned to be seen at 500 m. Within 40 m the flash is now 0.35 of that. The
   target is still a plain ball. It needs a prop.
 
+### The valley walls: grass with grey rock, not one tan (13:25)
+
+The critic's first fix, and the playtest's report 0012. Pairs:
+`artifacts/showcase-critic/walls-{1-chase,5-mountains,8-run}-before-after.jpg`.
+
+A render of the shader's masks as colours showed the cause. Scree covered
+nearly the whole wall. The erosion's thermal passes move material wherever a
+slope is over the talus angle, and at `talus` 0.9 (42 degrees) that was every
+wall, so every wall slid to one even slope and the shader painted all of it
+with the scree colour, a pale tan, at 85%. Rock by height added 60% rock
+above 200 m whatever the slope. The result was one tan from the valley floor
+to the snow.
+
+Four changes, the first three on the modern tier only:
+
+- Scree shows where the talus layer is over 0.3 of its scale (was 0.08), and
+  its colour is the rock's with 18% sand (was 35%).
+- Rock by height starts at 0.7 of the snow line and counts for 0.35 (was 0.5
+  and 0.6). `rock_slope` is 0.48, rock from about 50 degrees (was 0.62).
+  The grass takes 35% of the dry colour as it climbs.
+- The rock palette is grey, 0.36 0.35 0.345 and 0.19 0.19 0.195 (was the
+  shared brown-grey 0.26 0.23 0.20 and 0.15 0.13 0.12). Set in `App::init`
+  beside the modern tier's sun, so the retro tiers keep the table's.
+- `talus` is 1.5 (56 degrees) on every tier. Clefts and faces stay steeper
+  than the fans under them. Every valley's shape changes a little.
+
+What it does not do: the walls are still smooth. There is no cliff band, no
+jointing and no ledge anywhere, because a heightfield at 6 m cells over a
+12 m erosion grid cannot hold one. That is the rock kit's job (mesh cliffs on
+the steep bands) and row 4 of the technique table.
+
 ### Still open from report 0011
 
 A tree in the mountain's shadow has nothing under it, so it floats. It needs

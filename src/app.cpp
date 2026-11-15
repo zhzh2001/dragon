@@ -571,6 +571,13 @@ bool App::init(const Options& options) {
     if (atmosphere_.available()) {
         lighting_.sun_elevation_deg = 19.0f;
         post_settings_.exposure = 1.18f;
+        // And its rock is grey. The shared brown-grey, under a warm low sun
+        // and beside dry grass, read as earth: the blind critic saw "sand"
+        // on every wall (SHOWCASE.md, "The blind critic, round 1"). The
+        // slice target's faces are pale grey granite. The retro tiers keep
+        // the table's, which their pre-lit ground was tuned on.
+        lighting_.palette[gfx::PaletteEntry::Rock] = core::Vec4{0.36f, 0.35f, 0.345f, 0.0f};
+        lighting_.palette[gfx::PaletteEntry::RockDark] = core::Vec4{0.19f, 0.19f, 0.195f, 0.0f};
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (!options.grade.empty()) {
@@ -1680,7 +1687,9 @@ void App::regenerate_terrain() {
     // built, since the fixed-function tier bakes it into their colours.
     // Snow should sit sensibly relative to whatever the peaks came out at.
     material_.water_level = terrain_settings_.water_level;
-    material_.rock_slope = 0.62f;
+    // The modern tier's walls are grass with rock breaking through
+    // (terrain.hlsl, terrain_albedo): rock from about 50 degrees, not 40.
+    material_.rock_slope = tier_.tier == gfx::Tier::Modern ? 0.48f : 0.62f;
     // The terrain shader dissolves the ground into the sky over the outermost
     // band of this extent. It is the SKIRT's edge, not the playable one: the
     // fade predates the skirt, and left at the playable extent it began 500 m

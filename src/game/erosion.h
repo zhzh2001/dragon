@@ -42,8 +42,12 @@ struct ErosionSettings {
     int route_every = 4;
     // Thermal passes after each fluvial one, the talus slope (rise over
     // run) past which material slides, and how much of the excess moves.
+    // 1.5 (56 degrees) since 2026-11-15. At 0.9 (42 degrees) every wall
+    // slid down to one even slope, "smooth tan cones" to a viewer, and the
+    // whole of it counted as scree. Faces and clefts now stay steeper than
+    // the fans under them.
     int thermal_iterations = 3;
-    float talus = 0.9f;
+    float talus = 1.5f;
     float thermal_rate = 0.25f;
     // Metres of fixed, per-cell noise the routing sees (and the heights do
     // not): on an even slope eight-direction routing runs every rill

@@ -204,6 +204,11 @@ TerrainDetail sample_detail(float3 p, float3 normal) {
 
 float modulate(float d, float strength) { return 1.0 + (d - 0.5) * 2.0 * strength; }
 
+// The talus depth (the erosion's scree layer, normalised) from which scree
+// shows, on the modern tier.
+#define SCREE_FROM 0.3
+#define SCREE_TO 0.85
+
 float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail, float strength, float2 erosion) {
     // Colours come from the shared palette, so the ground is graded together
     // with the plants standing on it.
@@ -252,7 +257,20 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
     // Rock takes over on anything steep, and earlier at altitude where there is
     // less soil to hold on.
     float slope_blend = 1.0 - smoothstep(rock_slope, rock_slope + 0.22, flatness);
+#ifdef ATMOSPHERE
+    // The modern tier's walls are grass with rock breaking through it, as
+    // the slice target's are (SHOWCASE.md, "The blind critic, round 1").
+    // With rock on everything over 200 m and scree wherever a grain of
+    // sediment lay, a wall was one tan from the floor to the snow: "a sand
+    // dune", the critic said. Rock by height starts later and counts for
+    // less, and the grass dries as it climbs.
+    float altitude_rockiness = smoothstep(snow_line * 0.7, snow_line * 1.2, height) * 0.35;
+    float alpine = smoothstep(water_level + 80.0, snow_line, height);
+    albedo = lerp(albedo, lerp(albedo, GRASS_DRY * modulate(detail.ground.g, strength), 0.35),
+                  alpine * smoothstep(water_level + 0.3, bar_top, height));
+#else
     float altitude_rockiness = smoothstep(snow_line * 0.5, snow_line, height) * 0.6;
+#endif
     // Where the water ran, the soil went with it: gullies are bare rock a
     // little further down the slope than their banks.
     float gully = smoothstep(0.45, 0.85, erosion.x);
@@ -260,8 +278,15 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
 
     // Where the sediment settled: scree and gravel fans, paler and greyer
     // than the face above them, the grain of the dirt channel on them.
+#ifdef ATMOSPHERE
+    // Only where the talus lies thick: the fans under a face, not the whole
+    // slope the thermal passes touched. And grey, as the rock it fell from.
+    float scree = smoothstep(SCREE_FROM, SCREE_TO, erosion.y) * (1.0 - smoothstep(0.9, 0.98, flatness) * 0.5);
+    float3 scree_colour = lerp(ROCK, SAND, 0.18) * 1.15 * modulate(detail.ground.b, strength);
+#else
     float scree = smoothstep(0.08, 0.5, erosion.y) * (1.0 - smoothstep(0.9, 0.98, flatness) * 0.5);
     float3 scree_colour = lerp(ROCK, SAND, 0.35) * 1.08 * modulate(detail.ground.b, strength);
+#endif
     albedo = lerp(albedo, scree_colour, scree * 0.85);
     // The stream beds stay darker and damper than what drained into them.
     albedo *= 1.0 - 0.22 * smoothstep(0.6, 0.95, erosion.x);
@@ -403,7 +428,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     // settled, each at 7 m and 26 m mixed so neither scale's repeat shows,
     // the fine one gone by 700 m and the broad by 2.5 km.
     float scan_rock = rocky * (1.0 - smoothstep(700.0, 2500.0, camera_distance));
-    float scan_scree = smoothstep(0.08, 0.45, input.erosion.y) * (1.0 - rocky) * (1.0 - smoothstep(400.0, 1500.0, camera_distance));
+    float scan_scree = smoothstep(SCREE_FROM, SCREE_TO, input.erosion.y) * (1.0 - rocky) * (1.0 - smoothstep(400.0, 1500.0, camera_distance));
     float scan_detail = 0.5;
 #ifdef TERRAIN_LITE
     // The rock keeps its broad scan (one triplanar, not three), or a slope
