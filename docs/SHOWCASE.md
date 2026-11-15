@@ -1853,7 +1853,7 @@ tuft, 1.47 and 2.00 ms with the broad one, paired. No cost shows
 Not done: the bushes are still faceted, and nothing grows in drifts or
 flowers.
 
-### After round 3, tried and dropped: a softer flame (16:40)
+### After round 3, tried and dropped: a softer flame (16:38)
 
 The critic on the breath: "flat cel-shaded orange and cream blobs with hard
 edges". Two changes to `particles.hlsl` were rendered and neither is kept.
@@ -1948,6 +1948,31 @@ Not done in S3: the membrane's thickness and veins wait for mesh version
 - Whether mesh cliffs need collision. `Terrain::height_at` reads the
   heightfield, and a cliff piece that the dragon can fly through is worse
   than no cliff.
+
+After the blind critic's round 3 (2026-11-15), in its order, what is not
+yet done:
+
+- Trees: card crowns in one style, the largest remaining break between the
+  dragon and the world. New crown art is an asset job, not a tuning one.
+- Cliff faces up close: strata and seams are colour; there are no crags,
+  no scree fans under a band, and the rock kit's pieces still read as
+  stickers.
+- The flame: two flat tones with an outline (see "tried and dropped").
+- The dragon dark from the chase camera, back to the sun.
+- Water: no visible reflection of the banks, no froth on a riffle; the
+  gravel has no stones up close.
+- Bushes: faceted.
+- The valley's end seen as the end of the map from 150 m up.
+
+For the playtester, since the terrain and the river changed under the
+game: fly a run (`--run 7`), skim the river, land on a gravel bar and on a
+bench half way up a wall, and fight in the arena beside a cliff. Look for
+a bot or the demo pilot grounding on a cliff band, a cache or a tower
+placed badly on a bench, and the river's second thread reading as ponds.
+And three calls that are the user's: the course rings' size and look (a
+ring cuts frames 3 and 5), how bright the wind lines are, and the wing
+poses the critic names (the far wing's root in the glide, the fold on the
+ground, the near wing over the jaw while breathing).
 
 ## Sources
 
