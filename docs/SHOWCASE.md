@@ -844,7 +844,7 @@ Worse than version 2, or open:
 - Dive, brake, turns and the head close-up were not looked at on this
   mesh. The Blender pose sheets in `artifacts/hero-rig/` are older.
 
-## The legs in flight, joint by joint (2026-11-15, 10:50)
+## The legs in flight, joint by joint (2026-11-15, 10:34)
 
 Feedback report 0005 (`artifacts/showcase-feedback/0005-marked.jpg`) said
 of version 4's fold: "don't like the new folding, refer online/other games
