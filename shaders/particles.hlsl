@@ -138,8 +138,12 @@ float4 fs_main(VertexOut input) : SV_Target {
         // squares in every cloud of spray (the blind critic, 2026-11-15).
         // And faded into the surface it rises off (shape.w: the height over
         // it, in fade lengths), where the depth test cut it along a line.
-        float alpha = smoothstep(0.1, 0.6, body) * (1.0 - smoothstep(0.72, 1.0, r)) * saturate(input.shape.w) *
-                      input.color.a;
+        float edged = smoothstep(0.1, 0.6, body) * (1.0 - smoothstep(0.72, 1.0, r));
+        // Mist (gfx::Particle::soft, in the kind's fraction): a falloff from
+        // the middle with the billow as its density, and no edge.
+        float core = saturate(1.0 - r);
+        float mist = core * core * (0.45 + 1.1 * billow);
+        float alpha = lerp(edged, mist, saturate((input.shape.z - 2.0) * 2.5)) * saturate(input.shape.w) * input.color.a;
         float3 smoke = input.color.rgb * (0.8 + 0.4 * billow);
         return float4(smoke, alpha);
     }

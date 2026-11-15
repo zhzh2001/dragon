@@ -54,6 +54,10 @@ struct Particle {
     // billboard that crossed the water was cut along a straight line, and a
     // cloud of spray showed a ruled edge under every puff.
     float floor = -1.0e9f;
+    // Smoke: 0 is a billow with an edge, as a breath's smoke is; 1 is mist,
+    // dense in the middle and gone by the rim with no edge at all, as spray
+    // off water is. With an edge, spray was a scatter of grey balls.
+    float soft = 0.0f;
 };
 
 class ParticleSystem {

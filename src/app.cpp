@@ -7669,6 +7669,7 @@ void App::on_touchdown(float sink) {
         p.brightness = 0.2f + 0.25f * hard;
         // The ground slopes; the river does not. Its drawn plane, as the spray's.
         if (water) p.floor = surface + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
+        if (water) p.soft = 1.0f;  // mist, as update_spray's; dust keeps its edge
         particles_.spawn(p);
     }
 }
@@ -7769,7 +7770,10 @@ void App::update_spray(float dt) {
         // The wake: thrown out to the sides from just behind the body; the
         // wingbeat's: all round it.
         const float spread = (2.0f + 5.0f * out) * growth_scale_;
-        const float size = (0.7f + 0.5f * amount) * growth_scale_;
+        // A veil, not a bank of cloud: as billows with an edge the puffs
+        // stacked into "opaque cotton wool" that hid the dragon's tail (the
+        // blind critic, round 2). Mist (soft), a little smaller.
+        const float size = (0.55f + 0.4f * amount) * growth_scale_;
         p.position = core::Vec3{s.position.x, water + size * 0.6f, s.position.z} + across * (side * spread) -
                      along * ((1.0f + 4.0f * back) * growth_scale_ * wake);
         p.velocity = across * (side * (3.0f + 5.0f * out)) + core::Vec3{0.0f, 4.0f + 7.0f * lift * amount, 0.0f} +
@@ -7781,7 +7785,8 @@ void App::update_spray(float dt) {
         p.size_end = size * 2.2f;
         p.color_start = spray_colour_;
         p.color_end = spray_colour_ * 1.1f;
-        p.brightness = 0.25f + 0.2f * amount;
+        p.brightness = 0.3f + 0.2f * amount;
+        p.soft = 1.0f;
         // The plane the river is drawn on, which on the modern tier stands
         // half a metre over the line (build_water_mesh).
         p.floor = water + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
@@ -7799,6 +7804,15 @@ void App::update_spray(float dt) {
         drop.color_end = core::Vec3{0.6f, 0.7f, 0.8f};
         drop.brightness = 0.8f;
         particles_.spawn(drop);
+        // And a second, lower and wider: the spray is mostly drops.
+        const float fling = particle_unit();
+        gfx::Particle low = drop;
+        low.velocity = p.velocity * (0.9f + 0.6f * fling) + across * (side * 2.5f) + core::Vec3{0.0f, 1.5f, 0.0f};
+        low.life = 0.5f + 0.3f * fling;
+        low.size_start = 0.14f * growth_scale_;
+        low.size_end = 0.08f * growth_scale_;
+        low.brightness = 0.6f;
+        particles_.spawn(low);
     }
 }
 

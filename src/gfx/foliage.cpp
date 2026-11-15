@@ -124,7 +124,7 @@ void cone(MeshData& out, int sides, float base_y, float radius, float apex_y, Ve
 // A lumpy sphere of stacked rings: a crown, a bush. The lumps come from a
 // per-ring phase and a per-vertex radius wobble, because a perfect sphere on
 // a stick is a lollipop.
-void blob(MeshData& out, Vec3 centre, Vec3 radii, Vec3 color, int sides = 7, int layers = 4) {
+[[maybe_unused]] void blob(MeshData& out, Vec3 centre, Vec3 radii, Vec3 color, int sides = 7, int layers = 4) {
     std::vector<uint32_t> rings;
     for (int l = 1; l < layers; ++l) {
         const float t = float(l) / float(layers);  // 0..1 bottom to top
@@ -515,17 +515,23 @@ MeshData make_grass_mesh(GrassKind kind) {
         }
         case GrassKind::Bush:
         default: {
-            // A low shrub: two clumps of leaf cards over a dark core, as
-            // the broadleaf's crown is built. It was two faceted lumps, a
-            // green boulder on the grass (feedback report 0009). The core
-            // keeps the sky from showing through between the cards.
+            // A low shrub: two clumps of leaf cards around an inner clump of
+            // darker ones, as the broadleaf's crown is built. It was two
+            // faceted lumps, a green boulder on the grass (feedback report
+            // 0009); then cards over a solid dark core, which showed between
+            // them as black holes, with every card lit flat as ground (the
+            // blind critic, round 2: "the worst object in the set"). The
+            // inner cards keep the sky from showing through and are leaves
+            // themselves. Returned as built: a bush's cards keep the crown's
+            // normals, which finish_grass would pull upright.
             const Vec3 leaf = palette_vertex(PaletteEntry::Bush);
-            blob(mesh, Vec3{0.0f, 0.7f, 0.0f}, Vec3{0.8f, 0.6f, 0.75f}, palette_dim(leaf, 0.55f), 5, 2);
-            card_crown(mesh, Vec3{0.0f, 0.95f, 0.0f}, Vec3{1.25f, 0.85f, 1.15f}, 14, 4, 1.25f, leaf,
+            card_crown(mesh, Vec3{0.1f, 0.7f, 0.05f}, Vec3{0.7f, 0.5f, 0.65f}, 9, 9, 0.9f, palette_dim(leaf, 0.62f),
+                       FOLIAGE_MAT_LEAF, 73u);
+            card_crown(mesh, Vec3{0.0f, 0.95f, 0.0f}, Vec3{1.25f, 0.85f, 1.15f}, 18, 5, 1.2f, leaf,
                        FOLIAGE_MAT_LEAF, 91u);
-            card_crown(mesh, Vec3{0.9f, 0.65f, 0.5f}, Vec3{0.85f, 0.6f, 0.8f}, 8, 2, 1.0f,
-                       palette_dim(leaf, 1.1f), FOLIAGE_MAT_LEAF, 57u);
-            break;
+            card_crown(mesh, Vec3{0.9f, 0.65f, 0.5f}, Vec3{0.85f, 0.6f, 0.8f}, 10, 3, 1.0f,
+                       palette_dim(leaf, 1.08f), FOLIAGE_MAT_LEAF, 57u);
+            return mesh;
         }
     }
     finish_grass(mesh);

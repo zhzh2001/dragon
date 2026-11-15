@@ -1441,6 +1441,58 @@ Left open:
 - Per-piece CPU culling is fine at 5,000 pieces; ten times that would want
   the foliage cells.
 
+## The blind critic, round 2 (2026-11-15, 15:05)
+
+The same eight views on commit e0d707d, to a critic that had not seen round
+1, with a score a frame: 5 is the floor target, 10 the ceiling. Views and
+report: `artifacts/showcase-critic/round2/`.
+
+| Frame | Score |
+|---|---|
+| 1-chase | 3 |
+| 2-hero-close | 3.5 |
+| 3-landed | 2 |
+| 4-river | 2 |
+| 5-mountains | 1.5 |
+| 6-forest | 1 |
+| 7-fire | 1.5 |
+| 8-run | 3.5 |
+
+No frame reaches the floor. Round 1 gave no scores, so these are the
+baseline and not a measure of this round's changes. What it no longer
+reports: square edges on the spray, plants glowing in shade, the labels in
+the run view as "garbled", the trunks as red. What it still reports, in its
+order: no cliff structure on the walls and the kit's rocks as "stickers";
+no blue shift on the far ranges outside the run view; trees and bushes in a
+different art style; the valley floor a flat green plane from the air; the
+water without visible reflection or shallows; the gates; the particles; the
+wind lines; shade; labels over the dragon.
+
+It read the sward as "stubble" and the tall tufts as "sprinkled evenly at one
+spacing": the sward is a gain it did not credit, and the tufts on their grid
+are the next thing wrong with the meadow.
+
+One reading was wrong and useful. The "grey fill inside the ring" in frame 5
+is a cloud behind the ring. A cloud at that range is a flat grey shape with
+no structure, which is the real defect.
+
+### Fixed after round 2
+
+- The bushes, "the worst object in the set": cards over a solid dark core,
+  which showed between them as black holes, and every card lit flat, because
+  `finish_grass` recomputed the bush's normals and pulled them upright. The
+  bush is now three clumps of leaf cards, the inner one dark, and keeps the
+  crown's normals (`artifacts/showcase-critic/bushes-before-after.jpg`).
+- The spray, "opaque cotton wool" over the dragon's tail. Smoke has a second
+  shape, mist (`gfx::Particle::soft`, carried in the fraction of the kind):
+  dense in the middle, gone by the rim, no edge. The spray uses it at 0.55
+  to 0.95 m and throws a second, lower drop a puff
+  (`artifacts/showcase-critic/spray-mist-before-after.jpg`). Half the puffs
+  stayed hard for three renders. They came from a second emitter: the
+  touchdown ring, which fires when the skimming dragon brushes the water. A
+  count of hard and soft smoke in the pool, with each group's brightness,
+  named it in one run.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
