@@ -428,6 +428,11 @@ class Wing:
         pose = fold_matrices(self.bones, self.names, self.side, self.sign)
         length = np.linalg.norm(u[web[:, 0]] - u[web[:, 1]], axis=1)
         thin = np.array([('finger' in b) or ('spur' in b) for b in self.names])
+        # Mesh version 3 does not union the wings with the body: the membrane's root ends inside
+        # the flank. A triangle that cuts the arm or the body at rest is that root, and is left alone.
+        rest_tri = self.hide_tri[~thin[self.solved.argmax(1)][self.hide_tri].any(1)]
+        at_rest = {k for _, k in BVHTree.FromPolygons(u.tolist(), rest_tri.tolist(), all_triangles=True).overlap(
+            BVHTree.FromPolygons(u.tolist(), self.loose.tolist(), all_triangles=True))}
         for rounds in range(FOLD_ROUNDS + 1):
             solved = self.solved
             posed = np.einsum('vj,jab,vb->va', solved, pose, np.c_[u, np.ones(n)])[:, :3]
@@ -436,6 +441,7 @@ class Wing:
             arm_tri = self.hide_tri[~thin[solved.argmax(1)][self.hide_tri].any(1)]
             cuts = BVHTree.FromPolygons(posed.tolist(), arm_tri.tolist(), all_triangles=True).overlap(
                 BVHTree.FromPolygons(posed.tolist(), self.loose.tolist(), all_triangles=True))
+            cuts = [(i, k) for i, k in cuts if k not in at_rest]
             if (not len(tight) and not cuts) or rounds == FOLD_ROUNDS:
                 return rounds, float(ratio.max()), len(cuts)
             pull = np.zeros_like(solved)

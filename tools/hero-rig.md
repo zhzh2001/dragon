@@ -9,6 +9,14 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 3 (2026-11-15)
+
+The rig was rebuilt on mesh version 3, which has new wings. 51 of 56 checks pass. The skeleton did not change.
+One change in `tools/rig_hero.py`: `Wing.fold` leaves alone the membrane triangles that cut the arm or the body at rest.
+Version 3 does not union the wings with the body, so the membrane's root is inside the flank and 80 triangles a side cut it at rest.
+The five failures are the membrane stretch on each wing (longest 4.08, limit 1.6), one new intersection on each wing, and the membrane's mirror check (0.028, limit 0.02).
+`artifacts/hero-rig/verification.txt` is this run. The output below is version 2's. `tools/hero-build.md`, "What is weak in version 3", gives the causes.
+
 ## Files and commands
 
 - `tools/rig_hero.py` builds the skin, checks the exported file and renders the pose sheets.

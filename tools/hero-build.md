@@ -6,6 +6,96 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 3: the wings (2026-11-15)
+
+Version 3 replaces both wings. The body, the head and every other part are version 2's.
+The sections below this one describe version 2 and still hold, except where this section says otherwise.
+The main session cut the task to the wings while it ran. The flank, hip and shoulder marks were not started.
+
+### State
+
+- `assets/embercrest-hero-static.glb`: 27.7 MB, 86 of 86 checks pass. Hide 98,442, membrane 9,322, horn 6,429 triangles: 114,193.
+- `assets/embercrest-hero.glb`: 30.7 MB, 51 of 56 rig checks pass. The five failures are all on the new wing. See "What is weak".
+- In the engine the new wing is better in one view and worse in three. Read "The marks" before you use it.
+
+### The marks
+
+| Mark | What it was in the mesh | What was done | Pair | Fixed |
+|---|---|---|---|---|
+| 0004 mark 3, "wings are worse" | The first sculpt's wing: a smooth arm and fingers with no rings, and a membrane with no veins | Both wings replaced with the wing sculpt, fitted to version 2's skeleton, graded to the plates | `pairs-top.jpg`, `pairs-rear.jpg`, `pairs-flank.jpg`, `pairs-beat790.jpg`, `pairs-beat805.jpg`, `pairs-stand.jpg` | No. From above in the glide the bones have rings and the membrane has veins and the plate's orange-red. In the two mid-beat frames and folded on the ground the membrane looks torn, and version 2 looks cleaner. |
+| 0004 mark 1, 0003, 0001 mark 1, 0002 | Not examined | Not started: the body sculpt is being replaced | none | No |
+
+One finding for the next body, not acted on: `stage_align2` moves the hind legs out by 0.15 m inside a box that ends at Y -1.7 with no fade.
+The tail root is wider than 0.3 m there, so the box's rear face leaves a 0.15 m step across the tail root beside the thigh.
+That step is the likeliest cause of report 0001's "flat plate" and seam. Fade the move in Y, or drop it for a body that needs no widening.
+
+### Which option, and why
+
+Option (a) of the brief: the sculpt itself, with the stub bones cut away and the colours graded to the plates.
+The sculpt's arm, ringed fingers and claws are geometry that version 2's wing does not have, so a bake onto version 2's shape would lose them.
+
+### The `wing` stage
+
+`--stage wing` reads `wing2_src_raw.blend` and writes `wing2.blend` (both wings in full detail as `wing_src`, the reduced right and left wings as `wing_low` and `wing_low_left`) and `wing2_plan.npz` (masks for the maps stage). It takes about 90 seconds.
+No later stage writes these files, and the stage reads nothing from the body.
+
+All work on the sculpt is in "plan": a 1600 px square over the flat sculpt seen from above.
+`W2_CHAINS` holds each bone line in plan px and the skeleton points it maps to.
+
+1. Rays from above and below give the sculpt's upper and lower surface as two rasters.
+2. The rasters are edited: three stub bones drop to the membrane's level, a bone is swept across the gap in finger 2, the panel between fingers 1 and 2 is laid flatter, and the membrane is thinned from 64 mm to 41 mm.
+3. Each sculpt vertex moves from the old surfaces to the edited ones.
+4. A copy is reduced to 4,400 triangles while still flat. The stage cuts it along the edge of every bone strip and marks each face hide, membrane or horn. The border between membrane and bone is therefore a cut edge, not a row of triangle corners.
+5. `WingWarp` moves both meshes into the build frame. Each bone line maps to a line of version 2's skeleton. A vertex on a bone moves rigidly with it. A membrane vertex blends the bones' motions by 1 / distance^4.
+6. The left wing is the mirror.
+
+Which sculpt finger maps to which chain:
+
+| Skeleton chain | Sculpt bone | Note |
+|---|---|---|
+| upper arm and forearm | the scaled arm and the forearm | The arm bends down after the shoulder joint and ends inside the body at (0.30, 2.75, -1.12) glTF |
+| finger 1 (3 segments) | the leading-edge finger | Its claw ends at version 2's wing tip. The finger is 0.06 m shorter for it |
+| finger 2 | the second finger from the wrist to where it stops, then a swept bone 1.3 m long, then the lower part of the third finger with its claw | The swept part has no rings |
+| finger 3 | the finger that runs straight back from the wrist | Its first knuckle is on the skeleton's knuckle |
+| spur | the rib from the elbow to the trailing edge | |
+| none | the short finger near the tip | Its bone is flattened and its point is cut off the trailing edge. Its line still holds the trailing edge between fingers 1 and 2 |
+| none | two thumb claws at the wrist and one claw on finger 1's first knuckle | Kept. Each rides on the bone under it |
+
+The stubs that were removed: the cross bar on finger 2, the upper 2 m of the third finger, and the short finger's bone.
+
+Landmarks: every bone line ends on its skeleton point by construction. The stage logs each line's ends.
+The three fingers start 0.08 to 0.13 m from the fan origin, on the wrist knob, because the knob is rigid. The brief asked for 0.10 m.
+
+### Join, parts, maps
+
+- The wings are not unioned with the body. The reduced membrane's two faces touch in about 1,000 places, and the exact boolean drops such a mesh. With self-intersection on, it tears the sheet into 2,200 pieces. Each wing is its own closed surface. The arm and the root of the membrane end inside the body.
+- `stage_parts` takes the wing's hide, membrane and horn from the wing stage's marks. It merges wing vertices within 6 mm after the joint loops.
+- The joint loops are at the rig's joints now (`WING_JOINTS`).
+- The bake records where each wing texel lies in plan. `grade_wing` uses it to remove the stub bones' colour and to give the swept bone a bone's colour.
+- Colour: the upper face is graded to (0.60, 0.105, 0.022) linear with bones at (0.19, 0.045, 0.020), the lower face to (0.68, 0.27, 0.17) with bones at (0.46, 0.17, 0.10). A texel takes the upper colour by how far its surface faces up at bind.
+
+### Swapping the body
+
+The body sculpt is `BODY2_IN`. Set `HERO_BODY=/path/to/body.glb` to use another.
+Then run every stage but `wing`: `--stage import,align,low_parts,align2,low2,join,head,parts,uv,bake,maps,export`. `import` reads the wing sculpt again, which does not change `wing2.blend`.
+These numbers belong to the present body and must be measured again: the tail fit and `HIND_WIDEN` in `stage_align2`, `LEG_JOINTS`, `TOE_CLAWS`, `OLD_FEET_Y`, and the flank points `flank_a`, `flank_b` and `root` in `W2_TARGET`. Changing those three points does need the `wing` stage again.
+
+### What is weak in version 3
+
+- The wing reads as torn when it flaps or folds. Three causes, in order:
+  1. The panel between fingers 1 and 2 is 5.6 m wide in the sculpt and 1.6 m in the skeleton. The warp squeezes it into folds.
+  2. The reduced membrane has triangles 0.3 to 0.6 m long and two faces 40 mm apart. Skinning moves the faces through each other, and the pale underside shows.
+  3. The rig's wing solve does not converge on this mesh.
+- Rig checks that fail: membrane stretch on both wings (longest edge 4.08 of rest, limit 1.6, on the web in front of the forearm), one new membrane intersection a side, and the membrane's mirror check (0.028, limit 0.02).
+- What would fix it: a membrane built as one sheet with one triangulation and an offset copy for the second face, a skeleton whose finger fan matches the sculpt's (which the brief ruled out), and a rig pass on the wing weights.
+- 80 membrane triangles a side cut the body at rest. They are the membrane's root inside the flank.
+- The root shows a hard line where the arm enters the back. It is an intersection, not a blend.
+- The membrane's atlas has 1,104 islands.
+- `tools/build_hero.py` still has version 2's unused wing code: `wing_region`, `wing_deform`, `WING_TRIS`, `WING_CLAWS` and the `WING_SINK` and `WING_TUCK` constants.
+- `body.png`, `seam.png`, `head.png`, `eye.png`, `mouth.png` and `compare.png` are version 2's renders. Only `turnaround.png`, `graft.png` and `wire.png` were made again.
+
+## Version 2
+
 This is version 2. Version 1 took the body and the wings from one sculpt. Its
 body had soft, smeared scales. Version 2 takes each part from the sculpt that
 makes it best:
