@@ -34,7 +34,12 @@ struct AtmosphereSettings {
     float sky_scale = 9.0f;
     // Kilometres of air per kilometre of world in the aerial perspective,
     // so the valley reads as far as the target's.
-    float aerial_scale = 5.0f;
+    // 11, with the haze at 0.55, since 2026-11-15: at 5 and 1.2 a wall 3 km
+    // off had the contrast and the colour of one at 300 m, and what air
+    // there was came as a grey veil toward the sun (the blind critic, three
+    // rounds: "no blue shift", "the depth reads flat"). More air and less
+    // aerosol in it: the far wall goes blue and pale, the veil thins.
+    float aerial_scale = 11.0f;
     // How far the froxels reach, in world metres (past it, the last slice).
     float aerial_far_m = 24000.0f;
     // The share of the old exp2 valley fog kept on top of the air.
@@ -48,7 +53,7 @@ struct AtmosphereSettings {
     // Where the world's y = 0 sits above the sea, in km.
     float ground_altitude_km = 0.2f;
     float rayleigh = 1.0f;          // x Earth's Rayleigh scattering
-    float mie = 1.2f;               // x Earth's aerosol density: the haze
+    float mie = 0.55f;              // x Earth's aerosol density: the haze (see aerial_scale)
     float mie_scale_height_km = 1.2f;
     float mie_g = 0.7f;             // forward scattering: the glow about the sun
     float ozone = 1.0f;

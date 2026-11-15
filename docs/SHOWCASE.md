@@ -1807,6 +1807,27 @@ measured: a pair of runs differs by more than it can cost
 
 The pair: `artifacts/showcase-critic/marks-quiet-before-after.jpg`.
 
+### After round 3: more air, less aerosol (16:35)
+
+Three rounds said it: "no blue shift on the far ranges", "the depth reads
+flat", and toward the sun "a milky haze wash". A wall 3 km off had the
+contrast and the colour of one at 300 m.
+
+`AtmosphereSettings::aerial_scale` is 11 (was 5) and `mie` is 0.55 (was
+1.2): more than twice the air between the eye and a far wall, with under
+half the aerosol in it. The far wall goes blue and pale, a shaded wall
+goes blue-grey, and the veil toward the sun thins. The sky is a deeper
+blue. `--atmosphere aerial=5,haze=1.2` is the air as it was.
+
+In round 1 `aerial=7.5,haze=0.8` was tried and dropped as too subtle to
+see. It was. This is twice that step, and it is plain in every view with a
+far wall: `artifacts/showcase-critic/air-run-before-after.jpg` and
+`air-hero-before-after.jpg`. Checked too in the landed view, the shaded
+meadow and a run's evening valley.
+
+The cost: a sunlit far wall is less warm and less contrasty than it was.
+That is the trade the target makes.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

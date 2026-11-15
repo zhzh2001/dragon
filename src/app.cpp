@@ -3711,7 +3711,7 @@ void App::build_ui(float dt) {
         gfx::AtmosphereSettings& a = atmosphere_settings_;
         ImGui::Checkbox("physical sky", &a.enabled);
         ImGui::SliderFloat("sky brightness", &a.sky_scale, 0.0f, 30.0f, "%.1f");
-        ImGui::SliderFloat("aerial distance", &a.aerial_scale, 0.5f, 12.0f, "%.1f x");
+        ImGui::SliderFloat("aerial distance", &a.aerial_scale, 0.5f, 20.0f, "%.1f x");
         ImGui::SliderFloat("haze", &a.mie, 0.0f, 10.0f, "%.2f x");
         ImGui::SliderFloat("haze height", &a.mie_scale_height_km, 0.1f, 4.0f, "%.2f km");
         ImGui::SliderFloat("sun glow", &a.mie_g, 0.0f, 0.95f, "%.2f");
