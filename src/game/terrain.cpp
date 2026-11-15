@@ -349,7 +349,13 @@ float Terrain::cliff_bands(float h, float x, float z) const {
     const float wander = noise_.fbm(x / 900.0f - 7.0f, z / 900.0f + 23.0f, 3);
     const float ripple = noise_.fbm(x / 240.0f + 3.0f, z / 240.0f - 11.0f, 2);
     const float offset = 0.05f * x - 0.03f * z + 70.0f * wander + 26.0f * ripple;
-    const float t = (h - settings_.valley_floor + offset) / period;
+    // Beds of unlike thickness: the count of beds runs fast and slow by
+    // turns up the wall (it still only rises), so one is a third as thick
+    // as the dial and the next five thirds. Of one thickness, every wall
+    // was "a row of identical stepped battlements" (the blind critic,
+    // round 3).
+    const float even = (h - settings_.valley_floor + offset) / period;
+    const float t = even + 0.3f * std::sin(even * 2.3f + 1.7f);
     const float bed = std::floor(t);
     const float f = t - bed;
     // Each bed has its own thickness of hard rock: half to one and a half
@@ -362,7 +368,11 @@ float Terrain::cliff_bands(float h, float x, float z) const {
     bits ^= bits >> 13;
     const float hash = float(bits & 0xffffu) / 65535.0f;
     const float share = core::clampf(settings_.cliff_share * (0.5f + hash), 0.05f, 0.9f);
-    const float bench = core::clampf(settings_.cliff_bench, 0.0f, 1.0f);
+    // And one bed in four has no cliff: the wall runs on through it at its
+    // own slope, and the bands above and below it are that much further
+    // apart.
+    const float plain = 1.0f - core::smoothstep(0.22f, 0.36f, float((bits >> 16) & 0xffffu) / 65535.0f);
+    const float bench = core::lerpf(core::clampf(settings_.cliff_bench, 0.0f, 1.0f), 1.0f, plain);
     const float soft = 1.0f - share;
     // Continuous and rising: the bench's slope up to `soft`, then the cliff
     // makes up the rest of the bed.

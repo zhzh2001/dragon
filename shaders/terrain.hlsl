@@ -360,6 +360,40 @@ float4 ground_scan(Texture2D<float4> map, SamplerState map_sampler, float3 p, fl
 
 #endif
 
+#if defined(ATMOSPHERE) && !defined(TERRAIN_LITE)
+// A cliff's face, on one upright plane (u along the face, y up). x is its
+// tone, about 0 to 1: strata 2 to 8 m thick, each its own grey and a
+// little wavy, under streaks that run down the face as water stains do.
+// y is how much of a crack this point is: lines that wander down the face
+// as fractures do, each for a stretch of it, widened to stay a pixel and
+// gone where a pixel covers metres. Colour only, on the cliff bands (Terrain::cliff_bands).
+//
+// Tried first: beds cut into blocks at joints, each block its own tone.
+// Every face came out as a masonry wall, and the benches between them made
+// the mountain a ziggurat. And in 2026-10, beds on the slopes of the time:
+// a ploughed field, with no face steep enough to carry them.
+float2 cliff_face(float2 uv, float footprint) {
+    float wave = value_noise(uv * float2(0.013, 0.005));
+    float v = uv.y / 4.5 + 2.2 * wave;
+    float strata = lerp(value_noise(float2(v, 3.1)), value_noise(float2(v * 2.7, 9.4)), 0.35);
+    float stain = value_noise(uv * float2(1.0 / 11.0, 1.0 / 150.0));
+    float tone = saturate(0.5 + (strata - 0.5) * 1.1 + (stain - 0.5) * 0.7);
+    // A crack every 13 m along the face, pushed about by a slow noise. The
+    // push is never steep enough to turn a line back: as the level lines
+    // of a noise alone they closed into loops, scribbles on every near
+    // face (as the river's froth lines did, feedback report 0010).
+    float along = uv.x / 13.0 + 1.2 * value_noise(uv * float2(1.0 / 60.0, 1.0 / 40.0) + 4.7);
+    // A seam a metre and more wide with a soft edge, not a line: at 0.3 m
+    // and hard, the cracks were pen strokes on the face.
+    float width = (1.3 + footprint * 1.2) / 13.0;
+    float crack = 1.0 - smoothstep(width * 0.1, width, abs(frac(along) - 0.5));
+    // Each for a stretch of the face, not from top to bottom.
+    crack *= smoothstep(0.5, 0.6, value_noise(float2(floor(along) * 7.3, uv.y / 45.0))) *
+             (1.0 - smoothstep(1.2, 3.5, footprint));
+    return float2(tone, crack);
+}
+#endif
+
 float4 fs_main(VertexOut input) : SV_Target {
     float3 normal = normalize(input.normal);
     float3 to_sun = normalize(scene.sun.xyz);
@@ -432,6 +466,21 @@ float4 fs_main(VertexOut input) : SV_Target {
     float warm = value_noise(q * 0.011 + 3.3);
     float3 broken = lerp(float3(0.9, 0.94, 1.0), float3(1.08, 1.0, 0.88), warm) * (0.78 + 0.44 * blotch);
     float3 rock_tint = lerp((float3)1.0, broken, rocky * (1.0 - smoothstep(600.0, 3000.0, camera_distance)));
+    // The cliff bands' faces: strata, stains and cracks (cliff_face). By the mesh's own normal, from 55 degrees, so a bench
+    // and a slope take none. To 6 km: the far wall is where a pilot sees
+    // most of it. On the two upright planes, by how the face lies to each.
+    {
+        float3 face = normalize(input.normal);
+        float cliff = (1.0 - smoothstep(0.42, 0.58, face.y)) * (1.0 - smoothstep(3000.0, 6000.0, camera_distance));
+        if (cliff > 0.01) {
+            float footprint = max(length(ddx(input.world_position)), length(ddy(input.world_position)));
+            float2 w = abs(face.xz) + 1e-3;
+            w /= w.x + w.y;
+            float2 blocks = cliff_face(input.world_position.zy, footprint) * w.x +
+                            cliff_face(input.world_position.xy + 37.0, footprint) * w.y;
+            rock_tint *= lerp(1.0, (0.72 + 0.52 * blocks.x) * (1.0 - 0.3 * blocks.y), cliff);
+        }
+    }
 #elif defined(ATMOSPHERE)
     float rocky = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.22, saturate(normal.y));
     float3 rock_tint = (float3)1.0;

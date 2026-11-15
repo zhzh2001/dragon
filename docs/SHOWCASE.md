@@ -1754,6 +1754,45 @@ puffs' hard alpha edge and was there before the colours. The ward stone's
 lift (a tint of 1.35, as the towers have) washes its dark basalt to brown
 at 15 m.
 
+### After round 3: unlike beds, and a face with strata (16:20)
+
+The critic's first item again, in two parts: the steps are "a row of
+identical stepped battlements", and a face is "smooth and smudged".
+
+The steps (`Terrain::cliff_bands`):
+
+- The beds are of unlike thickness. The count of beds runs fast and slow by
+  turns up the wall (`t = e + 0.3 sin(2.3 e + 1.7)`, which only rises), so
+  one bed is a third as thick as the dial and another five thirds.
+- One bed in four has no cliff. The wall runs through it at its own slope,
+  and the bands either side of it are that much further apart.
+
+The face (`cliff_face` in `terrain.hlsl`, modern tier, not at the Terrain
+setting's Low): on the mesh's own normal from 55 degrees, to 6 km, on the
+two upright planes.
+
+- Strata 2 to 8 m thick, each its own grey, a little wavy.
+- Streaks 11 m wide that run down the face, as water stains do.
+- Seams: a dark line every 13 m or so along the face, pushed about by a
+  slow noise, each present for a stretch of the face.
+
+Three versions of the face were wrong first, and each is a trap:
+
+- Beds cut into blocks at joints, each block its own tone: a masonry wall
+  on every face. With the benches between them the mountain was a ziggurat.
+- Cracks as the level lines of a stretched noise: they close into loops,
+  scribbles on every near face. The river's froth lines did the same
+  (feedback report 0010). A line that must not close is a coordinate plus a
+  push too gentle to turn it back.
+- The same lines at 0.3 m with a hard edge: pen strokes. They are 1.3 m
+  wide with a soft edge and take 30% of the light, not 50%.
+
+The pairs against round 3's renders: `artifacts/showcase-critic/
+cliff-faces-run-before-after.jpg`, `cliff-faces-river-before-after.jpg`
+and `cliff-faces-near-before-after.jpg`. The face's GPU cost is not
+measured: a pair of runs differs by more than it can cost
+(`gpu-hist`, `20261115-2112-mac-m5-dragon-terrain-shape-cost`).
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
