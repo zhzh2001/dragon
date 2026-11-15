@@ -754,6 +754,33 @@ third, and `chrome-use` reported an unresponsive session. A window opened
 with `--profile-directory=Default` brought the relay back.
 `tools/hunyuan_oneshot.md` should say this when it is next edited.
 
+## Mesh version 3's wings, built and not used (2026-11-15, 01:34)
+
+A Claude worker built the wings from the wing sculpt (commit `6ca125a` on
+branch `hero-v3`, 1 hour 56 minutes). They are not in the game.
+`artifacts/showcase-study/hero-wing-v3-vs-v2-top.jpg` and
+`hero-wing-v3-vs-v2-beat.jpg` show version 2 on the left.
+
+- From above in the glide, version 3 has ringed finger bones, veins and
+  the plate's orange-red. That is the gain.
+- Mid-beat and folded, the membrane looks torn. The sculpt's panel between
+  fingers 1 and 2 is 5.6 m wide and the skeleton's is 1.6 m, so the fit
+  squeezes it into folds. The reduced membrane has two faces 40 mm apart
+  with different triangles, and skinning pushes one through the other.
+- The rig passes 51 of its 56 checks. The five failures are all on the
+  new membrane: stretch of 4.08 times rest against a limit of 1.6, one
+  intersection a side, and the mirror check.
+
+A wing from this sculpt needs a membrane built as one sheet with an offset
+copy for the second face, and either a finger fan in the skeleton that
+matches the sculpt or a sculpt drawn to the skeleton's fan. Until then
+version 2's wings stay, and the next build has a switch for the wing's
+source.
+
+The worker also found the likely cause of the hind-hip mark: the build
+moves the hind legs out 0.15 m inside a box with no fade, which leaves a
+step across the tail root.
+
 ## The body, generated again with bent legs (2026-11-15, 00:15)
 
 The plates are in `artifacts/showcase-study/hero-body2-plates/`, from the
