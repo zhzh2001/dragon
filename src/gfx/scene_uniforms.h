@@ -135,6 +135,12 @@ struct Lighting {
     // How much of the sky a creature's glossy hide reflects (skinned.hlsl;
     // the modern tier's).
     float sky_reflection = 1.0f;
+    // The creature's surface terms (skinned.hlsl, docs/SHOWCASE.md S3): the
+    // sun raking the hide's edge when it is behind the creature, the clear
+    // coat on horn and claw, and the cornea's highlight.
+    float hide_rim = 1.0f;
+    float clear_coat = 1.0f;
+    float cornea = 1.0f;
 
     Palette palette;
 

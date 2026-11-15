@@ -754,6 +754,60 @@ third, and `chrome-use` reported an unresponsive session. A window opened
 with `--profile-directory=Default` brought the relay back.
 `tools/hunyuan_oneshot.md` should say this when it is next edited.
 
+## The body, generated again with bent legs (2026-11-15, 00:15)
+
+The plates are in `artifacts/showcase-study/hero-body2-plates/`, from the
+Codex image backend with the design's three views as subject references.
+The prompt asks for a standing quadruped predator with every leg joint
+bent and visible, and names each joint. Hunyuan's generation is
+`assets/embercrest-cand-hero-body2-hunyuan.glb`, and
+`artifacts/showcase-study/hero-cand-body2-vs-body.jpg` shows the old sculpt
+and the new one from the side.
+
+- The fore leg has a shoulder mass, an elbow that points back, a wrist and
+  a paw. The hind leg has a haunch, a knee that points forward and a raised
+  hock. The old sculpt had none of these.
+- The stance is wider and lower: 0.336 by 1.167 by 0.399 in the
+  generator's units against 0.218 by 1.145 by 0.476.
+- The scales are the same size and as crisp. The belly band is cleaner.
+
+The mesh worker's brief grew a second stage: build from this body, place
+each leg joint on the joint the sculpt shows, and deliver pairs from the
+playtester's side view.
+
+## S3, as built: the rim, the clear coat and the cornea (2026-11-15)
+
+A submesh now carries a surface class (`anim::SkinSurface`), read from the
+glTF material's name by `surface_from_name`: hide, membrane, horn (and
+claw), eye, mouth. `world_renderer.cpp` passes it in `material.w`, and
+`skinned.hlsl` adds three terms.
+
+- The rim. With the sun beyond the creature, the edges of the hide take
+  its light: grazing angle squared, times how far the view looks toward
+  the sun. The body's own shadow dims it to 40% and does not remove it,
+  because the shadow map cannot tell a scale's lit edge from the flank
+  behind it. Before this, a dragon seen against the sun was a black
+  cut-out. A model with one material gets the rim too.
+- The clear coat. Horn and claw wear a second, tight lobe (roughness 0.22)
+  on the face normal, and reflect the sky through it.
+- The cornea. The eye wears the same coat at roughness 0.11 and reflects
+  the sky at 2.5 times the horn's share, so it has a window of sky in it
+  from most angles.
+
+The gains are "hide rim", "horn clear coat" and "cornea" in the Engine
+panel's lighting section, beside "sky in the hide". They ride in
+`scene.clouds2.yzw`, which was unused.
+`artifacts/showcase-s3/rim-coat-cornea-before-after.jpg` has the head
+against the sun and the body from below, before on the left.
+
+The Metal goldens were captured again: every difference was on the
+dragon. The Vulkan, D3D12 and D3D11 sets are stale until x99 next runs
+`golden.py capture`. The retro tiers do not have these terms, and a model
+pack does not store the surface class.
+
+Not done in S3: the membrane's thickness and veins wait for mesh version
+3's wing textures.
+
 ## Open questions
 
 - The hero dragon's design. Embercrest's current silhouette can stay, or a

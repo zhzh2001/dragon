@@ -3588,6 +3588,11 @@ void App::build_ui(float dt) {
         ImGui::SliderFloat("ground bounce", &lighting_.ground_bounce, 0.0f, 3.0f, "%.2f");
         if (atmosphere_.available()) ImGui::SliderFloat("sky in the hide", &lighting_.sky_reflection, 0.0f, 3.0f, "%.2f");
         if (tier_.tier == gfx::Tier::Modern) {
+            ImGui::SliderFloat("hide rim", &lighting_.hide_rim, 0.0f, 4.0f, "%.2f");
+            ImGui::SliderFloat("horn clear coat", &lighting_.clear_coat, 0.0f, 4.0f, "%.2f");
+            ImGui::SliderFloat("cornea", &lighting_.cornea, 0.0f, 4.0f, "%.2f");
+        }
+        if (tier_.tier == gfx::Tier::Modern) {
             ImGui::SliderFloat("breath light", &local_light_strength_, 0.0f, 1500.0f, "%.0f");
             ImGui::SliderFloat("membrane glow", &membrane_glow_, 0.0f, 8.0f, "%.2f");
         }

@@ -65,7 +65,9 @@ struct SceneUniforms {
     float4x4 cascade_view_proj[3];
     float4 cascade_params;
     // The volumetric clouds (modern tier, gfx/clouds.h): x 1 when they are
-    // drawn, so the sky leaves its own slab out; yzw unused.
+    // drawn, so the sky leaves its own slab out. yzw are the creature's
+    // surface gains (skinned.hlsl): y the hide's rim, z the clear coat on
+    // horn, w the cornea.
     float4 clouds2;
     // One local light (modern tier): xyz where, w its reach (0: none);
     // local_light_color rgb, and w the membranes' glow (skinned.hlsl).
