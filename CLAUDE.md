@@ -46,7 +46,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty-five suites, plain executables, no framework
+ctest --test-dir build            # twenty-six suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -190,6 +190,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | 1 / 2 / 3 | Camera preset: chase, action, cinematic |
 | Tab | Toggle free-fly survey camera (detaches where the chase camera is) |
 | F1 | Hide every ImGui panel (the HUD stays) |
+| F2 | The feedback tool: the world holds still (or runs at 1/8 or 1/4 speed, or steps a frame), a click on the picture leaves a numbered mark, each mark takes a note, and Save writes a folder to `~/Library/Application Support/Paleshell/Dragon/feedback/NNNN-summary/` with `frame.bmp`, `marked.bmp` and `report.md` (the notes, each mark's place, the model, scenario, flight state, camera, and a command that returns to the view). F2 or Escape closes it. A session asked to act on playtest feedback reads those folders first. `DRAGON_FEEDBACK_TEST=N` opens it at frame N, places two marks and saves, to check the capture path headless |
 | F / left mouse | Fire breath (hold) -- gamepad LB |
 | G | Fireball -- gamepad RB |
 | C | Bite -- gamepad B. Melee: a bite in a wide cone ahead of the mouth within 30 m, a claw or tail strike on anything within 16 m of the body. No aim needed; a hit stuns and knocks the target, hits chain to x1.7 |
@@ -555,7 +556,7 @@ src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws thro
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty-five suites: math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
+tests/       twenty-six suites: feedback, math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
              combat, bot, match, vegetation, breath, thermals, time_of_day
 docs/        the detail -- see the table above
 ```

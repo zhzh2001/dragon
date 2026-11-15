@@ -1983,8 +1983,27 @@ void App::pump_events() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         bool consumed = ui_.process_event(event);
+        // While the feedback tool is open the keyboard types notes and the
+        // mouse places marks: neither may also restart the run or breathe
+        // fire. F2 and Escape still reach the game, to close the tool.
+        if (feedback_active_) {
+            const bool tool_key = event.type == SDL_EVENT_KEY_DOWN &&
+                                  (event.key.scancode == SDL_SCANCODE_F2 ||
+                                   event.key.scancode == SDL_SCANCODE_ESCAPE);
+            if ((event.type == SDL_EVENT_KEY_DOWN && !tool_key) ||
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_MOTION) {
+                consumed = true;
+            }
+        }
         input_.handle_event(event, consumed);
         if (event.type == SDL_EVENT_QUIT) running_ = false;
+    }
+
+    if (input_.pressed(SDL_SCANCODE_F2) && !options_.hide_ui) set_feedback_active(!feedback_active_);
+    if (feedback_active_) {
+        // Escape closes the tool; it does not quit with a report half written.
+        if (input_.pressed(SDL_SCANCODE_ESCAPE) && !ui_.wants_keyboard()) set_feedback_active(false);
+        return;
     }
 
     // Escape releases the mouse first and only quits once the cursor is already
@@ -2079,6 +2098,260 @@ void App::pump_events() {
         mouse_look_ = want_look;
         if (!options_.headless) SDL_SetWindowRelativeMouseMode(device_.window(), mouse_look_);
     }
+}
+
+void App::set_feedback_active(bool active) {
+    feedback_active_ = active;
+    feedback_step_ = 0;
+    feedback_speed_ = 0;
+    if (!active) return;
+    set_mouse_captured(false);
+    if (mouse_look_) {
+        mouse_look_ = false;
+        if (!options_.headless) SDL_SetWindowRelativeMouseMode(device_.window(), false);
+    }
+}
+
+float App::feedback_dt(float dt) {
+    if (!feedback_active_) return dt;
+    // Held still is not zero: a step of nothing divides by it (DRAGON_FREEZE_AT).
+    if (feedback_capture_ != 0) return 1e-6f;
+    if (feedback_step_ > 0) {
+        --feedback_step_;
+        return 1.0f / 60.0f;
+    }
+    if (feedback_speed_ == 1) return dt * 0.125f;
+    if (feedback_speed_ == 2) return dt * 0.25f;
+    return 1e-6f;
+}
+
+game::FeedbackReport App::feedback_report() const {
+    game::FeedbackReport report;
+    report.summary = feedback_summary_;
+    for (const FeedbackEdit& edit : feedback_marks_) {
+        game::FeedbackMark mark;
+        mark.x = edit.x;
+        mark.y = edit.y;
+        mark.note = edit.note;
+        report.marks.push_back(mark);
+    }
+    {
+        const std::time_t now = std::time(nullptr);
+        char when[32] = {};
+        std::strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+        report.when = when;
+    }
+    char text[256];
+    auto add = [&report](const char* name, const std::string& value) { report.context.push_back({name, value}); };
+    const game::FlightState& state = flight_.state();
+    const gfx::Camera& camera = active_camera();
+    const core::Vec3 target = camera.position + camera.forward() * 20.0f;
+
+    add("model", player_model().path);
+    if (studio_active_) {
+        std::snprintf(text, sizeof(text), "scenario %d at %.2f s", studio_scenario_, double(studio_time_));
+        add("studio", text);
+    }
+    if (run_mode_) {
+        std::snprintf(text, sizeof(text), "seed %u", run_seed_);
+        add("hoard run", text);
+    }
+    std::snprintf(text, sizeof(text), "%.2f, %.2f, %.2f", double(state.position.x), double(state.position.y),
+                  double(state.position.z));
+    add("dragon position", text);
+    std::snprintf(text, sizeof(text), "%.1f m/s, climbing %.1f m/s, %.1f g, %.1f m above the ground%s",
+                  double(state.airspeed), double(state.climb_rate), double(state.g_load),
+                  double(state.ground_clearance), state.grounded ? ", grounded" : "");
+    add("flight", text);
+    std::snprintf(text, sizeof(text), "%.2f, %.2f, %.2f looking at %.2f, %.2f, %.2f%s%s",
+                  double(camera.position.x), double(camera.position.y), double(camera.position.z),
+                  double(target.x), double(target.y), double(target.z), free_camera_ ? ", free camera" : "",
+                  chase_.first_person ? ", first person" : "");
+    add("camera", text);
+    std::snprintf(text, sizeof(text), "%d, at %.2f s", frame_index_, double(time_seconds_));
+    add("frame", text);
+    std::snprintf(text, sizeof(text), "%s tier, %ux%u", tier_.name(), device_.width(), device_.height());
+    add("renderer", text);
+    add("combat", combat_enabled_ ? "on" : "off");
+
+    // A command that returns to the model, the scenario and the view. It
+    // cannot return to a moment of free play: for that the state above and
+    // the frame are the record.
+    std::string command = "./build/dragon --model " + player_model().path;
+    if (studio_active_) command += " --studio " + std::to_string(studio_scenario_);
+    if (run_mode_) command += " --run " + std::to_string(run_seed_);
+    std::snprintf(text, sizeof(text), " --cam %.2f,%.2f,%.2f,%.2f,%.2f,%.2f", double(camera.position.x),
+                  double(camera.position.y), double(camera.position.z), double(target.x), double(target.y),
+                  double(target.z));
+    command += text;
+    report.reproduce = command;
+    return report;
+}
+
+void App::draw_feedback_marks() const {
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const ImVec2 size = ImGui::GetIO().DisplaySize;
+    const float unit = size.y / 720.0f;
+    int number = 1;
+    for (const FeedbackEdit& mark : feedback_marks_) {
+        const ImVec2 at(mark.x * size.x, mark.y * size.y);
+        const float radius = 15.0f * unit;
+        draw->AddCircle(at, radius + 1.5f * unit, IM_COL32(10, 12, 16, 230), 32, 4.0f * unit);
+        draw->AddCircle(at, radius, IM_COL32(255, 70, 200, 255), 32, 2.5f * unit);
+        char label[8];
+        std::snprintf(label, sizeof(label), "%d", number++);
+        const ImVec2 text_size = ImGui::CalcTextSize(label);
+        const ImVec2 plate(at.x + radius * 0.9f, at.y - radius * 1.5f);
+        draw->AddRectFilled(ImVec2(plate.x - 4.0f, plate.y - 2.0f),
+                            ImVec2(plate.x + text_size.x + 4.0f, plate.y + text_size.y + 2.0f),
+                            IM_COL32(10, 12, 16, 235), 3.0f);
+        draw->AddText(plate, IM_COL32(255, 150, 225, 255), label);
+    }
+}
+
+bool App::build_feedback_ui() {
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+
+    // DRAGON_FEEDBACK_TEST=N: at frame N the tool opens, takes two marks and
+    // saves, so the capture path can be checked with no one at the keyboard.
+    static const char* test_env = SDL_getenv("DRAGON_FEEDBACK_TEST");
+    static const int test_frame = test_env ? std::atoi(test_env) : -1;
+    if (test_frame >= 0 && frame_index_ == test_frame && feedback_capture_ == 0 && feedback_saved_.empty()) {
+        set_feedback_active(true);
+        std::snprintf(feedback_summary_, sizeof(feedback_summary_), "Test report from DRAGON_FEEDBACK_TEST");
+        FeedbackEdit first;
+        first.x = 0.5f;
+        first.y = 0.6f;
+        std::snprintf(first.note, sizeof(first.note), "the dragon");
+        FeedbackEdit second;
+        second.x = 0.2f;
+        second.y = 0.3f;
+        std::snprintf(second.note, sizeof(second.note), "the far wall");
+        feedback_marks_ = {first, second};
+        feedback_capture_ = -1;  // start a save, as the button does
+    }
+
+    if (!feedback_active_) {
+        if (show_panels_) {
+            ImGui::GetForegroundDrawList()->AddText(ImVec2(140.0f, display.y - 22.0f), IM_COL32(200, 210, 225, 110),
+                                                    "F2  feedback");
+        }
+        return false;
+    }
+
+    // A save takes two frames with the world held still: this frame as the
+    // player saw it, then the same frame with the marks drawn on it.
+    if (feedback_capture_ == -1) {
+        const std::string root = core::paths::user("feedback");
+        int highest = 0;
+        std::error_code error;
+        std::filesystem::create_directories(root, error);
+        for (const auto& entry : std::filesystem::directory_iterator(root, error)) {
+            highest = std::max(highest, std::atoi(entry.path().filename().string().c_str()));
+        }
+        feedback_dir_ = root + "/" + game::feedback_folder_name(highest + 1, feedback_summary_);
+        std::filesystem::create_directories(feedback_dir_, error);
+        if (error) {
+            LOG_ERROR("feedback: could not create %s", feedback_dir_.c_str());
+            feedback_saved_ = "could not create " + feedback_dir_;
+            feedback_capture_ = 0;
+        } else {
+            feedback_capture_ = 1;
+        }
+    }
+    if (feedback_capture_ == 1) {
+        device_.request_screenshot(feedback_dir_ + "/frame.bmp");
+        feedback_capture_ = 2;
+        return true;
+    }
+    if (feedback_capture_ == 2) {
+        draw_feedback_marks();
+        device_.request_screenshot(feedback_dir_ + "/marked.bmp");
+        const game::FeedbackReport report = feedback_report();
+        std::ofstream out(feedback_dir_ + "/report.md");
+        out << game::feedback_markdown(report);
+        LOG_INFO("feedback: %zu mark(s) -> %s", feedback_marks_.size(), feedback_dir_.c_str());
+        feedback_saved_ = feedback_dir_;
+        feedback_marks_.clear();
+        feedback_summary_[0] = 0;
+        feedback_capture_ = 0;
+        if (test_frame >= 0) set_feedback_active(false);
+        return true;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    // A click on the picture, not on a panel, leaves a mark.
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.WantCaptureMouse && feedback_marks_.size() < 24) {
+        FeedbackEdit mark;
+        mark.x = core::clampf(io.MousePos.x / display.x, 0.0f, 1.0f);
+        mark.y = core::clampf(io.MousePos.y / display.y, 0.0f, 1.0f);
+        feedback_marks_.push_back(mark);
+    }
+    draw_feedback_marks();
+
+    {
+        const char* banner = feedback_speed_ == 0 ? "FEEDBACK   held still" : "FEEDBACK   slow motion";
+        const ImVec2 text_size = ImGui::CalcTextSize(banner);
+        const ImVec2 at((display.x - text_size.x) * 0.5f, 10.0f);
+        ImDrawList* draw = ImGui::GetForegroundDrawList();
+        draw->AddRectFilled(ImVec2(at.x - 12.0f, at.y - 5.0f), ImVec2(at.x + text_size.x + 12.0f, at.y + text_size.y + 5.0f),
+                            IM_COL32(10, 12, 16, 220), 4.0f);
+        draw->AddText(at, IM_COL32(255, 150, 225, 255), banner);
+    }
+
+    ImGui::SetNextWindowPos(ImVec2(12.0f, 52.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Feedback", nullptr, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextWrapped("Click the picture to mark what is wrong. Give each mark a note, then save.");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Time");
+        ImGui::RadioButton("held still", &feedback_speed_, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("1/8 speed", &feedback_speed_, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("1/4 speed", &feedback_speed_, 2);
+        if (ImGui::Button("step 1 frame")) {
+            feedback_speed_ = 0;
+            feedback_step_ = 1;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("step 10")) {
+            feedback_speed_ = 0;
+            feedback_step_ = 10;
+        }
+        ImGui::Separator();
+        ImGui::TextUnformatted("What is wrong, in one line");
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("##summary", feedback_summary_, sizeof(feedback_summary_));
+        int remove = -1;
+        for (size_t i = 0; i < feedback_marks_.size(); ++i) {
+            ImGui::PushID(int(i));
+            ImGui::Text("%zu", i + 1);
+            ImGui::SameLine(34.0f);
+            ImGui::SetNextItemWidth(-34.0f);
+            ImGui::InputText("##note", feedback_marks_[i].note, sizeof(feedback_marks_[i].note));
+            ImGui::SameLine();
+            if (ImGui::SmallButton("x")) remove = int(i);
+            ImGui::PopID();
+        }
+        if (remove >= 0) feedback_marks_.erase(feedback_marks_.begin() + remove);
+        if (feedback_marks_.empty()) ImGui::TextDisabled("no marks yet");
+        ImGui::Separator();
+        const bool has_content = feedback_summary_[0] != 0 || !feedback_marks_.empty();
+        ImGui::BeginDisabled(!has_content);
+        if (ImGui::Button("Save report")) feedback_capture_ = -1;
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Clear marks")) feedback_marks_.clear();
+        ImGui::SameLine();
+        if (ImGui::Button("Resume (F2)")) set_feedback_active(false);
+        if (!feedback_saved_.empty()) {
+            ImGui::Spacing();
+            ImGui::TextWrapped("Saved: %s", feedback_saved_.c_str());
+        }
+    }
+    ImGui::End();
+    return false;
 }
 
 void App::feed_first_person_head(float dt) {
@@ -3030,6 +3303,9 @@ void App::draw_flight_debug() {
 void App::build_ui(float dt) {
     (void)dt;
     if (options_.hide_ui) return;
+    // The feedback tool draws with the panels hidden too, and on the two
+    // frames it captures nothing else may be drawn.
+    if (build_feedback_ui()) return;
 
     // The tuning panels cover most of the screen, which is right while tuning
     // and useless while playing. One key clears the lot; the HUD stays.
@@ -9306,6 +9582,8 @@ void App::run() {
         frame_history_[frame_cursor_] = dt;
         frame_cursor_ = (frame_cursor_ + 1) % FRAME_HISTORY;
         if (frame_filled_ < FRAME_HISTORY) ++frame_filled_;
+        // After the history, so the fps readout stays the real frame's.
+        dt = feedback_dt(dt);
 
         mark = SDL_GetTicksNS();
         pump_events();

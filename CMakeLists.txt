@@ -95,6 +95,7 @@ target_sources(dragon PRIVATE
   src/game/debug_camera.cpp
   src/game/thermals.cpp
   src/game/time_of_day.cpp
+  src/game/feedback.cpp
   src/game/terrain.cpp
   src/game/erosion.cpp
   src/game/flight.cpp
@@ -550,3 +551,11 @@ add_executable(test_time_of_day
 target_include_directories(test_time_of_day PRIVATE src)
 target_compile_options(test_time_of_day PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME time_of_day COMMAND test_time_of_day)
+
+add_executable(test_feedback
+  tests/test_feedback.cpp
+  src/game/feedback.cpp
+)
+target_include_directories(test_feedback PRIVATE src)
+target_compile_options(test_feedback PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME feedback COMMAND test_feedback)

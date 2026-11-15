@@ -592,6 +592,34 @@ them on one asset before anything depends on them.
 - The concept-art skill now uses `image-use`. It was rewritten on this
   date.
 
+## The feedback tool (2026-11-14)
+
+The first playtest of the hero dragon came back as a paragraph: the legs
+swing loose in an attack, an artifact at "the back joint", stiff glides,
+lazy attacks. A paragraph does not say which frame, which joint or which
+view. So the game now takes the report itself.
+
+F2 opens the tool in any mode. The world holds still, or runs at an
+eighth or a quarter speed, or steps one frame or ten. A click on the
+picture leaves a numbered mark and each mark takes a note. Save writes a
+folder under the user directory, `feedback/NNNN-summary/`:
+
+- `frame.bmp`: the frame as it was, with the HUD and no marks.
+- `marked.bmp`: the same frame with the marks.
+- `report.md`: the summary, a table of the marks with their place as
+  fractions of the frame and their notes, the model, the studio scenario
+  and its time, the flight state, the camera, the frame number, and a
+  command line that returns to the model, the scenario and the view.
+
+While the tool is open the keyboard types notes and the mouse places
+marks, and neither reaches the game: R does not restart the run and a
+click does not breathe fire. A gamepad still does, because it is polled.
+
+`game/feedback.h` is the report's data and text, with a test suite.
+The capture is in `App::build_feedback_ui`. A save takes two frames with
+the world held still, one for each picture, and no panel is drawn on
+either.
+
 ## Open questions
 
 - The hero dragon's design. Embercrest's current silhouette can stay, or a

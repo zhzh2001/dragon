@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "game/feedback.h"
 #include "game/maneuver.h"
 #include "ui/hud.h"
 #include "gfx/render_tier.h"
@@ -813,6 +814,30 @@ private:
     // screen, which is fine while tuning and useless while playing.
     bool show_panels_ = true;
     bool show_tuning_panels_ = false;
+    // The feedback tool (game/feedback.h, docs/SHOWCASE.md): F2 holds the
+    // world still, a click on the frame leaves a numbered mark, each mark
+    // takes a note, and Save writes a folder under the user directory with
+    // the frame, the frame with its marks and report.md.
+    struct FeedbackEdit {
+        float x = 0.0f, y = 0.0f;  // fractions of the frame
+        char note[200] = {};
+    };
+    bool feedback_active_ = false;
+    int feedback_speed_ = 0;      // 0 held still, 1 an eighth speed, 2 a quarter
+    int feedback_step_ = 0;       // frames still to advance while held still
+    int feedback_capture_ = 0;    // 0 idle, 1 the clean frame, 2 the marked one
+    std::vector<FeedbackEdit> feedback_marks_;
+    char feedback_summary_[600] = {};
+    std::string feedback_dir_;    // the report being written
+    std::string feedback_saved_;  // the last report's folder, for the panel
+    // The step this frame takes while the tool is open.
+    float feedback_dt(float dt);
+    // Draws the tool. True on the two frames a report captures, when no
+    // panel may be drawn over the frame.
+    bool build_feedback_ui();
+    void draw_feedback_marks() const;
+    game::FeedbackReport feedback_report() const;
+    void set_feedback_active(bool active);
     // An imported asset arrives in whatever scale and orientation its author
     // used. Rather than guess at load time, the correction is a live transform
     // so it can be aligned by eye and then written down.
