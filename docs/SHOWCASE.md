@@ -879,6 +879,38 @@ Open: from the front the fore paws show their spread claws under the
 chin. The trailing-fore variant (candidates Q5 and Q6) is the other
 natural choice if the tuck reads wrong in play.
 
+## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
+
+The engine side is `DragonRig::set_attack_clips`: five optional clips from
+`assets/clips/<model>.attacks.glb` (`bite`, `claw_l`, `claw_r`, `tail_l`,
+`tail_r`), each played once from its action's edge and added to the
+finished pose after the head aim. The brake-bank trial put its clip under
+the limb physics and it was smoothed away; a strike goes on last. Under a
+playing clip the procedural neck, limb, wing and tail gesture drops to
+`attack_clip_under` (0.15) and the bite's jaw is the clip's. The body's
+pitch, roll, yaw and surge stay procedural, because a clip cannot move the
+root.
+
+Codex (gpt-6-astra, high, work account, 123k tokens, 18 minutes) authored
+the hero's clips from `tools/clips/hero-attacks-brief.md`:
+`tools/clips/make_hero_attacks.py`, a checker with 133 passing checks, and
+`tools/clips/hero-attacks.md` with the measured axis table. Each clip has
+a wind-up, a fast strike, an overshoot and a slower recovery, with the
+joints down a chain peaking after their parents.
+
+In the engine at full weight the clips overshot: the claw twisted the head
+past the shoulder, the tail whip curled under the body, and the bite stood
+the tail upright. The hero's profile plays them at `attack_clip 0.6`.
+`artifacts/showcase-anim/strike-clips-bite-before-after.jpg` has the bite
+at three frames, the procedural gesture above and the clip below;
+`strike-clips-in-engine.jpg` has bite, claw and tail at four frames each.
+The Dragon panel has "strike clips", "strike clip rate" and "procedural
+gesture under a clip".
+
+Not judged: how the strikes feel in motion and in a fight. Stills show
+the poses and not the timing. The claw's large roll is the body's own
+gesture and was there before.
+
 ## S3, as built: the rim, the clear coat and the cornea (2026-11-15)
 
 A submesh now carries a surface class (`anim::SkinSurface`), read from the

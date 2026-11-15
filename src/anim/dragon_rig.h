@@ -275,6 +275,7 @@ struct RigTuning {
     // gesture stays under a clip that covers the same joints.
     float attack_clip = 1.0f;
     float attack_clip_rate = 1.0f;
+    float attack_clip_under = 0.15f;  // the procedural neck, limb, wing and tail gesture left under a clip
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -1122,6 +1123,7 @@ private:
     const AnimationClip* brake_bank_clip_[2] = {nullptr, nullptr};
     float overlay_time_ = 0.0f;
     const AnimationClip* attack_clip_[ATTACK_CLIP_COUNT] = {};
+    float joints_under_clip() const;
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();
     void drive_limb_physics(const game::FlightState& state, core::Vec3 frame_acceleration,

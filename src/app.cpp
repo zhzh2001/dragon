@@ -4291,6 +4291,7 @@ void App::life_controls() {
     if (!dragon_rig_.has_attack_clips()) ImGui::TextDisabled("this species has no strike clips");
     ImGui::SliderFloat("strike clips", &rig.attack_clip, 0.0f, 2.0f);
     ImGui::SliderFloat("strike clip rate", &rig.attack_clip_rate, 0.25f, 2.0f);
+    ImGui::SliderFloat("procedural gesture under a clip", &rig.attack_clip_under, 0.0f, 1.0f);
 }
 
 void App::build_playtest_ui() {

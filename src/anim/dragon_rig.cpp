@@ -500,6 +500,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(clip_overlay),
     RIG_FLOAT_FIELD(attack_clip),
     RIG_FLOAT_FIELD(attack_clip_rate),
+    RIG_FLOAT_FIELD(attack_clip_under),
     RIG_FLOAT_FIELD(clip_overlay_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
@@ -1564,6 +1565,29 @@ void DragonRig::drive_gestures() {
         gesture_wing_raise_[1 - near] += wing * 0.4f * strike;
         gesture_tail_whip_ = side * (gesture_trail(u, a, 0.12f) - 0.5f * wind);
     }
+    // Under a keyframed strike the body's own motion stays -- the clip
+    // cannot move the root -- and the joints the clip keys give way to it.
+    // Both at once twisted the head past the shoulder in the claw and
+    // curled the tail whip into a loop.
+    const float under = joints_under_clip();
+    gesture_wing_raise_[0] *= under;
+    gesture_wing_raise_[1] *= under;
+    gesture_wing_sweep_deg_ *= under;
+    gesture_neck_pitch_deg_ *= under;
+    gesture_neck_yaw_deg_ *= under;
+    gesture_tail_yaw_deg_ *= under;
+    gesture_limb_rake_ *= under;
+    gesture_tail_whip_ *= under;
+}
+
+float DragonRig::joints_under_clip() const {
+    const float weight = core::saturate(tuning.attack_clip);
+    if (weight <= 0.0f) return 1.0f;
+    const bool playing =
+        (attack_clip_[ATTACK_BITE] && bite_time_ < attack_clip_[ATTACK_BITE]->duration) ||
+        (attack_clip_[claw_side_ >= 0.0f ? ATTACK_CLAW_R : ATTACK_CLAW_L] && claw_time_ < tuning.claw_duration) ||
+        (attack_clip_[tail_side_ >= 0.0f ? ATTACK_TAIL_R : ATTACK_TAIL_L] && tail_time_ < tuning.tail_duration);
+    return playing ? 1.0f - weight * (1.0f - core::saturate(tuning.attack_clip_under)) : 1.0f;
 }
 
 namespace {
@@ -3060,7 +3084,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     if ((action_.bite && bite_launch <= 0.0f) ||
         (!action_.bite && bite_time_ >= bite_launch && bite_time_ - dt < bite_launch)) {
         // Release the neck AFTER loading, not on the input edge.
-        add_kick(neck_kick_, core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) * tuning.bite_impulse);
+        add_kick(neck_kick_, core::rotate(body_to_model_, Vec3{0.0f, -0.35f, -0.94f}) * tuning.bite_impulse *
+                                 (attack_clip_[ATTACK_BITE] ? joints_under_clip() : 1.0f));
     }
     action_.bite = false;
     if (action_.claw) {
@@ -3082,7 +3107,8 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         // The whip: kick the tail's points sideways toward the mark, more
         // toward the tip. Engine body frame (right +X), carried into model
         // space like every other frame vector.
-        add_kick(tail_kick_, core::rotate(body_to_model_, Vec3{tail_side_, 0.15f, 0.0f}) * tuning.tail_impulse);
+        add_kick(tail_kick_, core::rotate(body_to_model_, Vec3{tail_side_, 0.15f, 0.0f}) * tuning.tail_impulse *
+                                 joints_under_clip());
     }
     action_.tail = false;
     // The kicks ramp in over gesture_kick_ramp seconds rather than landing
