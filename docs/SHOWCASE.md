@@ -669,6 +669,44 @@ Not fixed by this pass:
   crease, but "back joint" can also mean the hind hip. The user is asked
   to mark it with F2.
 
+## The first reports from the feedback tool (2026-11-14, 23:08)
+
+The user saved four reports. They are copied to
+`artifacts/showcase-feedback/` as `NNNN-marked.jpg` and `NNNN-report.md`.
+
+| Report | Mark | Note | Reading | Kind |
+|---|---|---|---|---|
+| 0001 | 1, hind hip at the tail root | "artifact" | A flat rectangular plate stands off the thigh, and a seam runs where the leg's hide meets the tail's | mesh and weights |
+| 0001 | 2, fore paw | "back stretch too much?" | The paw bent back on itself: the hang and the toe curl stacked on a folded wrist | profile, fixed below |
+| 0002 | 1, fore shoulder | "unnatural joint" | A hard dark crease where the tucked foreleg pinches the chest | weights at the shoulder |
+| 0003 | 1, belly between the forelegs | "more geometry artifacts" | The chest spike the body sculpt came with, and jagged belly plates | mesh |
+| 0004 | 1, flank | "low res texture and geometry" | The flank's scales are soft beside the neck's | texture share of the atlas |
+| 0004 | 2, neck | "this looks better" | The head sculpt's plates | keep |
+| 0004 | 3, wing | "wings are worse" | The first sculpt's soft wing surface, as the build reported | generate the wings alone |
+
+The tool itself had two faults, both fixed. The report's flight state was
+the idle flight model's and not the studio dragon's. Its command gave the
+camera's world position, and the dragon had flown on, so the command
+rendered an empty hillside. The command now gives the camera as an orbit
+round the dragon (`--inspect`) and the studio's frame number.
+`--inspect 270 6.5 0` is the user's side view.
+
+What changed in answer, besides the report:
+
+- The tail swings in time with the wings, which the user asked for.
+  `tail_beat_deg` is new in the rig (`anim/dragon_rig.h`): the tail's base
+  follows the wingbeat's curve a fifth of a beat late, with the gate the
+  body's heave uses, so it is still in a glide. It is 0 for every other
+  species and 18 for the hero. `artifacts/showcase-anim/tail-on-the-beat.jpg`
+  is the flap, frames 120 to 162. The Dragon panel has "tail on the beat".
+- The fore paw: no hang, half the toe curl, and a tuck of 50 degrees.
+  Below 42 the legs trail long under the body.
+
+The mesh and weight rows are the next asset round: wings generated alone,
+the flank given more of the atlas, the chest spike and the thigh plate
+removed, and the shoulder's weights smoothed. The rig is then rebuilt with
+its script.
+
 ## Open questions
 
 - The hero dragon's design. Embercrest's current silhouette can stay, or a

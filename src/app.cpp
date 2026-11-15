@@ -2143,7 +2143,8 @@ game::FeedbackReport App::feedback_report() const {
     }
     char text[256];
     auto add = [&report](const char* name, const std::string& value) { report.context.push_back({name, value}); };
-    const game::FlightState& state = flight_.state();
+    // The dragon on the screen: the studio's own when a scenario is playing.
+    const game::FlightState& state = dragon_state();
     const gfx::Camera& camera = active_camera();
     const core::Vec3 target = camera.position + camera.forward() * 20.0f;
 
@@ -2180,10 +2181,36 @@ game::FeedbackReport App::feedback_report() const {
     std::string command = "./build/dragon --model " + player_model().path;
     if (studio_active_) command += " --studio " + std::to_string(studio_scenario_);
     if (run_mode_) command += " --run " + std::to_string(run_seed_);
-    std::snprintf(text, sizeof(text), " --cam %.2f,%.2f,%.2f,%.2f,%.2f,%.2f", double(camera.position.x),
-                  double(camera.position.y), double(camera.position.z), double(target.x), double(target.y),
-                  double(target.z));
-    command += text;
+    // A camera near the dragon is given as the orbit that puts it there
+    // (--inspect: angle, distance, elevation, in the dragon's own frame). A
+    // world position found the camera and not the dragon: the first reports'
+    // commands rendered an empty hillside, because the dragon had flown on.
+    const core::Vec3 to_camera = core::rotate(core::conjugate(state.orientation), camera.position - state.position);
+    const float range = core::length(to_camera);
+    if (range > 0.5f && range < 120.0f) {
+        const float elevation = std::asin(core::clampf(to_camera.y / range, -1.0f, 1.0f));
+        const float angle = std::atan2(to_camera.x, to_camera.z);
+        float degrees = core::degrees(angle);
+        if (degrees < 0.0f) degrees += 360.0f;
+        std::snprintf(text, sizeof(text), " --inspect %.0f %.1f %.0f", double(degrees), double(range),
+                      double(core::degrees(elevation)));
+        command += text;
+        std::snprintf(text, sizeof(text), "%.0f degrees round, %.1f m away, %.0f degrees up (--inspect)",
+                      double(degrees), double(range), double(core::degrees(elevation)));
+        add("camera from the dragon", text);
+    } else {
+        std::snprintf(text, sizeof(text), " --cam %.2f,%.2f,%.2f,%.2f,%.2f,%.2f", double(camera.position.x),
+                      double(camera.position.y), double(camera.position.z), double(target.x), double(target.y),
+                      double(target.z));
+        command += text;
+    }
+    if (studio_active_) {
+        // The studio starts each scenario at zero, so a frame count returns
+        // to the moment in a headless run.
+        std::snprintf(text, sizeof(text), " --headless --hide-ui --frames %d --screenshot /tmp/moment.bmp",
+                      std::max(1, int(studio_time_ * 60.0f + 0.5f)));
+        command += text;
+    }
     report.reproduce = command;
     return report;
 }
@@ -4466,6 +4493,8 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("tail tip stiffness", &rig.tail_tip_stiffness, 0.05f, 1.0f);
         ImGui::SliderFloat("tail flow", &rig.tail_flow_deg, 0.0f, 45.0f, "%.1f deg");
         ImGui::SliderFloat("tail flow period", &rig.tail_flow_period, 0.5f, 8.0f, "%.2f s");
+        ImGui::SliderFloat("tail on the beat", &rig.tail_beat_deg, -30.0f, 30.0f, "%.1f deg");
+        ImGui::SliderFloat("tail beat lag", &rig.tail_beat_lag, 0.0f, 0.5f, "%.2f of a beat");
         ImGui::SliderFloat("tail flow cycles", &rig.tail_flow_cycles, 0.25f, 2.0f);
         ImGui::SliderFloat("tail flow vertical", &rig.tail_flow_vertical, 0.0f, 1.0f);
         ImGui::SliderFloat("tail flow half-life", &rig.tail_flow_half_life, 0.05f, 2.0f, "%.2f s");

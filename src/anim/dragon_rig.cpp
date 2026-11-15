@@ -430,6 +430,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(tail_flow_stream_end),
     RIG_FLOAT_FIELD(tail_flow_stream_scale),
     RIG_FLOAT_FIELD(tail_flow_attack_scale),
+    RIG_FLOAT_FIELD(tail_beat_deg),
+    RIG_FLOAT_FIELD(tail_beat_lag),
     RIG_FLOAT_FIELD(neck_range_deg),
     RIG_FLOAT_FIELD(tail_range_deg),
     RIG_FLOAT_FIELD(tail_rudder_deg),
@@ -3155,6 +3157,18 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         state.control.x * tuning.tail_elevator_deg +
             brake_body_ * tuning.brake_tail_drop_deg,
         -(state.control.y + 0.5f * state.control.z) * tuning.tail_rudder_deg};
+    // In time with the wings (tail_beat_deg): the same gate and the same
+    // curve as the body's heave (drive_body_beat), so the tail swings on the
+    // beat that lifts the body and is still in a glide.
+    if (tuning.tail_beat_deg != 0.0f) {
+        const float beat = core::saturate(state.flap_amplitude) *
+                           (1.0f - core::saturate(state.wing_tuck)) * (1.0f - ground_contact_);
+        if (beat > 1e-4f) {
+            const float down = core::clampf(tuning.wing_downstroke_fraction, 0.05f, 0.95f);
+            const float phase = wrapped_phase(state.flap_phase);
+            tail_steer.x += tuning.tail_beat_deg * beat * wingbeat_curve(phase - tuning.tail_beat_lag, down);
+        }
+    }
 
     // The neck leads the manoeuvre and lowers into the wind at speed -- and a
     // deliberate tuck streamlines regardless of how fast the dive is yet, the

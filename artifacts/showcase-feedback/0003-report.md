@@ -1,0 +1,32 @@
+# Feedback, 2026-11-14 23:09:23
+
+(no summary)
+
+![the frame with its marks](marked.bmp)
+
+The frame with nothing drawn on it is `frame.bmp`.
+
+## Marks
+
+| # | Where | x | y | Note |
+|---|---|---|---|---|
+| 1 | centre | 0.407 | 0.587 | more geometry artifacts |
+
+x and y are fractions of the frame from its top left corner.
+
+## State
+
+- model: assets/embercrest-hero.glb
+- studio: scenario 1 at 28.40 s
+- dragon position: -204.64, 37.01, -1310.21
+- flight: 0.0 m/s, climbing 0.0 m/s, 0.0 g, 3.0 m above the ground, grounded
+- camera: 608.45, 192.16, -2410.61 looking at 604.47, 193.81, -2391.08, free camera
+- frame: 20508, at 127.59 s
+- renderer: modern tier, 1920x1080
+- combat: on
+
+## Reproduce
+
+```sh
+./build/dragon --model assets/embercrest-hero.glb --studio 1 --cam 608.45,192.16,-2410.61,604.47,193.81,-2391.08
+```

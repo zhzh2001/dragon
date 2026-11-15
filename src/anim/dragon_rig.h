@@ -547,6 +547,14 @@ struct RigTuning {
     float tail_flow_stream_end = 95.0f;   // m/s, fully streamed
     float tail_flow_stream_scale = 0.35f; // amplitude retained at high speed
     float tail_flow_attack_scale = 0.15f; // amplitude retained during a whip
+    // The tail answers the wingbeat. A flying animal's tail is its
+    // counterweight: the body pitches up on each downstroke and the tail
+    // base swings down against it, then up through the recovery, and the
+    // chain's own lag carries that down the length as a wave in time with
+    // the wings. Degrees at the base; the lag is a fraction of one beat.
+    // Zero keeps a tail that ignores the beat, as every species had.
+    float tail_beat_deg = 0.0f;
+    float tail_beat_lag = 0.18f;
     // Hard articulation limits, total deviation from the rest shape. The neck
     // is tight -- big head turns are the aim system's job, not the sim's; the
     // tail keeps room to whip.
