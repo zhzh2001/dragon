@@ -7576,6 +7576,8 @@ void App::on_touchdown(float sink) {
         p.color_start = colour;
         p.color_end = colour * 1.15f;
         p.brightness = 0.2f + 0.25f * hard;
+        // The ground slopes; the river does not. Its drawn plane, as the spray's.
+        if (water) p.floor = surface + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
         particles_.spawn(p);
     }
 }
@@ -7641,6 +7643,9 @@ void App::update_spray(float dt) {
         p.color_start = spray_colour_;
         p.color_end = spray_colour_ * 1.1f;
         p.brightness = 0.25f + 0.2f * amount;
+        // The plane the river is drawn on, which on the modern tier stands
+        // half a metre over the line (build_water_mesh).
+        p.floor = water + (tier_.tier == gfx::Tier::Modern ? 0.5f : 0.0f);
         particles_.spawn(p);
         // And a drop thrown higher and faster, catching the light.
         gfx::Particle drop;
