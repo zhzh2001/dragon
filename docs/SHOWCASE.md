@@ -1807,7 +1807,7 @@ measured: a pair of runs differs by more than it can cost
 
 The pair: `artifacts/showcase-critic/marks-quiet-before-after.jpg`.
 
-### After round 3: more air, less aerosol (16:35)
+### After round 3: more air, less aerosol (16:25)
 
 Three rounds said it: "no blue shift on the far ranges", "the depth reads
 flat", and toward the sun "a milky haze wash". A wall 3 km off had the
