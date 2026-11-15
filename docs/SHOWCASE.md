@@ -802,7 +802,7 @@ The mesh worker's brief grew a second stage: build from this body, place
 each leg joint on the joint the sculpt shows, and deliver pairs from the
 playtester's side view.
 
-## Mesh version 4: the bent-leg body, its rig, and the fore legs' own fold (2026-11-15, 03:10)
+## Mesh version 4: the bent-leg body, its rig, and the fore legs' own fold (2026-11-15, 02:29)
 
 A second Claude worker built the mesh on the new body under version 2's
 wings and refitted the rig (48 minutes; commits `8f5063b` and `4df96a6`,
