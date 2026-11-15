@@ -4287,6 +4287,10 @@ void App::life_controls() {
     ImGui::TextDisabled("plays only while braking (Ctrl / LT, or the studio's brake)");
     ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
     ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
+    ImGui::SeparatorText("keyframed strikes (bite, claw, tail)");
+    if (!dragon_rig_.has_attack_clips()) ImGui::TextDisabled("this species has no strike clips");
+    ImGui::SliderFloat("strike clips", &rig.attack_clip, 0.0f, 2.0f);
+    ImGui::SliderFloat("strike clip rate", &rig.attack_clip_rate, 0.25f, 2.0f);
 }
 
 void App::build_playtest_ui() {
@@ -4760,6 +4764,12 @@ void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const 
         return i >= 0 && size_t(i) < model.overlay_clips.size() ? &model.overlay_clips[size_t(i)] : nullptr;
     };
     rig.set_brake_bank_clips(overlay(0), overlay(1));
+    const anim::AnimationClip* attacks[anim::DragonRig::ATTACK_CLIP_COUNT] = {};
+    for (int k = 0; k < anim::DragonRig::ATTACK_CLIP_COUNT; ++k) {
+        const int i = model.attack_clip[k];
+        if (i >= 0 && size_t(i) < model.attack_clips.size()) attacks[k] = &model.attack_clips[size_t(i)];
+    }
+    rig.set_attack_clips(attacks);
 }
 
 void App::find_wingtips(LoadedModel& model) {
@@ -4963,6 +4973,19 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                 if (out.overlay_clips[i].name == "brake_bank_l") out.brake_bank_clip[0] = int(i);
                 if (out.overlay_clips[i].name == "brake_bank_r") out.brake_bank_clip[1] = int(i);
             }
+        }
+        // The keyframed strikes, the same way (DragonRig::set_attack_clips).
+        const std::string attack_path = core::paths::asset("clips/" + stem + ".attacks.glb");
+        if (out.joints.valid() && std::filesystem::exists(attack_path)) {
+            out.attack_clips = anim::load_clip_file(attack_path.c_str(), out.skeleton);
+            static const char* const kNames[anim::DragonRig::ATTACK_CLIP_COUNT] = {"bite", "claw_l", "claw_r", "tail_l",
+                                                                                 "tail_r"};
+            for (size_t i = 0; i < out.attack_clips.size(); ++i) {
+                for (int k = 0; k < anim::DragonRig::ATTACK_CLIP_COUNT; ++k) {
+                    if (out.attack_clips[i].name == kNames[k]) out.attack_clip[k] = int(i);
+                }
+            }
+            LOG_INFO("attack clips: %zu in %s", out.attack_clips.size(), attack_path.c_str());
         }
     }
 

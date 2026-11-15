@@ -498,6 +498,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(work_wing_deg),
     RIG_FLOAT_FIELD(work_turn_rate),
     RIG_FLOAT_FIELD(clip_overlay),
+    RIG_FLOAT_FIELD(attack_clip),
+    RIG_FLOAT_FIELD(attack_clip_rate),
     RIG_FLOAT_FIELD(clip_overlay_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
@@ -3432,6 +3434,21 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // Jaw and tremor after the aim: the aim measures the head and would
     // correct the tremor straight back out.
     drive_attack(airborne);
+    // The keyframed strikes, last: whole, on the finished pose. Each runs
+    // once from its action's edge; the gesture timers are the clocks.
+    if (tuning.attack_clip > 1e-4f && has_attack_clips()) {
+        const float rate = core::clampf(tuning.attack_clip_rate, 0.1f, 4.0f);
+        auto play = [&](int index, float since) {
+            const AnimationClip* clip = attack_clip_[index];
+            const float t = since * rate;
+            if (clip && clip->valid() && t >= 0.0f && t < clip->duration) {
+                clip->sample_additive(t, pose_, tuning.attack_clip);
+            }
+        };
+        play(ATTACK_BITE, bite_time_);
+        play(claw_side_ >= 0.0f ? ATTACK_CLAW_R : ATTACK_CLAW_L, claw_time_);
+        play(tail_side_ >= 0.0f ? ATTACK_TAIL_R : ATTACK_TAIL_L, tail_time_);
+    }
     compute_world_matrices(*skeleton_, pose_, world_);
     compute_skinning_matrices(*skeleton_, world_, skinning_);
     aim_active_ = false;
@@ -3455,6 +3472,8 @@ void DragonRig::drive_attack(float airborne) {
         bite_open = u < peak ? std::sin(core::HALF_PI * u / core::maxf(peak, 1e-3f))
                              : (u < peak + 0.12f ? std::cos(core::HALF_PI * (u - peak) / 0.12f) : 0.0f);
     }
+    // A bite clip keys the jaw itself; the procedural gape would open it twice.
+    if (attack_clip_[ATTACK_BITE]) bite_open *= 1.0f - core::saturate(tuning.attack_clip);
     jaw_open_ = core::maxf(core::maxf(breath_smoothed_, spit_open), bite_open);
     if (joints_.jaw != NO_PARENT) {
         // A faint chatter on top of the breath -- the mouth is not a hatch.

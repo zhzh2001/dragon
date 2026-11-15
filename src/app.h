@@ -873,6 +873,8 @@ private:
         // overlay for a held braking turn, left and right (-1 when absent).
         std::vector<anim::AnimationClip> overlay_clips;
         int brake_bank_clip[2] = {-1, -1};
+        std::vector<anim::AnimationClip> attack_clips;
+        int attack_clip[5] = {-1, -1, -1, -1, -1};
         // Which clip serves as the ground idle, and whether it is held at one time.
         int idle_clip = -1;
         float idle_clip_hold = -1.0f;

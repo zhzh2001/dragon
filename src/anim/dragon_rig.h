@@ -270,6 +270,11 @@ struct RigTuning {
     // full brake (0 off, above 1 exaggerated) and its playback rate.
     float clip_overlay = 1.0f;
     float clip_overlay_rate = 1.0f;
+    // The keyframed strikes' weight (set_attack_clips): 1 as authored, 0 the
+    // procedural gesture alone. And how much of the procedural limb and neck
+    // gesture stays under a clip that covers the same joints.
+    float attack_clip = 1.0f;
+    float attack_clip_rate = 1.0f;
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -920,6 +925,19 @@ public:
         brake_bank_clip_[1] = right;
     }
     bool has_brake_bank_clips() const { return brake_bank_clip_[0] || brake_bank_clip_[1]; }
+    // Keyframed strikes (assets/clips/<model>.attacks.glb; docs/SHOWCASE.md,
+    // S4): `bite`, the claw to the left and to the right, the tail to the
+    // left and to the right. Any may be null. Each plays once from the
+    // action's edge, added whole onto the finished pose after the aim: a
+    // strike is the motion, not a layer under one. Not owned.
+    enum AttackClip { ATTACK_BITE = 0, ATTACK_CLAW_L, ATTACK_CLAW_R, ATTACK_TAIL_L, ATTACK_TAIL_R, ATTACK_CLIP_COUNT };
+    void set_attack_clips(const AnimationClip* const clips[ATTACK_CLIP_COUNT]) {
+        for (int i = 0; i < ATTACK_CLIP_COUNT; ++i) attack_clip_[i] = clips ? clips[i] : nullptr;
+    }
+    bool has_attack_clips() const {
+        for (const AnimationClip* clip : attack_clip_) if (clip) return true;
+        return false;
+    }
     void update(const game::FlightState& state, float dt);
 
     // A chain simulated as point masses in the dragon's own frame.
@@ -1103,6 +1121,7 @@ private:
     LimbDynamics limb_sim_[4];
     const AnimationClip* brake_bank_clip_[2] = {nullptr, nullptr};
     float overlay_time_ = 0.0f;
+    const AnimationClip* attack_clip_[ATTACK_CLIP_COUNT] = {};
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();
     void drive_limb_physics(const game::FlightState& state, core::Vec3 frame_acceleration,
