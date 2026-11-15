@@ -1656,6 +1656,20 @@ void App::upload_canopy() {
         }
     }
     atmosphere_.set_canopy(soft_cover, soft_top, n);
+
+    // And the shade under each crown (game::Vegetation::build_crown_shade),
+    // over the playable extent at 2.4 m a texel: spruce, pine, broadleaf,
+    // snag, each crown's radius at scale 1.
+    const float crown_radius[gfx::TREE_KINDS] = {3.0f, 3.6f, 3.6f, 0.6f};
+    vegetation_.build_crown_shade(terrain_settings_.half_extent, CROWN_SHADE_GRID, crown_radius);
+    atmosphere_.set_crown_shade(vegetation_.crown_shade(), vegetation_.crown_shade_size());
+    {
+        size_t under = 0;
+        for (const uint8_t v : vegetation_.crown_shade()) under += v > 64 ? 1 : 0;
+        LOG_INFO("crown shade: %.1f%% of the playable ground under a crown (%d x %d over +-%.0f m)",
+                 100.0 * double(under) / double(core::maxf(float(vegetation_.crown_shade().size()), 1.0f)),
+                 vegetation_.crown_shade_size(), vegetation_.crown_shade_size(), double(vegetation_.crown_shade_half()));
+    }
 }
 
 game::TerrainSettings App::tier_terrain(const game::TerrainSettings& base) const {
@@ -9281,7 +9295,8 @@ void App::render() {
             const game::Thermal& t = columns[size_t(i)];
             scene.thermals[i] = core::Vec4{t.base.x, t.radius, t.base.z, t.strength};
         }
-        scene.thermal_count = core::Vec4{float(n), 0.0f, 0.0f, 0.0f};
+        // y: the crown shade map's half extent (terrain.hlsl), 0 for none.
+        scene.thermal_count = core::Vec4{float(n), ablated("crown_shade") ? 0.0f : vegetation_.crown_shade_half(), 0.0f, 0.0f};
     }
     // The valley mist (scene_common.hlsl, valley_mist), the modern tier's:
     // pooled on the floor, as thick as the valley's hour makes it.

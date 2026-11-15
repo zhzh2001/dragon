@@ -160,7 +160,9 @@ void Atmosphere::shutdown() {
     rhi.destroy(sampler_);
     rhi.destroy(heights_);
     rhi.destroy(terrain_sun_);
-    heights_ = terrain_sun_ = nullptr;
+    rhi.destroy(crown_shade_);
+    heights_ = terrain_sun_ = crown_shade_ = nullptr;
+    crown_shade_size_ = 0;
     transmittance_ = multiscatter_ = atlas_ = nullptr;
     sampler_ = nullptr;
     tables_valid_ = false;
@@ -297,6 +299,37 @@ void Atmosphere::set_canopy(const std::vector<float>& cover, const std::vector<f
         height_texels_[i * 4 + 2] = to_half(top[i]);
     }
     device_->rhi().upload_texture(heights_, height_texels_.data(), uint32_t(n), uint32_t(n), false);
+}
+
+void Atmosphere::set_crown_shade(const std::vector<uint8_t>& shade, int n) {
+    if (!device_ || active_tier().tier != Tier::Modern) return;
+    // Nothing planted yet: one texel of open sky, so the slot is never empty.
+    const bool empty = n < 1 || shade.size() != size_t(n) * size_t(n);
+    const uint32_t size = empty ? 1u : uint32_t(n);
+    rhi::Device& rhi = device_->rhi();
+    if (!crown_shade_ || crown_shade_size_ != size) {
+        rhi.destroy(crown_shade_);
+        rhi::TextureDesc desc;
+        desc.width = desc.height = size;
+        desc.format = rhi::Format::RGBA8;
+        desc.usage = rhi::TEXTURE_SAMPLED;
+        crown_shade_ = rhi.create_texture(desc, "crown shade");
+        crown_shade_size_ = size;
+    }
+    if (!crown_shade_) return;
+    std::vector<uint8_t> texels(size_t(size) * size_t(size) * 4, 0);
+    if (!empty) {
+        for (size_t i = 0; i < shade.size(); ++i) texels[i * 4] = shade[i];
+    }
+    rhi.upload_texture(crown_shade_, texels.data(), size, size, false);
+}
+
+void Atmosphere::bind_crown_shade(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const {
+    if (!available() || !crown_shade_) return;
+    rhi::TextureBinding binding = {};
+    binding.texture = crown_shade_;
+    binding.sampler = sampler_;
+    rhi.bind_fragment_textures(pass, slot, &binding, 1);
 }
 
 void Atmosphere::bind_heights(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const {

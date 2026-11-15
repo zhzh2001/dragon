@@ -113,6 +113,19 @@ public:
         return trees_[int(kind)];
     }
     const std::vector<PlantInstance>& rocks(int kind) const { return rocks_[kind]; }
+
+    // The shade under the crowns that comes from the sky, not the sun: each
+    // tree a soft blot of `crown_radius[kind]` metres (times its scale) on
+    // an `n` x `n` grid over +-`half` metres, 0 open to 255 fully under.
+    // In a mountain's shadow no tree casts a shadow, and without this a tree
+    // there stood on evenly lit ground and floated (playtest report 0011).
+    // The terrain shader reads the grid as a texture; the grass reads it
+    // here, at its own root.
+    void build_crown_shade(float half, int n, const float crown_radius[gfx::TREE_KINDS]);
+    float crown_shade_at(float x, float z) const;  // 0..1, bilinear
+    const std::vector<uint8_t>& crown_shade() const { return crown_shade_; }
+    int crown_shade_size() const { return crown_shade_n_; }
+    float crown_shade_half() const { return crown_shade_half_; }
     // The kit's pieces where rock_kit is on (empty otherwise).
     const std::vector<gfx::RockInstance>& kit_rocks(int piece) const { return kit_rocks_[piece]; }
     // Legacy rocks and kit pieces together.
@@ -130,6 +143,9 @@ public:
 
 private:
     std::vector<PlantInstance> trees_[gfx::TREE_KINDS];
+    std::vector<uint8_t> crown_shade_;
+    int crown_shade_n_ = 0;
+    float crown_shade_half_ = 0.0f;
     std::vector<PlantInstance> rocks_[gfx::ROCK_KINDS];
     std::vector<gfx::RockInstance> kit_rocks_[gfx::ROCK_PIECES];
     float kit_extra_sink_ = 0.0f;

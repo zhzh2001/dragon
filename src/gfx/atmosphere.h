@@ -126,6 +126,11 @@ public:
     // The heights texture itself (r the ground, g the canopy's cover, b its
     // top), for the river's reflection.
     void bind_heights(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
+    // The shade under the crowns (game::Vegetation::build_crown_shade): `n`
+    // x `n` bytes, row-major from (-half, -half). The terrain reads it at
+    // `bind_crown_shade`'s slot; a 1 x 1 "open sky" texel until it is set.
+    void set_crown_shade(const std::vector<uint8_t>& shade, int n);
+    void bind_crown_shade(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
     // The transmittance table, for the sky's sun disc.
     void bind_transmittance(rhi::Device& rhi, rhi::Pass* pass, uint32_t slot) const;
 
@@ -141,6 +146,8 @@ private:
     rhi::Texture* heights_ = nullptr;      // RGBA16F: height, canopy cover, canopy top
     std::vector<uint16_t> height_texels_;  // what it holds, so the canopy can be added after
     rhi::Texture* terrain_sun_ = nullptr;  // RGBA16F: shadow top, ridge distance
+    rhi::Texture* crown_shade_ = nullptr;  // RGBA8: r the shade under the crowns
+    uint32_t crown_shade_size_ = 0;
     uint32_t heights_size_ = 1;
     float heights_half_ = 1.0f;
     bool terrain_sun_dirty_ = true;

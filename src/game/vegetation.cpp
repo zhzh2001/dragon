@@ -17,6 +17,11 @@ namespace {
 
 // A stateless hash of a grid cell, so every query of the same cell agrees
 // without storing anything. Decorrelated values per cell.
+// How much darker a plant fully under a crown is: the terrain's ambient
+// loses about this much there (terrain.hlsl, the crown shade), and a blade's
+// whole colour is all the instance can scale.
+constexpr float kCrownShadeOnGrass = 0.4f;
+
 struct CellHash {
     uint32_t state;
     CellHash(int ix, int iz, uint32_t seed) {
@@ -465,6 +470,52 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
              spacing, treeline);
 }
 
+void Vegetation::build_crown_shade(float half, int n, const float crown_radius[gfx::TREE_KINDS]) {
+    crown_shade_.assign(size_t(n) * size_t(n), 0);
+    crown_shade_n_ = n;
+    crown_shade_half_ = half;
+    if (n < 2 || half <= 0.0f) return;
+    const float texel = 2.0f * half / float(n);
+    std::vector<float> open(crown_shade_.size(), 1.0f);  // the share of the sky left
+    for (int k = 0; k < gfx::TREE_KINDS; ++k) {
+        for (const PlantInstance& tree : trees_[k]) {
+            // A little past the crown's edge: sky shade has no hard rim.
+            const float radius = crown_radius[k] * tree.position_scale.w * 1.6f;
+            if (radius <= 0.0f) continue;
+            const float cx = (tree.position_scale.x + half) / texel - 0.5f;
+            const float cz = (tree.position_scale.z + half) / texel - 0.5f;
+            const int reach = int(std::ceil(radius / texel));
+            for (int j = int(cz) - reach; j <= int(cz) + reach + 1; ++j) {
+                for (int i = int(cx) - reach; i <= int(cx) + reach + 1; ++i) {
+                    if (i < 0 || j < 0 || i >= n || j >= n) continue;
+                    const float dx = (float(i) - cx) * texel, dz = (float(j) - cz) * texel;
+                    const float d2 = (dx * dx + dz * dz) / (radius * radius);
+                    if (d2 >= 1.0f) continue;
+                    // Flat across the crown, falling off past it. Squared, it
+                    // was dark only at the trunk, which the crown hides from
+                    // any view above it.
+                    const float w = 1.0f - core::smoothstep(0.3f, 1.0f, d2);
+                    open[size_t(j) * size_t(n) + size_t(i)] *= 1.0f - 0.9f * w;
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < open.size(); ++i) crown_shade_[i] = uint8_t(std::lrint((1.0f - open[i]) * 255.0f));
+}
+
+float Vegetation::crown_shade_at(float x, float z) const {
+    const int n = crown_shade_n_;
+    if (n < 2 || crown_shade_half_ <= 0.0f) return 0.0f;
+    const float texel = 2.0f * crown_shade_half_ / float(n);
+    const float fx = (x + crown_shade_half_) / texel - 0.5f;
+    const float fz = (z + crown_shade_half_) / texel - 0.5f;
+    if (fx < 0.0f || fz < 0.0f || fx >= float(n - 1) || fz >= float(n - 1)) return 0.0f;
+    const int i = int(fx), j = int(fz);
+    const float u = fx - float(i), v = fz - float(j);
+    auto at = [&](int a, int b) { return float(crown_shade_[size_t(b) * size_t(n) + size_t(a)]) / 255.0f; };
+    return core::lerpf(core::lerpf(at(i, j), at(i + 1, j), u), core::lerpf(at(i, j + 1), at(i + 1, j + 1), u), v);
+}
+
 void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& settings,
                               Vec3 centre,
                               std::vector<PlantInstance> (&out)[gfx::GRASS_KINDS]) const {
@@ -518,6 +569,8 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
                 Vec4{x, height - 0.05f - sink_for(normal, settings.slope_sink * 0.5f), z, scale};
             plant.params = Vec4{core::TWO_PI * hash.next(), 0.75f + 0.5f * hash.next(),
                                 core::TWO_PI * hash.next(), 0.5f * hash.next()};
+            // Under a crown it has less sky, as the ground under it has.
+            plant.params.y *= 1.0f - kCrownShadeOnGrass * crown_shade_at(x, z);
             out[int(kind)].push_back(plant);
             ++total;
         }
@@ -558,7 +611,8 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
             const float scale = 0.85f + 0.4f * hash.next();
             const float phase = core::TWO_PI * hash.next();
             plant.position_scale = Vec4{x, height - 0.03f, z, scale};
-            plant.params = Vec4{yaw, 0.95f + 0.2f * dry, phase, 0.75f * dry};
+            plant.params = Vec4{yaw, (0.95f + 0.2f * dry) * (1.0f - kCrownShadeOnGrass * crown_shade_at(x, z)), phase,
+                                0.75f * dry};
             sward.push_back(plant);
         }
     }

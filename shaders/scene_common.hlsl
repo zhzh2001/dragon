@@ -75,6 +75,8 @@ struct SceneUniforms {
     float4 local_light_color;
     // The valley's thermals: xz the column, y its radius, w its strength
     // (m/s); thermal_count.x how many. A cumulus caps each (cloud_coverage).
+    // thermal_count.y is not the thermals': the crown shade map's half
+    // extent in metres (terrain.hlsl), 0 for none.
     float4 thermals[12];
     float4 thermal_count;
     // The valley mist (valley_mist, the modern tier's): x its density at the

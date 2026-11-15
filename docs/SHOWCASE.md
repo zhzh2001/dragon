@@ -1344,17 +1344,33 @@ the change, and it is also the first thing a playtester may dislike.
 critic's "no aerial perspective" in the chase view. In two valleys of a run
 the difference was a slightly bluer far wall. Not plain, so not kept.
 
-### Still open from report 0011
+### Shade under the crowns, from the sky (14:59)
 
-A tree in the mountain's shadow has nothing under it, so it floats. It needs
-shade from the sky, not the sun: a soft blot under each crown. The terrain's
-canopy map has 7 m texels and fades in past 150 m. The route is a top-down
-target around the camera, drawn from the tree instances as soft discs, which
-the terrain and the grass read into their ambient. It touches
-`gfx/foliage.*`, so it waits for the rock branch.
+Report 0011's mark is on a tree in the mountain's shadow with nothing under
+it. No tree casts a shadow there, so it stood on evenly lit ground and
+floated. `Vegetation::build_crown_shade` splats each tree onto a 2048 grid
+over the playable extent (2.4 m a texel): flat across 1.6 crown radii,
+falling off to the edge, 0.9 deep, overlapping crowns multiplied. The
+terrain shader reads it as a texture (slot 10) within 600 m and takes 70% of
+the ambient and 50% of the sun at its centre. The grass and the sward read
+the same grid on the CPU at their roots and lose up to 40% of their colour.
+`DRAGON_ABLATE=crown_shade` turns it off. Pair:
+`artifacts/showcase-critic/crown-shade-before-after.jpg`.
 
-The bark is saturated red-brown in shade (the critic: "the tree trunks at
-the left are saturated red").
+What went wrong on the way, each of which rendered as "no change":
+
+- The first version took the sky's share only. The report's ground is in
+  the shadow's penumbra and still grazed by the sun, so a cut in the ambient
+  alone moved it by 10 levels of 255.
+- The falloff was squared, dark only at the trunk, which the crown hides
+  from any view above it.
+- `core::smoothstep(1.0, 0.3, x)` returns a step, not a falling curve: the
+  edges must ascend. That zeroed the whole grid for one build.
+
+A debug render of the grid as a colour settled the first two in one look.
+
+Still open: the bark is saturated red-brown in shade (the critic: "the tree
+trunks at the left are saturated red").
 
 ### Not changed, because they are design calls
 

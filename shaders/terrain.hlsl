@@ -32,6 +32,9 @@ TEXTURE2D(canopy_map, 6);
 TEXTURE2D(grass_map, 7);
 TEXTURE2D(forest_map, 8);
 TEXTURE2D(gravel_map, 9);
+// The shade under the crowns, from the sky (game::Vegetation::
+// build_crown_shade): r, over the playable extent.
+TEXTURE2D(crown_shade_map, 10);
 #endif
 #endif
 #ifdef TERRAIN_LITE
@@ -520,6 +523,23 @@ float4 fs_main(VertexOut input) : SV_Target {
 #endif
 #ifdef ATMOSPHERE
     ambient *= 1.0 - 0.45 * canopy;
+    // Under a crown the ground sees less sky, whether or not the sun is
+    // out: a soft blot under each tree. In a mountain's shadow no tree casts
+    // a shadow, and without this a tree there stood on evenly lit ground
+    // and floated (playtest report 0011). Out to 600 m; past it the canopy
+    // term above carries the forest.
+    {
+        float crown_half = scene.thermal_count.y;
+        float2 crown_uv = input.world_position.xz / max(crown_half, 1.0) * 0.5 + 0.5;
+        float crown = crown_shade_map.Sample(crown_shade_map_sampler, saturate(crown_uv)).r;
+        crown *= step(0.5, crown_half) * (1.0 - smoothstep(250.0, 600.0, camera_distance)) * (1.0 - rocky);
+        ambient *= 1.0 - 0.7 * crown;
+        // And some of the sun. A low sun reaches under a crown from the
+        // side, and with the sky's share alone the blot did not show on
+        // ground the sun still grazed; the trunk, the low limbs and the
+        // grass about them take part of it.
+        visibility *= 1.0 - 0.5 * crown;
+    }
     // Past the shadow cascades no crown shades the ground: the canopy's
     // cover stands in for the shade under it.
     visibility *= 1.0 - 0.7 * canopy * smoothstep(1400.0, 2000.0, camera_distance);

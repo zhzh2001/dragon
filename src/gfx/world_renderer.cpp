@@ -408,6 +408,7 @@ void WorldRenderer::draw_terrain(Device& device, rhi::Pass* pass, const Mesh& me
             ground[i].sampler = white_sampler_;
         }
         if (ground[0].texture && ground[1].texture && ground[2].texture) device.rhi().bind_fragment_textures(pass, 7, ground, 3);
+        atmosphere_->bind_crown_shade(device.rhi(), pass, 10);
     }
 
     mesh.bind(device.rhi(), pass);

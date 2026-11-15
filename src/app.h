@@ -980,6 +980,9 @@ private:
     // The terrain's grid as the sun and the river see it (gfx::Atmosphere):
     // heights, then the forest's canopy on the same texels.
     static constexpr int SUN_GRID = 1024;
+    // The crown shade's grid over the playable extent (App::upload_canopy):
+    // 2.4 m a texel at 2.5 km, 16 MB as RGBA8.
+    static constexpr int CROWN_SHADE_GRID = 2048;
     // The coarse ground beyond the playable extent.
     gfx::Mesh terrain_skirt_mesh_;
     std::vector<gfx::MeshChunk> terrain_chunks_;
