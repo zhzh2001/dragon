@@ -891,8 +891,8 @@ adjustments".
 | 0006, 0007 | fore leg, "unnatural bending", "look at the bending!" | pose | the dangle, below |
 | 0006 | belly, "geometry artifacts"; flank, "not completely fixed" | mesh | open: the next mesh round |
 | 0007 | wing, "self shadow aliasing" (low priority) | shadows | open |
-| 0008 | "water artifacts" close to the river, and 37 fps there | water | open: S8 |
-| 0010 | "strange whirls?" on the river from a distance | water | open: S8 |
+| 0008 | "water artifacts" close to the river, and 37 fps there | water | fixed, below; the cost is down 4 ms of 16 |
+| 0010 | "strange whirls?" on the river from a distance | water | fixed, below |
 | 0009 | "vegetation quality can be improved": the bushes and the grass | plants | open: S7 |
 | 0011 | no tree shadow inside the mountain's shadow | lighting | open: trees need contact shade without the sun |
 | 0011 | "rocks look unnatural" | rock | open: S6 |
@@ -906,6 +906,37 @@ tried and `flight-legs-dangle-views.jpg` the choice in the glide, the
 flap, from behind, in the bite, the dive and landed. The other postures
 are the Dragon panel's "flight leg posture" presets (dangle, trail and
 tuck, trail both, fold), and their numbers are in the profile's comment.
+
+## The river's streaks and whirls (2026-11-15, 12:20)
+
+Reports 0008 and 0010. Close to the river on a bend, the whole surface
+was straight streaks from the far bank to the camera, and from a distance
+a patch of it churned. `artifacts/showcase-s8/water-close-before-after.jpg`
+and `water-distant-before-after.jpg` have both from the reports' own
+cameras.
+
+The cause was in the wave trains, not the reflection. A first guess, that
+the reflection's march sampled the forest at the same distances in every
+pixel, was wrong: jittering it changed nothing. A flat normal removed the
+streaks, and the normal drawn as colour showed them. Each train's
+direction was built from the river's local flow, which turns a little
+with every metre of a bend. Two kilometres from the map's origin, that
+turn times the position times a wavenumber of forty ran the phase through
+whole cycles across a metre. On a straight reach the flow is constant and
+the chop was right, which is why it had passed.
+
+- The trains now run in fixed world directions and are not carried by the
+  flow. The current shows in the rough patches and the edge froth.
+- The froth's streaks out in the current are gone. They were a noise
+  contour in the same turned frame; in a sound frame they closed into
+  loops metres across.
+- The cost, with the river filling a 1080p frame: 31.0 ms a frame before
+  and 27.1 after, of which everything but the water is 15.3. Eight trains
+  for twelve, and 20 reflection steps for 40, each pixel starting its
+  march at a different distance so the coarser steps do not band.
+
+The water is still 12 ms of such a frame. S8 has the rest: a cheaper
+reflection, and the look of the surface.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
