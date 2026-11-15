@@ -474,6 +474,38 @@ brief names the wing spike and the invalid weights as the things to fix
 first, and replaces the membrane plane check with a check for
 intersections.
 
+### The static mesh, version 2 (2026-11-14)
+
+A fresh Claude subagent rebuilt the mesh from three sculpts in 53 minutes
+and about 356,000 tokens, working from the first worker's record and
+script. The body, legs and tail are the wingless generation, the wings are
+the first generation's, and the head is unchanged. 86 of 86 checks pass.
+The file is 25.5 MB with 116,382 triangles in the hide, membrane and horn.
+
+The main session's reading of `artifacts/hero-build/`:
+
+- `body.png`: the flank, the thigh and the tail have separate scales with
+  dark creases, and the back has overlapping keeled plates. Version 1 had
+  a mottled smear in all three places.
+- `seam.png`: from 3 m the join reads as the lower edge of the frill. A
+  close look finds it, because the head's plates are flat and sharp and
+  the body's are rounder.
+- `turnaround.png`: the proportions and the silhouette are those of
+  version 1.
+
+What is still weak, from the worker's report:
+
+- The wing arms and membranes are the first sculpt's soft surface, so the
+  quality now changes at the wing root, and a band 0.4 m wide there has
+  stretched texture. The wings are the next part to generate alone.
+- The hind leg stands more upright than version 1's. The hip moved 0.45 m
+  and the knee 0.33 m back, and the hock 0.33 m down. Every other
+  landmark is within 0.16 m, and the wings did not move. The table is in
+  `tools/hero-build.md`.
+- The topology is still a decimation with cut loops. The hide's atlas is
+  46.7% used. The mouth's relief is a pattern, not anatomy. A spike of the
+  new sculpt hangs between the fore legs.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
