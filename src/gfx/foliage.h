@@ -10,6 +10,7 @@
 #include "gfx/mesh.h"
 #include "gfx/noise_lattice.h"
 #include "gfx/pipeline.h"
+#include "gfx/rock_kit.h"
 #include "gfx/scene_uniforms.h"
 
 namespace gfx {
@@ -45,6 +46,13 @@ public:
     void set_rock_mesh(Device& device, int kind, const MeshData& mesh, float height);
     void set_rocks(Device& device, int kind, const std::vector<FoliageInstance>& rocks);
     uint32_t rock_count() const;
+    // The scanned kit (gfx/rock_kit.h), the modern tier's rocks when its
+    // files load: drawn here, after the trees and into the shadow map, at
+    // the rock distances below. Its instances come from App::replant.
+    RockKit& rock_kit() { return kit_; }
+    const RockKit& rock_kit() const { return kit_; }
+    // The kit's frame: culled, its levels picked, streamed. Before any pass.
+    void prepare_rocks(Device& device, const SceneUniforms& scene);
     // Per-frame staging of one grass kind, before any render pass opens.
     void upload_grass(Device& device, GrassKind kind, const std::vector<FoliageInstance>& grass);
     // The baked noise lattice the bark grains with, on a tier that bakes it.
@@ -274,6 +282,7 @@ private:
 
     StaticSet trees_[TREE_KINDS];
     StaticSet rocks_[ROCK_KINDS];
+    RockKit kit_;
     float rock_height_[ROCK_KINDS] = {};
     void fill_static(Device& device, StaticSet& set, const std::vector<FoliageInstance>& items,
                      float height, const char* name);

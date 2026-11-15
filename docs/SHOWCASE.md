@@ -1311,6 +1311,65 @@ the left are saturated red").
 - The course's gates are in every arena frame. The later gates draw grey
   through the next one.
 
+## S6, first part: the scanned rock kit in the world (2026-11-15, 13:30)
+
+Report 0011 said "rocks look unnatural". The modern tier now draws the eight
+scanned pieces of `assets/props/rockkit/` instead of the six untextured
+shapes. `docs/WORLD.md`, "The scanned rock kit", has the design; this is
+what was built, measured and left open.
+
+Built:
+
+- `gfx::RockKit` and `shaders/rock.hlsl` / `rock_depth.hlsl`: base colour,
+  normal and occlusion-roughness maps, the shared lighting path with
+  `ambient_light_at` and `terrain_sky`, three levels of detail by distance,
+  24 instanced draws a frame after a CPU cull. The retro tiers keep the old
+  rocks; an `--tier sm2` frame was byte-identical to the build before.
+- The colour: each piece's measured mean albedo scaled to the palette's
+  rock (grey since the wall pass), the terrain's broken-rock drift, moss on
+  up-facing parts near the floor, a soil band and contact shade over the
+  last metre above the ground.
+- `Vegetation::place_kit`: boulder groups, cliff pieces on the steep faces,
+  every piece sunk until check points from its LOD2 are under the terrain
+  (`test_vegetation` checks every point of every piece: 0 floating).
+- Sliders under Terrain > Vegetation > Rocks.
+
+Measured:
+
+- Textures: the 1024 maps, 134 MB uncompressed with mips; the 2048 maps
+  would be 537 MB and were not loaded. The kit loads in about 230 ms.
+- Cost, `gpu: median` at 1920x1080, three runs each, interleaved, old rocks
+  (`DRAGON_NO_ROCK_KIT=1`) against the kit: the report's camera 14.5, 12.9,
+  15.0 ms against 13.3, 15.1, 12.3 ms; `--run 3` 16.3, 16.6, 15.5 ms against
+  16.2, 17.3, 15.7 ms. Another session shared the GPU, so the spread is
+  2 to 3 ms; no difference shows above it.
+- Count: about 5,200 pieces in the arena (530 cliff pieces), against 4,900
+  old rocks at the same seed.
+- Goldens: every difference was a rock on the slopes; the Metal set was
+  captured again after merging main.
+
+Pairs, old on the left, in `artifacts/showcase-s6/`: `rocks-report.jpg`
+(the report's camera), `rocks-floor.jpg` (a slab on the valley floor),
+`rocks-outcrop.jpg` (cliff pieces on a steep face, about 250 m out),
+`rocks-run.jpg` (a run valley from the chase camera), `rocks-high.jpg`
+(from high up).
+
+Left open:
+
+- Cliff pieces are outcrops, not walls. Each shell's face stands only 2 to
+  8 m out of its own rim, so once its foot and rim are under the ground on
+  a 45 to 62 degree face, 25 to 55% of it shows. At scale 1.7 they read
+  from altitude as grey rock bands; up close on a face they are patches of
+  rock a few metres proud. Walls need S6's mesh cliffs.
+- Fewer boulders stand on the steep faces than before: a tilted base on a
+  steep, curved slope needs more than 60% of the rock's height to bury,
+  and such a rock is left out.
+- `slab_a` is not placed (its hollow reads as a black cave).
+- The contact shade uses one ground plane per piece; on a large cliff piece
+  over curved ground the band is wrong by a metre or two in places.
+- Per-piece CPU culling is fine at 5,000 pieces; ten times that would want
+  the foliage cells.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

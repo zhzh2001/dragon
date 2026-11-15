@@ -6,6 +6,7 @@
 #include "core/math.h"
 #include "core/noise.h"
 #include "gfx/foliage.h"
+#include "gfx/rock_piece.h"
 
 namespace game {
 
@@ -60,6 +61,33 @@ struct VegetationSettings {
     float rock_floor_cover = 0.035f; // on the flat floor
     float rock_extent = 1.15f;       // x the playable half extent
 
+    // The scanned kit (gfx/rock_piece.h), the modern tier's rocks when the
+    // files load (App::vegetation_for_tier); the dials above are then the
+    // retro tiers' alone. Boulders and slabs lie in loose groups -- a large
+    // one and a few small ones beside it -- one group per candidate cell;
+    // cliff pieces stand on the steep faces, from a grid of their own.
+    bool rock_kit = false;
+    float rock_group_spacing = 72.0f;  // metres between group candidates
+    float rock_group_slope_cover = 0.55f;  // keep chance on the steepest ground
+    float rock_group_floor_cover = 0.05f;  // and on the flat floor
+    float rock_group_size = 1.4f;      // the mean count of small ones beside the large one
+    float rock_group_spread = 1.6f;    // how far out they lie, in the large one's radii
+    float rock_large_scale = 1.6f;     // the large one's scale, middle of its range
+    float rock_sink_min = 0.15f;       // a boulder's sink, as a share of its height
+    float rock_sink_max = 0.30f;
+    float rock_tilt = 0.75f;           // how far a boulder leans to the slope, 0 upright, 1 flush
+    // Cliff pieces: the steepness they need, as 1 - the normal's y averaged
+    // over their footprint, their grid, their keep chance, and how far they
+    // sink past the file's own 2 m rim burial.
+    float cliff_slope = 0.42f;
+    float cliff_spacing = 70.0f;
+    float cliff_cover = 0.8f;
+    float cliff_bury = 0.3f;
+    // How far a cliff's rim may stand over the ground (m, vertically) where
+    // it is not the foot; the foot is always buried.
+    float cliff_rim_tolerance = 2.0f;
+    float cliff_scale = 1.7f;          // the middle of their scale range
+
     float wind = 1.0f;
     uint32_t seed = 7;
 };
@@ -79,7 +107,14 @@ public:
         return trees_[int(kind)];
     }
     const std::vector<PlantInstance>& rocks(int kind) const { return rocks_[kind]; }
+    // The kit's pieces where rock_kit is on (empty otherwise).
+    const std::vector<gfx::RockInstance>& kit_rocks(int piece) const { return kit_rocks_[piece]; }
+    // Legacy rocks and kit pieces together.
     size_t rock_count() const;
+    // How far the kit's placement had to sink pieces past their planned
+    // sink so no check point floats (gfx::RockPieceInfo::check), the worst
+    // one, metres: the log's, and the test's.
+    float kit_extra_sink() const { return kit_extra_sink_; }
     size_t tree_count() const;
 
     // Fills `out[kind]` with the grass around `centre`. Cheap enough per frame
@@ -90,7 +125,10 @@ public:
 private:
     std::vector<PlantInstance> trees_[gfx::TREE_KINDS];
     std::vector<PlantInstance> rocks_[gfx::ROCK_KINDS];
+    std::vector<gfx::RockInstance> kit_rocks_[gfx::ROCK_PIECES];
+    float kit_extra_sink_ = 0.0f;
     void place_rocks(const Terrain& terrain, const VegetationSettings& settings);
+    void place_kit(const Terrain& terrain, const VegetationSettings& settings);
     core::Noise forest_{7};
 };
 
