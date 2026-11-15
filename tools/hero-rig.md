@@ -9,6 +9,14 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 5b (2026-11-15)
+
+The root panel is now a ruled patch from the flank (s = 0) to the arm and rib (s = 1) (`tools/hero-build.md`, "Version 5b"). The mesh's membrane carries `_SHEET_S`. 56 of 56 checks pass, none changed.
+
+- A root vertex's row runs linearly in s. At s = 1 it is the arm-and-rib weights: `sheet_weights` with only the arm and rib chains. At s = 0 it is the weights of the nearest hide vertex on the body (wing mask under 0.02, X over 0.3), with its limb share, so the root moves with the flank. 546 root positions a wing.
+- Then the fold relaxing runs as before, with the twins tied.
+- Result: longest folded membrane edge 1.399 (limit 1.6), 65 edges over 1.3, no new intersection, membrane mirror error 0.000001.
+
 ## Mesh version 5 (2026-11-15, not delivered)
 
 The rig was rebuilt on mesh version 5, which has wings with a sheet membrane (`tools/hero-build.md`, "Version 5").

@@ -1,4 +1,4 @@
-ok   file size 25.7 MB, limit 60 MB
+ok   file size 25.3 MB, limit 60 MB
 ok   no Draco
 ok   no skin: the file is unrigged
 ok   five materials ['hide', 'membrane', 'horn', 'eye', 'mouth']
@@ -63,24 +63,24 @@ ok   hide uses material hide
 ok   horn uses material horn
 ok   membrane uses material membrane
 ok   mouth uses material mouth
-ok   hide 104533 + membrane 6320 + horn 6775 = 117628 triangles, budget 80000 to 120000
-ok   head and collar: 35780 triangles, 30.4% of the dragon
+ok   hide 104662 + membrane 7992 + horn 6758 = 119412 triangles, budget 80000 to 120000
+ok   head and collar: 35780 triangles, 30.0% of the dragon
 ok   wingspan 18.989 m
 ok   feet at Y = 0.0015
 ok   forward is -Z: the eyes are 3.67 m ahead of the origin, the tail tip 9.73 m behind
-ok   feet where the first build's were: fore -2.85, hind 0.87 in Z (first build -2.83, 0.88)
+ok   feet where the first build's were: fore -2.84, hind 0.87 in Z (first build -2.83, 0.88)
 ok   tail tip at Z 9.73 (first build 9.73)
 ok   eye_r: a sphere of radius 140 mm, cornea bulge 8.0 mm
-ok   eye_r: nothing else comes within the ball's reach (nearest vertex 3.0 mm outside it)
+ok   eye_r: nothing else comes within the ball's reach (nearest vertex 4.0 mm outside it)
 ok   eye_r: turned 25 degrees each way about two axes, the ball stays 4.7 mm clear of the lids
 ok   eye_r: the lids are open over the pupil
 ok   eye_l: a sphere of radius 140 mm, cornea bulge 8.0 mm
-ok   eye_l: nothing else comes within the ball's reach (nearest vertex 3.0 mm outside it)
+ok   eye_l: nothing else comes within the ball's reach (nearest vertex 4.0 mm outside it)
 ok   eye_l: turned 25 degrees each way about two axes, the ball stays 4.7 mm clear of the lids
 ok   eye_l: the lids are open over the pupil
-ok   mouth closed: 0 of 4213 interior vertices can be seen from 57 directions
+ok   mouth closed: 0 of 4303 interior vertices can be seen from 57 directions
 ok   hide and mouth carry the _JAW weights
-ok   jaw open 35 degrees: 1054 of 1054 sampled interior vertices show
+ok   jaw open 35 degrees: 1076 of 1076 sampled interior vertices show
 ok   jaw open: the chin drops 0.55 m
 ok   membrane thickness map exists
 ok   thickness map 2048x2048, one channel

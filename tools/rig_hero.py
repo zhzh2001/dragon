@@ -305,13 +305,15 @@ def sheet_twins(points):
     return twin
 
 
-def sheet_weights(points, bones, names, side, body):
+def sheet_weights(points, bones, names, side, body, chains=None):
     """Panel weights: the two nearest bone chains share a vertex by its distance to each, linearly
     across the panel (a third chain is subtracted, so a swap of second and third is not a step).
     The body is a chain whose distance is the vertex's reach past the flank. Inside a chain the
     weight goes to its segments by a near field."""
     score, parts = [], []
     for chain, stems in SHEET_CHAINS.items():
+        if chains is not None and chain not in chains:
+            continue
         bn = [s + '_' + side for s in stems]
         d = np.array([segment_distance(points, np.array(bones[b][1]), np.array(bones[b][2])) for b in bn]).T
         score.append(1 / (d.min(1) + SHEET_EPS))
@@ -326,10 +328,11 @@ def sheet_weights(points, bones, names, side, body):
             dense[:, names.index('wing_spur_a_' + side)] += dense[:, names.index('wing_spur_b_' + side)]
             dense[:, names.index('wing_spur_b_' + side)] = 0
         parts.append(dense)
-    score.append(1 / (np.maximum(np.abs(points[:, 0]) - SHEET_FLANK_X, 0) + SHEET_EPS))
-    parts.append(body)
+    if body is not None:
+        score.append(1 / (np.maximum(np.abs(points[:, 0]) - SHEET_FLANK_X, 0) + SHEET_EPS))
+        parts.append(body)
     score = np.array(score).T
-    third = -np.partition(-score, 2, axis=1)[:, 2:3]
+    third = -np.partition(-score, 2, axis=1)[:, 2:3] if score.shape[1] > 2 else np.zeros((len(score), 1))
     share = np.maximum(score - third, 0)
     share /= share.sum(1, keepdims=True)
     return four(sum(share[:, k, None] * parts[k] for k in range(len(parts))))
@@ -475,6 +478,24 @@ class Wing:
             from_body = smooth_field(mid_point, SHEET_SPEC, parts=True)[3]
             self.sheet_rows = shell
             self.sheet_w = sheet_weights(mid_point, bones, names, side, from_body)
+            # Mesh version 5's root panel is a ruled patch from the flank (s = 0) to the arm and the
+            # rib (s = 1). Its weights run linearly in s from the nearest body vertex's to the arm's and rib's.
+            if '_SHEET_S' in membrane:
+                sv = np.full(n, -1.0)
+                sv[inverse[len(hid):]] = membrane['_SHEET_S'][mid].astype(float)
+                root = sv[shell] >= 0
+                if root.any():
+                    q = mid_point[root]
+                    wb = sheet_weights(q, bones, names, side, None, chains=('arm', 'spur'))
+                    flank = np.flatnonzero((mask < .02) & (hp[:, 0] * sign > .3))
+                    kd = KDTree(len(flank))
+                    for k, i in enumerate(flank):
+                        kd.insert(hp[i], k)
+                    kd.balance()
+                    wa = np.array([body[flank[kd.find(Vector(x))[1]]] for x in q], float)
+                    s_ = sv[shell][root][:, None]
+                    self.sheet_w[root] = four(s_ * wb + (1 - s_) * wa)
+                    print('WING', side, 'root patch:', int(root.sum()), 'vertices from the flank to the arm and rib', flush=True)
             self.solved[shell] = self.sheet_w
             # Twins by surface row: the fold relaxing below moves a pair together.
             self.pairs = np.unique(np.sort(np.c_[shell[has], shell[local[has]]], axis=1), axis=0)
