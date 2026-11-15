@@ -1,0 +1,8 @@
+PASS rejected joint_names: KeyError: 'wrong_root'
+PASS rejected rest: exact rest TRS
+PASS rejected translation_keys: bite rotation-only channels
+PASS rejected endpoints: bite rest endpoints, bite head recoil
+PASS rejected mirror: claw exact mirrored deltas
+PASS rejected amplitude: bite jaw opens, bite jaw closed overshoot
+PASS rejected overlap: tail exact mirrored deltas, tail_r larger distal peaks, tail_r tail whip overlap, tail_r tail whip delayed starts
+PASS rejected pop: bite no pop, bite head recoil

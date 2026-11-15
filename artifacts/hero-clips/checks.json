@@ -1,0 +1,3579 @@
+{
+  "results": [
+    {
+      "pass": true,
+      "check": "GLB loads",
+      "detail": "273884 bytes"
+    },
+    {
+      "pass": true,
+      "check": "77 unique model joints",
+      "detail": ""
+    },
+    {
+      "pass": true,
+      "check": "armature alone",
+      "detail": "no mesh, skin, material, image, or required extension"
+    },
+    {
+      "pass": true,
+      "check": "embedded animation buffer",
+      "detail": ""
+    },
+    {
+      "pass": true,
+      "check": "model hierarchy",
+      "detail": ""
+    },
+    {
+      "pass": true,
+      "check": "joint scene roots",
+      "detail": ""
+    },
+    {
+      "pass": true,
+      "check": "exact rest TRS",
+      "detail": "rotation 0.000000000 deg; translation 0.000000000 m; exact fields True"
+    },
+    {
+      "pass": true,
+      "check": "five named animations",
+      "detail": ""
+    },
+    {
+      "pass": true,
+      "check": "bite rotation-only channels",
+      "detail": "one rotation channel per joint; no translation or scale keys"
+    },
+    {
+      "pass": true,
+      "check": "bite duration and 30 fps sampling",
+      "detail": "0.90 s; 28 unit-quaternion keys per joint"
+    },
+    {
+      "pass": true,
+      "check": "bite rest endpoints",
+      "detail": "max 0.00000000 deg"
+    },
+    {
+      "pass": true,
+      "check": "bite no pop",
+      "detail": "23.12000 deg; jaw; frames 6 to 7"
+    },
+    {
+      "pass": true,
+      "check": "claw_r rotation-only channels",
+      "detail": "one rotation channel per joint; no translation or scale keys"
+    },
+    {
+      "pass": true,
+      "check": "claw_r duration and 30 fps sampling",
+      "detail": "0.90 s; 28 unit-quaternion keys per joint"
+    },
+    {
+      "pass": true,
+      "check": "claw_r rest endpoints",
+      "detail": "max 0.00000000 deg"
+    },
+    {
+      "pass": true,
+      "check": "claw_r no pop",
+      "detail": "24.86708 deg; upper_arm_r; frames 7 to 8"
+    },
+    {
+      "pass": true,
+      "check": "claw_l rotation-only channels",
+      "detail": "one rotation channel per joint; no translation or scale keys"
+    },
+    {
+      "pass": true,
+      "check": "claw_l duration and 30 fps sampling",
+      "detail": "0.90 s; 28 unit-quaternion keys per joint"
+    },
+    {
+      "pass": true,
+      "check": "claw_l rest endpoints",
+      "detail": "max 0.00000000 deg"
+    },
+    {
+      "pass": true,
+      "check": "claw_l no pop",
+      "detail": "24.86708 deg; upper_arm_l; frames 7 to 8"
+    },
+    {
+      "pass": true,
+      "check": "tail_r rotation-only channels",
+      "detail": "one rotation channel per joint; no translation or scale keys"
+    },
+    {
+      "pass": true,
+      "check": "tail_r duration and 30 fps sampling",
+      "detail": "1.00 s; 31 unit-quaternion keys per joint"
+    },
+    {
+      "pass": true,
+      "check": "tail_r rest endpoints",
+      "detail": "max 0.00000000 deg"
+    },
+    {
+      "pass": true,
+      "check": "tail_r no pop",
+      "detail": "20.62500 deg; tail_01; frames 8 to 9"
+    },
+    {
+      "pass": true,
+      "check": "tail_l rotation-only channels",
+      "detail": "one rotation channel per joint; no translation or scale keys"
+    },
+    {
+      "pass": true,
+      "check": "tail_l duration and 30 fps sampling",
+      "detail": "1.00 s; 31 unit-quaternion keys per joint"
+    },
+    {
+      "pass": true,
+      "check": "tail_l rest endpoints",
+      "detail": "max 0.00000000 deg"
+    },
+    {
+      "pass": true,
+      "check": "tail_l no pop",
+      "detail": "20.62500 deg; tail_01; frames 8 to 9"
+    },
+    {
+      "pass": true,
+      "check": "claw exact mirrored deltas",
+      "detail": "max 0.000000000 deg over every joint and key"
+    },
+    {
+      "pass": true,
+      "check": "tail exact mirrored deltas",
+      "detail": "max 0.000000000 deg over every joint and key"
+    },
+    {
+      "pass": true,
+      "check": "bite neck coil total",
+      "detail": "42.0000 deg at 0.1667 s; range (35, 45); window (0, 0.16)"
+    },
+    {
+      "pass": true,
+      "check": "bite neck throw total",
+      "detail": "28.5000 deg at 0.3000 s; range (25, 30); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite jaw opens",
+      "detail": "40.0000 deg at 0.1667 s; range (32, 48); window (0, 0.16)"
+    },
+    {
+      "pass": true,
+      "check": "bite jaw closed overshoot",
+      "detail": "2.5000 deg at 0.2667 s; range (2, 3); window (0.24, 0.28)"
+    },
+    {
+      "pass": true,
+      "check": "bite head recoil",
+      "detail": "8.0000 deg at 0.4667 s; range (6.4, 9.6); window (0.36, 0.65)"
+    },
+    {
+      "pass": true,
+      "check": "bite root pitch",
+      "detail": "6.0000 deg at 0.2333 s; range (6, 10); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite chest pitch",
+      "detail": "8.0000 deg at 0.2667 s; range (6, 10); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite wing_root_r sweep",
+      "detail": "15.0000 deg at 0.2667 s; range (12, 18); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite upper_arm_r reach",
+      "detail": "25.0000 deg at 0.2667 s; range (20, 30); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite wing_root_l sweep",
+      "detail": "15.0000 deg at 0.2667 s; range (12, 18); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite upper_arm_l reach",
+      "detail": "25.0000 deg at 0.2667 s; range (20, 30); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "bite tail root lift",
+      "detail": "12.0000 deg at 0.2667 s; range (10, 15); window (0.16, 0.36)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r shoulder wind-up",
+      "detail": "29.5306 deg at 0.1667 s; range (24, 36); window (0, 0.18)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r shoulder forward travel",
+      "detail": "59.5306 deg at 0.3000 s; range (48.0, 84.0); window (0.18, 0.3)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r elbow closed",
+      "detail": "29.5306 deg at 0.2000 s; range (24, 36); window (0, 0.22)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r elbow opening travel",
+      "detail": "49.5306 deg at 0.3333 s; range (40, 60); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r wrist flick",
+      "detail": "40.0000 deg at 0.3667 s; range (32, 48); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r opposite foreleg brace",
+      "detail": "15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r spine twist",
+      "detail": "15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r neck twist total",
+      "detail": "15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r head lead",
+      "detail": "15.0000 deg at 0.2333 s; range (12, 18); window (0.18, 0.3)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r striking wing lift",
+      "detail": "15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r opposite wing dip",
+      "detail": "10.0000 deg at 0.3333 s; range (8, 12); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r tail opposite swing",
+      "detail": "22.0000 deg at 0.3000 s; range (20, 25); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r paw crosses chest centre",
+      "detail": "min signed hand X -0.98196 m"
+    },
+    {
+      "pass": true,
+      "check": "claw_r toe 1 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r toe 2 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r toe 3 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r outer toe spread",
+      "detail": "16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)"
+    },
+    {
+      "pass": true,
+      "check": "claw_r inner toe spread",
+      "detail": "16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l shoulder wind-up",
+      "detail": "29.5306 deg at 0.1667 s; range (24, 36); window (0, 0.18)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l shoulder forward travel",
+      "detail": "59.5306 deg at 0.3000 s; range (48.0, 84.0); window (0.18, 0.3)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l elbow closed",
+      "detail": "29.5306 deg at 0.2000 s; range (24, 36); window (0, 0.22)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l elbow opening travel",
+      "detail": "49.5306 deg at 0.3333 s; range (40, 60); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l wrist flick",
+      "detail": "40.0000 deg at 0.3667 s; range (32, 48); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l opposite foreleg brace",
+      "detail": "15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l spine twist",
+      "detail": "15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l neck twist total",
+      "detail": "15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l head lead",
+      "detail": "15.0000 deg at 0.2333 s; range (12, 18); window (0.18, 0.3)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l striking wing lift",
+      "detail": "15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l opposite wing dip",
+      "detail": "10.0000 deg at 0.3333 s; range (8, 12); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l tail opposite swing",
+      "detail": "22.0000 deg at 0.3000 s; range (20, 25); window (0.18, 0.42)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l paw crosses chest centre",
+      "detail": "min signed hand X -0.98196 m"
+    },
+    {
+      "pass": true,
+      "check": "claw_l toe 1 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l toe 2 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l toe 3 curl",
+      "detail": "28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l outer toe spread",
+      "detail": "16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)"
+    },
+    {
+      "pass": true,
+      "check": "claw_l inner toe spread",
+      "detail": "16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r root left coil",
+      "detail": "25.0000 deg at 0.2000 s; range (20, 30); window (0, 0.22)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r root right whip",
+      "detail": "35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.38)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_01 whip",
+      "detail": "35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_02 whip",
+      "detail": "36.0000 deg at 0.3667 s; range (29, 43); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_03 whip",
+      "detail": "37.0000 deg at 0.4000 s; range (30, 44); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_04 whip",
+      "detail": "38.0000 deg at 0.4333 s; range (31, 45); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_05 whip",
+      "detail": "39.0000 deg at 0.4667 s; range (32, 46); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_06 whip",
+      "detail": "40.0000 deg at 0.5000 s; range (33, 47); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_07 whip",
+      "detail": "41.0000 deg at 0.5333 s; range (34, 48); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail_08 whip",
+      "detail": "42.0000 deg at 0.5667 s; range (35, 49); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r larger distal peaks",
+      "detail": "[35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0]"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tip cumulative bend",
+      "detail": "126.7907 deg at 0.5000 s; range (70, 180); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r root hip/spine twist",
+      "detail": "12.0000 deg at 0.3333 s; range (10, 15); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r chest hip/spine twist",
+      "detail": "10.0000 deg at 0.3667 s; range (10, 15); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r neck counter-swing",
+      "detail": "15.0000 deg at 0.4333 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r head counter-swing",
+      "detail": "15.0000 deg at 0.4667 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_r hind kick",
+      "detail": "15.0000 deg at 0.3667 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l root left coil",
+      "detail": "25.0000 deg at 0.2000 s; range (20, 30); window (0, 0.22)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l root right whip",
+      "detail": "35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.38)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_01 whip",
+      "detail": "35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_02 whip",
+      "detail": "36.0000 deg at 0.3667 s; range (29, 43); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_03 whip",
+      "detail": "37.0000 deg at 0.4000 s; range (30, 44); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_04 whip",
+      "detail": "38.0000 deg at 0.4333 s; range (31, 45); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_05 whip",
+      "detail": "39.0000 deg at 0.4667 s; range (32, 46); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_06 whip",
+      "detail": "40.0000 deg at 0.5000 s; range (33, 47); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_07 whip",
+      "detail": "41.0000 deg at 0.5333 s; range (34, 48); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tail_08 whip",
+      "detail": "42.0000 deg at 0.5667 s; range (35, 49); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l larger distal peaks",
+      "detail": "[35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0]"
+    },
+    {
+      "pass": true,
+      "check": "tail_l tip cumulative bend",
+      "detail": "126.7907 deg at 0.5000 s; range (70, 180); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l root hip/spine twist",
+      "detail": "12.0000 deg at 0.3333 s; range (10, 15); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l chest hip/spine twist",
+      "detail": "10.0000 deg at 0.3667 s; range (10, 15); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l neck counter-swing",
+      "detail": "15.0000 deg at 0.4333 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l head counter-swing",
+      "detail": "15.0000 deg at 0.4667 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "tail_l hind kick",
+      "detail": "15.0000 deg at 0.3667 s; range (12, 18); window (0.22, 0.55)"
+    },
+    {
+      "pass": true,
+      "check": "bite neck coil overlap",
+      "detail": "peak frames [3, 4, 5]; 1 to 3 frames per joint"
+    },
+    {
+      "pass": true,
+      "check": "bite neck coil delayed starts",
+      "detail": "first moving frames [1, 2, 3]"
+    },
+    {
+      "pass": true,
+      "check": "bite neck throw overlap",
+      "detail": "peak frames [7, 8, 9]; 1 to 3 frames per joint"
+    },
+    {
+      "pass": true,
+      "check": "bite neck throw delayed starts",
+      "detail": "first moving frames [1, 2, 3]"
+    },
+    {
+      "pass": true,
+      "check": "bite tail lift overlap",
+      "detail": "peak frames [8, 9, 10, 11, 12, 13, 14, 15]; 1 to 3 frames per joint"
+    },
+    {
+      "pass": true,
+      "check": "bite tail lift delayed starts",
+      "detail": "first moving frames [4, 5, 6, 7, 8, 9, 10, 11]"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail whip overlap",
+      "detail": "peak frames [10, 11, 12, 13, 14, 15, 16, 17]; 1 to 3 frames per joint"
+    },
+    {
+      "pass": true,
+      "check": "tail_r tail whip delayed starts",
+      "detail": "first moving frames [1, 2, 3, 4, 5, 6, 7, 8]"
+    },
+    {
+      "pass": true,
+      "check": "claw_r tail swing overlap",
+      "detail": "peak frames [9, 10, 11, 12, 13, 14, 15, 16]; 1 to 3 frames per joint"
+    },
+    {
+      "pass": true,
+      "check": "claw_r tail swing delayed starts",
+      "detail": "first moving frames [1, 2, 3, 4, 5, 6, 7, 8]"
+    },
+    {
+      "pass": true,
+      "check": "bite eased strike samples",
+      "detail": "constant-speed active tracks: []"
+    },
+    {
+      "pass": true,
+      "check": "claw_r eased strike samples",
+      "detail": "constant-speed active tracks: []"
+    },
+    {
+      "pass": true,
+      "check": "claw_l eased strike samples",
+      "detail": "constant-speed active tracks: []"
+    },
+    {
+      "pass": true,
+      "check": "tail_r eased strike samples",
+      "detail": "constant-speed active tracks: []"
+    },
+    {
+      "pass": true,
+      "check": "tail_l eased strike samples",
+      "detail": "constant-speed active tracks: []"
+    },
+    {
+      "pass": true,
+      "check": "bite recovery overshoot",
+      "detail": "[]"
+    },
+    {
+      "pass": true,
+      "check": "claw_r recovery overshoot",
+      "detail": "[]"
+    },
+    {
+      "pass": true,
+      "check": "claw_l recovery overshoot",
+      "detail": "[]"
+    },
+    {
+      "pass": true,
+      "check": "tail_r recovery overshoot",
+      "detail": "[]"
+    },
+    {
+      "pass": true,
+      "check": "tail_l recovery overshoot",
+      "detail": "[]"
+    },
+    {
+      "pass": true,
+      "check": "bite head moves up/back then down/forward",
+      "detail": "coil XYZ (-7.281343947923569e-10, 0.354655980662959, 0.9153218824693714); hit XYZ (-5.876230179530095e-10, -1.2655605455038597, -0.6528214805714132)"
+    }
+  ],
+  "measurements": [
+    {
+      "clip": "bite",
+      "metric": "neck coil total",
+      "peak_deg": 42.00000708835604,
+      "time_s": 0.16666666666666666,
+      "range_deg": [
+        35,
+        45
+      ],
+      "window_s": [
+        0,
+        0.16
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "neck throw total",
+      "peak_deg": 28.50000082765456,
+      "time_s": 0.3,
+      "range_deg": [
+        25,
+        30
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "jaw opens",
+      "peak_deg": 40.0000045279254,
+      "time_s": 0.16666666666666666,
+      "range_deg": [
+        32,
+        48
+      ],
+      "window_s": [
+        0,
+        0.16
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "jaw closed overshoot",
+      "peak_deg": 2.499999511936793,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        2,
+        3
+      ],
+      "window_s": [
+        0.24,
+        0.28
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "head recoil",
+      "peak_deg": 7.999995167712796,
+      "time_s": 0.4666666666666667,
+      "range_deg": [
+        6.4,
+        9.6
+      ],
+      "window_s": [
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "root pitch",
+      "peak_deg": 6.000007274121602,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        6,
+        10
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "chest pitch",
+      "peak_deg": 7.999995167712796,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        6,
+        10
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "wing_root_r sweep",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "upper_arm_r reach",
+      "peak_deg": 24.999995626235894,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        20,
+        30
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "wing_root_l sweep",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "upper_arm_l reach",
+      "peak_deg": 24.999995626235894,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        20,
+        30
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "bite",
+      "metric": "tail root lift",
+      "peak_deg": 11.999999880335062,
+      "time_s": 0.26666666666666666,
+      "range_deg": [
+        10,
+        15
+      ],
+      "window_s": [
+        0.16,
+        0.36
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "shoulder wind-up",
+      "peak_deg": 29.53056018661939,
+      "time_s": 0.16666666666666666,
+      "range_deg": [
+        24,
+        36
+      ],
+      "window_s": [
+        0,
+        0.18
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "shoulder forward travel",
+      "peak_deg": 59.53056303212163,
+      "time_s": 0.3,
+      "range_deg": [
+        48.0,
+        84.0
+      ],
+      "window_s": [
+        0.18,
+        0.3
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "elbow closed",
+      "peak_deg": 29.530556230154325,
+      "time_s": 0.2,
+      "range_deg": [
+        24,
+        36
+      ],
+      "window_s": [
+        0,
+        0.22
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "elbow opening travel",
+      "peak_deg": 49.53055274266015,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        40,
+        60
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "wrist flick",
+      "peak_deg": 40.0000045279254,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        32,
+        48
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "opposite foreleg brace",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "spine twist",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "neck twist total",
+      "peak_deg": 14.99999709303895,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "head lead",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.3
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "striking wing lift",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "opposite wing dip",
+      "peak_deg": 9.999997419379092,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        8,
+        12
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "tail opposite swing",
+      "peak_deg": 21.999999578135405,
+      "time_s": 0.3,
+      "range_deg": [
+        20,
+        25
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "toe 1 curl",
+      "peak_deg": 27.999994203598394,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "toe 2 curl",
+      "peak_deg": 28.000005621996088,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "toe 3 curl",
+      "peak_deg": 27.999994203598394,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "outer toe spread",
+      "peak_deg": 16.000001689062632,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        10,
+        20
+      ],
+      "window_s": [
+        0.18,
+        0.34
+      ]
+    },
+    {
+      "clip": "claw_r",
+      "metric": "inner toe spread",
+      "peak_deg": 16.000001689062632,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        10,
+        20
+      ],
+      "window_s": [
+        0.18,
+        0.34
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "shoulder wind-up",
+      "peak_deg": 29.53056018661939,
+      "time_s": 0.16666666666666666,
+      "range_deg": [
+        24,
+        36
+      ],
+      "window_s": [
+        0,
+        0.18
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "shoulder forward travel",
+      "peak_deg": 59.53056303212163,
+      "time_s": 0.3,
+      "range_deg": [
+        48.0,
+        84.0
+      ],
+      "window_s": [
+        0.18,
+        0.3
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "elbow closed",
+      "peak_deg": 29.530556230154325,
+      "time_s": 0.2,
+      "range_deg": [
+        24,
+        36
+      ],
+      "window_s": [
+        0,
+        0.22
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "elbow opening travel",
+      "peak_deg": 49.53055274266015,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        40,
+        60
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "wrist flick",
+      "peak_deg": 40.0000045279254,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        32,
+        48
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "opposite foreleg brace",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "spine twist",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "neck twist total",
+      "peak_deg": 14.99999709303895,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "head lead",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.3
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "striking wing lift",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.3,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "opposite wing dip",
+      "peak_deg": 9.999997419379092,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        8,
+        12
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "tail opposite swing",
+      "peak_deg": 21.999999578135405,
+      "time_s": 0.3,
+      "range_deg": [
+        20,
+        25
+      ],
+      "window_s": [
+        0.18,
+        0.42
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "toe 1 curl",
+      "peak_deg": 27.999994203598394,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "toe 2 curl",
+      "peak_deg": 28.000005621996088,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "toe 3 curl",
+      "peak_deg": 27.999994203598394,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        20,
+        34
+      ],
+      "window_s": [
+        0.3,
+        0.48
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "outer toe spread",
+      "peak_deg": 16.000001689062632,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        10,
+        20
+      ],
+      "window_s": [
+        0.18,
+        0.34
+      ]
+    },
+    {
+      "clip": "claw_l",
+      "metric": "inner toe spread",
+      "peak_deg": 16.000001689062632,
+      "time_s": 0.23333333333333334,
+      "range_deg": [
+        10,
+        20
+      ],
+      "window_s": [
+        0.18,
+        0.34
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "root left coil",
+      "peak_deg": 24.999995626235894,
+      "time_s": 0.2,
+      "range_deg": [
+        20,
+        30
+      ],
+      "window_s": [
+        0,
+        0.22
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "root right whip",
+      "peak_deg": 35.00000611867775,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        28,
+        42
+      ],
+      "window_s": [
+        0.22,
+        0.38
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_01 whip",
+      "peak_deg": 35.00000611867775,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        28,
+        42
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_02 whip",
+      "peak_deg": 36.00000005464576,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        29,
+        43
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_03 whip",
+      "peak_deg": 36.999994657601505,
+      "time_s": 0.4,
+      "range_deg": [
+        30,
+        44
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_04 whip",
+      "peak_deg": 38.0000024477341,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        31,
+        45
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_05 whip",
+      "peak_deg": 38.99999798660484,
+      "time_s": 0.4666666666666667,
+      "range_deg": [
+        32,
+        46
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_06 whip",
+      "peak_deg": 40.0000045279254,
+      "time_s": 0.5,
+      "range_deg": [
+        33,
+        47
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_07 whip",
+      "peak_deg": 40.99999990593414,
+      "time_s": 0.5333333333333333,
+      "range_deg": [
+        34,
+        48
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tail_08 whip",
+      "peak_deg": 41.99999234217191,
+      "time_s": 0.5666666666666667,
+      "range_deg": [
+        35,
+        49
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "tip cumulative bend",
+      "peak_deg": 126.79073721594193,
+      "time_s": 0.5,
+      "range_deg": [
+        70,
+        180
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "root hip/spine twist",
+      "peak_deg": 11.999999880335062,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        10,
+        15
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "chest hip/spine twist",
+      "peak_deg": 9.999997419379092,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        10,
+        15
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "neck counter-swing",
+      "peak_deg": 14.99999709303895,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "head counter-swing",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.4666666666666667,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_r",
+      "metric": "hind kick",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "root left coil",
+      "peak_deg": 24.999995626235894,
+      "time_s": 0.2,
+      "range_deg": [
+        20,
+        30
+      ],
+      "window_s": [
+        0,
+        0.22
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "root right whip",
+      "peak_deg": 35.00000611867775,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        28,
+        42
+      ],
+      "window_s": [
+        0.22,
+        0.38
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_01 whip",
+      "peak_deg": 35.00000611867775,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        28,
+        42
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_02 whip",
+      "peak_deg": 36.00000005464576,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        29,
+        43
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_03 whip",
+      "peak_deg": 36.999994657601505,
+      "time_s": 0.4,
+      "range_deg": [
+        30,
+        44
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_04 whip",
+      "peak_deg": 38.0000024477341,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        31,
+        45
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_05 whip",
+      "peak_deg": 38.99999798660484,
+      "time_s": 0.4666666666666667,
+      "range_deg": [
+        32,
+        46
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_06 whip",
+      "peak_deg": 40.0000045279254,
+      "time_s": 0.5,
+      "range_deg": [
+        33,
+        47
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_07 whip",
+      "peak_deg": 40.99999990593414,
+      "time_s": 0.5333333333333333,
+      "range_deg": [
+        34,
+        48
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tail_08 whip",
+      "peak_deg": 41.99999234217191,
+      "time_s": 0.5666666666666667,
+      "range_deg": [
+        35,
+        49
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "tip cumulative bend",
+      "peak_deg": 126.79073721594193,
+      "time_s": 0.5,
+      "range_deg": [
+        70,
+        180
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "root hip/spine twist",
+      "peak_deg": 11.999999880335062,
+      "time_s": 0.3333333333333333,
+      "range_deg": [
+        10,
+        15
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "chest hip/spine twist",
+      "peak_deg": 9.999997419379092,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        10,
+        15
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "neck counter-swing",
+      "peak_deg": 14.99999709303895,
+      "time_s": 0.43333333333333335,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "head counter-swing",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.4666666666666667,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    },
+    {
+      "clip": "tail_l",
+      "metric": "hind kick",
+      "peak_deg": 14.9999971265273,
+      "time_s": 0.36666666666666664,
+      "range_deg": [
+        12,
+        18
+      ],
+      "window_s": [
+        0.22,
+        0.55
+      ]
+    }
+  ],
+  "joint_peaks": {
+    "bite": {
+      "root": {
+        "peak_deg": 6.000007274121602,
+        "time_s": 0.23333333333333334
+      },
+      "chest": {
+        "peak_deg": 7.999995167712796,
+        "time_s": 0.26666666666666666
+      },
+      "neck_01": {
+        "peak_deg": 14.000002362785347,
+        "time_s": 0.1
+      },
+      "neck_02": {
+        "peak_deg": 14.000002362785347,
+        "time_s": 0.13333333333333333
+      },
+      "neck_03": {
+        "peak_deg": 14.000002362785347,
+        "time_s": 0.16666666666666666
+      },
+      "head": {
+        "peak_deg": 7.999995167712796,
+        "time_s": 0.4666666666666667
+      },
+      "jaw": {
+        "peak_deg": 40.0000045279254,
+        "time_s": 0.16666666666666666
+      },
+      "jaw_tip": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tail_01": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.26666666666666666
+      },
+      "tail_02": {
+        "peak_deg": 3.7500060685486227,
+        "time_s": 0.3
+      },
+      "tail_03": {
+        "peak_deg": 3.499993923048747,
+        "time_s": 0.3333333333333333
+      },
+      "tail_04": {
+        "peak_deg": 3.2499952700497006,
+        "time_s": 0.36666666666666664
+      },
+      "tail_05": {
+        "peak_deg": 2.9999967519090815,
+        "time_s": 0.4
+      },
+      "tail_06": {
+        "peak_deg": 2.749998123239228,
+        "time_s": 0.43333333333333335
+      },
+      "tail_07": {
+        "peak_deg": 2.499999511936793,
+        "time_s": 0.4666666666666667
+      },
+      "tail_08": {
+        "peak_deg": 2.2500009907842062,
+        "time_s": 0.5
+      },
+      "upper_arm_l": {
+        "peak_deg": 24.999995626235894,
+        "time_s": 0.26666666666666666
+      },
+      "forearm_l": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_l": {
+        "peak_deg": 16.97056152641169,
+        "time_s": 0.3
+      },
+      "toe_fore_2_l": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "toe_fore_3_l": {
+        "peak_deg": 16.97056152641169,
+        "time_s": 0.3
+      },
+      "toe_hind_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_l": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.26666666666666666
+      },
+      "wing_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "upper_arm_r": {
+        "peak_deg": 24.999995626235894,
+        "time_s": 0.26666666666666666
+      },
+      "forearm_r": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_r": {
+        "peak_deg": 16.97056152641169,
+        "time_s": 0.3
+      },
+      "toe_fore_2_r": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "toe_fore_3_r": {
+        "peak_deg": 16.97056152641169,
+        "time_s": 0.3
+      },
+      "toe_hind_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_r": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.26666666666666666
+      },
+      "wing_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eye_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eye_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "tongue_01": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_02": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_03": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      }
+    },
+    "claw_r": {
+      "root": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "chest": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3333333333333333
+      },
+      "neck_01": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.26666666666666666
+      },
+      "neck_02": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.3
+      },
+      "neck_03": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.3333333333333333
+      },
+      "head": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.23333333333333334
+      },
+      "jaw": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "jaw_tip": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tail_01": {
+        "peak_deg": 21.999999578135405,
+        "time_s": 0.3
+      },
+      "tail_02": {
+        "peak_deg": 5.400002374449231,
+        "time_s": 0.3333333333333333
+      },
+      "tail_03": {
+        "peak_deg": 5.800005698975014,
+        "time_s": 0.36666666666666664
+      },
+      "tail_04": {
+        "peak_deg": 6.199995222354373,
+        "time_s": 0.4
+      },
+      "tail_05": {
+        "peak_deg": 6.59999812685868,
+        "time_s": 0.43333333333333335
+      },
+      "tail_06": {
+        "peak_deg": 7.000001534992899,
+        "time_s": 0.4666666666666667
+      },
+      "tail_07": {
+        "peak_deg": 7.400004379532242,
+        "time_s": 0.5
+      },
+      "tail_08": {
+        "peak_deg": 7.7999940582858365,
+        "time_s": 0.5333333333333333
+      },
+      "upper_arm_l": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3
+      },
+      "forearm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_l": {
+        "peak_deg": 9.999997419379092,
+        "time_s": 0.3333333333333333
+      },
+      "wing_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "upper_arm_r": {
+        "peak_deg": 46.280826624029196,
+        "time_s": 0.36666666666666664
+      },
+      "forearm_r": {
+        "peak_deg": 29.530556230154325,
+        "time_s": 0.2
+      },
+      "wrist_r": {
+        "peak_deg": 40.0000045279254,
+        "time_s": 0.36666666666666664
+      },
+      "hand_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_r": {
+        "peak_deg": 28.111379757846596,
+        "time_s": 0.43333333333333335
+      },
+      "toe_fore_2_r": {
+        "peak_deg": 28.000005621996088,
+        "time_s": 0.43333333333333335
+      },
+      "toe_fore_3_r": {
+        "peak_deg": 28.111379757846596,
+        "time_s": 0.43333333333333335
+      },
+      "toe_hind_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_r": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3
+      },
+      "wing_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eye_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eye_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "tongue_01": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_02": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_03": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      }
+    },
+    "claw_l": {
+      "root": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3
+      },
+      "chest": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3333333333333333
+      },
+      "neck_01": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.26666666666666666
+      },
+      "neck_02": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.3
+      },
+      "neck_03": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.3333333333333333
+      },
+      "head": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.23333333333333334
+      },
+      "jaw": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "jaw_tip": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tail_01": {
+        "peak_deg": 21.999999578135405,
+        "time_s": 0.3
+      },
+      "tail_02": {
+        "peak_deg": 5.400002374449231,
+        "time_s": 0.3333333333333333
+      },
+      "tail_03": {
+        "peak_deg": 5.800005698975014,
+        "time_s": 0.36666666666666664
+      },
+      "tail_04": {
+        "peak_deg": 6.199995222354373,
+        "time_s": 0.4
+      },
+      "tail_05": {
+        "peak_deg": 6.59999812685868,
+        "time_s": 0.43333333333333335
+      },
+      "tail_06": {
+        "peak_deg": 7.000001534992899,
+        "time_s": 0.4666666666666667
+      },
+      "tail_07": {
+        "peak_deg": 7.400004379532242,
+        "time_s": 0.5
+      },
+      "tail_08": {
+        "peak_deg": 7.7999940582858365,
+        "time_s": 0.5333333333333333
+      },
+      "upper_arm_l": {
+        "peak_deg": 46.280826624029196,
+        "time_s": 0.36666666666666664
+      },
+      "forearm_l": {
+        "peak_deg": 29.530556230154325,
+        "time_s": 0.2
+      },
+      "wrist_l": {
+        "peak_deg": 40.0000045279254,
+        "time_s": 0.36666666666666664
+      },
+      "hand_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_l": {
+        "peak_deg": 28.111379757846596,
+        "time_s": 0.43333333333333335
+      },
+      "toe_fore_2_l": {
+        "peak_deg": 28.000005621996088,
+        "time_s": 0.43333333333333335
+      },
+      "toe_fore_3_l": {
+        "peak_deg": 28.111379757846596,
+        "time_s": 0.43333333333333335
+      },
+      "toe_hind_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_l": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3
+      },
+      "wing_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "upper_arm_r": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.3
+      },
+      "forearm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_r": {
+        "peak_deg": 9.999997419379092,
+        "time_s": 0.3333333333333333
+      },
+      "wing_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eye_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eye_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "tongue_01": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_02": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_03": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      }
+    },
+    "tail_r": {
+      "root": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3333333333333333
+      },
+      "chest": {
+        "peak_deg": 9.999997419379092,
+        "time_s": 0.36666666666666664
+      },
+      "neck_01": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.36666666666666664
+      },
+      "neck_02": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.4
+      },
+      "neck_03": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.43333333333333335
+      },
+      "head": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.4666666666666667
+      },
+      "jaw": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "jaw_tip": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tail_01": {
+        "peak_deg": 35.00000611867775,
+        "time_s": 0.3333333333333333
+      },
+      "tail_02": {
+        "peak_deg": 36.00000005464576,
+        "time_s": 0.36666666666666664
+      },
+      "tail_03": {
+        "peak_deg": 36.999994657601505,
+        "time_s": 0.4
+      },
+      "tail_04": {
+        "peak_deg": 38.0000024477341,
+        "time_s": 0.43333333333333335
+      },
+      "tail_05": {
+        "peak_deg": 38.99999798660484,
+        "time_s": 0.4666666666666667
+      },
+      "tail_06": {
+        "peak_deg": 40.0000045279254,
+        "time_s": 0.5
+      },
+      "tail_07": {
+        "peak_deg": 40.99999990593414,
+        "time_s": 0.5333333333333333
+      },
+      "tail_08": {
+        "peak_deg": 41.99999234217191,
+        "time_s": 0.5666666666666667
+      },
+      "upper_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "forearm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "upper_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "forearm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_r": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.36666666666666664
+      },
+      "shin_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eye_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eye_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "tongue_01": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_02": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_03": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      }
+    },
+    "tail_l": {
+      "root": {
+        "peak_deg": 11.999999880335062,
+        "time_s": 0.3333333333333333
+      },
+      "chest": {
+        "peak_deg": 9.999997419379092,
+        "time_s": 0.36666666666666664
+      },
+      "neck_01": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.36666666666666664
+      },
+      "neck_02": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.4
+      },
+      "neck_03": {
+        "peak_deg": 4.999999031012983,
+        "time_s": 0.43333333333333335
+      },
+      "head": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.4666666666666667
+      },
+      "jaw": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "jaw_tip": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tail_01": {
+        "peak_deg": 35.00000611867775,
+        "time_s": 0.3333333333333333
+      },
+      "tail_02": {
+        "peak_deg": 36.00000005464576,
+        "time_s": 0.36666666666666664
+      },
+      "tail_03": {
+        "peak_deg": 36.999994657601505,
+        "time_s": 0.4
+      },
+      "tail_04": {
+        "peak_deg": 38.0000024477341,
+        "time_s": 0.43333333333333335
+      },
+      "tail_05": {
+        "peak_deg": 38.99999798660484,
+        "time_s": 0.4666666666666667
+      },
+      "tail_06": {
+        "peak_deg": 40.0000045279254,
+        "time_s": 0.5
+      },
+      "tail_07": {
+        "peak_deg": 40.99999990593414,
+        "time_s": 0.5333333333333333
+      },
+      "tail_08": {
+        "peak_deg": 41.99999234217191,
+        "time_s": 0.5666666666666667
+      },
+      "upper_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "forearm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_l": {
+        "peak_deg": 14.9999971265273,
+        "time_s": 0.36666666666666664
+      },
+      "shin_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_arm_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "upper_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "forearm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "hand_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "thigh_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "shin_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "ankle_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "foot_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_fore_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_1_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_2_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "toe_hind_3_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_root_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_arm_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_wrist_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_1c_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_2b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_finger_3b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_a_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "wing_spur_b_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eye_l": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_l": {
+        "peak_deg": 1.6984169372153147e-15,
+        "time_s": 0.0
+      },
+      "eye_r": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "eyelid_upper_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "eyelid_lower_r": {
+        "peak_deg": 4.840722961582297e-15,
+        "time_s": 0.0
+      },
+      "tongue_01": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_02": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      },
+      "tongue_03": {
+        "peak_deg": 0.0,
+        "time_s": 0.0
+      }
+    }
+  },
+  "landmarks": {
+    "bite": [
+      {
+        "joint": "head",
+        "distance_m": 1.42401523160094,
+        "time_s": 0.3,
+        "delta_xyz_m": [
+          -5.876230179530095e-10,
+          -1.2655605455038597,
+          -0.6528214805714132
+        ]
+      },
+      {
+        "joint": "jaw_tip",
+        "distance_m": 2.0851615779555397,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          -6.435065241089388e-10,
+          -2.06517781367274,
+          -0.28799202088932585
+        ]
+      },
+      {
+        "joint": "hand_r",
+        "distance_m": 0.5960388816736875,
+        "time_s": 0.3,
+        "delta_xyz_m": [
+          -3.069037468605984e-09,
+          -0.5873037822213707,
+          -0.10166914898479673
+        ]
+      },
+      {
+        "joint": "hand_l",
+        "distance_m": 0.5960388816736875,
+        "time_s": 0.3,
+        "delta_xyz_m": [
+          3.069037468605984e-09,
+          -0.5873037822213707,
+          -0.10166914898479673
+        ]
+      },
+      {
+        "joint": "tail_08",
+        "distance_m": 3.850338398514479,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          0.0,
+          3.777555325432985,
+          -0.7451050572690647
+        ]
+      }
+    ],
+    "claw_r": [
+      {
+        "joint": "head",
+        "distance_m": 1.5207662981272483,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          1.473443032738586,
+          1.0821631502011542e-07,
+          0.3764249763150169
+        ]
+      },
+      {
+        "joint": "jaw_tip",
+        "distance_m": 2.5516633578268144,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          2.3963449432582467,
+          1.0628920144029053e-07,
+          0.8766509023531732
+        ]
+      },
+      {
+        "joint": "hand_r",
+        "distance_m": 1.1198358055243451,
+        "time_s": 0.26666666666666666,
+        "delta_xyz_m": [
+          0.003711049152963275,
+          0.644684750465964,
+          -0.9156418688358352
+        ]
+      },
+      {
+        "joint": "hand_l",
+        "distance_m": 0.8543687876698554,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          0.6978935887812296,
+          0.06331977066098848,
+          0.48875471427491535
+        ]
+      },
+      {
+        "joint": "tail_08",
+        "distance_m": 6.955087681744286,
+        "time_s": 0.4,
+        "delta_xyz_m": [
+          -6.278158896706741,
+          -5.680320214196399e-09,
+          -2.9929860555059546
+        ]
+      }
+    ],
+    "claw_l": [
+      {
+        "joint": "head",
+        "distance_m": 1.5191682806018885,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          -1.468305931742276,
+          1.0821631502011542e-07,
+          0.3898075879165681
+        ]
+      },
+      {
+        "joint": "jaw_tip",
+        "distance_m": 2.551262667137375,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          -2.390479265007405,
+          1.0628920144029053e-07,
+          0.8913753868592957
+        ]
+      },
+      {
+        "joint": "hand_r",
+        "distance_m": 0.8543687876698554,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          -0.6978935887812296,
+          0.06331977066098848,
+          0.48875471427491535
+        ]
+      },
+      {
+        "joint": "hand_l",
+        "distance_m": 1.1198358055243451,
+        "time_s": 0.26666666666666666,
+        "delta_xyz_m": [
+          -0.003711049152963275,
+          0.644684750465964,
+          -0.9156418688358352
+        ]
+      },
+      {
+        "joint": "tail_08",
+        "distance_m": 6.955087681744286,
+        "time_s": 0.4,
+        "delta_xyz_m": [
+          6.278158896706741,
+          -5.680320214196399e-09,
+          -2.9929860555059546
+        ]
+      }
+    ],
+    "tail_r": [
+      {
+        "joint": "head",
+        "distance_m": 0.9874161367331046,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          -0.9755064164510685,
+          1.1430535273859732e-07,
+          0.1528981966659857
+        ]
+      },
+      {
+        "joint": "jaw_tip",
+        "distance_m": 1.1740611928638638,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          -1.1630229877971512,
+          1.1909418606848021e-07,
+          0.16061511275185847
+        ]
+      },
+      {
+        "joint": "hand_r",
+        "distance_m": 0.8422333436112037,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          -0.8388818515293721,
+          -9.450952997980266e-08,
+          -0.075061603134702
+        ]
+      },
+      {
+        "joint": "hand_l",
+        "distance_m": 0.8320000858665102,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          -0.757327830826336,
+          -9.450952997980266e-08,
+          0.34449774968459224
+        ]
+      },
+      {
+        "joint": "tail_08",
+        "distance_m": 11.777385950297317,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          7.440369620376791,
+          -8.994910061232986e-08,
+          -9.12949723338776
+        ]
+      }
+    ],
+    "tail_l": [
+      {
+        "joint": "head",
+        "distance_m": 0.9871862932324461,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          0.9758220087445876,
+          1.1430535273859732e-07,
+          0.14935924743946094
+        ]
+      },
+      {
+        "joint": "jaw_tip",
+        "distance_m": 1.1739425751206483,
+        "time_s": 0.3333333333333333,
+        "delta_xyz_m": [
+          1.1635456910374076,
+          1.1909418606848021e-07,
+          0.15589289447940402
+        ]
+      },
+      {
+        "joint": "hand_r",
+        "distance_m": 0.8320000858665102,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          0.757327830826336,
+          -9.450952997980266e-08,
+          0.34449774968459224
+        ]
+      },
+      {
+        "joint": "hand_l",
+        "distance_m": 0.8422333436112037,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          0.8388818515293721,
+          -9.450952997980266e-08,
+          -0.075061603134702
+        ]
+      },
+      {
+        "joint": "tail_08",
+        "distance_m": 11.777385950297317,
+        "time_s": 0.36666666666666664,
+        "delta_xyz_m": [
+          -7.440369620376791,
+          -8.994910061232986e-08,
+          -9.12949723338776
+        ]
+      }
+    ]
+  },
+  "source_sha256": "32655f936dfd5a26ab718a0b2382a6e0bb93899073b249b9b48911c92f776138",
+  "clip_sha256": "6104ce3f8563e71fb3df83b1f1d9d7b16be91bc6e6461bb627bded1f412e1a99"
+}

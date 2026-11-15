@@ -1,0 +1,134 @@
+PASS GLB loads: 273884 bytes
+PASS 77 unique model joints
+PASS armature alone: no mesh, skin, material, image, or required extension
+PASS embedded animation buffer
+PASS model hierarchy
+PASS joint scene roots
+PASS exact rest TRS: rotation 0.000000000 deg; translation 0.000000000 m; exact fields True
+PASS five named animations
+PASS bite rotation-only channels: one rotation channel per joint; no translation or scale keys
+PASS bite duration and 30 fps sampling: 0.90 s; 28 unit-quaternion keys per joint
+PASS bite rest endpoints: max 0.00000000 deg
+PASS bite no pop: 23.12000 deg; jaw; frames 6 to 7
+PASS claw_r rotation-only channels: one rotation channel per joint; no translation or scale keys
+PASS claw_r duration and 30 fps sampling: 0.90 s; 28 unit-quaternion keys per joint
+PASS claw_r rest endpoints: max 0.00000000 deg
+PASS claw_r no pop: 24.86708 deg; upper_arm_r; frames 7 to 8
+PASS claw_l rotation-only channels: one rotation channel per joint; no translation or scale keys
+PASS claw_l duration and 30 fps sampling: 0.90 s; 28 unit-quaternion keys per joint
+PASS claw_l rest endpoints: max 0.00000000 deg
+PASS claw_l no pop: 24.86708 deg; upper_arm_l; frames 7 to 8
+PASS tail_r rotation-only channels: one rotation channel per joint; no translation or scale keys
+PASS tail_r duration and 30 fps sampling: 1.00 s; 31 unit-quaternion keys per joint
+PASS tail_r rest endpoints: max 0.00000000 deg
+PASS tail_r no pop: 20.62500 deg; tail_01; frames 8 to 9
+PASS tail_l rotation-only channels: one rotation channel per joint; no translation or scale keys
+PASS tail_l duration and 30 fps sampling: 1.00 s; 31 unit-quaternion keys per joint
+PASS tail_l rest endpoints: max 0.00000000 deg
+PASS tail_l no pop: 20.62500 deg; tail_01; frames 8 to 9
+PASS claw exact mirrored deltas: max 0.000000000 deg over every joint and key
+PASS tail exact mirrored deltas: max 0.000000000 deg over every joint and key
+PASS bite neck coil total: 42.0000 deg at 0.1667 s; range (35, 45); window (0, 0.16)
+PASS bite neck throw total: 28.5000 deg at 0.3000 s; range (25, 30); window (0.16, 0.36)
+PASS bite jaw opens: 40.0000 deg at 0.1667 s; range (32, 48); window (0, 0.16)
+PASS bite jaw closed overshoot: 2.5000 deg at 0.2667 s; range (2, 3); window (0.24, 0.28)
+PASS bite head recoil: 8.0000 deg at 0.4667 s; range (6.4, 9.6); window (0.36, 0.65)
+PASS bite root pitch: 6.0000 deg at 0.2333 s; range (6, 10); window (0.16, 0.36)
+PASS bite chest pitch: 8.0000 deg at 0.2667 s; range (6, 10); window (0.16, 0.36)
+PASS bite wing_root_r sweep: 15.0000 deg at 0.2667 s; range (12, 18); window (0.16, 0.36)
+PASS bite upper_arm_r reach: 25.0000 deg at 0.2667 s; range (20, 30); window (0.16, 0.36)
+PASS bite wing_root_l sweep: 15.0000 deg at 0.2667 s; range (12, 18); window (0.16, 0.36)
+PASS bite upper_arm_l reach: 25.0000 deg at 0.2667 s; range (20, 30); window (0.16, 0.36)
+PASS bite tail root lift: 12.0000 deg at 0.2667 s; range (10, 15); window (0.16, 0.36)
+PASS claw_r shoulder wind-up: 29.5306 deg at 0.1667 s; range (24, 36); window (0, 0.18)
+PASS claw_r shoulder forward travel: 59.5306 deg at 0.3000 s; range (48.0, 84.0); window (0.18, 0.3)
+PASS claw_r elbow closed: 29.5306 deg at 0.2000 s; range (24, 36); window (0, 0.22)
+PASS claw_r elbow opening travel: 49.5306 deg at 0.3333 s; range (40, 60); window (0.18, 0.42)
+PASS claw_r wrist flick: 40.0000 deg at 0.3667 s; range (32, 48); window (0.18, 0.42)
+PASS claw_r opposite foreleg brace: 15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)
+PASS claw_r spine twist: 15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)
+PASS claw_r neck twist total: 15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)
+PASS claw_r head lead: 15.0000 deg at 0.2333 s; range (12, 18); window (0.18, 0.3)
+PASS claw_r striking wing lift: 15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)
+PASS claw_r opposite wing dip: 10.0000 deg at 0.3333 s; range (8, 12); window (0.18, 0.42)
+PASS claw_r tail opposite swing: 22.0000 deg at 0.3000 s; range (20, 25); window (0.18, 0.42)
+PASS claw_r paw crosses chest centre: min signed hand X -0.98196 m
+PASS claw_r toe 1 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_r toe 2 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_r toe 3 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_r outer toe spread: 16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)
+PASS claw_r inner toe spread: 16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)
+PASS claw_l shoulder wind-up: 29.5306 deg at 0.1667 s; range (24, 36); window (0, 0.18)
+PASS claw_l shoulder forward travel: 59.5306 deg at 0.3000 s; range (48.0, 84.0); window (0.18, 0.3)
+PASS claw_l elbow closed: 29.5306 deg at 0.2000 s; range (24, 36); window (0, 0.22)
+PASS claw_l elbow opening travel: 49.5306 deg at 0.3333 s; range (40, 60); window (0.18, 0.42)
+PASS claw_l wrist flick: 40.0000 deg at 0.3667 s; range (32, 48); window (0.18, 0.42)
+PASS claw_l opposite foreleg brace: 15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)
+PASS claw_l spine twist: 15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)
+PASS claw_l neck twist total: 15.0000 deg at 0.3333 s; range (12, 18); window (0.18, 0.42)
+PASS claw_l head lead: 15.0000 deg at 0.2333 s; range (12, 18); window (0.18, 0.3)
+PASS claw_l striking wing lift: 15.0000 deg at 0.3000 s; range (12, 18); window (0.18, 0.42)
+PASS claw_l opposite wing dip: 10.0000 deg at 0.3333 s; range (8, 12); window (0.18, 0.42)
+PASS claw_l tail opposite swing: 22.0000 deg at 0.3000 s; range (20, 25); window (0.18, 0.42)
+PASS claw_l paw crosses chest centre: min signed hand X -0.98196 m
+PASS claw_l toe 1 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_l toe 2 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_l toe 3 curl: 28.0000 deg at 0.4333 s; range (20, 34); window (0.3, 0.48)
+PASS claw_l outer toe spread: 16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)
+PASS claw_l inner toe spread: 16.0000 deg at 0.2333 s; range (10, 20); window (0.18, 0.34)
+PASS tail_r root left coil: 25.0000 deg at 0.2000 s; range (20, 30); window (0, 0.22)
+PASS tail_r root right whip: 35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.38)
+PASS tail_r tail_01 whip: 35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.55)
+PASS tail_r tail_02 whip: 36.0000 deg at 0.3667 s; range (29, 43); window (0.22, 0.55)
+PASS tail_r tail_03 whip: 37.0000 deg at 0.4000 s; range (30, 44); window (0.22, 0.55)
+PASS tail_r tail_04 whip: 38.0000 deg at 0.4333 s; range (31, 45); window (0.22, 0.55)
+PASS tail_r tail_05 whip: 39.0000 deg at 0.4667 s; range (32, 46); window (0.22, 0.55)
+PASS tail_r tail_06 whip: 40.0000 deg at 0.5000 s; range (33, 47); window (0.22, 0.55)
+PASS tail_r tail_07 whip: 41.0000 deg at 0.5333 s; range (34, 48); window (0.22, 0.55)
+PASS tail_r tail_08 whip: 42.0000 deg at 0.5667 s; range (35, 49); window (0.22, 0.55)
+PASS tail_r larger distal peaks: [35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0]
+PASS tail_r tip cumulative bend: 126.7907 deg at 0.5000 s; range (70, 180); window (0.22, 0.55)
+PASS tail_r root hip/spine twist: 12.0000 deg at 0.3333 s; range (10, 15); window (0.22, 0.55)
+PASS tail_r chest hip/spine twist: 10.0000 deg at 0.3667 s; range (10, 15); window (0.22, 0.55)
+PASS tail_r neck counter-swing: 15.0000 deg at 0.4333 s; range (12, 18); window (0.22, 0.55)
+PASS tail_r head counter-swing: 15.0000 deg at 0.4667 s; range (12, 18); window (0.22, 0.55)
+PASS tail_r hind kick: 15.0000 deg at 0.3667 s; range (12, 18); window (0.22, 0.55)
+PASS tail_l root left coil: 25.0000 deg at 0.2000 s; range (20, 30); window (0, 0.22)
+PASS tail_l root right whip: 35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.38)
+PASS tail_l tail_01 whip: 35.0000 deg at 0.3333 s; range (28, 42); window (0.22, 0.55)
+PASS tail_l tail_02 whip: 36.0000 deg at 0.3667 s; range (29, 43); window (0.22, 0.55)
+PASS tail_l tail_03 whip: 37.0000 deg at 0.4000 s; range (30, 44); window (0.22, 0.55)
+PASS tail_l tail_04 whip: 38.0000 deg at 0.4333 s; range (31, 45); window (0.22, 0.55)
+PASS tail_l tail_05 whip: 39.0000 deg at 0.4667 s; range (32, 46); window (0.22, 0.55)
+PASS tail_l tail_06 whip: 40.0000 deg at 0.5000 s; range (33, 47); window (0.22, 0.55)
+PASS tail_l tail_07 whip: 41.0000 deg at 0.5333 s; range (34, 48); window (0.22, 0.55)
+PASS tail_l tail_08 whip: 42.0000 deg at 0.5667 s; range (35, 49); window (0.22, 0.55)
+PASS tail_l larger distal peaks: [35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0]
+PASS tail_l tip cumulative bend: 126.7907 deg at 0.5000 s; range (70, 180); window (0.22, 0.55)
+PASS tail_l root hip/spine twist: 12.0000 deg at 0.3333 s; range (10, 15); window (0.22, 0.55)
+PASS tail_l chest hip/spine twist: 10.0000 deg at 0.3667 s; range (10, 15); window (0.22, 0.55)
+PASS tail_l neck counter-swing: 15.0000 deg at 0.4333 s; range (12, 18); window (0.22, 0.55)
+PASS tail_l head counter-swing: 15.0000 deg at 0.4667 s; range (12, 18); window (0.22, 0.55)
+PASS tail_l hind kick: 15.0000 deg at 0.3667 s; range (12, 18); window (0.22, 0.55)
+PASS bite neck coil overlap: peak frames [3, 4, 5]; 1 to 3 frames per joint
+PASS bite neck coil delayed starts: first moving frames [1, 2, 3]
+PASS bite neck throw overlap: peak frames [7, 8, 9]; 1 to 3 frames per joint
+PASS bite neck throw delayed starts: first moving frames [1, 2, 3]
+PASS bite tail lift overlap: peak frames [8, 9, 10, 11, 12, 13, 14, 15]; 1 to 3 frames per joint
+PASS bite tail lift delayed starts: first moving frames [4, 5, 6, 7, 8, 9, 10, 11]
+PASS tail_r tail whip overlap: peak frames [10, 11, 12, 13, 14, 15, 16, 17]; 1 to 3 frames per joint
+PASS tail_r tail whip delayed starts: first moving frames [1, 2, 3, 4, 5, 6, 7, 8]
+PASS claw_r tail swing overlap: peak frames [9, 10, 11, 12, 13, 14, 15, 16]; 1 to 3 frames per joint
+PASS claw_r tail swing delayed starts: first moving frames [1, 2, 3, 4, 5, 6, 7, 8]
+PASS bite eased strike samples: constant-speed active tracks: []
+PASS claw_r eased strike samples: constant-speed active tracks: []
+PASS claw_l eased strike samples: constant-speed active tracks: []
+PASS tail_r eased strike samples: constant-speed active tracks: []
+PASS tail_l eased strike samples: constant-speed active tracks: []
+PASS bite recovery overshoot: []
+PASS claw_r recovery overshoot: []
+PASS claw_l recovery overshoot: []
+PASS tail_r recovery overshoot: []
+PASS tail_l recovery overshoot: []
+PASS bite head moves up/back then down/forward: coil XYZ (-7.281343947923569e-10, 0.354655980662959, 0.9153218824693714); hit XYZ (-5.876230179530095e-10, -1.2655605455038597, -0.6528214805714132)
+PASS complete checker: 133/133 checks
