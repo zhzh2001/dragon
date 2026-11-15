@@ -8101,7 +8101,13 @@ void App::draw_combat(rhi::Pass* pass) {
             const int index = int(&sentinel - combat_.sentinels().data());
             gfx::ModelUniforms ward;
             ward.model = ward_stone_matrix(sentinel, index);
-            ward.tint = core::Vec4{1.35f + 0.6f * flash, 1.3f + 0.3f * flash, 1.25f, flash * 0.4f};
+            // Its own dark basalt up close; lifted with distance, as a tower
+            // is, so it is not a black speck at range. With the lift at
+            // every distance the stone was washed to a flat brown at 15 m
+            // (the blind critic, round 3).
+            const float lift = core::lerpf(0.85f, 1.35f, core::smoothstep(60.0f, 400.0f, core::distance(
+                                                             active_camera().position, sentinel.position)));
+            ward.tint = core::Vec4{lift + 0.6f * flash, lift * 0.97f + 0.3f * flash, lift * 0.94f, flash * 0.4f};
             if (frozen) ward.tint = core::Vec4{0.8f, 1.0f, 1.4f, 0.15f};
             world_.draw_skinned(device_, pass, ward_prop_.mesh, ward, ward_prop_.joints, ward_prop_.textures,
                                 model_sampler_);
@@ -8490,6 +8496,16 @@ void App::draw_combat_hud() {
     // illegible without this: an enemy you cannot locate is not a fight, it is
     // damage arriving from nowhere.
     const core::Vec3 eye = active_camera().position;
+    // Where the locked target is on the screen: a mark close beside it
+    // keeps its bracket and drops its words.
+    ImVec2 locked_screen{-1e6f, -1e6f};
+    {
+        const int at = combat_.locked_index();
+        if (at >= 0 && size_t(at) < combat_.sentinels().size()) {
+            ImVec2 p;
+            if (project_to_screen(view_proj, combat_.sentinels()[size_t(at)].position, width, height, p)) locked_screen = p;
+        }
+    }
     for (const game::Sentinel& sentinel : combat_.sentinels()) {
         if (!sentinel.alive) continue;
         const float range = core::distance(flight_.state().position, sentinel.position);
@@ -8542,9 +8558,18 @@ void App::draw_combat_hud() {
             // do not obscure what they surround.
             const float half = core::clampf(2600.0f / core::maxf(range, 1.0f), hud_.px(10.0f), hud_.px(60.0f));
             hud_.bracket(screen, half, colour, hud_.px(1.8f));
+            // A mark with no role, close beside the locked target on the
+            // screen, is a bracket and nothing more. Six targets in a line
+            // each wrote a range and a status over the one that mattered:
+            // "the labels are unreadable" (the blind critic, round 3). T
+            // moves the lock, and the words with it.
+            const float beside = std::hypot(screen.x - locked_screen.x, screen.y - locked_screen.y);
+            const bool crowded = !locked && !flaming && !*role && beside < hud_.px(150.0f);
             std::snprintf(line, sizeof(line), flaming ? "%s%ld m  FLAME" : "%s%ld m", tag, std::lrint(range));
-            hud_.world_label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
-                             flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
+            if (!crowded) {
+                hud_.world_label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
+                                 flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
+            }
             // A rival's health under the bracket: whether to press the attack.
             // (Its aggression was drawn there too for one build and told the
             // player nothing they acted on; the Combat panel still lists it.)
@@ -8589,7 +8614,7 @@ void App::draw_combat_hud() {
                                     : st.chill > 0.3f  ? "CHILLED"
                                     : sentinel.stun > 0.0f ? "STUNNED"
                                                           : nullptr;
-            if (suffering) {
+            if (suffering && !crowded) {
                 const game::Element e = st.frozen > 0.0f || st.chill > 0.3f ? game::Element::Frost
                                         : st.shock > 0.0f  ? game::Element::Storm
                                         : st.burn > 0.0f   ? game::Element::Fire

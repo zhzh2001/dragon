@@ -1793,6 +1793,20 @@ and `cliff-faces-near-before-after.jpg`. The face's GPU cost is not
 measured: a pair of runs differs by more than it can cost
 (`gpu-hist`, `20261115-2112-mac-m5-dragon-terrain-shape-cost`).
 
+### After round 3: quiet marks, a darker ward stone (16:30)
+
+- A mark with no role, within 150 frame units of the locked target on the
+  screen, is a bracket and nothing more: no range, no status word. In the
+  training line six targets wrote over one another, "340 m", "92 m", "241
+  m" and "BURNING" three times; the fire frame now has two ranges and two
+  status words. `T` moves the lock and the words with it. A run's rivals,
+  towers and hunters have a role and keep their words.
+- The ward stone has no lift inside 60 m (a tint of 0.85) and the towers'
+  1.35 from 400 m. Lifted at every distance its basalt was a flat brown at
+  15 m.
+
+The pair: `artifacts/showcase-critic/marks-quiet-before-after.jpg`.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
