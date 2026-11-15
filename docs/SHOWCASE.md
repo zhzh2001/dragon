@@ -506,6 +506,60 @@ What is still weak, from the worker's report:
   46.7% used. The mouth's relief is a pattern, not anatomy. A spike of the
   new sculpt hangs between the fore legs.
 
+### The rig on version 2, and the pose inspection (2026-11-14)
+
+A Claude subagent finished the rig on mesh version 2, starting from
+Codex's script and skeleton. It took about 70 minutes and about 552,000
+tokens. All 56 checks pass. `tools/hero-rig.md` is the record,
+`tools/rig_hero.py` rebuilds `assets/embercrest-hero.glb` (28.4 MB, 77
+joints), and its profiles are `assets/embercrest-hero.glb.rig.cfg` and
+`.flight.cfg`.
+
+What was wrong with the first rig:
+
+- The wing spike. The elbow bone sat on the web in front of the arm,
+  0.61 m from the mesh's elbow, and a "fourth finger" ran along the
+  forearm. The engine turned the forearm about a point outside the arm.
+- The invalid weights. Five bones meet at the finger fan, and a vertex at
+  that point divided by zero in the four-influence cut.
+- The mirror failures were partly the check, which paired vertices up to
+  0.25 m apart on a sculpt whose sides differ, and partly real: each
+  wing's weights followed its own triangles.
+
+`artifacts/showcase-s2/old-vs-new-*.jpg` are ten pairs from the engine,
+the old Embercrest on the left and the hero on the right, same camera,
+same frame, sun at 30 degrees: the glide from the side, the front and
+above, the head, the flap, standing from the side, the feet, the head
+while standing, a landing flown with `--input`, and the slice's chase
+view.
+
+- The spike is gone in every view. The membrane is whole in the glide and
+  the flap.
+- The head pair is the plainest change: an eye, a lip line, separate
+  plates and dark ridged horns against a brown crust.
+- Standing, all four feet are on the ground, the wings fold, and the tail
+  lies out behind. The old model sat back on its haunches under two
+  upright wing planks.
+- From the chase camera the hero's wings read thinner than the old
+  model's. The wings rise 2 m from shoulder to wrist at bind, so the glide
+  holds them in a raised V, and from behind the camera sees them nearly
+  edge on. This is a profile matter, `wing_bind_level_deg` and the glide's
+  dihedral, and it is the first thing to tune.
+- The shadowed side of the body is close to black in the side views.
+  That is S3.
+
+What is weak in the rig, from its record: the neck bends as rigid plates
+that slide, the hind knee loses 10.9% of its volume at 60 degrees, the
+lids close by scaling flat and the engine does not blink yet, and the
+standing wing fold uses the old Embercrest's numbers.
+
+The delegation rule of S1 changes with this. A rig has numeric checks,
+and the first rig passed its own render inspection with a wing pulled
+into a spike. The defect showed only in the engine. So rigging goes to a
+worker that is required to render in the engine and look, which so far
+has been the Claude subagent. Codex keeps the work that numbers do decide:
+decimation, levels of detail, format conversion and batch rebuilds.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
