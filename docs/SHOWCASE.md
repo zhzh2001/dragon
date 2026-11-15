@@ -1369,8 +1369,10 @@ What went wrong on the way, each of which rendered as "no change":
 
 A debug render of the grid as a colour settled the first two in one look.
 
-Still open: the bark is saturated red-brown in shade (the critic: "the tree
-trunks at the left are saturated red").
+The bark was a warm brown, 0.20 0.14 0.09, that the low sun turned red (the
+critic: "the tree trunks at the left are saturated red"). On the modern tier
+it is 0.15 0.125 0.105, set beside the rock's in `App::init`
+(`artifacts/showcase-critic/bark-before-after.jpg`).
 
 ### Not changed, because they are design calls
 

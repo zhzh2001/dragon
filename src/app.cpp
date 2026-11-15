@@ -578,6 +578,10 @@ bool App::init(const Options& options) {
         // the table's, which their pre-lit ground was tuned on.
         lighting_.palette[gfx::PaletteEntry::Rock] = core::Vec4{0.36f, 0.35f, 0.345f, 0.0f};
         lighting_.palette[gfx::PaletteEntry::RockDark] = core::Vec4{0.19f, 0.19f, 0.195f, 0.0f};
+        // And its bark is a grey-brown. The table's is a warm brown that the
+        // low sun turned red: "the tree trunks are saturated red" (the same
+        // critic), the brightest hue in a stand of trees.
+        lighting_.palette[gfx::PaletteEntry::Bark] = core::Vec4{0.15f, 0.125f, 0.105f, 0.0f};
     }
     if (!options.atmosphere.empty()) atmosphere_settings_.parse(options.atmosphere);
     if (!options.grade.empty()) {
