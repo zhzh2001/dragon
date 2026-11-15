@@ -1215,7 +1215,7 @@ dominating four of eight frames, and the label pile-up in combat.
   tuned to be seen at 500 m. Within 40 m the flash is now 0.35 of that. The
   target is still a plain ball. It needs a prop.
 
-### The valley walls: grass with grey rock, not one tan (13:25)
+### The valley walls: grass with grey rock, not one tan (13:22)
 
 The critic's first fix, and the playtest's report 0012. Pairs:
 `artifacts/showcase-critic/walls-{1-chase,5-mountains,8-run}-before-after.jpg`.
@@ -1246,7 +1246,7 @@ jointing and no ledge anywhere, because a heightfield at 6 m cells over a
 12 m erosion grid cannot hold one. That is the rock kit's job (mesh cliffs on
 the steep bands) and row 4 of the technique table.
 
-### The eye opens in shade (13:40)
+### The eye opens in shade (13:31)
 
 The critic's frame 6, a meadow in a mountain's shadow, was "a dark green-navy
 murk", a blocker. One exposure served the whole valley, so a view in shade
@@ -1261,7 +1261,7 @@ and gains 0.97 stops (`artifacts/showcase-critic/shade-exposure-before-after.jpg
 It is measured by place and not from the picture. A histogram would also
 answer to fire and snow, and it needs a mip chain or a readback.
 
-### The claws on the wing (13:40)
+### The claws on the wing (13:31)
 
 The critic saw "bead-like spheres on the bone" of the wing. They are the
 thumb claws. The horn coat reflected the sky at the full Fresnel, so a claw
