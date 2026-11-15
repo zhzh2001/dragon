@@ -3,8 +3,8 @@ PASS armature contract: 77 joints, 1 skin, 1 imported armature
 PASS new names avoid mapper aliases: []
 PASS six meshes: eye_l, eye_r, hide, horn, membrane, mouth
 PASS material records unchanged: materials, image records, and texture records compared
-PASS source buffer unchanged: 27723320 original binary bytes compared, including every embedded image
-PASS rig.cfg present: every Embercrest key kept; 27 values differ: flutter_deg, flutter_speed_start, foot_hang_deg, glide_breath_deg, glide_trim_deg, gust_deg, gust_heave_m, jaw_open_deg, jaw_rest_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg
+PASS source buffer unchanged: 24319604 original binary bytes compared, including every embedded image
+PASS rig.cfg present: every Embercrest key kept; 28 values differ: flutter_deg, flutter_speed_start, foot_hang_deg, glide_breath_deg, glide_trim_deg, gust_deg, gust_heave_m, jaw_open_deg, jaw_rest_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, tail_beat_cycles, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg
 PASS flight.cfg present: every Embercrest key kept; 1 values differ: ground_offset
 PASS inverse binds reconcile: maximum matrix error 2.43390027e-07
 PASS measured skeleton hierarchy: maximum anchor error 4.4408921e-16 m; wrong parents []
@@ -12,45 +12,45 @@ PASS eye_l source geometry: 1024 triangles; all source attributes and indices co
 PASS eye_l influences: max sum error 0; unweighted 0; maximum 1
 PASS eye_r source geometry: 1024 triangles; all source attributes and indices compared
 PASS eye_r influences: max sum error 0; unweighted 0; maximum 1
-PASS hide source geometry: 98442 triangles; all source attributes and indices compared
+PASS hide source geometry: 104162 triangles; all source attributes and indices compared
 PASS hide influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
-PASS horn source geometry: 6429 triangles; all source attributes and indices compared
+PASS horn source geometry: 7488 triangles; all source attributes and indices compared
 PASS horn influences: max sum error 0; unweighted 0; maximum 1
-PASS membrane source geometry: 9322 triangles; all source attributes and indices compared
-PASS membrane influences: max sum error 1.1920929e-07; unweighted 0; maximum 4
+PASS membrane source geometry: 4444 triangles; all source attributes and indices compared
+PASS membrane influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
 PASS mouth source geometry: 4602 triangles; all source attributes and indices compared
 PASS mouth influences: max sum error 1.1920929e-07; unweighted 0; maximum 3
 PASS hide jaw mask retained: the jaw weight is the source mask, with the two corner ramps averaged; 51 vertices differ from the source, by at most 0.002318
-PASS horn component ownership: 28 components checked; incorrect components []
+PASS horn component ownership: 26 components checked; incorrect components []
 PASS mouth component ownership: 66 components checked; incorrect components []
 PASS eye_l rigid: 546 vertices at weight 1
 PASS lid_l topology: six rings of 36 unique positions
-PASS socket_l fixed: 365 exported vertices follow head
+PASS socket_l fixed: 362 exported vertices follow head
 PASS eye_r rigid: 546 vertices at weight 1
 PASS lid_r topology: six rings of 36 unique positions
-PASS socket_r fixed: 373 exported vertices follow head
-PASS hide mirrored field: exported weight against the field at the mirrored position; max 0.018352; RMS 0.001649; 53735 of 100917 vertices carry the field, the rest are spikes, jaw and lids
-FAIL membrane mirrored surface: left vertex against the right membrane at the mirrored point; max 0.028065; RMS 0.000743; 5042 vertices within 4 mm of the mirrored surface; 13 farther
-PASS hide mirrored weights: max 0.012490; RMS 0.000460; 3394 pairs within 2 mm of their mirror image; 20786 left vertices have no such partner; 141 more pairs have a spike on one side or both: 134 lead with the same bone, 7 with joined bones, 0 with bones apart
-PASS membrane mirrored weights: max 0.002243; RMS 0.000097; 2976 pairs within 2 mm of their mirror image; 85 left vertices have no such partner
-PASS horn mirrored weights: max 0.000000; RMS 0.000000; 374 pairs within 2 mm of their mirror image; 1443 left vertices have no such partner
-PASS mouth mirrored weights: max 0.000001; RMS 0.000000; 103 pairs within 2 mm of their mirror image; 1122 left vertices have no such partner; 4 more pairs set a tooth against the gum and are not compared
+PASS socket_r fixed: 372 exported vertices follow head
+PASS hide mirrored field: exported weight against the field at the mirrored position; max 0.018352; RMS 0.001862; 48217 of 96731 vertices carry the field, the rest are spikes, jaw and lids
+PASS membrane mirrored surface: left vertex against the right membrane at the mirrored point; max 0.015411; RMS 0.003801; 564 vertices within 4 mm of the mirrored surface; 1363 farther
+PASS hide mirrored weights: max 0.016042; RMS 0.001785; 370 pairs within 2 mm of their mirror image; 24548 left vertices have no such partner; 79 more pairs have a spike on one side or both: 78 lead with the same bone, 1 with joined bones, 0 with bones apart
+PASS membrane mirrored weights: max 0.001020; RMS 0.000783; 3 pairs within 2 mm of their mirror image; 1306 left vertices have no such partner
+PASS horn mirrored weights: max 0.000000; RMS 0.000000; 9 pairs within 2 mm of their mirror image; 2029 left vertices have no such partner
+PASS mouth mirrored weights: max 0.000001; RMS 0.000000; 120 pairs within 2 mm of their mirror image; 1132 left vertices have no such partner; 2 more pairs set a tooth against the gum and are not compared
 PASS Blender bind pose: max vertex displacement 2.81154547e-07 m
-PASS jaw fixed skull: 35 degrees; 98947 distant zero-mask vertices; max motion 0 m
-PASS lower teeth clear upper lip: 1434 vertices; nearest fixed hide 0.182410 m; minimum vertical clearance 0.130751 m
+PASS jaw fixed skull: 35 degrees; 94760 distant zero-mask vertices; max motion 0 m
+PASS lower teeth clear upper lip: 1553 vertices; nearest fixed hide 0.192555 m; minimum vertical clearance 0.130751 m
 PASS blink_l closure: inner-edge height spread 0.001599765 m; threshold 0.005 m
 PASS blink_l ball coverage: 0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m
 PASS blink_r closure: inner-edge height spread 0.001599879 m; threshold 0.005 m
 PASS blink_r ball coverage: 0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m
 PASS eye_l independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
 PASS eye_r independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
-FAIL wing_l membrane stretch: elbow 80 and wrist 80 degrees; 9135 edges; longest 4.0822 of rest; shortest 0.1898; 38 over 1.3
-FAIL wing_l membrane intersections: 1 membrane triangles cut the arm or the body when folded and not at rest; 81 cut it folded; 80 cut it at rest; 2591 membrane triangles tested, 2047 attached to the hide; 93208 arm and body triangles
-FAIL wing_r membrane stretch: elbow 80 and wrist 80 degrees; 9107 edges; longest 4.0856 of rest; shortest 0.1898; 43 over 1.3
-FAIL wing_r membrane intersections: 1 membrane triangles cut the arm or the body when folded and not at rest; 77 cut it folded; 76 cut it at rest; 2582 membrane triangles tested, 2042 attached to the hide; 93208 arm and body triangles
-PASS fore_l volume: 60-degree elbow/knee; rest 0.473441 m3; posed 0.461159 m3; change 2.5942%; simple boundary loops [72, 24, 21, 19]; valid True
-PASS hind_l volume: 60-degree elbow/knee; rest 0.683698 m3; posed 0.609278 m3; change 10.8849%; simple boundary loops [92, 26, 22, 27, 7]; valid True
-PASS fore_r volume: 60-degree elbow/knee; rest 0.472466 m3; posed 0.459990 m3; change 2.6407%; simple boundary loops [22, 70, 23, 19]; valid True
-PASS hind_r volume: 60-degree elbow/knee; rest 0.683036 m3; posed 0.610735 m3; change 10.5853%; simple boundary loops [28, 86, 23, 25, 6]; valid True
-PASS spike rigid ownership: 240 of 240 spikes and plates follow one bone at weight 1; 144 of them are on the head and neck
-PASS frill spike lengths: neck_02 bent 30 degrees; 144 spikes, 140 of them moved; base-to-tip length change at most 0.0002%; longest spike 0.802 m; 39943 edges inside spikes change at most 0.0306%; owners {'head': 62, 'neck_03': 42, 'neck_02': 36, 'chest': 1, 'neck_01': 3}
+PASS wing_l membrane stretch: elbow 80 and wrist 80 degrees; 3974 edges; longest 1.3419 of rest; shortest 0.1522; 11 over 1.3
+PASS wing_l membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1436 membrane triangles tested, 763 attached to the hide; 97114 arm and body triangles
+PASS wing_r membrane stretch: elbow 80 and wrist 80 degrees; 4081 edges; longest 1.3629 of rest; shortest 0.1750; 15 over 1.3
+PASS wing_r membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1474 membrane triangles tested, 771 attached to the hide; 97114 arm and body triangles
+PASS fore_l volume: 60-degree elbow/knee; rest 0.646477 m3; posed 0.607076 m3; change 6.0947%; simple boundary loops [14, 25, 14, 31, 71, 5]; valid True
+PASS hind_l volume: 60-degree elbow/knee; rest 1.104550 m3; posed 1.253994 m3; change 13.5299%; simple boundary loops [75, 22, 28, 17]; valid True
+PASS fore_r volume: 60-degree elbow/knee; rest 0.644180 m3; posed 0.605239 m3; change 6.0451%; simple boundary loops [74, 14, 24, 10, 27]; valid True
+PASS hind_r volume: 60-degree elbow/knee; rest 1.105190 m3; posed 1.257985 m3; change 13.8252%; simple boundary loops [22, 77, 24, 16]; valid True
+PASS spike rigid ownership: 217 of 217 spikes and plates follow one bone at weight 1; 148 of them are on the head and neck
+PASS frill spike lengths: neck_02 bent 30 degrees; 148 spikes, 141 of them moved; base-to-tip length change at most 0.0002%; longest spike 0.800 m; 42134 edges inside spikes change at most 0.0383%; owners {'head': 62, 'neck_03': 41, 'neck_02': 38, 'neck_01': 4, 'chest': 3}

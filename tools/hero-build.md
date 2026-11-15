@@ -6,6 +6,88 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 4: the bent-leg body under version 2's wings (2026-11-15)
+
+Version 4 is the delivered mesh. It takes the body from a new sculpt and keeps version 2's wings and head.
+The sections below describe versions 3 and 2. They hold except where this section says otherwise.
+
+### State
+
+- `assets/embercrest-hero-static.glb`: 24.3 MB, 86 of 86 checks pass (`artifacts/hero-build/verification-v4.txt`). Hide 104,162, membrane 4,444, horn 7,488 triangles: 116,094.
+- `assets/embercrest-hero.glb`: 27.1 MB, 56 of 56 rig checks pass, with two checks changed (`tools/hero-rig.md`, "Mesh version 4").
+- Build command: `HERO_BODY=$PWD/assets/embercrest-cand-hero-body2-hunyuan.glb blender -b --factory-startup --python tools/build_hero.py`.
+
+### Two switches
+
+- `HERO_WING` is `v2` (the default) or `v3`. `v2` cuts both wings out of the first whole-body sculpt and unions them with the body. `v3` runs the `wing` stage of "Version 3". The default run skips the `wing` stage unless `HERO_WING=v3`.
+- `HERO_BODY` names the body sculpt. `BODY_FIT` in the script must have an entry for the file's name. In this file "body A" is `embercrest-cand-hero-body-hunyuan.glb` (version 2's) and "body B" is `embercrest-cand-hero-body2-hunyuan.glb`.
+- With body A and `HERO_WING=v2` the `parts` stage gives hide 104,619, membrane 4,429, horn 7,337 triangles. Version 2 had 104,616, 4,429 and 7,337.
+
+### Why a new body
+
+Body A's plates asked for four straight legs. Its legs are columns with no elbow, knee or hock, and the rig bent them at invented places.
+Body B stands like a quadruped. The fore leg has a shoulder, an elbow that points back, a wrist and a paw. The hind leg has a haunch, a knee that points forward, a raised hock and a long foot.
+
+### How body B goes into the frame
+
+Body B stands lower and carries its neck forward, so its feet cannot set its scale as body A's did. `BODY_FIT` holds these numbers. They were fitted on side silhouettes of both bodies in the build frame.
+
+| Number | Value | Reason |
+|---|---|---|
+| scale, Y shift | 13.037, 0.0 | Body A's scale and the generator's own Y. The two torsos then coincide in plan. |
+| Z scale | 1.07 | Body B's back was 0.25 m lower. After the scale its back is within 0.07 m of body A's from Y 0 to 2 (3.78 against 3.84 at Y 0), and its belly within 0.1 m. |
+| neck turn | 30 degrees about (Y 2.3, Z 3.1), band 1.4 m, then 0.2 m forward | The neck leaned 45 degrees forward. The head sculpt's collar stands at 75. |
+| hind widen | 0 | Body B is already wider than the first sculpt. Body A's 0.15 m move was a box that ended at Y -1.7 with no fade, which left a step across the tail root. |
+| hind narrow | 0.35 m at the ground | The hind feet stood 1.7 m from the centre plane under hips at 0.9. Each leg leans in below Z 2.4, by (1 - Z/2.4)^1.5, only outside half width 0.55 to 0.85. The foot's centre is now at X 1.36. |
+| tail | Y scale 0.951 behind Y -1.5, lift -0.07 to 0.56 m | As for body A. The lift starts at Y -1.8, behind the hind feet. |
+| neck cut box | back to Y 0.8 | The turned head's horns reach back to Y 1.4. With the box at 1.5 their tips stayed, and the body was open. |
+
+Length, wingspan and head placement are version 2's: tail tip at Z 9.73, wingspan 18.994 m, eyes, lips and jaw hinge unchanged. The bounds centre is 3.009 m over the soles, so `ground_offset` 3.01 stands.
+
+### Numbers measured again for body B
+
+| Number | Body A | Body B |
+|---|---|---|
+| `LEG_JOINTS` | eight planes across vertical columns | eight planes, each normal the bisector of the two segments at the joint (`LEG_JOINTS_B`) |
+| `TOE_CLAWS` Y ranges | (2.50, 9.0), (-0.42, 0.25) | (2.98, 9.0), (-0.62, 0.25) |
+| `TOE_CLAW_Z` | 0.36 | 0.40 |
+| `OLD_FEET_Y`, the soles' centres | 2.334, -0.538 | 2.828, -0.875 |
+
+The paws stand 0.49 m further forward and the hind feet 0.34 m further back than version 2's. The verifier's foot check now compares the file with these numbers.
+`tools/hero-rig.md` has the joint positions.
+
+### Two changes the new body forced
+
+- The exact boolean returns one wing alone when it joins body B to the wing piece. `stage_join` detects the lost body, collapses the wing piece's ten edges that have four faces, and uses the manifold solver. That solver does not carry the operand's material, so a face is the wing's where the wing piece's surface is nearer than the body's. Body A still takes the exact path.
+- The palate came 5.2 mm inside the left eyeball's reach. `build_mouth` now pushes mouth vertices out to 3 mm past the reach (5 vertices moved).
+
+### What is weak in version 4
+
+- The hind legs still splay. From above in the glide the knees show beside the body (`pairs-v4-glide-top.jpg`).
+- The fore paw has four toes and the rig has three toe bones. The two inner claws follow one bone.
+- The outer fore claws are small pieces: the claw range starts at Y 2.98 and the outer toes are shorter.
+- The wing root was not re-tuned. `graft.png` shows it on the new back. The stretched band of version 2 is still there.
+- The neck's plates are turned 30 degrees over 1.4 m. No stretch shows in the renders. The texture is the sculpt's, baked after the turn.
+- The Z scale makes body B 7% taller than its sculpt.
+- `seam.png`, `head.png`, `eye.png`, `mouth.png`, `wire.png` and `compare.png` were not rendered again. `turnaround.png`, `graft.png` and `body.png` are version 4.
+- The `--landmarks` table was not run for body B.
+
+### Engine pairs
+
+Old is version 2's rigged file, new is version 4, both in this worktree's engine build at 1600 x 900. Each pair is cropped to the dragon and not scaled.
+
+| File | View | What it shows |
+|---|---|---|
+| `pairs-v4-glide-side.jpg` | `--studio 0 --frames 300 --inspect 270 6.5 0` | Old: both legs hang as columns, bent at mid-shin. New: the hind leg is a folded Z under the hip and the fore leg lies back under the chest. |
+| `pairs-v4-glide-top.jpg` | `--inspect 90 14 85` | The same span and length. The new hind knees show beside the body. |
+| `pairs-v4-flap-a.jpg`, `-b.jpg` | `--studio 1`, frames 790 and 805 | Two phases of the beat. The legs keep their fold. In `-b` a pale wedge of belly skin shows at the fore armpit. |
+| `pairs-v4-attack.jpg` | `--studio 8 --frames 440` | The legs in the bite. Old: columns swung down. New: folded. |
+| `pairs-v4-ground-side.jpg` | `--studio 9 --frames 200 --inspect 90 14 6` | Old stands on four posts. New stands with elbow, knee and hock. |
+| `pairs-v4-ground-feet.jpg` | `--inspect 60 11 3` | All four feet on the ground with their shadows attached. |
+| `pairs-v4-walk-a.jpg`, `-b.jpg` | `--studio 13`, frames 200 and 220 | The stride. The new fore leg reaches further. |
+| `pairs-v4-landed.jpg` | `--input -0.25,0,0,0,0,0 --frames 900 --inspect 90 14 6` | Landed in the game. The feet are on the grass. |
+| `v4-leg-candidates-round2.jpg` | glide, `--inspect 270 11 0` | Four of the eight tuck and trail candidates. D is the profile. |
+
 ## Version 3: the wings (2026-11-15)
 
 Version 3 replaces both wings. The body, the head and every other part are version 2's.
