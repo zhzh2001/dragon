@@ -702,6 +702,26 @@ What changed in answer, besides the report:
 - The fore paw: no hang, half the toe curl, and a tuck of 50 degrees.
   Below 42 the legs trail long under the body.
 
+The user's second look (2026-11-15, 00:00): the tail's beat was too
+minor, and the slider could not be found. Both were true. The swing went
+through the tail's spring, whose stiffness is 6 /s^2 against a wingbeat's
+80, so a fifteenth of it arrived. The slider was in the Dragon panel,
+which is behind the older-panels checkbox. The beat is now laid on the
+tail's bones after the chain has run: one swing a beat, 40 degrees at the
+tip, with `tail_beat_cycles` of a wave along the tail.
+`artifacts/showcase-anim/tail-on-the-beat.jpg` has the first version above
+and this one below. The Playtest panel's life section now begins with
+"tail" and "air": the beat, its lag and wave, the glide's sway, the gusts
+and the flutter.
+
+The same look said the legs still stretch back too far beside the older
+models, and that the leg joints are strange, and that the generated model
+may be to blame. It is. The body's plates asked for "four straight legs",
+so the sculpt's legs are columns with no visible knee, elbow or hock. The
+rig's joints were placed on them by eye, and a tuck that folds a bent leg
+only swings a straight one backward. The body is generated again from
+plates with the legs bent as a standing animal's are.
+
 The mesh and weight rows are the next asset round: wings generated alone,
 the flank given more of the atlas, the chest spike and the thigh plate
 removed, and the shoulder's weights smoothed. The rig is then rebuilt with
