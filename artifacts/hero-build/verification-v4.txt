@@ -1,0 +1,90 @@
+[verify] ok   file size 24.3 MB, limit 60 MB
+[verify] ok   no Draco
+[verify] ok   no skin: the file is unrigged
+[verify] ok   five materials ['hide', 'membrane', 'horn', 'eye', 'mouth']
+[verify] ok   hide: base colour, normal and occlusion-roughness-metallic maps
+[verify] ok   hide: occlusion and roughness share one packed map
+[verify] ok   hide: no baseColorFactor, the colour is in the texture
+[verify] ok   hide_base: 4096x4096
+[verify] ok   hide_normal: 4096x4096
+[verify] ok   hide_orm: 4096x4096
+[verify] ok   membrane: base colour, normal and occlusion-roughness-metallic maps
+[verify] ok   membrane: occlusion and roughness share one packed map
+[verify] ok   membrane: no baseColorFactor, the colour is in the texture
+[verify] ok   membrane_base: 2048x2048
+[verify] ok   membrane_normal: 2048x2048
+[verify] ok   membrane_orm: 2048x2048
+[verify] ok   horn: base colour, normal and occlusion-roughness-metallic maps
+[verify] ok   horn: occlusion and roughness share one packed map
+[verify] ok   horn: no baseColorFactor, the colour is in the texture
+[verify] ok   horn_base: 1024x1024
+[verify] ok   horn_normal: 1024x1024
+[verify] ok   horn_orm: 1024x1024
+[verify] ok   eye: base colour, normal and occlusion-roughness-metallic maps
+[verify] ok   eye: occlusion and roughness share one packed map
+[verify] ok   eye: no baseColorFactor, the colour is in the texture
+[verify] ok   eye_base: 512x512
+[verify] ok   eye_normal: 512x512
+[verify] ok   eye_orm: 512x512
+[verify] ok   mouth: base colour, normal and occlusion-roughness-metallic maps
+[verify] ok   mouth: occlusion and roughness share one packed map
+[verify] ok   mouth: no baseColorFactor, the colour is in the texture
+[verify] ok   mouth_base: 1024x1024
+[verify] ok   mouth_normal: 1024x1024
+[verify] ok   mouth_orm: 1024x1024
+[verify] ok   eye_l: node has no transform
+[verify] ok   eye_l: one indexed triangle primitive
+[verify] ok   eye_l: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   eye_l: tangents are unit vectors with a sign
+[verify] ok   eye_r: node has no transform
+[verify] ok   eye_r: one indexed triangle primitive
+[verify] ok   eye_r: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   eye_r: tangents are unit vectors with a sign
+[verify] ok   hide: node has no transform
+[verify] ok   hide: one indexed triangle primitive
+[verify] ok   hide: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   hide: tangents are unit vectors with a sign
+[verify] ok   horn: node has no transform
+[verify] ok   horn: one indexed triangle primitive
+[verify] ok   horn: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   horn: tangents are unit vectors with a sign
+[verify] ok   membrane: node has no transform
+[verify] ok   membrane: one indexed triangle primitive
+[verify] ok   membrane: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   membrane: tangents are unit vectors with a sign
+[verify] ok   mouth: node has no transform
+[verify] ok   mouth: one indexed triangle primitive
+[verify] ok   mouth: POSITION, NORMAL, TANGENT, TEXCOORD_0
+[verify] ok   mouth: tangents are unit vectors with a sign
+[verify] ok   meshes ['eye_l', 'eye_r', 'hide', 'horn', 'membrane', 'mouth']
+[verify] ok   eye_l uses material eye
+[verify] ok   eye_r uses material eye
+[verify] ok   hide uses material hide
+[verify] ok   horn uses material horn
+[verify] ok   membrane uses material membrane
+[verify] ok   mouth uses material mouth
+[verify] ok   hide 104162 + membrane 4444 + horn 7488 = 116094 triangles, budget 80000 to 120000
+[verify] ok   head and collar: 35780 triangles, 30.8% of the dragon
+[verify] ok   wingspan 18.994 m
+[verify] ok   feet at Y = 0.0015
+[verify] ok   forward is -Z: the eyes are 3.67 m ahead of the origin, the tail tip 9.73 m behind
+[verify] ok   feet where the first build's were: fore -2.84, hind 0.87 in Z (first build -2.83, 0.88)
+[verify] ok   tail tip at Z 9.73 (first build 9.73)
+[verify] ok   eye_r: a sphere of radius 140 mm, cornea bulge 8.0 mm
+[verify] ok   eye_r: nothing else comes within the ball's reach (nearest vertex 4.0 mm outside it)
+[verify] ok   eye_r: turned 25 degrees each way about two axes, the ball stays 4.7 mm clear of the lids
+[verify] ok   eye_r: the lids are open over the pupil
+[verify] ok   eye_l: a sphere of radius 140 mm, cornea bulge 8.0 mm
+[verify] ok   eye_l: nothing else comes within the ball's reach (nearest vertex 3.0 mm outside it)
+[verify] ok   eye_l: turned 25 degrees each way about two axes, the ball stays 4.7 mm clear of the lids
+[verify] ok   eye_l: the lids are open over the pupil
+[verify] ok   mouth closed: 0 of 4239 interior vertices can be seen from 59 directions
+[verify] ok   hide and mouth carry the _JAW weights
+[verify] ok   jaw open 35 degrees: 1060 of 1060 sampled interior vertices show
+[verify] ok   jaw open: the chin drops 0.55 m
+[verify] ok   membrane thickness map exists
+[verify] ok   thickness map 2048x2048, one channel
+[verify] all 86 checks passed
+Blender 5.3.0 (hash 02f0899d78e3 built 2026-11-10 01:31:21)
+
+Blender quit
