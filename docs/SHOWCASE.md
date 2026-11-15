@@ -707,6 +707,33 @@ the flank given more of the atlas, the chest spike and the thigh plate
 removed, and the shoulder's weights smoothed. The rig is then rebuilt with
 its script.
 
+## The wing, generated alone (2026-11-14, 23:37)
+
+Two plates of one wing are in
+`artifacts/showcase-study/hero-wing-plates/`: the upper surface, and the
+underside made as an edit of the upper plate so the two share one outline,
+then mirrored for the generator's back view. Both came from the Codex
+image backend. `assets/embercrest-cand-hero-wing-hunyuan.glb` is the
+generation, the last of the day's five, and
+`artifacts/showcase-study/hero-cand-wing-hunyuan.jpg` shows it.
+
+- The surface is what the wings lacked: fine wrinkles and veins across
+  the membrane, ringed finger bones, a scaled arm, clean claws.
+- The anatomy is partly wrong. Two finger bones stop in the middle of the
+  membrane as stubs, which neither plate shows.
+- The colour is washed to a pale pink on both faces. The upper plate is a
+  saturated orange-red.
+
+So the sculpt is a source of surface detail and not a wing to use whole.
+The brief for mesh version 3 says so, and gives the fallback: keep version
+2's wing shape and project the two plates onto it.
+
+A note on the tool. Chrome now has three profiles, and the relay's
+extension is in two of them. Reopened after a quit, Chrome came up on the
+third, and `chrome-use` reported an unresponsive session. A window opened
+with `--profile-directory=Default` brought the relay back.
+`tools/hunyuan_oneshot.md` should say this when it is next edited.
+
 ## Open questions
 
 - The hero dragon's design. Embercrest's current silhouette can stay, or a
