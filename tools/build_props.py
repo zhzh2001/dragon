@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build the four second-generation metre-scale Dragon Engine props with Blender, then verify GLBs.
+"""Build the second-generation metre-scale Dragon Engine props with Blender, then verify GLBs.
 
 blender -b --factory-startup --python tools/build_props.py
-Optional script arguments after --: --verify-only, --render, --output-dir PATH.
+Optional script arguments after --: --verify-only, --render, --output-dir PATH, --prop NAME.
 Only generated geometry and a deterministic, painted-in-code PNG atlas are used.
 """
 import argparse
@@ -19,6 +19,7 @@ import bpy
 import bmesh
 from mathutils import Matrix, Vector
 from mathutils.geometry import closest_point_on_tri
+from mathutils.bvhtree import BVHTree
 
 ROOT = Path(__file__).resolve().parents[1]
 TAU = math.tau
@@ -43,6 +44,8 @@ def atlas(name):
                (.13,.15,.17), (.09,.065,.035), (.82,.49,.09), (.85,.55,.12),
                (.27,.105,.035), (.68,.025,.045), (.025,.46,.27), (.025,.24,.64),
                (.85,.55,.12), (.85,.55,.12), (.68,.40,.07), (.23,.25,.24)]
+    if name == 'ward_stone':
+        palette = [(.09,.10,.115), (.20,.20,.20), (.12,.08,.06), (.09,.10,.115)] * 4
     rng = random.Random(712)
     pixels = []
     # A regular jittered coin field with dark seams; no input images or baking.
@@ -69,7 +72,22 @@ def atlas(name):
                 # Broad gold surface: real coin discs carry the readable detail.
                 factor = .86 + noise
             rgb=[max(0,min(1,c*factor)) for c in base]
-            if tile in (6,7,12,13,14):
+            if name == 'ward_stone':
+                rgb = [c*(.94+noise) for c in base]
+                if tile == 3:
+                    # Pale cuts have dark borders, like worn mineral-filled grooves.
+                    segments = [(.48,.16,.48,.84), (.48,.70,.76,.55),
+                                (.48,.52,.23,.68), (.48,.32,.72,.44)]
+                    distance = 1.0
+                    for ax,ay,bx,by in segments:
+                        dx,dy=bx-ax,by-ay
+                        t=max(0,min(1,((u-ax)*dx+(v-ay)*dy)/(dx*dx+dy*dy)))
+                        distance=min(distance,math.hypot(u-ax-t*dx,v-ay-t*dy))
+                    if distance < .025:
+                        rgb = [.45,.42,.36] if distance < .012 else [.035,.038,.04]
+                if tile in (0,3) and edge < .055:
+                    rgb = [.20,.20,.20]
+            if name == 'ward_stone' or tile in (6,7,12,13,14):
                 # Gold palette is linear; glTF base-colour PNG is sRGB encoded.
                 rgb=[12.92*c if c<=.0031308 else 1.055*c**(1/2.4)-.055 for c in rgb]
             pixels.extend(rgb+[1])
@@ -80,8 +98,8 @@ def atlas(name):
     mat = bpy.data.materials.new(name+'_atlas')
     mat.use_nodes = True
     shader = mat.node_tree.nodes.get('Principled BSDF')
-    shader.inputs['Roughness'].default_value = .72 if name in ('watchtower','spire_tower') else .40
-    shader.inputs['Metallic'].default_value = 0.0 if name in ('watchtower','spire_tower') else .45
+    shader.inputs['Roughness'].default_value = .72 if name in ('watchtower','spire_tower','ward_stone') else .40
+    shader.inputs['Metallic'].default_value = 0.0 if name in ('watchtower','spire_tower','ward_stone') else .45
     tex=mat.node_tree.nodes.new('ShaderNodeTexImage'); tex.image=image
     mat.node_tree.links.new(tex.outputs['Color'],shader.inputs['Base Color'])
     return mat
@@ -340,6 +358,54 @@ def hoard_trove():
     return g
 
 
+# Seven unequal basalt shards leave an origin socket for the engine's ward effect.
+# Two tilted iron bands and studs bind the shards without closing the polar gaps.
+# A long keel and short crown tips break symmetry and show the cage's orientation.
+# Inner faces clear radius 4; broad faces remain inside 7.5; tips stop before 8.5.
+# These measured limits preserve effect clearance, ray visibility, and the distance silhouette.
+# The 8,000-triangle ceiling keeps this repeated prop inexpensive to draw.
+def ward_stone():
+    g=Geometry()
+    # angle, width, lower shoulder, upper shoulder, crown height, crown radius
+    shards=[(.08,3.6,-3.2,2.1,4.9,3.9), (1.03,2.4,-3.7,2.8,3.6,4.7),
+            (1.90,3.9,-3.0,3.4,6.9,2.9), (2.89,2.1,-3.8,1.8,3.0,4.4),
+            (3.62,3.3,-2.9,2.4,5.9,3.3), (4.60,3.0,-3.6,1.1,4.1,4.5),
+            (5.46,2.3,-3.1,2.7,3.5,4.3)]
+    # The eight-point section gives each shard a broad face and narrow chipped edges.
+    section=[(-.5,-.32),(-.32,-.55),(.32,-.55),(.5,-.32),
+             (.5,.32),(.32,.55),(-.32,.55),(-.5,.32)]
+    for i,(angle,width,zlo,zhi,ztip,rtip) in enumerate(shards):
+        radius=(4.85,5.15,4.85,5.0,5.1,4.82,5.05)[i]
+        lean=(-.11,.13,.06,-.09,.11,-.14,.08)[i]
+        levels=[(2.4 if i==6 else 3.8, -7.95 if i==6 else zlo-1.6,.10,.12),
+                (radius,zlo,width,1.0), (radius+.12,zhi,width*(.65 if i%2 else 1.04),1.0),
+                (rtip,ztip,.85 if i in (1,3,6) else .16,.38 if i in (1,3,6) else .18)]
+        vs=[]
+        for k,(radius,z,w,depth) in enumerate(levels):
+            twist=angle+lean*(k-1)
+            for tangent,radial in section:
+                r=radius+radial*depth
+                vs.append((r*math.cos(twist)-tangent*w*math.sin(twist),
+                           r*math.sin(twist)+tangent*w*math.cos(twist),z))
+        g.add(vs,[tuple(reversed(range(8))),tuple(range(24,32))],1)
+        offset=len(g.vertices)-len(vs)
+        for k in range(3):
+            for j in range(8):
+                g.faces.append(tuple(offset+n for n in (k*8+j,k*8+(j+1)%8,(k+1)*8+(j+1)%8,(k+1)*8+j)))
+                g.tiles.append(3 if j==5 and k==1 else (1 if j in (0,2,4,6) else 0))
+    for z,rx,ry in ((-1.45,.19,-.12),(1.60,-.16,.24)):
+        tilt=Matrix.Rotation(rx,4,'X')@Matrix.Rotation(ry,4,'Y')
+        g.lathe((0,0,0),[(5.30,z-.25),(5.66,z-.25),(5.66,z+.25),
+                          (5.30,z+.25),(5.30,z-.25)],2,56,tilt,cap=False)
+        for i in range(28):
+            a=i*TAU/28+.04
+            normal=Vector((math.cos(a),math.sin(a),0))
+            p=tilt@Vector((5.65*math.cos(a),5.65*math.sin(a),z))
+            tr=tilt@normal.to_track_quat('Z','Y').to_matrix().to_4x4()
+            g.lathe(p,[(.13,0),(.13,.08),(.07,.16)],2,6,tr)
+    return g
+
+
 def skin(obj):
     arm=bpy.data.armatures.new('Prop_root_armature')
     rig=bpy.data.objects.new('Prop_armature',arm); bpy.context.collection.objects.link(rig)
@@ -409,6 +475,42 @@ def identity_node(node):
             and all(abs(x-1)<1e-6 for x in node.get('scale',[1,1,1])))
 
 
+def verify_ward(positions,indices):
+    vertices=[Vector(p) for p in positions]
+    triangles=[tuple(indices[k+j][0] for j in range(3)) for k in range(0,len(indices),3)]
+    origin=Vector((0,0,0))
+    minimum=min(closest_point_on_tri(origin,*(vertices[i] for i in t)).length for t in triangles)
+    maximum=max(v.length for v in vertices)
+    assert minimum>=4, 'Ward socket radius 4 obstructed'
+    assert maximum<=8.5, 'Ward radius 8.5 exceeded'
+    area=inside=0.0
+    for t in triangles:
+        a,b,c=(vertices[i] for i in t)
+        value=(b-a).cross(c-a).length*.5
+        area+=value
+        # A sphere is convex, so these entire triangles lie inside radius 7.5.
+        if max(a.length,b.length,c.length)<=7.5: inside+=value
+        else:
+            assert all(abs(v.y)>4 for v in (a,b,c) if v.length>7.5), 'Only polar tips can exceed radius 7.5'
+    fraction=inside/area
+    assert fraction>=.9, 'Ward inner surface area below 90 percent'
+    tree=BVHTree.FromPolygons(vertices,triangles,all_triangles=True)
+    escapes=0
+    for i in range(2000):
+        y=1-2*(i+.5)/2000
+        r=math.sqrt(1-y*y); angle=i*math.pi*(3-math.sqrt(5))
+        direction=Vector((r*math.cos(angle),y,r*math.sin(angle)))
+        if tree.ray_cast(origin,direction,20)[0] is None: escapes+=1
+    assert .30<=escapes/2000<=.55, 'Ward ray escape outside 30-55 percent'
+    assert 0<len(triangles)<=8000, 'Ward triangle budget exceeded'
+    return [f'  origin socket minimum triangle distance={minimum:.6f} m; required >=4: PASS',
+            f'  maximum vertex radius={maximum:.6f} m; required <=8.5: PASS',
+            f'  surface area={area:.6f} m2; entirely inside radius 7.5={inside:.6f} m2 ({fraction:.4%} conservative bound): PASS',
+            f'  outside radius 7.5: polar tips only: PASS',
+            f'  origin Fibonacci rays: {escapes}/2000 escape ({escapes/2000:.2%}); required 30-55%: PASS',
+            '  one Principled material; embedded 512 PNG; no emission: PASS']
+
+
 def verify(path,name):
     doc,blob=read_glb(path)
     assert len(doc.get('meshes',[]))==1,'Expected one mesh'
@@ -444,12 +546,15 @@ def verify(path,name):
     low=[min(p[a] for p in positions) for a in range(3)]
     high=[max(p[a] for p in positions) for a in range(3)]
     dimensions=[high[i]-low[i] for i in range(3)]
-    assert abs(low[1])<=.02,'Base is not at Y=0'
-    assert abs(low[0]+high[0])<=.2 and abs(low[2]+high[2])<=.2,'Footprint not centered'
-    assert 0 < tris <= 20000, 'Triangle budget exceeded'
-    expected={'watchtower':(11,40,11),'spire_tower':(7,44,7),
-              'hoard_pile':(16,5.5,16),'hoard_trove':(14,4,14)}[name]
-    assert all(abs(dimensions[a]-expected[a])<(.3 if a!=1 else .6) for a in range(3)), 'Incorrect dimensions'
+    if name == 'ward_stone':
+        ward_stats=verify_ward(positions,idx)
+    else:
+        assert abs(low[1])<=.02,'Base is not at Y=0'
+        assert abs(low[0]+high[0])<=.2 and abs(low[2]+high[2])<=.2,'Footprint not centered'
+        assert 0 < tris <= 20000, 'Triangle budget exceeded'
+        expected={'watchtower':(11,40,11),'spire_tower':(7,44,7),
+                  'hoard_pile':(16,5.5,16),'hoard_trove':(14,4,14)}[name]
+        assert all(abs(dimensions[a]-expected[a])<(.3 if a!=1 else .6) for a in range(3)), 'Incorrect dimensions'
     assert not doc['meshes'][0].get('weights'), 'Morph weights forbidden'
     if name in ('watchtower','spire_tower'):
         center=(0,35.2,2) if name=='watchtower' else (0,42,0)
@@ -465,12 +570,15 @@ def verify(path,name):
     mats=doc.get('materials',[]);assert len(mats)==1 and prim.get('material')==0
     pbr=mats[0]['pbrMetallicRoughness']; assert pbr.get('baseColorFactor',[1,1,1,1])==[1,1,1,1]
     assert not mats[0].get('normalTexture')
+    assert all(c==0 for c in mats[0].get('emissiveFactor',[0,0,0]))
+    assert not mats[0].get('emissiveTexture')
     tex=doc['textures'][pbr['baseColorTexture']['index']]
     images=doc.get('images',[]);assert len(images)==1
     image=images[tex['source']];assert image['mimeType']=='image/png' and 'uri' not in image
     view=doc['bufferViews'][image['bufferView']];start=view.get('byteOffset',0)
     png=blob[start:start+view['byteLength']];assert png[:8]==b'\x89PNG\r\n\x1a\n'
     w,h=struct.unpack_from('>II',png,16);assert w==h and w in (512,1024)
+    if name == 'ward_stone': assert w==512
     # Full round trip, independent of glTF accessor bounds and exporter state.
     clear();bpy.ops.import_scene.gltf(filepath=str(path), disable_bone_shape=True)
     meshes=[o for o in bpy.context.scene.objects if o.type=='MESH']
@@ -501,7 +609,9 @@ def verify(path,name):
     print(f'  dimensions X/Y/Z metres: {formatted(dimensions)}; triangles={tris}; bones=1 [root]',flush=True)
     print(f'  materials=[{mats[0]["name"]}]; textures=[{image.get("name",name+"_basecolor")}: embedded PNG {w}x{h}, baseColor]',flush=True)
     print('  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS',flush=True)
-    print('  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; base/centering/budget: PASS',flush=True)
+    if name == 'ward_stone':
+        for line in ward_stats: print(line,flush=True)
+    print('  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS',flush=True)
     return obj
 
 
@@ -512,19 +622,34 @@ def render(name,obj):
     scene.render.resolution_percentage=100
     scene.world.color=(.32,.32,.32)
     scene.view_settings.view_transform='AgX'
-    bpy.ops.mesh.primitive_plane_add(size=2000,location=(0,0,-.04))
+    bpy.ops.mesh.primitive_plane_add(size=2000,location=(0,0,-9 if name=='ward_stone' else -.04))
     floor=bpy.context.object
     mat=bpy.data.materials.new('Inspection floor');mat.diffuse_color=(.075,.095,.10,1)
     floor.data.materials.append(mat)
     height=max(v.co.z for v in obj.data.vertices)
-    target=Vector((0,0,height*.46))
+    target=Vector((0,0,0 if name=='ward_stone' else height*.46))
+    if name=='ward_stone':
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=48,ring_count=24,radius=3.8)
+        sphere=bpy.context.object
+        effect=bpy.data.materials.new('Inspection effect only');effect.use_nodes=True
+        shader=effect.node_tree.nodes.get('Principled BSDF')
+        shader.inputs['Base Color'].default_value=(1,.12,.008,1)
+        shader.inputs['Emission Color'].default_value=(1,.09,.003,1)
+        shader.inputs['Emission Strength'].default_value=1.5
+        sphere.data.materials.append(effect)
     bpy.ops.object.camera_add();camera=bpy.context.object;scene.camera=camera
     camera.data.type='PERSP';camera.data.lens=50;camera.data.clip_end=3000
     bpy.ops.object.light_add(type='SUN',location=(0,0,80))
     sun=bpy.context.object;sun.rotation_euler=(.45,-.5,-.4);sun.data.energy=2.5;sun.data.angle=.15
     out=ROOT/'artifacts/props/v2';out.mkdir(parents=True,exist_ok=True)
-    for label,distance in (('near',height*2.25 if height>10 else 27),('far',250)):
+    views=[('near',height*2.25 if height>10 else 27),('far',250)]
+    if name=='ward_stone': views=[('near',31),('far',250),('top',31),('bottom',31)]
+    for label,distance in views:
         camera.location=target+Vector((.55,-.67,.5)).normalized()*distance
+        if label in ('top','bottom'):
+            floor.hide_render=True
+            if name=='ward_stone': sphere.hide_render=True
+            camera.location=Vector((.001,0,distance if label=='top' else -distance))
         camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(out/(name+'_'+label+'.png'))
         bpy.ops.render.render(write_still=True)
@@ -534,9 +659,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify-only',action='store_true');parser.add_argument('--render',action='store_true')
     parser.add_argument('--output-dir',type=Path,default=ROOT/'assets'/'props')
+    parser.add_argument('--prop',choices=('watchtower','spire_tower','hoard_pile','hoard_trove','ward_stone'))
     args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
     args.output_dir.mkdir(parents=True,exist_ok=True)
-    for name,builder in (('watchtower',watchtower),('spire_tower',spire_tower),('hoard_pile',hoard_pile),('hoard_trove',hoard_trove)):
+    for name,builder in (('watchtower',watchtower),('spire_tower',spire_tower),('hoard_pile',hoard_pile),('hoard_trove',hoard_trove),('ward_stone',ward_stone)):
+        if args.prop and name!=args.prop: continue
         path=args.output_dir/(name+'.glb')
         if not args.verify_only:
             clear(); obj=builder().mesh(name,atlas(name));skin(obj)
@@ -551,6 +678,9 @@ def main():
 if __name__=='__main__':
     try:
         main()
+        # Exit after synchronous exports and renders, including foreground startup runs.
+        sys.stdout.flush();sys.stderr.flush()
+        os._exit(0)
     except BaseException:
         traceback.print_exc();sys.stdout.flush();sys.stderr.flush()
         # Blender otherwise returns success for Python errors without a CLI flag.
