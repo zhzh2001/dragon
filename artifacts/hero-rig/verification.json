@@ -1,6 +1,6 @@
 {
-  "source_sha256": "69ab0e67149a99eaf0fcdd02c2e4b597cdf0995df58a1127854eafb5d41693f3",
-  "output_sha256": "32655f936dfd5a26ab718a0b2382a6e0bb93899073b249b9b48911c92f776138",
+  "source_sha256": "631b6117e78738e13cd73669231edadb60bb7767f40db5ab75bf09a18c3bb3cb",
+  "output_sha256": "d399c23ea857bf07f380011094aab2f0b25fc329372eb205d5c508549b6a9508",
   "checks": [
     {
       "pass_": true,
@@ -30,12 +30,12 @@
     {
       "pass_": true,
       "name": "source buffer unchanged",
-      "detail": "24319604 original binary bytes compared, including every embedded image"
+      "detail": "25339040 original binary bytes compared, including every embedded image"
     },
     {
       "pass_": true,
       "name": "rig.cfg present",
-      "detail": "every Embercrest key kept; 28 values differ: flutter_deg, flutter_speed_start, foot_hang_deg, glide_breath_deg, glide_trim_deg, gust_deg, gust_heave_m, jaw_open_deg, jaw_rest_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, tail_beat_cycles, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg"
+      "detail": "every Embercrest key kept; 41 values differ: attack_clip, attack_clip_under, flutter_deg, flutter_speed_start, foot_hang_deg, fore_flight_elbow_deg, fore_flight_shoulder_deg, fore_flight_wrist_deg, front_leg_trail_deg, front_leg_tuck_deg, glide_breath_deg, glide_trim_deg, gust_deg, gust_heave_m, hind_flight_hip_deg, hind_flight_hock_deg, hind_flight_knee_deg, jaw_open_deg, jaw_rest_deg, leg_flight_pose, leg_flight_splay_deg, leg_trail_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, tail_beat_cycles, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg"
     },
     {
       "pass_": true,
@@ -75,7 +75,7 @@
     {
       "pass_": true,
       "name": "hide source geometry",
-      "detail": "104162 triangles; all source attributes and indices compared"
+      "detail": "104662 triangles; all source attributes and indices compared"
     },
     {
       "pass_": true,
@@ -85,7 +85,7 @@
     {
       "pass_": true,
       "name": "horn source geometry",
-      "detail": "7488 triangles; all source attributes and indices compared"
+      "detail": "6758 triangles; all source attributes and indices compared"
     },
     {
       "pass_": true,
@@ -95,7 +95,7 @@
     {
       "pass_": true,
       "name": "membrane source geometry",
-      "detail": "4444 triangles; all source attributes and indices compared"
+      "detail": "7992 triangles; all source attributes and indices compared"
     },
     {
       "pass_": true,
@@ -105,7 +105,7 @@
     {
       "pass_": true,
       "name": "mouth source geometry",
-      "detail": "4602 triangles; all source attributes and indices compared"
+      "detail": "4644 triangles; all source attributes and indices compared"
     },
     {
       "pass_": true,
@@ -120,12 +120,12 @@
     {
       "pass_": true,
       "name": "horn component ownership",
-      "detail": "26 components checked; incorrect components []"
+      "detail": "53 components checked; incorrect components []"
     },
     {
       "pass_": true,
       "name": "mouth component ownership",
-      "detail": "66 components checked; incorrect components []"
+      "detail": "67 components checked; incorrect components []"
     },
     {
       "pass_": true,
@@ -160,195 +160,195 @@
     {
       "pass_": true,
       "name": "hide mirrored field",
-      "detail": "exported weight against the field at the mirrored position; max 0.018352; RMS 0.001862; 48217 of 96731 vertices carry the field, the rest are spikes, jaw and lids"
+      "detail": "exported weight against the field at the mirrored position; max 0.018352; RMS 0.001838; 49466 of 104223 vertices carry the field, the rest are spikes, jaw and lids"
     },
     {
       "pass_": true,
       "name": "membrane mirrored surface",
-      "detail": "left vertex against the right membrane at the mirrored point; max 0.015411; RMS 0.003801; 564 vertices within 4 mm of the mirrored surface; 1363 farther",
+      "detail": "left vertex against the right membrane at the mirrored point; max 0.000001; RMS 0.000000; 2323 vertices within 4 mm of the mirrored surface; 0 farther",
       "over": 0,
       "worst": [
         [
-          -6.007,
-          5.601,
-          -0.319,
-          0.0032,
-          0.0154
+          -8.644,
+          4.532,
+          0.832,
+          0.0,
+          0.0
         ],
         [
-          -5.677,
-          5.585,
-          -0.054,
-          0.003,
-          0.0139
+          -8.644,
+          4.532,
+          0.832,
+          0.0,
+          0.0
         ],
         [
-          -1.619,
-          3.573,
-          -0.294,
-          0.0013,
-          0.0131
+          -8.648,
+          4.526,
+          0.814,
+          0.0,
+          0.0
         ],
         [
-          -6.61,
-          5.077,
-          0.491,
-          0.0036,
-          0.013
+          -8.648,
+          4.526,
+          0.814,
+          0.0,
+          0.0
         ],
         [
-          -5.56,
-          5.153,
-          0.38,
-          0.0035,
-          0.0126
+          -4.217,
+          4.823,
+          0.45,
+          0.0,
+          0.0
         ],
         [
-          -5.437,
-          5.61,
-          -0.23,
-          0.0016,
-          0.0122
+          -4.222,
+          4.811,
+          0.435,
+          0.0,
+          0.0
         ],
         [
-          -5.437,
-          5.61,
-          -0.23,
-          0.0016,
-          0.0122
+          -3.351,
+          5.512,
+          -0.533,
+          0.0,
+          0.0
         ],
         [
-          -5.114,
-          5.644,
-          -0.233,
-          0.002,
-          0.0114
+          -3.351,
+          5.512,
+          -0.533,
+          0.0,
+          0.0
         ],
         [
-          -6.642,
-          5.536,
-          -0.158,
-          0.0009,
-          0.0113
+          -3.344,
+          5.522,
+          -0.518,
+          0.0,
+          0.0
         ],
         [
-          -5.942,
-          5.557,
-          0.004,
-          0.0003,
-          0.0113
+          -3.344,
+          5.522,
+          -0.518,
+          0.0,
+          0.0
         ],
         [
-          -5.455,
-          5.595,
-          -0.098,
-          0.0014,
-          0.0111
+          -4.342,
+          5.318,
+          0.075,
+          0.0,
+          0.0
         ],
         [
-          -6.885,
-          5.334,
-          0.23,
-          0.0004,
-          0.0111
-        ],
-        [
-          -4.516,
-          5.632,
-          -0.464,
-          0.0036,
-          0.0109
-        ],
-        [
-          -7.013,
-          5.297,
-          0.316,
-          0.0002,
-          0.0099
-        ],
-        [
-          -2.175,
-          3.154,
-          0.652,
-          0.0028,
-          0.0097
-        ],
-        [
-          -2.175,
-          3.154,
-          0.652,
-          0.0028,
-          0.0097
-        ],
-        [
-          -5.576,
-          5.18,
-          0.309,
-          0.0025,
-          0.0097
-        ],
-        [
-          -3.352,
-          3.121,
-          1.086,
-          0.0009,
-          0.0095
-        ],
-        [
-          -2.147,
-          3.156,
-          0.634,
-          0.0004,
-          0.0093
-        ],
-        [
-          -2.147,
-          3.156,
-          0.634,
-          0.0004,
-          0.0093
-        ],
-        [
-          -6.122,
-          4.674,
-          0.765,
-          0.003,
-          0.009
-        ],
-        [
-          -5.232,
-          5.603,
-          -0.141,
-          0.0011,
-          0.0089
-        ],
-        [
-          -4.831,
-          5.49,
-          -0.171,
-          0.0038,
-          0.0087
-        ],
-        [
-          -6.208,
-          5.527,
+          -4.344,
+          5.303,
           0.062,
-          0.001,
-          0.0086
+          0.0,
+          0.0
         ],
         [
-          -8.218,
-          5.236,
-          0.393,
-          0.0019,
-          0.0083
+          -3.844,
+          5.564,
+          -0.358,
+          0.0,
+          0.0
+        ],
+        [
+          -8.146,
+          5.287,
+          0.218,
+          0.0,
+          0.0
+        ],
+        [
+          -8.146,
+          5.287,
+          0.218,
+          0.0,
+          0.0
+        ],
+        [
+          -3.84,
+          5.579,
+          -0.344,
+          0.0,
+          0.0
+        ],
+        [
+          -4.473,
+          5.673,
+          -0.386,
+          0.0,
+          0.0
+        ],
+        [
+          -4.473,
+          5.655,
+          -0.396,
+          0.0,
+          0.0
+        ],
+        [
+          -8.143,
+          5.269,
+          0.209,
+          0.0,
+          0.0
+        ],
+        [
+          -8.143,
+          5.269,
+          0.209,
+          0.0,
+          0.0
+        ],
+        [
+          -3.719,
+          4.955,
+          0.071,
+          0.0,
+          0.0
+        ],
+        [
+          -3.711,
+          4.967,
+          0.085,
+          0.0,
+          0.0
+        ],
+        [
+          -4.378,
+          4.551,
+          0.693,
+          0.0,
+          0.0
+        ],
+        [
+          -4.383,
+          4.54,
+          0.676,
+          0.0,
+          0.0
+        ],
+        [
+          -4.027,
+          5.417,
+          -0.16,
+          0.0,
+          0.0
         ]
       ]
     },
     {
       "pass_": true,
       "name": "hide mirrored weights",
-      "detail": "max 0.016042; RMS 0.001785; 370 pairs within 2 mm of their mirror image; 24548 left vertices have no such partner; 79 more pairs have a spike on one side or both: 78 lead with the same bone, 1 with joined bones, 0 with bones apart",
+      "detail": "max 0.016042; RMS 0.000544; 5665 pairs within 2 mm of their mirror image; 20553 left vertices have no such partner; 121 more pairs have a spike on one side or both: 119 lead with the same bone, 2 with joined bones, 0 with bones apart",
       "worst_pair": {
         "left": [
           -0.1645909994840622,
@@ -378,61 +378,61 @@
     {
       "pass_": true,
       "name": "membrane mirrored weights",
-      "detail": "max 0.001020; RMS 0.000783; 3 pairs within 2 mm of their mirror image; 1306 left vertices have no such partner",
+      "detail": "max 0.000001; RMS 0.000000; 2000 pairs within 2 mm of their mirror image; 0 left vertices have no such partner",
       "worst_pair": {
         "left": [
-          -5.855165958404541,
-          5.30917501449585,
-          0.2616400122642517
+          -8.6481294631958,
+          4.525822162628174,
+          0.8139790296554565
         ],
         "right": [
-          5.8550519943237305,
-          5.310626029968262,
-          0.2612909972667694
+          8.6481294631958,
+          4.525822162628174,
+          0.8139790296554565
         ],
-        "distance_m": 0.0014967448078095913,
+        "distance_m": 0.0,
         "left_weights": {
-          "wing_finger_1a_l": 0.09025628119707108,
-          "wing_finger_1b_l": 0.0645933672785759,
-          "wing_finger_2a_l": 0.5628156661987305,
-          "wing_finger_2b_l": 0.28233471512794495
+          "wing_finger_1b_l": 8.986148168332875e-05,
+          "wing_finger_1c_l": 0.7381266951560974,
+          "wing_finger_2a_l": 2.2501367880067846e-07,
+          "wing_finger_2b_l": 0.2617832124233246
         },
         "right_weights": {
-          "wing_finger_1a_r": 0.09017015248537064,
-          "wing_finger_1b_r": 0.06524524092674255,
-          "wing_finger_2a_r": 0.5632699131965637,
-          "wing_finger_2b_r": 0.2813147008419037
+          "wing_finger_1b_r": 8.986138709587976e-05,
+          "wing_finger_1c_r": 0.7381273508071899,
+          "wing_finger_2a_r": 2.25012954047088e-07,
+          "wing_finger_2b_r": 0.26178255677223206
         }
       }
     },
     {
       "pass_": true,
       "name": "horn mirrored weights",
-      "detail": "max 0.000000; RMS 0.000000; 9 pairs within 2 mm of their mirror image; 2029 left vertices have no such partner",
+      "detail": "max 0.000000; RMS 0.000000; 393 pairs within 2 mm of their mirror image; 1492 left vertices have no such partner",
       "worst_pair": {
         "left": [
-          -5.671555995941162,
-          2.4562230110168457,
-          1.8609050512313843
+          -9.494342803955078,
+          4.609377861022949,
+          1.0947660207748413
         ],
         "right": [
-          5.67233419418335,
-          2.4573380947113037,
-          1.8622770309448242
+          9.494342803955078,
+          4.609377861022949,
+          1.0947660207748413
         ],
-        "distance_m": 0.0019316656980663538,
+        "distance_m": 0.0,
         "left_weights": {
-          "wing_finger_3b_l": 1.0
+          "wing_finger_1c_l": 1.0
         },
         "right_weights": {
-          "wing_finger_3b_r": 1.0
+          "wing_finger_1c_r": 1.0
         }
       }
     },
     {
       "pass_": true,
       "name": "mouth mirrored weights",
-      "detail": "max 0.000001; RMS 0.000000; 120 pairs within 2 mm of their mirror image; 1132 left vertices have no such partner; 2 more pairs set a tooth against the gum and are not compared",
+      "detail": "max 0.000001; RMS 0.000000; 90 pairs within 2 mm of their mirror image; 1163 left vertices have no such partner; 3 more pairs set a tooth against the gum and are not compared",
       "worst_pair": {
         "left": [
           -0.08369100093841553,
@@ -465,12 +465,12 @@
     {
       "pass_": true,
       "name": "jaw fixed skull",
-      "detail": "35 degrees; 94760 distant zero-mask vertices; max motion 0 m"
+      "detail": "35 degrees; 102253 distant zero-mask vertices; max motion 0 m"
     },
     {
       "pass_": true,
       "name": "lower teeth clear upper lip",
-      "detail": "1553 vertices; nearest fixed hide 0.192555 m; minimum vertical clearance 0.130751 m"
+      "detail": "1553 vertices; nearest fixed hide 0.182410 m; minimum vertical clearance 0.128151 m"
     },
     {
       "pass_": true,
@@ -505,162 +505,162 @@
     {
       "pass_": true,
       "name": "wing_l membrane stretch",
-      "detail": "elbow 80 and wrist 80 degrees; 3974 edges; longest 1.3419 of rest; shortest 0.1522; 11 over 1.3",
+      "detail": "elbow 80 and wrist 80 degrees; 6303 edges; longest 1.3988 of rest; shortest 0.1491; 65 over 1.3",
       "longest_edges": [
         {
-          "ratio": 1.342,
+          "ratio": 1.399,
           "a": [
-            -3.775,
-            4.393,
-            0.467
+            -1.807,
+            3.223,
+            0.943
           ],
           "b": [
-            -3.745,
-            4.678,
-            0.277
+            -1.976,
+            3.214,
+            0.949
           ]
         },
         {
-          "ratio": 1.341,
+          "ratio": 1.398,
           "a": [
-            -3.17,
-            4.303,
-            0.285
+            -3.1,
+            5.057,
+            -0.352
           ],
           "b": [
-            -3.254,
-            4.461,
-            0.216
+            -3.314,
+            5.033,
+            -0.196
           ]
         },
         {
-          "ratio": 1.33,
+          "ratio": 1.396,
           "a": [
-            -3.811,
-            4.146,
-            0.667
+            -3.071,
+            3.882,
+            0.629
           ],
           "b": [
-            -3.743,
-            4.509,
-            0.436
+            -3.024,
+            3.768,
+            0.688
           ]
         },
         {
-          "ratio": 1.323,
+          "ratio": 1.396,
           "a": [
-            -3.572,
-            4.307,
-            0.516
+            -3.064,
+            3.894,
+            0.644
           ],
           "b": [
-            -3.521,
-            4.043,
-            0.649
+            -3.017,
+            3.778,
+            0.704
           ]
         },
         {
-          "ratio": 1.32,
+          "ratio": 1.395,
           "a": [
-            -3.065,
-            4.342,
-            0.102
+            -1.807,
+            3.209,
+            0.929
           ],
           "b": [
-            -3.177,
-            4.599,
-            -0.07
+            -1.976,
+            3.2,
+            0.934
           ]
         },
         {
-          "ratio": 1.319,
+          "ratio": 1.39,
           "a": [
-            -3.299,
-            4.335,
-            0.401
+            -2.963,
+            3.971,
+            0.53
           ],
           "b": [
-            -3.343,
-            4.567,
-            0.257
+            -2.918,
+            3.87,
+            0.6
           ]
         },
         {
-          "ratio": 1.316,
+          "ratio": 1.389,
           "a": [
-            -3.572,
-            4.307,
-            0.516
+            -4.16,
+            4.696,
+            0.492
           ],
           "b": [
-            -3.587,
-            4.577,
-            0.356
+            -4.273,
+            4.621,
+            0.586
           ]
         },
         {
-          "ratio": 1.31,
+          "ratio": 1.388,
           "a": [
-            -3.223,
-            4.58,
-            0.084
+            -2.968,
+            3.959,
+            0.515
           ],
           "b": [
-            -3.245,
-            4.64,
-            -0.022
+            -2.924,
+            3.859,
+            0.585
           ]
         },
         {
-          "ratio": 1.308,
+          "ratio": 1.387,
           "a": [
-            -3.179,
-            4.171,
-            0.394
+            -4.153,
+            4.706,
+            0.507
           ],
           "b": [
-            -3.298,
-            4.373,
-            0.317
+            -4.267,
+            4.631,
+            0.602
           ]
         },
         {
-          "ratio": 1.302,
+          "ratio": 1.386,
           "a": [
-            -3.404,
-            4.375,
-            0.371
+            -2.053,
+            3.062,
+            1.08
           ],
           "b": [
-            -3.42,
-            4.574,
-            0.24
+            -2.211,
+            3.105,
+            1.038
           ]
         },
         {
-          "ratio": 1.301,
+          "ratio": 1.38,
           "a": [
-            -3.171,
-            4.069,
-            0.513
+            -2.989,
+            4.079,
+            0.443
           ],
           "b": [
-            -3.299,
-            4.335,
-            0.401
+            -2.963,
+            3.971,
+            0.53
           ]
         },
         {
-          "ratio": 1.294,
+          "ratio": 1.38,
           "a": [
-            -3.664,
-            4.255,
-            0.525
+            -2.052,
+            3.049,
+            1.064
           ],
           "b": [
-            -3.611,
-            4.511,
-            0.355
+            -2.21,
+            3.093,
+            1.022
           ]
         }
       ]
@@ -668,168 +668,168 @@
     {
       "pass_": true,
       "name": "wing_l membrane intersections",
-      "detail": "0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1436 membrane triangles tested, 763 attached to the hide; 97114 arm and body triangles",
+      "detail": "0 membrane triangles cut the arm or the body when folded and not at rest; 241 cut it folded; 241 cut it at rest; 3996 membrane triangles tested, 0 attached to the hide; 94510 arm and body triangles",
       "fresh": []
     },
     {
       "pass_": true,
       "name": "wing_r membrane stretch",
-      "detail": "elbow 80 and wrist 80 degrees; 4081 edges; longest 1.3629 of rest; shortest 0.1750; 15 over 1.3",
+      "detail": "elbow 80 and wrist 80 degrees; 6299 edges; longest 1.3988 of rest; shortest 0.1491; 65 over 1.3",
       "longest_edges": [
         {
-          "ratio": 1.363,
+          "ratio": 1.399,
           "a": [
-            3.786,
-            4.554,
-            0.356
+            1.807,
+            3.223,
+            0.943
           ],
           "b": [
-            3.858,
-            4.463,
-            0.425
+            1.976,
+            3.214,
+            0.949
           ]
         },
         {
-          "ratio": 1.349,
+          "ratio": 1.398,
           "a": [
-            3.786,
-            4.554,
-            0.356
+            3.1,
+            5.057,
+            -0.352
           ],
           "b": [
-            3.73,
-            4.72,
-            0.236
+            3.314,
+            5.033,
+            -0.196
           ]
         },
         {
-          "ratio": 1.341,
+          "ratio": 1.396,
           "a": [
-            3.373,
-            4.216,
-            0.494
-          ],
-          "b": [
-            3.377,
-            3.952,
-            0.637
-          ]
-        },
-        {
-          "ratio": 1.33,
-          "a": [
-            3.951,
-            4.247,
+            3.071,
+            3.882,
             0.629
           ],
           "b": [
-            3.817,
-            4.412,
-            0.498
+            3.024,
+            3.768,
+            0.688
           ]
         },
         {
-          "ratio": 1.33,
+          "ratio": 1.396,
           "a": [
-            3.552,
-            4.27,
-            0.523
+            3.064,
+            3.894,
+            0.644
           ],
           "b": [
-            3.576,
-            4.076,
-            0.636
+            3.017,
+            3.778,
+            0.704
           ]
         },
         {
-          "ratio": 1.329,
+          "ratio": 1.395,
           "a": [
-            3.229,
-            4.338,
-            0.344
+            1.807,
+            3.209,
+            0.929
           ],
           "b": [
-            3.317,
-            4.53,
-            0.251
+            1.976,
+            3.2,
+            0.934
           ]
         },
         {
-          "ratio": 1.32,
+          "ratio": 1.39,
           "a": [
-            3.265,
-            4.416,
-            0.247
+            2.963,
+            3.971,
+            0.53
           ],
           "b": [
-            3.353,
-            4.681,
-            0.092
+            2.918,
+            3.87,
+            0.6
           ]
         },
         {
-          "ratio": 1.319,
+          "ratio": 1.389,
           "a": [
-            3.035,
-            4.219,
-            0.238
+            4.16,
+            4.696,
+            0.492
           ],
           "b": [
-            3.163,
-            4.468,
-            0.111
+            4.273,
+            4.621,
+            0.586
           ]
         },
         {
-          "ratio": 1.319,
+          "ratio": 1.388,
           "a": [
-            3.035,
-            4.219,
-            0.238
+            2.968,
+            3.959,
+            0.515
           ],
           "b": [
-            3.163,
-            4.468,
-            0.111
+            2.924,
+            3.859,
+            0.585
           ]
         },
         {
-          "ratio": 1.31,
+          "ratio": 1.387,
           "a": [
-            3.618,
-            4.371,
-            0.434
+            4.153,
+            4.706,
+            0.507
           ],
           "b": [
-            3.644,
-            4.702,
-            0.229
+            4.267,
+            4.631,
+            0.602
           ]
         },
         {
-          "ratio": 1.31,
+          "ratio": 1.386,
           "a": [
-            3.043,
-            4.289,
-            0.113
+            2.053,
+            3.062,
+            1.08
           ],
           "b": [
-            3.179,
-            4.584,
-            -0.079
+            2.211,
+            3.105,
+            1.038
           ]
         },
         {
-          "ratio": 1.305,
+          "ratio": 1.38,
           "a": [
-            3.1,
-            4.053,
-            0.472
+            2.989,
+            4.079,
+            0.443
           ],
           "b": [
-            3.229,
-            4.338,
-            0.344
+            2.963,
+            3.971,
+            0.53
+          ]
+        },
+        {
+          "ratio": 1.38,
+          "a": [
+            2.052,
+            3.049,
+            1.064
+          ],
+          "b": [
+            2.21,
+            3.093,
+            1.022
           ]
         }
       ]
@@ -837,38 +837,38 @@
     {
       "pass_": true,
       "name": "wing_r membrane intersections",
-      "detail": "0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1474 membrane triangles tested, 771 attached to the hide; 97114 arm and body triangles",
+      "detail": "0 membrane triangles cut the arm or the body when folded and not at rest; 247 cut it folded; 247 cut it at rest; 3996 membrane triangles tested, 0 attached to the hide; 94510 arm and body triangles",
       "fresh": []
     },
     {
       "pass_": true,
       "name": "fore_l volume",
-      "detail": "60-degree elbow/knee; rest 0.646477 m3; posed 0.607076 m3; change 6.0947%; simple boundary loops [14, 25, 14, 31, 71, 5]; valid True"
+      "detail": "60-degree elbow/knee; rest 0.646477 m3; posed 0.607076 m3; change 6.0947%; simple boundary loops [71, 31, 25, 5, 14, 14]; valid True"
     },
     {
       "pass_": true,
       "name": "hind_l volume",
-      "detail": "60-degree elbow/knee; rest 1.104550 m3; posed 1.253994 m3; change 13.5299%; simple boundary loops [75, 22, 28, 17]; valid True"
+      "detail": "60-degree elbow/knee; rest 1.104550 m3; posed 1.253994 m3; change 13.5299%; simple boundary loops [75, 17, 28, 22]; valid True"
     },
     {
       "pass_": true,
       "name": "fore_r volume",
-      "detail": "60-degree elbow/knee; rest 0.644180 m3; posed 0.605239 m3; change 6.0451%; simple boundary loops [74, 14, 24, 10, 27]; valid True"
+      "detail": "60-degree elbow/knee; rest 0.644180 m3; posed 0.605239 m3; change 6.0451%; simple boundary loops [74, 24, 10, 27, 14]; valid True"
     },
     {
       "pass_": true,
       "name": "hind_r volume",
-      "detail": "60-degree elbow/knee; rest 1.105190 m3; posed 1.257985 m3; change 13.8252%; simple boundary loops [22, 77, 24, 16]; valid True"
+      "detail": "60-degree elbow/knee; rest 1.105190 m3; posed 1.257985 m3; change 13.8252%; simple boundary loops [77, 24, 22, 16]; valid True"
     },
     {
       "pass_": true,
       "name": "spike rigid ownership",
-      "detail": "217 of 217 spikes and plates follow one bone at weight 1; 148 of them are on the head and neck"
+      "detail": "219 of 219 spikes and plates follow one bone at weight 1; 146 of them are on the head and neck"
     },
     {
       "pass_": true,
       "name": "frill spike lengths",
-      "detail": "neck_02 bent 30 degrees; 148 spikes, 141 of them moved; base-to-tip length change at most 0.0002%; longest spike 0.800 m; 42134 edges inside spikes change at most 0.0383%; owners {'head': 62, 'neck_03': 41, 'neck_02': 38, 'neck_01': 4, 'chest': 3}"
+      "detail": "neck_02 bent 30 degrees; 146 spikes, 141 of them moved; base-to-tip length change at most 0.0002%; longest spike 0.800 m; 41509 edges inside spikes change at most 0.0383%; owners {'head': 62, 'neck_03': 41, 'neck_02': 38, 'neck_01': 4, 'chest': 1}"
     }
   ],
   "passed": 56,

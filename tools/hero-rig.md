@@ -9,6 +9,28 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 5b (2026-11-15)
+
+The root panel is now a ruled patch from the flank (s = 0) to the arm and rib (s = 1) (`tools/hero-build.md`, "Version 5b"). The mesh's membrane carries `_SHEET_S`. 56 of 56 checks pass, none changed.
+
+- A root vertex's row runs linearly in s. At s = 1 it is the arm-and-rib weights: `sheet_weights` with only the arm and rib chains. At s = 0 it is the weights of the nearest hide vertex on the body (wing mask under 0.02, X over 0.3), with its limb share, so the root moves with the flank. 546 root positions a wing.
+- Then the fold relaxing runs as before, with the twins tied.
+- Result: longest folded membrane edge 1.399 (limit 1.6), 65 edges over 1.3, no new intersection, membrane mirror error 0.000001.
+
+## Mesh version 5 (2026-11-15, not delivered)
+
+The rig was rebuilt on mesh version 5, which has wings with a sheet membrane (`tools/hero-build.md`, "Version 5").
+56 of 56 checks pass, with no check changed. `artifacts/hero-rig/verification.txt` is this run. The skeleton did not change.
+
+### The sheet membrane's weights
+
+- A wing whose membrane positions nearly all have an offset twin (one other position 12 to 30 mm away) is a sheet. On version 5, 1,582 of 1,582 positions a wing have one.
+- Each pair starts from panel weights at its middle (`sheet_weights`). The bone chains are the arm (upper arm, forearm, wrist), the three fingers and the rib. The body is a chain whose distance is the vertex's reach past X 0.55. Each chain scores 1 / (distance + 0.05 m). The third score is subtracted, so the two nearest chains share the vertex, linearly across the panel, without a step where the second and third swap. Inside a chain the weight goes to its segments by a near field (0.20 m). The rib's outer bone gives its weight to the inner one.
+- Panel weights alone fail the test fold: the longest membrane edge stretched 5.40 times its rest length, and 6 triangles a wing cut the arm.
+- So the fold relaxing acts on the membrane too, as it does on version 4's. After every relaxing round and every mirror turn, each pair takes one shared row (`Wing.tie_twins`). The two faces then carry identical weights in the file.
+- Result: longest folded edge 1.389 (limit 1.6), 32 edges over 1.3, no new intersection, membrane mirror error 0.000001.
+- The relaxing changes membrane weights only where the test fold stretched an edge. The panel weights are not what is exported there.
+
 ## Mesh version 4 (2026-11-15)
 
 The rig was refitted to mesh version 4: a new body with bent legs under version 2's wings and head.

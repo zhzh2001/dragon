@@ -26,6 +26,7 @@ SOURCE = ROOT / 'assets/embercrest-hero-static.glb'
 OUTPUT = ROOT / 'assets/embercrest-hero.glb'
 SPEC = ROOT / 'tools/skeletons/embercrest-hero.json'
 ART = ROOT / 'artifacts/hero-rig'
+SHEET_SPEC = json.loads(SPEC.read_text())
 DTYPES = {5126: '<f4', 5125: '<u4', 5123: '<u2', 5121: 'u1'}
 WIDTHS = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
 
@@ -279,6 +280,64 @@ def fold_matrices(bones, names, side, sign, degrees=None):
     return out
 
 
+# Mesh version 5: the membrane is one sheet with an offset second face. Its vertices are weighted
+# by the panel they lie in, not by the relaxed solve, and the two faces carry identical rows.
+SHEET_GAP = (.012, .030)            # m: an offset copy lies this far from its twin
+SHEET_EPS = .05                     # m: keeps the score finite on a bone
+SHEET_FLANK_X = .55                 # m: the membrane's inner edge lies on the flank here
+SHEET_SEGMENT_RADIUS = .20          # m: segments of one chain blend across a knuckle over about this
+SHEET_CHAINS = {'arm': ('wing_root', 'wing_arm', 'wing_wrist'), 'f1': ('wing_finger_1a', 'wing_finger_1b', 'wing_finger_1c'),
+                'f2': ('wing_finger_2a', 'wing_finger_2b'), 'f3': ('wing_finger_3a', 'wing_finger_3b'),
+                'spur': ('wing_spur_a', 'wing_spur_b')}
+
+
+def sheet_twins(points):
+    """For each point, the index of its offset twin, or -1. The twin is the only other point this close."""
+    tree = KDTree(len(points))
+    for i, q in enumerate(points):
+        tree.insert(q, i)
+    tree.balance()
+    twin = np.full(len(points), -1)
+    for i, q in enumerate(points):
+        near = [(d, k) for _, k, d in tree.find_range(q, SHEET_GAP[1]) if k != i and d >= SHEET_GAP[0]]
+        if len(near) == 1:
+            twin[i] = near[0][1]
+    return twin
+
+
+def sheet_weights(points, bones, names, side, body, chains=None):
+    """Panel weights: the two nearest bone chains share a vertex by its distance to each, linearly
+    across the panel (a third chain is subtracted, so a swap of second and third is not a step).
+    The body is a chain whose distance is the vertex's reach past the flank. Inside a chain the
+    weight goes to its segments by a near field."""
+    score, parts = [], []
+    for chain, stems in SHEET_CHAINS.items():
+        if chains is not None and chain not in chains:
+            continue
+        bn = [s + '_' + side for s in stems]
+        d = np.array([segment_distance(points, np.array(bones[b][1]), np.array(bones[b][2])) for b in bn]).T
+        score.append(1 / (d.min(1) + SHEET_EPS))
+        rel = d - d.min(1, keepdims=True)
+        w = 1 / (rel * rel + SHEET_SEGMENT_RADIUS ** 2) ** 3
+        w /= w.sum(1, keepdims=True)
+        dense = np.zeros((len(points), len(names)))
+        for k, b in enumerate(bn):
+            dense[:, names.index(b)] = w[:, k]
+        # The rib's outer bone only marks where the rib runs: its weight goes to the inner one.
+        if chain == 'spur':
+            dense[:, names.index('wing_spur_a_' + side)] += dense[:, names.index('wing_spur_b_' + side)]
+            dense[:, names.index('wing_spur_b_' + side)] = 0
+        parts.append(dense)
+    if body is not None:
+        score.append(1 / (np.maximum(np.abs(points[:, 0]) - SHEET_FLANK_X, 0) + SHEET_EPS))
+        parts.append(body)
+    score = np.array(score).T
+    third = -np.partition(-score, 2, axis=1)[:, 2:3] if score.shape[1] > 2 else np.zeros((len(score), 1))
+    share = np.maximum(score - third, 0)
+    share /= share.sum(1, keepdims=True)
+    return four(sum(share[:, k, None] * parts[k] for k in range(len(parts))))
+
+
 def four(w):
     """At most four influences a row, without a step: subtract the fifth, then normalise."""
     w = top_four(w)
@@ -409,6 +468,38 @@ class Wing:
                 copy[i] = barycentric(u[lower_tri[face]], location) @ solved[lower_tri[face]]
         self.solved = four(copy)
         self.solved[self.pinned] = self.pin_target
+        # Mesh version 5: a membrane whose vertices nearly all have an offset twin is one sheet.
+        local = sheet_twins(u[shell])
+        has = local >= 0
+        self.sheet = has.mean() > .8
+        if self.sheet:
+            # Both twins take the weights at their middle, so their rows are identical.
+            mid_point = np.where(has[:, None], (u[shell] + u[shell[np.maximum(local, 0)]]) / 2, u[shell])
+            from_body = smooth_field(mid_point, SHEET_SPEC, parts=True)[3]
+            self.sheet_rows = shell
+            self.sheet_w = sheet_weights(mid_point, bones, names, side, from_body)
+            # Mesh version 5's root panel is a ruled patch from the flank (s = 0) to the arm and the
+            # rib (s = 1). Its weights run linearly in s from the nearest body vertex's to the arm's and rib's.
+            if '_SHEET_S' in membrane:
+                sv = np.full(n, -1.0)
+                sv[inverse[len(hid):]] = membrane['_SHEET_S'][mid].astype(float)
+                root = sv[shell] >= 0
+                if root.any():
+                    q = mid_point[root]
+                    wb = sheet_weights(q, bones, names, side, None, chains=('arm', 'spur'))
+                    flank = np.flatnonzero((mask < .02) & (hp[:, 0] * sign > .3))
+                    kd = KDTree(len(flank))
+                    for k, i in enumerate(flank):
+                        kd.insert(hp[i], k)
+                    kd.balance()
+                    wa = np.array([body[flank[kd.find(Vector(x))[1]]] for x in q], float)
+                    s_ = sv[shell][root][:, None]
+                    self.sheet_w[root] = four(s_ * wb + (1 - s_) * wa)
+                    print('WING', side, 'root patch:', int(root.sum()), 'vertices from the flank to the arm and rib', flush=True)
+            self.solved[shell] = self.sheet_w
+            # Twins by surface row: the fold relaxing below moves a pair together.
+            self.pairs = np.unique(np.sort(np.c_[shell[has], shell[local[has]]], axis=1), axis=0)
+            print('WING', side, 'sheet membrane:', int(has.sum()), 'of', len(shell), 'vertices have a twin', flush=True)
         web = np.unique(np.sort(np.concatenate([self.web_tri[:, [0, 1]], self.web_tri[:, [1, 2]], self.web_tri[:, [2, 0]]]), axis=1), axis=0)
         self.web = web[np.linalg.norm(u[web[:, 0]] - u[web[:, 1]], axis=1) > 1e-3]
         self.loose = self.web_tri[~is_hide[self.web_tri].any(1)]
@@ -458,6 +549,7 @@ class Wing:
             solved[free] += .5 * pull[free] / pulls[free, None]
             self.solved = four(solved)
             self.solved[self.pinned] = self.pin_target
+            self.tie_twins()
 
     def sample(self, points, reach):
         """Weights at the closest surface point to each query, and the distance to it."""
@@ -472,7 +564,16 @@ class Wing:
                 distance[i] = d
         return out, distance
 
+    def tie_twins(self):
+        """A sheet's two faces carry one row: each pair takes the mean of its two rows."""
+        if self.sheet:
+            a, b = self.pairs[:, 0], self.pairs[:, 1]
+            mean = four((self.solved[a] + self.solved[b]) / 2)
+            self.solved[a] = mean
+            self.solved[b] = mean
+
     def result(self):
+        self.tie_twins()
         k = len(self.hid)
         return self.hid, self.solved[self.inverse[:k]], self.mid, self.solved[self.inverse[k:]]
 
@@ -503,6 +604,7 @@ def mirror_wings(left, right, names):
         change = max(change, float(abs(blended - own.solved).max()))
         own.solved = four(blended)
         own.solved[own.pinned] = own.pin_target
+        own.tie_twins()
     return change
 
 
