@@ -433,7 +433,8 @@ void test_long_sim_stays_finite() {
         // it into a spur; the spurs of G1 grounded it at 24 m/s, where three
         // seconds ahead was 72 m.
         const float ground = terrain.ground_ahead(flight.state().position, flight.state().velocity);
-        const BotDecision d = pilot.update(dt, flight.state(), target_at(target), true, ground);
+        const BotDecision d = pilot.update(dt, flight.state(), target_at(target), true, ground, 1.0f,
+                                           terrain.downhill(flight.state().position));
         const float speed_before = flight.state().airspeed;
         const float clearance_before = flight.state().ground_clearance;
         flight.update(d.flight, &terrain, dt);

@@ -72,7 +72,9 @@ void test_surface_query_matches_mesh() {
                                                     terrain.analytic_height_at(x, z)));
     }
     CHECK(worst_gap > 0.01f);
-    CHECK(worst_gap < 6.0f);
+    // Under 6 m until the cliff bands (Terrain::cliff_bands): a bench meets
+    // a cliff at a corner, and a 6 m cell cuts it.
+    CHECK(worst_gap < 10.0f);
     std::printf("  analytic-vs-surface gap up to %.2f m over %d samples\n", worst_gap, 2000);
 }
 

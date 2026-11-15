@@ -72,7 +72,8 @@ float live_range_for_boost(const FlightState& self, const FlightState& player) {
 }  // namespace
 
 BotDecision BotPilot::update(float dt, const FlightState& self, const FlightState& player,
-                             bool player_alive, float ground_height, float health_fraction) {
+                             bool player_alive, float ground_height, float health_fraction,
+                             Vec3 downhill) {
     BotDecision decision;
     state_time_ += dt;
     // Nerve: the drawn aggression, raised by good health and lowered by
@@ -299,8 +300,18 @@ BotDecision BotPilot::update(float dt, const FlightState& self, const FlightStat
     const bool recovering =
         clearance < tuning.terrain_floor * 0.55f || clearance < pull_out_altitude;
     if (recovering) {
-        const Vec3 level_forward = core::normalize_or(
+        Vec3 level_forward = core::normalize_or(
             Vec3{self.forward().x, 0.0f, self.forward().z}, Vec3::forward());
+        // On a steep slope, away from it. Straight ahead and up is a climb
+        // at the face, and a cliff band rises faster than a bot climbs: one
+        // hung at 20 m/s with the stick back for eight seconds and drifted
+        // onto a 56 degree wall. Downhill the ground falls away and the
+        // speed comes back. From 27 degrees, all the way by 45.
+        const float steep = core::length(downhill);
+        if (steep > 0.5f) {
+            const float turn = core::saturate((steep - 0.5f) / 0.5f);
+            level_forward = core::normalize_or(level_forward + downhill * (2.0f * turn / steep), level_forward);
+        }
         aim_point = self.position + level_forward * 120.0f + Vec3{0.0f, 220.0f, 0.0f};
     }
     decision.flight = steer_toward(self, aim_point, tuning.steering, ground_height);

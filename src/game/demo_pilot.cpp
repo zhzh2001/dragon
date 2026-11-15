@@ -379,7 +379,8 @@ DemoDecision DemoPilot::fight(float dt, const FlightState& self, const DemoWorld
                                            Vec3::up());
     fighter_.tuning = fight_tuning;
     const BotDecision b =
-        fighter_.update(dt, self, mark, true, ground_ahead(self, world), world.health_fraction);
+        fighter_.update(dt, self, mark, true, ground_ahead(self, world), world.health_fraction,
+                        world.terrain ? world.terrain->downhill(self.position) : Vec3{0.0f, 0.0f, 0.0f});
     DemoDecision d;
     d.flight = b.flight;
     d.fire = b.fire;

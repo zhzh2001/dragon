@@ -70,6 +70,23 @@ struct TerrainSettings {
     // large buttresses with gullies between.
     float spur_spacing = 700.0f;  // metres between spurs, along the valley
 
+    // Cliff bands: the finished height, erosion included, is remapped so the
+    // rock stands in layers. Each `cliff_period` metres of height is one
+    // bed: its top `cliff_share` is hard and stands as a cliff, the rest is
+    // soft and lies back as a bench at `cliff_bench` times the wall's own
+    // slope. The cliff takes up the height the bench gave away, so a wall
+    // keeps its crest. The beds dip and wander (Terrain::cliff_bands), so a
+    // band climbs and falls along a wall and is not a contour line. Walls
+    // only. Before it a wall was one even slope from floor to crest, and
+    // the rock on it was a tint (the blind critic's first item in both
+    // rounds, 2026-11-15). Hard and soft beds inside the erosion were tried
+    // first and showed nothing: erosion only removes material along its
+    // channels. 0 for `cliff_period` or `cliff_strength` turns it off.
+    float cliff_period = 110.0f;   // metres of height per bed
+    float cliff_share = 0.28f;     // of a bed that is cliff
+    float cliff_bench = 0.25f;     // a bench's slope over the wall's
+    float cliff_strength = 1.0f;
+
     // key=value,... over these fields, for captures (--terrain): the shape
     // dials by the names their sliders use.
     void parse(const std::string& list);
@@ -147,6 +164,9 @@ public:
     float analytic_height_at(float x, float z) const;
     // The noise alone, before erosion.
     float base_height_at(float x, float z) const;
+    // The height `h` at (x, z) with the cliff bands cut into it
+    // (TerrainSettings::cliff_period).
+    float cliff_bands(float h, float x, float z) const;
     // What erosion left at (x, z), each 0..1: x where water ran (gullies,
     // stream beds), y where sediment settled (scree fans). Zero where it did
     // not run. The terrain mesh carries them in its vertex colour.
@@ -158,6 +178,10 @@ public:
     // see a spur rising ahead (a bot climbing at 24 m/s grounded on one).
     // What the bots and the demo pilot steer their terrain floor by.
     float ground_ahead(core::Vec3 position, core::Vec3 velocity) const;
+    // Which way the ground falls, and how steeply: a level vector pointing
+    // downhill, its length the rise over the run across `reach` metres each
+    // way. The broad slope, not the mesh's: what a flier turns away from.
+    core::Vec3 downhill(core::Vec3 position, float reach = 60.0f) const;
 
     // The surface you can stand on or splash into: the ground, or the water
     // where the ground is below the water line.
@@ -200,6 +224,10 @@ private:
         std::vector<float> delta;    // metres, masked
         std::vector<float> flow;     // 0..1
         std::vector<float> deposit;  // 0..1
+        // How much of the cliff bands a point keeps, less kCliffKeepOutside
+        // (so a sample outside the grid, which is 0, means that share):
+        // none on a crest, all of it a hundred metres below one.
+        std::vector<float> cliff_keep;
     };
     ErosionGrid erosion_;
     void run_erosion();

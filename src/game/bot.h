@@ -155,8 +155,11 @@ public:
     // the flight path -- below the bot AND ahead of it -- not just directly
     // underneath: avoidance that only looks down flies into rising slopes.
     // `health_fraction` is this bot's own health, 0..1; it moves the nerve.
+    // `downhill` is Terrain::downhill at the bot: the way the ground falls
+    // and how steeply. The ground recovery turns that way on a steep slope.
     BotDecision update(float dt, const FlightState& self, const FlightState& player,
-                       bool player_alive, float ground_height, float health_fraction = 1.0f);
+                       bool player_alive, float ground_height, float health_fraction = 1.0f,
+                       core::Vec3 downhill = core::Vec3{0.0f, 0.0f, 0.0f});
 
     // The caller saw this bot take damage; the pilot reacts.
     void notify_hit();

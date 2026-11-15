@@ -35,6 +35,10 @@ void Terrain::generate(const TerrainSettings& settings, const Terrain& eroded) {
     build_mesh();
 }
 
+// The share of the cliff bands the ground keeps where no crest is known:
+// past the erosion's grid, and with the erosion off.
+constexpr float kCliffKeepOutside = 0.6f;
+
 void Terrain::run_erosion() {
     erosion_ = ErosionGrid{};
     if (!settings_.erosion || settings_.erosion_strength <= 0.0f) return;
@@ -121,6 +125,49 @@ void Terrain::run_erosion() {
     blur(erosion_.flow);
     blur(erosion_.deposit);
 
+    // Where the cliff bands (cliff_bands) are kept. They remap height, so a
+    // summit that falls in the soft part of its bed is flattened four times
+    // over: every crest in the run's first valley became a mesa. A crest is
+    // where the ground is near the highest ground around it, so: the
+    // highest within 150 m, less the ground's own height, is how far below
+    // a crest a point lies, and the bands fade in over the first hundred
+    // metres of that.
+    {
+        const int reach = std::max(1, int(std::lround(150.0f / cell)));
+        std::vector<float> ground(base.size());
+        for (size_t i = 0; i < base.size(); ++i) ground[i] = base[i] + erosion_.delta[i];
+        std::vector<float> highest = ground;
+        std::vector<float> tmp(base.size());
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool along_x = pass == 0;
+            for (int iz = 0; iz < n; ++iz) {
+                for (int ix = 0; ix < n; ++ix) {
+                    const int at = along_x ? ix : iz;
+                    float top = -1e9f;
+                    for (int k = std::max(at - reach, 0); k <= std::min(at + reach, n - 1); ++k) {
+                        const size_t j = along_x ? size_t(iz) * size_t(n) + size_t(k) : size_t(k) * size_t(n) + size_t(ix);
+                        top = core::maxf(top, highest[j]);
+                    }
+                    tmp[size_t(iz) * size_t(n) + size_t(ix)] = top;
+                }
+            }
+            highest.swap(tmp);
+        }
+        erosion_.cliff_keep.resize(base.size());
+        for (int iz = 0; iz < n; ++iz) {
+            for (int ix = 0; ix < n; ++ix) {
+                const size_t i = size_t(iz) * size_t(n) + size_t(ix);
+                const float x = -half + float(ix) * cell, z = -half + float(iz) * cell;
+                const float edge = core::maxf(std::fabs(x), std::fabs(z)) / half;
+                const float keep = core::smoothstep(12.0f, 110.0f, highest[i] - ground[i]);
+                // Toward the grid's edge, the share the ground past it has.
+                erosion_.cliff_keep[i] =
+                    (keep - kCliffKeepOutside) * (1.0f - core::smoothstep(0.83f, 0.98f, edge));
+            }
+        }
+        blur(erosion_.cliff_keep);
+    }
+
     float cut = 0.0f, fill = 0.0f, flow_max = 0.0f;
     for (size_t i = 0; i < base.size(); ++i) {
         cut = core::minf(cut, erosion_.delta[i]);
@@ -175,7 +222,9 @@ void TerrainSettings::parse(const std::string& list) {
                                 {"backdrop", &backdrop_lift}, {"spur", &spur_height},
                                 {"spur_spacing", &spur_spacing}, {"erosion_strength", &erosion_strength},
                                 {"talus", &erosion_params.talus}, {"thermal_rate", &erosion_params.thermal_rate},
-                                {"erodibility", &erosion_params.erodibility}};
+                                {"erodibility", &erosion_params.erodibility},
+                                {"cliffs", &cliff_period},    {"cliff_share", &cliff_share},
+                                {"cliff_bench", &cliff_bench}, {"cliff_strength", &cliff_strength}};
         bool found = false;
         for (const Field& f : fields) {
             if (key == f.key) {
@@ -258,7 +307,47 @@ float Terrain::height_at(float x, float z) const {
 }
 
 float Terrain::analytic_height_at(float x, float z) const {
-    return base_height_at(x, z) + erosion_sample(erosion_.delta, x, z);
+    return cliff_bands(base_height_at(x, z) + erosion_sample(erosion_.delta, x, z), x, z);
+}
+
+float Terrain::cliff_bands(float h, float x, float z) const {
+    const float period = settings_.cliff_period;
+    if (period < 1.0f || settings_.cliff_strength <= 0.0f) return h;
+    float strength = settings_.cliff_strength * core::smoothstep(0.2f, 0.6f, valley_mask(x, z));
+    // Less of it toward a crest (run_erosion); past the erosion's grid,
+    // where no crest is known, one share everywhere.
+    strength *= core::saturate(kCliffKeepOutside + erosion_sample(erosion_.cliff_keep, x, z));
+    if (strength <= 0.0f) return h;
+    // Not every face: broad patches keep less of it, so one wall is stepped
+    // and the next is nearly plain. At full strength everywhere each spur
+    // carried the same stair at the same height.
+    const float patch = noise_.fbm(x / 1300.0f + 19.0f, z / 1300.0f - 31.0f, 2);
+    strength *= core::lerpf(0.8f, 1.0f, core::smoothstep(0.35f, 0.6f, patch));
+    // The beds dip to the north-east and wander: by some tens of metres
+    // over a kilometre, and by a few over the width of a spur.
+    const float wander = noise_.fbm(x / 900.0f - 7.0f, z / 900.0f + 23.0f, 3);
+    const float ripple = noise_.fbm(x / 240.0f + 3.0f, z / 240.0f - 11.0f, 2);
+    const float offset = 0.05f * x - 0.03f * z + 70.0f * wander + 26.0f * ripple;
+    const float t = (h - settings_.valley_floor + offset) / period;
+    const float bed = std::floor(t);
+    const float f = t - bed;
+    // Each bed has its own thickness of hard rock: half to one and a half
+    // times the share, from a hash of its number.
+    // An integer hash: a sine's last bits differ between machines, and
+    // the same seed must build the same valley on each.
+    uint32_t bits = uint32_t(int32_t(bed) + 4096) * 2654435761u;
+    bits ^= bits >> 15;
+    bits *= 2246822519u;
+    bits ^= bits >> 13;
+    const float hash = float(bits & 0xffffu) / 65535.0f;
+    const float share = core::clampf(settings_.cliff_share * (0.5f + hash), 0.05f, 0.9f);
+    const float bench = core::clampf(settings_.cliff_bench, 0.0f, 1.0f);
+    const float soft = 1.0f - share;
+    // Continuous and rising: the bench's slope up to `soft`, then the cliff
+    // makes up the rest of the bed.
+    const float g = f < soft ? bench * f : bench * soft + (1.0f - bench * soft) * (f - soft) / share;
+    const float banded = (bed + g) * period - offset + settings_.valley_floor;
+    return core::lerpf(h, banded, strength);
 }
 
 float Terrain::base_height_at(float x, float z) const {
@@ -352,7 +441,29 @@ float Terrain::ground_ahead(Vec3 position, Vec3 velocity) const {
         const Vec3 ahead = position + heading * metres;
         ground = core::maxf(ground, height_at(ahead.x, ahead.z));
     }
+    // Further out, less what a flier climbs on the way there: about 20 m a
+    // second. A cliff band (cliff_bands) stands up to 94 m over the bench
+    // under it, and seen three seconds out at 52 m/s that was more than a
+    // bot could climb: the ten-minute dogfight ended on a face. A low rise
+    // five seconds off stays out of it, so a pilot is no shyer of a slope.
+    for (float look = 4.0f; look <= 5.0f; look += 1.0f) {
+        const Vec3 ahead = position + velocity * look;
+        const float seen = height_at(ahead.x, ahead.z) - 20.0f * (look - 3.0f);
+        ground = core::maxf(ground, seen);
+    }
+    for (float metres = 240.0f; metres <= 300.0f; metres += 60.0f) {
+        const Vec3 ahead = position + heading * metres;
+        const float seen = height_at(ahead.x, ahead.z) - 23.0f * (metres - 180.0f) / 60.0f;
+        ground = core::maxf(ground, seen);
+    }
     return ground;
+}
+
+Vec3 Terrain::downhill(Vec3 position, float reach) const {
+    const float r = core::maxf(reach, 1.0f);
+    const float dx = height_at(position.x + r, position.z) - height_at(position.x - r, position.z);
+    const float dz = height_at(position.x, position.z + r) - height_at(position.x, position.z - r);
+    return Vec3{-dx / (2.0f * r), 0.0f, -dz / (2.0f * r)};
 }
 
 Vec3 Terrain::normal_at(float x, float z) const {

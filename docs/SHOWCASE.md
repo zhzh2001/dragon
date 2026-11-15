@@ -1493,6 +1493,75 @@ no structure, which is the real defect.
   count of hard and soft smoke in the pool, with each group's brightness,
   named it in one run.
 
+### Cliff bands on the walls (15:25)
+
+The critic's first item in both rounds: "no cliff structure". A wall was one
+even slope from the floor to the crest, and the rock on it was a tint.
+
+Tried first and dropped: hard and soft beds inside the erosion. A hard bed
+eroded at 0.3 times the rate and held a talus angle of 3.6 against 1.5. Four
+variants of the bed's thickness and hardness showed almost nothing in the
+mountains view. Erosion only removes material along its channels, and a
+face between two gullies never meets it.
+
+What was built: the finished height is remapped (`Terrain::cliff_bands`,
+after the erosion). Each 110 m of height is one bed. Its top share is hard
+and stands as a cliff. The rest is soft and lies back as a bench at a
+quarter of the wall's own slope. The cliff takes up the height the bench
+gave away, so the function is continuous and rising and a wall keeps its
+height. In numbers, on a 40 degree wall: benches at 12 degrees, cliffs at 60
+to 78 degrees and 86 to 94 m tall, and the ground lowered by up to 71 m.
+The dials are `cliff_period`, `cliff_share`, `cliff_bench` and
+`cliff_strength` in `TerrainSettings`, the Terrain panel's four "cliff"
+sliders, and `--terrain cliffs=,cliff_share=,cliff_bench=,cliff_strength=`
+(`cliffs=0` is the wall as it was).
+
+Three things kept it from reading as a staircase:
+
+- The beds dip and wander. The bed's height is offset by a plane (5 m in
+  100 east, 3 m in 100 north), a broad noise (70 m over 900 m) and a ripple
+  (26 m over 240 m), so a band climbs and falls along a wall.
+- Each bed has its own hard share, half to one and a half times the dial,
+  from an integer hash of its number. A sine hash differs in its last bits
+  between machines, and the same seed must build the same valley on each.
+- Broad patches keep 80 to 100% of the strength. At a floor of 35% the
+  mountains view showed no bands at all, and at 60% soft ones.
+
+The crests needed a fourth. A remap of height flattens any summit that
+falls in the soft part of its bed, and every crest of the run's first
+valley became a mesa. The erosion grid now carries how far each point lies
+below the highest ground within 150 m, and the bands fade in over the first
+110 m of that (`ErosionGrid::cliff_keep`). Past the grid, where no crest is
+known, the ground keeps 60% of the bands.
+
+The material followed without a change: rock by slope puts rock on the
+cliffs and grass on the benches, and the trees found the benches.
+
+The pairs: `artifacts/showcase-critic/cliffs-5-mountains-before-after.jpg`,
+`cliffs-1-chase-before-after.jpg` and `cliffs-8-run-before-after.jpg`.
+
+Two suites failed with the bands in, and both were real:
+
+- The ten-minute dogfight (`test_bot`) ended on a face at 48 s. A cliff 94 m
+  tall, first seen three seconds out at 52 m/s, is more than a bot climbs.
+  `Terrain::ground_ahead` now also looks four and five seconds out and 240
+  and 300 m ahead, less the 20 m a second a flier climbs on the way, so a
+  low rise far off does not make a pilot shy of a slope.
+- With that it ended at 509 s instead. The bot hung at 20 m/s with the stick
+  back for eight seconds and drifted onto a 56 degree wall: its ground
+  recovery climbs straight ahead, which is a climb at the face. The pilot
+  now takes `Terrain::downhill` (the broad slope over 60 m each way), and on
+  ground steeper than 27 degrees the recovery turns that way, all the way by
+  45 degrees. Zero grounded frames after it.
+- `test_vegetation` holds the mesh within a limit of the analytic height.
+  The limit went from 6 m to 10 m: a bench meets a cliff at a corner, and a
+  6 m cell cuts it by up to 7.1 m.
+
+Two soaks with the bands in: `--bots 3 --match --autopilot --frames 7200`
+ended with no grounding, 3 kills and 5 bites swung, and `--run 7 --autopilot
+--frames 8700` banked the first valley at 112 s and lost the second in a
+fight 370 m over the ground. Neither pilot touched a wall.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

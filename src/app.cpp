@@ -3517,6 +3517,10 @@ void App::build_ui(float dt) {
         dirty |= ImGui::SliderFloat("ridge octave scale", &terrain_settings_.ridge_scale, 100.0f, 2000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("strata step", &terrain_settings_.strata_step, 0.0f, 80.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("strata strength", &terrain_settings_.strata_strength, 0.0f, 1.0f, "%.2f");
+        dirty |= ImGui::SliderFloat("cliff bed", &terrain_settings_.cliff_period, 0.0f, 300.0f, "%.0f m");
+        dirty |= ImGui::SliderFloat("cliff share", &terrain_settings_.cliff_share, 0.05f, 0.8f, "%.2f");
+        dirty |= ImGui::SliderFloat("cliff bench slope", &terrain_settings_.cliff_bench, 0.0f, 1.0f, "%.2f");
+        dirty |= ImGui::SliderFloat("cliff strength", &terrain_settings_.cliff_strength, 0.0f, 1.0f, "%.2f");
         dirty |= ImGui::SliderFloat("ridge warp", &terrain_settings_.warp_strength, 0.0f, 1200.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("ridge warp scale", &terrain_settings_.warp_scale, 300.0f, 5000.0f, "%.0f m");
         dirty |= ImGui::SliderFloat("wall profile", &terrain_settings_.wall_profile, 0.2f, 1.0f, "%.2f");
@@ -7157,7 +7161,7 @@ void App::update_bots(float dt) {
         } else {
             CORE_PROFILE("bots: pilot");
             decision = bot->pilot.update(dt, self, flight_.state(), combat_.alive(), ground,
-                                         health_fraction);
+                                         health_fraction, terrain_.downhill(self.position));
         }
         // The manoeuvre the pilot asked for, flown by the same code the
         // player's Z and B run through.
