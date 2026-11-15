@@ -6,6 +6,164 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 5c: one wrist claw and a detailed root panel (2026-11-15)
+
+The wrist carried two joined blades and a lower spur. The root panel used a plain colour fill and flat normals.
+Version 5c replaces the wrist cluster, shortens the finger claws, and transfers real membrane detail to the root.
+
+### Measurements before the repair
+
+The three visible wrist projections were not three separate horn islands.
+The two upper prongs measured 1.118 m and 0.843 m from the wrist anchor.
+They shared one horn island. Its longest distance from the hide-contact centre was 0.890 m.
+The lower spur measured 0.299 m from its hide-contact centre.
+
+Finger claws 1, 2, and 3 measured 0.410 m, 0.403 m, and 0.379 m.
+All three exceeded the 0.35 m limit.
+
+The root interior used X 0.8–2.15 m and Y -0.8–0.3 m in the build frame.
+The neighboring interior used X 3.1–4.0 m and the same Y range.
+Both measurements exclude the attachment edge and use each membrane face separately.
+
+| Face | Root RGB, linear | Neighbor RGB, linear | Root thickness | Neighbor thickness |
+|---|---|---|---:|---:|
+| Upper | 0.5304, 0.1123, 0.0291 | 0.6542, 0.1345, 0.0328 | 0.2970 | 0.2979 |
+| Lower | 0.4955, 0.1082, 0.0299 | 0.6053, 0.1284, 0.0313 | 0.2940 | 0.2937 |
+
+Log contrast is standard deviation after taking logarithms.
+The root's upper log-colour standard deviations were 0.038, 0.043, and 0.050.
+The neighbor's values were 0.342, 0.524, and 0.939.
+RMS is the square root of mean squared values.
+Normal-map XY RMS was 0.0040 at the root and 0.1145 nearby.
+
+The material used `OPAQUE`. All 4,000 membrane positions had one opposite-face partner, about 20 mm away.
+The diagnosis found missing colour and normal detail, not an extra sheet or alpha blending.
+The thickness means already matched within 1%.
+
+The engine currently derives membrane transmission from skin weights in `mark_membranes` and `shaders/skinned.hlsl`.
+It does not read the thickness PNG. The PNG repair therefore cannot explain a rendering improvement by itself.
+
+### Wrist and finger changes
+
+A new tube replaces the cluster because the warped prongs share a broad, folded base.
+The builder cuts off the upper blades and closes the cut hide.
+It also removes the lower spur. The existing hide already covers that spur's base.
+The new claw has a round cross-section, a tapered tip, and a curved centre line.
+Chord is the straight distance from base to tip.
+Arc length follows the claw's curved centre line.
+Its planned chord is 0.4144 m, its arc is 0.4910 m, and its base diameter is 0.104 m.
+The builder mirrors the complete right wing to make the left wing.
+Joint cuts, the 6 mm weld, and degenerate-face cleanup exclude rigid horn faces.
+Those operations had changed the two tiny claw tips differently.
+
+The claw points forward and down in bind. Engine captures check its direction again in the glide.
+The rig assigns every thumb vertex to `wing_wrist_l` or `wing_wrist_r`.
+The hide within the existing 60 mm grip distance follows the same bone.
+Bone names do not change.
+
+The three finger claws contract around their original finger ends.
+The distal span fit preserves the original 19 m wingspan check.
+The exported thumb reaches 0.4152 m from its base centre to its furthest tip-ring vertex.
+Its sampled centre-line arc measures 0.4904 m, with a 0.1124 m bend from the chord.
+Both base diameters measure 0.1040 m. Both base gaps measure 0.000 mm.
+The mirrored claw surfaces differ by at most 0.000596 mm.
+
+| Finger | Before | After |
+|---|---:|---:|
+| 1 | 0.4096 m | 0.3062 m |
+| 2 | 0.4034 m | 0.3057 m |
+| 3 | 0.3786 m | 0.2802 m |
+
+Both wings have these lengths. `artifacts/hero-claws/measurements-v5c.json` records the full measurements.
+
+### Root changes
+
+The root retains version 5b's ruled patch and its paired faces.
+The attachment now follows Z 3.20, below isolated dorsal scales and above the haunch bulge.
+At this height, 202 bilateral rays found continuous torso skin, with half-widths from 0.379 to 0.906 m.
+The source fit puts the edge 60 mm inside that flank.
+A later pass seats the edge against the reduced final hide, on both sides.
+Rays start inside this measured torso section because outside rays can hit separate armor shells before the flank.
+A smooth maximum envelope covers the actual seam segments and preserves bilateral symmetry.
+
+A continuous reflected patch supplies actual baked detail from the neighboring panel.
+The physical chart spans 2.785 by 2.345 m and preserves the donor's grain scale.
+The reflection shifts 0.40 m across the rib to include broad veins.
+The root matches the neighbor's measured mean and log contrast.
+The normal transfer converts both UV tangent frames through physical panel axes before copying the detail.
+This keeps the sampled grain direction independent of the atlas island rotation.
+The builder then matches the neighbor's normal-detail RMS and restores unit-length normal vectors.
+
+The thickness map takes the neighboring samples and increases toward the flank.
+Each face retains the neighbor's interior mean.
+The new checks inspect the final compressed colour map and final thickness PNG.
+
+### Verification and iteration
+
+All original 86 mesh checks remain in place, with their original thresholds.
+New checks measure thumb count, chord, arc, curvature, base width, base contact, mirror symmetry, and retained finger lengths.
+They also measure root colour, contrast, thickness, flank thickening, and seam enclosure.
+
+Signed distance to the nearest face gave false gaps inside overlapping scale shells.
+The seam check therefore measures lateral gap by ray crossings through the final hide.
+The `_SHEET_EDGE` attribute identifies the attachment explicitly. Defaults at other bone borders cannot enter the measurement.
+The check tests attachment vertices and nine points along each attachment edge.
+The rig repeats that check in bind and fold.
+
+The first preview exposed broad dark and pink patches on unchanged wing bones.
+Two repair helpers recalculated normals across open bone shells. The final builder preserves their existing winding.
+The second preview exposed repeated crinkled grain at the root.
+Its small tile lacked broad veins, so contrast matching amplified the fine pattern.
+The third material pass replaces that tile with one continuous neighboring patch.
+The final output must come from the complete `wing5` through `export` stages, not the cached diagnostic patches.
+
+The final static file passes 112 of 112 checks, including all original 86 checks.
+Hide, membrane, and horn contain 104,251, 7,912, and 6,696 triangles: 118,859 total.
+The wingspan measures 18.992 m.
+
+| Face | Root RGB, linear | Neighbor RGB, linear | Root thickness | Neighbor thickness | Root normal RMS | Neighbor normal RMS |
+|---|---|---|---:|---:|---:|---:|
+| Upper | 0.6533, 0.1337, 0.0317 | 0.6535, 0.1338, 0.0321 | 0.29785 | 0.29784 | 0.1231 | 0.1153 |
+| Lower | 0.6055, 0.1275, 0.0300 | 0.6051, 0.1276, 0.0303 | 0.29382 | 0.29383 | 0.1227 | 0.1170 |
+
+The largest mean-colour error is 1.20%. Thickness means differ by less than 0.01%.
+Normal RMS differs by 6.8% above and 4.8% below after JPEG encoding.
+Upper thickness rises from 0.1559 away from the flank to 0.5910 near it.
+Lower thickness rises from 0.1487 to 0.5738.
+
+Upper log contrast is 0.346, 0.524, 0.919 at the root and 0.342, 0.525, 0.936 nearby.
+Lower log contrast is 0.338, 0.542, 0.998 at the root and 0.332, 0.547, 0.995 nearby.
+All three channels differ by less than 2% after encoding.
+The copied detail retains the donor's physical scale; no blur supplies the missing grain.
+For 95% of samples, the nearest source lies within 4.3 mm of the reflected coordinate.
+At narrow panel edges, the farthest source lies 257 mm away. These edge samples stretch the nearest existing detail.
+
+The original attachment had a maximum lateral gap of 222.245 mm at the dorsal scale saddle.
+The final attachment has 0.000 mm maximum lateral gap across 2,688 exported seam samples.
+The rig repeats that result in bind and fold.
+All 74 rig checks pass, including all original 56 checks. The longest folded membrane edge is 1.3978 times rest.
+
+All seven final engine pairs were opened and reviewed at their original crop size.
+The wrist reads as a curved talon. The root has visible veins and grain, with a closed flank seam.
+The third visual pass removes the repeated grain. The narrow donor margins retain the texture limitation described above.
+`artifacts/hero-claws/review.md` records the review and the seven paired JPEG paths.
+
+### Rebuild commands
+
+```sh
+HERO_WING=v5 HERO_BODY=$PWD/assets/embercrest-cand-hero-body2-hunyuan.glb \
+  blender -b --factory-startup --python tools/build_hero.py -- \
+  --stage wing5,low2,join,head,parts,uv,bake,maps,export
+HERO_WING=v5 HERO_BODY=$PWD/assets/embercrest-cand-hero-body2-hunyuan.glb \
+  blender -b --factory-startup --python tools/build_hero.py -- --verify-only
+HERO_RIG_CACHE=$PWD/build-hero-cache/rig5c HERO_RIG_ART=$PWD/artifacts/hero-claws/rig \
+  blender -b --factory-startup --python tools/rig_hero.py -- --no-render
+```
+
+The shared `build-hero-cache` symlink supplies the existing import and alignment stages.
+The input asset symlinks remain unchanged.
+The report paths keep this task's extra artifacts inside `artifacts/hero-claws/`.
+
 ## Version 5b: the root panel by construction (2026-11-15)
 
 Version 5b replaces version 5's root panel, the membrane between the body and the rib. The outer three panels are version 5's, built by the same code. The section below on version 5 still holds for them.

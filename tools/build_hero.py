@@ -1077,8 +1077,10 @@ W5_COLOUR = {"upper": (0.529, 0.112, 0.029), "lower": (0.492, 0.108, 0.030),
 # line A on body B's flank, which cannot fold. W5_ROOT_PATH is A as (Y, Z) stations; its X is the
 # flank's, read by rays from the side, minus W5_ROOT_SINK. Above Z 3.2 the flank is smooth; below it
 # the haunch bulges to X 1.4 between Y -0.2 and -1.0.
-W5_ROOT_PATH = ((1.00, 3.40), (0.40, 3.35), (-0.40, 3.45), (-0.80, 3.40), (-1.20, 3.25))
-W5_ROOT_SINK = 0.025                # m: the attachment line lies this far inside the flank
+# The old high path crossed isolated dorsal scales. At Z 3.20, both flanks form continuous torso skin.
+W5_ROOT_PATH = ((1.00, 3.20), (0.40, 3.20), (-0.40, 3.20), (-0.80, 3.20), (-1.20, 3.20))
+# The smoothed edge crossed flank scales and left teeth. A deeper seam stays inside the hide.
+W5_ROOT_SINK = 0.060                # m: the attachment line lies this far inside the flank
 W5_ROOT_SAG = 0.05                  # m: the patch sags this far at its middle, as a sine across it
 W5_ROOT_SCALLOP = 0.35              # m: depth of the trailing edge's scallop between the flank and the rib's tip
 W5_ROOT_AP = 0.85                   # share of the sculpt's inner edge, from the stump, that is A in plan
@@ -1614,6 +1616,75 @@ def w5_sheet(wmap):
     return out, remap[tris], np.array(rib_ids)
 
 
+# The sculpt thumb folded into several blades during the wrist warp. Cut it out and close the hide first.
+def w5_remove_thumb(obj, plan):
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    cut_y = float(plan.xy(np.array([0.0, 50.0]))[1])
+    cut = bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
+                               plane_co=(0, cut_y, 0), plane_no=(0, 1, 0), clear_outer=True, dist=1e-6)
+    edges = [e for e in cut["geom_cut"] if isinstance(e, bmesh.types.BMEdge) and e.is_boundary]
+    made = bmesh.ops.holes_fill(bm, edges=edges, sides=0)["faces"]
+    for f in made:
+        f.material_index = 0
+    bmesh.ops.triangulate(bm, faces=made)
+    # Keep the sculpt winding. Its open bone shells cannot define a new global outside.
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+# All three finger claws exceeded 0.35 m. Contract their ends while keeping the hide boundary joined.
+def w5_short_fingers(co, px, lines):
+    for name in ("f1", "f2", "f3"):
+        line, target, _ = lines[name]
+        t, _, d = w2_segment(px, line[-1], np.array(W5_CLAWS[name], float))
+        weight = smoothstep((t + 0.20) / 0.25) * (d < 18)
+        co -= (co - target[-1]) * (0.26 * weight[:, None])
+    return co
+
+
+# One tapered round tube replaces the folded blades. Its base sits inside the closed wrist hide.
+def w5_add_thumb(low, tgt):
+    tree = bvh_of(low)
+    wrist = tgt["wrist"].copy()
+    start = Vector((float(wrist[0]), 2.0, float(wrist[2])))
+    hit = tree.ray_cast(start, Vector((0, -1, 0)), 3.0)
+    if hit[0] is None:
+        raise HeroError("The wrist surface was missing. Check the thumb cut plane.")
+    base = np.array(hit[0]) - np.array([0, .045, 0])
+    control = np.array([[0, 0, 0], [0, .18, .07], [0, .37, .05], [0, .39, -.14]])
+    u = np.linspace(0, 1, 12)
+    centres = base + ((1-u)**3)[:,None]*control[0] + (3*(1-u)**2*u)[:,None]*control[1] \
+        + (3*(1-u)*u*u)[:,None]*control[2] + (u**3)[:,None]*control[3]
+    tangent = np.gradient(centres, axis=0)
+    tangent /= np.linalg.norm(tangent, axis=1, keepdims=True)
+    axis = np.tile([1., 0, 0], (len(u), 1))
+    across = np.cross(tangent, axis)
+    radius = .052 * (1-u)**.85 + .001*u
+    angle = np.arange(10)*2*np.pi/10
+    verts = (centres[:,None,:] + radius[:,None,None] * (np.cos(angle)[None,:,None]*axis[:,None,:]
+             + np.sin(angle)[None,:,None]*across[:,None,:])).reshape(-1,3)
+    faces = []
+    for j in range(len(u)-1):
+        for i in range(10):
+            a,b = j*10+i,j*10+(i+1)%10
+            faces.extend([(a,b,b+10),(a,b+10,a+10)])
+    faces.extend([tuple(range(9,-1,-1)), tuple((len(u)-1)*10+i for i in range(10))])
+    me=bpy.data.meshes.new("thumb_claw")
+    me.from_pydata(verts.tolist(), [], faces)
+    obj=bpy.data.objects.new("thumb_claw",me)
+    bpy.context.collection.objects.link(obj)
+    me.materials.append(low.data.materials[2])
+    activate(low,[obj])
+    bpy.ops.object.join()
+    bm=bmesh.new();bm.from_mesh(low.data)
+    bmesh.ops.triangulate(bm,faces=[f for f in bm.faces if len(f.verts)>3])
+    # The new tube already has outward winding. Preserve every existing bone shell.
+    bm.to_mesh(low.data);bm.free()
+    log("thumb claw: base",base.round(4).tolist(),"tip",centres[-1].round(4).tolist(),
+        "length",round(float(np.linalg.norm(centres[-1]-base)),4),"base diameter",.104)
+
+
 def stage_wing5():
     """The second wing sculpt fitted panel by panel to the skeleton's wing bones.
     Writes wing5.blend: `wing_src` (both wings in full detail, for the bake),
@@ -1798,6 +1869,9 @@ def stage_wing5():
         p.use_smooth = True
     sa = sheet_me.attributes.new("sheet_s", "FLOAT", "POINT")
     sa.data.foreach_set("value", np.r_[sheet_s, sheet_s].astype(np.float32))
+    # Zero defaults also appear on welded bone borders. An explicit tag identifies only the actual attachment.
+    edge_attr=sheet_me.attributes.new("sheet_edge","FLOAT","POINT")
+    edge_attr.data.foreach_set("value",np.r_[sheet_s==0,sheet_s==0].astype(np.float32))
     # Folds at rest: neighbouring triangles of one face that turn past 60 degrees.
     fn = np.cross(co[np.array(upper_faces)[:, 1]] - co[np.array(upper_faces)[:, 0]],
                   co[np.array(upper_faces)[:, 2]] - co[np.array(upper_faces)[:, 0]])
@@ -1815,10 +1889,15 @@ def stage_wing5():
         "95%", round(float(np.percentile(el, 95)), 3), "max", round(float(el.max()), 3))
     topo_report(sheet, "wing5 sheet")
 
-    # Into the build frame.
+    # The old thumb warp made blades. Remove its source and target before the final frame mapping.
+    w5_remove_thumb(low, plan)
+    w5_remove_thumb(src, plan)
+    flat = coords(src)
+    px_all = plan.px(flat[:, :2])
     lc = coords(low)
-    lo3 = wmap(plan.px(lc[:, :2]), lc[:, 2])
-    hi3 = wmap(px_all, flat[:, 2])
+    lpx = plan.px(lc[:, :2])
+    lo3 = w5_short_fingers(wmap(lpx, lc[:, 2]), lpx, lines)
+    hi3 = w5_short_fingers(wmap(px_all, flat[:, 2]), px_all, lines)
     # The tip claw must end at version 2's half span: the claw and the outer finger move in along the finger.
     span = max(float(lo3[:, 0].max()), float(hi3[:, 0].max()))
     over = span - WINGSPAN / 2
@@ -1831,6 +1910,7 @@ def stage_wing5():
         set_coords(sheet, sco)
     set_coords(low, lo3)
     set_coords(src, hi3)
+    w5_add_thumb(low, tgt)
     plan_attr = src.data.attributes.new("plan", "FLOAT_VECTOR", "POINT")
     plan_attr.data.foreach_set("vector", np.stack([px_all[:, 0] / 800, px_all[:, 1] / 800, np.zeros(len(px_all))], 1).ravel())
     for p in low.data.polygons:
@@ -3387,7 +3467,7 @@ def source_colours(obj):
     return vc
 
 
-def cut_joint_loops(bm, skip_slot=None):
+def cut_joint_loops(bm, skip_slot=None, rigid_slot=None):
     made = 0
     for name, x, y, dx, dy, r in WING_JOINTS:
         for side in (1, -1):
@@ -3395,7 +3475,7 @@ def cut_joint_loops(bm, skip_slot=None):
             n = Vector((dx * side, dy, 0)).normalized()
             for k in ((-0.5, 0.5) if name.startswith("finger") else (-1, 0, 1)):
                 pc = c + n * (k * JOINT_LOOP_SPACING)
-                faces = [f for f in bm.faces if f.material_index != skip_slot
+                faces = [f for f in bm.faces if f.material_index != skip_slot and f.material_index != rigid_slot
                          and all((Vector((v.co.x, v.co.y, 0)) - c).length < r and v.co.z > 3.0 for v in f.verts)]
                 if faces:
                     bmesh.ops.bisect_plane(bm, geom=face_geom(faces), dist=1e-5, plane_co=pc, plane_no=n)
@@ -3489,15 +3569,18 @@ def stage_parts():
         bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     log("wing edges split:", split)
     thick_layer = bm.verts.layers.float.new("thick")
-    cut_joint_loops(bm, skip_slot=memb_slot if WING_V5 else None)
+    # Rigid claws need no joint cuts. The cuts and 6 mm weld previously distorted their mirrored tips.
+    cut_joint_loops(bm, skip_slot=memb_slot if WING_V5 else None, rigid_slot=claw_slot if WING_V5 else None)
     # A loop cut can leave a wing vertex 2 mm from another. The rig's fold stretches such an edge forty times.
     if WING_V3 or WING_V5:
         close = [v for v in bm.verts if v.link_faces and all(f.material_index in wing_slots for f in v.link_faces)
-                 and not any(f.material_index == memb_slot for f in v.link_faces)]
+                 and not any(f.material_index == memb_slot or (WING_V5 and f.material_index == claw_slot) for f in v.link_faces)]
         before = len(bm.verts)
         bmesh.ops.remove_doubles(bm, verts=close, dist=0.006)
         log("wing vertices merged within 6 mm:", before - len(bm.verts))
-    bmesh.ops.dissolve_degenerate(bm, dist=2e-4, edges=bm.edges)
+    # The authored claw caps have valid tiny triangles. The general cleanup changed their two mirrored tips differently.
+    cleanup_edges=[e for e in bm.edges if not (WING_V5 and all(f.material_index==claw_slot for f in e.link_faces))]
+    bmesh.ops.dissolve_degenerate(bm, dist=2e-4, edges=cleanup_edges)
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
     bm.verts.ensure_lookup_table()
     bm.faces.ensure_lookup_table()
@@ -3706,6 +3789,67 @@ def unwrap(obj, margin, head_share=None, angle=UV_ANGLE):
         "head share", round(float(area[from_head == 1].sum() / max(area.sum(), 1e-9)), 3))
 
 
+# The source flank differed from the reduced hide. Bilateral rays seat the mirrored edge inside the final body.
+def w5_seat_root(membrane, hide):
+    p=coords(membrane)
+    ss=np.empty(len(p));membrane.data.attributes['sheet_s'].data.foreach_get('value',ss)
+    edge_value=np.empty(len(p));membrane.data.attributes['sheet_edge'].data.foreach_get('value',edge_value)
+    edge=edge_value>.5
+    tri=np.array([f.vertices[:] for f in membrane.data.polygons])
+    edges=np.unique(np.sort(np.concatenate([tri[:,[0,1]],tri[:,[1,2]],tri[:,[2,0]]]),axis=1),axis=0)
+    edges=edges[np.all(edge[edges],axis=1)]
+    samples=np.concatenate([p[edge]]+[p[edges[:,0]]*(1-t)+p[edges[:,1]]*t for t in np.linspace(.1,.9,9)])
+    tree=bvh_of(hide)
+    # Test actual seam segments. Interpolating the two faces by Y missed narrow recesses in the scales.
+    shifts=[]
+    for q in samples:
+        limits=[]
+        for side in (1,-1):
+            for dz in (-.012,0,.012):
+                # Start inside the torso. Outside rays hit floating scale shells before the actual flank.
+                hit=tree.ray_cast(Vector((0,float(q[1]),float(q[2]+dz))),Vector((side,0,0)),1.6)
+                if hit[0] is None:
+                    raise HeroError('The flank ray missed the hide. Check the root attachment path.')
+                limits.append(float(hit[0].x*side))
+        shifts.append(max(0,abs(q[0])-min(limits)+.040))
+    shifts=np.array(shifts)
+    stations=np.linspace(float(samples[:,1].min()),float(samples[:,1].max()),101)
+    # A local maximum envelope covers curved hide between membrane vertices without introducing teeth.
+    needed=np.array([shifts[np.abs(samples[:,1]-y)<.15].max() for y in stations])
+    root=(ss>=0)&(np.abs(p[:,0])<2.95)&(p[:,1]>-1.35)&(p[:,1]<1.05)&(p[:,2]<4.4)
+    shift=np.interp(p[root,1],stations,needed)*(1-np.clip(ss[root],0,1))
+    p[root,0]-=np.sign(p[root,0])*shift
+    set_coords(membrane,p)
+    log('root final-hide seating: maximum inward shift',round(float(shift.max()*1000),3),'mm')
+
+
+# A third sculpt spur survived the thumb cut. Remove its horn surface and close the matching hide boundary.
+def w5_remove_wrist_stub(horn, hide):
+    bm=bmesh.new();bm.from_mesh(horn.data)
+    dropped=[v for v in bm.verts if 3<abs(v.co.x)<4.2 and 5.15<v.co.z<5.56 and v.co.y<.50]
+    points=np.array([v.co[:] for v in dropped])
+    bmesh.ops.delete(bm,geom=dropped,context='VERTS')
+    bm.to_mesh(horn.data);bm.free()
+    if not len(points):
+        return
+    tree=KDTree(len(points))
+    for i,p in enumerate(points):tree.insert(p,i)
+    tree.balance()
+    bm=bmesh.new();bm.from_mesh(hide.data)
+    edge=[e for e in bm.edges if e.is_boundary and all(tree.find(v.co)[2]<1e-5 for v in e.verts)]
+    made=bmesh.ops.holes_fill(bm,edges=edge,sides=0)['faces']
+    uv=bm.loops.layers.uv.active
+    for f in made:
+        f.smooth=True
+        for loop in f.loops:
+            neighbors=[l[uv].uv.copy() for l in loop.vert.link_loops if l.face not in made] if uv else []
+            if neighbors:loop[uv].uv=sum(neighbors,Vector((0,0)))/len(neighbors)
+    bmesh.ops.triangulate(bm,faces=made)
+    # The hide has open material borders. Recalculating every face could reverse a whole wing shell.
+    bm.to_mesh(hide.data);bm.free()
+    log('removed lower wrist spur vertices',len(dropped),'closed hide faces',len(made))
+
+
 def stage_uv():
     """One object per material, each with its own atlas."""
     open_blend("parts.blend")
@@ -3723,12 +3867,17 @@ def stage_uv():
     for o in [o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("low")]:
         o.name = o.data.materials[0].name
         o.data.name = o.name
+    if WING_V5:
+        w5_remove_wrist_stub(bpy.data.objects["horn"],bpy.data.objects["hide"])
     for name in ("hide", "membrane", "horn"):
         obj = bpy.data.objects[name]
         # The membrane is two faces of one sheet: a wide angle keeps each face in a few islands.
         unwrap(obj, 0.0004 if name == "hide" else 0.0015, HEAD_UV_SHARE if name == "hide" else None,
                MEMBRANE_UV_ANGLE if name == "membrane" and (WING_V3 or WING_V5) else UV_ANGLE)
         topo_report(obj, name)
+
+    if WING_V5:
+        w5_seat_root(bpy.data.objects['membrane'], bpy.data.objects['hide'])
 
     # The membrane's thickness: the sculpt's own, and thicker near a bone.
     memb, hide = bpy.data.objects["membrane"], bpy.data.objects["hide"]
@@ -4080,25 +4229,91 @@ def grade_wing5(name, base, wing, plan, stats):
     return np.clip(out, 0.0, 1.0)
 
 
-W5_ROOT_TEXTURE_X = (2.25, 2.60)    # m: the root patch's texels are replaced inside the first, faded out by the second
-
-
-def smooth_root5(base, tn, wing, plan, pos):
-    """The root patch's bake source is the sculpt's root panel carried onto the patch, and where that panel
-    reaches past the patch it collapses and bakes streaks. Its texels take each face's target colour with a
-    gentle variation in space instead, and a flat normal. The fade ends before the rib."""
+# The old fill erased veins and flattened normals. Copy a neighboring bake patch at the same physical scale.
+def smooth_root5(base, tn, wing, plan, pos, onrm, thick, stats):
     x = np.abs(pos[..., 0])
-    w = (1.0 - smoothstep((x - W5_ROOT_TEXTURE_X[0]) / (W5_ROOT_TEXTURE_X[1] - W5_ROOT_TEXTURE_X[0]))) * wing
-    upper = plan[..., 2] > 0.25
-    y, z = pos[..., 1], pos[..., 2]
-    vary = (np.sin(x * 3.1 + y * 1.7) * np.sin(y * 4.3 - z * 2.1) + 0.5 * np.sin(x * 7.9 - y * 6.2 + z * 3.3)) / 1.5
-    out = base.copy()
-    for key, sel in (("upper", upper), ("lower", ~upper)):
-        col = np.exp(np.log(np.array(W5_COLOUR[key], np.float32))[None, None, :] + 0.10 * vary[..., None])
-        out = np.where(sel[..., None], base * (1 - w[..., None]) + col * w[..., None], out)
-    tn = tn * (1 - w[..., None]) + np.array([0, 0, 1], np.float32) * w[..., None]
-    log("membrane root patch texels replaced:", int((w > 0.99).sum()), "faded:", int(((w > 0) & (w <= 0.99)).sum()))
-    return out.astype(np.float32), tn
+    root = wing & (x < 2.85)
+    interior = root & (x > .8) & (x < 2.15) & (pos[...,1] < .3) & (pos[...,1] > -.8)
+    neighbor = wing & (x > 3.1) & (x < 4.0) & (pos[...,1] < .3) & (pos[...,1] > -.8)
+    p = pos.copy()
+    p[...,0] = x
+    origin = np.array([2.62,.03,4.12])
+    along = np.array([.25,-1.29,-1.38]); along /= np.linalg.norm(along)
+    across = np.array([1.,0,0]); across -= along*(across@along); across /= np.linalg.norm(across)
+    a = (p-origin)@across
+    v = (p-origin)@along
+    # The small repeated tile amplified fine grain and omitted broad veins. Reflect one continuous neighboring patch instead.
+    sample = np.stack([.40-a[root],v[root]],axis=1)
+    root_ids = np.flatnonzero(root)
+    upper = plan[...,2]>.25
+    for key, face in (("upper",upper),("lower",~upper)):
+        donor = wing & face & (a<3.3) & (x>2.9)
+        ids=np.flatnonzero(donor)
+        tree=KDTree(len(ids))
+        for k,(aa,vv) in enumerate(zip(a[donor],v[donor])):
+            tree.insert((float(aa),float(vv),0),k)
+        tree.balance()
+        selected=face[root]
+        found=[tree.find((float(q[0]),float(q[1]),0)) for q in sample[selected]]
+        distance=np.array([item[2] for item in found])
+        nearest=np.array([item[1] for item in found])
+        dst=root_ids[selected]; src=ids[nearest]
+        base.reshape(-1,3)[dst]=base.reshape(-1,3)[src]
+        # UV islands use different tangent axes. Transport normal detail through physical panel axes.
+        pf=pos.reshape(-1,3); nf=onrm.reshape(-1,3); width=pos.shape[1]
+        def axes(ii):
+            nn=nf[ii]
+            du=pf[ii+1]-pf[ii-1]; dv=pf[ii+width]-pf[ii-width]
+            tt=du-nn*np.sum(du*nn,axis=1)[:,None]
+            tt/=np.maximum(np.linalg.norm(tt,axis=1,keepdims=True),1e-8)
+            bb=np.cross(nn,tt)
+            bb*=np.where(np.sum(bb*dv,axis=1)>0,1,-1)[:,None]
+            physical=np.broadcast_to(across,nn.shape).copy()
+            physical[:,0]*=np.where(pos.reshape(-1,3)[ii,0]<0,-1,1)
+            uu=physical-nn*np.sum(physical*nn,axis=1)[:,None]
+            uu/=np.maximum(np.linalg.norm(uu,axis=1,keepdims=True),1e-8)
+            vv=np.cross(nn,uu)
+            vv*=np.where(vv@along>0,1,-1)[:,None]
+            return tt,bb,nn,uu,vv
+        st,sb,sn,su,sv=axes(src);dt,db,dn,du,dv=axes(dst)
+        detail=tn.reshape(-1,3)[src]
+        world=detail[:,0,None]*st+detail[:,1,None]*sb+detail[:,2,None]*sn
+        # Reflection reverses the across-rib detail direction. Preserve that sign when transporting the normal.
+        carried=-np.sum(world*su,axis=1)[:,None]*du+np.sum(world*sv,axis=1)[:,None]*dv+np.sum(world*sn,axis=1)[:,None]*dn
+        tn.reshape(-1,3)[dst]=np.stack([np.sum(carried*dt,axis=1),np.sum(carried*db,axis=1),np.sum(carried*dn,axis=1)],axis=1)
+        # Preserve the neighboring normal contrast after encoding. The continuous donor includes its broad relief and fine grain.
+        target_normal=float(np.sqrt((tn[neighbor&face,:2]**2).mean()))*1.05
+        for _ in range(3):
+            measured=float(np.sqrt((tn[interior&face,:2]**2).mean()))
+            detail=tn.reshape(-1,3)[dst].copy()
+            detail[:,:2]*=target_normal/measured
+            detail/=np.maximum(np.linalg.norm(detail,axis=1,keepdims=True),1e-8)
+            tn.reshape(-1,3)[dst]=detail
+        target=base[neighbor&face].mean(0)
+        # The continuous donor includes broader veins. Match total contrast without amplifying a small repeated grain sample.
+        target_sd=np.log(base[neighbor&face].clip(1e-4)).std(0)
+        for _ in range(4):
+            logc=np.log(base.reshape(-1,3)[dst].clip(1e-4))
+            region=np.log(base[interior&face].clip(1e-4))
+            logc=(logc-region.mean(0))*target_sd/region.std(0)
+            base.reshape(-1,3)[dst]=np.exp(logc)
+            base.reshape(-1,3)[dst]*=target/base[interior&face].mean(0)
+            base.reshape(-1,3)[dst]=base.reshape(-1,3)[dst].clip(1e-4,1)
+        # The old map ignored the inner flank. Keep the neighbor mean and increase thickness toward the body.
+        pattern=thick.reshape(-1)[src]
+        flank=1-smoothstep((x.reshape(-1)[dst]-.55)/1.0)
+        pattern=pattern*(1+.25*flank)
+        thick.reshape(-1)[dst]=pattern
+        thick.reshape(-1)[dst]*=float(thick[neighbor&face].mean()/thick[interior&face].mean())
+        stats['root5c_'+key]=dict(root_rgb=base[interior&face].mean(0).tolist(),
+            neighbor_rgb=target.tolist(),root_thickness=float(thick[interior&face].mean()),
+            neighbor_thickness=float(thick[neighbor&face].mean()),
+            root_log_sd=np.log(base[interior&face].clip(1e-4)).std(0).tolist(),
+            neighbor_log_sd=np.log(base[neighbor&face].clip(1e-4)).std(0).tolist(),
+            donor_max_distance_m=float(distance.max()), donor_95_distance_m=float(np.percentile(distance,95)),
+            donor_extent_m=np.ptp(sample,axis=0).tolist(), donor_reflection_offset_m=.40)
+        log('root5c',key,stats['root5c_'+key])
+    return np.clip(base,0,1).astype(np.float32),tn,thick
 
 
 def stage_maps():
@@ -4152,7 +4367,7 @@ def stage_maps():
         if wing.any() and WING_V5:
             base = grade_wing5(name, base, wing, raw["plan"], stats)
             if name == "membrane":
-                base, tn = smooth_root5(base, tn, wing, raw["plan"], pos)
+                base, tn, root_thick = smooth_root5(base, tn, wing, raw["plan"], pos, onrm, raw["thick"].astype(np.float32), stats)
         if name == "hide":
             # The head sculpt's neck takes the body sculpt's colour where
             # they meet: one gain for the dark back, one for the pale front.
@@ -4243,10 +4458,17 @@ def stage_maps():
             full, far = WING_GRADE[name]
             w = (far + (full - far) * (1.0 - smoothstep((ax - WING_GRADE_NEAR) / WING_GRADE_FADE)))[..., None]
             base[wing] = (base * wing_gain ** w)[wing]
+        # The replacement thumb has no sculpt surface. Fine growth bands keep its keratin finish consistent.
+        if WING_V5 and name == "horn":
+            thumb = wing & (np.abs(pos[...,0])<4.2) & (pos[...,2]>5.45)
+            bands = 1 + .035*np.sin(pos[...,1]*180 + pos[...,2]*25)
+            base[thumb] = (np.array(W5_COLOUR["claw"])*bands[...,None])[thumb]
+            tn[thumb] = (0,0,1)
+            rough[thumb] = .30
         base = np.clip(base, 0.0, 1.0)
         finish_maps(name, base, tn, rough[..., 0], ao, valid, groups=(body, head, wing))
         if name == "membrane":
-            tv, v2 = dilate_fill(raw["thick"].astype(np.float32)[..., None], valid, 8)
+            tv, v2 = dilate_fill((root_thick if WING_V5 else raw["thick"].astype(np.float32))[..., None], valid, 8)
             tv[~v2] = tv[valid].mean()
             write_png(OUT_THICK, to_u8(tv[..., 0]))
             log("thickness map written", OUT_THICK)
@@ -4502,7 +4724,7 @@ def stage_export():
         me.materials.append(mats[mname])
         for p in me.polygons:
             p.use_smooth = True
-        keep = {"jaw": "_JAW"} if oname in ("hide", "mouth") else {"sheet_s": "_SHEET_S"} if oname == "membrane" else {}
+        keep = {"jaw": "_JAW"} if oname in ("hide", "mouth") else {"sheet_s": "_SHEET_S", "sheet_edge": "_SHEET_EDGE"} if oname == "membrane" else {}
         for a in list(me.attributes):
             if a.is_internal or a.is_required or a.name in ("UVMap", "custom_normal", "sharp_face", "material_index"):
                 continue
@@ -4786,6 +5008,138 @@ def rotate_about(points, centre, axis, degrees):
     return (points - centre) @ m.T + centre
 
 
+# Earlier checks accepted every horn shape. Measure actual connected pieces and their hide contact.
+def w5_components(points, triangles):
+    p, inverse = np.unique(np.round(points, 6), axis=0, return_inverse=True)
+    tri = inverse[triangles]
+    adj = [set() for _ in p]
+    for a,b,c in tri:
+        adj[a].update((b,c)); adj[b].update((a,c)); adj[c].update((a,b))
+    seen=set(); result=[]
+    for i in range(len(p)):
+        if i in seen:
+            continue
+        stack=[i];seen.add(i);ids=[]
+        while stack:
+            j=stack.pop();ids.append(j)
+            for k in adj[j]-seen:
+                seen.add(k);stack.append(k)
+        result.append(p[ids])
+    return result
+
+
+# A nearby scale can face an interior point. Lateral crossings distinguish enclosure from a real seam gap.
+def w5_lateral_gap(tree, point):
+    side=1 if point[0]>0 else -1
+    origin=Vector((side*1.6,float(point[1]),float(point[2])))
+    direction=Vector((-side,0,0));inside=0
+    for _ in range(32):
+        hit=tree.ray_cast(origin,direction,3.2)
+        if hit[0] is None:
+            return 0.0 if inside else float('inf')
+        if hit[0].x*side<=abs(point[0]):
+            return 0.0 if inside else abs(point[0])-hit[0].x*side
+        inside=max(0,inside+(1 if hit[1].x*side>0 else -1))
+        origin=hit[0]+direction*.00001
+    raise HeroError('The flank ray crossed too many surfaces. Inspect the attachment.')
+
+
+def w5_verify_repairs(geo, check):
+    hp=geo["hide"]["pos"]
+    tree=BVHTree.FromPolygons(hp.tolist(),geo["hide"]["idx"].tolist(),all_triangles=True)
+    pieces=w5_components(geo["horn"]["pos"],geo["horn"]["idx"])
+    report={}
+    for sign,side in ((1,"r"),(-1,"l")):
+        wrist=[p for p in pieces if len(p)>10 and 3.0<p[:,0].mean()*sign<4.5 and p[:,2].mean()>5.2]
+        check(len(wrist)==1,f"wing {side}: exactly one wrist claw, found {len(wrist)}")
+        if len(wrist)==1:
+            p=wrist[0]
+            base=(p[p[:,0].argmax()]+p[p[:,0].argmin()])/2
+            tip=p[np.linalg.norm(p-base,axis=1).argmax()]
+            length=float(np.linalg.norm(tip-base));diameter=float(np.ptp(p[:,0]))
+            check(.35<=length<=.50 and diameter<=.12,
+                  f"wing {side}: thumb length {length:.4f} m, base diameter {diameter:.4f} m")
+            centres=[]
+            for u in np.linspace(0,1,12):
+                radius=.052*(1-u)**.85+.001*u
+                expected=base+3*(1-u)**2*u*np.array([0,.18,.07])+3*(1-u)*u*u*np.array([0,.37,.05])+u**3*np.array([0,.39,-.14])
+                ends=[p[np.linalg.norm(p-(expected+np.array([radius,0,0])),axis=1).argmin()],
+                      p[np.linalg.norm(p-(expected-np.array([radius,0,0])),axis=1).argmin()]]
+                centres.append(np.mean(ends,axis=0))
+            centres=np.array(centres)
+            arc=float(np.linalg.norm(np.diff(centres,axis=0),axis=1).sum())
+            axis=(tip-base)/length
+            delta=centres-base
+            bow=float(np.linalg.norm(delta-np.outer(delta@axis,axis),axis=1).max())
+            check(.35<=arc<=.50 and bow>.025,f"wing {side}: curved thumb arc {arc:.4f} m, bend {bow:.4f} m")
+            check(tip[1]>base[1] and tip[2]<base[2],f"wing {side}: thumb points forward and down in bind")
+            # The widest ring is the base. Every point must lie within the wrist hide.
+            ring=p[np.abs(np.linalg.norm(p-base,axis=1)-diameter/2)<1e-5]
+            # Open wrist shells have no signed inside. The intact forward hide face must cover the base ring.
+            gaps=[]
+            for q in ring:
+                hit=tree.ray_cast(Vector(q)+Vector((0,.3,0)),Vector((0,-1,0)),.6)
+                gaps.append(max(0,float(q[1]-hit[0].y)) if hit[0] is not None else float('inf'))
+            gap=max(gaps)
+            check(gap<.001,f"wing {side}: thumb base maximum gap {gap*1000:.3f} mm")
+            report['thumb_'+side]=dict(base=base.tolist(),tip=tip.tolist(),length_m=length,arc_m=arc,bend_m=bow,diameter_m=diameter,gap_mm=gap*1000)
+        fingers=[p for p in pieces if len(p)>15 and p[:,0].mean()*sign>5.4 and p[:,2].mean()>2]
+        check(len(fingers)==3,f"wing {side}: three finger claws retained, found {len(fingers)}")
+        lengths=[]
+        for p in fingers:
+            d=np.array([tree.find_nearest(Vector(q))[3] for q in p])
+            base=p[d<.006].mean(0)
+            lengths.append(float(np.linalg.norm(p-base,axis=1).max()))
+        check(len(lengths)==3 and all(.25<=x<=.35 for x in lengths),
+              f"wing {side}: finger claw lengths {[round(x,4) for x in lengths]} m")
+        report['fingers_'+side]=lengths
+    horn=geo['horn'];p=horn['pos'];tri=horn['idx']
+    right_piece=next(q for q in pieces if len(q)>10 and 3<q[:,0].mean()<4.5 and q[:,2].mean()>5.2)
+    right_keys=set(map(tuple,np.round(right_piece,6)))
+    keep=np.array([tuple(v) in right_keys for v in np.round(p,6)])
+    right=tri[np.all(keep[tri],axis=1)]
+    tree_mirror=BVHTree.FromPolygons(p.tolist(),right.tolist(),all_triangles=True)
+    left=next(q for q in pieces if len(q)>10 and -4.5<q[:,0].mean()<-3 and q[:,2].mean()>5.2)
+    error=max(tree_mirror.find_nearest(Vector(q*np.array([-1,1,1])))[3] for q in left)
+    check(error<1e-5,f"wrist claw surfaces mirror within {error*1000:.6f} mm")
+    # The old seam was judged only in screenshots. Sample its vertices and its edges against the final hide.
+    m=geo['membrane'];ss=m['sheet_s'];pos=m['pos']
+    sel=m['sheet_edge']>.5
+    edges=np.unique(np.sort(np.concatenate([m['idx'][:,[0,1]],m['idx'][:,[1,2]],m['idx'][:,[2,0]]]),axis=1),axis=0)
+    edges=edges[np.all(sel[edges],axis=1)]
+    samples=np.concatenate([pos[sel]]+[pos[edges[:,0]]*(1-t)+pos[edges[:,1]]*t for t in np.linspace(.1,.9,9)])
+    gap=max(w5_lateral_gap(tree,q) for q in samples);report['root_seam_gap_mm']=gap*1000
+    check(gap<.001,f"root seam maximum lateral gap {gap*1000:.3f} mm across {len(samples)} samples")
+    # Inspect the final JPEG and PNG. Raw bake means do not include grading or image compression.
+    raw=np.load(cache('raw_membrane.npz'));pos=raw['pos'].astype(np.float32);x=np.abs(pos[...,0]);y=pos[...,1]
+    root=raw['wing']&(x>.8)&(x<2.15)&(y<.3)&(y>-.8)
+    neighbor=raw['wing']&(x>3.1)&(x<4)&(y<.3)&(y>-.8)
+    image=bpy.data.images.load(cache('map_membrane_base.jpg'),check_existing=False)
+    base=srgb_to_linear(np_from_image(image)[...,:3]);bpy.data.images.remove(image)
+    image=bpy.data.images.load(OUT_THICK,check_existing=False);image.colorspace_settings.name='Non-Color'
+    thick=np_from_image(image)[...,0];bpy.data.images.remove(image)
+    image=bpy.data.images.load(cache('map_membrane_normal.jpg'),check_existing=False)
+    image.colorspace_settings.name='Non-Color'
+    normal=np_from_image(image)[...,:3]*2-1;bpy.data.images.remove(image)
+    for name,face in (("upper",raw['plan'][...,2]>.25),("lower",raw['plan'][...,2]<=.25)):
+        a,b=base[root&face].mean(0),base[neighbor&face].mean(0)
+        delta=np.abs(a/b-1)
+        check(np.all(delta<.08),f"root {name} RGB mean {a.round(4).tolist()}, neighbor {b.round(4).tolist()}, error {delta.round(4).tolist()}")
+        ta,tb=float(thick[root&face].mean()),float(thick[neighbor&face].mean())
+        check(abs(ta/tb-1)<.10,f"root {name} thickness {ta:.4f}, neighbor {tb:.4f}")
+        sa=np.log(base[root&face].clip(1e-4)).std(0);sb=np.log(base[neighbor&face].clip(1e-4)).std(0)
+        check(np.all(sa/sb>.65)&np.all(sa/sb<1.45),f"root {name} log contrast {sa.round(3).tolist()}, neighbor {sb.round(3).tolist()}")
+        near=raw['wing']&face&(x>.45)&(x<.9)&(y<.3)&(y>-.8)
+        far=raw['wing']&face&(x>1.6)&(x<2.15)&(y<.3)&(y>-.8)
+        check(thick[near].mean()>thick[far].mean(),f"root {name} thickness toward flank {thick[near].mean():.4f}, away {thick[far].mean():.4f}")
+        root_normal=float(np.sqrt((normal[root&face,:2]**2).mean()))
+        neighbor_normal=float(np.sqrt((normal[neighbor&face,:2]**2).mean()))
+        check(.8<root_normal/neighbor_normal<1.2,f'root {name} normal XY RMS {root_normal:.4f}, neighbor {neighbor_normal:.4f}')
+        report[name]=dict(root_rgb=a.tolist(),neighbor_rgb=b.tolist(),rgb_relative_error=delta.tolist(),root_thickness=ta,neighbor_thickness=tb,root_log_sd=sa.tolist(),neighbor_log_sd=sb.tolist(),root_normal_xy_rms=root_normal,neighbor_normal_xy_rms=neighbor_normal)
+    with open(os.path.join(ROOT,'artifacts','hero-claws','measurements-v5c.json'),'w') as f:
+        json.dump(report,f,indent=2)
+
+
 def verify():
     fails, notes = [], []
 
@@ -4839,7 +5193,9 @@ def verify():
               float(np.mean(np.abs(np.linalg.norm(tan[:, :3], axis=1) - 1) < 1e-2)) > 0.995,
               f"{mesh['name']}: tangents are unit vectors with a sign")
         jaw = accessor(doc, binary, attrs["_JAW"]) if "_JAW" in attrs else None
-        geo[mesh["name"]] = dict(pos=pos, idx=idx, material=mats[prim["material"]], jaw=jaw)
+        geo[mesh["name"]] = dict(pos=pos, idx=idx, material=mats[prim["material"]], jaw=jaw,
+                                 sheet_s=accessor(doc,binary,attrs["_SHEET_S"]) if "_SHEET_S" in attrs else None,
+                                 sheet_edge=accessor(doc,binary,attrs["_SHEET_EDGE"]) if "_SHEET_EDGE" in attrs else None)
     want = dict(EXPORT_OBJECTS)
     check(sorted(geo) == sorted(want), f"meshes {sorted(geo)}")
     for name, g in geo.items():
@@ -4962,6 +5318,12 @@ def verify():
         w, h = struct.unpack(">II", head[16:24])
         check((w, h) == (MAP_SIZE["membrane"],) * 2 and head[25] == 0, f"thickness map {w}x{h}, one channel")
 
+    if WING_V5:
+        w5_verify_repairs(geo,check)
+    # Preserve the complete gate report. Earlier runs only printed the mesh checks.
+    os.makedirs(ART,exist_ok=True)
+    with open(os.path.join(ART,'verification.txt'),'w') as f:
+        f.write('\n'.join(notes+fails)+'\n')
     for line in notes + fails:
         print("[verify]", line)
     if fails:
