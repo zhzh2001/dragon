@@ -1054,6 +1054,108 @@ Version 4 is kept beside it on this machine as
 play (`--models assets/embercrest-hero.glb,assets/embercrest-hero-v4.glb`
 and `M`).
 
+## What other showcases do that this build does not (2026-11-15, 12:55)
+
+The user pointed at three sources: `../crimson-loong` (two serpent dragons
+over a karst lake, a 90-second film in three.js), `../abyssal-garden` (an
+underwater garden, WebGL) and `../awesome-fable-5.2` (an index of 288 works,
+no prompt text). Three read-only agents studied them. Nothing was built or
+run. The costs below are the agents' estimates from reading shader code, not
+measurements.
+
+### Licences
+
+- Crimson Loong (github.com/ChetasLua/crimson-loong) has no licence file.
+  Its code is all rights reserved. Ideas and constants can be reimplemented
+  in our own code. No file, shader text or leaf-drawing routine can be
+  copied.
+- Abyssal Garden is MIT, "Copyright (c) 2026 Maksymilian Dendura". A port of
+  its code needs the notice in `THIRD_PARTY_NOTICES.md`.
+- Unsung Vale (github.com/Leonxlnx/unsung-vale) is MIT. Thousand Peaks
+  (github.com/0xCodez/thousand-peaks) and Ryu (github.com/seeconever/ryu)
+  were read for method only.
+
+### What the engine already has
+
+The check was a grep on 2026-11-15. The engine has the split tone and the
+vignette (`post_composite.hlsl`), cloud shadows in every lit shader
+(`cloud_shadow` in `scene_common.hlsl`), the terrain's shadow at any distance
+(`terrain_sun.hlsl`) and in the air (`atmo_air_shadow`), a foliage wind sway,
+a wind-up and a recoil on procedural strikes, ray-marched water reflections,
+half-resolution ambient occlusion, adaptive resolution, and TAA.
+
+The engine does not have light shafts, a dither or grain after the grade,
+crown-centre normals on leaf cards, a spring answer to gusts, jointed rock,
+detail that keeps its size on screen, a number for how much a frame moves,
+or a critic that sees only renders.
+
+### Method: the part all three agree on
+
+1. A blind visual critic. Abyssal Garden's prompt requires "a separate
+   subagent that sees ONLY the your renders, never your code or reasoning",
+   six fixed camera poses plus a fly-through, and "Iterate until it reports
+   nothing above 'minor'". Thousand Peaks compares each frame with a
+   reference still and writes "the three biggest gaps", for "15+ rounds".
+   This build's rounds were judged by the session that wrote the change,
+   which knows what the change was meant to do. That is the largest gap in
+   method.
+2. One key frame approved before the rest (Thousand Peaks). `docs/concept/`
+   holds targets, but no round ended with a side-by-side against one.
+3. A motion number. Crimson Loong's `motion.py` freezes the camera, renders
+   time T and T+DT, shrinks both eight times and reports the share of pixels
+   that changed, whole frame and a 3 by 3 grid. A photograph scores 0. It
+   turns "stiff" and "dead world" into numbers. `DRAGON_FREEZE_AT` freezes
+   the world, not the camera alone, so this needs a small flag.
+4. A stated noise floor for image differences (its `imgdiff.py`: the same
+   frame captured twice differs by 0 to 0.6 mean, a real change is above 1).
+5. Ryu's two lessons: "Stills lied about the render" and "Showing a draft
+   to a person found what no agent had flagged".
+
+### Techniques, ranked by what the playtester would see against the work
+
+| # | Technique | Source | Answers |
+|---|---|---|---|
+| 1 | Light shafts: a half-resolution march through the shadow map, 12 to 34 jittered steps, phase `0.2 + 2 mu^3`, depth-aware upsample; dust particles lit by the same shadow map so a shaft reads as volume | Abyssal Garden; Crimson Loong marches 14 steps at quarter resolution and also samples its cloud field | the flat frame (S9) |
+| 2 | Leaf-card normals blended toward the direction out of the crown centre (`0.5 card + 0.62 outward + 0.16 up`, card share 0.40 for a broadleaf and 0.12 for a pine), self-shade baked per spray from the spray area above it, a fill that is warm from below and sky from above, cards seen edge-on faded out | Crimson Loong, Unsung Vale, Harappa | toy-like trees (0009), part of the shade complaint (0011) |
+| 3 | Strikes as impulses: draw back over 0.5 s, strike in 0.18 s, a recoil pulse (attack 0.16 s, release 0.38 s), each spine joint delayed by its distance from the head over a whip speed, with a Gaussian reach | Crimson Loong | lazy attacks (S5) |
+| 4 | Rock: jointed blocks (Voronoi columns that lean with height, beds of varying thickness with a gentle dip) run once for displacement and again per pixel, crack lines at least a pixel wide, shade under overhangs, stains below them, a cool fill on the shadow side; boulders as noisy icospheres clipped by four planes, power-law sizes, sunk 30% | Crimson Loong, Abyssal Garden, Thousand Peaks | smooth mountains and unnatural rocks (0011, 0012) |
+| 5 | Detail grain that keeps its size on screen: pick the octave from the pixel footprint, sample one map at two scales, blend and renormalise | Crimson Loong | terrain that is mush far away and wallpaper close |
+| 6 | Plants as damped springs: a gust is a plane front crossing the valley, each plant overshoots, rings and settles (maple 4.3 rad/s damping 0.17, pine 5.2 and 0.20, bush 9 and 0.24, grass 15 and 0.42), leaves show a pale side in the gust, the shadow pass bends too; a dragon's pass is a push in a ring buffer | Crimson Loong | a dead world; the dragon has no effect on it |
+| 7 | Head and neck: gaze target smoothed over five past samples, a neck bend that peaks one neck-length back, head turn capped at 62 degrees, idle drift, blinks every 4.7 s, a 1.8% breath swell | Crimson Loong | stiff motion (S4) |
+| 8 | Water: a shore distance field jump-flooded once per valley, wavelets and a broken foam line along it, the bed seen through shallow water with per-channel absorption, ripples smaller than a pixel faded out of the reflection, foam drawn in travel-time coordinates along the flow | Crimson Loong | artificial water (0008, 0010) |
+| 9 | Grade: a luminance-only S-curve, highlight desaturation, a triangular dither or grain of about 0.009 after the tonemap, weak bloom (6 to 8% mix) | both | banding in the sky, the amateur frame |
+| 10 | Clustered planting with clearings, plants on walls, grass never thinner than a pixel | Abyssal Garden, Crimson Loong | S7 ground cover |
+| 11 | Camera: look-at as a weighted blend of the player and the target, a framing offset of about 14 by 6 degrees off the subject, handheld drift of 0.004 rad, shake as event pulses | Crimson Loong | the chase camera in combat |
+
+Abyssal Garden also uses one fog function in every shader, with extinction
+per channel and a forward-scatter lobe. This engine's atmosphere already does
+that job.
+
+### What does not transfer
+
+- Crimson Loong is a film. Its wake, wetness and gust tables come from
+  walking both dragons' rails through all 90 seconds at load. A game needs
+  ring buffers of recent events.
+- Its body is "the last 172 metres of the head's path". That suits a
+  serpent. For a winged quadruped the idea survives for the neck and tail
+  only.
+- Its one 4096 shadow map covers a 300 by 340 metre set, and its planting
+  follows two fixed lens positions. A valley is kilometres long and the
+  camera is free.
+- Its clouds are four fisheye layers marched once. They hold from one
+  viewpoint. The volumetric clouds here are the better tool.
+- Alpha-to-coverage needs MSAA. This engine resolves with FXAA or TAA, so a
+  coverage fraction must be a dither.
+- Neither source addresses large terrain form. Their rock is parametric
+  pillars and SDF walls. Report 0012 stays a heightfield problem.
+
+### Order
+
+The method comes first because it is cheap and it changes what every later
+round is judged by: the blind critic on six fixed views, then the motion
+number. Then the techniques in the table's order, with rows 2, 4 and 10
+after the rock worker's branch merges, because they touch the same files.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
