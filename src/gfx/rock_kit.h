@@ -73,7 +73,7 @@ public:
     float moss = 1.0f;
     // Where a piece meets the ground: the soil's colour and a darkening
     // over this many metres above it.
-    float contact_height = 0.6f;
+    float contact_height = 1.0f;
     float contact = 1.0f;
 
 private:

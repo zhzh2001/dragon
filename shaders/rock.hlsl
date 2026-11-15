@@ -115,15 +115,19 @@ float4 fs_main(VertexOut input) : SV_Target {
     float rocky = 1.0 - smoothstep(scene.terrain_params.z, scene.terrain_params.z + 0.22, ground_flat);
     float3 soil = lerp(lerp(scene.palette[PALETTE_GRASS_DRY].rgb, scene.palette[PALETTE_GRASS].rgb, 0.5) * 0.75,
                        scene.palette[PALETTE_ROCK].rgb, rocky);
-    albedo = lerp(albedo, soil, near_ground * 0.6);
-    occlusion *= 1.0 - 0.3 * near_ground;
+    albedo = lerp(albedo, soil, near_ground * 0.5);
+    // The contact shade: the sky and the sun both reach the foot of a rock
+    // less, since the ground and the rock hide each other there. The sun's
+    // share is cut by less, so a sunlit foot still reads as lit.
+    occlusion *= 1.0 - 0.6 * near_ground;
+    float contact_sun = 1.0 - 0.35 * near_ground;
 
     float3 to_sun = normalize(scene.sun.xyz);
     float3 to_camera = normalize(scene.camera_position.xyz - input.world_position);
     // The shared lighting path, as skinned.hlsl lights a scanned hide.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
-    float3 direct = direct_sun(normal, visibility) + local_light(input.world_position, normal);
-    float3 ambient = ambient_light(normal);
+    float3 direct = direct_sun(normal, visibility * contact_sun) + local_light(input.world_position, normal);
+    float3 ambient = ambient_light_at(normal, input.world_position);
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // down in a gully, less sky
 #endif

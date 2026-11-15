@@ -178,6 +178,8 @@ On the modern tier the rocks are the eight scanned pieces of
 three cliff pieces, each at three levels of detail. The retro tiers keep the
 Row 7 rocks above, unchanged; `App::vegetation_for_tier` turns the kit on
 only when the tier is modern and the 24 files loaded.
+`DRAGON_NO_ROCK_KIT=1` keeps the old rocks on the modern tier too, for a
+before-and-after.
 
 - **Drawing** (`gfx::RockKit`, `src/gfx/rock_kit.h`, owned by
   `gfx::Foliage`): `shaders/rock.hlsl` reads the base colour, the normal map
@@ -202,14 +204,20 @@ only when the tier is modern and the 24 files loaded.
   `tone` 0.6, times `brightness`), which keeps the scan's contrast. The
   terrain's warm and cool broken-rock drift (`terrain.hlsl`) is applied
   across the world, moss and grass lie on up-facing parts near the valley
-  floor, and the last 0.6 m above the ground plane blends to the ground's
-  own colour and darkens, so the join is not a cut.
+  floor, and the last metre above the ground plane blends to the ground's
+  own colour and takes a contact shade (the ambient cut by up to 60%, the
+  sun by up to 35%), so the join is not a cut. The ambient is
+  `ambient_light_at`, so a rock in a mountain's shadow goes blue with the
+  ground.
 - **Placement** (`Vegetation::place_kit`, `src/gfx/rock_piece.h` for the
   data): boulders and slabs in loose groups, one candidate per 72 m cell, a
-  large one and a few small ones beside it, more of them downhill, each sunk
-  15 to 30% of its height and leaning 60% of the way to the slope. Cliff
+  large one (scale 1.2 to 2.2, so 4 to 12 m) and a few small ones beside
+  it, more of them downhill, each sunk 15 to 30% of its height and leaning
+  75% of the way to the slope. `slab_a` is not placed: its scan has a hollow
+  under one side that read as a black cave at any sink. Cliff
   pieces stand only where the plane fitted to the ground over their width is
-  steeper than `cliff_slope`, from a 64 m grid gathered into bands by noise,
+  steeper than `cliff_slope`, at scale 1.4 to 2 (40 to 65 m wide), from a
+  70 m grid gathered into bands by noise,
   their mounting plane on that ground and their face (+Z) out along the fall
   line. Every piece is then lowered until a set of check points measured from
   LOD2 (a boulder's base outline, a cliff's open rim and foot) is under the
@@ -220,7 +228,8 @@ only when the tier is modern and the 24 files loaded.
   8 m out of its own rim. The terrain's steep faces are 45 to 62 degrees, so
   a piece whose foot is buried shows 45 to 55% of its vertices with 3 to 8 m
   of relief at scale 1 (simulated on planar slopes before it was built), and
-  less on curved ground, where it sinks 7 m on average. They read as
+  less on curved ground: at scale 1.7 they sink 16 m on average. About
+  5,200 pieces in the arena, 530 of them cliff pieces. They read as
   outcrops of the face from the air and close up, not as walls. A wall needs
   the terrain to have one: S6's mesh cliffs.
 - **Dials**: Terrain > Vegetation > Rocks: the draw and shadow distances,

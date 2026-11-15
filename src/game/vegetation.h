@@ -72,21 +72,21 @@ struct VegetationSettings {
     float rock_group_floor_cover = 0.05f;  // and on the flat floor
     float rock_group_size = 1.4f;      // the mean count of small ones beside the large one
     float rock_group_spread = 1.6f;    // how far out they lie, in the large one's radii
-    float rock_large_scale = 1.0f;     // the large one's scale, middle of its range
+    float rock_large_scale = 1.6f;     // the large one's scale, middle of its range
     float rock_sink_min = 0.15f;       // a boulder's sink, as a share of its height
     float rock_sink_max = 0.30f;
-    float rock_tilt = 0.6f;            // how far a boulder leans to the slope, 0 upright, 1 flush
+    float rock_tilt = 0.75f;           // how far a boulder leans to the slope, 0 upright, 1 flush
     // Cliff pieces: the steepness they need, as 1 - the normal's y averaged
     // over their footprint, their grid, their keep chance, and how far they
     // sink past the file's own 2 m rim burial.
     float cliff_slope = 0.42f;
-    float cliff_spacing = 64.0f;
-    float cliff_cover = 0.55f;
+    float cliff_spacing = 70.0f;
+    float cliff_cover = 0.8f;
     float cliff_bury = 0.3f;
     // How far a cliff's rim may stand over the ground (m, vertically) where
     // it is not the foot; the foot is always buried.
     float cliff_rim_tolerance = 2.0f;
-    float cliff_scale = 1.1f;          // the middle of their scale range
+    float cliff_scale = 1.7f;          // the middle of their scale range
 
     float wind = 1.0f;
     uint32_t seed = 7;

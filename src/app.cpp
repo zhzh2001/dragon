@@ -1308,7 +1308,9 @@ void App::load_rocks() {
                  loaded ? "" : (" (" + error + ")").c_str(), gfx::ROCK_KINDS - from_file);
         // The modern tier's scanned kit (gfx/rock_kit.h), once: the old
         // kinds above stay loaded as its fallback.
-        if (tier_.tier == gfx::Tier::Modern && !foliage_.rock_kit().loaded()) {
+        // DRAGON_NO_ROCK_KIT=1: the old rocks on the modern tier too, for a
+        // before-and-after.
+        if (tier_.tier == gfx::Tier::Modern && !foliage_.rock_kit().loaded() && !SDL_getenv("DRAGON_NO_ROCK_KIT")) {
             const uint64_t start = SDL_GetTicks();
             if (foliage_.rock_kit().load(device_)) {
                 LOG_INFO("rock kit: loaded in %llu ms", (unsigned long long)(SDL_GetTicks() - start));
