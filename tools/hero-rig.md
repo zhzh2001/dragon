@@ -1,346 +1,203 @@
-# Embercrest hero rig attempt
+# Embercrest hero rig
 
 ## Status
 
-The rig failed acceptance after three full passes on 2026-11-14.
-Pass 3 reported 47 passing gates and seven failing gates.
-The process exited with status 1 after writing all seven renders.
-No pass qualified for a commit. No files were staged or committed.
+The rig passes all 56 checks on mesh version 2, and the engine drives it without a visible fault.
+`assets/embercrest-hero.glb` has 77 joints, six skinned meshes and at most four influences a vertex.
+Git ignores the file. It stays in `assets/` of this worktree for the main session to collect.
 
-Do not use this GLB in the game. Eight hide vertices contain invalid weights.
-The failure also affects mirrored weights, wing planarity, and right-wing intersections.
-The source symlink and its target remained unchanged.
+A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
+This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
 ## Files and commands
 
-`tools/rig_hero.py` builds the skin, checks the exported GLB, and renders the poses.
-`tools/skeletons/embercrest-hero.json` contains 77 bone records, measured anchors, eye frames, and measurement notes.
-`assets/embercrest-hero.glb` contains the failed output, preserved for inspection.
-The output has 110,350 vertices and 121,650 triangles across six meshes.
-Its size is 24,418,268 bytes.
-The two hero sidecars are unchanged copies of the original Embercrest sidecars.
+- `tools/rig_hero.py` builds the skin, checks the exported file and renders the pose sheets.
+- `tools/skeletons/embercrest-hero.json` holds the 77 bones, one a line, and the wing field's numbers.
+- `assets/embercrest-hero.glb.rig.cfg` and `.flight.cfg` are Embercrest's, with three values changed.
+- `artifacts/hero-rig/` holds `verification.txt`, seven pose sheets and fifteen engine renders.
+- `artifacts/hero-rig/pass-1-output.txt` to `pass-3-output.txt` are the first rig's logs, on version 1.
 
-The following commands run from this worktree:
+Run these from the worktree:
 
 ```sh
 /opt/homebrew/bin/blender -b --factory-startup --python tools/rig_hero.py
+/opt/homebrew/bin/blender -b --factory-startup --python tools/rig_hero.py -- --no-render
 /opt/homebrew/bin/blender -b --factory-startup --python tools/rig_hero.py -- --verify-only
 /opt/homebrew/bin/blender -b --factory-startup --python tools/rig_hero.py -- --render
 ```
 
-The default command builds, checks, and renders.
-`--verify-only` checks the existing exported asset without building or rendering.
-`--render` checks and renders the existing exported asset without rebuilding.
-Both inspection modes use the same verification function as the default command.
-The three full passes exercised the default command.
-The standalone inspection flags were not run separately within this pass budget.
+The first command builds, verifies and renders. It takes 3 minutes 10 seconds.
+`--no-render` builds and verifies in 11 seconds. `--verify-only` checks the file that exists.
+A failed check exits with status 1. An exception exits with status 2.
+The build is deterministic: two builds gave the same SHA-256.
 
-Failed gates return status 1 after the requested work finishes.
-Unexpected exceptions return status 2 with a traceback.
-The script uses an explicit process exit because Blender otherwise returns zero for Python exceptions.
+The builder reads the source file's bytes and appends joints, weights and inverse bind matrices.
+It does not pass the mesh through Blender, so positions, normals, tangents, maps and `_JAW` stay byte-identical.
+The verifier reads the exported file again and poses it with Blender's armature and linear skinning.
+The builder's own fold uses numpy. The two agree to three decimals on the longest edge.
 
-The cache directory holds temporary files, Python caches, probe scripts, and intermediate renders.
-`.gitignore` changed only to ignore `build-hero-rig-cache/`.
-The GLB remains ignored. It was not force-added.
-No game, CMake build, interactive Blender session, MCP tool, or additional agent ran.
+## What was wrong with the first rig
 
-## Source preservation
-
-The builder reads the source GLB directly.
-An accessor describes one typed array in a GLB buffer.
-The builder appends weight accessors, joint accessors, joint nodes, and inverse bind matrices.
-An inverse bind matrix maps model coordinates into a resting joint.
-
-The original 21,741,832 buffer bytes remain identical, including all embedded image bytes.
-All positions, normals, tangents, texture coordinates, jaw masks, and triangle indices remain identical.
-Material, texture, and image records remain identical.
-The builder does not decimate, weld, remesh, or re-export the source through Blender.
-
-The verifier imports the output once to count Blender armatures and obtain its materials.
-It then reconstructs evaluation meshes from the output accessors without changing their vertex order.
-It reads the output's weights, hierarchy, and inverse bind matrices for these meshes.
-Blender evaluates linear skinning. Preserve Volume is disabled because the engine uses linear skinning.
-
-Blender texture coordinates reverse the GLB V coordinate during inspection only.
-Pass 1 omitted this conversion and rendered incorrect texture patches.
-Pass 2 corrected the inspection conversion. The exported texture coordinates never changed.
-
-## Measurement method
-
-All recorded coordinates use metres, +Y up, and forward -Z.
-The measurements came from the actual static GLB, not the published landmark table alone.
-
-The preparation probes measured bounds, connected components, local surface sections, and transverse ray intersections.
-A connected component is a group of connected vertices.
-Position duplicates were merged only in temporary measurement arrays.
-This merge did not change the exported asset.
-
-The published joint planes supplied initial search locations.
-Surface measurements supplied missing heights and lateral centres.
-The shoulder and hip surfaces merge into the torso.
-Their internal joint centres remain anatomical estimates, not directly observable mesh features.
-
-Three source renders checked the side, top, and head measurements.
-They were preparation probes, not build passes.
-Later probes examined boundary caps, existing intersections, and invalid exported weights.
-Those probes did not rebuild the asset or generate additional pose sheets.
+1. The wing arm was in the wrong place. This caused the spike in `first-rig-in-engine.jpg`.
+   The first rig put the elbow at (2.64, 4.56, -0.45). That point is on the web in front of the arm.
+   The mesh's elbow is the knob at (2.62, 4.12, -0.03), 0.61 m away.
+   The first rig's fourth finger ran from the wrist to that knob, along the forearm, and then down the rib.
+   The engine turned the forearm about a point outside the arm and pulled the hide off it.
+2. Eight hide vertices at the two wrists had weights that were not numbers.
+   Five bones meet at the finger fan. A vertex nearest that point scored them equally.
+   The influence cut-off subtracted the fifth score from the first four and divided by zero.
+3. The mirror checks paired each left vertex with the nearest right vertex at any distance.
+   The two sides of the sculpt differ by up to 0.25 m, so the pairs were not mirror images.
+   One real asymmetry was underneath: the membrane weights depended on each side's own triangles.
+4. The leg anchors were version 1's. On version 2 a 60 degree knee bend changed the hind leg's volume by 45%.
+5. A box behind the head made everything in it follow `head`, with a hard edge at the box.
+6. Below Y 2.05 the belly between the legs followed the nearest thigh, with a seam at X = 0.
+7. The wing field reached the flank. By its formula a vertex at X 1.06 beside the hip gave a quarter of its weight to wing bones.
 
 ## Measured landmarks
 
-The complete numeric bone table is in `embercrest-hero.json`.
-The table below records the main anchors.
-Positive X marks the right side. Limb and wing anchors mirror across X=0.
-The head has its own measured centre near X=-0.01.
+Coordinates are metres, +Y up, -Z forward, right side. The left side mirrors X.
+The JSON has every bone.
 
-| Landmark | X | Y | Z | Basis |
+| Landmark | X | Y | Z | How |
 |---|---:|---:|---:|---|
-| Root | 0 | 2.55 | 0.20 | Torso estimate |
-| Chest | 0 | 2.80 | -0.90 | Torso estimate |
-| Neck 01 | 0 | 3.04 | -2.18 | Neck surface sections |
-| Neck 02 | 0 | 3.48 | -2.66 | Neck surface sections |
-| Neck 03 | 0 | 3.96 | -2.98 | Neck surface sections |
-| Head | -0.01 | 4.48 | -3.30 | Skull base estimate |
-| Jaw hinge | -0.0108 | 4.575033 | -3.441072 | Rear jaw-mask support |
-| Jaw tip | -0.0108 | 4.46 | -4.40 | Measured front jaw extent |
-| Left eyeball | -0.224210 | 4.796591 | -3.644584 | Rear sphere fit |
-| Right eyeball | 0.204210 | 4.796591 | -3.644584 | Rear sphere fit |
-| Fore shoulder | 0.72 | 2.30 | -1.84 | Torso intersection estimate |
-| Fore elbow | 0.76 | 1.92 | -1.72 | Torso intersection estimate |
-| Fore wrist | 0.599 | 0.98 | -2.04 | Ray interval midpoint |
-| Fore foot | 0.582 | 0.40 | -2.25 | Ray interval midpoint |
-| Hind hip | 0.85 | 2.25 | 0.05 | Torso intersection estimate |
-| Hind knee | 0.903 | 1.83 | 0 | Ray interval midpoint |
-| Hind hock | 0.957 | 1.43 | 0.96 | Ray interval midpoint |
-| Hind foot | 1.048 | 0.45 | 0.84 | Ray interval midpoint |
-| Wing shoulder | 1.25 | 3.78 | -1.10 | Local hide section |
-| Wing elbow | 2.64 | 4.56 | -0.45 | Local hide section |
-| Wing wrist | 3.43 | 5.68 | -0.71 | Local hide section |
-| Finger fan origin | 3.66 | 5.72 | -0.65 | Fan junction estimate |
-| Finger 1 knuckle A | 6.31 | 5.64 | -0.40 | Local hide section |
-| Finger 1 knuckle B | 7.95 | 5.40 | 0.07 | Local hide section |
-| Finger 1 tip | 9.35 | 4.65 | 0.94 | Claw component |
-| Finger 2 knuckle | 5.85 | 5.16 | 0.37 | Local hide section |
-| Finger 2 tip | 8.10 | 3.75 | 1.40 | Claw component |
-| Finger 3 knuckle | 4.74 | 4.84 | 0.63 | Local hide section |
-| Finger 3 tip | 5.71 | 3.05 | 1.73 | Claw component |
-| Finger 4 knuckle | 2.76 | 4.02 | 0.43 | Local hide section |
-| Finger 4 tip | 2.87 | 2.74 | 1.26 | Claw component |
+| Wing shoulder | 1.15 | 3.68 | -0.88 | Arm centre line, extended to the body |
+| Wing elbow | 2.62 | 4.12 | -0.03 | Arm centre line, the bend |
+| Wing wrist | 3.43 | 5.68 | -0.58 | Arm centre line, the knob |
+| Finger fan origin | 3.66 | 5.72 | -0.55 | Arm centre line past the wrist |
+| Spur knuckle | 2.76 | 4.02 | 0.43 | First rig's section of the rib |
+| Spur tip | 2.87 | 2.74 | 1.26 | Claw piece in `horn` |
+| Fore shoulder | 0.60 | 2.30 | -1.85 | `hero-build.md`, inside the torso |
+| Fore elbow | 0.64 | 1.90 | -1.84 | Section midpoint |
+| Fore wrist | 0.52 | 0.95 | -1.92 | Section midpoint |
+| Fore foot | 0.52 | 0.42 | -2.02 | Section midpoint |
+| Hind hip | 0.88 | 2.30 | 0.55 | `hero-build.md`, inside the torso |
+| Hind knee | 1.00 | 1.80 | 0.40 | Section midpoint, toward the front |
+| Hind hock | 1.02 | 1.08 | 0.95 | Section midpoint |
+| Hind foot | 1.04 | 0.42 | 0.80 | Section midpoint |
+| Jaw hinge | -0.0108 | 4.575 | -3.441 | First rig, unchanged |
+| Eye centres | 0.2042, -0.2242 | 4.7966 | -3.6446 | First rig's sphere fit, unchanged |
 
-The actual span is 18.993751 m.
-The lowest source vertex is Y=-0.001826 m.
-The source's wings are spread, but their surfaces are not horizontal or coplanar.
+The arm centre line comes from the hide's thickness.
+A ray from each hide vertex runs inward along its normal to the far side.
+The midpoint is a centre point. Points where the hide is 0.2 to 0.7 m thick lie in the arm tube.
+Their medians, in 0.15 m steps of X, give this line on both sides:
+(1.30, 3.71, -0.78), (2.05, 3.96, -0.40), (2.65, 4.14, -0.03), (2.95, 4.64, -0.24), (3.40, 5.71, -0.56).
+The left and right lines agree within 0.06 m.
 
-The jaw hinge uses 79 rear-wall vertices with mask values between 0.02 and 0.15.
-Their Y bounds are 4.502058 to 4.682943 m.
-Their Z bounds are -3.515665 to -3.394357 m.
-The hinge uses their median Y and Z coordinates.
-Its position differs from the published preview hinge by about 68 mm.
-The static mesh contains no internal jaw joint. This estimate is not a measured anatomical pivot.
+Each leg of version 2 is a near-vertical column. Sections every 0.15 m of height gave the midpoints.
+The fore column sits at X 0.49 to 0.65, Z -1.98 to -1.85. The hind column sits at X 1.01 to 1.04, Z 0.65 to 0.93.
+The hind hip moved 0.50 m back from the first rig's and the hock 0.35 m down.
+The hip and shoulder centres are inside the torso. They are estimates.
 
-The eye fit excludes the cornea and uses the rear hemisphere.
-Each fitted sphere has a radius of approximately 0.140000 m.
-Each inner lid ring contains 36 unique positions at radius 0.152 m.
-Each socket contains 253 unique positions at radius 0.156 m.
-Topology traversal recovers five more rings outside the inner ring.
-Each eye therefore has exactly six rings of 36 positions.
-Texture seams duplicate some positions in the exported vertex arrays.
+Toe bones end at the claw pieces in `horn`: fore claws at X 0.174, 0.499, 0.799, hind claws at X 0.690, 1.087, 1.456.
 
-The tongue forms a separate 106-position component.
-Its anchors follow four measured cross-sections:
+The tail's centre at each station is the bottom of the section plus 1.1 half-widths.
+The first rig's tail went up 0.41 m and down 0.65 m between its first three joints. This one does not.
 
-| Anchor | X | Y | Z |
-|---|---:|---:|---:|
-| Tongue 01 | -0.010783 | 4.551916 | -3.600000 |
-| Tongue 02 | -0.010783 | 4.522171 | -3.850344 |
-| Tongue 03 | -0.010783 | 4.492452 | -4.100688 |
-| Tongue tip | -0.010783 | 4.474186 | -4.351032 |
+The neck, head, jaw, eye, lid and tongue anchors are the first rig's. Those parts did not move.
 
-Tail anchors use surface samples within 120 mm of each Z station.
-They use the central 300 mm strip and its 40th-percentile Y height.
-This reduces bias from dorsal spikes, but remains a surface-based estimate.
+## Bone contract
 
-## Bone contracts
+Every name in `winged-quadruped.json` is present. The engine's log reads:
 
-Every original `winged-quadruped.json` name remains present.
-The rig retains `root`, `chest`, three neck bones, `head`, `jaw`, `jaw_tip`, and eight tail bones.
-It retains both forelegs, both hind legs, their feet, and their three-toe branches.
-It retains every original wing root, arm, wrist, and finger name.
+```text
+mapped rig: neck 3, tail 8, wing root 3/3, fingers 3/3, legs 3/3, front legs 3/3, feet 4, jaw jaw
+```
 
-Each wing adds a fourth two-bone finger and a third segment on finger 1.
-The face adds `eye_l`, `eye_r`, four eyelid bones, and `tongue_01` through `tongue_03`.
-All eye and eyelid bones parent to `head`.
-The tongue chain parents to `jaw`.
-`jaw_tip` remains available for the engine's forward jaw probe.
+Added bones: `eye_l`, `eye_r`, four `eyelid_*` bones, `tongue_01` to `tongue_03`, `wing_finger_1c_*`, and `wing_spur_a_*` and `wing_spur_b_*`.
+None of the names contains a helper word the mapper skips or a word it takes for a limb.
 
-The mapper skips `_end`, `ik`, `pole`, `cont`, `target`, `chain`, `roll`, `fly`, `muscle`, and `kneecap` in relevant searches.
-The new face names contain none of those substrings.
-They also avoid neck, tail, wing, shoulder, head, limb, foot, and chest aliases.
-`eyelid_upper_l` does not contain the foreleg alias `upper_arm`.
+The spur is the rib from the elbow to the trailing edge. It replaces the first rig's `wing_finger_4a` and `4b`.
+`wing_spur_a` hangs off `wing_root`, the upper arm. Its subtree has two bones and the forearm's has nine.
+The mapper counts a child as a branch only if it has a third of the largest child's bones.
+So the arm's main line still runs root, arm, wrist, and the fan has three fingers.
+The engine does not move the spur. It rides on the upper arm.
+`wing_spur_b` carries no weight. It marks the rib's outer half for the weight field, and its weight goes to `wing_spur_a`.
 
-The mapper selects sides from joint positions and descendants.
-The wing chain branches at `wing_wrist_l` or `wing_wrist_r`.
-The four finger branches preserve the mapper's anatomical hierarchy.
-No engine source changed. The engine mapper itself was not executed.
+## Weights
 
-## Weight decisions
+### Body
 
-The body uses distance to measured bone segments.
-The leg field blends adjacent segments within 150 mm on either side of a joint.
-It blends toward toe bones below Y=0.35 m.
-The torso blend ends at Y=2.65 m.
+`near_field` scores each bone by how much farther it is than the nearest bone, with a radius of 0.35 m.
+The first rig scored by distance alone. Far from the spine that field went flat, and a flank followed four bones.
+The head is rigid in front of a plane through the head joint that faces forward and up. It blends over 0.35 m.
 
-The wing field copies the candidate rigger's inverse-distance formula and continuous four-influence cutoff.
-The cutoff subtracts the fifth-largest score before normalizing the four remaining scores.
-The distance radius is 0.408 m, scaled from the candidate's canonical radius.
-The wrist share fades between 0.24 and 0.98 m from its anchor.
-The field applies beyond X=0.85 m, above Y=2.65 m, and behind Z=-1.75 m.
-It reaches full strength at X=1.5 m.
-Membrane and adjacent hide use the same field and body transition.
-The builder does not level the already spread wings.
+### Legs
 
-This vectorized field missed the candidate function's fallback for tied scores.
-Five wing segments share a fan junction.
-Eight exported hide vertices encounter tied scores and produce division by zero.
-Their weights become NaN, which means an invalid numeric value.
-This is an implementation defect. The source geometry did not require invalid weights.
+A leg owns a vertex by distance from the leg's bones, not by a box.
+The mask is 1 within 0.42 m of a fore leg bone or 0.60 m of a hind leg bone, and 0 beyond 0.58 m or 0.90 m.
+It fades out between Y 2.0 and 2.6 for a fore leg and Y 1.95 and 2.65 for a hind leg.
+The belly at X = 0 is outside both masks, so it follows the spine.
+Inside the mask, adjacent leg bones blend across 0.40 m at each joint. Below Y 0.35 the toe bones take over.
 
-The source `hide._JAW` mask becomes the exported jaw weight exactly.
-The remaining share belongs to `head`.
-This preserves the authored corner falloff and skull-side fang assignments.
-No additional cheek vertices receive jaw weight.
+### Wings
 
-The mouth begins with its source jaw mask.
-Each tooth component becomes rigid under `head` or `jaw` according to its original mask.
-The tongue receives only tongue-chain weights.
-The three tongue bones remain children of the jaw.
+The wing's hide and membrane are one surface, welded where their vertices coincide. One solve covers both.
+A hide vertex on a bone's shaft holds the field's weights. The test is that its second bone is much farther than its first.
+A vertex at a joint, on the flare under the upper arm, or on the membrane holds nothing.
+It takes the smoothest weights its neighbours allow, with cotangent stiffness.
+Toward the body the hide holds the body's field, by a mask that rises from X 0.85 to 1.5.
 
-Each eye mesh receives weight 1 on its own eye bone.
-The socket receives weight 1 on `head`.
-The six lid rings receive strengths 1.0, 0.97, 0.84, 0.58, 0.25, and 0.035.
-Their remaining weight belongs to `head`.
-The inner ring's measured principal axis supplies the lid's long axis.
-The fitted eye direction supplies its outward frame.
+This replaces the inverse-distance wing field the brief named. That field put a step where two bones were equally far.
+A fold moves the hand 1.3 m, so a step of 3% in the weights stretches a 50 mm edge by 80%.
 
-Each eyelid bone uses that measured frame in its bind rotation.
-The closed pose scales its local transverse axes to 0.001.
-It translates outward by 0.164 m and overlaps the opposite lid by 0.8 mm.
-This is a flattened closure, not a spherical sliding animation.
-It passes sampled coverage, but the closed skin looks stretched.
-The geometry remains unchanged in the resting GLB.
+Details that each fixed a measured fault:
 
-Every horn component receives one rigid owner.
-Skull horns follow `head`.
-Foot claws follow their nearest toe segment.
-Wing claws follow their nearest wing segment.
-The final verifier checks all 20 horn components.
+- Four influences. A second and third solve shut each bone outside the vertices where it is one of the leading four.
+  A weight then fades to zero at the edge of its region. Cutting the fifth weight afterwards tripled the count of stretched edges.
+- The membrane is a shell with two faces. Vertices within 60 mm, and facing vertices within 120 mm, are tied.
+  The upper face then copies the lower face at the closest point.
+- The hide within 60 mm of a wing claw follows the claw's bone alone. Before this the wrist claw lifted off and left a hole.
+- The two wings are mirrored. The left wing moves halfway to the right wing's weights at the mirrored point, and the right wing copies the result.
+  The share fades between 20 and 60 mm from the other wing's surface. Eight turns run.
+- After each mirror turn the builder folds the wing as the verifier does.
+  Each free end of a membrane edge that stretches past 1.4 moves halfway to its other end.
+  Each free corner of a membrane triangle that cuts the arm moves halfway to the weights of the arm triangle it cuts.
+  The first turn needed one round a side. Later turns needed none.
 
-The posterior head region follows `head` rigidly to protect its dense frill.
-Its bounds are Y>3.48 m, -3.50<Z<-1.78 m, and absolute X<1.32 m for the length check.
-Zero-mask vertices in that region receive no jaw movement.
-This conservative choice also makes part of the collar follow the head.
-The collar does not have separately fitted plate ownership along the neck.
+### Spikes and plates
 
-## Pose checks and limits
+The hide is one connected mesh, so a spike is found by shape.
+Protrusion is the distance of a vertex outside a copy of the hide smoothed 80 times.
+Each vertex climbs to a peak of protrusion. Peaks within 0.04 m of their saddle merge.
+A segment counts if it rises 0.10 m over its base, spans under 1.5 m, and has no leg, wing, jaw or lid vertex.
+There are 235 such segments with 38,553 vertices. 144 are on the head and neck.
+Each follows one bone at weight 1: the bone that leads at the segment's base.
+On the head and neck 62 follow `head`, 42 `neck_03`, 36 `neck_02`, 3 `neck_01` and 1 `chest`.
 
-The checks read the exported GLB again before posing.
-The jaw rotates -35 degrees about local X.
-Both eyes rotate 25 degrees about local Y.
-Both wing elbows and wrists rotate 80 degrees about local Y, with mirrored signs.
-Both forearm bones rotate 60 degrees about local X.
-Both shin bones rotate -60 degrees about local X.
-`neck_02` rotates 30 degrees about local X.
+### Jaw, mouth, eyes, horns
 
-The blink check measures inner-edge separation against the unchanged 5 mm limit.
-It casts 10,517 coverage rays per eye across nine viewing directions.
-The directions span approximately 20 degrees around each eye's normal.
-No ray exposes the ball in the final blink.
-This sampled check is not a proof for every possible viewing direction or intermediate blink pose.
+- The hide's jaw weight is `_JAW`, and the rest goes to `head`. So is the mouth's, outside teeth and tongue.
+- The two corner ramps of `_JAW` differ by up to 0.04. A vertex with a mirror twin within 2 mm takes the mean.
+  51 hide vertices change, by at most 0.0023.
+- Each tooth is rigid on `jaw` or `head`. The tongue follows the three tongue bones.
+- Each eye mesh follows its eye bone. The socket follows `head`. Six lid rings follow the lid bones at 1.0, 0.97, 0.84, 0.58, 0.25 and 0.035.
+- Each piece of `horn` follows one bone: the skull horns `head`, each toe claw its toe, each wing claw the nearest wing bone.
 
-The limb check welds texture seams in temporary measurement arrays.
-It finds each boundary loop and caps that loop separately.
-A cap closes the measurement surface without changing the asset.
-All four tested limb regions have three simple boundary loops.
-Each boundary vertex has two neighbours, and no measured edge has more than two incident triangles.
-The same vertex correspondence and cap rule apply before and after deformation.
+## Checks that changed
 
-The earlier single-centroid cap combined unrelated boundaries and gave misleading volume changes.
-Pass 3 replaced that method with separate boundary caps.
-The 15% threshold did not change.
-The final changes range from 3.9066% to 8.8792%.
+- Wing fold. The brief asked for membrane vertices within 0.05 m of a plane through the finger bones. A folded membrane bulges, so that check is gone.
+  The new checks fold the elbow 80 degrees and the wrist 80 degrees the other way, about the body's up axis.
+  The forearm swings forward to the upper arm, and the hand swings back along the forearm.
+  No membrane edge longer than 1 mm may reach 1.6 times its rest length.
+  No membrane triangle may cut the arm or the body unless it does at rest.
+  "Arm or body" is every hide triangle that no finger or spur bone leads. A membrane triangle with a vertex on the hide is the attachment and is not counted.
+- Fold axis. The first rig turned both hinges the same way, which sweeps the hand through the head.
+  A hinge normal to the wing's own plane closes the wedge between forearm and finger 3 by 80 degrees. That wedge is 70 degrees wide, so the finger passes through the forearm.
+  About the up axis the same wedge closes from 98 to 18 degrees in plan, and nothing has to cross.
+- Mirror. Three checks replace one.
+  The hide's exported weights match the field evaluated at the mirrored position, where the field decides them.
+  Each left membrane vertex matches the right membrane's weights at the mirrored point, where the surfaces are within 4 mm.
+  Vertex pairs within 2 mm of being mirror images match. The head mirrors about X = -0.0115 and the body about X = 0.
+  A pair with a spike on one side must lead with the same bone or a joined bone. A tooth is not compared with the gum.
+- Frill. The check measures each of the 144 head and neck spikes from base to tip, and every edge inside them, with `neck_02` bent 30 degrees.
+- Limb volume. A leg is the hide that follows that leg's bones by more than half.
+- Sidecars. The check lists which values differ from Embercrest's.
 
-The frill check measures 50,673 edges longer than 0.1 mm.
-It also checks rigid head ownership for 28,490 exported vertices.
-The maximum measured length change is 0.137055%.
-Very short edges are numerically unstable at float precision.
-Rigid ownership is the stronger check for those excluded short edges.
-The frill is connected to the head, so the check covers its region rather than naming individual spikes.
+## Verification output
 
-Mirroring compares actual exported weights at nearest reflected surface positions.
-It swaps left and right joint names before comparing weights.
-The threshold remains two percentage points per influence.
-The mouth uses X=-0.01 as its reflection plane. Other meshes use X=0.
-
-The source is asymmetric and has different triangulation on opposite sides.
-Nearest positions can pair different teeth or upper and lower surfaces.
-The final mouth example pairs a head-owned tooth with a jaw-owned tooth only 10.031 mm away.
-This correspondence limitation remains a failed gate, not a declared symmetry pass.
-The membrane's maximum influence difference is 0.373582, well above 0.02.
-Its worst pair lies 77.694 mm apart after reflection.
-The hide's invalid weights prevent a finite symmetry result.
-
-The membrane check fits one plane to the posed finger anchors and measures every membrane vertex against it.
-The unchanged limit is 0.05 m.
-The maximum distances are 2.994477 m on the left and 3.080295 m on the right.
-The finger anchors themselves deviate by up to 0.257998 m from that fitted plane.
-
-Four right-wing anchors form a tetrahedron with volume 0.366381 cubic metres in the rest pose.
-Those anchors are the fan origin, finger 1 knuckle A, finger 2 knuckle, and finger 4 knuckle.
-A nonzero tetrahedron volume proves that those four anchors are not coplanar.
-A literal plane through all measured finger anchors therefore does not exist.
-Flattening the membrane or moving the measured anchors would change this geometric contract.
-The plane gate remains failed.
-
-The intersection check compares membrane triangles with arm-dominated hide triangles.
-The left wing has no measured intersections.
-The right wing has seven intersecting triangle pairs before deformation and eight after folding.
-The source overlap lies near X=2.17 to 2.56 m, Y=4.10 to 4.45 m, and Z=-0.65 to -0.47 m.
-The source-preserving build retains that overlap.
-The folded intersection gate remains failed.
-
-## Pass history and render inspection
-
-| Pass | Result | Changes and observations |
-|---|---|---|
-| 1 | 37 pass, 13 fail | Initial skin, full render set, incorrect inspection UV conversion, failed blink frame |
-| 2 | 38 pass, 12 fail | Correct inspection UVs, measured lid bind axes, adjacent limb weights, improved framing |
-| 3 | 47 pass, 7 fail | Lid overlap, nine-direction coverage, corrected volume caps, component and hierarchy checks |
-
-Each pass built, checked, rendered, and received full-resolution inspection.
-No fourth build pass ran.
-The three complete process outputs are preserved in `artifacts/hero-rig/pass-1-output.txt` through `pass-3-output.txt`.
-The first two asset and render snapshots remain in the ignored cache.
-
-All seven final sheets are 1920 by 1080 pixels:
-
-| File | Inspection result |
-|---|---|
-| `bones.png` | Side and top skeleton overlays show the measured limb and finger layout. |
-| `jaw.png` | The jaw opens clearly. Lower teeth clear the upper lip. The mouth floor looks pale and flat. |
-| `blink.png` | The ball disappears. The lid looks stretched, and the lower patch retains small dark defects. |
-| `wingfold.png` | The folded fan is not planar. Invalid wrist vertices leave thin protruding lines. |
-| `crouch.png` | Four legs bend. The pose is a deformation test, not a planted crouch. |
-| `neck.png` | The frill stays rigid. The collar moves with the head more than a flexible neck requires. |
-| `weights-head.png` | Red shows jaw weight. Green and blue show upper and lower lid weight. |
-
-Blender ignores the invalid influence entries when constructing inspection vertex groups.
-Those eight vertices therefore remain unweighted in the inspection scene.
-The renders do not establish usable runtime deformation at those vertices.
-The explicit exported-weight gate fails before rendering, and every final sheet displays the failed status.
-
-## Exact final verification output
-
-The following block is copied from `artifacts/hero-rig/verification.txt` without editing.
-The NaN case requires the additional diagnostic immediately after this block.
+This is `artifacts/hero-rig/verification.txt`, unedited.
 
 ```text
 PASS bone names: 77 unique joints; all original and requested names exist
@@ -348,90 +205,121 @@ PASS armature contract: 77 joints, 1 skin, 1 imported armature
 PASS new names avoid mapper aliases: []
 PASS six meshes: eye_l, eye_r, hide, horn, membrane, mouth
 PASS material records unchanged: materials, image records, and texture records compared
-PASS source buffer unchanged: 21741832 original binary bytes compared, including every embedded image
-PASS rig.cfg unchanged: byte comparison
-PASS flight.cfg unchanged: byte comparison
+PASS source buffer unchanged: 25521620 original binary bytes compared, including every embedded image
+PASS rig.cfg present: every Embercrest key kept; 2 values differ: jaw_open_deg, jaw_rest_deg
+PASS flight.cfg present: every Embercrest key kept; 1 values differ: ground_offset
 PASS inverse binds reconcile: maximum matrix error 2.43390027e-07
 PASS measured skeleton hierarchy: maximum anchor error 4.4408921e-16 m; wrong parents []
 PASS eye_l source geometry: 1024 triangles; all source attributes and indices compared
 PASS eye_l influences: max sum error 0; unweighted 0; maximum 1
 PASS eye_r source geometry: 1024 triangles; all source attributes and indices compared
 PASS eye_r influences: max sum error 0; unweighted 0; maximum 1
-PASS hide source geometry: 100773 triangles; all source attributes and indices compared
-FAIL hide influences: max sum error nan; unweighted 0; maximum 4
-PASS horn source geometry: 7803 triangles; all source attributes and indices compared
+PASS hide source geometry: 104616 triangles; all source attributes and indices compared
+PASS hide influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
+PASS horn source geometry: 7337 triangles; all source attributes and indices compared
 PASS horn influences: max sum error 0; unweighted 0; maximum 1
-PASS membrane source geometry: 6340 triangles; all source attributes and indices compared
+PASS membrane source geometry: 4429 triangles; all source attributes and indices compared
 PASS membrane influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
-PASS mouth source geometry: 4686 triangles; all source attributes and indices compared
+PASS mouth source geometry: 4476 triangles; all source attributes and indices compared
 PASS mouth influences: max sum error 1.1920929e-07; unweighted 0; maximum 3
-PASS hide jaw mask retained: maximum exported weight difference 0; source corner falloff retained
-PASS horn component ownership: 20 components checked; incorrect components []
-PASS mouth component ownership: 68 components checked; incorrect components []
+PASS hide jaw mask retained: the jaw weight is the source mask, with the two corner ramps averaged; 51 vertices differ from the source, by at most 0.002318
+PASS horn component ownership: 24 components checked; incorrect components []
+PASS mouth component ownership: 63 components checked; incorrect components []
 PASS eye_l rigid: 546 vertices at weight 1
 PASS lid_l topology: six rings of 36 unique positions
-PASS socket_l fixed: 369 exported vertices follow head
+PASS socket_l fixed: 365 exported vertices follow head
 PASS eye_r rigid: 546 vertices at weight 1
 PASS lid_r topology: six rings of 36 unique positions
-PASS socket_r fixed: 377 exported vertices follow head
-FAIL hide mirrored weights: max nan; RMS nan; nearest surface distance max 0.207003 m; 24548 pairs
-FAIL membrane mirrored weights: max 0.373582; RMS 0.030359; nearest surface distance max 0.193837 m; 1910 pairs
-PASS horn mirrored weights: max 0.000000; RMS 0.000000; nearest surface distance max 0.109653 m; 2110 pairs
-FAIL mouth mirrored weights: max 1.000000; RMS 0.338856; nearest surface distance max 0.065520 m; 1277 pairs
+PASS socket_r fixed: 373 exported vertices follow head
+PASS hide mirrored field: exported weight against the field at the mirrored position; max 0.018352; RMS 0.001630; 54963 of 104224 vertices carry the field, the rest are spikes, jaw and lids
+PASS membrane mirrored surface: left vertex against the right membrane at the mirrored point; max 0.015411; RMS 0.003812; 573 vertices within 4 mm of the mirrored surface; 1376 farther
+PASS hide mirrored weights: max 0.012490; RMS 0.001454; 336 pairs within 2 mm of their mirror image; 25010 left vertices have no such partner; 106 more pairs have a spike on one side or both: 103 lead with the same bone, 3 with joined bones, 0 with bones apart
+PASS membrane mirrored weights: max 0.001020; RMS 0.000783; 3 pairs within 2 mm of their mirror image; 1306 left vertices have no such partner
+PASS horn mirrored weights: max 0.000000; RMS 0.000000; 3 pairs within 2 mm of their mirror image; 1989 left vertices have no such partner
+PASS mouth mirrored weights: max 0.000001; RMS 0.000000; 84 pairs within 2 mm of their mirror image; 1152 left vertices have no such partner; 1 more pairs set a tooth against the gum and are not compared
 PASS Blender bind pose: max vertex displacement 2.81154547e-07 m
-PASS jaw fixed skull: 35 degrees; 89140 distant zero-mask vertices; max motion 0 m
-PASS lower teeth clear upper lip: 1542 vertices; nearest fixed hide 0.196240 m; minimum vertical clearance 0.128151 m
+PASS jaw fixed skull: 35 degrees; 102256 distant zero-mask vertices; max motion 0 m
+PASS lower teeth clear upper lip: 1394 vertices; nearest fixed hide 0.182410 m; minimum vertical clearance 0.130751 m
 PASS blink_l closure: inner-edge height spread 0.001599765 m; threshold 0.005 m
 PASS blink_l ball coverage: 0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m
 PASS blink_r closure: inner-edge height spread 0.001599879 m; threshold 0.005 m
 PASS blink_r ball coverage: 0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m
 PASS eye_l independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
 PASS eye_r independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
-FAIL wing_l membrane plane: elbow 80 and wrist 80 degrees; max 2.994477 m; RMS 0.468634 m; finger nonplanarity 0.257998 m
-PASS wing_l arm intersections: 0 folded intersecting triangle pairs; 0 already intersect at rest; 2097 arm triangles
-FAIL wing_r membrane plane: elbow 80 and wrist 80 degrees; max 3.080295 m; RMS 0.579947 m; finger nonplanarity 0.257998 m
-FAIL wing_r arm intersections: 8 folded intersecting triangle pairs; 7 already intersect at rest; 2110 arm triangles
-PASS fore_l volume: 60-degree elbow/knee; rest 0.631979 m3; posed 0.575865 m3; change 8.8792%; simple boundary loops [93, 39, 37]; valid True
-PASS hind_l volume: 60-degree elbow/knee; rest 0.900040 m3; posed 0.864879 m3; change 3.9066%; simple boundary loops [28, 31, 151]; valid True
-PASS fore_r volume: 60-degree elbow/knee; rest 0.631848 m3; posed 0.578212 m3; change 8.4887%; simple boundary loops [43, 90, 40]; valid True
-PASS hind_r volume: 60-degree elbow/knee; rest 0.911286 m3; posed 0.864028 m3; change 5.1859%; simple boundary loops [141, 32, 30]; valid True
-PASS frill edge lengths: neck 30 degrees; 50673 edges over 0.1 mm; maximum length change 0.137055%
-PASS frill rigid ownership: 28490 vertices in measured posterior head region
+PASS wing_l membrane stretch: elbow 80 and wrist 80 degrees; 3986 edges; longest 1.3419 of rest; shortest 0.1514; 12 over 1.3
+PASS wing_l membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1436 membrane triangles tested, 763 attached to the hide; 97568 arm and body triangles
+PASS wing_r membrane stretch: elbow 80 and wrist 80 degrees; 4043 edges; longest 1.3630 of rest; shortest 0.1744; 15 over 1.3
+PASS wing_r membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 0 cut it folded; 0 cut it at rest; 1465 membrane triangles tested, 765 attached to the hide; 97568 arm and body triangles
+PASS fore_l volume: 60-degree elbow/knee; rest 0.473441 m3; posed 0.461159 m3; change 2.5942%; simple boundary loops [21, 72, 24, 19]; valid True
+PASS hind_l volume: 60-degree elbow/knee; rest 0.684142 m3; posed 0.609722 m3; change 10.8778%; simple boundary loops [93, 27, 7, 26, 22]; valid True
+PASS fore_r volume: 60-degree elbow/knee; rest 0.472466 m3; posed 0.459990 m3; change 2.6407%; simple boundary loops [70, 23, 19, 22]; valid True
+PASS hind_r volume: 60-degree elbow/knee; rest 0.683036 m3; posed 0.610735 m3; change 10.5853%; simple boundary loops [86, 23, 25, 28, 6]; valid True
+PASS spike rigid ownership: 235 of 235 spikes and plates follow one bone at weight 1; 144 of them are on the head and neck
+PASS frill spike lengths: neck_02 bent 30 degrees; 144 spikes, 140 of them moved; base-to-tip length change at most 0.0002%; longest spike 0.802 m; 39928 edges inside spikes change at most 0.0306%; owners {'head': 62, 'neck_03': 42, 'neck_02': 36, 'chest': 1, 'neck_01': 3}
 ```
 
-The literal `unweighted 0` field counts zero sums only. It does not count NaN sums.
-A separate exported-array diagnostic found eight invalid rows with zero finite weight mass.
-The finite-weight condition correctly failed the influence gate. The zero-sum count alone is incomplete.
+## Engine check
 
-```text
-INVALID_WEIGHTS eye_l 0 finite mass zero 0
-INVALID_WEIGHTS eye_r 0 finite mass zero 0
-INVALID_WEIGHTS hide 8 finite mass zero 8
-BOUND [-3.661107301712036, 5.915647983551025, -0.6388640999794006] [3.6576881408691406, 5.9357147216796875, -0.49701619148254395]
-EXAMPLES [[-3.661107301712036, 5.915647983551025, -0.6388640999794006], [-3.661107301712036, 5.915647983551025, -0.6388640999794006], [-3.647160053253174, 5.9301910400390625, -0.6041232347488403], [-3.6446645259857178, 5.925394535064697, -0.5424110889434814], [-3.6132802963256836, 5.9265618324279785, -0.5034734010696411], [3.6576881408691406, 5.9292216300964355, -0.5975627303123474], [3.63157320022583, 5.9357147216796875, -0.5580158829689026], [3.612229585647583, 5.92567777633667, -0.49701619148254395]]
-INVALID_WEIGHTS horn 0 finite mass zero 0
-INVALID_WEIGHTS membrane 0 finite mass zero 0
-INVALID_WEIGHTS mouth 0 finite mass zero 0
-GLB_BYTES 24418268
-Blender 5.3.0 (hash 02f0899d78e3 built 2026-11-10 01:31:21)
+The engine in the main checkout ran this file, read-only, one process at a time.
+Each render is frame 120 of a studio scenario at 1600 x 900, in `artifacts/hero-rig/engine-*.jpg`.
+`--inspect 0` looks from behind and `--inspect 180` from the front. The files are named for what they show.
 
-Blender quit
-```
+| File | Scenario and view | What it shows |
+|---|---|---|
+| `engine-glide-side.jpg` | glide, 90 14 6 | No spike. The wings hold the sculpt's raised V. The legs hang tucked. |
+| `engine-glide-front.jpg` | glide, 180 14 6 | Both wings alike. Each wrist claw sits on its wrist. |
+| `engine-glide-rear.jpg` | glide, 0 14 6 | The tail is straight and the wings are level with each other. |
+| `engine-glide-top.jpg` | glide, 90 14 85 | The membrane is whole. The thin dark line at each wrist is the claw's shadow. |
+| `engine-flap-side.jpg` | flap, 90 14 6 | The wing bends at the mesh's elbow and wrist. Nothing tears. |
+| `engine-dive-side.jpg` | dive, 90 14 6 | The wings fold back along the body and stay outside it. |
+| `engine-brake-side.jpg` | brake, 90 14 6 | The wing is spread and whole. The legs reach forward. |
+| `engine-turn-rear.jpg` | turn, 0 20 20 | The banked wing is whole. |
+| `engine-grounded-side.jpg` | grounded, 90 14 6 | The feet are on the ground. The wings fold. No spike. |
+| `engine-grounded-front.jpg` | grounded, 180 14 6 | The two folded wings match. |
+| `engine-grounded-top.jpg` | grounded, 90 14 85 | The forearm folds forward and the fingers lie back along the flank. |
+| `engine-grounded-feet.jpg` | grounded, 60 11 3 | All four feet stand on the ground with their shadows attached. |
+| `engine-walk-side.jpg` | walk, 90 14 6 | The legs bend at the knee and hock and the soles stay down. |
+| `engine-head-glide.jpg` | glide, head close | The jaw is shut. The eye is in its socket. |
+| `engine-head-grounded.jpg` | grounded, head close | The same on the ground. |
+
+The first rig on version 2 was also rendered before any change. It showed the spike at the wrist in the grounded view.
+
+### Sidecar changes
+
+- `flight.cfg`: `ground_offset` 3.993398 became 3.01. The engine centres the model on its bounds, and this mesh's centre is 3.01 m over its soles.
+  The rig plants the feet at either value. The value moves the body centre that the camera follows.
+- `rig.cfg`: `jaw_rest_deg` -16 became 0. Embercrest's sculpt gapes and this one is shut. At -16 the lower jaw went into the skull.
+- `rig.cfg`: `jaw_open_deg` 16 became 28. The verifier opens the jaw 35 degrees with the teeth clear.
+
+The standing wing fold and the leg numbers are Embercrest's and are not tuned.
+
+## What is weak
+
+- The builder relaxes the wing weights against the same fold the verifier tests. Other fold angles and axes are not checked.
+  A hinge normal to the wing's plane cannot pass, for the reason given under "Fold axis".
+- The fold relaxing leaves the longest edge at 1.34 on the left and 1.36 on the right. It stops at 1.4, so the margin to 1.6 is the builder's choice, not slack in the mesh.
+- The intersection check does not count membrane triangles attached to the hide, or cuts through a finger or the spur. 763 of 2,199 left membrane triangles are attached.
+- The two sides of the sculpt differ. Only 336 hide pairs and 573 membrane vertices lie close enough to their mirror image to compare.
+  The membrane's mirror error is at most 1.5% where the surfaces are within 4 mm. Within 20 mm it is 7.6% at one vertex and over 2% at 37 of 1,600, with an RMS of 0.7%.
+  The two surfaces sit that far apart there, and the weights change across the gap.
+- 37% of the hide's vertices are in spikes and plates that follow one bone. Where two neighbours follow different bones, the hide between them takes the whole bend.
+  The neck bends as plates that slide, not as skin. Three spike pairs across the centre line follow joined bones, not the same bone.
+- A plate lower than 0.10 m keeps blended weights and bends with the neck.
+- The hind leg loses 10.9% of its volume at a 60 degree knee bend. The limit is 15%.
+- The toe claws are rigid on one toe each, and the hide of the toes blends between toes. A toe curl can open a small gap at a claw's base. The wing claws do not have this fault.
+- `wing_spur_b` has no weight. The spur cannot bend at its knuckle.
+- The lids close by scaling the lid bone flat. The closed skin looks stretched. The engine does not blink.
+- The blink check samples nine directions. It is not a proof.
+- The sculpt's wings rise 2 m from shoulder to wrist. The glide shows that V. A level glide needs a rig profile change or a levelled bind pose.
+- The standing fold stands the wrists above the head line in the side view. That is the profile's numbers on a new skeleton.
+- The hip, shoulder and jaw hinge are inside the mesh. Their positions are estimates.
+- `tests/test_anim.cpp` did not run on this file. The worktree has no build.
 
 ## Reproduction identity
 
-Source SHA-256:
-
 ```text
-6edb94f950cd149e44089c5412e123b03bb2f76999406e6f229e6ecfe159c401
+source  4eb3f768ed97b83b897825930e19ae441fba4bd0930e2d9271e84336f186c198  assets/embercrest-hero-static.glb
+output  4d41fb90c28c4707879a109ab24e25f508ede6c2e9cdd978f3799d79c1ece3ab  assets/embercrest-hero.glb (28,441,356 bytes)
 ```
 
-Output SHA-256:
-
-```text
-c8ec367162bf260ef68226eb8abafb59bb6f0b2e2e0b791c3d93aae295d28468
-```
-
-The generator and asset remain in the final failed state. No unverified fix was applied after the third pass.
-The first repair must restore the tied-score fallback before another exported asset can meet the influence contract.
-The remaining geometry and symmetry gates also need resolution before acceptance.
+Blender 5.3.0. The second rig took about 75 minutes on 2026-11-14.
