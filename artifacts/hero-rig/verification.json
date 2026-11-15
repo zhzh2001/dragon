@@ -1,0 +1,359 @@
+{
+  "source_sha256": "6edb94f950cd149e44089c5412e123b03bb2f76999406e6f229e6ecfe159c401",
+  "output_sha256": "c8ec367162bf260ef68226eb8abafb59bb6f0b2e2e0b791c3d93aae295d28468",
+  "checks": [
+    {
+      "pass_": true,
+      "name": "bone names",
+      "detail": "77 unique joints; all original and requested names exist"
+    },
+    {
+      "pass_": true,
+      "name": "armature contract",
+      "detail": "77 joints, 1 skin, 1 imported armature"
+    },
+    {
+      "pass_": true,
+      "name": "new names avoid mapper aliases",
+      "detail": "[]"
+    },
+    {
+      "pass_": true,
+      "name": "six meshes",
+      "detail": "eye_l, eye_r, hide, horn, membrane, mouth"
+    },
+    {
+      "pass_": true,
+      "name": "material records unchanged",
+      "detail": "materials, image records, and texture records compared"
+    },
+    {
+      "pass_": true,
+      "name": "source buffer unchanged",
+      "detail": "21741832 original binary bytes compared, including every embedded image"
+    },
+    {
+      "pass_": true,
+      "name": "rig.cfg unchanged",
+      "detail": "byte comparison"
+    },
+    {
+      "pass_": true,
+      "name": "flight.cfg unchanged",
+      "detail": "byte comparison"
+    },
+    {
+      "pass_": true,
+      "name": "inverse binds reconcile",
+      "detail": "maximum matrix error 2.43390027e-07"
+    },
+    {
+      "pass_": true,
+      "name": "measured skeleton hierarchy",
+      "detail": "maximum anchor error 4.4408921e-16 m; wrong parents []"
+    },
+    {
+      "pass_": true,
+      "name": "eye_l source geometry",
+      "detail": "1024 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": true,
+      "name": "eye_l influences",
+      "detail": "max sum error 0; unweighted 0; maximum 1"
+    },
+    {
+      "pass_": true,
+      "name": "eye_r source geometry",
+      "detail": "1024 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": true,
+      "name": "eye_r influences",
+      "detail": "max sum error 0; unweighted 0; maximum 1"
+    },
+    {
+      "pass_": true,
+      "name": "hide source geometry",
+      "detail": "100773 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": false,
+      "name": "hide influences",
+      "detail": "max sum error nan; unweighted 0; maximum 4"
+    },
+    {
+      "pass_": true,
+      "name": "horn source geometry",
+      "detail": "7803 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": true,
+      "name": "horn influences",
+      "detail": "max sum error 0; unweighted 0; maximum 1"
+    },
+    {
+      "pass_": true,
+      "name": "membrane source geometry",
+      "detail": "6340 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": true,
+      "name": "membrane influences",
+      "detail": "max sum error 1.78813934e-07; unweighted 0; maximum 4"
+    },
+    {
+      "pass_": true,
+      "name": "mouth source geometry",
+      "detail": "4686 triangles; all source attributes and indices compared"
+    },
+    {
+      "pass_": true,
+      "name": "mouth influences",
+      "detail": "max sum error 1.1920929e-07; unweighted 0; maximum 3"
+    },
+    {
+      "pass_": true,
+      "name": "hide jaw mask retained",
+      "detail": "maximum exported weight difference 0; source corner falloff retained"
+    },
+    {
+      "pass_": true,
+      "name": "horn component ownership",
+      "detail": "20 components checked; incorrect components []"
+    },
+    {
+      "pass_": true,
+      "name": "mouth component ownership",
+      "detail": "68 components checked; incorrect components []"
+    },
+    {
+      "pass_": true,
+      "name": "eye_l rigid",
+      "detail": "546 vertices at weight 1"
+    },
+    {
+      "pass_": true,
+      "name": "lid_l topology",
+      "detail": "six rings of 36 unique positions"
+    },
+    {
+      "pass_": true,
+      "name": "socket_l fixed",
+      "detail": "369 exported vertices follow head"
+    },
+    {
+      "pass_": true,
+      "name": "eye_r rigid",
+      "detail": "546 vertices at weight 1"
+    },
+    {
+      "pass_": true,
+      "name": "lid_r topology",
+      "detail": "six rings of 36 unique positions"
+    },
+    {
+      "pass_": true,
+      "name": "socket_r fixed",
+      "detail": "377 exported vertices follow head"
+    },
+    {
+      "pass_": false,
+      "name": "hide mirrored weights",
+      "detail": "max nan; RMS nan; nearest surface distance max 0.207003 m; 24548 pairs",
+      "worst_pair": {
+        "left": [
+          -3.661107063293457,
+          5.915647983551025,
+          -0.6388639807701111
+        ],
+        "right": [
+          3.6712019443511963,
+          5.920882225036621,
+          -0.6299129724502563
+        ],
+        "distance_m": 0.014471505768597126,
+        "left_weights": {},
+        "right_weights": {
+          "wing_wrist_r": 0.9401086568832397,
+          "wing_finger_1a_r": 0.059891343116760254
+        }
+      }
+    },
+    {
+      "pass_": false,
+      "name": "membrane mirrored weights",
+      "detail": "max 0.373582; RMS 0.030359; nearest surface distance max 0.193837 m; 1910 pairs",
+      "worst_pair": {
+        "left": [
+          -1.2261860370635986,
+          3.0892529487609863,
+          0.21141299605369568
+        ],
+        "right": [
+          1.1689879894256592,
+          3.0831480026245117,
+          0.15918800234794617
+        ],
+        "distance_m": 0.0776938647031784,
+        "left_weights": {
+          "root": 0.07718060910701752,
+          "tail_01": 0.023157348856329918,
+          "wing_root_l": 0.7558816075325012,
+          "wing_finger_4b_l": 0.1437804251909256
+        },
+        "right_weights": {
+          "root": 0.3172740340232849,
+          "tail_01": 0.2568277418613434,
+          "wing_root_r": 0.3822999894618988,
+          "wing_finger_4b_r": 0.04359825700521469
+        }
+      }
+    },
+    {
+      "pass_": true,
+      "name": "horn mirrored weights",
+      "detail": "max 0.000000; RMS 0.000000; nearest surface distance max 0.109653 m; 2110 pairs",
+      "worst_pair": {
+        "left": [
+          -9.496603965759277,
+          4.521667003631592,
+          1.0310200452804565
+        ],
+        "right": [
+          9.497146606445312,
+          4.520883083343506,
+          1.0341989994049072
+        ],
+        "distance_m": 0.0033188459929078817,
+        "left_weights": {
+          "wing_finger_1c_l": 1.0
+        },
+        "right_weights": {
+          "wing_finger_1c_r": 1.0
+        }
+      }
+    },
+    {
+      "pass_": false,
+      "name": "mouth mirrored weights",
+      "detail": "max 1.000000; RMS 0.338856; nearest surface distance max 0.065520 m; 1277 pairs",
+      "worst_pair": {
+        "left": [
+          -0.2912899851799011,
+          4.5666117668151855,
+          -3.696160078048706
+        ],
+        "right": [
+          0.2732209861278534,
+          4.564317226409912,
+          -3.6865880489349365
+        ],
+        "distance_m": 0.01003082562237978,
+        "left_weights": {
+          "head": 1.0
+        },
+        "right_weights": {
+          "jaw": 1.0
+        }
+      }
+    },
+    {
+      "pass_": true,
+      "name": "Blender bind pose",
+      "detail": "max vertex displacement 2.81154547e-07 m"
+    },
+    {
+      "pass_": true,
+      "name": "jaw fixed skull",
+      "detail": "35 degrees; 89140 distant zero-mask vertices; max motion 0 m"
+    },
+    {
+      "pass_": true,
+      "name": "lower teeth clear upper lip",
+      "detail": "1542 vertices; nearest fixed hide 0.196240 m; minimum vertical clearance 0.128151 m"
+    },
+    {
+      "pass_": true,
+      "name": "blink_l closure",
+      "detail": "inner-edge height spread 0.001599765 m; threshold 0.005 m"
+    },
+    {
+      "pass_": true,
+      "name": "blink_l ball coverage",
+      "detail": "0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m"
+    },
+    {
+      "pass_": true,
+      "name": "blink_r closure",
+      "detail": "inner-edge height spread 0.001599879 m; threshold 0.005 m"
+    },
+    {
+      "pass_": true,
+      "name": "blink_r ball coverage",
+      "detail": "0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m"
+    },
+    {
+      "pass_": true,
+      "name": "eye_l independence",
+      "detail": "25 degrees; max lid motion 0 m; eye motion 0.062647 m"
+    },
+    {
+      "pass_": true,
+      "name": "eye_r independence",
+      "detail": "25 degrees; max lid motion 0 m; eye motion 0.062647 m"
+    },
+    {
+      "pass_": false,
+      "name": "wing_l membrane plane",
+      "detail": "elbow 80 and wrist 80 degrees; max 2.994477 m; RMS 0.468634 m; finger nonplanarity 0.257998 m"
+    },
+    {
+      "pass_": true,
+      "name": "wing_l arm intersections",
+      "detail": "0 folded intersecting triangle pairs; 0 already intersect at rest; 2097 arm triangles"
+    },
+    {
+      "pass_": false,
+      "name": "wing_r membrane plane",
+      "detail": "elbow 80 and wrist 80 degrees; max 3.080295 m; RMS 0.579947 m; finger nonplanarity 0.257998 m"
+    },
+    {
+      "pass_": false,
+      "name": "wing_r arm intersections",
+      "detail": "8 folded intersecting triangle pairs; 7 already intersect at rest; 2110 arm triangles"
+    },
+    {
+      "pass_": true,
+      "name": "fore_l volume",
+      "detail": "60-degree elbow/knee; rest 0.631979 m3; posed 0.575865 m3; change 8.8792%; simple boundary loops [93, 39, 37]; valid True"
+    },
+    {
+      "pass_": true,
+      "name": "hind_l volume",
+      "detail": "60-degree elbow/knee; rest 0.900040 m3; posed 0.864879 m3; change 3.9066%; simple boundary loops [28, 31, 151]; valid True"
+    },
+    {
+      "pass_": true,
+      "name": "fore_r volume",
+      "detail": "60-degree elbow/knee; rest 0.631848 m3; posed 0.578212 m3; change 8.4887%; simple boundary loops [43, 90, 40]; valid True"
+    },
+    {
+      "pass_": true,
+      "name": "hind_r volume",
+      "detail": "60-degree elbow/knee; rest 0.911286 m3; posed 0.864028 m3; change 5.1859%; simple boundary loops [141, 32, 30]; valid True"
+    },
+    {
+      "pass_": true,
+      "name": "frill edge lengths",
+      "detail": "neck 30 degrees; 50673 edges over 0.1 mm; maximum length change 0.137055%"
+    },
+    {
+      "pass_": true,
+      "name": "frill rigid ownership",
+      "detail": "28490 vertices in measured posterior head region"
+    }
+  ],
+  "passed": 47,
+  "failed": 7
+}
