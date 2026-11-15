@@ -177,8 +177,27 @@ float4 fs_main(VertexOut input) : SV_Target {
         // at the fringe (fire's cool end is already red), paler and bright
         // enough to bloom in the heat. A fixed red fringe drew frost, blight
         // and tide with black outlines.
-        falloff = cover * (0.45 + 5.5 * heat * heat);
-        light = lerp(light * 0.6, light * float3(1.0, 1.3, 1.5), heat);
+        // Three colours by the heat, all from the breath's own. The fringe
+        // is its hue made deeper (the weaker channels fall away) and dim
+        // enough to stay under the tonemap's ceiling. The body is its colour
+        // a little deeper, at full strength. The core, the hottest part, is
+        // half way to white. Before this every hot pixel was the colour times five or
+        // more: the tonemap keeps the hue and scales the peak back to one,
+        // so the whole jet was one cream from the jaws to the tip, with the
+        // cool patches as mustard blotches on it (the blind critic, round
+        // 2: "steam from a hose").
+        float peak = max(light.r, max(light.g, light.b)) + 1e-4;
+        float3 hue = light / peak;
+        float3 fringe = pow(hue, (float3)2.2) * peak * 0.28;
+        float3 core = lerp(hue, (float3)1.0, 0.42) * peak * 4.0;
+        float3 flame = pow(hue, (float3)1.3) * peak * 1.5;
+        light = lerp(fringe, flame, smoothstep(0.0, 0.5, heat));
+        // The core only near the jaws: down the jet the flame is its own
+        // colour and then the fringe's, hot to cool from end to end. With
+        // pale cores all the way along it the jet was a camouflage pattern.
+        light = lerp(light, core, smoothstep(0.55, 1.0, heat) * saturate(1.0 - age * 2.4));
+        light = lerp(light, fringe * 1.6, smoothstep(0.3, 0.7, age) * 0.7);
+        falloff = cover;
     } else {
         // Soft disc with a hot centre: quadratic falloff squared reads as a
         // glow core rather than a flat coin.

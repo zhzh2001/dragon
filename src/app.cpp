@@ -274,6 +274,8 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--attack") {
             options.combat = true;
             options.attack = true;
+        } else if (arg == "--breathe") {
+            options.breathe = true;
         } else if (arg == "--bots" && i + 1 < argc) {
             options.combat = true;
             options.bots = SDL_atoi(argv[++i]);
@@ -7948,6 +7950,13 @@ game::CombatInput App::read_combat_input() const {
         in.fury = true;       // released the moment it fills
         in.boost = true;  // likewise: a burn at t=0 and every cooldown after
         in.melee = true;  // and a bite every cooldown, for the lunge on a capture
+        return in;
+    }
+    // --breathe: the breath alone, held. --attack's boost outruns the chase
+    // camera and its bite and fireballs cover the flame, so the breath
+    // itself never got onto a capture.
+    if (options_.breathe) {
+        in.breath = true;
         return in;
     }
 

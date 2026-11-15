@@ -172,6 +172,9 @@ struct Options {
     // --attack holds breath and fires continuously. The combat equivalent of
     // --input: it puts the flame and the projectiles on screen for a capture.
     bool attack = false;
+    // --breathe holds the breath alone: the flame without the boost, the
+    // bite and the fireballs that --attack puts over it.
+    bool breathe = false;
     // --bots N replaces the sentinels with N bot dragons at startup.
     int bots = 0;
     // --bot-range N spawns the bots N metres out instead of 650, so a capture

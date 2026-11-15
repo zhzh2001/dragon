@@ -118,6 +118,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--combat` | Spawn a wave of sentinels. The dragon is armed by default (since 2026-10-13: breath, fireballs, bites and the rest work in the empty valley); this is what gives it targets, and what makes `--autopilot` the demo pilot instead of the course flyer. The Combat panel's "sentinel wave" does the same in play. |
 | `--training` | Arm the dragon and lay out the training room instead: six passive dummies ahead of the spawn, no return fire, back in 2.5 s. With `--attack`, the melee reach on a screenshot; `R` flies the line again. |
 | `--attack` | Also hold breath, fire, boost and bite -- how flame, projectiles, boost and the lunge get onto a screenshot. |
+| `--breathe` | Hold the breath alone, with no targets: the flame on a capture without the boost, the bite and the fireballs `--attack` puts over it. With `--inspect 70 26 6` it is seen from the side; with `--element NAME`, any element's. |
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
 | `--run [seed]` | The hoard run (`DIRECTION.md` row 3): one generated valley flown head to pass, rivals at posts and towers on the slopes along it, three hoard caches to land on, the pass gate, death ending it, results text. No seed picks one from the clock; the seed is printed and on the results screen so a good valley can be flown again. `--seed N` also sets it. |

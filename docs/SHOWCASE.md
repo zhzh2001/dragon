@@ -1647,6 +1647,47 @@ pass):
 The pair, from 26 m: `artifacts/showcase-critic/ward-stone-before-after.jpg`.
 `--training` now logs where its line starts, for a `--cam` on it.
 
+### The breath has a core and a fringe (16:05)
+
+The critic on the fire frame: "a grey-white jet like steam from a hose. It
+has no orange core, no heat glow". Two things were wrong, and the first was
+the frame. `--attack` holds the boost, the bite and the fireballs with the
+breath: the grey jet is the boost's trail, the dragon is 90 m ahead of the
+camera, and the flame is under four reticles. `--breathe` holds the breath
+alone, and `--breathe --inspect 70 26 6` is the view the breath is judged
+from now.
+
+The second was the flame. Seen alone it was one cream from the jaws to the
+tip, (255, 215, 142) at the jaws and half way down the jet alike, with
+mustard blotches. The
+shader multiplied the breath's colour by up to six where it was hot. The
+tonemap keeps a bright colour's hue and scales its peak channel back to
+one, so every hot pixel came out as the same colour and no pixel as a
+brighter one. Brightness cannot shape a flame in this pipeline. Hue and
+darkness can.
+
+So the flame is three colours by its heat, each from the breath's own
+(`particles.hlsl`, the modern branch):
+
+- The fringe: the hue made deeper (each channel over the peak, to the power
+  2.2) and dim enough to stay under the tonemap's ceiling.
+- The body: the hue a little deeper (power 1.3), at full strength.
+- The core: 42% of the way to white. Only near the jaws: it fades out by
+  0.42 of a puff's life, and from 0.3 of it the puff turns to the fringe's
+  colour. With pale cores all along it the jet was a camouflage pattern.
+
+It is from the breath's own colour, so frost has a white core and a deep
+blue fringe and blight a pale one and a dark green, without a table. The
+bloom reaches the flame as before: at the default 0.35 its halo is slight.
+
+The pairs, fire, frost and blight: `artifacts/showcase-critic/
+breath-before-after.jpg`. From the chase camera:
+`breath-chase-after.jpg`.
+
+Not done: the flame lights nothing around it that a capture shows, it has
+no smoke at its tip, and the SM2 and fixed-function flames are as they
+were.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
