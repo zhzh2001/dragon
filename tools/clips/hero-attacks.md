@@ -15,7 +15,8 @@ TRS means translation, rotation, and scale.
 
 The work changed only the five path groups in the brief.
 The source model was read through its supplied symlink. No other checkout received writes.
-Blender ran as a foreground subprocess. No second worker was used.
+Blender ran as a foreground subprocess. A dedicated animation worker authored the outputs, and the parent reviewed them.
+The worker reported 156,763 tokens, above the brief's 110k target. That count excludes the parent's review.
 
 ## Motion
 
