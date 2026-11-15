@@ -555,7 +555,12 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
             // Reeds crowd the waterside, bushes are scattered, tufts are the rest.
             const float pick = hash.next();
             GrassKind kind = GrassKind::Tuft;
-            const float near_water = core::saturate(1.0f - (height - t.water_level) / 14.0f);
+            // Within 14 m of the water's height, which on the canal's long
+            // banks was beside it. A braided river's floor starts 3 m up,
+            // and 14 m took in the whole meadow: one plant in nine there was
+            // a tall yellow reed. Within 5 m.
+            const float near_water =
+                core::saturate(1.0f - (height - t.water_level) / (t.river_braid > 0.0f ? 5.0f : 14.0f));
             // A braided river's gravel stands up to two metres over the
             // water, and little grows on it: one plant in five, a reed.
             if (t.river_braid > 0.0f && height < t.water_level + 2.2f && pick > 0.2f) continue;

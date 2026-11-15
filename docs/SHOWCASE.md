@@ -1828,6 +1828,31 @@ meadow and a run's evening valley.
 The cost: a sunlit far wall is less warm and less contrasty than it was.
 That is the trade the target makes.
 
+### After round 3: fine tufts, reeds at the water (16:35)
+
+The critic on the landed frame: "large flat grass cards", "hard polygon
+edges", "a low-poly asset pack". The tuft was sixteen straight blades 9 and
+13 cm wide, pale against the lawn.
+
+- The modern tier's tuft (`make_grass_mesh(kind, fine)`) is 26 thin blades
+  from a disc 0.6 m across, each bent over at the middle, 0.35 to 1.25 m
+  tall and 2 to 3.4 cm wide at the root, in the ground's green. 78
+  triangles where there were 16. The retro tiers keep the broad one.
+- Reeds grew within 14 m of the water's height. Beside the canal's long
+  banks that was the waterside. A braided river's floor starts 3 m up, and
+  14 m took in the whole meadow: one plant in nine there was a tall yellow
+  reed. Within 5 m now, where the river is braided.
+
+The pairs against round 3's renders: `artifacts/showcase-critic/
+tufts-landed-before-after.jpg` and `tufts-meadow-before-after.jpg`.
+
+Cost: all grass is 1.59 and 1.83 ms of the landed frame with the fine
+tuft, 1.47 and 2.00 ms with the broad one, paired. No cost shows
+(`gpu-hist`, `20261115-2132-mac-m5-dragon-fine-tuft-cost`).
+
+Not done: the bushes are still faceted, and nothing grows in drifts or
+flowers.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

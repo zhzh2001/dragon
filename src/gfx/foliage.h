@@ -298,7 +298,9 @@ private:
 
 // The plant meshes, generated. Vertex colour carries the material.
 MeshData make_tree_mesh(TreeKind kind);
-MeshData make_grass_mesh(GrassKind kind);
+// `fine` is the modern tier's tuft: many thin bent blades, where the retro
+// tiers keep sixteen broad ones a card with software vertices can afford.
+MeshData make_grass_mesh(GrassKind kind, bool fine = false);
 // A generated rock of `kind` (the rocks.glb order: boulder, big boulder,
 // slab, crag, scree, outcrop), for when the file is missing: a displaced
 // sphere at the kind's size, grey with dark crevices, base 0.6 m under y 0.

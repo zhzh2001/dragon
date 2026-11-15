@@ -302,6 +302,32 @@ void blade_at(MeshData& out, Vec3 at, float angle, float lean, float height, flo
     for (size_t v = first; v < out.vertices.size(); ++v) out.vertices[v].position += at;
 }
 
+// A blade in two pieces, bent over at the middle: straight to 55% of its
+// height, then out to the tip. Five vertices, three triangles.
+void bent_blade_at(MeshData& out, Vec3 at, float angle, float lean, float height, float width, Vec3 base_color,
+                   Vec3 tip_color) {
+    const Vec3 dir{std::cos(angle), 0.0f, std::sin(angle)};
+    const Vec3 side = core::cross(Vec3::up(), dir);
+    const Vec3 middle = at + dir * (lean * height * 0.25f) + Vec3::up() * (height * 0.55f);
+    const Vec3 tip = at + dir * (lean * height) + Vec3::up() * height;
+    const uint32_t first = uint32_t(out.vertices.size());
+    MeshVertex v[5];
+    v[0].position = at - side * width;
+    v[1].position = at + side * width;
+    v[2].position = middle - side * (width * 0.7f);
+    v[3].position = middle + side * (width * 0.7f);
+    v[4].position = tip;
+    v[0].color = v[1].color = base_color;
+    v[2].color = v[3].color = core::lerp(base_color, tip_color, 0.55f);
+    v[4].color = tip_color;
+    for (MeshVertex& vertex : v) {
+        vertex.normal = Vec3::up();
+        out.vertices.push_back(vertex);
+    }
+    const uint32_t order[9] = {0, 1, 2, 2, 1, 3, 2, 3, 4};
+    for (uint32_t i : order) out.indices.push_back(first + i);
+}
+
 void finish_grass(MeshData& mesh) {
     // Blades are lit like the ground they grow from, not like the walls of a
     // tent: normals pulled toward up.
@@ -446,7 +472,7 @@ MeshData make_tree_mesh(TreeKind kind) {
     return mesh;
 }
 
-MeshData make_grass_mesh(GrassKind kind) {
+MeshData make_grass_mesh(GrassKind kind, bool fine) {
     // No texture, no alpha: a few hundred thousand thin triangles are cheaper
     // than one alpha-tested billboard pass, and from a dragon they read the
     // same.
@@ -459,6 +485,37 @@ MeshData make_grass_mesh(GrassKind kind) {
             // (feedback report 0009); the skirt gives the clump a body.
             const Vec3 base = palette_vertex(PaletteEntry::GrassBlade);
             const Vec3 tip = palette_dim(base, 1.7f);
+            if (fine) {
+                // The modern tier's: 26 thin blades from a disc 0.6 m
+                // across, each bent over, a third to one and a quarter
+                // metres tall. The sixteen broad ones, 9 and 13 cm wide and
+                // straight, were "large flat grass cards" with "hard polygon
+                // edges": "a low-poly asset pack" (the blind critic, round
+                // 3). Nearer the ground's green too: pale, each clump was a
+                // spike of straw on the lawn.
+                uint32_t state = 0x51ed270bu;
+                auto unit = [&state]() {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    return float(state & 0xffffffu) / float(0xffffff);
+                };
+                for (int b = 0; b < 26; ++b) {
+                    // One draw per statement: the clump is the same on every compiler.
+                    const float out = std::sqrt(unit()) * 0.3f;
+                    const float around = core::TWO_PI * unit();
+                    const float tall = unit();
+                    const float turn = unit();
+                    const float shade = 0.85f + 0.3f * unit();
+                    // Leaning away from the middle, the outer blades more.
+                    const float angle = around + (turn - 0.5f) * 1.4f;
+                    const float height = 0.35f + 0.9f * tall * tall;
+                    const float lean = 0.25f + 0.5f * (out / 0.3f) * (1.0f - 0.4f * tall);
+                    bent_blade_at(mesh, Vec3{std::cos(around) * out, 0.0f, std::sin(around) * out}, angle, lean, height,
+                                  0.02f + 0.014f * tall, palette_dim(base, 0.75f * shade), palette_dim(base, 1.35f * shade));
+                }
+                break;
+            }
             for (int b = 0; b < 8; ++b) {
                 const float a = core::TWO_PI * float(b) / 8.0f + 0.35f * float(b % 3);
                 const float height = 1.1f + 0.45f * float((b * 5) % 4) / 3.0f;
@@ -653,7 +710,8 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
         if (batch_) trees_[k].source = mesh;
     }
     for (int k = 0; k < GRASS_KINDS; ++k) {
-        if (!grass_[k].mesh.upload(device->rhi(), make_grass_mesh(GrassKind(k)), grass_names[k])) {
+        if (!grass_[k].mesh.upload(device->rhi(), make_grass_mesh(GrassKind(k), active_tier().tier == Tier::Modern),
+                                   grass_names[k])) {
             return false;
         }
     }
