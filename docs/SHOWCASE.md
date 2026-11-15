@@ -1699,6 +1699,61 @@ a puff is a few shreds. And the drops were soft discs. They are streaks now,
 third as wide. The pair: `artifacts/showcase-critic/
 spray-wisps-before-after.jpg`.
 
+## The blind critic, round 3 (2026-11-15, 16:15)
+
+The same eight views on commit 55300c8, and a ninth for the breath
+(`--frames 90 --breathe --inspect 70 26 6 --hide-ui`). The renders and the
+report as written are in `artifacts/showcase-critic/round3/`. The critic
+did not see rounds 1 and 2.
+
+| Frame | Round 2 | Round 3 |
+|---|---|---|
+| 1-chase | 3 | 3.5 |
+| 2-hero-close | 3.5 | 3.5 |
+| 3-landed | 2 | 2.5 |
+| 4-river | 2 | 3 |
+| 5-mountains | 1.5 | 2.5 |
+| 6-forest | 1 | 2.5 |
+| 7-fire | 1.5 | 2 |
+| 8-run | 3.5 | 3.5 |
+| 9-breath | | 3 |
+
+The eight shared frames average 2.25 and then 2.88. No frame reaches 5. A
+different agent reads each round, and how far two readers differ on one
+frame is unknown, so half a point is not a result. The four frames that
+moved a point or more are the ones this round's work was in: the river,
+the mountains, the forest view (its bushes and its foreground), the fire.
+
+What the critic says now, in its order:
+
+1. Rock and cliff surfaces, still first. The walls have structure now and
+   the critic names it: "stepped terraces", "the most convincing wall in the
+   set" (frame 8). But "a row of identical stepped battlements" (1), "a
+   stepped pyramid" (4), and in frame 5 "melted wax". Two gaps: the steps
+   are too regular, and a cliff's face is a smooth smudge with no crags,
+   cracks or scree.
+2. Trees and ground cover: card crowns of one height, "paper" bushes, single
+   grass cards.
+3. No aerial haze between the near forest and the far wall (1, 7, 8), and
+   too much milky wash toward the sun (2).
+4. Marker clutter in combat: brackets, rings and labels stacked on one
+   target (7).
+5. Fire and spray: "cel-shaded" blobs with hard edges, no smoke, no glow on
+   the dragon or the ground. The spray is "cotton wool and rain".
+6. The ward stone up close: "flat untextured brown polygons".
+7. The dragon back-lit and dark from the chase camera, and three wing
+   poses: the far wing's root in the glide (2), the fold on the ground (3),
+   the near wing over the jaw while it breathes (9).
+8. Gravel "a grey noise smear with no stones", water with no reflection.
+9. A course ring cutting a frame that is not about the course (3, 5).
+10. The valley's end seen as "the end of the map" (2).
+
+Read against the work: the cliffs and the river moved their frames and are
+not finished. The breath went from "steam" to "cel-shaded", which is the
+puffs' hard alpha edge and was there before the colours. The ward stone's
+lift (a tint of 1.35, as the towers have) washes its dark basalt to brown
+at 15 m.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
