@@ -4561,6 +4561,32 @@ void App::build_dragon_ui() {
         }
         {
             // The legs in flight, joint by joint; on, it replaces the tuck and the trail.
+            // The postures tried on the hero (docs/SHOWCASE.md, "The legs in
+            // flight"): a starting point for any model with bent legs at bind.
+            struct Posture { const char* name; float on, hip, knee, hock, shoulder, elbow, wrist, splay; };
+            static const Posture kPostures[] = {
+                {"dangle", 1.0f, 30.0f, 20.0f, 30.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+                {"trail and tuck", 1.0f, 45.0f, 5.0f, 35.0f, 65.0f, -140.0f, 105.0f, -18.0f},
+                {"trail both", 1.0f, 45.0f, 5.0f, 35.0f, 40.0f, 60.0f, 30.0f, -18.0f},
+                {"fold (tuck and trail)", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+            };
+            if (ImGui::BeginCombo("flight leg posture", "presets")) {
+                for (const Posture& p : kPostures) {
+                    if (ImGui::Selectable(p.name)) {
+                        rig.leg_flight_pose = p.on;
+                        if (p.on > 0.5f) {
+                            rig.hind_flight_hip_deg = p.hip;
+                            rig.hind_flight_knee_deg = p.knee;
+                            rig.hind_flight_hock_deg = p.hock;
+                            rig.fore_flight_shoulder_deg = p.shoulder;
+                            rig.fore_flight_elbow_deg = p.elbow;
+                            rig.fore_flight_wrist_deg = p.wrist;
+                            rig.leg_flight_splay_deg = p.splay;
+                        }
+                    }
+                }
+                ImGui::EndCombo();
+            }
             bool pose = rig.leg_flight_pose > 0.5f;
             if (ImGui::Checkbox("flight pose by joint", &pose)) rig.leg_flight_pose = pose ? 1.0f : 0.0f;
             if (pose) {

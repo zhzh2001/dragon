@@ -879,6 +879,34 @@ Open: from the front the fore paws show their spread claws under the
 chin. The trailing-fore variant (candidates Q5 and Q6) is the other
 natural choice if the tuck reads wrong in play.
 
+## The playtest's second round of reports (2026-11-15, 11:30 to 11:37)
+
+Reports 0006 to 0012 are in `artifacts/showcase-feedback/`. The playtester
+also said of the flight postures: "I don't like any new folding postures,
+maybe use old dangling and keep these as alternative postures for future
+adjustments".
+
+| Report | Mark | Kind | Answer |
+|---|---|---|---|
+| 0006, 0007 | fore leg, "unnatural bending", "look at the bending!" | pose | the dangle, below |
+| 0006 | belly, "geometry artifacts"; flank, "not completely fixed" | mesh | open: the next mesh round |
+| 0007 | wing, "self shadow aliasing" (low priority) | shadows | open |
+| 0008 | "water artifacts" close to the river, and 37 fps there | water | open: S8 |
+| 0010 | "strange whirls?" on the river from a distance | water | open: S8 |
+| 0009 | "vegetation quality can be improved": the bushes and the grass | plants | open: S7 |
+| 0011 | no tree shadow inside the mountain's shadow | lighting | open: trees need contact shade without the sun |
+| 0011 | "rocks look unnatural" | rock | open: S6 |
+| 0012 | "mountain shapes seem weird" | terrain | open: S6 |
+
+The dangle is the hero's default again: hind 30, 20, 30, fore 25, -20, 45,
+splay -6. The legs hang a little aft of where they stand with the feet
+drooping, and the limb physics swings them.
+`artifacts/showcase-anim/flight-legs-dangle-candidates.jpg` has the six
+tried and `flight-legs-dangle-views.jpg` the choice in the glide, the
+flap, from behind, in the bite, the dive and landed. The other postures
+are the Dragon panel's "flight leg posture" presets (dangle, trail and
+tuck, trail both, fold), and their numbers are in the profile's comment.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
