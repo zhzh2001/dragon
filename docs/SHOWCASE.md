@@ -1014,6 +1014,46 @@ count.
   99 Hz display, a frame over 10.1 ms waits for the next refresh, so 12 ms
   of work shows as 49.5 fps.
 
+## Mesh version 5b: wings from the skeleton-guided sculpt (2026-11-15, 13:10)
+
+Version 3's wing sculpt had a finger fan the skeleton did not, and its
+membrane tore. For this one the plates were drawn along the skeleton's
+own wing bones laid flat (`artifacts/showcase-study/hero-wing2-guide.png`,
+`hero-wing2-plates.jpg`), Hunyuan made the sculpt
+(`hero-cand-wing2-hunyuan.jpg`: three fingers, one rib, no stub bones),
+and an Opus worker built the wings from it in two passes (branch
+`hero-wing2`, merged; `tools/hero-build.md`, "Version 5" and "5b").
+
+- The sculpt's panels are within 2% of the skeleton's, except the outer
+  one, 28% wide, whose texture is compressed across.
+- The membrane is one sheet with a second face of the same triangles
+  19.8 mm away, so skinning cannot push one face through the other.
+- The mesh passes its 86 checks and the rig its 56, none changed. The
+  longest folded membrane edge is 1.40 of rest against a limit of 1.6;
+  version 3's was 4.08.
+- The first pass left the panel between the body and the rib creased: its
+  target shape turns back under the arm, and a fit onto that is not
+  one-to-one. The second pass builds that panel by construction, a ruled
+  sheet between the flank and the arm-and-rib line. It has no fold past
+  60 degrees at rest.
+
+`artifacts/hero-build/pairs-v5b-*.jpg` are the worker's pairs, version 4
+on the left; `artifacts/showcase-s2/v5b-wings-in-game.jpg` is the merged
+model in a run, the glide, the flap, standing, landed and the bite.
+
+Worse than version 4, known:
+
+- The root panel has a smoothed colour and no veins. Mid-beat from the
+  side it reads as a plain wall between the arm and the flank.
+- The arm meets the back as an intersection, not a blended join.
+- Folded on the ground, the forearm and the thumb claw stand higher over
+  the back.
+
+Version 4 is kept beside it on this machine as
+`assets/embercrest-hero-v4.glb` with its profiles, for a comparison in
+play (`--models assets/embercrest-hero.glb,assets/embercrest-hero-v4.glb`
+and `M`).
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from
