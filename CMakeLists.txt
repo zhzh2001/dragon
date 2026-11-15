@@ -524,6 +524,7 @@ add_executable(test_vegetation
   src/game/vegetation.cpp
   src/core/noise.cpp
   src/gfx/mesh.cpp
+  src/gfx/noise_lattice.cpp
 )
 target_include_directories(test_vegetation PRIVATE src)
 target_link_libraries(test_vegetation PRIVATE SDL3::SDL3)

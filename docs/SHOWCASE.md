@@ -1285,6 +1285,30 @@ Not done: the tutorial line under the run's top bar still reads as debug
 text, and the bottom plate still covers the dragon's hind legs in the chase
 view.
 
+### The sward: short grass edge to edge near the camera (13:50)
+
+The critic's ground-cover blocker: "sparse, spiky low-poly blades and paper
+bushes spaced out on bare flat green". The tufts are clumps 1.5 m tall on a
+2.2 m grid, and between them was the terrain's texture alone.
+`GrassKind::Sward` is a patch of 200 one-triangle blades, 16 to 60 cm tall,
+over a square 2.6 m across. `Vegetation::grass_around` sets one a cell on a
+1.7 m grid of its own within 46 m of the camera, where the ground is grass
+and above the gravel line. The blades take the terrain's own grass colour
+from the palette, and each patch takes the terrain's dry-patch noise as its
+warm push, so a patch has no outline on the ground under it. The modern tier
+only. Pair: `artifacts/showcase-critic/sward-before-after.jpg`.
+
+- The first blades were 20 to 75 cm, up to 6.5 cm wide, laid over by up to
+  half their height, with tips at 1.75 of the ground's colour. They read as
+  cut straw. Upright, under 4 cm wide and tips at 1.3 read as turf.
+- Cost: 10.3 to 11.7 ms GPU in the landed view at 1080p (one run each, the
+  machine otherwise idle). About 2,300 patches, 460,000 triangles. None from
+  higher than 46 m over the ground, so flight pays nothing.
+- The motion number of the meadow view (`tools/showcase/motion.py`) went
+  from 9.5% to 17.6% of the frame in a second.
+- Open: the sward stops at a visible edge at its radius, and the tufts above
+  it are still the large pale clumps.
+
 ### Tried and dropped: more haze
 
 `--atmosphere aerial=7.5,haze=0.8` against the defaults (5 and 1.2), for the

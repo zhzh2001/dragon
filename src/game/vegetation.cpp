@@ -4,6 +4,7 @@
 
 #include "core/log.h"
 #include "game/terrain.h"
+#include "gfx/noise_lattice.h"
 
 using core::Vec3;
 using core::Vec4;
@@ -519,6 +520,46 @@ void Vegetation::grass_around(const Terrain& terrain, const VegetationSettings& 
                                 core::TWO_PI * hash.next(), 0.5f * hash.next()};
             out[int(kind)].push_back(plant);
             ++total;
+        }
+    }
+
+    // The sward: one patch a cell on a finer grid of its own, no gaps, where
+    // the ground is grass. Its colour follows the ground's: the same patch
+    // noise the terrain shader turns its grass dry by (terrain.hlsl,
+    // terrain_albedo), as the warm push.
+    if (!settings.sward || settings.sward_radius <= 0.0f) return;
+    const float step = core::maxf(settings.sward_spacing, 0.8f);
+    const float reach = settings.sward_radius;
+    // From higher than its reach none of it shows: a dragon in flight pays
+    // nothing for it.
+    if (centre.y - terrain.height_at(centre.x, centre.z) > reach) return;
+    const int sx0 = int(std::floor((centre.x - reach) / step));
+    const int sx1 = int(std::ceil((centre.x + reach) / step));
+    const int sz0 = int(std::floor((centre.z - reach) / step));
+    const int sz1 = int(std::ceil((centre.z + reach) / step));
+    std::vector<PlantInstance>& sward = out[int(GrassKind::Sward)];
+    for (int iz = sz0; iz <= sz1; ++iz) {
+        for (int ix = sx0; ix <= sx1; ++ix) {
+            if (sward.size() >= settings.max_sward) return;
+            CellHash hash(ix, iz, settings.seed ^ 0x7f4a7c15u);
+            const float x = (float(ix) + hash.next()) * step;
+            const float z = (float(iz) + hash.next()) * step;
+            if (std::fabs(x) > limit || std::fabs(z) > limit) continue;
+            const float dx = x - centre.x, dz = z - centre.z;
+            if (dx * dx + dz * dz > reach * reach) continue;
+            const float height = terrain.height_at(x, z);
+            // Above the gravel at the waterline, which is bare.
+            if (height < t.water_level + 2.5f || height > ceiling) continue;
+            const Vec3 normal = terrain.normal_at(x, z);
+            if (normal.y < settings.grass_max_slope + 0.08f) continue;
+            const float dry = core::smoothstep(0.35f, 0.75f, gfx::fbm(x * 0.0055f, z * 0.0055f));
+            PlantInstance plant;
+            const float yaw = core::TWO_PI * hash.next();
+            const float scale = 0.85f + 0.4f * hash.next();
+            const float phase = core::TWO_PI * hash.next();
+            plant.position_scale = Vec4{x, height - 0.03f, z, scale};
+            plant.params = Vec4{yaw, 0.95f + 0.2f * dry, phase, 0.75f * dry};
+            sward.push_back(plant);
         }
     }
 }

@@ -21,7 +21,9 @@ class ShadowMap;
 // The kinds of plant. Each is one generated mesh drawn instanced; the
 // placement code decides which kind stands where.
 enum class TreeKind : int { Spruce = 0, Pine, Broadleaf, Dead, Count };
-enum class GrassKind : int { Tuft = 0, Reed, Bush, Count };
+// Sward is the lawn itself: a patch of short blades, set edge to edge near
+// the camera, in the ground's own green (the modern tier's).
+enum class GrassKind : int { Tuft = 0, Reed, Bush, Sward, Count };
 
 constexpr int TREE_KINDS = int(TreeKind::Count);
 // Rocks ride the same instanced static path as trees (DIRECTION.md row 7):
@@ -109,6 +111,9 @@ public:
     // Grass shrinks to nothing between these camera distances.
     float grass_fade_start = 90.0f;
     float grass_fade_end = 130.0f;
+    // And the sward's, much nearer: its blades are under a pixel past it.
+    float sward_fade_start = 30.0f;
+    float sward_fade_end = 46.0f;
     // Past this camera distance a crown's detail cards are dropped and its
     // coarse cards carry it: the impostor, without a second mesh or a second
     // draw. Dithered over a band so trees do not pop.

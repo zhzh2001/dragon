@@ -276,6 +276,14 @@ void blade(MeshData& out, float angle, float lean, float height, float width, Ve
     out.indices.push_back(first + 2);
 }
 
+// The same blade, standing at `at` in the plant.
+void blade_at(MeshData& out, Vec3 at, float angle, float lean, float height, float width, Vec3 base_color,
+              Vec3 tip_color) {
+    const size_t first = out.vertices.size();
+    blade(out, angle, lean, height, width, base_color, tip_color);
+    for (size_t v = first; v < out.vertices.size(); ++v) out.vertices[v].position += at;
+}
+
 void finish_grass(MeshData& mesh) {
     // Blades are lit like the ground they grow from, not like the walls of a
     // tent: normals pulled toward up.
@@ -300,6 +308,7 @@ float Foliage::grass_height(GrassKind kind) {
         case GrassKind::Tuft: return 1.5f;
         case GrassKind::Reed: return 2.6f;
         case GrassKind::Bush: return 2.0f;
+        case GrassKind::Sward: return 0.6f;
         default: return 1.5f;
     }
 }
@@ -439,6 +448,37 @@ MeshData make_grass_mesh(GrassKind kind) {
             }
             break;
         }
+        case GrassKind::Sward: {
+            // The lawn: 200 short blades over a square 2.6 m across, set
+            // edge to edge by the placement so the ground near the camera
+            // is grass and not a green plane with clumps standing on it
+            // ("sparse spiky blades on a bare green plane", the blind
+            // critic, 2026-11-15). In the ground's own green, darker at the
+            // root, so a patch has no outline against the ground it is on.
+            const Vec3 ground = palette_vertex(PaletteEntry::Grass);
+            uint32_t state = 0x9e3779b9u;
+            auto unit = [&state]() {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                return float(state & 0xffffffu) / float(0xffffff);
+            };
+            for (int b = 0; b < 200; ++b) {
+                // One draw per statement: the patch is the same on every compiler.
+                const float px = unit();
+                const float pz = unit();
+                const float angle = core::TWO_PI * unit();
+                const float tall = unit();
+                const float lean = 0.08f + 0.3f * unit();
+                const float shade = 0.9f + 0.2f * unit();
+                // Upright and thin, a few taller: laid over at half their
+                // height and 6 cm wide they read as cut straw.
+                const float height = 0.16f + 0.26f * tall * tall + (b % 11 == 0 ? 0.2f : 0.0f);
+                blade_at(mesh, Vec3{(px - 0.5f) * 2.6f, 0.0f, (pz - 0.5f) * 2.6f}, angle, lean, height,
+                         0.018f + 0.02f * tall, palette_dim(ground, 0.7f * shade), palette_dim(ground, 1.3f * shade));
+            }
+            break;
+        }
         case GrassKind::Bush:
         default: {
             // A low shrub: two clumps of leaf cards over a dark core, as
@@ -539,7 +579,7 @@ bool Foliage::init(Device* device, PipelineCache* pipelines, ShadowMap* shadow_m
     }
     card_sampler_ = create_model_sampler(device->rhi());
     static const char* tree_names[TREE_KINDS] = {"spruce", "pine", "broadleaf", "dead_tree"};
-    static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush"};
+    static const char* grass_names[GRASS_KINDS] = {"grass_tuft", "reed", "bush", "sward"};
     for (int k = 0; k < TREE_KINDS; ++k) {
         // Coarse triangles first, the detail cards after: past the LOD's
         // dither band every detail card is discarded anyway, so a cell out
@@ -1253,8 +1293,10 @@ void Foliage::draw_impostors(Device& device, rhi::Pass* pass, const SceneUniform
 
 void Foliage::draw_grass(Device& device, rhi::Pass* pass, const SceneUniforms& scene) {
     for (int k = 0; k < GRASS_KINDS; ++k) {
+        const bool sward = GrassKind(k) == GrassKind::Sward;
         draw(device, pass, scene, grass_[k].mesh, grass_[k].instances, grass_[k].uploaded,
-             grass_fade_start, grass_fade_end, grass_height(GrassKind(k)));
+             sward ? sward_fade_start : grass_fade_start, sward ? sward_fade_end : grass_fade_end,
+             grass_height(GrassKind(k)));
     }
 }
 

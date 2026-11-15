@@ -1595,6 +1595,7 @@ game::VegetationSettings App::vegetation_for_tier() const {
     v.stand_contrast = tier_.tier == gfx::Tier::Modern ? stand_contrast_ : 0.0f;
     v.grass_radius *= tier_.budget.grass_radius_scale;
     v.grass = v.grass && tier_.budget.grass_radius_scale > 0.0f;
+    v.sward = v.sward && tier_.tier == gfx::Tier::Modern;
     v.rock_kit = tier_.tier == gfx::Tier::Modern && foliage_.rock_kit().loaded();
     return v;
 }
@@ -3539,6 +3540,9 @@ void App::build_ui(float dt) {
                                "%.0f m");
             ImGui::SliderFloat("grass spacing", &vegetation_settings_.grass_spacing, 1.0f, 8.0f,
                                "%.1f m");
+            ImGui::Checkbox("sward (short grass near the camera)", &vegetation_settings_.sward);
+            ImGui::SliderFloat("sward radius", &vegetation_settings_.sward_radius, 10.0f, 120.0f, "%.0f m");
+            ImGui::SliderFloat("sward spacing", &vegetation_settings_.sward_spacing, 0.8f, 4.0f, "%.1f m");
             ImGui::SliderFloat("wind", &vegetation_settings_.wind, 0.0f, 3.0f);
             ImGui::SliderFloat("crown detail distance", &foliage_.lod_distance, 40.0f, 800.0f,
                                "%.0f m");
@@ -9309,6 +9313,8 @@ void App::render() {
     foliage_.wind = vegetation.wind;
     foliage_.grass_fade_end = vegetation.grass_radius;
     foliage_.grass_fade_start = vegetation.grass_radius * 0.7f;
+    foliage_.sward_fade_end = vegetation.sward_radius;
+    foliage_.sward_fade_start = vegetation.sward_radius * 0.6f;
     // The Trees and Rocks settings' reach, read by the draw each frame.
     foliage_.tree_distance_cap = tier_.budget.tree_draw_distance;
     foliage_.rock_distance_scale = tier_.budget.rock_distance_scale;

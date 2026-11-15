@@ -51,6 +51,12 @@ struct VegetationSettings {
     float grass_above_floor = 450.0f;
     float grass_max_slope = 0.7f;
     uint32_t max_grass = 16000;
+    // The sward (gfx::GrassKind::Sward): patches of short blades on their
+    // own grid, edge to edge, this far from the camera. The modern tier's.
+    bool sward = true;
+    float sward_radius = 46.0f;
+    float sward_spacing = 1.7f;
+    uint32_t max_sward = 6000;
     // Rocks (DIRECTION.md row 7): one candidate per `rock_spacing` cell,
     // kept by slope -- outcrops and crags on the steep faces past the rock
     // threshold, scree and boulders on the mid slopes, a sprinkle of boulders
