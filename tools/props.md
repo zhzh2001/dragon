@@ -9,6 +9,7 @@ All dimensions and effect centres below are metres in glTF coordinates (X/Y/Z).
 | `spire_tower.glb` | 7.000 × 44.000 × 7.000 | 1,388 | Orb: (0, 42, 0) |
 | `hoard_pile.glb` | 16.000 × 5.500 × 16.000 | 10,228 | — |
 | `hoard_trove.glb` | 14.000 × 4.000 × 14.000 | 10,074 | — |
+| `ward_stone.glb` | 11.634 × 14.850 × 11.499 | 3,108 | Ward: (0, 0, 0) |
 
 The keep has a roughly 9 m square lower shaft, an 11 m stepped plinth,
 three tapering masonry tiers, broad string courses, base buttresses, framed
@@ -37,7 +38,8 @@ coin textures; the readable coins are geometry.
 
 Each GLB contains one mesh / triangle primitive, one skin and one bone named
 `root`, with identity rest, inverse bind and every node transform. Every vertex
-has root weight 1.0. Origin is horizontally centred at ground level, Y=0.
+has root weight 1.0. The four ground props have horizontally centred origins at ground level, Y=0.
+The ward stone origin is its floating effect centre.
 Geometry is authored in Blender metres, -Y forward, then exported as Y-up,
 +Z forward. All geometry modifiers are baked; only the armature binding remains
 before export. Each asset has one Principled material and one embedded
@@ -57,16 +59,19 @@ blender -b --factory-startup --python tools/build_props.py -- --render
 blender -b --factory-startup --python tools/build_props.py -- --verify-only
 ```
 
-The default build regenerates and verifies all four GLBs. Verification reads
-actual accessor buffers, checks dimensions and the 20,000-triangle ceiling,
-checks triangle-level socket clearance, then imports each GLB back into Blender
-and checks skinning, material texture connections and bounds again. Exceptions
+The default build regenerates and verifies all five GLBs.
+Use `--prop ward_stone` to build only the ward stone.
+Verification reads actual accessor buffers and checks dimensions and socket clearance.
+Triangle ceilings are 20,000 for ground props and 8,000 for the ward.
+The verifier imports each GLB back into Blender and checks skinning, material texture connections, and bounds again. Exceptions
 exit nonzero even without Blender's `--python-exit-code` flag.
 
-`--render` writes eight PNGs under `artifacts/props/v2/`: each asset has a
+`--render` writes twelve PNGs under `artifacts/props/v2/`.
+The original four ground props supply eight images: each has a
 three-quarter near view and a perspective far view at exactly 250 m from its
 aim point, both at 30 degrees elevation, 50 mm lens, 1200 × 1000 pixels.
-All eight were inspected at full size. The keep's wide crown and the spire's
+All eight ground-prop images were inspected at full size.
+The four ward views are described below. The keep's wide crown and the spire's
 rings/prongs distinguish them at distance; the caches differ through the broad
 gold mound versus the low stone ring and banner. At 250 m, small treasure
 pieces naturally merge, while the overall shape and colour remain visible.
@@ -104,4 +109,65 @@ VERIFY hoard_trove: PASS
   materials=[hoard_trove_atlas]; textures=[hoard_trove_basecolor: embedded PNG 512x512, baseColor]
   single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
   axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; base/centering/budget: PASS
+```
+
+
+## Ward stone cage
+
+Seven unequal basalt shards surround the empty origin socket. Their widths, spacing, shoulders, and crown heights differ without axis symmetry.
+Two iron bands tilt in opposite directions. Each band carries 28 six-sided studs.
+The long lower keel reaches Y=-7.95 m. The highest crown reaches Y=6.90 m.
+Broad shard shoulders sit at radii 4.82–5.27 m. Bands span radii 5.30–5.66 m before tilting.
+These dimensions leave the effect visible through broad gaps while keeping the cage compact.
+Only the keel and crown tips extend beyond radius 7.5 m.
+
+Basalt uses linear RGB (0.09, 0.10, 0.115), with edge and facet highlights near (0.20, 0.20, 0.20).
+Iron uses (0.12, 0.08, 0.06). Rune cuts use (0.45, 0.42, 0.36), bordered by dark grooves.
+Runes occupy outward shard faces. The atlas converts linear colours to sRGB for PNG storage.
+The exported material has no emission. The effect sphere belongs to the engine.
+
+Build and inspect only this prop:
+
+```sh
+blender --factory-startup --python tools/build_props.py -- --prop ward_stone --render
+blender --factory-startup --python tools/build_props.py -- --prop ward_stone --verify-only
+```
+
+The selective build leaves the four existing GLBs unchanged.
+The verifier measures exported triangles, rather than source vertices or accessor bounds.
+Socket clearance uses the closest point on every triangle.
+Visibility uses 2,000 evenly distributed Fibonacci rays from the origin.
+The area bound counts only triangles whose three vertices lie inside radius 7.5 m.
+A sphere is convex, so these complete triangles lie inside it.
+Triangles crossing that boundary contribute nothing to the bound, even when part of their area lies inside.
+
+The first pass looked too regular. The second varied shard widths, lean, shoulder radii, and blunt crown tips.
+The second pass also moved the keel into the near silhouette.
+Two design passes produced the final inspection images. All four images were opened at their full 1200 × 1000 resolution.
+`ward_stone_near.png` shows the three-quarter view from 31 m.
+`ward_stone_far.png` uses the same direction from exactly 250 m, with a 50 mm lens.
+`ward_stone_top.png` and `ward_stone_bottom.png` show both polar openings from 31 m.
+A temporary orange emissive sphere of radius 3.8 m appears in the near and far inspections only.
+The sphere is added after export and verification. It is absent from the GLB.
+The floor and sphere are hidden in the polar views.
+
+The near view exposes rune cuts, studs, unequal crown tips, and the lower keel.
+The far view retains the cage silhouette and visible effect opening; small runes merge at this distance.
+The polar views show clear openings and the single extended keel.
+
+Actual ward verifier output:
+
+```text
+VERIFY ward_stone: PASS
+  glTF Y-up bbox metres: min=(-5.599, -7.950, -5.997) max=(6.035, 6.900, 5.502)
+  dimensions X/Y/Z metres: (11.634, 14.850, 11.499); triangles=3108; bones=1 [root]
+  materials=[ward_stone_atlas]; textures=[ward_stone_basecolor: embedded PNG 512x512, baseColor]
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  origin socket minimum triangle distance=4.383413 m; required >=4: PASS
+  maximum vertex radius=8.323742 m; required <=8.5: PASS
+  surface area=553.627896 m2; entirely inside radius 7.5=523.524195 m2 (94.5625% conservative bound): PASS
+  outside radius 7.5: polar tips only: PASS
+  origin Fibonacci rays: 1049/2000 escape (52.45%); required 30-55%: PASS
+  one Principled material; embedded 512 PNG; no emission: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
 ```
