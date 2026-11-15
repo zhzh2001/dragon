@@ -894,7 +894,7 @@ adjustments".
 | 0008 | "water artifacts" close to the river, and 37 fps there | water | fixed, below; the cost is down 4 ms of 16 |
 | 0010 | "strange whirls?" on the river from a distance | water | fixed, below |
 | 0009 | "vegetation quality can be improved": the bushes and the grass | plants | open: S7 |
-| 0011 | no tree shadow inside the mountain's shadow | lighting | open: trees need contact shade without the sun |
+| 0011 | no tree shadow inside the mountain's shadow | lighting | open; one route tried and ruled out, below |
 | 0011 | "rocks look unnatural" | rock | open: S6 |
 | 0012 | "mountain shapes seem weird" | terrain | open: S6 |
 
@@ -937,6 +937,24 @@ the chop was right, which is why it had passed.
 
 The water is still 12 ms of such a frame. S8 has the rest: a cheaper
 reflection, and the look of the surface.
+
+## Trees in a mountain's shadow: what does not work (2026-11-15, 12:40)
+
+Report 0011: inside the mountain's shadow a tree casts nothing and stands
+on the grass like a cut-out. The sun's term is zero there, so the shadow
+map has nothing to dim.
+
+Tried: where `terrain_sun` hides the sun, let the shadow map's answer dim
+the ambient instead, as a soft shadow from the bright side of the sky. It
+changed 1% of the picture. Drawn as colour, the map reads "shadowed"
+across the whole shaded valley floor: the terrain is in the cascades too,
+so the map cannot tell a tree's shade from the mountain's. The change was
+reverted.
+
+Routes left: a second, trees-only depth in the cascade (one more target),
+or a blob of sky occlusion per tree drawn from the vegetation's own
+instance list, which also works past the cascades. The canopy map is too
+coarse up close (7 m texels paint blots; `terrain.hlsl` already says so).
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
