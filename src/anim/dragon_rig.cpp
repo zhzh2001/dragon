@@ -515,6 +515,14 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_trail_deg),
     RIG_FLOAT_FIELD(front_leg_trail_deg),
     RIG_FLOAT_FIELD(front_leg_tuck_deg),
+    RIG_FLOAT_FIELD(leg_flight_pose),
+    RIG_FLOAT_FIELD(hind_flight_hip_deg),
+    RIG_FLOAT_FIELD(hind_flight_knee_deg),
+    RIG_FLOAT_FIELD(hind_flight_hock_deg),
+    RIG_FLOAT_FIELD(fore_flight_shoulder_deg),
+    RIG_FLOAT_FIELD(fore_flight_elbow_deg),
+    RIG_FLOAT_FIELD(fore_flight_wrist_deg),
+    RIG_FLOAT_FIELD(leg_flight_splay_deg),
     RIG_FLOAT_FIELD(leg_brake_extend),
     RIG_FLOAT_FIELD(leg_brake_forward_deg),
     RIG_FLOAT_FIELD(leg_posture_sway),
@@ -2342,11 +2350,37 @@ void DragonRig::drive_legs(const game::FlightState& state, Vec3 frame_accelerati
                 sign *= -1.15f;
             }
         };
-        drive_limb(joints_.leg[side], trail, tuck_angle);
-        drive_limb(joints_.front_leg[side],
-                   (core::radians(tuning.front_leg_trail_deg) +
-                    core::radians(tuning.leg_dive_trail_deg) * dive) * flight_fold,
-                   front_tuck_angle);
+        if (tuning.leg_flight_pose > 0.5f) {
+            // The pose joint by joint. The dive presses the whole limb a
+            // little further aft at its root; the brake and the pendulum
+            // ride on the root as they do on the tuck.
+            auto pose_limb = [&](const std::vector<int>& chain, float a0, float a1, float a2) {
+                const float angles[3] = {a0, a1, a2};
+                for (size_t i = 0; i < chain.size() && i < 3; ++i) {
+                    float angle = core::radians(angles[i]) * flight_fold;
+                    if (i == 0) {
+                        angle += core::radians(tuning.leg_dive_trail_deg) * dive * flight_fold * 0.5f;
+                        rotate_joint(chain[i], Vec3::unit_x(), angle * aft - brake_forward * aft + swing.x, true);
+                        rotate_joint(chain[i], Vec3::unit_z(),
+                                     swing.y + (side == 0 ? 1.0f : -1.0f) *
+                                                   core::radians(tuning.leg_flight_splay_deg) * flight_fold,
+                                     true);
+                    } else {
+                        rotate_joint(chain[i], Vec3::unit_x(), angle * aft, true);
+                    }
+                }
+            };
+            pose_limb(joints_.leg[side], tuning.hind_flight_hip_deg, tuning.hind_flight_knee_deg,
+                      tuning.hind_flight_hock_deg);
+            pose_limb(joints_.front_leg[side], tuning.fore_flight_shoulder_deg, tuning.fore_flight_elbow_deg,
+                      tuning.fore_flight_wrist_deg);
+        } else {
+            drive_limb(joints_.leg[side], trail, tuck_angle);
+            drive_limb(joints_.front_leg[side],
+                       (core::radians(tuning.front_leg_trail_deg) +
+                        core::radians(tuning.leg_dive_trail_deg) * dive) * flight_fold,
+                       front_tuck_angle);
+        }
 
         // The claw: the near limb rakes forward and down and returns. The
         // foreleg where there is one, the hind leg on a wyvern. Side 0 is

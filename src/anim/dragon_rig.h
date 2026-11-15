@@ -782,6 +782,20 @@ struct RigTuning {
     // negative tuck, which opens its elbow.
     static constexpr float kFrontTuckInherit = 999.0f;
     float front_leg_tuck_deg = kFrontTuckInherit;
+    // A flight pose joint by joint (docs/SHOWCASE.md, "The legs in flight"):
+    // with leg_flight_pose on, each joint of a leg chain turns by its own
+    // angle about the model's X axis in the air, and the tuck and the trail
+    // above are not applied. Positive turns the bone aft. One tuck value
+    // with alternating signs cannot hold a thigh back, a shin along it and a
+    // foot trailing, which is how a flying quadruped carries its legs.
+    float leg_flight_pose = 0.0f;
+    float hind_flight_hip_deg = 0.0f;
+    float hind_flight_knee_deg = 0.0f;
+    float hind_flight_hock_deg = 0.0f;
+    float fore_flight_shoulder_deg = 0.0f;
+    float fore_flight_elbow_deg = 0.0f;
+    float fore_flight_wrist_deg = 0.0f;
+    float leg_flight_splay_deg = 0.0f;  // the hip and shoulder turned in (negative) or out
     // During an air-brake a flying animal begins to unfold its landing limbs
     // and lets them float into the airflow: a partial extension and an
     // engine-forward hip offset. Every shipped profile carries its own pair;

@@ -4554,6 +4554,20 @@ void App::build_dragon_ui() {
                                                                                               : rig.front_leg_tuck_deg;
             if (ImGui::SliderFloat("front leg tuck", &front, -60.0f, 120.0f, "%.0f deg")) rig.front_leg_tuck_deg = front;
         }
+        {
+            // The legs in flight, joint by joint; on, it replaces the tuck and the trail.
+            bool pose = rig.leg_flight_pose > 0.5f;
+            if (ImGui::Checkbox("flight pose by joint", &pose)) rig.leg_flight_pose = pose ? 1.0f : 0.0f;
+            if (pose) {
+                ImGui::SliderFloat("hind hip", &rig.hind_flight_hip_deg, -90.0f, 120.0f, "%.0f deg");
+                ImGui::SliderFloat("hind knee", &rig.hind_flight_knee_deg, -120.0f, 120.0f, "%.0f deg");
+                ImGui::SliderFloat("hind hock", &rig.hind_flight_hock_deg, -120.0f, 120.0f, "%.0f deg");
+                ImGui::SliderFloat("fore shoulder", &rig.fore_flight_shoulder_deg, -90.0f, 120.0f, "%.0f deg");
+                ImGui::SliderFloat("fore elbow", &rig.fore_flight_elbow_deg, -170.0f, 120.0f, "%.0f deg");
+                ImGui::SliderFloat("fore wrist", &rig.fore_flight_wrist_deg, -120.0f, 140.0f, "%.0f deg");
+                ImGui::SliderFloat("legs splay", &rig.leg_flight_splay_deg, -30.0f, 30.0f, "%.0f deg");
+            }
+        }
         if (dragon_rig_.has_base_clip()) {
             ImGui::TextDisabled("clip '%s'%s", player_model().animations[size_t(player_model().idle_clip)].name.c_str(),
                                 player_model().idle_clip_hold >= 0.0f ? " (held at its last frame)" : "");

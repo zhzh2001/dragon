@@ -844,6 +844,36 @@ Worse than version 2, or open:
 - Dive, brake, turns and the head close-up were not looked at on this
   mesh. The Blender pose sheets in `artifacts/hero-rig/` are older.
 
+## The legs in flight, joint by joint (2026-11-15, 10:50)
+
+Feedback report 0005 (`artifacts/showcase-feedback/0005-marked.jpg`) said
+of version 4's fold: "don't like the new folding, refer online/other games
+for more natural leg postures in flight". Its marks are the fore leg,
+"unnatural folding", and the hind leg, "looks like standing in the sky".
+Both were right. The hind Z kept the foot under the hip as on the ground,
+and the fore tuck pushed the elbow up past the shoulder.
+
+Flying quadrupeds in other games and in film carry the hind legs back
+along the root of the tail, loose at the knee, and hold the fore legs to
+the chest. One tuck value with alternating signs cannot do that, so the
+rig has a pose by joint: `leg_flight_pose 1` and an angle each for hip,
+knee and hock, shoulder, elbow and wrist, positive aft, with
+`leg_flight_splay_deg` for the roots. With it on, the tuck and the trail
+are not applied; the brake's reach and the pendulum still ride on the
+root. A profile without the keys is unchanged.
+
+The hero carries hind 45, 5, 35 and fore 65, -140, 105, from two rounds
+of candidates (`artifacts/showcase-anim/flight-legs-pose-candidates.jpg`).
+`flight-legs-pose-before-after.jpg` is the bite from the side, the fold on
+the left; `flight-legs-pose-views.jpg` has the glide from the side and
+the front, the dive, the brake, a landing and the stand. The Dragon
+panel has "flight pose by joint" and its seven sliders under "front leg
+tuck".
+
+Open: from the front the fore paws show their spread claws under the
+chin. The trailing-fore variant (candidates Q5 and Q6) is the other
+natural choice if the tuck reads wrong in play.
+
 ## S3, as built: the rim, the clear coat and the cornea (2026-11-15)
 
 A submesh now carries a surface class (`anim::SkinSurface`), read from the
