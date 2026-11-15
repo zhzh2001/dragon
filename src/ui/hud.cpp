@@ -42,6 +42,7 @@ void Hud::begin(float width, float height) {
     height_ = height;
     unit_ = height / 720.0f;
     draw_ = ImGui::GetForegroundDrawList();
+    world_labels_.clear();
 }
 
 void Hud::plate(ImVec2 min, ImVec2 max, float rounding_units) const {
@@ -150,6 +151,30 @@ void Hud::label(ImVec2 pos, const char* string, ImU32 colour, float size_units, 
 
 void Hud::numeral(ImVec2 pos, const char* string, ImU32 colour, float size_units, Align align) const {
     text(numeral_font_, pos, string, colour, px(size_units), align);
+}
+
+void Hud::world_label(ImVec2 pos, const char* string, ImU32 colour, float size_units, Align align) {
+    const float w = label_width(string, size_units);
+    const float h = px(size_units) * 1.15f;
+    const float pad = px(3.0f);
+    float x = pos.x - (align == Align::Centre ? w * 0.5f : align == Align::Right ? w : 0.0f);
+    float y = pos.y;
+    const float edge = margin();
+    x = x < edge ? edge : (x + w > width_ - edge ? width_ - edge - w : x);
+    y = y < edge ? edge : (y + h > height_ - edge ? height_ - edge - h : y);
+    for (int tries = 0; tries < 8; ++tries) {
+        bool clear = true;
+        for (const ImVec4& r : world_labels_) {
+            if (x < r.z + pad && x + w > r.x - pad && y < r.w + pad && y + h > r.y - pad) {
+                y = r.w + pad;  // under the one in the way
+                clear = false;
+                break;
+            }
+        }
+        if (clear) break;
+    }
+    world_labels_.push_back(ImVec4(x, y, x + w, y + h));
+    text(label_font_, ImVec2(x, y), string, colour, px(size_units), Align::Left);
 }
 
 float Hud::label_width(const char* string, float size_units) const {

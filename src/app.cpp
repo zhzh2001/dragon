@@ -6813,8 +6813,8 @@ void App::draw_run_hud() {
                 hud_.arc(screen, apparent + hud_.px(6.0f), -core::HALF_PI, core::HALF_PI * 3.0f, progress,
                          tk.accent, hud_.px(4.0f));
             }
-            hud_.label(ImVec2(screen.x + apparent + hud_.px(8.0f), screen.y - hud_.px(8.0f)), text,
-                       colour, 14.0f);
+            hud_.world_label(ImVec2(screen.x + apparent + hud_.px(8.0f), screen.y - hud_.px(8.0f)), text,
+                             colour, 14.0f);
         } else {
             const gfx::Camera& camera = active_camera();
             const core::Vec3 to = position - camera.position;
@@ -6827,7 +6827,7 @@ void App::draw_run_hud() {
             const float radius = core::minf(width, height) * 0.40f;
             hud_.edge_arrow(centre, direction, radius, colour, hud_.px(10.0f));
             const ImVec2 tip(centre.x + direction.x * radius, centre.y + direction.y * radius);
-            hud_.label(ImVec2(tip.x, tip.y + hud_.px(18.0f)), text, colour, 13.0f, ui::Align::Centre);
+            hud_.world_label(ImVec2(tip.x, tip.y + hud_.px(18.0f)), text, colour, 13.0f, ui::Align::Centre);
         }
     };
     if (phase == game::HoardPhase::Flying) {
@@ -6947,7 +6947,7 @@ void App::draw_run_hud() {
             draw->AddQuad(ImVec2(screen.x, screen.y - r), ImVec2(screen.x + r, screen.y),
                           ImVec2(screen.x, screen.y + r), ImVec2(screen.x - r, screen.y), green, hud_.px(1.8f));
             std::snprintf(line, sizeof(line), "HERD x%d  %ld m", n, std::lrint(range));
-            hud_.label(ImVec2(screen.x + r + hud_.px(6.0f), screen.y - hud_.px(7.0f)), line, green, 12.0f);
+            hud_.world_label(ImVec2(screen.x + r + hud_.px(6.0f), screen.y - hud_.px(7.0f)), line, green, 12.0f);
         }
         for (const game::Prey& p : animals) {
             if (p.state == game::PreyState::Eaten) continue;
@@ -8391,8 +8391,8 @@ void App::draw_combat_hud() {
             const float half = core::clampf(2600.0f / core::maxf(range, 1.0f), hud_.px(10.0f), hud_.px(60.0f));
             hud_.bracket(screen, half, colour, hud_.px(1.8f));
             std::snprintf(line, sizeof(line), flaming ? "%s%ld m  FLAME" : "%s%ld m", tag, std::lrint(range));
-            hud_.label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
-                       flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
+            hud_.world_label(ImVec2(screen.x + half + hud_.px(5.0f), screen.y - hud_.px(7.0f)), line,
+                             flaming ? tk.flame : locked ? tk.lock : hunter ? tk.danger : tk.mark, 12.0f);
             // A rival's health under the bracket: whether to press the attack.
             // (Its aggression was drawn there too for one build and told the
             // player nothing they acted on; the Combat panel still lists it.)
@@ -8446,9 +8446,9 @@ void App::draw_combat_hud() {
                                                            : game::Element::Stone;
                 const core::Vec3 c = sentinel.stun > 0.0f && !st.any() ? core::Vec3{0.89f, 0.67f, 0.24f}
                                                                        : game::element_colour(e);
-                hud_.label(ImVec2(screen.x, below), suffering,
-                           IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235), 11.0f,
-                           ui::Align::Centre);
+                hud_.world_label(ImVec2(screen.x, below), suffering,
+                                 IM_COL32(int(c.x * 255.0f), int(c.y * 255.0f), int(c.z * 255.0f), 235), 11.0f,
+                                 ui::Align::Centre);
             }
             if (locked) {
                 draw->AddCircle(ImVec2(screen.x, screen.y), half * 1.35f, colour, 28, hud_.px(1.4f));

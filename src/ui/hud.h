@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <algorithm>
 
 #include "core/math.h"
@@ -94,6 +95,15 @@ public:
                Align align = Align::Left) const;
     void numeral(ImVec2 pos, const char* text, ImU32 colour, float size_units = 32.0f,
                  Align align = Align::Left) const;
+    // A label fixed to something in the world: a marker's name, a target's
+    // range, its status. Kept on the screen, and moved down a line at a time
+    // until it is clear of every world label placed before it this frame.
+    // Two targets in line put their labels on one spot, and a marker near
+    // the edge ran off it (the blind critic, 2026-11-15: "garbled",
+    // "clipped at the right edge"). The first placed keeps its spot, so
+    // draw the labels that matter most first.
+    void world_label(ImVec2 pos, const char* text, ImU32 colour, float size_units = 13.0f,
+                     Align align = Align::Left);
     float label_width(const char* text, float size_units = 15.0f) const;
     float numeral_width(const char* text, float size_units = 32.0f) const;
 
@@ -107,6 +117,7 @@ private:
     Tokens tokens_;
     ImFont* numeral_font_ = nullptr;
     ImFont* label_font_ = nullptr;
+    std::vector<ImVec4> world_labels_;  // this frame's, as min x, min y, max x, max y
     ImDrawList* draw_ = nullptr;
     float width_ = 1280.0f;
     float height_ = 720.0f;

@@ -1271,6 +1271,20 @@ returns. The cornea keeps the full term. The change is small
 (`artifacts/showcase-critic/horn-coat-before-after.jpg`): the claws are
 darker and still pale, because their texture is pale.
 
+### World labels keep clear of each other (13:36)
+
+The critic: a hoard's label "overlaps another label and is garbled", three
+ranges on one spot in combat, a marker's name "clipped at the right edge".
+`ui::Hud::world_label` keeps a label on the screen and moves it down a line
+at a time until it is clear of every world label placed before it in the
+frame. The run's markers, the herd's, and a target's range and status go
+through it (`artifacts/showcase-critic/hud-labels-before-after.jpg`). The
+first placed keeps its spot: combat targets, then the run's markers.
+
+Not done: the tutorial line under the run's top bar still reads as debug
+text, and the bottom plate still covers the dragon's hind legs in the chase
+view.
+
 ### Tried and dropped: more haze
 
 `--atmosphere aerial=7.5,haze=0.8` against the defaults (5 and 1.2), for the
