@@ -1,0 +1,17 @@
+{
+  "bite": {
+    "max_joint_position_error_m": 3.198720899820027e-06
+  },
+  "claw_r": {
+    "max_joint_position_error_m": 2.3871641629339203e-06
+  },
+  "claw_l": {
+    "max_joint_position_error_m": 2.431401974483864e-06
+  },
+  "tail_r": {
+    "max_joint_position_error_m": 2.3871641629339203e-06
+  },
+  "tail_l": {
+    "max_joint_position_error_m": 2.3871641629339203e-06
+  }
+}
