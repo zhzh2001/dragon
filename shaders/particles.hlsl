@@ -141,8 +141,12 @@ float4 fs_main(VertexOut input) : SV_Target {
         float edged = smoothstep(0.1, 0.6, body) * (1.0 - smoothstep(0.72, 1.0, r));
         // Mist (gfx::Particle::soft, in the kind's fraction): a falloff from
         // the middle with the billow as its density, and no edge.
+        // Wisps: the billow decides where there is any, so a puff is a few
+        // shreds and not a disc. With the billow only shading a round
+        // falloff, each puff was a ball with a bright middle: over the
+        // river they read as lamps (2026-11-15).
         float core = saturate(1.0 - r);
-        float mist = core * core * (0.45 + 1.1 * billow);
+        float mist = pow(core, 1.5) * (0.1 + 1.5 * smoothstep(0.3, 0.8, billow));
         float alpha = lerp(edged, mist, saturate((input.shape.z - 2.0) * 2.5)) * saturate(input.shape.w) * input.color.a;
         float3 smoke = input.color.rgb * (0.8 + 0.4 * billow);
         return float4(smoke, alpha);

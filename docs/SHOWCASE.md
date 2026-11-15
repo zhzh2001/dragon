@@ -1688,6 +1688,17 @@ Not done: the flame lights nothing around it that a capture shows, it has
 no smoke at its tip, and the SM2 and fixed-function flames are as they
 were.
 
+### Spray as wisps and dashes (16:10)
+
+On the new water the spray read as round balls of light. Two causes. The
+mist puff was a round falloff that the billow only shaded, so each was a
+disc with a bright middle. It is now `pow(core, 1.5) * (0.1 + 1.5 *
+smoothstep(0.3, 0.8, billow))`: the billow decides where there is any, and
+a puff is a few shreds. And the drops were soft discs. They are streaks now,
+0.028 s of their own flight long (a 12 m/s drop is a 0.34 m dash) and a
+third as wide. The pair: `artifacts/showcase-critic/
+spray-wisps-before-after.jpg`.
+
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 
 The engine side is `DragonRig::set_attack_clips`: five optional clips from

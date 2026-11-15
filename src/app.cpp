@@ -7830,14 +7830,21 @@ void App::update_spray(float dt) {
         drop.color_start = core::Vec3{0.9f, 0.95f, 1.0f};
         drop.color_end = core::Vec3{0.6f, 0.7f, 0.8f};
         drop.brightness = 0.8f;
+        // A dash along its flight, not a dot: as discs the drops were
+        // round lamps hanging over the water.
+        drop.kind = gfx::ParticleKind::Streak;
+        drop.stretch = drop.velocity * 0.028f;
+        drop.size_start = 0.07f * growth_scale_;
+        drop.size_end = 0.04f * growth_scale_;
         particles_.spawn(drop);
         // And a second, lower and wider: the spray is mostly drops.
         const float fling = particle_unit();
         gfx::Particle low = drop;
         low.velocity = p.velocity * (0.9f + 0.6f * fling) + across * (side * 2.5f) + core::Vec3{0.0f, 1.5f, 0.0f};
         low.life = 0.5f + 0.3f * fling;
-        low.size_start = 0.14f * growth_scale_;
-        low.size_end = 0.08f * growth_scale_;
+        low.stretch = low.velocity * 0.028f;
+        low.size_start = 0.05f * growth_scale_;
+        low.size_end = 0.03f * growth_scale_;
         low.brightness = 0.6f;
         particles_.spawn(low);
     }
