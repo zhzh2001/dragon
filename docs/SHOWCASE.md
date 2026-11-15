@@ -434,6 +434,41 @@ the wings of the first whole-body generation. The rig is refitted
 afterwards with the same script. Four of the day's five cloud generations
 are used.
 
+### The first rig, and the dragon in the engine (2026-11-14)
+
+Codex (`gpt-6-astra`, high, work account) fitted a rig to the first static
+mesh from `tools/showcase/hero-rig-brief.md`. It took 23 minutes and
+152,901 tokens and stopped at its budget of three passes. 47 checks
+passed and 7 failed, so it did not commit; the main session committed its
+state on the `hero-rig` branch (`34f34c3`). The rig has 77 joints, with
+the jaw, eye, eyelid and tongue bones added to the contract.
+
+The failures: eight hide vertices have weights that are not numbers, the
+left and right weights do not mirror on the hide, the membrane and the
+mouth, and the folded membrane leaves the plane of its fingers by up to
+3 m. The last check was the brief's and may be too strict, because a
+folded membrane bulges; the others are defects.
+
+The engine loads the file: 77 joints, 121,650 triangles, 6 submeshes and
+15 textures. `artifacts/showcase-study/hero-rig-wip-in-engine.jpg` has
+four views of it in the valley.
+
+- From the chase camera it flies and reads as a dragon with a pale belly
+  and plated back.
+- In the glide from the side, the left wing is pulled out into one long
+  spike past the wrist. On the ground the same spike stands up behind the
+  head. This is what the failed mirror check measured.
+- The hide is close to black in the head view, where Blender shows
+  orange. The view is backlit, but the old Embercrest in the same shot is
+  brown. The baked occlusion and roughness reach the engine's shader
+  differently from Blender's, which is S3's first job.
+- The eye is there and catches no light.
+
+The rig is refitted when the mesh of three sculpts lands. The refit's
+brief names the wing spike and the invalid weights as the things to fix
+first, and replaces the membrane plane check with a check for
+intersections.
+
 ## The hero dragon, as a specification
 
 These numbers are norms the study inferred, not sourced figures. S2 tests
