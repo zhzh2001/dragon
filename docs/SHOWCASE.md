@@ -893,7 +893,7 @@ adjustments".
 | 0007 | wing, "self shadow aliasing" (low priority) | shadows | open |
 | 0008 | "water artifacts" close to the river, and 37 fps there | water | fixed, below; the cost is down 4 ms of 16 |
 | 0010 | "strange whirls?" on the river from a distance | water | fixed, below |
-| 0009 | "vegetation quality can be improved": the bushes and the grass | plants | open: S7 |
+| 0009 | "vegetation quality can be improved": the bushes and the grass | plants | the bush and the tuft rebuilt, below; ground cover is S7 |
 | 0011 | no tree shadow inside the mountain's shadow | lighting | open; one route tried and ruled out, below |
 | 0011 | "rocks look unnatural" | rock | open: S6 |
 | 0012 | "mountain shapes seem weird" | terrain | first step done: the spurs, below |
@@ -970,6 +970,20 @@ The 26 suites pass, and the autopilot banked valley 1 of seed 3 and went
 on into valley 2. The Metal goldens were captured again. Not done: the
 surface is still smooth. Cliff bands and rock faces are S6's rock work,
 and the rocks of report 0011 with them.
+
+## Bushes of leaf cards, fuller tufts (2026-11-15, 12:50)
+
+Report 0009. A bush was two faceted lumps, a green boulder on the grass.
+It is now two clumps of leaf cards over a dark core, built by the same
+`card_crown` as the broadleaf's crown; the grass pass already ran the
+shader that cuts the cards. A tuft was eight thin blades and read as a
+few spikes; it has eight short, wider blades around them as a skirt.
+`artifacts/showcase-s7/bush-and-tuft-before-after.jpg` has the report's
+view and a lower one, before on the left. The frame costs the same within
+0.3 ms (7.9 against 8.2 at 1080p there).
+
+The lawn is still clumps on a painted ground. Cover dense enough to hide
+it, in short grass, is S7's ground work.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 

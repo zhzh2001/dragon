@@ -410,13 +410,21 @@ MeshData make_grass_mesh(GrassKind kind) {
     MeshData mesh;
     switch (kind) {
         case GrassKind::Tuft: {
-            // Eight blades to about a metre and a half, darker at the root.
+            // A clump: eight long blades to about a metre and a half around
+            // eight short, wider ones that lean further out, darker at the
+            // root. Eight thin blades alone stood on the lawn as a few spikes
+            // (feedback report 0009); the skirt gives the clump a body.
             const Vec3 base = palette_vertex(PaletteEntry::GrassBlade);
             const Vec3 tip = palette_dim(base, 1.7f);
             for (int b = 0; b < 8; ++b) {
                 const float a = core::TWO_PI * float(b) / 8.0f + 0.35f * float(b % 3);
                 const float height = 1.1f + 0.45f * float((b * 5) % 4) / 3.0f;
-                blade(mesh, a, 0.4f, height, 0.07f, base, tip);
+                blade(mesh, a, 0.4f, height, 0.09f, base, tip);
+            }
+            for (int b = 0; b < 8; ++b) {
+                const float a = core::TWO_PI * (float(b) + 0.5f) / 8.0f + 0.27f * float(b % 2);
+                const float height = 0.45f + 0.3f * float((b * 3) % 4) / 3.0f;
+                blade(mesh, a, 0.75f, height, 0.13f, palette_dim(base, 0.9f), palette_dim(tip, 0.9f));
             }
             break;
         }
@@ -433,10 +441,16 @@ MeshData make_grass_mesh(GrassKind kind) {
         }
         case GrassKind::Bush:
         default: {
-            // A low shrub: two lumps of darker leaf.
+            // A low shrub: two clumps of leaf cards over a dark core, as
+            // the broadleaf's crown is built. It was two faceted lumps, a
+            // green boulder on the grass (feedback report 0009). The core
+            // keeps the sky from showing through between the cards.
             const Vec3 leaf = palette_vertex(PaletteEntry::Bush);
-            blob(mesh, Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.3f, 1.0f, 1.2f}, leaf, 6, 3);
-            blob(mesh, Vec3{0.9f, 0.7f, 0.5f}, Vec3{0.9f, 0.7f, 0.8f}, palette_dim(leaf, 1.1f), 6, 3);
+            blob(mesh, Vec3{0.0f, 0.7f, 0.0f}, Vec3{0.8f, 0.6f, 0.75f}, palette_dim(leaf, 0.55f), 5, 2);
+            card_crown(mesh, Vec3{0.0f, 0.95f, 0.0f}, Vec3{1.25f, 0.85f, 1.15f}, 14, 4, 1.25f, leaf,
+                       FOLIAGE_MAT_LEAF, 91u);
+            card_crown(mesh, Vec3{0.9f, 0.65f, 0.5f}, Vec3{0.85f, 0.6f, 0.8f}, 8, 2, 1.0f,
+                       palette_dim(leaf, 1.1f), FOLIAGE_MAT_LEAF, 57u);
             break;
         }
     }
