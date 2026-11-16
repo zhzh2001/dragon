@@ -18,7 +18,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/COMBAT.md` | Fire, targeting and aim assist, bot AI doctrine, the match loop, the hoard run |
 | `docs/WORLD.md` | Terrain generation and queries, the river, the skirt past the map edge, vegetation placement and the card-built plants |
 | `docs/EFFECTS.md` | Particles, the per-species breath profiles, and the fully synthesized audio |
-| `docs/STATUS.md` | Milestone history, and the open questions a new session should know about |
+| `docs/STATUS.md` | Milestone history, and the open questions a new session should know about. For the showcase work since 2026-11-14, start at `docs/SHOWCASE.md`, "Where it stands" |
 | `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
 | `docs/EMBERCREST.md` | The script-built original dragon: what the Blender generator produced, why it is not the hero model, and how to rebuild it |
 | `docs/MODEL_GENERATION.md` | Generating a creature: which cloud and local tools were measured and what each one is actually good for, the four-step pipeline that survived, and how to add a creature that is not a dragon |

@@ -6,6 +6,75 @@ section 6 as the order of work for the modern tier's picture. `FIDELITY.md`
 stays the record of the rendering techniques. The retro tiers are out of
 scope here.
 
+## Where it stands (2026-11-15, 23:05)
+
+Read this first when you pick the work up. `main` is at `4151bd9`, the
+tree is clean, the 26 suites pass and the Metal goldens match.
+
+The standing direction (the user's, 2026-11-15): the visual showcase
+first, gameplay later; the dragon, its animation and its effects before
+the world; ignore the rings and the placeholder sphere.
+
+What the evening of 2026-11-15 built, each with its own section:
+
+| Work | Where |
+|---|---|
+| The breath as a marched volume; fireballs as comets; sparks, smoke, the pale core at the jaws, a skin of soot, a released flame that burns out | `showcase/EFFECTS.md` |
+| The breath's light as a line, on the dragon, the banks and the river; lens ghosts kept to the sun | `showcase/EFFECTS.md` |
+| The membrane's bow between the fingers; the hero's fingers bending under load; the rim's grain filtered | `showcase/HERO.md` |
+| The beat, two passes: now 0.85 s, the tip sweeping 76 degrees | `showcase/PLAYTEST.md` |
+| The meadow in drifts | `showcase/WORLD.md` |
+| Blind critic rounds 4, 5 and 6 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round4` to `round6` |
+| The Tripo test on an account with credits | `MODEL_GENERATION.md`, "Tripo v3.1 on an account with credits" |
+
+Waiting on the user:
+
+- A yes or no on new wing geometry for the hero (slack modelled into the
+  membrane, thinner fingers, a fold that creases on the ground). Six
+  critic rounds put the wings first, and shader and rig tuning has not
+  changed that. It is a Codex asset job (`CLAUDE.md`, "Delegate complex 3D
+  model rigging"): check `codex-profiles usage` first. Do not start it
+  without the answer.
+- The playtest of the evening's changes: the beat (`--model
+  assets/embercrest-hero.glb --studio 1`, and Space held in play), the
+  breath and the fireball (F, G; `--breathe`, `--spit`), a low pass over
+  the river while breathing (`--skim --breathe`). The last feedback, "the
+  wingbeat is slow, and the flapping range is still limited", is answered
+  by the second pass and not yet seen by the playtester.
+- Two calls that are the user's: the flame's length (the breath's range,
+  155 m, about nine dragons) and whether the plume's smoke is too much
+  from the chase camera.
+- What licence the Tripo account's output carries. Nothing from Tripo is
+  in the game, and nothing may ship until that is read.
+
+If no answer has come, the next items in order are in "Open questions"
+below: the flame's hot point at the jaws and smoke that breaks from its
+edge, the river's stair-stepped edge from above, the clouds up close.
+
+Things a new session would otherwise learn the slow way:
+
+- The blind critic's scores do not compare between rounds to better than
+  half a point: a different agent scores each round, and round 6 scored
+  unchanged frames 0.8 lower than round 5. Use its wording, and its
+  ranking within one round.
+- A view chosen to show one thing from far off (a fireball at 75 m, the
+  plume at 120 m) scores as a poor picture. Give the critic framed shots.
+- `--inspect 180` is the front and `--inspect 0` the rear.
+- The hero is `--model assets/embercrest-hero.glb`. The default roster
+  flies the generated Embercrest, which is what the goldens show, so a
+  change in the hero's profiles moves no golden.
+- A rig dial that changes a silhouette goes in a species' profile at 0 in
+  the code (`finger_load_curl_deg`): the roster has seven bind poses.
+- The hero's build cache is `build-hero-cache/` in the main checkout
+  (3.1 GB, ignored). No worktree exists; `tools/hero-build.md` says how a
+  new one links to it.
+- The Vulkan, D3D12 and D3D11 golden sets are stale since the evening's
+  shader changes. They need `golden.py capture` on x99.
+- Tried and dropped the same evening: three times the boulders on the
+  valley floor (dots from the air), the hide's sky reflection at 2.2 (no
+  visible gain), worn tracks in the meadow ("stains"), the membrane's bow
+  on vertices weighted to the arm (561 vertices, nothing to see).
+
 The record is in parts since 2026-11-15. This file holds the study, the
 decisions, the order of work and the open questions. What was built is in
 `docs/showcase/`:
@@ -15,8 +84,8 @@ decisions, the order of work and the open questions. What was built is in
 | `showcase/HERO.md` | The hero dragon's model: the design, mesh versions 1 to 5b, the rig, the surface |
 | `showcase/PLAYTEST.md` | The feedback tool, every round of playtest reports, and the legs, the wingbeat and the strikes they changed |
 | `showcase/WORLD.md` | The river, the valley walls, the bushes, the rock kit, the frame's cost |
-| `showcase/CRITIC.md` | What other showcases do, and the three blind critic rounds with what each changed (cliffs, the braided river, the ward stone, the breath's colours, the air, the grass) |
-| `showcase/EFFECTS.md` | The breath as a ray-marched volume, and fireballs as comets through the same march |
+| `showcase/CRITIC.md` | What other showcases do, and the six blind critic rounds with what each changed (cliffs, the braided river, the ward stone, the breath's colours, the air, the grass; then the wings and the fire) |
+| `showcase/EFFECTS.md` | The breath as a ray-marched volume, fireballs as comets through the same march, the breath's light, smoke and sparks |
 
 A new section goes in the part it belongs to, at the end, with its time
 from `date`. "Where each section is", at the end of this file, maps every
@@ -287,7 +356,9 @@ not yet done, in the order six rounds agree on:
 - The wings. The membrane bows and the fingers bend, and the critic
   still reads planks on rods outside the upstroke. The next step is
   geometry: slack modelled into the membrane, thinner fingers, a fold
-  that creases on the ground.
+  that creases on the ground. The beat itself was retuned twice
+  (`showcase/PLAYTEST.md`); its top is limited to +66 degrees because the
+  wingtips touch over the back past that.
 - The ground and the cliffs: the meadow has drifts and is still a sheet;
   no stones, no relief in the rock.
 - The flame: no hot point at the jaws, no smoke that breaks from the

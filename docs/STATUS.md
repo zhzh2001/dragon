@@ -4,7 +4,14 @@ What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `DIRECTION.md` and `FIDELITY.md`,
 and the ports are `PORTING.md` (an index into `docs/porting/`).
 
-## Latest — 2026-10-13: the retro cards, and two new directions
+## Latest — 2026-11-15: the showcase track
+
+Since 2026-11-14 the work is the modern tier's picture: a hero dragon, its
+animation and effects, then the world. Its state, what waits on the
+user and what comes next are in `SHOWCASE.md`, "Where it stands". The
+sections below are older and are not updated for it.
+
+## 2026-10-13: the retro cards, and two new directions
 
 - **The retro track on real cards, 2026-10-05 to 13** (`docs/porting/CARDS.md`):
   - The Lowest preset, below Minimal, for cards slower than the M6, plus
