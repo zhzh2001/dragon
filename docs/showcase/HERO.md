@@ -557,3 +557,83 @@ pack does not store the surface class.
 
 Not done in S3: the membrane's thickness and veins wait for mesh version
 3's wing textures.
+
+## A membrane that billows (2026-11-15, 21:14)
+
+The blind critic's fourth round put the wings first: "the membrane is a
+flat, opaque sheet, the finger bones are thick straight rods, and nothing
+bends between the joints" (`CRITIC.md`, "The blind critic, round 4"). The
+skin weights are the reason. A membrane vertex follows its finger rigidly,
+so the sheet between two fingers is a plane whatever the wing does.
+
+The modern tier now bows each panel under load, in the vertex shader.
+
+A panel is the skin between two spars: two fingers, a finger and the arm,
+or the last finger and the flank. `App::mark_membranes` measures every
+membrane vertex in the bind pose, seen from above: `d1` to its nearest
+spar and `d2` to the next. A sheet pinned on both spars bows as a parabola
+across the panel, so the vertex's reach is `4 d1 d2 / (d1 + d2)`: the
+panel's width at its middle, nothing on a spar. The slope of that reach
+across the wing is stored too, because the lighting needs the bowed
+normal.
+
+There was no free vertex attribute, and a new one would change the vertex
+layout of every backend. The values ride in the tangent's `w`, which
+already carried the membrane share past 1: `|w| - 1` is now a 22-bit
+integer over 2^22, the share in 3 bits, the reach in 5 and the slope's two
+parts in 7 each. A float holds that exactly. The vertex stage takes it
+apart (`skin_common.hlsl`, `membrane_bulge`) and passes the share on as
+before. The first packing gave the slope 5 bits each and the panels were
+lit in contour bands.
+
+The shader moves the vertex along the bind pose's up, carried by the
+vertex's own bones, so the bow follows a folded wing. The same offset is
+in the shadow pass and in the velocity pass, which takes last frame's
+amount for last frame's position.
+
+The amount is one number a creature, from the rig
+(`DragonRig::membrane_load`). The rig reads it off the pose it has just
+built: each wingtip's height over its shoulder, in arm lengths, and how
+fast that changes. A tip going down loads the sheet and a tip going up
+unloads it. It is not read from the flap's phase, so the fold, the phase
+delay and a strike's wing all count. Three dials in the rig profile:
+
+| Dial | Default | Meaning |
+|---|---|---|
+| `membrane_camber` | 0.11 | the bow in a glide, as a share of the panel's width |
+| `membrane_billow` | 0.12 | added at the downstroke's fastest, taken off at the upstroke's |
+| `membrane_slack` | 0.04 | the sag under its own weight on the ground |
+
+The hero's widest panel is 4.44 m. Its middle sits 0.49 m above the plane
+of its fingers in a glide and about 1 m at the peak of a downstroke. At
+0.07 the change did not read at game size; 0.16 looked quilted.
+
+The amount rides after the joints in the skin block
+(`WorldRenderer::skin_membrane`), not in the model block, which the D3D9
+tiers have no register to grow. A packed palette does not carry it, so
+the retro tiers keep the flat sheet.
+
+The fragment stage also reads where a pixel sits in its panel. The light
+through the membrane is 0.5 of what it was on a finger and 1.3 in the
+middle of a wide panel, and the albedo is 20% darker along a finger. The
+sheet reads as thin in the middle and thick at its bones.
+
+`artifacts/wing-membrane/` has the glide from below and from above, before
+and after, at full size, and `roster.jpg`, the seven species in the glide
+with the bow on. Every species was looked at; none tears. The dials are
+"membrane bow, glide" and "membrane bow, beat" in the studio's wingbeat
+section and in the Dragon panel, with "membrane sag, landed". `--rig
+membrane_camber=0,membrane_billow=0,membrane_slack=0` is the flat sheet.
+
+The Metal goldens were captured again: every difference was on a wing or
+in its shadow. The Vulkan, D3D12 and D3D11 sets are stale, and the change
+has not run on those backends.
+
+Seen and not fixed:
+
+- The fingers are still straight rods. Bending them under load is a rig
+  change.
+- A wing lit at a low angle shows faint stripes of shadow acne. They are
+  there without the bow too.
+- The folded wing on the ground is two flat panels with a hard patch of
+  transmitted light. The sag there is too small to change that.

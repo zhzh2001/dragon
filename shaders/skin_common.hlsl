@@ -28,8 +28,59 @@ struct SkinUniforms {
 static const int MAX_JOINTS = 256;
 struct SkinUniforms {
     float4x4 joints[MAX_JOINTS];
+    // x how far the membranes bow, as a share of a panel's width (signed: up
+    // under load), y the widest panel in the mesh's units. Zero: flat.
+    float4 membrane;
 };
 #define SKIN_JOINT(skin, j) (skin).joints[j]
+#define MEMBRANE_BULGE
+#endif
+
+// A vertex's membrane share from the tangent's w (App::mark_membranes): the
+// top three bits of |w| - 1. The lower bits are the panel's reach and slope,
+// which only membrane_bulge reads.
+float membrane_share(float tangent_w) {
+    return floor((abs(tangent_w) - 1.0) * 8.0) / 7.0;
+}
+
+// Where a membrane vertex sits in its panel: 0 on a spar, 1 in the middle of
+// the widest panel. The sheet is thinnest there.
+float membrane_panel(float tangent_w) {
+    float n = (abs(tangent_w) - 1.0) * 8.0;
+    return floor((n - floor(n)) * 32.0) / 31.0;
+}
+
+#ifdef MEMBRANE_BULGE
+// The membrane bows between its spars (docs/showcase/HERO.md, "A membrane
+// that billows"). A vertex carries how far its place in the panel moves at
+// full bow (the panel's width at its middle, nothing on a finger) and the
+// slope of that across the wing, both measured in the bind pose seen from
+// above. The bow is along the bind pose's up, carried by the vertex's own
+// bones, so it follows a fold. `offset` is added to the skinned position,
+// `tilt` to the skinned normal, both in the model's space.
+void membrane_bulge(float4x4 blended, float3 skinned_normal, float tangent_w, float4 membrane,
+                    out float3 offset, out float3 tilt) {
+    offset = (float3)0.0;
+    tilt = (float3)0.0;
+    if (membrane.x == 0.0 || membrane.y <= 0.0) return;
+    float n = (abs(tangent_w) - 1.0) * 4194304.0;
+    const float share = floor(n / 524288.0);
+    n -= share * 524288.0;
+    const float reach = floor(n / 16384.0);
+    n -= reach * 16384.0;
+    const float slope_x = floor(n / 128.0);
+    const float slope_z = n - slope_x * 128.0;
+    if (share < 0.5) return;
+    const float amount = membrane.x * share / 7.0;
+    const float3 up = normalize(mul(blended, float4(0.0, 1.0, 0.0, 0.0)).xyz);
+    offset = up * (amount * membrane.y * reach / 31.0);
+    const float2 slope = (float2(slope_x, slope_z) / 127.0 - 0.5) * 8.0;
+    const float3 across = mul(blended, float4(slope.x, 0.0, slope.y, 0.0)).xyz;
+    const float3 normal = normalize(skinned_normal);
+    // The upper face's normal is up minus the bow's slope; the lower face's
+    // is its opposite, which the normal's own side of `up` supplies.
+    tilt = -across * (amount * dot(normal, up));
+}
 #endif
 
 // The joint indices' vertex input. A UBYTE4 attribute is an integer vector on

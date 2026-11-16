@@ -12,6 +12,9 @@ struct VertexIn {
     float2 uv          : TEXCOORD3;
     JOINT_INDEX_TYPE joint_index : TEXCOORD4;
     float4 weight      : TEXCOORD5;
+#ifdef MEMBRANE_BULGE
+    float4 tangent     : TEXCOORD6;  // its w: the membrane's panel (skin_common.hlsl)
+#endif
 };
 
 struct ShadowUniforms {
@@ -26,7 +29,13 @@ ConstantBuffer<SkinUniforms> skin : UNIFORM_SLOT(2);
 DepthOnlyOut vs_main(VertexIn input) {
     float4x4 blended = SKIN_MATRIX(skin, input.joint_index, input.weight);
     DepthOnlyOut o;
-    o.clip_position = mul(shadow.light_view_proj, mul(model.model, mul(blended, float4(input.position, 1.0))));
+    float4 local = mul(blended, float4(input.position, 1.0));
+#ifdef MEMBRANE_BULGE
+    float3 bulge_offset, bulge_tilt;
+    membrane_bulge(blended, input.normal, input.tangent.w, skin.membrane, bulge_offset, bulge_tilt);
+    local.xyz += bulge_offset;
+#endif
+    o.clip_position = mul(shadow.light_view_proj, mul(model.model, local));
     WRITE_DEPTH_VARYING(o);
     return o;
 }

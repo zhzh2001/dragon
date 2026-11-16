@@ -91,6 +91,14 @@ public:
                             const ModelUniforms& model, const std::vector<core::Mat4>& joints);
 
     bool wireframe = false;
+    // The membranes' bow for the skinned draws that follow (skin_common.hlsl,
+    // membrane_bulge): x how far, as a share of a panel's width, y the
+    // widest panel in the mesh's units. `skin_membrane_before` is last
+    // frame's, for the velocity pass. Zero draws the flat sheet; set it
+    // before a winged creature's draws and clear it after. The modern tier
+    // only: a packed palette has no room for it.
+    core::Vec4 skin_membrane = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    core::Vec4 skin_membrane_before = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 
 private:
     PipelineCache* pipelines_ = nullptr;

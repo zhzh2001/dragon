@@ -470,6 +470,9 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(gesture_strike_out),
     RIG_FLOAT_FIELD(gesture_hold),
     RIG_FLOAT_FIELD(gesture_legs),
+    RIG_FLOAT_FIELD(membrane_camber),
+    RIG_FLOAT_FIELD(membrane_billow),
+    RIG_FLOAT_FIELD(membrane_slack),
     RIG_FLOAT_FIELD(gesture_kick_ramp),
     RIG_FLOAT_FIELD(gesture_impact_deg),
     RIG_FLOAT_FIELD(gesture_body_pitch_deg),
@@ -3555,6 +3558,37 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     compute_world_matrices(*skeleton_, pose_, world_);
     compute_skinning_matrices(*skeleton_, world_, skinning_);
     aim_active_ = false;
+
+    // The membranes' load, read off the pose that was just built: each
+    // wingtip's height over its shoulder, in arm lengths, and how fast it
+    // changes. A tip going down pushes on the air and the panels bow up; a
+    // tip going up unloads them. Read from the pose and not from the flap's
+    // phase, so the fold, the phase delay and a strike's wing all count.
+    {
+        float rate = 0.0f;
+        int sides = 0;
+        for (int side = 0; side < 2; ++side) {
+            const std::vector<int>& root = joints_.wing_root[side];
+            const std::vector<std::vector<int>>& fingers = joints_.wing_fingers[side];
+            if (root.empty() || fingers.empty() || fingers.front().empty()) continue;
+            const core::Vec3 shoulder = world_[size_t(root.front())].translation_part();
+            const core::Vec3 wrist = world_[size_t(root.back())].translation_part();
+            const core::Vec3 tip = world_[size_t(fingers.front().back())].translation_part();
+            const float arm = core::maxf(core::distance(shoulder, wrist), 1e-4f);
+            const float height = (tip.y - shoulder.y) / arm;
+            if (membrane_tip_valid_ && dt > 1e-5f) rate += (height - membrane_tip_[side]) / dt;
+            membrane_tip_[side] = height;
+            ++sides;
+        }
+        membrane_tip_valid_ = sides > 0;
+        if (sides > 0) rate /= float(sides);
+        // A beat's fastest is about 6 arm lengths a second at the tip.
+        const float stroke = core::clampf(-rate / 6.0f, -1.0f, 1.0f);
+        const float air = state.grounded ? 0.0f : core::saturate(core::length(state.velocity) / 25.0f);
+        const float target = air * tuning.membrane_camber + (0.35f + 0.65f * air) * tuning.membrane_billow * stroke -
+                             (1.0f - air) * tuning.membrane_slack;
+        membrane_load_ += (target - membrane_load_) * (1.0f - std::exp(-dt / 0.05f));
+    }
 }
 
 void DragonRig::drive_attack(float airborne) {

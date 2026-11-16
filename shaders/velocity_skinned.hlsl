@@ -17,6 +17,9 @@ struct VertexIn {
     float2 uv          : TEXCOORD3;
     JOINT_INDEX_TYPE joint_index : TEXCOORD4;
     float4 weight      : TEXCOORD5;
+#ifdef MEMBRANE_BULGE
+    float4 tangent     : TEXCOORD6;  // its w: the membrane's panel (skin_common.hlsl)
+#endif
 };
 
 struct VelocityUniforms {
@@ -41,6 +44,11 @@ ConstantBuffer<SkinUniforms> prev_skin : UNIFORM_SLOT(3);
 VelocityOut vs_main(VertexIn input) {
     float4x4 blended = SKIN_MATRIX(skin, input.joint_index, input.weight);
     float4 local = mul(blended, float4(input.position, 1.0));
+#ifdef MEMBRANE_BULGE
+    float3 bulge_offset, bulge_tilt;
+    membrane_bulge(blended, input.normal, input.tangent.w, skin.membrane, bulge_offset, bulge_tilt);
+    local.xyz += bulge_offset;
+#endif
     float4 world = mul(model.model, local);
     VelocityOut o;
     o.clip_position = mul(velocity.jittered_view_proj, world);
@@ -50,7 +58,12 @@ VelocityOut vs_main(VertexIn input) {
     o.clip_position.z *= 1.0005;
     o.now = mul(velocity.view_proj, world);
     float4x4 prev_blended = SKIN_MATRIX(prev_skin, input.joint_index, input.weight);
-    o.before = mul(velocity.prev_view_proj, mul(velocity.prev_model, mul(prev_blended, float4(input.position, 1.0))));
+    float4 prev_local = mul(prev_blended, float4(input.position, 1.0));
+#ifdef MEMBRANE_BULGE
+    membrane_bulge(prev_blended, input.normal, input.tangent.w, prev_skin.membrane, bulge_offset, bulge_tilt);
+    prev_local.xyz += bulge_offset;
+#endif
+    o.before = mul(velocity.prev_view_proj, mul(velocity.prev_model, prev_local));
     return o;
 }
 #endif

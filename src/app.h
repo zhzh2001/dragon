@@ -337,6 +337,7 @@ private:
     struct PreviousPose {
         core::Mat4 model;
         std::vector<core::Mat4> joints;
+        core::Vec4 membrane;  // WorldRenderer::skin_membrane of that frame
     };
     std::unordered_map<const void*, PreviousPose> previous_models_;
     gfx::DebugDraw debug_;
@@ -821,8 +822,8 @@ private:
     float touchdown_kick_ = 2.5f;
     core::Vec3 dust_colour_{0.30f, 0.27f, 0.21f};
     core::Vec3 spray_colour_{1.25f, 1.32f, 1.4f};  // drawn unlit, so sunlit white is over 1
-    static void mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
-                               const anim::DragonJoints& joints);
+    static float mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
+                                const anim::DragonJoints& joints);
     // Sun through the wing membranes (skinned.hlsl): the transmitted light
     // is the hide's colour times this (Lighting panel, "membrane glow").
     float membrane_glow_ = 1.2f;
@@ -899,6 +900,9 @@ private:
         anim::Skeleton skeleton;
         anim::DragonJoints joints;
         anim::SkinnedMesh mesh;
+        // The widest membrane panel, in the mesh's units (mark_membranes):
+        // what a vertex's packed reach is a share of. 0 without wings.
+        float membrane_reach = 0.0f;
         std::vector<rhi::Texture*> textures;
         std::vector<anim::AnimationClip> animations;
         // assets/clips/<stem>.brake_bank.glb, when present: the keyframed
@@ -964,6 +968,11 @@ private:
     // by index from every bot; growth must not move one under a live reference.
     std::vector<std::unique_ptr<LoadedModel>> models_;
     int player_model_ = 0;
+    // WorldRenderer::skin_membrane for a creature: the rig's load on the
+    // model's widest panel. Zero for a model without wings.
+    static core::Vec4 membrane_bow(const LoadedModel& model, const anim::DragonRig& rig) {
+        return core::Vec4{model.membrane_reach > 0.0f ? rig.membrane_load() : 0.0f, model.membrane_reach, 0.0f, 0.0f};
+    }
     LoadedModel& player_model() { return *models_[size_t(player_model_)]; }
     const LoadedModel& player_model() const { return *models_[size_t(player_model_)]; }
     // A model index, clamped. Bots store an index rather than a pointer so the

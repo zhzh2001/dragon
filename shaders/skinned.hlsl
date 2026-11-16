@@ -111,6 +111,7 @@ struct VertexOut {
     float emissive : TEXCOORD4;
     float3 world_tangent : TEXCOORD5;
     float tangent_sign : TEXCOORD6;
+    float panel : TEXCOORD7;  // a membrane's place in its panel (skin_common.hlsl, membrane_panel)
 };
 
 // Both stages read the model block: the vertex stage its transform and tint,
@@ -129,6 +130,12 @@ VertexOut vs_main(VertexIn input) {
     // approximation and is right up to non-uniform scale.
     float3 skinned_normal = mul(blended, float4(input.normal, 0.0)).xyz;
     float3 skinned_tangent = mul(blended, float4(input.tangent.xyz, 0.0)).xyz;
+#ifdef MEMBRANE_BULGE
+    float3 bulge_offset, bulge_tilt;
+    membrane_bulge(blended, skinned_normal, input.tangent.w, skin.membrane, bulge_offset, bulge_tilt);
+    skinned_position.xyz += bulge_offset;
+    skinned_normal = normalize(skinned_normal) + bulge_tilt;
+#endif
 
     float4 world = mul(model.model, skinned_position);
 
@@ -138,7 +145,10 @@ VertexOut vs_main(VertexIn input) {
     o.world_tangent = mul(model.model, float4(skinned_tangent, 0.0)).xyz;
     // Handedness survives skinning: it is a property of the UV layout, not of
     // the pose.
-    o.tangent_sign = input.tangent.w;
+    // Past 1, the membrane share (the fragment stage reads it), taken out of
+    // the packed w here: the packing does not survive interpolation.
+    o.tangent_sign = (input.tangent.w < 0.0 ? -1.0 : 1.0) * (1.0 + 0.98 * membrane_share(input.tangent.w));
+    o.panel = membrane_panel(input.tangent.w);
     o.albedo = input.color * model.tint.rgb;
     o.uv = input.uv;
     o.emissive = model.tint.a;
@@ -224,6 +234,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         float through = sun_visibility(input.world_position, -face, shadow_map, shadow_map_sampler);
         float forward = saturate(dot(-to_camera, to_sun));
         transmitted = membrane * behind * through * (0.35 + 0.65 * forward * forward) * scene.local_light_color.w;
+        // The sheet is thinnest in the middle of a panel and thick along a
+        // finger: the light through it follows.
+        transmitted *= 0.5 + 0.8 * smoothstep(0.0, 0.55, input.panel);
     }
 #endif
 
@@ -239,6 +252,8 @@ float4 fs_main(VertexOut input) : SV_Target {
         float luminance = dot(albedo, float3(0.30, 0.59, 0.11));
         albedo = lerp(albedo, luminance * model.recolour.rgb, model.recolour.a);
     }
+    // A membrane is darker where it thickens onto a finger.
+    albedo *= lerp(1.0, 0.8 + 0.26 * smoothstep(0.0, 0.5, input.panel), membrane);
 
     // Scaly hide is not a mirror, so the specular lobe is deliberately modest:
     // a single GGX highlight, no image-based lighting, no environment probe.

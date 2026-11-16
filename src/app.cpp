@@ -4386,6 +4386,10 @@ void App::studio_controls() {
                                "%.0f deg");
             ImGui::SliderFloat("stroke plane tilt", &rig.stroke_plane_tilt_deg, -45.0f, 45.0f,
                                "%.0f deg");
+            // The panels between the fingers bow under load: a share of a
+            // panel's width, in the glide and added on the downstroke.
+            ImGui::SliderFloat("membrane bow, glide", &rig.membrane_camber, 0.0f, 0.3f, "%.2f");
+            ImGui::SliderFloat("membrane bow, beat", &rig.membrane_billow, 0.0f, 0.3f, "%.2f");
         }
         if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||
             scenario == game::StudioScenario::Tail || scenario == game::StudioScenario::Attack) {
@@ -4802,6 +4806,9 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("neck lead", &rig.neck_lead_deg, 0.0f, 30.0f, "%.0f deg");
         ImGui::SliderFloat("neck streamline", &rig.neck_streamline_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("wing load flex", &rig.wing_load_flex_deg, 0.0f, 20.0f, "%.0f deg/g");
+        ImGui::SliderFloat("membrane bow, glide", &rig.membrane_camber, 0.0f, 0.3f, "%.2f");
+        ImGui::SliderFloat("membrane bow, beat", &rig.membrane_billow, 0.0f, 0.3f, "%.2f");
+        ImGui::SliderFloat("membrane sag, landed", &rig.membrane_slack, 0.0f, 0.2f, "%.2f");
         ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
         ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");
@@ -5210,7 +5217,7 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                      out.neck_profile.valid ? "; neck measured" : "");
         }
     }
-    if (out.joints.valid()) mark_membranes(mesh_data, out.skeleton, out.joints);
+    if (out.joints.valid()) out.membrane_reach = mark_membranes(mesh_data, out.skeleton, out.joints);
     out.mesh.upload(device_.rhi(), shape_for_tier(mesh_data, tag.c_str(), 0, pack.get(), &loaded.textures), tag.c_str());
     upload_far_lod(out.mesh, mesh_data, (tag + "_far").c_str(), pack.get(), &loaded.textures);
 
@@ -5448,35 +5455,148 @@ anim::SkinnedMeshData App::shape_for_tier(const anim::SkinnedMeshData& mesh, con
 }
 
 // The membrane: the share of each vertex's skin weight on a wing finger or
-// anything below one, written into the tangent's |w| past 1 (the sign stays
-// the handedness). The fingers span the membrane; the arm's bones are
-// thick. skinned.hlsl lights it from behind (docs/GAPS.md, G4).
-void App::mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
-                         const anim::DragonJoints& joints) {
+// anything below one, and where the vertex sits in its panel, written into
+// the tangent's |w| past 1 (the sign stays the handedness). The fingers span
+// the membrane; the arm's bones are thick. skinned.hlsl lights it from
+// behind (docs/GAPS.md, G4) and skin_common.hlsl bows it under load
+// (docs/showcase/HERO.md, "A membrane that billows").
+//
+// A panel is the skin between two spars: two fingers, a finger and the arm,
+// or the last finger and the flank. In the bind pose, seen from above, a
+// vertex d1 from its nearest spar and d2 from the next sits in a panel
+// d1 + d2 wide, and a sheet pinned on both spars bows as a parabola across
+// it: 4 d1 d2 / (d1 + d2), the panel's width at its middle and nothing at
+// either spar. That reach and its slope are what the shader needs.
+//
+// |w| - 1 is a 22-bit integer over 2^22: the share in the top 3 bits, the
+// reach in 5 as a share of the returned largest, and the slope's x and z in
+// 7 each over -4 to 4. The slope has the bits because the shading shows it:
+// at 5 bits the panels were lit in contour bands. Returns the largest
+// reach, in the mesh's units.
+float App::mark_membranes(anim::SkinnedMeshData& mesh, const anim::Skeleton& skeleton,
+                          const anim::DragonJoints& joints) {
     const int count = skeleton.count();
-    std::vector<bool> membrane(size_t(count), false);
+    std::vector<int8_t> wing(size_t(count), -1);  // which side's membrane a joint carries
     for (int side = 0; side < 2; ++side) {
         for (const std::vector<int>& finger : joints.wing_fingers[side]) {
             for (int j : finger) {
-                if (j >= 0 && j < count) membrane[size_t(j)] = true;
+                if (j >= 0 && j < count) wing[size_t(j)] = int8_t(side);
             }
         }
     }
     for (int j = 0; j < count; ++j) {
         const int parent = skeleton.joint(j).parent;
-        if (parent != anim::NO_PARENT && membrane[size_t(parent)]) membrane[size_t(j)] = true;
+        if (parent != anim::NO_PARENT && wing[size_t(parent)] >= 0) wing[size_t(j)] = wing[size_t(parent)];
     }
-    size_t marked = 0;
-    for (anim::SkinnedVertex& v : mesh.vertices) {
-        float share = 0.0f;
-        for (int k = 0; k < 4; ++k) {
-            if (v.joints[k] < membrane.size() && membrane[v.joints[k]]) share += v.weights[k];
+
+    // The spars, in the mesh's bind space: from the inverse binds, which are
+    // what place the vertices (anim/skeleton.h, set_inverse_bind).
+    auto bind_position = [&](int j) { return core::inverse(skeleton.joint(j).inverse_bind).translation_part(); };
+    std::vector<std::vector<core::Vec3>> spars[2];
+    for (int side = 0; side < 2; ++side) {
+        std::vector<core::Vec3> arm;
+        for (int j : joints.wing_root[side]) {
+            if (j >= 0 && j < count) arm.push_back(bind_position(j));
         }
-        share = core::saturate(share);
-        if (share > 0.5f) ++marked;
-        v.tangent.w = (v.tangent.w < 0.0f ? -1.0f : 1.0f) * (1.0f + 0.98f * share);
+        for (const std::vector<int>& finger : joints.wing_fingers[side]) {
+            std::vector<core::Vec3> line;
+            if (!finger.empty() && finger.front() >= 0 && finger.front() < count) {
+                const int parent = skeleton.joint(finger.front()).parent;
+                if (parent != anim::NO_PARENT) line.push_back(bind_position(parent));
+            }
+            for (int j : finger) {
+                if (j >= 0 && j < count) line.push_back(bind_position(j));
+            }
+            if (line.size() >= 2) spars[side].push_back(std::move(line));
+        }
+        if (arm.size() >= 2) spars[side].push_back(arm);
+        // The flank: from the shoulder back to the hip, where the root panel ends.
+        if (!arm.empty() && !joints.leg[side].empty() && joints.leg[side].front() >= 0 &&
+            joints.leg[side].front() < count) {
+            spars[side].push_back({arm.front(), bind_position(joints.leg[side].front())});
+        }
     }
-    LOG_INFO("membranes: %zu of %zu vertices", marked, mesh.vertices.size());
+    // The distance from `p` to a spar and the way out from it, seen from above.
+    auto to_spar = [](const std::vector<core::Vec3>& line, core::Vec3 p, float& distance, core::Vec2& out) {
+        distance = 1e30f;
+        for (size_t i = 0; i + 1 < line.size(); ++i) {
+            const core::Vec2 a{line[i].x, line[i].z};
+            const core::Vec2 b{line[i + 1].x, line[i + 1].z};
+            const core::Vec2 ab{b.x - a.x, b.y - a.y};
+            const core::Vec2 ap{p.x - a.x, p.z - a.y};
+            const float along = core::saturate((ap.x * ab.x + ap.y * ab.y) / core::maxf(ab.x * ab.x + ab.y * ab.y, 1e-12f));
+            const core::Vec2 away{ap.x - ab.x * along, ap.y - ab.y * along};
+            const float d = std::sqrt(away.x * away.x + away.y * away.y);
+            if (d < distance) {
+                distance = d;
+                out = d > 1e-6f ? core::Vec2{away.x / d, away.y / d} : core::Vec2{0.0f, 0.0f};
+            }
+        }
+    };
+
+    struct Panel {
+        float share = 0.0f;
+        float reach = 0.0f;
+        core::Vec2 slope{0.0f, 0.0f};
+    };
+    std::vector<Panel> panels(mesh.vertices.size());
+    std::vector<float> reaches;
+    size_t marked = 0;
+    for (size_t i = 0; i < mesh.vertices.size(); ++i) {
+        const anim::SkinnedVertex& v = mesh.vertices[i];
+        float side_share[2] = {0.0f, 0.0f};
+        for (int k = 0; k < 4; ++k) {
+            if (v.joints[k] < wing.size() && wing[v.joints[k]] >= 0) side_share[wing[v.joints[k]]] += v.weights[k];
+        }
+        Panel& panel = panels[i];
+        panel.share = core::saturate(side_share[0] + side_share[1]);
+        if (panel.share > 0.5f) ++marked;
+        const int side = side_share[1] > side_share[0] ? 1 : 0;
+        if (panel.share < 0.02f || spars[side].size() < 2) continue;
+        float d1 = 1e30f, d2 = 1e30f;
+        core::Vec2 out1{0.0f, 0.0f}, out2{0.0f, 0.0f};
+        for (const std::vector<core::Vec3>& line : spars[side]) {
+            float d = 0.0f;
+            core::Vec2 out{0.0f, 0.0f};
+            to_spar(line, v.position, d, out);
+            if (d < d1) {
+                d2 = d1;
+                out2 = out1;
+                d1 = d;
+                out1 = out;
+            } else if (d < d2) {
+                d2 = d;
+                out2 = out;
+            }
+        }
+        const float width = d1 + d2;
+        if (width < 1e-6f) continue;
+        panel.reach = 4.0f * d1 * d2 / width;
+        const float k1 = 4.0f * d2 * d2 / (width * width);
+        const float k2 = 4.0f * d1 * d1 / (width * width);
+        panel.slope = core::Vec2{k1 * out1.x + k2 * out2.x, k1 * out1.y + k2 * out2.y};
+        if (panel.share > 0.5f) reaches.push_back(panel.reach);
+    }
+    // The largest reach, but not one stray vertex's: the 99th percentile.
+    float largest = 0.0f;
+    if (!reaches.empty()) {
+        const size_t at = reaches.size() * 99 / 100;
+        std::nth_element(reaches.begin(), reaches.begin() + std::ptrdiff_t(at), reaches.end());
+        largest = reaches[at];
+    }
+    for (size_t i = 0; i < mesh.vertices.size(); ++i) {
+        const Panel& panel = panels[i];
+        const float reach = largest > 1e-6f ? core::saturate(panel.reach / largest) : 0.0f;
+        const uint32_t share_bits = uint32_t(std::lround(panel.share * 7.0f));
+        const uint32_t reach_bits = uint32_t(std::lround(reach * 31.0f));
+        const uint32_t slope_x = uint32_t(std::lround((core::clampf(panel.slope.x, -4.0f, 4.0f) / 8.0f + 0.5f) * 127.0f));
+        const uint32_t slope_z = uint32_t(std::lround((core::clampf(panel.slope.y, -4.0f, 4.0f) / 8.0f + 0.5f) * 127.0f));
+        const uint32_t packed = (share_bits << 19) | (reach_bits << 14) | (slope_x << 7) | slope_z;
+        anim::SkinnedVertex& v = mesh.vertices[i];
+        v.tangent.w = (v.tangent.w < 0.0f ? -1.0f : 1.0f) * (1.0f + float(packed) / 4194304.0f);
+    }
+    LOG_INFO("membranes: %zu of %zu vertices, panels to %.3f wide", marked, mesh.vertices.size(), largest);
+    return largest;
 }
 
 core::Mat4 App::ward_stone_matrix(const game::Sentinel& sentinel, int index) const {
@@ -9616,6 +9736,7 @@ void App::render() {
                 world_.draw_mesh_depth(device_, shadow_pass, terrain_mesh_, shadow_.light_view_proj(),
                                        gfx::ModelUniforms(), &terrain_chunks_);
             }
+            world_.skin_membrane = membrane_bow(player_model(), dragon_rig_);
             world_.draw_skinned_depth(device_, shadow_pass, player_model().mesh, shadow_.light_view_proj(),
                                       dragon_model, dragon_rig_.skinning_matrices());
             for (const auto& bot : bots_) {
@@ -9625,10 +9746,12 @@ void App::render() {
                 gfx::ModelUniforms bot_model;
                 bot_model.model =
                     core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
+                world_.skin_membrane = membrane_bow(worn, bot->rig);
                 world_.draw_skinned_depth(device_, shadow_pass, worn.mesh,
                                           shadow_.light_view_proj(), bot_model,
                                           bot->rig.skinning_matrices());
             }
+            world_.skin_membrane = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
             // The ward stones' shadows, on the ground and on each other.
             if (ward_prop_.ok && !ablated("towers")) {
                 for (size_t i = 0; i < combat_.sentinels().size(); ++i) {
@@ -9774,8 +9897,10 @@ void App::render() {
     }
     {
         CORE_PROFILE("player draw");
+        world_.skin_membrane = membrane_bow(player_model(), dragon_rig_);
         if (!ablated("player")) world_.draw_skinned(device_, pass, player_model().mesh, dragon_model,
                             dragon_rig_.skinning_matrices(), player_model().textures, model_sampler_);
+        world_.skin_membrane = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     }
 
     // Checkpoints. One mesh, one draw per ring, tinted by state -- few enough
@@ -9837,8 +9962,10 @@ void App::render() {
             bot_model.recolour = core::Vec4{0.8f, 1.35f, 2.1f, 0.95f};
             bot_model.tint = core::Vec4{1.15f, 1.35f, 1.75f, 0.28f};
         }
+        world_.skin_membrane = membrane_bow(worn, bot->rig);
         world_.draw_skinned(device_, pass, worn.mesh, bot_model, bot->rig.skinning_matrices(),
                             worn.textures, model_sampler_);
+        world_.skin_membrane = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     }
 
     // The sky: after everything opaque, before anything blended, on only the
@@ -9941,20 +10068,24 @@ void App::render() {
         // Last frame's model matrix and pose for `key`, swapped for this
         // frame's; this frame's again for a creature first seen.
         auto draw = [&](const void* key, const anim::SkinnedMesh& mesh, const gfx::ModelUniforms& model,
-                        const std::vector<core::Mat4>& joints) {
-            auto [it, fresh] = previous_models_.try_emplace(key, PreviousPose{model.model, joints});
-            const PreviousPose before = fresh ? PreviousPose{model.model, joints} : it->second;
-            it->second = PreviousPose{model.model, joints};
+                        const std::vector<core::Mat4>& joints, const core::Vec4& membrane) {
+            auto [it, fresh] = previous_models_.try_emplace(key, PreviousPose{model.model, joints, membrane});
+            const PreviousPose before = fresh ? PreviousPose{model.model, joints, membrane} : it->second;
+            it->second = PreviousPose{model.model, joints, membrane};
+            world_.skin_membrane = membrane;
+            world_.skin_membrane_before = before.membrane;
             world_.draw_skinned_velocity(device_, velocity, mesh, model, before.model, joints, before.joints, matrices);
+            world_.skin_membrane = world_.skin_membrane_before = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
         };
-        draw(&dragon_rig_, player_model().mesh, dragon_model, dragon_rig_.skinning_matrices());
+        draw(&dragon_rig_, player_model().mesh, dragon_model, dragon_rig_.skinning_matrices(),
+             membrane_bow(player_model(), dragon_rig_));
         for (const auto& bot : bots_) {
             if (bot->slot < 0 || !combat_.sentinels()[size_t(bot->slot)].alive) continue;
             const game::FlightState& s = bot->flight.state();
             const LoadedModel& worn = model_at(bot->model);
             gfx::ModelUniforms bot_model;
             bot_model.model = core::Mat4::trs(s.position, s.orientation, core::Vec3::one()) * worn.asset.matrix();
-            draw(bot.get(), worn.mesh, bot_model, bot->rig.skinning_matrices());
+            draw(bot.get(), worn.mesh, bot_model, bot->rig.skinning_matrices(), membrane_bow(worn, bot->rig));
         }
         device_.end_pass(velocity);
     }

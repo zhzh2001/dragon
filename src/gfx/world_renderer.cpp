@@ -119,6 +119,9 @@ PipelineDesc make_skinned_depth_desc(rhi::Format depth_format) {
 // draw left behind in the unused slots.
 struct SkinBlock {
     core::Mat4 joints[anim::MAX_JOINTS];
+    // After the joints (skin_common.hlsl): x how far the membranes bow, as a
+    // share of a panel's width, y the widest panel in the mesh's units.
+    core::Vec4 membrane = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // A retro tier's block (PACKED_JOINTS, shaders/skin_common.hlsl): each joint's
@@ -177,9 +180,12 @@ SkinBlock make_skin_block(const std::vector<core::Mat4>& joints) {
 // give them. A packed block is filled straight from the joints: built
 // through the full block, every skinned draw on the Pi 1B zeroed, filled
 // and read back 16 KB to send 3.
-void push_joints(Device& device, const std::vector<core::Mat4>& joints, const std::vector<uint16_t>* palette) {
+void push_joints(Device& device, const std::vector<core::Mat4>& joints, const std::vector<uint16_t>* palette,
+                 const core::Vec4& membrane) {
     if (!active_tier().packed_joints) {
-        push_skin(device, palette ? make_palette_block(joints, *palette) : make_skin_block(joints));
+        SkinBlock block = palette ? make_palette_block(joints, *palette) : make_skin_block(joints);
+        block.membrane = membrane;
+        push_skin(device, block);
         return;
     }
     static const core::Mat4 identity = core::Mat4::identity();
@@ -506,7 +512,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
     // pushes each submesh's palette instead (below), over this.
     bool whole = false;
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) whole |= submesh.index_count && submesh.palette.empty();
-    if (whole) push_joints(device, joints, nullptr);
+    if (whole) push_joints(device, joints, nullptr, skin_membrane);
     device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
     mesh.bind(device.rhi(), pass);
 
@@ -553,7 +559,7 @@ void WorldRenderer::draw_skinned(Device& device, rhi::Pass* pass,
         }
         if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 4);
 
-        if (!submesh.palette.empty()) push_joints(device, joints, &submesh.palette);
+        if (!submesh.palette.empty()) push_joints(device, joints, &submesh.palette, skin_membrane);
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }
@@ -586,7 +592,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     device.rhi().bind_pipeline(pass, pipeline);
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &light_view_proj, sizeof(core::Mat4));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
-    push_joints(device, joints, nullptr);
+    push_joints(device, joints, nullptr, skin_membrane);
     mesh.bind(device.rhi(), pass);
     const bool split = !mesh.submeshes().empty() && !mesh.submeshes().front().palette.empty();
     if (!split) {
@@ -596,7 +602,7 @@ void WorldRenderer::draw_skinned_depth(Device& device, rhi::Pass* pass,
     // A palette-split mesh draws batch by batch, each with its own joints.
     for (const anim::SkinnedSubmesh& submesh : mesh.submeshes()) {
         if (submesh.index_count == 0) continue;
-        push_joints(device, joints, &submesh.palette);
+        push_joints(device, joints, &submesh.palette, skin_membrane);
         device.rhi().draw_indexed(pass, submesh.index_count, 1, submesh.index_offset, 0, 0);
     }
 }
@@ -632,7 +638,9 @@ void WorldRenderer::draw_skinned_velocity(Device& device, rhi::Pass* pass, const
     device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &u, sizeof(u));
     device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
     // The two palettes, this frame's in slot 2 and the last in slot 3.
-    auto push_both = [&](const SkinBlock& now, const SkinBlock& then) {
+    auto push_both = [&](SkinBlock now, SkinBlock then) {
+        now.membrane = skin_membrane;
+        then.membrane = skin_membrane_before;
         push_skin(device, now);
         device.rhi().push_uniforms(rhi::Stage::Vertex, 3, &then, sizeof(SkinBlock));
     };

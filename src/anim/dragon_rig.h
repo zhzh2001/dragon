@@ -592,6 +592,16 @@ struct RigTuning {
     // Wings bow upward under load: degrees of extra dihedral per g above 1.
     // The one signal that makes a hard pull look like it costs something.
     float wing_load_flex_deg = 7.0f;
+    // The membrane between the fingers billows under load (skin_common.hlsl,
+    // membrane_bulge; docs/showcase/HERO.md, "A membrane that billows"): how
+    // far each panel bows, as a share of its width. `membrane_camber` is the
+    // glide's, bowed up by the lift. `membrane_billow` is added at the
+    // downstroke's fastest and taken off at the upstroke's, where the panels
+    // go slack. `membrane_slack` is the sag under their own weight on the
+    // ground. 0 for all three is the flat sheet. The modern tier only.
+    float membrane_camber = 0.11f;
+    float membrane_billow = 0.12f;
+    float membrane_slack = 0.04f;
     // Asymmetric wing lean with roll input -- both wings rotate the same way
     // about the body axis, which is exactly what produces a roll.
     float wing_roll_lean_deg = 9.0f;
@@ -970,6 +980,9 @@ public:
 
     const Pose& pose() const { return pose_; }
     const std::vector<core::Mat4>& skinning_matrices() const { return skinning_; }
+    // How far the membranes bow this frame, as a share of a panel's width:
+    // up (positive) under lift and on a downstroke, down when slack.
+    float membrane_load() const { return membrane_load_; }
     // Joint world transforms, for debug drawing the skeleton.
     const std::vector<core::Mat4>& world_matrices() const { return world_; }
     // Raw chain states, for probes: the rig's output should be a faithful
@@ -1118,6 +1131,9 @@ private:
     Pose pose_;
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
+    float membrane_load_ = 0.0f;
+    float membrane_tip_[2] = {0.0f, 0.0f};  // each wingtip's height over its shoulder, in arm lengths
+    bool membrane_tip_valid_ = false;
 
     ChainDynamics tail_sim_, neck_sim_;
     // Smoothed g deviation and flight intensity, so wing flex and the clip fade
