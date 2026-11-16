@@ -333,11 +333,13 @@ float4 fs_main(VertexOut input) : SV_Target {
         // valley's, as for the ground (terrain_sky).
         float visibility = sun_visibility(input.world_position, float3(0.0, 1.0, 0.0), shadow_map, shadow_map_sampler);
         float3 sky_in = ambient_light(float3(0.0, 1.0, 0.0)) * terrain_sky(input.world_position);
-        float3 bed = scene.palette[PALETTE_SAND].rgb * 0.5 * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + sky_in);
+        // A breath over the river lights it as it lights the banks.
+        float3 fire = local_light(input.world_position, float3(0.0, 1.0, 0.0));
+        float3 bed = scene.palette[PALETTE_SAND].rgb * 0.5 * (direct_sun(float3(0.0, 1.0, 0.0), visibility) + sky_in + 0.4 * fire);
         // Reds first and fast: a metre of water over pale gravel is
         // blue-green, three metres the water's own colour.
         float3 through = exp(-depth * float3(1.5, 0.5, 0.42));
-        const float3 DEEP_M = scene.palette[PALETTE_WATER_DEEP].rgb * (sky_in + 0.3 * visibility);
+        const float3 DEEP_M = scene.palette[PALETTE_WATER_DEEP].rgb * (sky_in + 0.3 * visibility + 0.12 * fire);
         float3 under = lerp(DEEP_M, bed, through);
 
         float cosine = saturate(dot(-view, n));
@@ -361,6 +363,9 @@ float4 fs_main(VertexOut input) : SV_Target {
         float sharpness = lerp(220.0, 30.0, smoothstep(0.1, 1.5, footprint));
         float glint = pow(saturate(dot(reflected, normalize(scene.sun.xyz))), sharpness) * (sharpness + 8.0) / 228.0;
         color += scene.sun_color.rgb * scene.sun.w * glint * 1.2 * visibility;
+        // And the flame's own streak in the mirror, an eighth of its light
+        // at the least and all of it at a grazing view.
+        color += local_light_mirror(input.world_position, reflected) * (0.125 + 0.875 * fresnel) * 0.22;
         // The shore, soft: the water thins out over its last metre of depth,
         // read from the heightfield, so the edge follows the smooth bank and
         // not the 6 m mesh's facets where the water plane crosses them, which

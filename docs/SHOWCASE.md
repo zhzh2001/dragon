@@ -324,6 +324,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | The fire lights what is near it, and its grain moves (2026-11-15, 21:20) | `showcase/EFFECTS.md` |
 | A fireball with a head (2026-11-15, 21:24) | `showcase/EFFECTS.md` |
 | A released flame burns out (2026-11-15, 21:27) | `showcase/EFFECTS.md` |
+| The river takes the fire's light, and the lens leaves the flame alone (2026-11-15, 21:33) | `showcase/EFFECTS.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |
@@ -362,6 +363,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | The blind critic, round 3: After round 3: fine tufts, reeds at the water (16:35) | `showcase/CRITIC.md` |
 | The blind critic, round 3: After round 3, tried and dropped: a softer flame (16:38) | `showcase/CRITIC.md` |
 | The blind critic, round 4 (2026-11-15, 20:25) | `showcase/CRITIC.md` |
+| The blind critic, round 5 (2026-11-15, 21:30) | `showcase/CRITIC.md` |
 
 ## Sources
 

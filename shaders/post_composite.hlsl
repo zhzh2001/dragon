@@ -76,7 +76,15 @@ float3 fxaa(float2 uv, float2 t) {
 // The ghosts: the bloom's bright spots mirrored through the centre at four
 // scales, each tinted as a coated lens tints them, fading toward the frame's
 // edge (Chapman's screen-space flare), and a thin halo ring. The bloom is
-// already thresholded, so only the sun, fire and glinting snow make any.
+// already thresholded, and only a bright spot at the sun makes a ghost: a
+// breath of fire fills a tenth of the frame, and its ghosts were dull
+// magenta discs a hand wide hanging over it (the blind critic's fifth
+// round, "a bad-blend artefact").
+float lens_at_sun(float2 at) {
+    float2 d = (at - post.flare.xy) * float2(post.texel.y / max(post.texel.x, 1e-6), 1.0);
+    return 1.0 - smoothstep(0.1, 0.28, length(d));
+}
+
 float3 lens_ghosts(float2 uv) {
     float2 mirrored = 1.0 - uv;
     float2 to_centre = 0.5 - mirrored;
@@ -89,11 +97,11 @@ float3 lens_ghosts(float2 uv) {
         // Only what is far brighter than a sunlit cloud: the clouds' own
         // bloom made a purple disc in the middle of the sky.
         float3 source = max(bloom.SampleLevel(bloom_sampler, at, 0.0).rgb - 0.5, 0.0);
-        sum += source * TINT[i] * (edge * edge * edge);
+        sum += source * TINT[i] * (edge * edge * edge * lens_at_sun(at));
     }
     float2 ring = normalize(to_centre + 1e-5) * 0.38;
     float halo = pow(saturate(1.0 - abs(length(mirrored + ring - 0.5) - 0.38) * 12.0), 2.0);
-    sum += max(bloom.SampleLevel(bloom_sampler, mirrored + ring, 0.0).rgb - 0.5, 0.0) * float3(0.8, 0.85, 1.0) * halo * 0.5;
+    sum += max(bloom.SampleLevel(bloom_sampler, mirrored + ring, 0.0).rgb - 0.5, 0.0) * float3(0.8, 0.85, 1.0) * (halo * 0.5 * lens_at_sun(mirrored + ring));
     return sum;
 }
 

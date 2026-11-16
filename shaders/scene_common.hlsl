@@ -527,16 +527,20 @@ float3 direct_sun(float3 normal, float visibility) {
 // a third of the way down the jet did not. The sum of 1 / r^2 along the
 // segment has a closed form: the angle the segment subtends, over the
 // distance to its line.
-float3 local_light(float3 world_position, float3 normal) {
-#ifdef ATMOSPHERE
-    float reach = scene.local_light.w;
-    if (reach <= 0.0) return (float3)0.0;
+float3 local_light_axis() {
     float2 packed = scene.thermal_count.zw;
     float3 along_axis = float3(packed.x, 1.0 - abs(packed.x) - abs(packed.y), packed.y);
     float fold = max(-along_axis.y, 0.0);
     along_axis.x += along_axis.x >= 0.0 ? -fold : fold;
     along_axis.z += along_axis.z >= 0.0 ? -fold : fold;
-    along_axis = normalize(along_axis);
+    return normalize(along_axis);
+}
+
+float3 local_light(float3 world_position, float3 normal) {
+#ifdef ATMOSPHERE
+    float reach = scene.local_light.w;
+    if (reach <= 0.0) return (float3)0.0;
+    float3 along_axis = local_light_axis();
     float span = reach * (5.0 / 6.0);
     float3 from_start = world_position - scene.local_light.xyz;
     float along = dot(from_start, along_axis);
@@ -549,6 +553,30 @@ float3 local_light(float3 world_position, float3 normal) {
     float beside = max(length(from_start - along_axis * along), 1.5);
     float sum = (atan((span - along) / beside) - atan(-along / beside)) / beside;
     return scene.local_light_color.rgb * (window * window * facing * sum);
+#else
+    return (float3)0.0;
+#endif
+}
+
+// The same line seen in a mirror: the flame's streak on water. `reflected`
+// is the view ray off the surface. The lobe is about the point of the line
+// the mirrored ray passes nearest, wide, since the water under a flame is
+// never still. Returns the flame's light as the mirror would show it,
+// before the surface's own reflectance.
+float3 local_light_mirror(float3 world_position, float3 reflected) {
+#ifdef ATMOSPHERE
+    float reach = scene.local_light.w;
+    if (reach <= 0.0) return (float3)0.0;
+    float3 along_axis = local_light_axis();
+    float span = reach * (5.0 / 6.0);
+    float3 from_start = world_position - scene.local_light.xyz;
+    float lean = dot(reflected, along_axis);
+    float along = (dot(along_axis, from_start) - lean * dot(reflected, from_start)) / max(1.0 - lean * lean, 1e-3);
+    float3 to_light = scene.local_light.xyz + along_axis * clamp(along, 0.0, span) - world_position;
+    float d2 = dot(to_light, to_light);
+    float window = saturate(1.0 - d2 / (reach * reach));
+    float lobe = pow(saturate(dot(reflected, to_light * rsqrt(max(d2, 1e-4)))), 70.0);
+    return scene.local_light_color.rgb * (lobe * window * window);
 #else
     return (float3)0.0;
 #endif

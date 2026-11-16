@@ -786,3 +786,33 @@ What it ranks first:
 
 The world items (floor, walls, forest, water) repeat rounds 1 to 3.
 
+
+## The blind critic, round 5 (2026-11-15, 21:30)
+
+`artifacts/showcase-critic/round5/` has fourteen frames and the report.
+The mean is 4.25, and 4.18 over the twelve views of round 4 (4.1 then).
+Three frames reach the floor target for the first time: the glide from
+below (5.3), the bite (5.2) and the breath from the side (5.0). A
+different agent scores each round, so a difference under half a point is
+not a measurement; the wording is the result.
+
+What the round confirms of the evening's work:
+
+- "The membrane now reads as membrane" where the fingers span it, with
+  "real scalloped sag between the fingers" and a glowing underside.
+- "I saw no hatching, banding or dither" in the flame.
+- The fire's light: "the warm orange spill on the sand and on the wing
+  roots is convincing".
+- The fireball "reads as a comet with a pale head and a short tail".
+
+What it puts next:
+
+1. The valley floor, the cliffs and the forest lead the list again. They
+   are in almost every frame and the dragon's work does not move them.
+2. The membrane at the arm: the panel between the forearm, the first
+   finger and the flank is still a uniform slab, and from the front on a
+   downstroke the wings are "bone rods with at most a 20 px strip of
+   membrane".
+3. The flame's edge: no dark, broken, smoky fringe, and the pale core
+   sits mid-plume and not at the mouth. Its length is nine dragons.
+4. The body's shadow side is a dark brown mass in rear views.

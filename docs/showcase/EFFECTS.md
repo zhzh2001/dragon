@@ -213,3 +213,24 @@ range, 155 m for the hero against a body 12 m long, and it widens to
 of what it burns, so this is the range's question and the playtester's:
 "width at the tip" is in the Playtest panel, the range is in the species'
 breath profile.
+
+## The river takes the fire's light, and the lens leaves the flame alone (2026-11-15, 21:33)
+
+The river. `water.hlsl` did not call `local_light`, so under a low pass
+the banks glowed and the water between them stayed dark. It now takes the
+light twice. The bed and the water's own colour are lit through the
+surface (0.4 and 0.12 of the light on the bank: more of either turned the
+teal water green). And the flame has a streak in the mirror:
+`local_light_mirror` (`scene_common.hlsl`) finds the point of the jet's
+line that the mirrored view ray passes nearest and puts a lobe about it,
+an eighth of the flame's light at a steep view and all of it at a
+grazing one. The ripples in the water's normal break the streak up.
+
+The lens. The ghosts of the lens flare are the bloom's bright spots
+mirrored through the centre of the frame. A breath of fire is a bright
+spot a tenth of the frame across, and its ghosts were dull magenta discs
+hanging over the flame; the blind critic's fifth round called them "a
+bad-blend artefact". A ghost's source now counts only within about a
+quarter of the frame's height of the sun (`lens_at_sun`,
+`post_composite.hlsl`). The sun's ghosts are as they were: no golden
+scene but `fire` moved, and it was captured again.
