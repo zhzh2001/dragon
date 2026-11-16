@@ -6,10 +6,11 @@ section 6 as the order of work for the modern tier's picture. `FIDELITY.md`
 stays the record of the rendering techniques. The retro tiers are out of
 scope here.
 
-## Where it stands (2026-11-16, 03:05)
+## Where it stands (2026-11-16, 18:48)
 
 Read this first when you pick the work up. The 26 suites pass and the
-Metal goldens match on `main` after the overnight Tripo run.
+Metal goldens match on `main` after the overnight Tripo run. No engine code
+changed after it; the day added Tripo models and records only.
 
 The standing direction (the user's, 2026-11-15): the visual showcase
 first, gameplay later; the dragon, its animation and its effects before
@@ -27,6 +28,7 @@ What the evening of 2026-11-15 built, each with its own section:
 | Blind critic rounds 4, 5 and 6 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round4` to `round6` |
 | The Tripo test on an account with credits | `MODEL_GENERATION.md`, "Tripo v3.1 on an account with credits" |
 | The overnight Tripo run (2026-11-16): 72 models, six rock pieces and two towers in the game | `MODEL_GENERATION.md`, "The overnight Tripo run"; `showcase/WORLD.md`, "Tripo crags, scree and boulders"; `tools/props.md`, the Tripo section |
+| The second Tripo spend (2026-11-16, day): 67 models, none in the game yet; crags, prey, landmarks and rocks wait for a Codex job | `MODEL_GENERATION.md`, "The second spend"; `artifacts/tripo-overnight/day2-*.jpg` |
 
 Waiting on the user:
 
@@ -50,11 +52,17 @@ Waiting on the user:
   night want the playtester's eye: the crags and scree on the slopes, the
   slender Tripo watchtower against the old broad keep
   (`artifacts/props/v3/compare-game-watchtower.png`), and a Tripo hide on
-  the hero, not switched on (`artifacts/tripo-overnight/hero-hide-*.jpg`).
-- The Tripo account expires on 2026-11-16 with about 3,700 credits unused.
-  The valley walls are still the open gap: every Tripo wall had a flat
-  cap, a flat back or a mirrored face, and a wall job would cut those away
-  (`tripo-wall-09` to `-11` are the best faces).
+  the hero, not switched on (`artifacts/tripo-overnight/hero-hide-*.jpg`
+  show the first version; the file to try is now `tripo-hero-retex-03`,
+  see "The second spend").
+- The Tripo credits are spent; the account expires at the end of
+  2026-11-16. Its 79 kept models are in `assets/tripo-raw/` (5 GB, not in
+  git). The valley walls are still the open gap, but the second spend
+  found the shape that works: single lopsided crags in a row, not long
+  wall pieces (`tripo-wall2-05`, `-07`, `tripo-crag2-02`, `-05` to `-08`).
+  The next Codex asset jobs, in order: those crags as a wall set, the six
+  standing prey for rigging, the pass gate, the keep and `tripo-hoard-10`
+  as run props, and the good rocks into the kit.
 
 If no answer has come, the next items in order are in "Open questions"
 below: the flame's hot point at the jaws and smoke that breaks from its
