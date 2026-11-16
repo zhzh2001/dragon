@@ -203,7 +203,11 @@ The far mesh (`TERRAIN_LITE`) and the retro tiers do not have it. Every
 Metal golden moved, on the grass only, and was captured again; the
 Vulkan, D3D12 and D3D11 sets are stale.
 
-Cost: see the run recorded in `~/src/gpu-hist` (below, once measured).
+Cost at 1080p on the Mac, from separate runs with and without the field:
++0.22 and +0.40 ms looking down on the floor (10.9 to 11.2 ms), and
+nothing measurable facing a wall (one pair +1.24 ms, the other -0.06, on
+a busy machine). The record is
+`~/src/gpu-hist/research/dragon-m5/runs/20261116-0300-mac-m5-dragon-meadow-drifts-cost`.
 
 Still a sheet in other ways: no rocks or shrubs out in the open meadow,
 no height in the grass past the blades' range, and the scan's ripple
