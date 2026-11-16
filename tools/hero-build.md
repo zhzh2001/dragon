@@ -161,6 +161,11 @@ HERO_RIG_CACHE=$PWD/build-hero-cache/rig5c HERO_RIG_ART=$PWD/artifacts/hero-claw
 ```
 
 The shared `build-hero-cache` symlink supplies the existing import and alignment stages.
+Since 2026-11-15 the cache itself is `build-hero-cache/` at the root of the
+main checkout (3.1 GB, ignored by git). It was in the `hero-wing2` worktree,
+which is removed; a new worktree symlinks to the main checkout's copy.
+Blender's `.blend1` backups in it were deleted, and
+`from-hero-wing2-worktree/` holds that worktree's last built `.glb` files.
 The input asset symlinks remain unchanged.
 The report paths keep this task's extra artifacts inside `artifacts/hero-claws/`.
 
