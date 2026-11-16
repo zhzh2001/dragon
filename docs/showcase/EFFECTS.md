@@ -262,3 +262,22 @@ fire. The strength follows the same dial as the tip ("soot at the tip",
 16 m and at 60 m. The skin is a darker edge, not yet smoke that breaks
 away: a trail of smoke behind the plume is still not drawn for the
 marched breath.
+
+## Smoke off the marched breath (2026-11-15, 21:53)
+
+The puffs left smoke (`smoke_for`: fire's soot, frost's vapour, stone's
+dust). The marched breath did not, so the plume ended in its own orange
+and left nothing behind. It now emits smoke puffs from the skin of the
+far third of the jet: slow, rising, 1.6 to 2.6 s of life, in the
+element's smoke colour, at 50 times the element's rate a second (7.5 a
+second for fire).
+
+It is light on purpose, and far from the jaws. From the chase camera the
+jet is seen end on, so smoke anywhere along it is in front of the view.
+The first version, from the far half at 12 a second, put a grey veil over
+the way ahead, which is what the playtest of 2026-10-21 called too much
+fog. `artifacts/breath-volume/smoke-before-after.jpg` is three seconds of
+breath from 120 m, before and after.
+
+The new random draws shift the particle sequence, so the `fire` golden's
+streaks and embers moved; it was captured again.

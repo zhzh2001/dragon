@@ -327,6 +327,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | A released flame burns out (2026-11-15, 21:27) | `showcase/EFFECTS.md` |
 | The river takes the fire's light, and the lens leaves the flame alone (2026-11-15, 21:33) | `showcase/EFFECTS.md` |
 | The pale core at the jaws, and a skin of smoke (2026-11-15, 21:37) | `showcase/EFFECTS.md` |
+| Smoke off the marched breath (2026-11-15, 21:53) | `showcase/EFFECTS.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |

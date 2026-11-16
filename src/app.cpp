@@ -2777,6 +2777,44 @@ void App::update(float dt) {
                     spark.brightness = 2.6f;
                     particles_.spawn(spark);
                 }
+                // And what the flame leaves (smoke_for, as the puffs do):
+                // smoke off the far third of the jet, from its skin, slow,
+                // rising and long-lived, so the plume ends in a roll of
+                // smoke and leaves a trail where it has been. Light, and
+                // far from the jaws: from the chase camera the jet is seen
+                // end on, and smoke nearer than that was a grey veil over
+                // the view ahead (the playtest of 2026-10-21: "the fog is
+                // too much").
+                const BreathSmoke smoke = smoke_for(player_breath_.element);
+                breath_smoke_owed_ += dt * smoke.rate * 50.0f;
+                while (breath_smoke_owed_ >= 1.0f) {
+                    breath_smoke_owed_ -= 1.0f;
+                    const float pick = 0.62f + 0.38f * std::fabs(particle_unit());
+                    const float side_x = particle_unit();
+                    const float side_y = particle_unit();
+                    const float side_z = particle_unit();
+                    const float pace = std::fabs(particle_unit());
+                    const float seed = particle_unit() * 0.5f + 0.5f;
+                    core::Vec3 at, drift;
+                    float radius = 1.0f;
+                    if (!breath_volume_.sample(pick, breath_volume_settings_, at, drift, radius)) break;
+                    const core::Vec3 out = core::normalize_or(core::Vec3{side_x, side_y + 0.6f, side_z}, core::Vec3::up());
+                    gfx::Particle s;
+                    s.kind = gfx::ParticleKind::Smoke;
+                    s.seed = seed;
+                    s.position = at + out * (radius * 0.7f);
+                    s.velocity = drift * 0.3f + out * 2.5f;
+                    s.acceleration = core::Vec3{0.0f, player_breath_.buoyancy * 0.5f + 2.0f, 0.0f};
+                    s.drag = 0.9f;
+                    s.life = 1.6f + 1.0f * pace;
+                    s.fade_in = 0.3f;
+                    s.size_start = radius * 0.8f;
+                    s.size_end = radius * 1.6f;
+                    s.color_start = smoke.colour;
+                    s.color_end = smoke.colour * 1.25f;
+                    s.brightness = smoke.opacity;
+                    particles_.spawn(s);
+                }
             } else {
                 emit_flame(combat_.breath_origin(), combat_.breath_direction(), range, false, dt, &player_breath_);
             }
