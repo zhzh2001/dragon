@@ -167,5 +167,5 @@ Formulas to hand:
 
 ## What was applied
 
-See `docs/SHOWCASE.md`, "Feedback 0013 to 0015, and the turn to the
-dragon", for what each number became in the rig and the effects.
+See `docs/showcase/PLAYTEST.md`, "Feedback 0013 to 0015, and the turn to
+the dragon", for what each number became in the rig and the effects.
