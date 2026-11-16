@@ -45,6 +45,8 @@ assets/silver-dragon-reference/
 assets/silver-dragon/
 artifacts/gold-dragon-rig/measurement/canonical-points.npy
 artifacts/gold-dragon-rig/materials/*.glb
+artifacts/sunspear/materials/*.glb
+artifacts/rimeplume/materials/*.glb
 tools/__pycache__/
 artifacts/**/*.bmp
 artifacts/**/*.log
