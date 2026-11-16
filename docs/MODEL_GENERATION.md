@@ -1258,7 +1258,7 @@ include the other tab's job; the totals come from the counts.
 
 The account and its credits expire at the end of 2026-11-16. Credits do
 not carry over, so the 3,725 left were spent the same day (see "The second
-spend" below), down to 40.
+spend" below), down to 20.
 
 Where the credits went, by result: the rock and run-prop groups (1,210
 credits) put eight models in the game, six rocks and two towers. The
@@ -1295,8 +1295,11 @@ discarded. The swap was not made: it is a call for the playtester.
 
 The two trial files are not in the repository. To build one, swap image 0
 (the hide's base colour) of `assets/embercrest-hero.glb` for image 2 of
-`assets/tripo-raw/tripo-hero-retex-01.glb`, and copy the hero's two `.cfg`
-files beside it under the new name.
+`assets/tripo-raw/tripo-hero-retex-03.glb`, and copy the hero's two `.cfg`
+files beside it under the new name. `retex-01`, the file the images above
+show, was deleted by mistake in the clean-up on 2026-11-16 (see "The second
+spend"). `retex-03` is the same job run again: a new generation, so its
+detail differs, with the same crisp scales and orange cast.
 
 The contact sheets in `artifacts/tripo-overnight/` (walls, rocks,
 wood-trees, props, prey, species, hero) show every model from the front,
@@ -1371,6 +1374,25 @@ shrine is fair. Of the second try at the run props:
 The contact sheets are `artifacts/tripo-overnight/day2-walls.jpg`,
 `day2-rocks.jpg`, `day2-landmarks.jpg`, `day2-prey.jpg` and
 `day2-crags-rocks.jpg`.
+
+The clean-up after the run deleted the 60 models judged not usable:
+the 19 species and 6 hero meshes, the 2 trees, the night's 5 cliffs and 3
+of its walls, the day's 8 failed walls, 3 failed crags and 4 weak rocks, and
+the 5 hoards and 4 ward stones that failed. The contact sheets in
+`artifacts/tripo-overnight/` and this section keep the record of each.
+The night's walls 09 to 11 were kept for their faces. 79 models remain
+(5 GB).
+
+The clean-up also deleted `tripo-hero-retex-01` and `-02` by mistake: the
+hero-skin candidate was waiting for a playtest, not rejected. The Studio
+no longer offered a download. Its signed link had expired. Its project
+page opened empty. Uploaded meshes and their re-textures do not appear in
+the Studio's asset lists. So the same Texture job ran again for 20 credits:
+`embercrest-hero-static.glb` with its materials removed (5 MB), rotation Y
+-90 in "Find the Best Angle", "Use Original UV" on, the front plate,
+"Remove Lighting" on, 4K. The result is `tripo-hero-retex-03` (Studio
+project `a5742629-4c38-4c03-937c-a753a4d7b5a2`). Its UVs match the hero's:
+89% of them fall in the same 0.001 cell, and the rest are within one cell.
 
 What a later Codex job can take from this run, in order of value: the
 crags as a valley-wall set; the six standing prey for rigging; the pass
