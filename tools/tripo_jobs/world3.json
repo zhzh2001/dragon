@@ -1,0 +1,8 @@
+[
+ {"name": "tripo-hero-mv-02", "views": "artifacts/showcase-study/hero-plates"},
+ {"name": "tripo-hero-mv-03", "views": "artifacts/showcase-study/hero-plates"},
+ {"name": "tripo-hero-head-mv-01", "views": "artifacts/showcase-study/hero-head-plates"},
+ {"name": "tripo-log-02", "prompt": "A mossy fallen tree trunk half sunk in the ground, about 10 metres long, thick rotting bark with green moss and small ferns, a broken jagged end and a few short branch stubs. Realistic photogrammetry scan."},
+ {"name": "tripo-rootplate-01", "prompt": "The upturned root plate of a toppled spruce, a disc of tangled roots, earth and stones about 4 metres across standing on edge, with the first metre of trunk lying on the ground. Realistic photogrammetry scan."},
+ {"name": "tripo-boulder-05", "prompt": "A low rounded river boulder of dark grey granite about 3 metres long, smooth water-polished surface with a few pale quartz veins. Realistic photogrammetry scan, flat underside."}
+]

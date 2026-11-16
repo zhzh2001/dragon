@@ -4,12 +4,13 @@
 
 namespace gfx {
 
-// The scanned rock kit (assets/props/rockkit/, tools/rockkit.md): eight
-// pieces, three levels of detail each, drawn on the modern tier by
+// The rock kit (assets/props/rockkit/, tools/rockkit.md): eight pieces
+// from Poly Haven scans and six from Tripo (tools/rockkit.md, "Tripo
+// pieces"), three levels of detail each, drawn on the modern tier by
 // gfx::RockKit. This header is the data the placement needs without a GPU:
 // each piece's size, its cliff plane, and the points that must lie under
 // the ground for it not to float.
-constexpr int ROCK_PIECES = 8;
+constexpr int ROCK_PIECES = 14;
 constexpr int ROCK_LODS = 3;
 constexpr int ROCK_CHECK_POINTS = 26;
 
@@ -85,6 +86,54 @@ inline const RockPieceInfo& rock_piece(int piece) {
           {15.28f, 0.73f, 2.16f}, {-14.51f, 0.10f, 3.03f}, {8.13f, 0.17f, 4.38f}, {-6.91f, 0.19f, 3.51f},
           {-10.71f, 0.06f, 3.94f}},
          25},
+        // The Tripo pieces (assets/props/rockkit/pieces.json): a tor and a
+        // ridge crest (crags), a scree cone, three boulders. Each stands
+        // upright on its flat base and turns only about the vertical; the
+        // check points are its base outline from LOD2.
+        {"tor_a", false, false, {22.01f, 24.01f, 22.75f}, {}, {0.0f, 1.0f, 0.0f},
+         {{2.71f, -0.12f, 8.96f}, {-3.18f, 0.50f, -11.14f}, {-10.45f, 0.40f, 1.89f}, {8.14f, 0.50f, -3.24f},
+          {-6.20f, 0.08f, 10.40f}, {-9.97f, 0.55f, -5.76f}, {8.25f, 0.70f, 4.14f}, {1.04f, 0.04f, -5.73f},
+          {7.57f, 0.01f, -8.90f}, {-2.59f, 0.11f, 7.45f}, {10.88f, 0.35f, 0.75f}, {-8.89f, 0.42f, 5.59f},
+          {7.03f, 0.39f, 0.58f}, {5.02f, 0.58f, 5.99f}, {-9.29f, 0.62f, -2.47f}, {5.43f, 0.57f, -6.49f},
+          {-5.73f, 0.08f, 7.43f}, {8.81f, 0.17f, -6.10f}, {-7.81f, 0.57f, 2.72f}, {-3.45f, 0.35f, -8.55f},
+          {-0.79f, 0.14f, -10.54f}, {7.43f, 0.67f, 6.58f}, {-3.82f, -0.08f, 10.94f}, {1.36f, 0.11f, 6.99f},
+          {3.00f, -0.01f, -7.11f}, {-8.36f, 0.45f, -7.30f}},
+         26},
+        {"ridge_a", false, false, {40.03f, 16.05f, 26.27f}, {}, {0.0f, 1.0f, 0.0f},
+         {{-19.28f, -0.06f, -6.03f}, {20.06f, 0.12f, 9.26f}, {4.47f, 0.30f, -5.84f}, {-6.25f, 0.42f, 7.43f},
+          {6.36f, 0.22f, 11.65f}, {-9.02f, 0.33f, -12.21f}, {12.07f, 0.09f, -0.66f}, {-14.08f, 0.35f, 0.74f},
+          {-2.28f, 0.46f, -8.86f}, {14.08f, 0.21f, 12.75f}, {16.88f, 0.25f, 3.72f}, {-15.21f, 0.27f, -12.98f},
+          {0.75f, 0.39f, 9.08f}, {-10.44f, 0.12f, 4.10f}, {-17.47f, 0.40f, -1.38f}, {-2.49f, 0.15f, 7.14f},
+          {9.93f, 0.05f, 12.83f}, {-18.71f, 0.12f, -9.59f}, {-5.67f, 0.09f, -11.56f}, {18.79f, 0.27f, 6.32f},
+          {5.41f, 0.16f, -2.96f}, {17.69f, 0.22f, 11.10f}, {0.54f, 0.08f, -8.17f}, {-12.50f, 0.02f, -12.69f},
+          {15.80f, 0.47f, 1.43f}, {-7.08f, 0.02f, 5.10f}},
+         26},
+        {"scree_a", false, false, {20.01f, 7.03f, 20.33f}, {}, {0.0f, 1.0f, 0.0f},
+         {{6.91f, 0.01f, 5.09f}, {-8.14f, 0.06f, -5.29f}, {5.54f, 0.11f, -7.86f}, {-6.11f, 0.15f, 7.29f},
+          {-1.73f, 0.08f, -9.80f}, {1.15f, 0.20f, 9.64f}, {3.52f, 0.07f, -1.67f}, {-8.75f, 0.16f, 1.13f},
+          {9.38f, 0.21f, -3.02f}, {8.38f, 0.08f, 1.31f}, {-2.51f, 0.21f, 8.77f}, {1.59f, 0.15f, -8.41f},
+          {-7.53f, 0.17f, 4.41f}, {-8.85f, 0.02f, -2.02f}, {-6.38f, 0.16f, -7.15f}, {8.81f, 0.16f, -0.70f},
+          {-4.09f, 0.21f, 7.39f}, {8.76f, 0.22f, 3.27f}, {-0.35f, 0.09f, -8.45f}, {2.52f, 0.06f, 8.43f},
+          {-2.04f, 0.04f, -8.25f}, {4.00f, 0.18f, -7.70f}, {-0.31f, 0.07f, 9.22f}, {3.01f, 0.23f, -8.89f},
+          {-8.78f, 0.19f, -0.56f}, {1.00f, 0.11f, 8.34f}},
+         26},
+        {"boulder_d", false, false, {4.51f, 2.60f, 4.54f}, {}, {0.0f, 1.0f, 0.0f},
+         {{-1.70f, 0.00f, -0.84f}, {1.39f, 0.00f, 0.89f}, {1.09f, 0.07f, -1.55f}, {-0.49f, 0.00f, 1.49f},
+          {-1.83f, 0.01f, 0.31f}, {1.53f, 0.03f, -0.18f}, {0.06f, 0.04f, -1.73f}, {0.24f, 0.06f, 1.54f},
+          {1.34f, 0.05f, -1.22f}},
+         9},
+        {"boulder_e", false, false, {5.01f, 3.99f, 5.10f}, {}, {0.0f, 1.0f, 0.0f},
+         {{0.40f, -0.00f, -1.64f}, {1.40f, 0.48f, 1.05f}, {2.01f, 0.43f, -1.19f}, {-0.74f, 0.45f, -1.83f},
+          {1.39f, 0.17f, -0.24f}, {0.18f, 0.40f, -2.18f}, {1.02f, 0.09f, 0.86f}, {0.88f, 0.29f, -1.54f},
+          {1.58f, 0.35f, -1.37f}, {1.27f, 0.15f, 0.20f}, {1.62f, 0.14f, -0.62f}, {1.80f, 0.36f, -0.91f},
+          {1.02f, 0.34f, 1.11f}},
+         13},
+        {"boulder_f", false, false, {3.23f, 3.08f, 4.00f}, {}, {0.0f, 1.0f, 0.0f},
+         {{-1.21f, 0.02f, -1.98f}, {0.59f, 0.06f, 1.90f}, {1.14f, 0.02f, -1.05f}, {-1.57f, 0.08f, -0.20f},
+          {0.74f, 0.05f, 0.28f}, {-0.60f, 0.10f, 0.79f}, {-0.24f, 0.07f, -0.59f}, {-1.30f, 0.03f, -0.97f},
+          {-0.19f, 0.07f, 1.45f}, {0.62f, 0.12f, -1.46f}, {1.07f, 0.07f, 1.50f}, {-1.09f, 0.12f, -0.56f},
+          {-0.75f, 0.03f, -1.97f}, {0.83f, 0.11f, 0.65f}},
+         14},
     };
     return pieces[piece >= 0 && piece < ROCK_PIECES ? piece : 0];
 }

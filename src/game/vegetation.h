@@ -93,6 +93,26 @@ struct VegetationSettings {
     // it is not the foot; the foot is always buried.
     float cliff_rim_tolerance = 2.0f;
     float cliff_scale = 1.7f;          // the middle of their scale range
+    // Crags (the Tripo tor and ridge crest): one candidate a `crag_spacing`
+    // cell, kept at `crag_cover`, on ground between the two slopes and at
+    // least `crag_above_floor` metres over the valley floor; sunk
+    // `crag_sink` of their height. Scree cones: below a steep face, on
+    // gentler ground.
+    float crag_spacing = 130.0f;
+    float crag_cover = 0.7f;
+    float crag_slope_min = 0.1f;
+    float crag_slope_max = 0.45f;
+    float crag_above_floor = 30.0f;
+    float crag_scale = 1.0f;
+    float crag_sink = 0.12f;
+    float scree_spacing = 90.0f;
+    float scree_cover = 0.6f;
+    float scree_scale = 1.0f;
+    float scree_sink = 0.2f;
+    // The highest a crag or scree cone stands (m): under the renderer's snow
+    // line (gfx::SceneSettings::snow_line, 400), since loose rock on clean
+    // snow reads as pasted on.
+    float crag_scree_ceiling = 370.0f;
 
     float wind = 1.0f;
     uint32_t seed = 7;

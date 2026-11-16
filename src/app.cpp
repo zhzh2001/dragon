@@ -3750,6 +3750,18 @@ void App::build_ui(float dt) {
                     replant_now |= ImGui::SliderFloat("cliff bury", &v.cliff_bury, 0.0f, 6.0f, "%.1f m");
                     replant_now |= ImGui::SliderFloat("cliff rim showing", &v.cliff_rim_tolerance, 0.0f, 6.0f, "%.1f m");
                     ImGui::SetItemTooltip("How far a cliff piece's rim may stand out of the ground; its foot is always buried");
+                    replant_now |= ImGui::SliderFloat("crag spacing", &v.crag_spacing, 30.0f, 500.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("crag cover", &v.crag_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("crag slope from", &v.crag_slope_min, 0.0f, 0.6f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("crag slope to", &v.crag_slope_max, 0.0f, 0.9f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("crag above floor", &v.crag_above_floor, 0.0f, 400.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("crag scale", &v.crag_scale, 0.3f, 3.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("crag sink", &v.crag_sink, 0.0f, 0.5f, "%.2f of height");
+                    replant_now |= ImGui::SliderFloat("scree spacing", &v.scree_spacing, 20.0f, 400.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("scree cover", &v.scree_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("scree scale", &v.scree_scale, 0.3f, 3.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("scree sink", &v.scree_sink, 0.0f, 0.6f, "%.2f of height");
+                    replant_now |= ImGui::SliderFloat("crags and scree below", &v.crag_scree_ceiling, 0.0f, 2000.0f, "%.0f m");
                 }
                 ImGui::TreePop();
             }

@@ -231,8 +231,8 @@ bool RockKit::load(Device& device) {
         LOG_INFO("rock kit: %s, mean albedo (%.3f, %.3f, %.3f)", name, double(piece.mean_albedo.x),
                  double(piece.mean_albedo.y), double(piece.mean_albedo.z));
     }
-    LOG_INFO("rock kit: 8 pieces, %llu / %llu / %llu triangles a level, 24 maps at 1024",
-             (unsigned long long)triangles[0], (unsigned long long)triangles[1], (unsigned long long)triangles[2]);
+    LOG_INFO("rock kit: %d pieces, %llu / %llu / %llu triangles a level, %d maps at 1024", ROCK_PIECES,
+             (unsigned long long)triangles[0], (unsigned long long)triangles[1], (unsigned long long)triangles[2], 3 * ROCK_PIECES);
     loaded_ = true;
     return true;
 }

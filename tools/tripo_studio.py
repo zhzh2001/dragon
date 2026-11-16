@@ -74,7 +74,8 @@ def input_tabs(snap):
 
 def credits():
     txt = cu("read", check=False)
-    m = re.search(r"^(\d{2,6})\s*$", txt, re.M)
+    # The balance is the number just before the header's "Upgrade" button.
+    m = re.search(r"^(\d+)\s*\n\s*Upgrade", txt, re.M)
     return int(m.group(1)) if m else None
 
 
@@ -118,7 +119,7 @@ def fetch(name, url):
     return dest
 
 
-def generate(name, prompt=None, image=None, views=None):
+def generate(name, prompt=None, image=None, views=None, tpose=False):
     cu("open", GENERATE_URL)
     time.sleep(7)
     snap = snapshot()
@@ -128,6 +129,9 @@ def generate(name, prompt=None, image=None, views=None):
         time.sleep(1.5)
         snap = snapshot()
         cu("fill", ref_after(snap, r'textbox "Describe what you want'), prompt)
+        if tpose:
+            cu("click", ref_after(snapshot(), r'button "T-Pose"'))
+            time.sleep(1)
     elif views is not None:
         # The multi-view tab's four slots are the first four file inputs, in
         # the order front, left, right, back. Tag them so each upload names
@@ -189,7 +193,8 @@ def main():
                 continue
             for attempt in range(2):
                 try:
-                    entry = generate(job["name"], job.get("prompt"), job.get("image"), job.get("views"))
+                    entry = generate(job["name"], job.get("prompt"), job.get("image"), job.get("views"),
+                                     job.get("tpose", False))
                     entry["job"] = job
                     log(entry)
                     break

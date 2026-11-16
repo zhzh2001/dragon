@@ -212,3 +212,39 @@ a busy machine). The record is
 Still a sheet in other ways: no rocks or shrubs out in the open meadow,
 no height in the grass past the blades' range, and the scan's ripple
 repeats visibly from 60 m.
+
+## Tripo crags, scree and boulders in the world (2026-11-16, 01:58)
+
+The rock kit has six Tripo pieces since this night (`tools/rockkit.md`,
+"Tripo pieces"; Codex built them from the raw files in
+`assets/tripo-raw/`). `gfx/rock_piece.h` lists them after the scans, and
+`Vegetation::place_kit` places them:
+
+- `boulder_d`, `boulder_e` and `boulder_f` join the boulder groups. A group's
+  large one and its small ones now draw from six boulders, not three.
+- `tor_a` and `ridge_a` are crags. One candidate stands in each 130 m cell,
+  kept at 0.7, on ground with a slope from 0.1 to 0.45, at least 30 m over
+  the valley floor and at least two radii from any cliff piece. Each stands
+  upright, turns about the vertical, and sinks 12% of its height and then
+  until its base outline is under the ground.
+- `scree_a` lies where gentler ground (slope 0.04 to 0.3) has a steep face
+  15 to 60 m uphill. It leans 80% of the way to the slope.
+- Neither crags nor scree go above 370 m. The renderer's snow line is 400 m,
+  and loose rock on clean snow read as pasted on.
+
+Every dial is under Terrain > Vegetation > Rocks. The arena at the default
+seed has 3,898 kit pieces: 238 cliff pieces, 38 crags, 57 scree cones.
+The log names the first of each kind with its position, for a `--cam` on it.
+
+What it is and is not: rock variety on the slopes and the floor. It is not
+the valley wall the critic asked for. Codex dropped the three Tripo walls
+(cavities, a masonry pattern on one face, flat caps). Tonight's later
+batches hold more wall candidates (`tripo-wall-06`, `-08`, `-09` to `-11`).
+
+A long shadow under a crag or a scree cone can show as a dark
+parallelogram in a `--cam` view far from the player. The shadow map follows
+the player, so a far piece falls in the coarse cascade. With `--sun 60` it
+is gone.
+
+The Metal goldens pass without a new capture; the largest tile difference
+was 4.1.

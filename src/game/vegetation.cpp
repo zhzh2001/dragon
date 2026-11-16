@@ -115,11 +115,16 @@ void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& s
 namespace {
 
 // The kit's pieces by role (gfx/rock_piece.h order).
-constexpr int KIT_BOULDERS[3] = {0, 1, 2};
+// boulder_a-c are scans; boulder_d-f are Tripo pieces (gfx/rock_piece.h).
+constexpr int KIT_BOULDERS[6] = {0, 1, 2, 11, 12, 13};
+constexpr int KIT_BOULDER_COUNT = 6;
 // slab_a (3) is left out: its scan has a hollow under one side that reads
 // as a black cave at any sink (docs/SHOWCASE.md, S6). Both entries slab_b.
 constexpr int KIT_SLABS[2] = {4, 4};
 constexpr int KIT_CLIFFS[3] = {5, 6, 7};
+// The Tripo crags (a tor, a ridge crest) and the scree cone.
+constexpr int KIT_CRAGS[2] = {8, 9};
+constexpr int KIT_SCREE = 10;
 
 // A piece's radius on the ground at scale 1: half its larger footprint side.
 float footprint_radius(int piece) {
@@ -267,6 +272,115 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
         }
     }
 
+    // ---- crags and scree (the Tripo pieces): upright, turned about the
+    // vertical only, sunk a share of their height and then until their base
+    // outline is under the ground. Crags stand on shoulders and crests, high
+    // over the floor; scree lies where gentler ground meets a steep face
+    // above it. Both keep the boulders out of their footprints.
+    const auto place_upright = [&](int piece, float x, float z, float scale, float yaw, float sink_share,
+                                   float tilt, float shade_roll, float moss_roll, float hash_roll) {
+        const gfx::RockPieceInfo& info = gfx::rock_piece(piece);
+        const float height = terrain.height_at(x, z);
+        const core::Vec3 n = terrain.normal_at(x, z);
+        const core::Vec3 up = core::normalize_or(core::lerp(core::Vec3::up(), n, tilt), core::Vec3::up());
+        const core::Quat q = core::normalize(core::rotation_between(core::Vec3::up(), up) *
+                                             core::Quat::from_axis_angle(core::Vec3::up(), yaw));
+        gfx::RockInstance rock;
+        rock.position_scale = core::Vec4{x, height - sink_share * info.size.y * scale, z, scale};
+        rock.rotation = to_vec4(q);
+        const float extra = bury_check_points(terrain, rock, piece, 0.1f);
+        // Sunk by more than a third of its height on this ground: leave it out.
+        if (extra > 0.35f * info.size.y * scale) return false;
+        kit_extra_sink_ = core::maxf(kit_extra_sink_, extra);
+        rock.ground = ground_plane(x, z);
+        rock.params = core::Vec4{0.92f + 0.16f * shade_roll, moss_at(height, moss_roll), hash_roll, 0.0f};
+        // The first of each kind, for a --cam on it.
+        if (kit_rocks_[piece].empty())
+            LOG_INFO("rocks: first %s at (%.0f, %.0f, %.0f), scale %.2f", info.name, double(x), double(height),
+                     double(z), double(scale));
+        kit_rocks_[piece].push_back(rock);
+        cliffs.push_back(Footprint{x, z, footprint_radius(piece) * scale});
+        return true;
+    };
+    size_t crag_count = 0, scree_count = 0;
+    {
+        const float crag_spacing = core::maxf(settings.crag_spacing, 30.0f);
+        const int crag_cells = int((2.0f * extent) / crag_spacing);
+        for (int iz = 0; iz < crag_cells; ++iz) {
+            for (int ix = 0; ix < crag_cells; ++ix) {
+                CellHash hash(ix, iz, settings.seed * 17u + 9u);
+                const float jx = hash.next();
+                const float jz = hash.next();
+                const float x = -extent + (float(ix) + 0.15f + 0.7f * jx) * crag_spacing;
+                const float z = -extent + (float(iz) + 0.15f + 0.7f * jz) * crag_spacing;
+                const float keep = hash.next();
+                const float pick = hash.next();
+                const float scale_roll = hash.next();
+                const float yaw = hash.next() * core::TWO_PI;
+                const float shade = hash.next();
+                const float moss = hash.next();
+                const float id = hash.next();
+                if (keep > settings.crag_cover) continue;
+                const float height = terrain.height_at(x, z);
+                if (height < floor + settings.crag_above_floor) continue;
+                if (height > settings.crag_scree_ceiling) continue;
+                const float slope = 1.0f - terrain.normal_at(x, z).y;
+                if (slope < settings.crag_slope_min || slope > settings.crag_slope_max) continue;
+                bool clear = true;
+                for (const Footprint& f : cliffs) {
+                    if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < 4.0f * f.r * f.r) clear = false;
+                }
+                if (!clear) continue;
+                const int piece = KIT_CRAGS[pick < 0.5f ? 0 : 1];
+                const float scale = settings.crag_scale * (0.75f + 0.5f * scale_roll);
+                if (place_upright(piece, x, z, scale, yaw, settings.crag_sink, 0.0f, shade, moss, id)) ++crag_count;
+            }
+        }
+        const float scree_spacing = core::maxf(settings.scree_spacing, 20.0f);
+        const int scree_cells = int((2.0f * extent) / scree_spacing);
+        for (int iz = 0; iz < scree_cells; ++iz) {
+            for (int ix = 0; ix < scree_cells; ++ix) {
+                CellHash hash(ix, iz, settings.seed * 19u + 13u);
+                const float jx = hash.next();
+                const float jz = hash.next();
+                const float x = -extent + (float(ix) + jx) * scree_spacing;
+                const float z = -extent + (float(iz) + jz) * scree_spacing;
+                const float keep = hash.next();
+                const float scale_roll = hash.next();
+                const float yaw = hash.next() * core::TWO_PI;
+                const float shade = hash.next();
+                const float moss = hash.next();
+                const float id = hash.next();
+                if (keep > settings.scree_cover) continue;
+                const float scree_height = terrain.height_at(x, z);
+                if (scree_height < t.water_level + 3.0f || scree_height > settings.crag_scree_ceiling) continue;
+                const core::Vec3 n = terrain.normal_at(x, z);
+                const float slope = 1.0f - n.y;
+                if (slope < 0.04f || slope > 0.3f) continue;
+                // The face it fell from: steep ground a few tens of metres uphill.
+                const core::Vec2 flat{n.x, n.z};
+                const float flat_len = std::sqrt(flat.x * flat.x + flat.y * flat.y);
+                if (flat_len < 1e-3f) continue;
+                const core::Vec2 uphill = flat * (-1.0f / flat_len);
+                bool below_face = false;
+                for (float d = 15.0f; d <= 60.0f; d += 15.0f) {
+                    const float ux = x + uphill.x * d;
+                    const float uz = z + uphill.y * d;
+                    if (1.0f - terrain.normal_at(ux, uz).y > settings.cliff_slope * 0.85f) below_face = true;
+                }
+                if (!below_face) continue;
+                bool clear = true;
+                for (const Footprint& f : cliffs) {
+                    if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < f.r * f.r) clear = false;
+                }
+                if (!clear) continue;
+                const float scale = settings.scree_scale * (0.7f + 0.6f * scale_roll);
+                if (place_upright(KIT_SCREE, x, z, scale, yaw, settings.scree_sink, 0.8f, shade, moss, id))
+                    ++scree_count;
+            }
+        }
+    }
+
     // ---- boulder groups.
     const float spacing = core::maxf(settings.rock_group_spacing, 12.0f);
     const int cells = int((2.0f * extent) / spacing);
@@ -324,7 +438,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
             const float pick = hash.next();
             const bool slab = slope < 0.2f && pick < 0.4f;
             const float which = hash.next();
-            const int large = slab ? KIT_SLABS[int(which * 1.999f)] : KIT_BOULDERS[int(which * 2.999f)];
+            const int large = slab ? KIT_SLABS[int(which * 1.999f)] : KIT_BOULDERS[int(which * (float(KIT_BOULDER_COUNT) - 0.001f))];
             const float scale_roll = hash.next();
             const float large_scale = settings.rock_large_scale * (0.75f + 0.6f * scale_roll);
             const float yaw = hash.next() * core::TWO_PI;
@@ -345,7 +459,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                 const float angle = hash.next() * core::TWO_PI;
                 const float reach = hash.next();
                 const float piece_roll = hash.next();
-                const int piece = KIT_BOULDERS[int(piece_roll * 2.999f)];
+                const int piece = KIT_BOULDERS[int(piece_roll * (float(KIT_BOULDER_COUNT) - 0.001f))];
                 const float small_roll = hash.next();
                 const float small_scale = large_scale * (0.22f + 0.3f * small_roll);
                 const float distance = radius * (0.9f + settings.rock_group_spread * reach) +
@@ -367,8 +481,10 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
     }
     size_t total = 0;
     for (const auto& list : kit_rocks_) total += list.size();
-    LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims), worst extra sink %.2f m",
-             total, cliffs.size(), double(cliff_sink_sum / float(cliffs.empty() ? 1 : cliffs.size())), double(kit_extra_sink_));
+    LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims; %zu crags, %zu scree), "
+             "worst extra sink %.2f m",
+             total, cliffs.size() - crag_count - scree_count, double(cliff_sink_sum / float(cliffs.size() > crag_count + scree_count ? cliffs.size() - crag_count - scree_count : 1)),
+             crag_count, scree_count, double(kit_extra_sink_));
 }
 
 void Vegetation::plant(const Terrain& terrain, const VegetationSettings& settings) {
