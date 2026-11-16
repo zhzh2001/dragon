@@ -171,3 +171,40 @@ Left open:
   over curved ground the band is wrong by a metre or two in places.
 - Per-piece CPU culling is fine at 5,000 pieces; ten times that would want
   the foliage cells.
+
+## A meadow in drifts (2026-11-15, 22:00)
+
+"The ground plane is a flat green sheet" is the first item of the blind
+critic's fifth round, and some form of it has led every round
+(`CRITIC.md`). The meadow's colour was two greens blended by one noise 180
+m across, under the ground scan's grain. From the air nothing sat between
+the scan's grain and the valley's width.
+
+`terrain_albedo` (`terrain.hlsl`) now has a second field for the grass,
+on the modern tier's near mesh: two value noises at about 50 m and 20 m,
+their sample point pushed up to 35 m by the first noise so the edges do
+not run with the grid.
+
+- Below 0.30 to 0.46 of the field: lush hollows, the grass darker and
+  bluer (0.60, 0.80, 0.56 of its colour), three quarters of the way.
+- Above 0.56 to 0.72: drifts gone to seed, 60% toward the dry grass and
+  20% brighter.
+- Worn tracks: the ridge of a third noise at 118 m, a line about a metre
+  wide, half the sand's colour. A ridge is a contour and a contour
+  closes, so whole tracks were rings. The drift field cuts them into
+  lengths. After the cut few remain; they are a detail, not the change.
+
+The grass on the walls takes the same field, which breaks their sheets
+of one green too. `artifacts/meadow-drifts/before-after.jpg` has the
+floor from 60 m and from 120 m. The landed view was checked: the blades
+are one green over both tones and the seam does not show.
+
+The far mesh (`TERRAIN_LITE`) and the retro tiers do not have it. Every
+Metal golden moved, on the grass only, and was captured again; the
+Vulkan, D3D12 and D3D11 sets are stale.
+
+Cost: see the run recorded in `~/src/gpu-hist` (below, once measured).
+
+Still a sheet in other ways: no rocks or shrubs out in the open meadow,
+no height in the grass past the blades' range, and the scan's ripple
+repeats visibly from 60 m.

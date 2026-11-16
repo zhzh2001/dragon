@@ -237,6 +237,26 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
 
     // Each material wears its channel: 1 + (d - 0.5) * 2 * strength.
     float3 grass = lerp(GRASS, GRASS_DRY, smoothstep(0.35, 0.75, patches)) * modulate(detail.ground.g, strength);
+#if defined(ATMOSPHERE) && !defined(TERRAIN_LITE)
+    // The meadow in drifts (docs/showcase/WORLD.md, "A meadow in drifts").
+    // The patches above are 180 m across and two greens: from the air the
+    // valley floor was one sheet, the first item of every blind critic's
+    // round. A second field at 20 to 50 m, bent by the first so its edges
+    // do not run with the grid: deep lush hollows, pale drifts gone to
+    // seed, and the worn lines animals leave between them.
+    float2 meadow_at = world_position.xz + (patches - 0.5) * 70.0;
+    float drift = value_noise(meadow_at * 0.019) * 0.65 + value_noise(meadow_at * 0.047 + 17.0) * 0.35;
+    float lush = 1.0 - smoothstep(0.30, 0.46, drift);
+    float seeded = smoothstep(0.56, 0.72, drift);
+    grass = lerp(grass, grass * float3(0.60, 0.80, 0.56), lush * 0.75);
+    grass = lerp(grass, lerp(grass, GRASS_DRY * modulate(detail.ground.g, strength), 0.6) * 1.2, seeded * 0.7);
+    float track = 1.0 - abs(value_noise(meadow_at * 0.0085 + 5.3) * 2.0 - 1.0);
+    // A track is a contour of its noise and a contour closes: left whole,
+    // the tracks were rings. The drift field cuts them into lengths that
+    // start and end in the grass.
+    track = smoothstep(0.955, 0.99, track) * smoothstep(0.38, 0.52, drift);
+    grass = lerp(grass, SAND * 0.5 * modulate(detail.ground.b, strength), track * 0.6);
+#endif
     float3 rock = lerp(ROCK_DARK, ROCK, smoothstep(0.25, 0.8, patches)) * modulate(detail.rock, strength);
 
     // Strata: near-horizontal bands on steep faces, the single strongest cue

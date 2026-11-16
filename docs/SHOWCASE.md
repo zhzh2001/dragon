@@ -334,6 +334,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Bushes of leaf cards, fuller tufts (2026-11-15, 12:27) | `showcase/WORLD.md` |
 | Where a frame's time goes (2026-11-15, 12:45) | `showcase/WORLD.md` |
 | S6, first part: the scanned rock kit in the world (2026-11-15, 13:30) | `showcase/WORLD.md` |
+| A meadow in drifts (2026-11-15, 22:00) | `showcase/WORLD.md` |
 | What other showcases do that this build does not (2026-11-15, 12:55) | `showcase/CRITIC.md` |
 | What other showcases do that this build does not: Licences | `showcase/CRITIC.md` |
 | What other showcases do that this build does not: What the engine already has | `showcase/CRITIC.md` |
