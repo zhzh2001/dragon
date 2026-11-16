@@ -126,11 +126,17 @@ void BreathVolume::feed(core::Vec3 mouth, core::Vec3 direction, core::Vec3 carry
 
 void BreathVolume::update(float dt) {
     const float decay = std::exp(-jet_.drag * dt);
+    // Let go, the gas burns out at more than twice the rate: with nothing
+    // feeding it, what was a jet cooled and went to smoke in half a second.
+    // At its own rate the last second of flame hung in the air as a bright
+    // cloud with no dragon on it (the blind critic's fourth round, "an
+    // explosion sprite").
+    const float ageing = fed_ ? 1.0f : 2.4f;
     for (Node& node : nodes_) {
         node.velocity = node.velocity * decay;
         node.velocity.y += jet_.buoyancy * dt;
         node.position = node.position + (node.velocity + node.carry) * dt;
-        node.age += dt;
+        node.age += dt * ageing;
     }
     const float life = std::max(jet_.life, 0.05f);
     while (!nodes_.empty() && nodes_.back().age >= life) nodes_.pop_back();

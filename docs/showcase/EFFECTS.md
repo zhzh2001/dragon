@@ -192,3 +192,24 @@ from 75 m, before and after. The `fire` golden was captured again.
 
 The round's size is still the collision radius times 0.8. The reference
 study has a fireball the size of the head; ours is about twice that.
+
+## A released flame burns out (2026-11-15, 21:27)
+
+The critic's turn frame showed a flame "not attached to the mouth", "a
+separate orange cloud", "like an explosion sprite". In that frame the
+run's fire meter had just emptied. The breath had stopped, and what was
+breathed travelled on at full brightness for its whole life, 1.3 s.
+
+A node that is not fed now ages 2.4 times as fast
+(`BreathVolume::update`). Age is what cools the colour, opens the gaps
+and darkens the tip, so a released jet goes to deep orange and smoke and
+is gone in about half a second. While the breath is held, nothing
+changes: the youngest node is the mouth, and the jet stays on the jaws
+through the turn (checked at frames 100 and 130 of the same run).
+
+Still open from the fourth round: the jet's length. It is the breath's
+range, 155 m for the hero against a body 12 m long, and it widens to
+14.8 m at the tip. Shortening what is drawn would leave the flame short
+of what it burns, so this is the range's question and the playtester's:
+"width at the tip" is in the Playtest panel, the range is in the species'
+breath profile.
