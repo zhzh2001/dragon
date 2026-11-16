@@ -234,3 +234,31 @@ bad-blend artefact". A ghost's source now counts only within about a
 quarter of the frame's height of the sun (`lens_at_sun`,
 `post_composite.hlsl`). The sun's ghosts are as they were: no golden
 scene but `fire` moved, and it was captured again.
+
+## The pale core at the jaws, and a skin of smoke (2026-11-15, 21:37)
+
+The blind critic's fifth round: "the pale core sits mid-plume, not at the
+mouth", and the flame has "no dark, broken, smoky edge".
+
+The core. The heat fell as one minus the age to the power 1.25. A node's
+age is not its distance: the gas slows, so half the plume's length is
+flown in the first third of its life. Where the jet was wide, 60% of the
+way down, the gas was still young enough for its tongues to read through
+the ramp's pale end, and from 60 m that was a second, larger core. The
+power is now 3.5 (`BREATH_COOLING`, `breath_volume.hlsl`), and the
+tongues' gain over the body falls with the age. The pale colour is at
+the jaws and thins to streaks over the first third; the rest is the
+body's orange with its lines.
+
+The skin. Soot was only at the tip, past half the gas's life. Past the
+first of its life the jet now also wears it on the outer part of its
+radius (from 0.55 of the radius, full at 0.95), wherever the gas there is
+cool. A ray that grazes the jet meets only the skin and comes out dark
+red-brown; a ray through the middle meets the skin thinly and then the
+fire. The strength follows the same dial as the tip ("soot at the tip",
+`smoke`).
+
+`artifacts/breath-volume/core-and-skin-before-after.jpg` has both, at
+16 m and at 60 m. The skin is a darker edge, not yet smoke that breaks
+away: a trail of smoke behind the plume is still not drawn for the
+marched breath.

@@ -103,6 +103,11 @@ float4 breath_spine(float3 p, float swell, int from, int to, out int nearest) {
     return best;
 }
 
+// How fast the gas cools along the jet: the heat falls as one minus the age
+// to this power. At 1.25 the pale core was widest half way down the plume,
+// where the jet is wide, and not at the jaws.
+static const float BREATH_COOLING = 3.5;
+
 float4 fs_main(BreathVertex input) : SV_Target {
     float2 uv = input.uv;
     float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
@@ -243,14 +248,22 @@ float4 fs_main(BreathVertex input) : SV_Target {
             // Hot on the axis and at the jaws, cooling outward and along,
             // and hot in the tongues: between them the body is a deep
             // orange, so the flame has lines in it and not one glow.
-            float heat = saturate(1.0 - q * 1.1) * pow(1.0 - age, 1.25);
-            heat *= 0.3 + 1.5 * ridge * (0.5 + 0.5 * fine);
+            float heat = saturate(1.0 - q * 1.1) * pow(1.0 - age, BREATH_COOLING);
+            // The tongues' share falls with the age: far down the plume
+            // they are the body's orange and not a second pale core.
+            heat *= 0.3 + lerp(1.5, 0.5, age) * ridge * (0.5 + 0.5 * fine);
             // A fireball's head (axis.w, 0 for a jet): solid heat about the
             // axis where the round is young, so the head is a pale ball and
             // not the jet's lines.
             heat = max(heat, jet.axis.w * saturate(1.0 - q * 1.7) * pow(1.0 - age, 2.0));
             // Soot: past half its life the cool gas goes dark and still hides.
-            float lit = 1.0 - 0.9 * jet.colour.z * smoothstep(0.5, 1.0, age) * (1.0 - saturate(heat * 3.0));
+            // And the jet wears a skin of it: past the first of its life
+            // the outer quarter of the radius is smoke over the fire, so
+            // the edge is dark and broken where the noise tears it, and not
+            // the fire's own colour fading out.
+            float soot = max(0.9 * jet.colour.z * smoothstep(0.5, 1.0, age),
+                             min(1.7 * jet.colour.z, 0.95) * smoothstep(0.55, 0.95, q) * smoothstep(0.08, 0.35, age));
+            float lit = 1.0 - soot * (1.0 - saturate(heat * 3.0));
             // The gas thins as it spreads: as opaque across at any width.
             float kept = exp(-density * jet.shape.x * min(1.0, 1.5 / s.z) * ds);
             float weight = through * (1.0 - kept);
