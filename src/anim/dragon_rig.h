@@ -698,6 +698,20 @@ struct RigTuning {
     //         whips; the head swings opposite; the near wing dips
     // All of it is additive on the flight pose and gone within the gesture.
     float gesture_anticipation = 0.25f;       // fraction of each gesture spent winding up
+    // The time after the wind-up, in shares: going out to full reach, held
+    // there at the contact, and the rest coming back. The defaults (0.3 out,
+    // 0.12 held) on a 0.55 s gesture hold the contact for three frames; the
+    // references hold 16 to 48 (docs/MOTION_REFERENCE.md), so a species with
+    // a longer gesture takes a shorter share out and a longer one held.
+    float gesture_strike_out = 0.3f;
+    float gesture_hold = 0.12f;
+    // The legs' share of a strike, 0 to 1, on a model posed joint by joint
+    // in flight (leg_flight_pose). In a bite the hind legs draw up through
+    // the wind-up and kick back straight on the lunge while the fore claws
+    // thrust forward; under a claw or a tail whip the hind legs drop and
+    // spread to brace. At 0 the legs keep their flight pose through every
+    // strike, which the playtest called ragdoll (feedback 0014).
+    float gesture_legs = 0.0f;
     // The neck's and the tail's velocity kicks (bite, spit, whip) ramp in
     // over this many seconds instead of landing in one frame.
     float gesture_kick_ramp = 0.1f;
@@ -1216,6 +1230,11 @@ private:
     float gesture_neck_yaw_deg_ = 0.0f;       // + toward the right
     float gesture_tail_yaw_deg_ = 0.0f;       // + toward the right
     float gesture_limb_rake_ = 0.0f;          // signed load/strike envelope for the claw
+    // The legs in a strike (RigTuning::gesture_legs), each 0 to 1.
+    float gesture_fore_reach_[2] = {0.0f, 0.0f};  // a fore limb thrust forward; 0 is the right
+    float gesture_hind_draw_ = 0.0f;              // hind legs drawn up under the belly
+    float gesture_hind_kick_ = 0.0f;              // hind legs kicked back straight
+    float gesture_hind_brace_ = 0.0f;             // hind legs dropped and spread
     float gesture_tail_whip_ = 0.0f;          // signed whip envelope, + toward the right
     void drive_gestures();
     float jaw_open_ = 0.0f;

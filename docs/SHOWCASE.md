@@ -315,6 +315,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Feedback 0013 to 0015, and the turn to the dragon: The legs trail and tuck (19:00) | `showcase/PLAYTEST.md` |
 | Feedback 0013 to 0015, and the turn to the dragon: A deeper, slower beat (19:08) | `showcase/PLAYTEST.md` |
 | S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20) | `showcase/PLAYTEST.md` |
+| Strikes that hold, and legs that act (2026-11-15, 19:55) | `showcase/PLAYTEST.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |

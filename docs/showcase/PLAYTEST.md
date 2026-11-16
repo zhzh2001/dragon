@@ -218,8 +218,8 @@ Three feedback reports came with it, six marks:
 |---|---|---|
 | 0013 | "transparent artifacts?" on the membrane's root panel | done, "The wrist hook and the root panel" below |
 | 0013 | "prefer to dangle like front legs as well" on the hind leg | done, then withdrawn: "The legs trail and tuck" below |
-| 0014 | "legs are ragdoll in melee attacks" | open, after the reference study |
-| 0014 | "tail too" | open, after the reference study |
+| 0014 | "legs are ragdoll in melee attacks" | done, "Strikes that hold, and legs that act" at the end of this file |
+| 0014 | "tail too" | partly: the body and the clip now end together; the tail's own motion is unchanged |
 | 0015 | "malformed wing claw" | done, the same section |
 | 0015 | "wings can have a larger flapping range" | done, "A deeper, slower beat" below |
 
@@ -381,3 +381,59 @@ gesture under a clip".
 Not judged: how the strikes feel in motion and in a fight. Stills show
 the poses and not the timing. The claw's large roll is the body's own
 gesture and was there before.
+
+## Strikes that hold, and legs that act (2026-11-15, 19:55)
+
+Feedback 0014: "legs are ragdoll in melee attacks", "tail too". The
+reference study (`docs/MOTION_REFERENCE.md`) named what was missing: a
+hold at the contact, and limbs and a tail that take part.
+
+What the code did before:
+
+- The body's gesture (pitch, roll, yaw, surge) lasted 0.55 s for a bite or
+  a claw and 0.75 s for the tail. The keyframed clip on the neck, wings
+  and tail lasts 0.9 s, or 1.0 s for the tail. The body was back at rest
+  while the clip was still recovering.
+- The contact was held for 0.12 of the time after the wind-up: 0.05 s,
+  three frames. The references hold 16 to 48 frames.
+- The legs kept their flight pose through every strike.
+
+What changed, in the rig and in the hero's profile:
+
+| | Before | After |
+|---|---|---|
+| Bite and claw gesture | 0.55 s | 0.9 s, the clip's length |
+| Tail gesture | 0.75 s | 1.0 s |
+| Wind-up | 0.14 s (0.19 s tail) | 0.15 s (0.17 s tail) |
+| Strike out | 0.12 s | 0.12 s |
+| Contact held | 0.05 s, 3 frames | 0.19 s, 11 frames |
+| Recovery | 0.24 s | 0.44 s |
+| Legs | flight pose | below |
+
+The wind-up is the same length on purpose: a strike lands when it did.
+The combat code does not read these durations, so no hit timing changed.
+
+The legs (`gesture_legs`, 0 to 1, off by default, 1 on the hero; it works
+on a model posed joint by joint in flight):
+
+- Bite: the hind legs draw up as the head rears, then kick back straight
+  on the lunge. The fore claws thrust forward with the jaws.
+- Claw: the hind legs drop and spread to brace, at half strength.
+- Tail: the hind legs draw up in the coil and brace as the tail goes
+  across. The fore limb on the far side reaches out.
+
+Two shares that were constants are rig fields now: `gesture_strike_out`
+(0.3) and `gesture_hold` (0.12). The defaults keep every other species as
+it was. The studio's melee scenarios have three new sliders: "strike out
+share", "contact hold share" and "legs in a strike".
+
+The pairs, each strike at three moments from the side:
+`artifacts/melee/0014-strikes-before-after.jpg`. At 28 frames after the
+press the bite is still at full reach with the claws out; before, it was
+half way back. The bite from behind and at the head, and the tail from
+above and the front: `0014-strikes-other-views.jpg`.
+
+Not done: an anticipation as long as the references' (20 frames and
+more). That delays the hit and is a gameplay decision. The tail's own
+motion in a bite or a claw is the clip's and was not changed. The stills
+show poses; the timing needs a playtest.
