@@ -41,8 +41,10 @@ const char* studio_scenario_notes(StudioScenario scenario);
 // `ground_y` used by the grounded scenario. `ground_offset` is the body-centre
 // height above that surface; the default preserves the original studio pose for
 // callers that do not have per-model ground tuning.
+// `tuning` is the flight tuning the beat is built from: the creature's own, so
+// the studio plays the wingbeat the player flies. Null is the defaults.
 FlightState studio_state(StudioScenario scenario, float t, core::Vec3 centre, float ground_y,
-                         float ground_offset = 2.5f);
+                         float ground_offset = 2.5f, const FlightTuning* tuning = nullptr);
 
 // Where the attack scenario's target orbits, for the head aim.
 core::Vec3 studio_attack_target(float t, core::Vec3 centre);

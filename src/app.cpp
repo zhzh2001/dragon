@@ -2602,7 +2602,7 @@ void App::update(float dt) {
         const auto scenario = game::StudioScenario(studio_scenario_);
         const float ground = terrain_.height_at(studio_centre_.x, studio_centre_.z);
         studio_state_ = game::studio_state(scenario, studio_time_, studio_centre_, ground,
-                                          flight_.tuning.ground_offset);
+                                          flight_.tuning.ground_offset, &flight_.tuning);
         if (scenario == game::StudioScenario::Attack) {
             dragon_rig_.set_aim_target(game::studio_attack_target(studio_time_, studio_centre_));
         } else if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||

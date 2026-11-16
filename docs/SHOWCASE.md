@@ -1891,7 +1891,7 @@ Three feedback reports came with it, six marks:
 | 0014 | "legs are ragdoll in melee attacks" | open, after the reference study |
 | 0014 | "tail too" | open, after the reference study |
 | 0015 | "malformed wing claw" | done, the same section |
-| 0015 | "wings can have a larger flapping range" | open, after the reference study |
+| 0015 | "wings can have a larger flapping range" | done, "A deeper, slower beat" below |
 
 ### The hind legs hang (17:20)
 
@@ -1974,6 +1974,51 @@ Playtest panel to hold only what is open for tuning. So:
   brake clip are in the Dragon panel, behind "show the older tuning
   panels".
 - "Camera and light" is last and closed.
+
+### A deeper, slower beat (19:08)
+
+Feedback 0015: "wings can have a larger flapping range". The reference
+study (`docs/MOTION_REFERENCE.md`) gave four faults: the downstroke too
+short, no fold going up, no tip lag, a shallow stroke.
+
+Two things hid the stroke before it could be tuned.
+
+- The hero's profile capped the shoulder at 42 degrees a side
+  (`wing_flap_limit_deg`), whatever the flight model asked for.
+- The studio built its beat from the default flight tuning, so a species'
+  own beat, and `--flight`, never reached `--studio 1`. `studio_state` now
+  takes the player's tuning.
+
+| | Before | After |
+|---|---|---|
+| Beat period | 0.9 s | 1.1 s |
+| Downstroke's share | 40% | 50% |
+| Stroke the flight model asks for | +50 to -42 degrees | +62 to -50 |
+| Shoulder limit | 42 degrees | 66 |
+| Hand's lag behind the arm | 3.5% of a beat | 10% |
+| Recovery elbow, wrist, fingers, droop | 11, 17, 13, 15 degrees | 16, 26, 18, 20 |
+| Recovery fold, and the phase it opens by | 10 degrees, 0.68 | 14 degrees, 0.82 |
+| Peak flap force | 9000 N | 7200 N |
+
+The peak force is lower because thrust comes from the downstroke alone,
+and the downstroke is 1.25 times as long. Held flap from the spawn, speed
+after 20 s: 50.6 m/s before, 50.0 after.
+
+The pair at three phases, from the front and the side:
+`artifacts/wingbeat/0015-beat-before-after.jpg`. At the bottom of the
+stroke the tips are now well under the belly; before, the wing stopped
+near level. Mid upstroke the hand folds in; before, the wing rose open.
+Ten phases of each: `0015-beat-ten-phases-before.jpg` and `-after.jpg`.
+From above, the head, and the chase camera at both ends of the stroke:
+`0015-beat-other-views.jpg`.
+
+One candidate folded harder (wrist 45, fingers 30) and read as a bat: the
+span fell under half. The fold kept is still deeper than the reference
+dragons' 20 to 30% of span at its deepest frame. The studio's beat
+scenario has "recovery wrist" and "recovery fingers" sliders for it.
+
+Not measured: the beat's shares on frames, as the reference study measured
+them. The numbers above are the settings.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 

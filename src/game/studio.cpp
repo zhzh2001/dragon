@@ -231,7 +231,7 @@ anim::RigAction studio_action(StudioScenario scenario, float previous, float t) 
 }
 
 FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float ground_y,
-                         float ground_offset) {
+                         float ground_offset, const FlightTuning* tuning) {
     FlightState state;
 
     const Quat orientation = orientation_at(scenario, t);
@@ -263,7 +263,11 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
     // drifted: it played an 8 +/- 36 degree stroke against the flight model's
     // 4 +/- 46, understating the wingbeat by a fifth, so the scenario used to
     // judge the flap was quietly milder than the one the player flies.
-    const FlightTuning flight;
+    // The creature's own tuning when the caller has one. Until 2026-11-15 this
+    // was always the defaults, so a species' beat period and stroke, and
+    // --flight, never reached the scenario that judges the flap.
+    const FlightTuning defaults;
+    const FlightTuning& flight = tuning ? *tuning : defaults;
     state.wing_angle = core::radians(flight.glide_dihedral_deg);
 
     switch (scenario) {
