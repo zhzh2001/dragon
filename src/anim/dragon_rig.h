@@ -602,6 +602,13 @@ struct RigTuning {
     float membrane_camber = 0.11f;
     float membrane_billow = 0.12f;
     float membrane_slack = 0.04f;
+    // The fingers bend up along their length under the same load: degrees
+    // at the tip at a downstroke's fastest, a quarter of that in a glide. 0
+    // keeps them straight, and is the default: on the generated Embercrest
+    // the far wingtip already arcs in the glide and this hooked it higher.
+    // A species sets it in its profile once it has been looked at (the
+    // hero: 24).
+    float finger_load_curl_deg = 0.0f;
     // Asymmetric wing lean with roll input -- both wings rotate the same way
     // about the body axis, which is exactly what produces a roll.
     float wing_roll_lean_deg = 9.0f;
@@ -1132,6 +1139,8 @@ private:
     std::vector<core::Mat4> world_;
     std::vector<core::Mat4> skinning_;
     float membrane_load_ = 0.0f;
+    float membrane_stroke_ = 0.0f;  // the stroke's share of it, -1 to 1: down is positive
+    float membrane_air_ = 0.0f;     // and the glide's, 0 on the ground to 1 at speed
     float membrane_tip_[2] = {0.0f, 0.0f};  // each wingtip's height over its shoulder, in arm lengths
     bool membrane_tip_valid_ = false;
 

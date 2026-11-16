@@ -4390,6 +4390,7 @@ void App::studio_controls() {
             // panel's width, in the glide and added on the downstroke.
             ImGui::SliderFloat("membrane bow, glide", &rig.membrane_camber, 0.0f, 0.3f, "%.2f");
             ImGui::SliderFloat("membrane bow, beat", &rig.membrane_billow, 0.0f, 0.3f, "%.2f");
+            ImGui::SliderFloat("finger bend under load", &rig.finger_load_curl_deg, 0.0f, 45.0f, "%.0f deg");
         }
         if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||
             scenario == game::StudioScenario::Tail || scenario == game::StudioScenario::Attack) {
@@ -4810,6 +4811,7 @@ void App::build_dragon_ui() {
         ImGui::SliderFloat("membrane bow, glide", &rig.membrane_camber, 0.0f, 0.3f, "%.2f");
         ImGui::SliderFloat("membrane bow, beat", &rig.membrane_billow, 0.0f, 0.3f, "%.2f");
         ImGui::SliderFloat("membrane sag, landed", &rig.membrane_slack, 0.0f, 0.2f, "%.2f");
+        ImGui::SliderFloat("finger bend under load", &rig.finger_load_curl_deg, 0.0f, 45.0f, "%.0f deg");
         ImGui::SliderFloat("wing roll lean", &rig.wing_roll_lean_deg, 0.0f, 25.0f, "%.0f deg");
         ImGui::SliderFloat("idle fade in flight", &rig.clip_flight_fade, 0.0f, 1.0f);
         ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -60.0f, 60.0f, "%.0f deg");

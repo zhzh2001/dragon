@@ -473,6 +473,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(membrane_camber),
     RIG_FLOAT_FIELD(membrane_billow),
     RIG_FLOAT_FIELD(membrane_slack),
+    RIG_FLOAT_FIELD(finger_load_curl_deg),
     RIG_FLOAT_FIELD(gesture_kick_ramp),
     RIG_FLOAT_FIELD(gesture_impact_deg),
     RIG_FLOAT_FIELD(gesture_body_pitch_deg),
@@ -1289,10 +1290,27 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             // sails in the game. Now the bench and the game agree by
             // construction, and a profile's stow angles are the whole pose.
             const float flight_share = 1.0f - stow;
+            // The fingers bend with the load the membrane carries (the load
+            // of the pose before this one): up along their length on a
+            // downstroke and in the glide, straight when the sheet is slack.
+            // Spread along the finger, so its tip turns through the angle
+            // named at a full downstroke. Straight in every pose, they were
+            // rods with a sheet between them.
+            // A quarter of the angle is the glide's steady load; the rest
+            // is the stroke's, and little of it goes the other way on the
+            // upstroke, where the recovery terms already droop the hand.
+            // With the whole glide load in it, a long finger hooked up at
+            // the tip like a horn in level flight.
+            const float load_curl =
+                finger_index >= 0
+                    ? core::radians(tuning.finger_load_curl_deg) *
+                          (0.25f * membrane_air_ + core::clampf(membrane_stroke_, -0.3f, 1.0f)) /
+                          core::maxf(float(chain_length), 1.0f)
+                    : 0.0f;
             const float flap_angle = (local_base * sign + roll_lean) *
                                          flap_weight_at(size_t(depth)) * flap_normalize *
                                          flight_share +
-                                     stow_angle * sign;
+                                     stow_angle * sign + load_curl * sign * flight_share;
 
             // Folding closes progressively toward the tip, which is how a wing
             // actually stows. A generated wing has shoulder -> elbow -> hand,
@@ -3587,7 +3605,10 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         const float air = state.grounded ? 0.0f : core::saturate(core::length(state.velocity) / 25.0f);
         const float target = air * tuning.membrane_camber + (0.35f + 0.65f * air) * tuning.membrane_billow * stroke -
                              (1.0f - air) * tuning.membrane_slack;
-        membrane_load_ += (target - membrane_load_) * (1.0f - std::exp(-dt / 0.05f));
+        const float follow = 1.0f - std::exp(-dt / 0.05f);
+        membrane_load_ += (target - membrane_load_) * follow;
+        membrane_stroke_ += ((0.35f + 0.65f * air) * stroke - membrane_stroke_) * follow;
+        membrane_air_ += (air - membrane_air_) * follow;
     }
 }
 

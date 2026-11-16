@@ -637,3 +637,36 @@ Seen and not fixed:
   there without the bow too.
 - The folded wing on the ground is two flat panels with a hard patch of
   transmitted light. The sag there is too small to change that.
+
+## Fingers that bend (2026-11-15, 21:49)
+
+The second half of the critic's line on the wings: "the finger bones are
+thick straight rods". The fifth round saw it from the front on a
+downstroke: "bone rods with at most a 20 px strip of membrane", "a
+skeleton with no skin" (`CRITIC.md`, round 5, frame 4).
+
+The rig now bends each wing finger up along its length with the load the
+membrane carries. The angle is spread over the finger's joints, about the
+same fore-aft axis the flap turns on. A quarter of it is the glide's
+steady load. The rest follows the stroke, as the membrane's bow does: all
+of it at a downstroke's fastest, at most 0.3 of it the other way on the
+upstroke, where the recovery terms already droop the hand. On the ground
+the stow owns the wing and the bend is off.
+
+`finger_load_curl_deg` is the dial: degrees at the tip at a downstroke's
+fastest. It is 0 in the code and 24 in the hero's profile. On the
+generated Embercrest the far wingtip already arcs in the glide, and the
+first version, with the whole glide load in the bend, hooked it up over
+the back like a horn. So a species takes the bend in its own profile
+after it has been looked at, and the roster's golden frames did not move.
+
+`artifacts/wing-fingers/before-after.jpg` is the hero at frame 300 of the
+flap, from the front and at three quarters. From the front the hand rises
+from a hanging rod to an arc and the sheet under it shows. The beat was
+looked at from the side, the front, the rear and above at frames 290, 310
+and 330, and in the chase view with the flap held. The dial is "finger
+bend under load" in the studio's wingbeat section and the Dragon panel.
+
+The load is read from the wingtip's motion and the bend moves the
+wingtip. The loop is negative: a tip that bends up reads as a rising tip,
+which lowers the load. It was stable in every run.

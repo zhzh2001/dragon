@@ -306,6 +306,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Mesh version 5b: wings from the skeleton-guided sculpt (2026-11-15, 13:10) | `showcase/HERO.md` |
 | S3, as built: the rim, the clear coat and the cornea (2026-11-15) | `showcase/HERO.md` |
 | A membrane that billows (2026-11-15, 21:14) | `showcase/HERO.md` |
+| Fingers that bend (2026-11-15, 21:49) | `showcase/HERO.md` |
 | The feedback tool (2026-11-14) | `showcase/PLAYTEST.md` |
 | The first playtest of the hero, and the profile pass (2026-11-14) | `showcase/PLAYTEST.md` |
 | The first reports from the feedback tool (2026-11-14, 23:08) | `showcase/PLAYTEST.md` |
