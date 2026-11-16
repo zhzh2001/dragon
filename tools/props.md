@@ -171,3 +171,149 @@ VERIFY ward_stone: PASS
   one Principled material; embedded 512 PNG; no emission: PASS
   axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
 ```
+
+## Third generation: Tripo (2026-11-16)
+
+Tripo generated the source meshes with paid credits. The raw files remain read-only under `assets/tripo-raw/`.
+Blender 5.3.0 converted the selected sources. `tools/tripo_props.py` supplies the conversion path in `tools/build_props.py`.
+The procedural builder remains available without `--from-tripo`.
+
+All ten candidates were rendered and opened at full size under `artifacts/props/v3/candidates/`.
+The selection used watchtower 01, spire 01, hoard 01, hoard 02, and wardstone 02.
+Watchtower 02 lost the square keep silhouette. Watchtower 03 had a broken, narrow roof.
+Spire 02 had a large crystal and weaker stone detail. Hoard 03 contained large purple letter-like blocks.
+Wardstone 01 had more uniform slabs. Wardstone 02 had unequal shards and a lower keel.
+
+The converter fits each imported mesh before decimation. The following table uses Blender coordinates: X, Y, Z-up.
+For each axis, it adds the source offset and then multiplies by the scale.
+Ground offsets centre the footprint and place the base at zero. The ward offset centres its initial bounds.
+
+| Prop | Source | Source offset X/Y/Z | Scale X/Y/Z |
+|---|---|---|---|
+| watchtower | `tripo-watchtower-01.glb` | (-0.000091553, -0.000045776, 0.490478516) | (16.42281757, 15.41100517, 40.72582650) |
+| spire | `tripo-spire-01.glb` | (-0.000274658, 0.000793457, 0.489013672) | (20.85994907, 20.74486750, 45.01801605) |
+| hoard pile | `tripo-hoard-01.glb` | (0.000045776, 0.000137329, 0.268798828) | (16.35180738, 16.30400846, 10.26274130) |
+| trove | `tripo-hoard-02.glb` | (0.029937744, -0.038330078, 0.197219849) | (15.25207793, 15.62187564, 10.14881920) |
+| ward | `tripo-wardstone-02.glb` | (-0.000167847, 0, -0.000015259) | (13.72878246, 12.84012539, 15.18315080) |
+
+The watchtower roof moves rearward by up to 0.9 m above Blender Z=31 m.
+A small iron bracket supports a new empty flame cradle at glTF (0, 35.2, 2).
+The spire loses everything above Blender Z=36.7 m, including its crystal and original cradle.
+Its remaining shaft stretches vertically by 39.3/36.7. New iron prongs surround glTF (0, 42, 0).
+Neither tower contains a flame or orb mesh.
+
+The converter makes a new UV atlas after decimation. It bakes colour, tangent-space normals, and metallic-roughness from the full source mesh.
+The ground maps are 2048 × 2048. The ward maps are 1024 × 1024.
+Colour uses sRGB. The other maps use linear data. Normal maps use the OpenGL convention.
+These three embedded PNG maps replace the procedural texture rule for accepted Tripo assets.
+The one-mesh, one-primitive, one-material, identity-root skin contract remains unchanged.
+All socket, dimension, triangle, ward-area, and ward-visibility checks remain unchanged.
+A build verifies a temporary GLB before replacing its destination.
+
+No clear directional light/dark split appeared in the inspected source renders.
+The colour bake uses emission and adds no Blender lighting. It preserves source colour without a lighting correction or colour grade.
+Source crevice shading remains in the colour maps.
+
+Rebuild and inspect a selected prop:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/build_props.py -- --from-tripo assets/tripo-raw --prop watchtower --render
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python tools/build_props.py -- --from-tripo assets/tripo-raw --verify-only --render
+```
+
+The Tripo render path writes near and 250 m views under `artifacts/props/v3/`.
+It also writes the ward's top and bottom views. The temporary orange inspection sphere never enters the exported GLB.
+
+Final acceptance:
+
+| Prop | Result | Triangles | Map size |
+|---|---|---:|---|
+| watchtower | Replaced from Tripo 01 after pass 1 | 19,498 | Three 2048 PNGs |
+| spire | Replaced from Tripo 01 after pass 2 | 19,655 | Three 2048 PNGs |
+| hoard pile | Kept the original v2 file | 10,228 | One 512 PNG |
+| hoard trove | Kept the original v2 file | 10,074 | One 512 PNG |
+| ward stone | Kept the original v2 file | 3,108 | One 512 PNG |
+
+The watchtower's shaft is narrower than v2. Its stone footing, roof, and keep silhouette remain readable at 250 m.
+The spire's stone shaft, metal rings, and empty prongs remain readable at that distance.
+Both towers passed the in-game inspection. Their effects sit in the intended cradles.
+
+Pass 1 decimation broke the spire's added prong tips. Pass 2 preserved the authored cradle outside decimation.
+The preserved mesh also introduced a second UV layer. Blender used its baked UV1 atlas, but the engine read UV0.
+The exported accessor and texture references were remapped to UV0 without another bake.
+The builder now removes unused UV layers after baking. The verifier rejects textures that reference another UV set.
+
+The pile and trove failed pass 1 because their shading looked crumpled and their texture projection stretched across triangles.
+Pass 2 reset smooth normals and combined normal projections from three ray distances, using the rock-kit routine.
+The pile failed that routine's coverage gate with this exact error:
+
+```text
+Normal projection left 0.20% of the surface uncovered. Inspect the bake cage.
+```
+
+The trove passed its structural checks, but retained stretched wood grain and crumpled stone and metal shading.
+Neither hoard replaced its original file. Their second-pass settings remain in the helper for inspection, but normal builds skip them.
+
+The ward's first pass expanded inner vertices to radius 4.45 m and tapered its shoulders to radius 7.45 m.
+It allowed polar tips to radius 8.4 m. The boundary between these envelopes produced stretched tip triangles.
+Pass 2 used a continuous 7.45 m envelope and reset source and destination normals.
+It passed all geometric checks: minimum socket distance 4.343825 m, 100% area inside radius 7.5 m, and 42.55% ray escape.
+Its 7,682 triangles still showed stretched tips and crumpled dark faces. The original ward remained unchanged.
+No third conversion pass ran.
+
+`--from-tripo` skips these three rejected props and prints each reason. Their existing files remain unchanged.
+An explicit build of a rejected `--prop` exits with that reason. `--verify-only` still checks every final file.
+
+Rejected bench views are under `artifacts/props/v3/rejected/pass1/` and `rejected/pass2/`.
+The root v3 tower images show the accepted conversions.
+The root v3 hoard and ward images are reference copies from v2 because those GLBs remain byte-identical.
+All candidate and conversion views were opened at full size, including both ward polar views.
+The final mixed set passed the verifier below. `verify-final.log` contains the full Blender log.
+
+```text
+VERIFY watchtower: PASS
+  effect centre glTF metres: (0.000, 35.200, 2.000); empty sphere radius=0.65 m: PASS
+  glTF Y-up bbox metres: min=(-5.495, 0.005, -5.489) max=(5.498, 39.986, 5.497)
+  dimensions X/Y/Z metres: (10.993, 39.981, 10.986); triangles=19498; bones=1 [root]
+  materials=[watchtower_tripo]; textures=[watchtower_basecolor: embedded PNG 2048x2048, baseColor]
+  normal and metallic-roughness: embedded PNG 2048x2048; tangent-space normal: PASS
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
+VERIFY spire_tower: PASS
+  effect centre glTF metres: (0.000, 42.000, 0.000); empty sphere radius=1.20 m: PASS
+  glTF Y-up bbox metres: min=(-3.500, -0.005, -3.503) max=(3.498, 44.000, 3.511)
+  dimensions X/Y/Z metres: (6.998, 44.005, 7.014); triangles=19655; bones=1 [root]
+  materials=[spire_tower_tripo]; textures=[spire_tower_basecolor: embedded PNG 2048x2048, baseColor]
+  normal and metallic-roughness: embedded PNG 2048x2048; tangent-space normal: PASS
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
+VERIFY hoard_pile: PASS
+  glTF Y-up bbox metres: min=(-8.000, 0.000, -8.000) max=(8.000, 5.500, 8.000)
+  dimensions X/Y/Z metres: (16.000, 5.500, 16.000); triangles=10228; bones=1 [root]
+  materials=[hoard_pile_atlas]; textures=[hoard_pile_basecolor: embedded PNG 512x512, baseColor]
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
+VERIFY hoard_trove: PASS
+  glTF Y-up bbox metres: min=(-7.000, 0.000, -7.000) max=(7.000, 4.000, 7.000)
+  dimensions X/Y/Z metres: (14.000, 4.000, 14.000); triangles=10074; bones=1 [root]
+  materials=[hoard_trove_atlas]; textures=[hoard_trove_basecolor: embedded PNG 512x512, baseColor]
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
+VERIFY ward_stone: PASS
+  glTF Y-up bbox metres: min=(-5.599, -7.950, -5.997) max=(6.035, 6.900, 5.502)
+  dimensions X/Y/Z metres: (11.634, 14.850, 11.499); triangles=3108; bones=1 [root]
+  materials=[ward_stone_atlas]; textures=[ward_stone_basecolor: embedded PNG 512x512, baseColor]
+  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS
+  origin socket minimum triangle distance=4.383413 m; required >=4: PASS
+  maximum vertex radius=8.323742 m; required <=8.5: PASS
+  surface area=553.627896 m2; entirely inside radius 7.5=523.524195 m2 (94.5625% conservative bound): PASS
+  outside radius 7.5: polar tips only: PASS
+  origin Fibonacci rays: 1049/2000 escape (52.45%); required 30-55%: PASS
+  one Principled material; embedded PNG maps; no emission: PASS
+  axis mapping: Blender (X,Y,Z) -> glTF (X,Z,-Y); forward authored -Y -> +Z; placement/budget: PASS
+```
+
+A procedural spire rebuild passed in `build/procedural-props-check/`, without `--from-tripo` or rendering.
+It retained 1,388 triangles, one 512 PNG, and the original dimensions and socket clearance.
+The rejected-pile CLI check exited 1 and left its file unchanged.
+Byte comparisons confirmed that both hoards and the ward match their saved v2 GLBs.

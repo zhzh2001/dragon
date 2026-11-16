@@ -3,7 +3,7 @@
 
 blender -b --factory-startup --python tools/build_props.py
 Optional script arguments after --: --verify-only, --render, --output-dir PATH, --prop NAME.
-Only generated geometry and a deterministic, painted-in-code PNG atlas are used.
+Use --from-tripo PATH to bake the selected Tripo sources.
 """
 import argparse
 import json
@@ -508,7 +508,7 @@ def verify_ward(positions,indices):
             f'  surface area={area:.6f} m2; entirely inside radius 7.5={inside:.6f} m2 ({fraction:.4%} conservative bound): PASS',
             f'  outside radius 7.5: polar tips only: PASS',
             f'  origin Fibonacci rays: {escapes}/2000 escape ({escapes/2000:.2%}); required 30-55%: PASS',
-            '  one Principled material; embedded 512 PNG; no emission: PASS']
+            '  one Principled material; embedded PNG maps; no emission: PASS']
 
 
 def verify(path,name):
@@ -569,16 +569,26 @@ def verify(path,name):
 
     mats=doc.get('materials',[]);assert len(mats)==1 and prim.get('material')==0
     pbr=mats[0]['pbrMetallicRoughness']; assert pbr.get('baseColorFactor',[1,1,1,1])==[1,1,1,1]
-    assert not mats[0].get('normalTexture')
+    texture_infos=[value for key,value in pbr.items() if key.endswith('Texture')]
+    texture_infos += [value for key,value in mats[0].items() if key.endswith('Texture')]
+    assert all(info.get('texCoord',0)==0 for info in texture_infos), 'Textures must use UV0'
+    tripo = 'normalTexture' in mats[0]
+    if tripo: assert 'metallicRoughnessTexture' in pbr, 'Missing metallic-roughness map'
     assert all(c==0 for c in mats[0].get('emissiveFactor',[0,0,0]))
     assert not mats[0].get('emissiveTexture')
     tex=doc['textures'][pbr['baseColorTexture']['index']]
-    images=doc.get('images',[]);assert len(images)==1
+    images=doc.get('images',[]);assert len(images)==(3 if tripo else 1)
     image=images[tex['source']];assert image['mimeType']=='image/png' and 'uri' not in image
     view=doc['bufferViews'][image['bufferView']];start=view.get('byteOffset',0)
     png=blob[start:start+view['byteLength']];assert png[:8]==b'\x89PNG\r\n\x1a\n'
-    w,h=struct.unpack_from('>II',png,16);assert w==h and w in (512,1024)
-    if name == 'ward_stone': assert w==512
+    w,h=struct.unpack_from('>II',png,16)
+    expected_size=(1024 if name=='ward_stone' else 2048) if tripo else 512
+    assert w==h==expected_size, 'Incorrect texture dimensions'
+    for im in images:
+        assert im['mimeType']=='image/png' and 'uri' not in im
+        bv=doc['bufferViews'][im['bufferView']];start=bv.get('byteOffset',0)
+        data=blob[start:start+bv['byteLength']]
+        assert data[:8]==b'\x89PNG\r\n\x1a\n' and struct.unpack_from('>II',data,16)==(w,h)
     # Full round trip, independent of glTF accessor bounds and exporter state.
     clear();bpy.ops.import_scene.gltf(filepath=str(path), disable_bone_shape=True)
     meshes=[o for o in bpy.context.scene.objects if o.type=='MESH']
@@ -593,6 +603,11 @@ def verify(path,name):
     links=bsdf.inputs['Base Color'].links
     assert len(links)==1 and links[0].from_node.type=='TEX_IMAGE','Base color texture disconnected'
     reimage=links[0].from_node.image
+    if tripo:
+        normal_links=bsdf.inputs['Normal'].links
+        assert len(normal_links)==1 and normal_links[0].from_node.type=='NORMAL_MAP'
+        assert normal_links[0].from_node.space=='TANGENT'
+        assert bsdf.inputs['Metallic'].is_linked and bsdf.inputs['Roughness'].is_linked
     assert tuple(reimage.size)==(w,h) and reimage.packed_file,'Missing reimported embedded texture'
     assert len(obj.vertex_groups)==1 and obj.vertex_groups[0].name=='root'
     assert all(len(v.groups)==1 and abs(v.groups[0].weight-1)<1e-6 for v in obj.data.vertices)
@@ -608,6 +623,7 @@ def verify(path,name):
     print(f'  glTF Y-up bbox metres: min={formatted(low)} max={formatted(high)}',flush=True)
     print(f'  dimensions X/Y/Z metres: {formatted(dimensions)}; triangles={tris}; bones=1 [root]',flush=True)
     print(f'  materials=[{mats[0]["name"]}]; textures=[{image.get("name",name+"_basecolor")}: embedded PNG {w}x{h}, baseColor]',flush=True)
+    if tripo: print(f'  normal and metallic-roughness: embedded PNG {w}x{h}; tangent-space normal: PASS',flush=True)
     print('  single mesh/skin; root rest+inverse bind=identity; root weights=1; transforms=identity; no animations/morphs/extra nodes: PASS',flush=True)
     if name == 'ward_stone':
         for line in ward_stats: print(line,flush=True)
@@ -615,7 +631,7 @@ def verify(path,name):
     return obj
 
 
-def render(name,obj):
+def render(name,obj,out=None,prefix=None,near_only=False):
     scene=bpy.context.scene
     scene.render.engine='CYCLES';scene.cycles.samples=32;scene.cycles.seed=17
     scene.render.resolution_x=1200;scene.render.resolution_y=1000
@@ -641,9 +657,10 @@ def render(name,obj):
     camera.data.type='PERSP';camera.data.lens=50;camera.data.clip_end=3000
     bpy.ops.object.light_add(type='SUN',location=(0,0,80))
     sun=bpy.context.object;sun.rotation_euler=(.45,-.5,-.4);sun.data.energy=2.5;sun.data.angle=.15
-    out=ROOT/'artifacts/props/v2';out.mkdir(parents=True,exist_ok=True)
+    out=out or ROOT/'artifacts/props/v2';out.mkdir(parents=True,exist_ok=True)
     views=[('near',height*2.25 if height>10 else 27),('far',250)]
     if name=='ward_stone': views=[('near',31),('far',250),('top',31),('bottom',31)]
+    if near_only: views=views[:1]
     for label,distance in views:
         camera.location=target+Vector((.55,-.67,.5)).normalized()*distance
         if label in ('top','bottom'):
@@ -651,7 +668,7 @@ def render(name,obj):
             if name=='ward_stone': sphere.hide_render=True
             camera.location=Vector((.001,0,distance if label=='top' else -distance))
         camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
-        scene.render.filepath=str(out/(name+'_'+label+'.png'))
+        scene.render.filepath=str(out/((prefix or name)+'_'+label+'.png'))
         bpy.ops.render.render(write_still=True)
 
 
@@ -659,20 +676,35 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify-only',action='store_true');parser.add_argument('--render',action='store_true')
     parser.add_argument('--output-dir',type=Path,default=ROOT/'assets'/'props')
+    parser.add_argument('--from-tripo',type=Path,help='Read-only directory of Tripo source GLBs')
     parser.add_argument('--prop',choices=('watchtower','spire_tower','hoard_pile','hoard_trove','ward_stone'))
     args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
     args.output_dir.mkdir(parents=True,exist_ok=True)
+    if args.from_tripo:
+        sys.path.insert(0,str(ROOT/'tools'))
+        import tripo_props
     for name,builder in (('watchtower',watchtower),('spire_tower',spire_tower),('hoard_pile',hoard_pile),('hoard_trove',hoard_trove),('ward_stone',ward_stone)):
         if args.prop and name!=args.prop: continue
         path=args.output_dir/(name+'.glb')
-        if not args.verify_only:
-            clear(); obj=builder().mesh(name,atlas(name));skin(obj)
+        check_path=path
+        rejected=tripo_props.REJECTED.get(name) if args.from_tripo and not args.verify_only else None
+        if rejected:
+            if args.prop: raise RuntimeError(f'{name}: {rejected}')
+            print(f'KEEP {name}: {rejected}',flush=True)
+        if not args.verify_only and not rejected:
+            check_path=path.with_name(path.stem+'.pending.glb')
+            clear()
+            if args.from_tripo:
+                obj=tripo_props.build(name,args.from_tripo)
+            else: obj=builder().mesh(name,atlas(name))
+            skin(obj)
             assert all(m.type=='ARMATURE' for m in obj.modifiers)
-            bpy.ops.export_scene.gltf(filepath=str(path),export_format='GLB',export_animations=False,
+            bpy.ops.export_scene.gltf(filepath=str(check_path),export_format='GLB',export_animations=False,
                 export_yup=True,export_apply=False,export_extras=False,export_cameras=False,export_lights=False)
-            canonicalize_root(path)
-        obj=verify(path,name)
-        if args.render: render(name,obj)
+            canonicalize_root(check_path)
+        obj=verify(check_path,name)
+        if check_path!=path: check_path.replace(path)
+        if args.render: render(name,obj,ROOT/'artifacts/props/v3' if args.from_tripo else None)
 
 
 if __name__=='__main__':

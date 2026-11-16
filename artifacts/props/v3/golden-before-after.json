@@ -1,0 +1,52 @@
+{
+  "dragon-head": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  },
+  "dragon-side": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  },
+  "fire": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  },
+  "ground": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  },
+  "run-hud": {
+    "bbox": [
+      265,
+      427,
+      1206,
+      559
+    ],
+    "mean_channel_error": 0.0013751446759259257,
+    "max_channel_error": 66
+  },
+  "skeleton": {
+    "bbox": [
+      673,
+      473,
+      676,
+      476
+    ],
+    "mean_channel_error": 7.2337962962962966e-06,
+    "max_channel_error": 3
+  },
+  "valley-nopost": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  },
+  "valley": {
+    "bbox": null,
+    "mean_channel_error": 0.0,
+    "max_channel_error": 0
+  }
+}

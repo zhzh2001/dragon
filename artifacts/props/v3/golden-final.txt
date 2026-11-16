@@ -1,0 +1,9 @@
+ok   valley         mean 0.017  max  92  >8 0.066%  worst tile (1024,448) 2.5
+ok   valley-nopost  mean 0.016  max  78  >8 0.062%  worst tile (1024,448) 2.2
+ok   dragon-side    mean 0.008  max 103  >8 0.027%  worst tile (384,352) 1.1
+ok   dragon-head    mean 0.003  max  46  >8 0.009%  worst tile (128,352) 0.2
+ok   skeleton       mean 0.008  max 103  >8 0.027%  worst tile (384,352) 1.1
+ok   ground         mean 0.013  max 101  >8 0.053%  worst tile (224,288) 2.0
+ok   fire           mean 0.018  max  88  >8 0.073%  worst tile (64,192) 4.1
+ok   run-hud        mean 0.020  max  82  >8 0.088%  worst tile (0,448) 2.3
+renders and diffs in artifacts/props/v3/golden-final

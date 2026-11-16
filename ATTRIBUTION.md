@@ -13,7 +13,8 @@ hobby project's reading, not legal advice.
 | Material | Public repo | Public release (free binary) | Personal copy | Why |
 |---|---|---|---|---|
 | Code, shaders, tools, tests, docs | yes, MIT | yes | yes | Ours (`LICENSE`) |
-| Original props (`assets/props/` except `grazer.glb` and `rockkit/`), terrain and leaf textures | yes, MIT | yes | yes | Procedural, made by our scripts |
+| Procedural props, terrain and leaf textures | yes, MIT | yes | yes | Made by our scripts; excludes the generated assets below |
+| Tripo run props accepted in `tools/props.md` and their inspection renders | yes, labelled AI-generated | yes | yes | Paid output; section 5.2.2 (below) |
 | HUD fonts (`assets/fonts/`): Barlow Condensed, Fira Sans | yes, OFL 1.1 | yes | yes | Licence text beside each, and in `THIRD_PARTY_NOTICES.md` |
 | `assets/textures/terrain_rock.png`, `terrain_scree.png`, `terrain_grass.png`, `terrain_forest.png`, `terrain_gravel.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03`, `gray_rocks`, `leafy_grass`, `forest_leaves_04` and `dry_river_pebbles` scans (below) |
 | Tripo additions in `assets/props/rockkit/` | yes, labelled AI-generated | yes | yes | Paid output; section 5.2.2 (below) |
@@ -67,6 +68,15 @@ The derived kit files and their inspection renders may enter the public reposito
 `AI_DISCLOSURE.md` labels these assets as AI-generated.
 `tools/rockkit.md` records the source files, processing and rejected pieces.
 The large raw exports stay local and untracked.
+
+## Tripo run props (2026-11-16)
+
+The task brief records that the prop sources used paid credits.
+[Tripo terms, section 5.2.2](https://www.tripo3d.ai/terms), checked on 2026-11-16, permit modification, publication, distribution and commercial use of paid output.
+The accepted prop files and all candidate inspection renders can ship in the public repository.
+`tools/props.md` records the selected sources, conversions and rejected candidates.
+`AI_DISCLOSURE.md` identifies the generated content.
+The raw exports remain local and untracked.
 
 ## Hunyuan 3D: the generated roster
 
