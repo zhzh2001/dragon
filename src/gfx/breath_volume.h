@@ -68,6 +68,7 @@ struct BreathVolumeSettings {
     float core = 4.0f;           // the pale core's gain over the hot colour
     float gain = 1.5f;           // the body's gain over the hot colour
     float smoke = 0.55f;         // how far the tip darkens to soot, 0 to 1
+    float sparks = 70.0f;        // sparks thrown off the jet a second (the app emits them)
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);
@@ -115,6 +116,11 @@ public:
     };
     void draw_comet(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
                     const BreathVolumeSettings& settings, const Comet& comet, float time_seconds);
+
+    // A point on the jet for a spark to leave from: `along` 0 at the mouth
+    // to 1 at the tip. False when no jet is in the air.
+    bool sample(float along, const BreathVolumeSettings& settings, core::Vec3& position, core::Vec3& velocity,
+                float& radius) const;
 
     // For tests and probes: the spine, youngest first.
     struct Node {

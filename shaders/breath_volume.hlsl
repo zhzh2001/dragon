@@ -261,9 +261,11 @@ float4 fs_main(BreathVertex input) : SV_Target {
     // puts an edge where the mean crosses a step, so the tongues and the
     // silhouette are lines.
     float mean_heat = heat_sum / cover;
-    float3 emission = lerp(fringe * 0.55, body, smoothstep(0.04, 0.17, mean_heat));
+    float3 emission = lerp(fringe, body, smoothstep(0.03, 0.2, mean_heat));
     emission = lerp(emission, pale, smoothstep(0.28, 0.5, mean_heat));
     emission *= (lit_sum / cover) * jet.colour.w;
-    return float4(emission, smoothstep(0.06, 0.45, cover));
+    // The rim fades out as light does, wide and soft at its last: a hard
+    // dark rim was an ink line round the flame.
+    return float4(emission, smoothstep(0.03, 0.7, cover) * (0.55 + 0.45 * smoothstep(0.0, 0.12, mean_heat)));
 }
 #endif

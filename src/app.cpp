@@ -2744,6 +2744,39 @@ void App::update(float dt) {
                 breath_volume_.feed(combat_.breath_origin() +
                                         combat_.breath_direction() * breath_volume_settings_.mouth_forward,
                                     combat_.breath_direction(), flight_.state().velocity, jet, dt);
+                // Sparks: bright dashes thrown off the jet's skin, the near
+                // half more than the far, each leaving sideways and up and
+                // slowing in the air. A volume alone is a body with no grit.
+                breath_sparks_owed_ += dt * breath_volume_settings_.sparks;
+                while (breath_sparks_owed_ >= 1.0f) {
+                    breath_sparks_owed_ -= 1.0f;
+                    const float pick = std::fabs(particle_unit());  // one draw per statement (emit_flame)
+                    const float side_x = particle_unit();
+                    const float side_y = particle_unit();
+                    const float side_z = particle_unit();
+                    const float pace = 0.5f + 0.5f * std::fabs(particle_unit());
+                    core::Vec3 at, drift;
+                    float radius = 1.0f;
+                    if (!breath_volume_.sample(pick * pick * 0.8f, breath_volume_settings_, at, drift, radius)) break;
+                    const core::Vec3 out = core::normalize_or(core::Vec3{side_x, side_y + 0.4f, side_z}, core::Vec3::up());
+                    gfx::Particle spark;
+                    spark.kind = gfx::ParticleKind::Streak;
+                    // From the skin, outward fast: launched inside the body at
+                    // the gas's own pace a spark never left it, and a pale
+                    // dash on a pale flame is not seen. Then it falls.
+                    spark.position = at + out * radius;
+                    spark.velocity = drift * 0.3f + out * (22.0f + 26.0f * pace);
+                    spark.acceleration = core::Vec3{0.0f, -7.0f, 0.0f};
+                    spark.drag = 1.6f;
+                    spark.life = 0.5f + 0.6f * pace;
+                    spark.stretch = spark.velocity * 0.022f;
+                    spark.size_start = 0.1f;
+                    spark.size_end = 0.04f;
+                    spark.color_start = core::lerp(player_breath_.hot, core::Vec3::one() * 2.0f, 0.35f);
+                    spark.color_end = player_breath_.cool;
+                    spark.brightness = 2.6f;
+                    particles_.spawn(spark);
+                }
             } else {
                 emit_flame(combat_.breath_origin(), combat_.breath_direction(), range, false, dt, &player_breath_);
             }

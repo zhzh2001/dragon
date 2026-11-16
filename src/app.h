@@ -326,6 +326,7 @@ private:
     // The rounds drawn as comets this frame (indices into
     // combat_.projectiles()): draw_combat leaves their spheres out.
     std::vector<int> comet_rounds_;
+    float breath_sparks_owed_ = 0.0f;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),

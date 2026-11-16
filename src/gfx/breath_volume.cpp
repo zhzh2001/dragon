@@ -30,7 +30,7 @@ void BreathVolumeSettings::parse(const std::string& list) {
                                 {"extinction", &extinction},     {"noise_size", &noise_size},
                                 {"erosion", &erosion},           {"flow", &flow},
                                 {"core", &core},                 {"gain", &gain},
-                                {"smoke", &smoke}};
+                                {"smoke", &smoke},               {"sparks", &sparks}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;
@@ -135,6 +135,22 @@ void BreathVolume::update(float dt) {
     while (!nodes_.empty() && nodes_.back().age >= life) nodes_.pop_back();
     fed_last_ = fed_;
     fed_ = false;
+}
+
+bool BreathVolume::sample(float along, const BreathVolumeSettings& settings, core::Vec3& position,
+                          core::Vec3& velocity, float& radius) const {
+    if (nodes_.empty()) return false;
+    const size_t index = std::min(size_t(core::saturate(along) * float(nodes_.size())), nodes_.size() - 1);
+    const Node& n = nodes_[index];
+    const float life = std::max(jet_.life, 0.05f);
+    const float drag = std::max(jet_.drag, 1e-3f);
+    const float end_radius =
+        std::max((jet_.size_end + jet_.range * jet_.spread * 0.6f) * settings.end_radius, settings.mouth_radius);
+    const float gone = (1.0f - std::exp(-drag * std::min(n.age, life))) / (1.0f - std::exp(-drag * life));
+    position = n.position;
+    velocity = n.velocity + n.carry;
+    radius = core::lerpf(settings.mouth_radius, end_radius, std::pow(core::saturate(gone), 0.9f));
+    return true;
 }
 
 void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,

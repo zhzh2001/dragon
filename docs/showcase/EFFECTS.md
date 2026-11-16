@@ -113,3 +113,19 @@ Open: the cost of eight comets on screen was not measured. A round has no
 flash as it leaves the mouth and its impact is the old burst of
 particles.
 
+## Sparks, a softer rim, and a final dither (20:30)
+
+- Sparks. About 70 a second leave the jet's skin as bright dashes, fast and
+  outward, then fall (`--breath sparks=N`). The first version launched them
+  inside the body at the gas's own pace. They never left it, and a pale
+  dash on a pale flame is not seen.
+- The rim. The ramp's coolest band was the cool colour at 0.55, under a
+  hard step in the cover. Close up that was an ink line round the flame.
+  The band is the cool colour whole, and the cover fades over a wider
+  range.
+- The dither. `post_composite.hlsl` adds one 8-bit step of triangular
+  noise, fixed to the pixel, after the grade. It is from the showcase
+  study's list (`CRITIC.md`, technique 9): a slow gradient in the sky or
+  the haze breaks into grain and not bands. Every golden image moved by a
+  mean of 0.33 of a step and was recaptured.
+

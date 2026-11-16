@@ -215,6 +215,14 @@ float4 fs_main(PostVertex input) : SV_Target {
     float v = 1.0 - post.bloom.z * smoothstep(0.35, 0.95, length(d) * 1.4142);
     c *= v;
 
+    // Dither: one 8-bit step of triangular noise, fixed to the pixel, so a
+    // slow gradient (the sky, the haze) breaks into grain and not bands.
+    // Fixed, not animated: a headless capture is the same every run.
+    float2 pixel = input.uv / max(post.texel.xy, 1e-6);
+    float grain_a = frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
+    float grain_b = frac(52.9829189 * frac(dot(pixel + 37.0, float2(0.00583715, 0.06711056))));
+    c += (grain_a + grain_b - 1.0) / 255.0;
+
     return float4(saturate(c), 1.0);
 }
 #endif
