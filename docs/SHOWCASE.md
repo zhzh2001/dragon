@@ -6,10 +6,10 @@ section 6 as the order of work for the modern tier's picture. `FIDELITY.md`
 stays the record of the rendering techniques. The retro tiers are out of
 scope here.
 
-## Where it stands (2026-11-15, 23:05)
+## Where it stands (2026-11-16, 03:05)
 
-Read this first when you pick the work up. `main` is at `4151bd9`, the
-tree is clean, the 26 suites pass and the Metal goldens match.
+Read this first when you pick the work up. The 26 suites pass and the
+Metal goldens match on `main` after the overnight Tripo run.
 
 The standing direction (the user's, 2026-11-15): the visual showcase
 first, gameplay later; the dragon, its animation and its effects before
@@ -26,6 +26,7 @@ What the evening of 2026-11-15 built, each with its own section:
 | The meadow in drifts | `showcase/WORLD.md` |
 | Blind critic rounds 4, 5 and 6 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round4` to `round6` |
 | The Tripo test on an account with credits | `MODEL_GENERATION.md`, "Tripo v3.1 on an account with credits" |
+| The overnight Tripo run (2026-11-16): 72 models, six rock pieces and two towers in the game | `MODEL_GENERATION.md`, "The overnight Tripo run"; `showcase/WORLD.md`, "Tripo crags, scree and boulders"; `tools/props.md`, the Tripo section |
 
 Waiting on the user:
 
@@ -44,8 +45,16 @@ Waiting on the user:
 - Two calls that are the user's: the flame's length (the breath's range,
   155 m, about nine dragons) and whether the plume's smoke is too much
   from the chase camera.
-- What licence the Tripo account's output carries. Nothing from Tripo is
-  in the game, and nothing may ship until that is read.
+- The Tripo licence is settled: output from paid credits may ship
+  (`MODEL_GENERATION.md`, "The overnight Tripo run"). Three looks from that
+  night want the playtester's eye: the crags and scree on the slopes, the
+  slender Tripo watchtower against the old broad keep
+  (`artifacts/props/v3/compare-game-watchtower.png`), and a Tripo hide on
+  the hero, not switched on (`artifacts/tripo-overnight/hero-hide-*.jpg`).
+- The Tripo account expires on 2026-11-16 with about 3,700 credits unused.
+  The valley walls are still the open gap: every Tripo wall had a flat
+  cap, a flat back or a mirrored face, and a wall job would cut those away
+  (`tripo-wall-09` to `-11` are the best faces).
 
 If no answer has come, the next items in order are in "Open questions"
 below: the flame's hot point at the jaws and smoke that breaks from its

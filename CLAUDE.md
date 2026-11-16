@@ -22,6 +22,7 @@ they are records of what was already tried and why it is the way it is.
 | `docs/DIRECTION.md` | Where the modern build goes before the port: the hoard-run roguelite, the art direction and its targets in `docs/concept/`, the HUD kit, the asset policy, and the sequenced plan |
 | `docs/EMBERCREST.md` | The script-built original dragon: what the Blender generator produced, why it is not the hero model, and how to rebuild it |
 | `docs/MODEL_GENERATION.md` | Generating a creature: which cloud and local tools were measured and what each one is actually good for, the four-step pipeline that survived, and how to add a creature that is not a dragon |
+| `tools/tripo_studio.py` | Driving Tripo Studio headlessly through chrome-use: text, image and multi-view jobs in batches, the download decoded with gltfpack. The night it was used is in `docs/MODEL_GENERATION.md`, "The overnight Tripo run" |
 | `tools/hunyuan_oneshot.md` | Driving the Hunyuan one-shot headlessly through chrome-use -- the generation step of that pipeline, and the traps that cost a run each |
 | `tools/skeletons/*.json` | The deform skeletons the rigger fits, one per anatomy *and per set of measurements* -- a shared file shares its author's leg positions, `wing_field` gates and `jaw_mask`, and those do not transfer. Bone names are a contract with `src/anim/dragon_rig.cpp` |
 | `docs/ROADMAP.md` | The original plan and its phases |
