@@ -1,0 +1,34 @@
+[
+ {
+  "name": "tripo-rimefang-mv-01",
+  "views": "artifacts/dragon-options/rimefang-views"
+ },
+ {
+  "name": "tripo-frostvein-mv-01",
+  "views": "artifacts/dragon-options/frostvein-views"
+ },
+ {
+  "name": "tripo-blightmaw-mv-01",
+  "views": "artifacts/dragon-options/blightmaw-views"
+ },
+ {
+  "name": "tripo-ironroot-mv-01",
+  "views": "artifacts/dragon-options/ironroot-views"
+ },
+ {
+  "name": "tripo-stormsail-mv-01",
+  "views": "artifacts/dragon-options/stormsail-views"
+ },
+ {
+  "name": "tripo-tidewrack-mv-01",
+  "views": "artifacts/dragon-options/tidewrack-views"
+ },
+ {
+  "name": "tripo-sunspear-mv-01",
+  "views": "artifacts/dragon-options/elemental-expansion/sunspear-views"
+ },
+ {
+  "name": "tripo-rimeplume-mv-01",
+  "views": "artifacts/dragon-options/elemental-expansion/rimeplume-views"
+ }
+]
