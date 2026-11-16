@@ -245,6 +245,10 @@ float4 fs_main(BreathVertex input) : SV_Target {
             // orange, so the flame has lines in it and not one glow.
             float heat = saturate(1.0 - q * 1.1) * pow(1.0 - age, 1.25);
             heat *= 0.3 + 1.5 * ridge * (0.5 + 0.5 * fine);
+            // A fireball's head (axis.w, 0 for a jet): solid heat about the
+            // axis where the round is young, so the head is a pale ball and
+            // not the jet's lines.
+            heat = max(heat, jet.axis.w * saturate(1.0 - q * 1.7) * pow(1.0 - age, 2.0));
             // Soot: past half its life the cool gas goes dark and still hides.
             float lit = 1.0 - 0.9 * jet.colour.z * smoothstep(0.5, 1.0, age) * (1.0 - saturate(heat * 3.0));
             // The gas thins as it spreads: as opaque across at any width.

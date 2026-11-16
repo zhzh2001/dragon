@@ -322,6 +322,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Fireballs as comets (2026-11-15, 20:21) | `showcase/EFFECTS.md` |
 | Sparks, a softer rim, and a final dither (20:30) | `showcase/EFFECTS.md` |
 | The fire lights what is near it, and its grain moves (2026-11-15, 21:20) | `showcase/EFFECTS.md` |
+| A fireball with a head (2026-11-15, 21:24) | `showcase/EFFECTS.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |

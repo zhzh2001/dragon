@@ -259,24 +259,30 @@ void BreathVolume::draw_comet(Device& device, rhi::Pass* pass, const Camera& cam
     if (!pass || !available_ || !device.depth()) return;
     const float speed = core::length(comet.velocity);
     const core::Vec3 back = speed > 1e-3f ? comet.velocity * (-1.0f / speed) : core::Vec3{0.0f, 0.0f, 1.0f};
-    // Six nodes: the head a little ahead of the round's centre, then the
-    // tail thinning over eight radii. Age runs head to tail, which is what
-    // makes the head pale and whole and the tail orange and torn.
+    // Six nodes: the head a little ahead of the round's centre, then a
+    // tail that thins to a point over five radii. Age runs head to tail,
+    // fast at first, which is what makes the head pale and whole and the
+    // tail orange and torn. At eight radii with a tail a third of the head
+    // across, the round was a smear with no head (the blind critic's
+    // fourth round).
     constexpr int kNodes = 6;
     Uniforms u = {};
     for (int i = 0; i < kNodes; ++i) {
         const float along = float(i) / float(kNodes - 1);
-        const core::Vec3 p = comet.position + back * (comet.radius * (8.0f * along - 0.3f));
-        u.nodes[i] = core::Vec4{p.x, p.y, p.z, comet.radius * core::lerpf(1.0f, 0.3f, along)};
-        u.info[i] = core::Vec4{along * 0.97f, i + 1 < kNodes ? 1.0f : 0.0f, 0.0f, 0.0f};
+        const core::Vec3 p = comet.position + back * (comet.radius * (5.0f * along * along + 0.6f * along - 0.3f));
+        const float taper = 1.0f - along;
+        u.nodes[i] = core::Vec4{p.x, p.y, p.z, comet.radius * (0.1f + 0.9f * taper * taper)};
+        u.info[i] = core::Vec4{std::sqrt(along) * 0.97f, i + 1 < kNodes ? 1.0f : 0.0f, 0.0f, 0.0f};
     }
     u.params = core::Vec4{camera.z_near, time_seconds, float(kNodes), float(std::clamp(settings.steps / 2, 8, 48))};
-    u.shape = core::Vec4{settings.extinction, 1.0f / std::max(settings.noise_size, 0.1f), settings.erosion * 0.8f,
+    // Three times the jet's opacity: a round is a dense ball, and a thin one
+    // took the colour of the hill behind it.
+    u.shape = core::Vec4{settings.extinction * 3.0f, 1.0f / std::max(settings.noise_size, 0.1f), settings.erosion * 0.8f,
                          std::max(speed * 0.2f, 12.0f)};
     u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke) * 0.5f, comet.brightness};
     u.hot = core::Vec4{comet.hot.x, comet.hot.y, comet.hot.z, 0.0f};
     u.cool = core::Vec4{comet.cool.x, comet.cool.y, comet.cool.z, 0.0f};
-    u.axis = core::Vec4{back.x, back.y, back.z, 0.0f};
+    u.axis = core::Vec4{back.x, back.y, back.z, 1.0f};  // w: the head's solid heat (breath_volume.hlsl)
     submit(device, pass, scene, u, kNodes, settings);
 }
 

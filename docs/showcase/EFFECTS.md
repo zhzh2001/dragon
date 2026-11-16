@@ -166,3 +166,29 @@ golden was captured again; no other scene moved.
 
 Not done from the same list: the jet's length against the dragon's, the
 fireball's compact head, the jet's attachment in a hard turn.
+
+## A fireball with a head (2026-11-15, 21:24)
+
+The blind critic on the comet: "a long streak, not a ball: a beige-orange
+smear with a brown rim", "no bright core", darker than the sunlit wall
+behind it. Three causes, all in `BreathVolume::draw_comet`:
+
+- The spine was eight radii long and its tail a third of the head across,
+  so the round was one long cone. It is now five radii, spaced close at
+  the head, and the radius falls as the square of the way back: a ball,
+  then a point.
+- It marched at the jet's opacity, which is set for a body of gas metres
+  across. A round two metres across was half see-through and took the
+  colour of the hill behind it. A comet now has three times the jet's
+  extinction.
+- The jet's heat is in its lines: a quarter of the axis is hot and the
+  rest is the body's orange. A head needs solid heat. The shader takes a
+  floor on the heat about the axis where the round is young
+  (`jet.axis.w`, 1 for a comet and 0 for a jet), so the middle of the
+  head reads through the ramp's pale end and its rim through the orange.
+
+`artifacts/breath-volume/fireball-head-before-after.jpg` is the same shot
+from 75 m, before and after. The `fire` golden was captured again.
+
+The round's size is still the collision radius times 0.8. The reference
+study has a fireball the size of the head; ours is about twice that.
