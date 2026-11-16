@@ -829,7 +829,6 @@ private:
     float membrane_glow_ = 1.2f;
     // How bright a breath's light is (Lighting panel, "breath light"):
     // the hot colour times this, over 1 + metres squared.
-    float local_light_strength_ = 900.0f;
     float smoke_owed_ = 0.0f;
     void emit_impact(core::Vec3 position, bool hostile, bool on_terrain,
                      game::Element element = game::Element::None);

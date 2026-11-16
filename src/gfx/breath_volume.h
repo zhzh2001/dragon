@@ -69,6 +69,8 @@ struct BreathVolumeSettings {
     float gain = 1.5f;           // the body's gain over the hot colour
     float smoke = 0.55f;         // how far the tip darkens to soot, 0 to 1
     float sparks = 70.0f;        // sparks thrown off the jet a second (the app emits them)
+    float light = 8.0f;          // the light a breath throws on what is near it (scene_common.hlsl, local_light):
+                                 // a metre of flame's, in the scene's units at a metre. The hostile breaths' too.
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);

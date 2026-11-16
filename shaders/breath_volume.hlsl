@@ -149,8 +149,12 @@ float4 fs_main(BreathVertex input) : SV_Target {
     float3 body = hot * jet.colour.y;
     float3 fringe = jet.cool.rgb;
 
-    // A fixed offset a pixel, so the steps' banding becomes grain.
-    float dither = frac(52.9829189 * frac(dot(input.clip_position.xy, float2(0.06711056, 0.00583715))));
+    // An offset a pixel, so the steps' banding becomes grain, and another
+    // one every frame: held still, the grain was a diagonal hatch over the
+    // pale core (the blind critic's fourth round, "a screen-door artefact").
+    // Moving, it is the flame's flicker.
+    float2 cell = input.clip_position.xy + 5.588238 * fmod(floor(time * 60.0), 64.0);
+    float dither = frac(52.9829189 * frac(dot(cell, float2(0.06711056, 0.00583715))));
     float t = t0;
     float through = 1.0;
     float heat_sum = 0.0;

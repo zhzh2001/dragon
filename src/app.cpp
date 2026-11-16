@@ -3768,7 +3768,7 @@ void App::build_ui(float dt) {
             ImGui::SliderFloat("cornea", &lighting_.cornea, 0.0f, 4.0f, "%.2f");
         }
         if (tier_.tier == gfx::Tier::Modern) {
-            ImGui::SliderFloat("breath light", &local_light_strength_, 0.0f, 1500.0f, "%.0f");
+            ImGui::SliderFloat("breath light", &breath_volume_settings_.light, 0.0f, 30.0f, "%.1f");
             ImGui::SliderFloat("membrane glow", &membrane_glow_, 0.0f, 8.0f, "%.2f");
         }
     }
@@ -4568,6 +4568,7 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("pale core", &b.core, 1.0f, 8.0f);
         ImGui::SliderFloat("body brightness", &b.gain, 0.5f, 4.0f);
         ImGui::SliderFloat("soot at the tip", &b.smoke, 0.0f, 1.0f);
+        ImGui::SliderFloat("light on the dragon and the ground", &b.light, 0.0f, 30.0f, "%.1f");
     }
     if (ImGui::CollapsingHeader("Tail, limbs and strikes", ImGuiTreeNodeFlags_DefaultOpen)) {
         // The short list: what is open for the playtest. Every other life
@@ -8120,11 +8121,23 @@ void App::set_local_light(gfx::SceneUniforms& scene) const {
         }
     }
     if (range <= 0.0f) return;
-    const core::Vec3 at = origin + direction * (range * 0.3f);
+    // The jet's bright half as a line (scene_common.hlsl, local_light): from
+    // the jaws, half the range long (five sixths of the reach), its
+    // direction octahedral in thermal_count's spare zw.
     const float t = time_seconds_;
     const float flicker = 0.85f + 0.1f * std::sin(t * 23.0f) + 0.05f * std::sin(t * 41.0f + 1.3f);
-    scene.local_light = core::Vec4{at.x, at.y, at.z, range * 0.9f};
-    const core::Vec3 colour = hot * (local_light_strength_ * flicker);
+    scene.local_light = core::Vec4{origin.x, origin.y, origin.z, range * 0.6f};
+    const core::Vec3 d = core::normalize_or(direction, core::Vec3::forward());
+    const float sum = std::fabs(d.x) + std::fabs(d.y) + std::fabs(d.z);
+    core::Vec2 packed{d.x / sum, d.z / sum};
+    if (d.y < 0.0f) {
+        const core::Vec2 folded{(1.0f - std::fabs(packed.y)) * (packed.x >= 0.0f ? 1.0f : -1.0f),
+                                (1.0f - std::fabs(packed.x)) * (packed.y >= 0.0f ? 1.0f : -1.0f)};
+        packed = folded;
+    }
+    scene.thermal_count.z = packed.x;
+    scene.thermal_count.w = packed.y;
+    const core::Vec3 colour = hot * (breath_volume_settings_.light * flicker);
     scene.local_light_color = core::Vec4{colour.x, colour.y, colour.z, membrane_glow_};
 }
 
@@ -9649,7 +9662,9 @@ void App::render() {
             scene.thermals[i] = core::Vec4{t.base.x, t.radius, t.base.z, t.strength};
         }
         // y: the crown shade map's half extent (terrain.hlsl), 0 for none.
-        scene.thermal_count = core::Vec4{float(n), ablated("crown_shade") ? 0.0f : vegetation_.crown_shade_half(), 0.0f, 0.0f};
+        // zw are the local light's (set_local_light, above), and stay.
+        scene.thermal_count.x = float(n);
+        scene.thermal_count.y = ablated("crown_shade") ? 0.0f : vegetation_.crown_shade_half();
     }
     // The valley mist (scene_common.hlsl, valley_mist), the modern tier's:
     // pooled on the floor, as thick as the valley's hour makes it.

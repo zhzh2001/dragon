@@ -518,15 +518,37 @@ float3 direct_sun(float3 normal, float visibility) {
 // square, windowed to zero at its reach, a little wrapped (the fire is
 // metres across), and unshadowed. Modern tier only: the retro tiers'
 // instruction budgets are measured without it.
+//
+// The fire is a line, not a point: the jet's bright half, from the jaws on
+// (its direction in thermal_count.zw, octahedral: the block has no whole
+// spare vector; its length is five sixths of the reach). A line's light
+// falls with the distance and not its square, so it reaches the ground
+// under a low pass and the breather's own chest and wings, which a point
+// a third of the way down the jet did not. The sum of 1 / r^2 along the
+// segment has a closed form: the angle the segment subtends, over the
+// distance to its line.
 float3 local_light(float3 world_position, float3 normal) {
 #ifdef ATMOSPHERE
     float reach = scene.local_light.w;
     if (reach <= 0.0) return (float3)0.0;
-    float3 to_light = scene.local_light.xyz - world_position;
+    float2 packed = scene.thermal_count.zw;
+    float3 along_axis = float3(packed.x, 1.0 - abs(packed.x) - abs(packed.y), packed.y);
+    float fold = max(-along_axis.y, 0.0);
+    along_axis.x += along_axis.x >= 0.0 ? -fold : fold;
+    along_axis.z += along_axis.z >= 0.0 ? -fold : fold;
+    along_axis = normalize(along_axis);
+    float span = reach * (5.0 / 6.0);
+    float3 from_start = world_position - scene.local_light.xyz;
+    float along = dot(from_start, along_axis);
+    float3 nearest = scene.local_light.xyz + along_axis * clamp(along, 0.0, span);
+    float3 to_light = nearest - world_position;
     float d2 = dot(to_light, to_light);
     float window = saturate(1.0 - d2 / (reach * reach));
     float facing = saturate(dot(normal, to_light * rsqrt(max(d2, 1e-4))) * 0.7 + 0.3);
-    return scene.local_light_color.rgb * (window * window * facing / (1.0 + d2));
+    // The flame is metres across: nothing is nearer its light than that.
+    float beside = max(length(from_start - along_axis * along), 1.5);
+    float sum = (atan((span - along) / beside) - atan(-along / beside)) / beside;
+    return scene.local_light_color.rgb * (window * window * facing * sum);
 #else
     return (float3)0.0;
 #endif

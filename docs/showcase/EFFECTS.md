@@ -129,3 +129,40 @@ particles.
   the haze breaks into grain and not bands. Every golden image moved by a
   mean of 0.33 of a step and was recaptured.
 
+
+## The fire lights what is near it, and its grain moves (2026-11-15, 21:20)
+
+Two items from the blind critic's fourth round (`CRITIC.md`): "the fire
+lights nothing", and "a fine diagonal hatch or dither pattern" in the pale
+core.
+
+The light. The breath's light was one point, 46 m down a 155 m jet, with
+an inverse-square falloff. The breather's own head was 46 m from it and
+took about a third of the sun's light; the ground under a low pass took
+less. The light is now a line: the jet's bright half, from the jaws on.
+The sum of `1 / r^2` along a segment has a closed form, the angle the
+segment subtends over the distance to its line, so `local_light`
+(`scene_common.hlsl`) costs two arctangents. A line's light falls with the
+distance and not its square. It reaches the chest and the wings of the
+dragon that breathes, and the banks under a pass at six metres.
+
+The scene block had no spare vector for the line's direction. It is in
+`thermal_count.zw`, octahedral, and the line's length is five sixths of
+the light's reach. The strength is `light` in the breath's settings
+(`--breath light=8`, the Playtest panel's "light on the dragon and the
+ground", the Engine panel's "breath light"): a metre of flame's light at
+a metre, 8 by default. The old dial's 900 was a point's intensity, and
+its unit is gone. `artifacts/breath-volume/light-before-after.jpg` has
+the head and chest from the side and a low pass over the river.
+
+The water takes none of it: `water.hlsl` does not call `local_light`.
+The banks glow and the river between them stays dark.
+
+The grain. The march's start was offset by one fixed value a pixel, and
+held still it was a hatch. The offset now changes every frame (the same
+interleaved gradient, shifted by the frame's count modulo 64). In a
+still it is grain; in motion it is the flame's flicker. The `fire`
+golden was captured again; no other scene moved.
+
+Not done from the same list: the jet's length against the dragon's, the
+fireball's compact head, the jet's attachment in a hard turn.

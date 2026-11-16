@@ -30,7 +30,8 @@ void BreathVolumeSettings::parse(const std::string& list) {
                                 {"extinction", &extinction},     {"noise_size", &noise_size},
                                 {"erosion", &erosion},           {"flow", &flow},
                                 {"core", &core},                 {"gain", &gain},
-                                {"smoke", &smoke},               {"sparks", &sparks}};
+                                {"smoke", &smoke},               {"sparks", &sparks},
+                                {"light", &light}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;

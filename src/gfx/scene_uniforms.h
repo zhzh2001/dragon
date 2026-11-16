@@ -66,7 +66,9 @@ struct SceneUniforms {
     core::Vec4 local_light_color = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
     // The valley's thermals (game/thermals.h), for the cumulus over each
     // (scene_common.hlsl, cloud_coverage): x, z the column, y its radius, w
-    // its strength (m/s); thermal_count.x how many are set.
+    // its strength (m/s); thermal_count.x how many are set. y is the crown
+    // shade map's half extent. zw are the local light's: the direction of
+    // the line it lies on from local_light.xyz, octahedral.
     static constexpr int MAX_THERMALS = 12;
     core::Vec4 thermals[MAX_THERMALS];
     core::Vec4 thermal_count = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
