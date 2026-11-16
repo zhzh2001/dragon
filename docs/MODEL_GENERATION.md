@@ -1257,7 +1257,8 @@ two tabs ran side by side, so a job's before-and-after difference can
 include the other tab's job; the totals come from the counts.
 
 The account and its credits expire at the end of 2026-11-16. Credits do
-not carry over, so the 3,725 left are lost unless they are spent that day.
+not carry over, so the 3,725 left were spent the same day (see "The second
+spend" below), down to 40.
 
 Where the credits went, by result: the rock and run-prop groups (1,210
 credits) put eight models in the game, six rocks and two towers. The
@@ -1300,6 +1301,81 @@ files beside it under the new name.
 The contact sheets in `artifacts/tripo-overnight/` (walls, rocks,
 wood-trees, props, prey, species, hero) show every model from the front,
 the side, the back and above, labelled with its file name.
+
+#### The second spend (2026-11-16, day)
+
+The user chose four groups for the 3,725 credits left: walls with a new
+approach, more rock-kit variety, landmarks and run props, and prey. No
+Codex conversion ran; the models wait in `assets/tripo-raw/` (8.6 GB
+after this run). The job lists are `tools/tripo_jobs/walls5.json`,
+`rocks5.json`, `landmarks1.json`, `prey1.json` and `extra1.json`. The
+batches ran in the Chrome profile that holds the Tripo login, pinned with
+`TRIPO_BROWSER`, two tabs side by side.
+
+67 generations cost 3,685 credits and left 40. One job failed once ("the
+viewer did not load a model") and its retry succeeded; the failure cost no
+credits. Queue time varied: most jobs took 150 to 300 s, two took 594 and
+820 s. When the last job of a list was running in both tabs, stopping one
+tab before its Generate click cost nothing.
+
+| Group | Models | Credits | Usable | Verdict |
+|---|---|---|---|---|
+| Walls (`walls5.json`) | 11 | 605 | 3 | See below |
+| Rocks (`rocks5.json`) | 14 | 770 | 12 | Outcrops, slabs, a pinnacle, boulders, two riverbank strips, a talus pile. `tor-15` came out as square masonry and `ledge-24` as a box. `outcrop-11` has a baked grass base, because its prompt said "grassy slope" |
+| Landmarks and run props (`landmarks1.json`) | 16 | 880 | 12 | See below |
+| Prey (`prey1.json`) | 8 | 440 | 8 | Goat, chamois, boar, bighorn, elk and wolf stand square on four straight legs, the pose a rig needs. The eagle and the raven have spread wings, a little raised |
+| Crags and rocks (`extra1.json`) | 18 | 990 | 13 | See below |
+
+Walls. Two approaches were tried:
+
+- Image to 3D from crops of `docs/concept/valley-target.png` and
+  `docs/concept/showcase/slice-target-floor.png` gave dioramas: a slab
+  with the painted slope, trees and snow baked in, and a flat black back.
+  Two were made; the third was skipped. The crops are not in the
+  repository: `valley-target.png` (1290, 100)-(1672, 380), and
+  `slice-target-floor.png` (0, 0)-(560, 440) and (1180, 90)-(1672, 390).
+- Text prompts for "a freestanding rock formation with natural broken rock
+  on every side including the back" removed the tiled back of the night
+  run. But Tripo makes compact, upright shapes whatever width the prompt
+  gives, and it mirrors a large rock that has no clear front. A block, a
+  corner, a spur and a dome came out with the same face front and back. A
+  long schist wall came out as a dry-stone wall. Tilted strata came out
+  as a rubble pyramid. Usable: the granite crag (`wall2-05`), the
+  sandstone crag (`wall2-07`) and the basalt column pillar (`wall2-08`).
+
+The useful wall prompt is one massive crag, lopsided. `extra1.json` asks for
+it in eight rock types ("strongly asymmetric and lopsided, one side steeper
+than the other, no symmetry, a single solid rock mass with a broken uneven
+top"). Five of eight are usable (`crag2-02`, `-05`, `-06`, `-07`, `-08`);
+`crag2-01` is a plain lump; `crag2-03` has a flat cut top, and `crag2-04`
+is mirrored. A valley wall would be a row of these crags, not one long
+piece. Of the extra list's ten rocks, `slab-26` (thin flat slabs) and
+`boulder-30` (an egg on a plinth) are weak; `pinnacle-28` and the slab
+under `boulder-19` need their bases cut.
+
+Landmarks. Good: the ruined keep, the ruined round tower (a blue disc is
+baked inside its open top), the single-arch bridge, the broken arch, the
+circle of standing stones, the monolith, the pass gate (two towers and an
+arched gateway; it could replace the run's gate), the ruined wall segment,
+the cairn, and the dragon skeleton (on a sandy slab to cut away). The
+shrine is fair. Of the second try at the run props:
+
+- `hoard-10`, coins, goblets and crowns spread on a low rock, reads well
+  from above. It is the hoard candidate.
+- `hoard-11` is a square stone trough, a diorama box.
+- `hoard-12` is an open chest on stone tiles, in a stylised game-prop look.
+- `wardstone-13` has a good shape, but its carved "runes" look like
+  Chinese characters.
+- `wardstone-14` is an ornate carved pedestal, not a ward stone.
+
+The contact sheets are `artifacts/tripo-overnight/day2-walls.jpg`,
+`day2-rocks.jpg`, `day2-landmarks.jpg`, `day2-prey.jpg` and
+`day2-crags-rocks.jpg`.
+
+What a later Codex job can take from this run, in order of value: the
+crags as a valley-wall set; the six standing prey for rigging; the pass
+gate, the keep and `hoard-10` as run props; and the good rocks into the
+rock kit (`tools/rockkit.md`).
 
 ## Frameworks: is ComfyUI the right harness?
 
