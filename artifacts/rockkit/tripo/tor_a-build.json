@@ -1,0 +1,53 @@
+{
+  "light_before": [
+    0.1987,
+    0.8787,
+    1.6318
+  ],
+  "light_after": [
+    -0.0,
+    0.0002,
+    0.0001
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.088,
+  "atlas_coverage": 0.632,
+  "mesh_light_after": [
+    0.15008,
+    0.00097
+  ],
+  "mean_albedo": [
+    0.2309,
+    0.207,
+    0.1791
+  ],
+  "name": "tor_a",
+  "asset": "tripo-cliff-05.glb",
+  "scan_triangles": 1894512,
+  "scale": 23.249,
+  "triangles": [
+    19699,
+    4924,
+    1230
+  ],
+  "islands_dropped": 0,
+  "size_blender_xyz": [
+    22.01,
+    22.75,
+    24.01
+  ],
+  "seconds": 138.5,
+  "source": "tripo-cliff-05.glb",
+  "rotation_blender": [
+    0,
+    0,
+    0
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true,
+  "source_alignment_shift": [
+    0.0029129981994628906,
+    0.0011000633239746094,
+    0.01395475585013628
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "light_before": [
+    -1.1895,
+    0.0183,
+    1.2979
+  ],
+  "light_after": [
+    -0.0,
+    -0.0,
+    0.0
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 0.972,
+  "atlas_coverage": 0.697,
+  "mesh_light_after": [
+    0.17322,
+    0.00233
+  ],
+  "mean_albedo": [
+    0.2319,
+    0.2079,
+    0.1799
+  ],
+  "name": "wall_b",
+  "asset": "tripo-cliff-03.glb",
+  "scan_triangles": 1913348,
+  "scale": 22.498,
+  "triangles": [
+    19700,
+    4924,
+    1230
+  ],
+  "islands_dropped": 49,
+  "size_blender_xyz": [
+    22.01,
+    12.93,
+    34.01
+  ],
+  "seconds": 159.1,
+  "source": "tripo-cliff-03.glb",
+  "rotation_blender": [
+    0,
+    0,
+    -90
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}

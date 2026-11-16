@@ -13,9 +13,10 @@ hobby project's reading, not legal advice.
 | Material | Public repo | Public release (free binary) | Personal copy | Why |
 |---|---|---|---|---|
 | Code, shaders, tools, tests, docs | yes, MIT | yes | yes | Ours (`LICENSE`) |
-| Original props (`assets/props/` except `grazer.glb`), terrain and leaf textures | yes, MIT | yes | yes | Procedural, made by our scripts |
+| Original props (`assets/props/` except `grazer.glb` and `rockkit/`), terrain and leaf textures | yes, MIT | yes | yes | Procedural, made by our scripts |
 | HUD fonts (`assets/fonts/`): Barlow Condensed, Fira Sans | yes, OFL 1.1 | yes | yes | Licence text beside each, and in `THIRD_PARTY_NOTICES.md` |
 | `assets/textures/terrain_rock.png`, `terrain_scree.png`, `terrain_grass.png`, `terrain_forest.png`, `terrain_gravel.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03`, `gray_rocks`, `leafy_grass`, `forest_leaves_04` and `dry_river_pebbles` scans (below) |
+| Tripo additions in `assets/props/rockkit/` | yes, labelled AI-generated | yes | yes | Paid output; section 5.2.2 (below) |
 | Hunyuan-generated roster (`assets/<species>.glb`, about 50 MB each) | **no**, gitignored for size | **yes, labelled AI-generated** | yes | Outputs are ours (clause 5.3); the label is required (3.3); see below |
 | `assets/props/grazer.glb` (Hunyuan-derived, 3.5 MB) | yes, labelled | yes | yes | As above, and small enough to track |
 | AI concept art and renders in `artifacts/`, `docs/concept/` | yes, labelled | no (not game content) | -- | Outputs are ours under the OpenAI, Google and Tencent terms |
@@ -48,12 +49,24 @@ the rest of the repository goes.
 
 ## Poly Haven rock scans (2026-11-14)
 
-`assets/props/rockkit/` is eight rock and cliff pieces built from Poly
+The original eight pieces in `assets/props/rockkit/` use Poly
 Haven models, all CC0: `boulder_01`, `namaqualand_boulder_03`, `_04` and
 `_05`, `rock_09`, `rock_face_01`, `rock_face_02` and `mountainside`.
 `tools/build_rockkit.py` downloads, decimates, re-bakes and grades them,
 and `tools/rockkit.md` records what was done to each. CC0 needs no credit
 and has no limit on where the files ship.
+
+## Tripo rock pieces (2026-11-16)
+
+The added rock kit pieces use Tripo-generated cliff, ridge, scree and boulder meshes.
+The task brief records generation with paid credits.
+[Tripo terms, section 5.2.2](https://www.tripo3d.ai/terms), read on 2026-11-16,
+permit modification, publication, distribution and licensing of paid output.
+The terms were updated on 2026-11-13.
+The derived kit files and their inspection renders may enter the public repository and releases.
+`AI_DISCLOSURE.md` labels these assets as AI-generated.
+`tools/rockkit.md` records the source files, processing and rejected pieces.
+The large raw exports stay local and untracked.
 
 ## Hunyuan 3D: the generated roster
 

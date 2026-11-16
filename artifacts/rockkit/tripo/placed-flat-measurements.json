@@ -1,0 +1,8 @@
+{
+  "boulder_e": {
+    "terrain": "flat",
+    "margin": 0.15,
+    "translation_y": -0.6333063185214997,
+    "highest_check_point_y": -0.15000000000000002
+  }
+}

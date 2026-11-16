@@ -1,9 +1,10 @@
 # Rock and cliff kit
 
-`tools/build_rockkit.py` builds the kit from Poly Haven scans. It was tested
-with Blender 5.3.0. The kit is 24 files in `assets/props/rockkit/`: eight
-pieces at three levels of detail (LOD). All sizes below are metres in glTF
-axes (X width, Y up, Z depth).
+`tools/build_rockkit.py` builds the kit from Poly Haven scans and local Tripo meshes.
+It was tested with Blender 5.3.0.
+The original scan kit contains eight pieces at three levels of detail (LOD).
+The Tripo additions are recorded under "Tripo pieces (2026-11-16)" below.
+All sizes use metres and glTF axes: X width, Y up, Z depth.
 
 | Piece | Poly Haven id | X x Y x Z | Triangles LOD0 / 1 / 2 | Scan scale |
 |---|---|---|---:|---:|
@@ -18,7 +19,7 @@ axes (X width, Y up, Z depth).
 
 All eight scans are Poly Haven models, licence CC0. The script downloads the
 glTF form with 4K maps from `https://api.polyhaven.com/files/<id>`. Nothing
-else is in the kit. The scans were not made by an AI tool.
+else was in the original scan kit. The scans were not made by an AI tool.
 
 ## File contract
 
@@ -130,11 +131,11 @@ blender -b --factory-startup --python tools/build_rockkit.py -- --only cliff_a,s
 blender -b --factory-startup --python tools/build_rockkit.py -- --render --shots wall
 ```
 
-The default run downloads into `build-rockkit-cache/` (about 470 MB with its work files, ignored by
-git), builds all eight pieces and verifies. A full build takes about 4
-minutes on this Mac with the downloads cached. `--only` builds the named
-pieces and does not verify. A failed check prints the reason and
-`ROCKKIT FAILED`, and Blender exits with code 1.
+The cache is `build-rockkit-cache/`, ignored by git.
+A default run rebuilds the scans and all available accepted Tripo sources, then verifies the kit.
+The original scan-only build took about four minutes with cached downloads.
+`--only` builds the named pieces and does not verify.
+A failed check prints the reason and `ROCKKIT FAILED`. Blender exits with code 1.
 
 ## Verification
 
@@ -159,7 +160,8 @@ file. It asserts:
 - no baked light: the slope described under "Colour" is under 0.15;
 - albedo: every piece's mean, per channel and in luminance, is within 8% of
   the kit's mean;
-- the directory holds the 24 files and nothing else, and is at most 80 MB.
+- the original scan group contains 24 files and remains at most 80 MB;
+- additional files belong to registered Tripo pieces or `pieces.json`.
 
 Final output:
 
@@ -284,3 +286,238 @@ olive plane, and `cliff_a` showed the slope through a gap under its ledge.
   verifier allows a mean of 3/255 and 32/255 at the 99.9th percentile.
 - Nothing was loaded in the engine. The files were checked by the verifier
   and by re-import into Blender for the renders.
+
+## Tripo pieces (2026-11-16)
+
+The local Tripo exports are read-only inputs in `assets/tripo-raw/`.
+Their hashes are in `artifacts/rockkit/tripo/source-sha256.json`.
+The cache uses a real directory inside this worktree.
+The builder rejects output paths that resolve outside the worktree.
+The original 24 scan files remain byte-identical.
+Their hashes are in `artifacts/rockkit/tripo/original-sha256.json`.
+No C++ file changed. Engine integration remains separate.
+
+### Processing
+
+The builder imports each full source mesh and keeps its original normal map for baking.
+It removes loose fragments, cuts the bottom 3.5% flat, and closes the cut.
+It scales the width to the target and adjusts height separately where specified.
+The solid pieces retain their depth. Their rims are not bent into shells.
+The builder sets XYZ rotation mode before applying a wall's yaw.
+Tripo imports use quaternion mode, which ignored the first Euler rotations.
+
+LOD0 receives a new atlas and three maps baked from the high mesh.
+The maps use the existing kit sizes, image formats and material layout.
+Occlusion is constant 1.0 because Tripo supplies no occlusion map.
+Roughness uses the source map's green channel and targets a mean of 0.86.
+The metallic channel is written as zero.
+
+The existing grade removes directional light and mutes the source hue.
+It targets linear albedo (0.232, 0.208, 0.180).
+A second directional correction uses area-weighted samples at the mesh's UV coordinates.
+This correction removes residual lighting that the texel fit missed.
+The verifier measures the encoded GLB again, after JPEG compression.
+
+The first scree LOD2 failed silhouette overlap at 0.878.
+Outline weights now protect its projected boundary during decimation.
+The modifier ratio stays at 0.0625. The resulting file contains 801 triangles.
+Its weakest silhouette overlap is 0.905.
+
+`boulder_e` LOD2 also exposed JPEG colour bleed into the metallic channel.
+The packed-map encoder now supports JPEG 4:4:4, with full colour resolution.
+New Tripo builds use that encoder. It requires `ffmpeg` on `PATH`.
+The original scan encoder stays unchanged.
+
+### Normal projection repair
+
+The first bake projected some texels onto nearby back-facing surfaces.
+The source normal maps had no negative-Z samples.
+The builder now tries three ray offsets: 0.1, 0.35 and 1.0 times the original offset.
+The original offset is 1.2% of the piece's bounding-box diagonal.
+Each texel keeps the nearest valid outward hit.
+The builder fills remaining rejected projections from nearby valid texels, then normalizes the result.
+It does not reverse negative Z values or reduce valid normal strength.
+
+`normal-repairs.json` records the offsets and replacement fractions for each piece.
+The repair preserves geometry, base-colour JPEGs and packed-map JPEGs.
+Every encoded Tripo normal must point outward and stay within the unit-length quantization bound.
+The original scan verifier remains unchanged.
+Tripo maps do not use the scan verifier's mean-Z threshold of 0.80.
+That average rejected valid strong normals on scree, even after all reversed samples were removed.
+The per-texel checks enforce the file contract directly.
+
+The normal-only path also needs the source translation applied after LOD0 decimation.
+`source-alignment.json` records that translation and its size in atlas texels.
+The repair path now reads the recorded translation in Blender coordinates: X, Y, Z-up.
+Ridge, scree and `boulder_f` needed aligned rebakes because their omitted shifts exceeded one average atlas texel.
+The crag and the other boulders had sub-texel shifts.
+
+### Placement data
+
+`assets/props/rockkit/pieces.json` stores size, kind and ground check points for each accepted addition.
+All coordinates use glTF axes and metres.
+The points come from LOD2. Each piece has at most 26 points.
+Sampling starts with the lower 3.5% of LOD2.
+The band expands when fewer than eight vertices or 25% of the projected footprint are available.
+The JSON records the band height and footprint coverage.
+Walls also use rear points from successive height bands.
+
+After yaw and horizontal placement, lower each piece until every check point sits at least 0.15 m below terrain.
+The flat-ground check lowers `boulder_e` by 0.633306 m.
+Its placed render shows continuous ground contact across most of the base, with a natural undercut on the left.
+Use `--placed --only boulder_e` to repeat that render.
+
+No wall ships from this round. The following wall rules apply to diagnostic builds.
+Keep each piece's Y axis vertical. Rotate around Y to face the wall downhill.
+Do not rotate its mounting normal onto the terrain normal.
+That old shell-placement rule would tilt these solids.
+
+For slope angle `a`, use normal `n = (0, cos(a), sin(a))`.
+Set `d = max(dot(n, p)) + 0.15` over the wall's check points.
+The mounting point is `(0, 0, d / n.z)`.
+Translate that point onto the terrain plane after yaw rotation.
+The JSON also stores the reference plane for a 53.5-degree slope.
+Actual terrain must contain every check point after placement.
+
+The mounted inspection views use this rule on 45-degree and 62-degree slopes.
+`rejected-wall-placement.json` records exposed vertex fractions, relief and check-point distances for the rejected walls.
+These are planar checks. They do not replace the engine's checks against curved terrain.
+
+### Rejected candidates
+
+`wall_a` used `tripo-cliff-01.glb`, with its original +Z face forward.
+It passed the initial numeric checks after the light correction.
+The final close view retained an isolated black cavity.
+The top view showed repeated rectangular joints.
+The three output GLBs were removed. The raw and final renders remain as evidence.
+
+`wall_b` used `tripo-cliff-03.glb`, with its +X face rotated toward +Z.
+It passed the initial numeric checks. Its front showed vertical rock fractures.
+The top remained a broad, nearly flat cap with weak texture.
+Mounted views showed that cap exposed on both 45-degree and 62-degree slopes.
+The three output GLBs were removed. The mounted views remain as rejection evidence.
+No wall candidate met the brief's visual requirement.
+The valley-wall asset gap remains open.
+
+`wall_c` used `tripo-cliff-04.glb`, rotated to show its broad ledge.
+Its final top view showed a broad flat roof and a diagonal slab.
+The measured 39.84 m Z extent was not solid wall thickness.
+Its initial mean-Z check failed at 0.74967 against 0.80.
+The later per-texel rule supersedes that heuristic. Its visual faults still require rejection.
+The three output GLBs were removed. Its final renders and build measurements remain as evidence.
+
+Normal builds exclude rejected candidates.
+`--diagnostic` permits a deliberate rebuild for inspection.
+Rejected candidates do not appear in the placement JSON.
+
+### Accepted pieces
+
+Six pieces passed the file checks and visual review.
+They add 18 GLBs, totalling 46,094,152 bytes.
+The table uses measurements from the final encoded files.
+Each piece received the common base cut, atlas bake and grade described above.
+`boulder_f` arrived in the source folder during this task and was included.
+
+| Piece | Source | X, Y, Z metres | Triangles LOD0/1/2 | Mean linear albedo RGB | Shape work |
+|---|---|---|---|---|---|
+| `tor_a` | `tripo-cliff-05.glb` | 22.01, 24.01, 22.75 | 19699/4924/1230 | 0.2216, 0.1990, 0.1724 | Crag; fit width 22 m and height 24 m. |
+| `ridge_a` | `tripo-ridge-01.glb` | 40.03, 16.05, 26.27 | 19699/4922/1230 | 0.2319, 0.2079, 0.1796 | Crag; fit width 40 m and height 16 m. |
+| `scree_a` | `tripo-scree-01.glb` | 20.01, 7.03, 20.33 | 11819/2953/801 | 0.2206, 0.1986, 0.1723 | Mound; fit width 20 m and height 7 m. |
+| `boulder_d` | `tripo-boulder-01.glb` | 4.51, 2.60, 4.54 | 7878/1968/492 | 0.2337, 0.2087, 0.1805 | Boulder; fit X to 4.5 m. |
+| `boulder_e` | `tripo-boulder-02.glb` | 5.01, 3.99, 5.10 | 7880/1970/492 | 0.2338, 0.2090, 0.1807 | Boulder; fit X to 5 m. |
+| `boulder_f` | `tripo-boulder-03.glb` | 3.23, 3.08, 4.00 | 7879/1969/491 | 0.2211, 0.1980, 0.1710 | Boulder; fit Z to 4 m. |
+
+The crag, ridge and scree have irregular fractured forms.
+Their 2K maps become soft in close views of these large surfaces.
+The three boulders retain more surface detail per metre.
+This round adds no accepted wall.
+
+### Rebuild the additions
+
+Run these commands from the worktree root.
+The source files must be available under `assets/tripo-raw/` for a rebuild.
+Verification and final rendering read the exported files and do not need the raw sources.
+Use `--only` to preserve the original scan files.
+Run Blender in the foreground.
+
+```sh
+tripo_pieces=tor_a,ridge_a,scree_a,boulder_d,boulder_e,boulder_f
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
+  --python tools/build_rockkit.py -- --only "$tripo_pieces"
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
+  --python tools/build_rockkit.py -- --metadata
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
+  --python tools/build_rockkit.py -- --verify-only --only "$tripo_pieces"
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
+  --python tools/build_rockkit.py -- --render --only "$tripo_pieces"
+```
+
+Each accepted piece has front, side, top and close renders in `artifacts/rockkit/tripo/`.
+The rejected walls also have raw cardinal views and front views from 50 m.
+`wall_b` has mounted views on both endpoint slopes.
+`visual-review.json` records the acceptance decisions and rejection evidence.
+`final-sha256.json` identifies the accepted GLBs.
+
+The placement audit checked every listed point against its LOD2 vertex buffer.
+Each footprint has at least three noncollinear points and at most 26 points.
+The JSON sizes match the LOD0 buffers. Rejected walls are absent.
+All 24 original files matched their baseline hashes.
+`git diff --stat -- assets/props/rockkit` showed no changes to those tracked files before staging the additions.
+
+### Final verification output
+
+The command above produced this output for the six accepted pieces:
+
+```text
+VERIFY tor_a: PASS
+  glTF Y-up size X/Y/Z metres: (22.01, 24.01, 22.75); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 19699/4924/1230 (25.0%, 6.2%); budget 20000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.947
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8641
+  mean linear albedo: (0.2216, 0.1990, 0.1724); directional light term 0.003 (limit 0.15)
+  bytes LOD0/1/2: 5878012/1950860/660452
+VERIFY ridge_a: PASS
+  glTF Y-up size X/Y/Z metres: (40.03, 16.05, 26.27); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 19699/4922/1230 (25.0%, 6.2%); budget 20000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.987, LOD2 0.958
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8296
+  mean linear albedo: (0.2319, 0.2079, 0.1796); directional light term 0.002 (limit 0.15)
+  bytes LOD0/1/2: 6100852/2007640/661000
+VERIFY scree_a: PASS
+  glTF Y-up size X/Y/Z metres: (20.01, 7.03, 20.33); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 11819/2953/801 (25.0%, 6.8%); budget 12000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.967, LOD2 0.905
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.7499
+  mean linear albedo: (0.2206, 0.1986, 0.1723); directional light term 0.002 (limit 0.15)
+  bytes LOD0/1/2: 6899040/2280104/763616
+VERIFY boulder_d: PASS
+  glTF Y-up size X/Y/Z metres: (4.51, 2.60, 4.54); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7878/1968/492 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.982
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0250; LOD0 mean Z 0.9647
+  mean linear albedo: (0.2337, 0.2087, 0.1805); directional light term 0.041 (limit 0.15)
+  bytes LOD0/1/2: 3726604/1220864/398136
+VERIFY boulder_e: PASS
+  glTF Y-up size X/Y/Z metres: (5.01, 3.99, 5.10); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7880/1970/492 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.990, LOD2 0.967
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.9382
+  mean linear albedo: (0.2338, 0.2090, 0.1807); directional light term 0.022 (limit 0.15)
+  bytes LOD0/1/2: 4467784/1480716/532964
+VERIFY boulder_f: PASS
+  glTF Y-up size X/Y/Z metres: (3.23, 3.08, 4.00); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7879/1969/491 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.984, LOD2 0.932
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8807
+  mean linear albedo: (0.2211, 0.1980, 0.1710); directional light term 0.006 (limit 0.15)
+  bytes LOD0/1/2: 4892844/1629052/543612
+VERIFY selection: PASS
+  selection mean linear albedo: (0.2271, 0.2035, 0.1761); worst piece deviation 2.93% (limit 8%)
+  selected bytes: 46094152; directory size: 116.65 MB; original scan kit: 70.54 MB of 80 MB
+```

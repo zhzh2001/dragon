@@ -1,0 +1,97 @@
+{
+  "wall_a": {
+    "status": "dropped",
+    "reason": "The close view retained an isolated black cavity. The top showed repeated rectangular joints.",
+    "evidence": [
+      "wall_a-close.png",
+      "wall_a-top.png",
+      "wall_a-front-50m.png"
+    ]
+  },
+  "wall_c": {
+    "status": "dropped",
+    "reason": "The final top showed a broad flat roof. The source also showed regular masonry joints.",
+    "orientation_note": "The source horizontal principal axis was 36.78 degrees in X/Z. The candidate yaw was -90 degrees in Blender.",
+    "bounds_note": "The 39.84 m Z extent crossed the diagonal slab. It did not measure solid wall thickness.",
+    "source_horizontal_variance_ratio": 8.4996,
+    "evidence": [
+      "wall_c-top.png",
+      "wall_c-front.png",
+      "wall_c-close.png",
+      "wall_c-raw-plus_z.png"
+    ],
+    "initial_normal_note": "The initial mean-Z heuristic failed at 0.74967. Visual rejection remained sufficient after replacing that heuristic."
+  },
+  "wall_b": {
+    "status": "dropped",
+    "reason": "The broad weakly textured roof stayed exposed on 45-degree and 62-degree slopes.",
+    "evidence": [
+      "wall_b-top.png",
+      "wall_b-mounted-45-above.png",
+      "wall_b-mounted-62-above.png",
+      "wall_b-mounted-62-front.png"
+    ]
+  },
+  "tor_a": {
+    "status": "accepted",
+    "reason": "Fractured pillar with an irregular top and base. Close detail softened at this texel density.",
+    "evidence": [
+      "tor_a-front.png",
+      "tor_a-side.png",
+      "tor_a-top.png",
+      "tor_a-close.png"
+    ]
+  },
+  "ridge_a": {
+    "status": "accepted",
+    "reason": "Broken ridge with an irregular crest. Circular marks were surface pits, not isolated black holes.",
+    "evidence": [
+      "ridge_a-front.png",
+      "ridge_a-side.png",
+      "ridge_a-top.png",
+      "ridge_a-close.png"
+    ]
+  },
+  "scree_a": {
+    "status": "accepted",
+    "reason": "Irregular rubble mound. Strong normals preserved separate stones without a flat cap.",
+    "evidence": [
+      "scree_a-front.png",
+      "scree_a-side.png",
+      "scree_a-top.png",
+      "scree_a-close.png"
+    ]
+  },
+  "boulder_d": {
+    "status": "accepted",
+    "reason": "Rounded weathered stone with grain and small surface pits. The top retained texture and irregular relief.",
+    "evidence": [
+      "boulder_d-front.png",
+      "boulder_d-side.png",
+      "boulder_d-top.png",
+      "boulder_d-close.png"
+    ]
+  },
+  "boulder_e": {
+    "status": "accepted",
+    "reason": "Fractured stone with textured relief on its cap. Its uneven bottom needs terrain burial using the expanded lower footprint.",
+    "evidence": [
+      "boulder_e-front.png",
+      "boulder_e-side.png",
+      "boulder_e-top.png",
+      "boulder_e-close.png",
+      "boulder_e-placed-flat-front.png"
+    ],
+    "placement_note": "The exact check-point burial moved Y down 0.633306 m. The placed front showed continuous contact across most of the base."
+  },
+  "boulder_f": {
+    "status": "accepted",
+    "reason": "Irregular split boulder with textured cap and fractures. Dark gaps followed deep crevices between its lobes.",
+    "evidence": [
+      "boulder_f-front.png",
+      "boulder_f-side.png",
+      "boulder_f-top.png",
+      "boulder_f-close.png"
+    ]
+  }
+}

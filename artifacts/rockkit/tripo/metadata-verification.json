@@ -1,0 +1,44 @@
+{
+  "tor_a": {
+    "check_points": 26,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.035,
+    "sampled_hull_coverage": 0.9288162380787882
+  },
+  "ridge_a": {
+    "check_points": 26,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.035,
+    "sampled_hull_coverage": 0.9278879675008915
+  },
+  "scree_a": {
+    "check_points": 26,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.035,
+    "sampled_hull_coverage": 0.9161975529272945
+  },
+  "boulder_d": {
+    "check_points": 9,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.035,
+    "sampled_hull_coverage": 0.5276247211105876
+  },
+  "boulder_e": {
+    "check_points": 13,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.125,
+    "sampled_hull_coverage": 0.25901102080424954
+  },
+  "boulder_f": {
+    "check_points": 14,
+    "max_vertex_distance": 0.0,
+    "size_error": 0.0,
+    "band_fraction": 0.035,
+    "sampled_hull_coverage": 0.8134340533708305
+  }
+}

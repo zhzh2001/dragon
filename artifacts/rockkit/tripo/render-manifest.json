@@ -1,0 +1,57 @@
+{
+  "tor_a": {
+    "lod0_sha256": "84049202e4463a467b61b2a81ea15fc5d17a9c401697c296ae9335b69d68723c",
+    "images": {
+      "tor_a-front.png": "4b60f90825e36db0f2971e373ae4a2bb7c72e1fd33cc516917cd457f87aa448e",
+      "tor_a-side.png": "13dd8595e911e0ffa472fc02695f45a8d24bbf2f9769a73dc432c687ddc54823",
+      "tor_a-top.png": "3f030cb0b15347d0c47313ae28d21ad901d17f5e8544149b56a32364e5785e62",
+      "tor_a-close.png": "bf4170cfe3351d5421ef2eaec477603c64b066d922a4f1dcd228b9af7156afc2"
+    }
+  },
+  "ridge_a": {
+    "lod0_sha256": "0f9cde1da4d4d601ea3ac2738c0f0d7dbcd7b3c3aba100d51f28d7c1b224b866",
+    "images": {
+      "ridge_a-front.png": "3ef9422fb2257228684131efbcdd424a9eb9c92b67d95facc07cecc678364191",
+      "ridge_a-side.png": "3c18f368d9f79aaaf6299f596cb372c60337da8c8b5d85e57920ee2e827eecf4",
+      "ridge_a-top.png": "f8797a7ec4abfcdce3e3b8e98d0a89cff517980191e4b878d1aaff9f714eed47",
+      "ridge_a-close.png": "08f6daff409d131b79fb997d3e47616633d581ad6a2e0291343171b22e77424d"
+    }
+  },
+  "scree_a": {
+    "lod0_sha256": "0caebd31c6be085a610141341b80e1797983cbed59270149c696041906f733d2",
+    "images": {
+      "scree_a-front.png": "b86d8243a2319d23d0d4e022bceaea8896bb92ad7664385e691da517226cf7d5",
+      "scree_a-side.png": "ffbbb9e3373c165613a68491ba3c83466a52e979f7a8e5246d10d4186defedf9",
+      "scree_a-top.png": "78b3a9259c367bf978b0260f11c48c71a300dbd6dda41bc72dfa35f8b32305fc",
+      "scree_a-close.png": "2b14f8cbc5226e59652154171b0c99e2d689a5f4ba99c1309d25d000f856e7d2"
+    }
+  },
+  "boulder_d": {
+    "lod0_sha256": "3ec1109fefb4a8d74ecd287ad86488de77b49f938ed69ca189d37a6780296fe7",
+    "images": {
+      "boulder_d-front.png": "e7212ddcc9bbf5c3a147961ef956fffab2184bf56e9851c4d1759643ff7ef2c6",
+      "boulder_d-side.png": "69cf008938380dbf551e313ba1e81f9bdaaea2db07adc01fe8b795c9742bb813",
+      "boulder_d-top.png": "7df3a8a17626a3dde15fc4e8714cfeb42de94076fe93f9ddc44f8864e274806f",
+      "boulder_d-close.png": "21be99247e7c35d68d5070f0d2111b08fbc8d75080b33f811a5292e6ef71397d"
+    }
+  },
+  "boulder_e": {
+    "lod0_sha256": "633559a8d67274dfb96ebcaa3ecb0e73c5b3e3c6963c24b66f16aa64563d2d05",
+    "images": {
+      "boulder_e-front.png": "64e262145163f2af50b543fbeca6f2e80657a6782e50e75d43519de030add72c",
+      "boulder_e-side.png": "a93be5012295ffc71e94d09f14237e0b38183ea62a22f1e29b244b88a10848ad",
+      "boulder_e-top.png": "dda012527bdbd31498b84be08f7906ebbe323343545fe6b63a52ec5c742a177b",
+      "boulder_e-close.png": "665dea50db721ec72f70b46465e4908efa04e9a3e0eaa0ae2cddb40b021c82c7",
+      "boulder_e-placed-flat-front.png": "43f87204862529b764a41a800e5c2fdd50616a9701520e9fe5af763e4db73861"
+    }
+  },
+  "boulder_f": {
+    "lod0_sha256": "048f8d780d0e6594f0f64aa6b2c568afbb6acd5748fde9b9e249ae69a7070bfd",
+    "images": {
+      "boulder_f-front.png": "922b615efe4202852905bdffc4c59cd166f5b83cd2ce2c29d07996c2b234a97b",
+      "boulder_f-side.png": "28b906badd552575fcefc343c2fd7c73da0fccf802aa814f372e870f0668adc9",
+      "boulder_f-top.png": "31ce8f70d2c883b5807e5f437f4f4275eb35004540e38f9ba87c5ef4fb40c13f",
+      "boulder_f-close.png": "bb6f63d41024eadada4139b123530df386716bdbda460bc330121e41249441b4"
+    }
+  }
+}

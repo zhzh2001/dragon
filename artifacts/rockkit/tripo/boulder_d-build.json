@@ -1,0 +1,52 @@
+{
+  "light_before": [
+    -0.0207,
+    0.5076,
+    1.0791
+  ],
+  "light_after": [
+    0.0,
+    -0.0,
+    0.0
+  ],
+  "contrast_gain": 0.765,
+  "log_sd_before": 0.588,
+  "atlas_coverage": 0.594,
+  "mesh_light_after": [
+    0.04158
+  ],
+  "mean_albedo": [
+    0.2316,
+    0.2077,
+    0.1797
+  ],
+  "name": "boulder_d",
+  "asset": "tripo-boulder-01.glb",
+  "scan_triangles": 1898642,
+  "scale": 4.62,
+  "triangles": [
+    7878,
+    1968,
+    492
+  ],
+  "islands_dropped": 55054,
+  "size_blender_xyz": [
+    4.51,
+    4.54,
+    2.6
+  ],
+  "seconds": 189.0,
+  "source": "tripo-boulder-01.glb",
+  "rotation_blender": [
+    0,
+    0,
+    0
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true,
+  "source_alignment_shift": [
+    -0.00040161609649658203,
+    -0.00021469593048095703,
+    0.002097517717629671
+  ]
+}

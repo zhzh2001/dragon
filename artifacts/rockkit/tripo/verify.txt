@@ -1,0 +1,51 @@
+VERIFY tor_a: PASS
+  glTF Y-up size X/Y/Z metres: (22.01, 24.01, 22.75); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 19699/4924/1230 (25.0%, 6.2%); budget 20000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.947
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8641
+  mean linear albedo: (0.2216, 0.1990, 0.1724); directional light term 0.003 (limit 0.15)
+  bytes LOD0/1/2: 5878012/1950860/660452
+VERIFY ridge_a: PASS
+  glTF Y-up size X/Y/Z metres: (40.03, 16.05, 26.27); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 19699/4922/1230 (25.0%, 6.2%); budget 20000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.987, LOD2 0.958
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8296
+  mean linear albedo: (0.2319, 0.2079, 0.1796); directional light term 0.002 (limit 0.15)
+  bytes LOD0/1/2: 6100852/2007640/661000
+VERIFY scree_a: PASS
+  glTF Y-up size X/Y/Z metres: (20.01, 7.03, 20.33); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 11819/2953/801 (25.0%, 6.8%); budget 12000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.967, LOD2 0.905
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.7499
+  mean linear albedo: (0.2206, 0.1986, 0.1723); directional light term 0.002 (limit 0.15)
+  bytes LOD0/1/2: 6899040/2280104/763616
+VERIFY boulder_d: PASS
+  glTF Y-up size X/Y/Z metres: (4.51, 2.60, 4.54); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7878/1968/492 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.982
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0250; LOD0 mean Z 0.9647
+  mean linear albedo: (0.2337, 0.2087, 0.1805); directional light term 0.041 (limit 0.15)
+  bytes LOD0/1/2: 3726604/1220864/398136
+VERIFY boulder_e: PASS
+  glTF Y-up size X/Y/Z metres: (5.01, 3.99, 5.10); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7880/1970/492 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.990, LOD2 0.967
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.9382
+  mean linear albedo: (0.2338, 0.2090, 0.1807); directional light term 0.022 (limit 0.15)
+  bytes LOD0/1/2: 4467784/1480716/532964
+VERIFY boulder_f: PASS
+  glTF Y-up size X/Y/Z metres: (3.23, 3.08, 4.00); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 7879/1969/491 (25.0%, 6.2%); budget 8000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.984, LOD2 0.932
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8807
+  mean linear albedo: (0.2211, 0.1980, 0.1710); directional light term 0.006 (limit 0.15)
+  bytes LOD0/1/2: 4892844/1629052/543612
+VERIFY selection: PASS
+  selection mean linear albedo: (0.2271, 0.2035, 0.1761); worst piece deviation 2.93% (limit 8%)
+  selected bytes: 46094152; directory size: 116.65 MB; original scan kit: 70.54 MB of 80 MB

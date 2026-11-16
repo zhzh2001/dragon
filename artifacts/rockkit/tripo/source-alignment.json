@@ -1,0 +1,68 @@
+{
+  "tor_a": {
+    "source_alignment_shift": [
+      0.0029129981994628906,
+      0.0011000633239746094,
+      0.01395475585013628
+    ],
+    "shift_metres": 0.014297933720077906,
+    "average_surface_texel_metres": 0.02679365898938437,
+    "shift_in_average_texels": 0.5336312493095003,
+    "tight_cage_metres": 0.04767702909232221
+  },
+  "ridge_a": {
+    "source_alignment_shift": [
+      0.006191253662109375,
+      -0.007312774658203125,
+      0.030973495915532112
+    ],
+    "shift_metres": 0.03242168632782269,
+    "average_surface_texel_metres": 0.03063081048671565,
+    "shift_in_average_texels": 1.0584664856283752,
+    "tight_cage_metres": 0.06059597111528566
+  },
+  "scree_a": {
+    "source_alignment_shift": [
+      0.003834247589111328,
+      0.009937763214111328,
+      0.023404279723763466
+    ],
+    "shift_metres": 0.025714215944930462,
+    "average_surface_texel_metres": 0.018706826339848024,
+    "shift_in_average_texels": 1.374589974685111,
+    "tight_cage_metres": 0.03525276215901689
+  },
+  "boulder_d": {
+    "source_alignment_shift": [
+      -0.00040161609649658203,
+      -0.00021469593048095703,
+      0.002097517717629671
+    ],
+    "shift_metres": 0.0021463854284122924,
+    "average_surface_texel_metres": 0.004820133861600292,
+    "shift_in_average_texels": 0.44529581336143415,
+    "tight_cage_metres": 0.008285301076815176
+  },
+  "boulder_e": {
+    "source_alignment_shift": [
+      -0.0018613338470458984,
+      0.002551555633544922,
+      0.00295123434625566
+    ],
+    "shift_metres": 0.004322589965258397,
+    "average_surface_texel_metres": 0.005230189772230432,
+    "shift_in_average_texels": 0.8264690486393218,
+    "tight_cage_metres": 0.009818751178216687
+  },
+  "boulder_f": {
+    "source_alignment_shift": [
+      0.003897249698638916,
+      -0.0014399886131286621,
+      0.004667455796152353
+    ],
+    "shift_metres": 0.0062487811634363965,
+    "average_surface_texel_metres": 0.004188395597284045,
+    "shift_in_average_texels": 1.4919271635870315,
+    "tight_cage_metres": 0.007191401388107072
+  }
+}

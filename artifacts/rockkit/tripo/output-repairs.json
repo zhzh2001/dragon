@@ -1,0 +1,23 @@
+{
+  "scree_a_lod2": {
+    "reason": "The original side silhouette overlap was 0.878.",
+    "method": "Weight projected outline vertices during decimation.",
+    "requested_ratio": 0.0625,
+    "triangles": 801,
+    "projection_bands": 160,
+    "outline_weight": 0.01,
+    "interior_weight": 1,
+    "decimate_vertex_group_factor": 300,
+    "probe_overlap_front_side_top": [
+      0.9215767168,
+      0.9050989223,
+      0.9221758665
+    ]
+  },
+  "boulder_e_lod2": {
+    "reason": "JPEG chroma subsampling added metallic blue at sharp roughness changes.",
+    "method": "Encode the packed map as JPEG 4:4:4. Preserve the other maps and geometry.",
+    "metallic_mean": 0.0020650229264,
+    "metallic_p999": 0.031372550875
+  }
+}

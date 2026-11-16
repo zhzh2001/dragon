@@ -1,0 +1,58 @@
+{
+  "light_before": [
+    0.4944,
+    -0.3689,
+    1.5028
+  ],
+  "light_after": [
+    0.0005,
+    -0.0011,
+    0.0011
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.175,
+  "atlas_coverage": 0.609,
+  "mesh_light_after": [
+    0.15782,
+    0.00235
+  ],
+  "mean_albedo": [
+    0.2297,
+    0.206,
+    0.1783
+  ],
+  "name": "ridge_a",
+  "asset": "tripo-ridge-01.glb",
+  "scan_triangles": 1871136,
+  "scale": 41.0,
+  "triangles": [
+    19699,
+    4922,
+    1230
+  ],
+  "islands_dropped": 434,
+  "size_blender_xyz": [
+    40.03,
+    26.27,
+    16.05
+  ],
+  "seconds": 150.8,
+  "source": "tripo-ridge-01.glb",
+  "rotation_blender": [
+    0,
+    0,
+    0
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true,
+  "source_alignment_shift": [
+    0.006191253662109375,
+    -0.007312774658203125,
+    0.030973495915532112
+  ],
+  "triangles_before_export": [
+    19699,
+    4923,
+    1231
+  ]
+}

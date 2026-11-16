@@ -1,0 +1,1 @@
+PASS: 24 original GLBs matched the baseline SHA-256 hashes.

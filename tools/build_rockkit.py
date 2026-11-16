@@ -1,4 +1,4 @@
-"""Build the rock and cliff kit from Poly Haven CC0 scans.
+"""Build the rock kit from Poly Haven scans and local Tripo meshes.
 
     blender -b --factory-startup --python tools/build_rockkit.py
     blender -b --factory-startup --python tools/build_rockkit.py -- --verify-only
@@ -6,9 +6,19 @@
     blender -b --factory-startup --python tools/build_rockkit.py -- --only cliff_a,boulder_b
 
 The default run downloads the scans into build-rockkit-cache/, builds the
-eight pieces at three levels of detail into assets/props/rockkit/, and then
+available pieces at three levels of detail into assets/props/rockkit/, and then
 verifies them. `--verify-only` checks the files on disk. `--render` writes the
-three inspection renders to artifacts/rockkit/ from the files on disk.
+three scan inspection renders to artifacts/rockkit/ from the files on disk.
+Use --render --only NAME for individual front, side, top and close views.
+Use --raw-faces --only NAME before choosing a Tripo wall orientation.
+Use --metadata to regenerate placement data from the exported Tripo pieces.
+Use --mounted --only NAME to inspect wall burial at 45 and 62 degrees.
+Use --placed --only NAME to inspect flat-terrain burial from placement check points.
+Use --repair-normals --only NAME to repeat the normal-only bake.
+Install ffmpeg before encoding Tripo packed maps. Their JPEGs need full chroma resolution.
+Use --probe-normals --only NAME to measure cage failures before repair.
+Use --use-probes with repair only when the saved probes match the source and geometry.
+Use --diagnostic to rebuild a rejected piece for inspection.
 The record is tools/rockkit.md.
 
 Every step for one piece:
@@ -26,6 +36,8 @@ import json
 import math
 import os
 import struct
+import subprocess
+import shutil
 import sys
 import time
 import urllib.request
@@ -87,7 +99,74 @@ PIECES = [
     dict(name="cliff_c", kind="cliff", asset="mountainside", fit=(0, 33.0), upright=72.0,
          squash=(1.0, 1.0, 0.68)),
 ]
-BUDGET = {"boulder": 8000, "slab": 8000, "cliff": 20000}
+SCAN_PIECES = list(PIECES)
+TRIPO_PIECES = [
+    dict(name="wall_a", kind="wall", asset="tripo-cliff-01.glb", fit=(0, 30), height=26,
+         rejected="The close view retained a black cavity. The top showed a rectangular grid."),
+    dict(name="wall_b", kind="wall", asset="tripo-cliff-03.glb", fit=(0, 22), height=34, rot=(0, 0, -90),
+         rejected="The broad flat roof remained visible on 45-degree and 62-degree slopes."),
+    dict(name="wall_c", kind="wall", asset="tripo-cliff-04.glb", fit=(0, 34), height=18, rot=(0, 0, -90),
+         rejected="The roof remained broad and flat. The source showed regular masonry joints."),
+    dict(name="tor_a", kind="crag", asset="tripo-cliff-05.glb", fit=(0, 22), height=24),
+    dict(name="ridge_a", kind="crag", asset="tripo-ridge-01.glb", fit=(0, 40), height=16),
+    dict(name="scree_a", kind="mound", asset="tripo-scree-01.glb", fit=(0, 20), height=7),
+    dict(name="boulder_d", kind="boulder", asset="tripo-boulder-01.glb", fit=(0, 4.5)),
+    dict(name="boulder_e", kind="boulder", asset="tripo-boulder-02.glb", fit=(0, 5)),
+    dict(name="boulder_f", kind="boulder", asset="tripo-boulder-03.glb", fit=(1, 4)),
+]
+for piece in TRIPO_PIECES:
+    piece.update(source="tripo", cuts=[((0.5, 0.5, 0.035), (0, 0, -1))])
+PIECES += TRIPO_PIECES
+BUDGET = {"boulder": 8000, "slab": 8000, "cliff": 20000, "wall": 20000,
+          "crag": 20000, "mound": 12000}
+TRIPO_ART = os.path.join(ART, "tripo")
+
+
+def check_write_paths():
+    """Reject output paths that resolve outside this worktree."""
+    for path in (CACHE, OUT, ART, TMP, TRIPO_ART):
+        if os.path.commonpath((ROOT, os.path.realpath(path))) != ROOT:
+            raise KitError(f"Output path left the worktree: {path}")
+        if os.path.isdir(path):
+            for base, dirs, files in os.walk(path, followlinks=False):
+                for name in dirs + files:
+                    child = os.path.join(base, name)
+                    if os.path.islink(child):
+                        raise KitError(f"Output path contained a symlink: {child}")
+
+
+def source_path(piece):
+    return os.path.join(ROOT, "assets", "tripo-raw", piece["asset"])
+
+
+def local_tripo(piece, normal_only=False):
+    """Copy embedded maps into the local cache. The source stays read-only."""
+    path = source_path(piece)
+    doc, binary = read_glb(path)
+    mat = doc["materials"][0]
+    pbr = mat["pbrMetallicRoughness"]
+    maps = {}
+    os.makedirs(TMP, exist_ok=True)
+    for key, texture in (("diff", pbr["baseColorTexture"]),
+                         ("nor_gl", mat["normalTexture"]),
+                         ("arm", pbr["metallicRoughnessTexture"])):
+        if normal_only and key != "nor_gl":
+            continue
+        blob, mime = image_blob(doc, binary, doc["textures"][texture["index"]]["source"])
+        target = os.path.join(TMP, piece["name"] + "_source_" + key +
+                              (".png" if mime == "image/png" else ".jpg"))
+        with open(target, "wb") as f:
+            f.write(blob)
+        maps[key] = target
+    if normal_only:
+        return path, maps
+    arm = load_pixels(maps["arm"])[..., :3]
+    arm[..., 0] = 1.0
+    arm[..., 2] = 0.0
+    maps["arm"] = os.path.join(TMP, piece["name"] + "_source_orm.png")
+    write_png(maps["arm"], to_u8(arm))
+    maps["constant_ao"] = True
+    return path, maps
 
 
 def log(*a):
@@ -204,8 +283,20 @@ def write_png(path, rgb_bottom_first_u8):
         f.write(png_bytes(rgb_bottom_first_u8[::-1]))
 
 
-def write_jpeg(path, rgb_bottom_first_u8, quality):
+def write_jpeg(path, rgb_bottom_first_u8, quality, packed=False):
     h, w, _ = rgb_bottom_first_u8.shape
+    if packed:
+        # Separate channels need full chroma resolution to keep metallic blue zero.
+        encoder = shutil.which("ffmpeg")
+        check(encoder is not None, "Packed JPEG encoding needs ffmpeg. Install ffmpeg.")
+        result = subprocess.run([encoder, "-v", "error", "-f", "rawvideo", "-pixel_format", "rgb24",
+                                 "-video_size", f"{w}x{h}", "-i", "pipe:0", "-frames:v", "1",
+                                 "-c:v", "mjpeg", "-pix_fmt", "yuvj444p", "-q:v", "2",
+                                 "-f", "image2pipe", "pipe:1"],
+                                input=rgb_bottom_first_u8[::-1].tobytes(), capture_output=True, check=True)
+        with open(path, "wb") as f:
+            f.write(result.stdout)
+        return
     img = bpy.data.images.new("jpeg_out", w, h, alpha=False, float_buffer=False)
     img.colorspace_settings.name = "Non-Color"
     rgba = np.ones((h, w, 4), dtype=np.float32)
@@ -307,8 +398,9 @@ def apply_modifier(obj, mod):
 
 
 def import_scan(path):
+    before = set(bpy.context.scene.objects)
     bpy.ops.import_scene.gltf(filepath=path)
-    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    meshes = [o for o in bpy.context.scene.objects if o not in before and o.type == "MESH"]
     if not meshes:
         raise KitError(f"{path}: no mesh")
     activate(meshes[0], meshes)
@@ -318,7 +410,7 @@ def import_scan(path):
     bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     for o in list(bpy.context.scene.objects):
-        if o != obj:
+        if o != obj and o not in before:
             bpy.data.objects.remove(o)
     return obj
 
@@ -478,6 +570,8 @@ def stand_upright(obj, lean_deg):
 
 def prepare_source(obj, piece):
     """Orient, cut, scale and seat the scan. Returns the game-size scan."""
+    if piece.get("source") == "tripo":
+        obj.rotation_mode = "XYZ"
     weld(obj)
     # Two empty slots: 0 for the scan, 1 for the underside of a cut. Clearing
     # the slots later would reset every face to slot 0 and lose the mark.
@@ -498,6 +592,9 @@ def prepare_source(obj, piece):
     axis, metres = piece["fit"]
     s = metres / (hi[axis] - lo[axis])
     transform(obj, scale=(s, s, s))
+    if "height" in piece:
+        lo, hi = bounds(obj)
+        transform(obj, scale=(1, 1, piece["height"] / (hi[2] - lo[2])))
     if piece["kind"] == "cliff":
         bend_cliff_borders(obj, piece)
     lo, hi = bounds(obj)
@@ -708,10 +805,6 @@ def bake_maps(sc, src, low, maps, mats, size, name):
         set_source_mode(mats, kind, maps, cap)
         out[kind] = bake_pass(sc, src, low, kind, size, extrusion)
     out["object_normal"] = bake_pass(sc, src, low, "object_normal", size, extrusion)
-    low.data.materials.clear()
-    for p in low.data.polygons:
-        p.material_index = 0
-
     valid = out["diff"].max(axis=2) > 1e-6
     coverage = float(valid.mean())
     normals = out["object_normal"] * 2.0 - 1.0
@@ -726,22 +819,91 @@ def bake_maps(sc, src, low, maps, mats, size, name):
     stats["atlas_coverage"] = round(coverage, 3)
 
     tn = out["normal"] * 2.0 - 1.0
+    if maps.get("constant_ao"):
+        trials = [bake_pass(sc, src, low, "normal", size, extrusion * factor) * 2 - 1
+                  for factor in (0.1, 0.35)] + [tn]
+        tn, stats["normal_projection"] = combine_normal_trials(trials, out["object_normal"].max(axis=2) > 1e-6)
+        stats["normal_projection"]["cage_metres"] = [extrusion * factor for factor in (0.1, 0.35, 1.0)]
     tn /= np.maximum(np.linalg.norm(tn, axis=2, keepdims=True), 1e-6)
     tn[~valid] = (0.0, 0.0, 1.0)
     orm = out["arm"].copy()
     rough = orm[..., 1]
     orm[..., 1] = np.clip(rough + (TARGET_ROUGH - rough[valid].mean()), 0.45, 1.0)
-    orm[..., 0] = np.clip(orm[..., 0], 0.0, 1.0)
+    orm[..., 0] = 1.0 if maps.get("constant_ao") else np.clip(orm[..., 0], 0.0, 1.0)
     orm[..., 2] = 0.0
 
     base, _ = dilate_fill(base, valid, 24)
     base[~_] = base[valid].mean(axis=0)
+    if maps.get("constant_ao"):
+        base, residual = correct_mesh_light(low, base, normals, valid, rock)
+        stats["mesh_light_after"] = residual
     orm, v2 = dilate_fill(orm, valid, 24)
     orm[~v2] = orm[valid].mean(axis=0)
     tn, _ = dilate_fill(tn, valid, 24)
     tn /= np.maximum(np.linalg.norm(tn, axis=2, keepdims=True), 1e-6)
     stats["mean_albedo"] = [round(float(x), 4) for x in base[valid].mean(axis=0)]
+    low.data.materials.clear()
+    for polygon in low.data.polygons:
+        polygon.material_index = 0
     return dict(base=base, normal=tn, orm=orm), stats
+
+
+def combine_normal_trials(trials, mask):
+    """Prefer the nearest outward hit. Fill rejected projections from nearby valid texels."""
+    combined = np.zeros((*mask.shape, 3), dtype=np.float64)
+    good = np.zeros(mask.shape, dtype=bool)
+    all_flat = mask.copy()
+    contributions = []
+    for normal in trials:
+        flat = np.max(np.abs(normal - (0, 0, 1)), axis=2) < 1e-6
+        unit = np.abs(np.linalg.norm(normal, axis=2) - 1) < 0.01
+        take = mask & (normal[..., 2] > 0) & unit & ~flat & ~good
+        combined[take] = normal[take]
+        contributions.append(float(take[mask].mean()))
+        good |= take
+        all_flat &= flat
+    combined[all_flat] = (0, 0, 1)
+    good |= all_flat
+    invalid = float((mask & ~good).sum() / mask.sum())
+    combined, good = dilate_fill(combined, good, 24)
+    unfilled = float((mask & ~good).sum() / mask.sum())
+    check(unfilled < 0.0001, f"Normal projection left {unfilled:.2%} of the surface uncovered. Inspect the bake cage.")
+    combined[~good] = (0, 0, 1)
+    combined /= np.maximum(np.linalg.norm(combined, axis=2, keepdims=True), 1e-6)
+    return combined, dict(cage_factors=[0.1, 0.35, 1.0], contribution_fractions=contributions,
+                          flat_fraction=float(all_flat[mask].mean()), invalid_filled_fraction=invalid,
+                          unfilled_surface_fraction=unfilled,
+                          negative_z_fraction=float((combined[..., 2] < 0).mean()),
+                          mean=combined.mean(axis=(0, 1)).tolist())
+
+
+def correct_mesh_light(low, base, normals, valid, rock):
+    """Remove residual light using the exported mesh's area-weighted UV samples."""
+    mesh = low.data
+    indices = np.array([loop.vertex_index for loop in mesh.loops])
+    positions = np.array([v.co[:] for v in mesh.vertices])
+    directions = np.array([n.vector[:] for n in mesh.corner_normals])
+    uv = np.array([item.uv[:] for item in mesh.uv_layers[0].data])
+    weight = np.array([p.area for p in mesh.polygons]).repeat(3)
+    height = positions[:, 2].max() - positions[:, 2].min()
+    seen = positions[indices, 2] > height * 0.03
+    root_weight = np.sqrt(weight[seen])
+    matrix = np.column_stack((np.ones(seen.sum()), directions[seen])) * root_weight[:, None]
+    h, w, _ = base.shape
+    x = np.clip((uv[:, 0] * w).astype(int), 0, w - 1)
+    y = np.clip((uv[:, 1] * h).astype(int), 0, h - 1)
+    field, _ = dilate_fill(normals, valid, 24)
+    field /= np.maximum(np.linalg.norm(field, axis=2, keepdims=True), 1e-6)
+    residuals = []
+    for _ in range(5):
+        luminance = base[y, x] @ LUMA
+        coeff, *_ = np.linalg.lstsq(matrix, np.log(np.maximum(luminance[seen], 1e-4)) * root_weight, rcond=None)
+        residuals.append(round(float(np.linalg.norm(coeff[1:])), 5))
+        if residuals[-1] < 0.055:
+            break
+        base = np.clip(base * np.exp(-(field @ coeff[1:]))[..., None], 0.012, 0.85)
+        base *= TARGET_ALBEDO / base[rock].mean(axis=0)
+    return base, residuals
 
 
 def write_maps(maps, name):
@@ -757,7 +919,8 @@ def write_maps(maps, name):
         nrm /= np.maximum(np.linalg.norm(nrm, axis=2, keepdims=True), 1e-6)
         stem = os.path.join(TMP, name + LOD_SUFFIX[lod])
         write_jpeg(stem + "_base.jpg", to_u8(linear_to_srgb(base)), 90)
-        write_jpeg(stem + "_orm.jpg", to_u8(orm), 88)
+        write_jpeg(stem + "_orm.jpg", to_u8(orm), 88,
+                   packed=name in {p["name"] for p in TRIPO_PIECES})
         # 7 bits for X and Y, 6 for Z: under one degree of error, and the PNG
         # is a fifth smaller, which is what fits the kit in its 80 MB.
         n8 = to_u8(nrm * 0.5 + 0.5).astype(np.int32)
@@ -841,13 +1004,32 @@ def export_glb(obj, path, name, images):
     write_glb(path, doc, binary)
 
 
-def make_lod(low, ratio):
+def make_lod(low, ratio, protect_outline=False):
     activate(low)
     bpy.ops.object.duplicate()
     o = bpy.context.view_layer.objects.active
     mod = o.modifiers.new("dec", "DECIMATE")
     mod.ratio = ratio
     mod.use_collapse_triangulate = True
+    if protect_outline:
+        # Keep the outer vertices in each narrow strip of all three projections.
+        pos = np.array([v.co[:] for v in o.data.vertices])
+        lo, hi = pos.min(axis=0), pos.max(axis=0)
+        chosen = set()
+        for axis in range(3):
+            bucket = np.minimum(((pos[:, axis] - lo[axis]) / (hi[axis] - lo[axis]) * 160).astype(int), 159)
+            for other in range(3):
+                if axis == other:
+                    continue
+                for band in range(160):
+                    ix = np.flatnonzero(bucket == band)
+                    if len(ix):
+                        chosen.update((int(ix[np.argmin(pos[ix, other])]), int(ix[np.argmax(pos[ix, other])])))
+        group = o.vertex_groups.new(name="outline")
+        group.add(list(range(len(pos))), 1.0, "REPLACE")
+        group.add(list(chosen), 0.01, "REPLACE")
+        mod.vertex_group = group.name
+        mod.vertex_group_factor = 300
     apply_modifier(o, mod)
     return o
 
@@ -857,12 +1039,19 @@ def build_piece(piece):
     name = piece["name"]
     sc = reset_scene()
     use_gpu(sc)
-    path, maps = download(piece["asset"])
+    path, maps = local_tripo(piece) if piece.get("source") == "tripo" else download(piece["asset"])
     src = import_scan(path)
     scan_tris = tri_count(src)
     scale, islands, dropped = prepare_source(src, piece)
     mats = source_materials(src, maps)
     low = make_lod0(src, BUDGET[piece["kind"]])
+    if piece.get("source") == "tripo":
+        repaired = low.data.validate(verbose=True, clean_customdata=False)
+        log(name, "decimated mesh repairs:", repaired)
+        lo, hi = bounds(low)
+        shift = (-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2])
+        transform(low, move=shift)
+        transform(src, move=shift)
     unwrap(low)
     for p in low.data.polygons:
         p.use_smooth = True
@@ -871,7 +1060,10 @@ def build_piece(piece):
     os.makedirs(OUT, exist_ok=True)
     tris = []
     for lod, ratio in enumerate(LOD_RATIOS):
-        obj = low if lod == 0 else make_lod(low, ratio)
+        obj = low if lod == 0 else make_lod(low, ratio, protect_outline=name == "scree_a" and lod == 2)
+        if lod and piece.get("source") == "tripo":
+            repaired = obj.data.validate(verbose=True, clean_customdata=False)
+            log(name, f"LOD{lod} mesh repairs:", repaired)
         tris.append(tri_count(obj))
         export_glb(obj, os.path.join(OUT, name + LOD_SUFFIX[lod] + ".glb"),
                    name + LOD_SUFFIX[lod], images[lod])
@@ -881,6 +1073,13 @@ def build_piece(piece):
                  size_blender_xyz=[round(float(x), 2) for x in hi - lo],
                  seconds=round(time.time() - t0, 1))
     log("BUILT", json.dumps(stats))
+    if piece.get("source") == "tripo":
+        os.makedirs(TRIPO_ART, exist_ok=True)
+        stats.update(source=piece["asset"], rotation_blender=piece.get("rot", (0, 0, 0)),
+                     source_alignment_shift=[float(value) for value in shift],
+                     occlusion="constant 1.0", full_high_mesh_normal_bake=True)
+        with open(os.path.join(TRIPO_ART, name + "-build.json"), "w") as f:
+            json.dump(stats, f, indent=2)
     return stats
 
 
@@ -971,6 +1170,15 @@ def verify_file(piece, lod):
     tan = accessor(doc, binary, prim["attributes"]["TANGENT"]).astype(np.float64)
     uv = accessor(doc, binary, prim["attributes"]["TEXCOORD_0"]).astype(np.float64)
     idx = accessor(doc, binary, prim["indices"]).astype(np.int64).reshape(-1, 3)
+    for label, values in (("positions", pos), ("normals", nrm), ("tangents", tan), ("UVs", uv)):
+        check(np.isfinite(values).all(), f"{name}: {label} contained non-finite values")
+    check(idx.min() >= 0 and idx.max() < len(pos), f"{name}: triangle index left the vertex buffer")
+    if piece.get("source") == "tripo":
+        _, merged = np.unique(pos, axis=0, return_inverse=True)
+        faces = np.sort(merged[idx], axis=1)
+        check(len(np.unique(faces, axis=0)) == len(faces), f"{name}: duplicate geometric triangles remained")
+        area = np.linalg.norm(np.cross(pos[idx[:, 1]] - pos[idx[:, 0]], pos[idx[:, 2]] - pos[idx[:, 0]]), axis=1)
+        check(float(area.min()) > 1e-12, f"{name}: a triangle had zero area")
     check(tan.shape[1] == 4 and np.all(np.abs(np.abs(tan[:, 3]) - 1) < 1e-3),
           f"{name}: tangents need a +-1 handedness")
     # A triangle with no UV area has no tangent; the exporter writes zero.
@@ -1002,8 +1210,14 @@ def verify_file(piece, lod):
         pixels[label] = decode(blob, mime)
     n = pixels["normal"] * 2 - 1
     check(np.abs(np.linalg.norm(n, axis=2) - 1).mean() < 0.02, f"{name}: normal map is not unit length")
-    check(n[..., 2].mean() > 0.80 and abs(n[..., 0].mean()) < 0.05 and abs(n[..., 1].mean()) < 0.05,
-          f"{name}: normal map is not tangent space")
+    check(abs(n[..., 0].mean()) < 0.05 and abs(n[..., 1].mean()) < 0.05,
+          f"{name}: tangent normal directions had a large bias")
+    if piece.get("source") == "tripo":
+        check(float(n[..., 2].min()) > 0, f"{name}: a tangent normal pointed into the surface")
+        check(float(np.abs(np.linalg.norm(n, axis=2) - 1).max()) < 0.035,
+              f"{name}: a tangent normal exceeded the quantization error bound")
+    else:
+        check(n[..., 2].mean() > 0.80, f"{name}: normal map is not tangent space")
     # JPEG chroma ringing leaves a few stray counts in blue; 0 is written.
     blue = pixels["orm"][..., 2]
     check(blue.mean() <= 3 / 255 and np.percentile(blue, 99.9) <= 32 / 255,
@@ -1030,59 +1244,86 @@ def verify_file(piece, lod):
     light = float(np.linalg.norm(coef[1:]))
 
     return dict(name=name, tris=tris, lo=lo, hi=hi, size=size, sizes=sizes, pos=pos, idx=idx,
-                mean_albedo=mean_albedo, light=light, bytes=os.path.getsize(path))
+                mean_albedo=mean_albedo, light=light, bytes=os.path.getsize(path),
+                normal_min_z=float(n[..., 2].min()), normal_mean_z=float(n[..., 2].mean()),
+                normal_max_unit_error=float(np.abs(np.linalg.norm(n, axis=2) - 1).max()))
 
 
-def verify():
+def verify(selected=None):
     reset_scene()
     lines, means = [], {}
     total = 0
-    for piece in PIECES:
-        kind = piece["kind"]
-        info = [verify_file(piece, lod) for lod in range(3)]
-        a = info[0]
-        name = piece["name"]
-        x, y, z = a["size"]
-        check(a["tris"] <= BUDGET[kind], f"{name}: {a['tris']} triangles, budget {BUDGET[kind]}")
-        r1, r2 = info[1]["tris"] / a["tris"], info[2]["tris"] / a["tris"]
-        check(0.20 <= r1 <= 0.30, f"{name}: LOD1 is {r1:.1%} of LOD0, expected about 25%")
-        check(0.045 <= r2 <= 0.08, f"{name}: LOD2 is {r2:.1%} of LOD0, expected about 6%")
-        if kind == "boulder":
-            across = max(x, z)
-            check(2.0 <= across <= 6.0 and min(x, z) >= 2.0, f"{name}: {x:.2f} x {z:.2f} m across, expected 2 to 6")
-        elif kind == "slab":
-            check(4.0 <= max(x, z) <= 10.0, f"{name}: {max(x, z):.2f} m long, expected 4 to 10")
-            check(y <= 0.5 * max(x, z), f"{name}: {y:.2f} m high is not a slab")
-        else:
-            check(20.0 <= x <= 40.0, f"{name}: {x:.2f} m wide, expected 20 to 40")
-            check(15.0 <= y <= 30.0, f"{name}: {y:.2f} m high, expected 15 to 30")
-        check(abs(a["lo"][1]) < 0.01, f"{name}: base is at y={a['lo'][1]:.3f}, expected 0")
-        cx, cz = (a["lo"][0] + a["hi"][0]) / 2, (a["lo"][2] + a["hi"][2]) / 2
-        check(abs(cx) < 0.01 and abs(cz) < 0.01, f"{name}: origin is ({cx:.3f}, {cz:.3f}) off the base centre")
-        ious = []
-        for lod in (1, 2):
-            b = info[lod]
-            drift = float(np.abs(np.concatenate([b["lo"] - a["lo"], b["hi"] - a["hi"]])).max())
-            limit = (0.03, 0.06)[lod - 1] * float(a["size"].max())
-            check(drift <= limit, f"{b['name']}: bounds drift {drift:.2f} m from LOD0, limit {limit:.2f}")
-            worst = 1.0
-            for axes in ((0, 1), (2, 1), (0, 2)):   # front, side, top
-                s0 = silhouette(a["pos"], a["idx"], axes, a["lo"], a["hi"])
-                s1 = silhouette(b["pos"], b["idx"], axes, a["lo"], a["hi"])
-                worst = min(worst, float((s0 & s1).sum() / max(1, (s0 | s1).sum())))
-            floor = (0.95, 0.90)[lod - 1]
-            check(worst >= floor, f"{b['name']}: silhouette overlap {worst:.3f}, floor {floor}")
-            ious.append(worst)
-        check(a["light"] < LIGHT_LIMIT, f"{name}: base colour follows the surface direction ({a['light']:.3f}); baked light")
-        means[name] = a["mean_albedo"]
-        total += sum(i["bytes"] for i in info)
-        lines.append(f"VERIFY {name}: PASS\n"
-                     f"  glTF Y-up size X/Y/Z metres: ({x:.2f}, {y:.2f}, {z:.2f}); base y={a['lo'][1]:.3f}; origin offset ({cx:.3f}, {cz:.3f})\n"
-                     f"  triangles LOD0/1/2: {a['tris']}/{info[1]['tris']}/{info[2]['tris']} ({r1:.1%}, {r2:.1%}); budget {BUDGET[kind]}\n"
-                     f"  silhouette overlap with LOD0 (worst of front, side, top): LOD1 {ious[0]:.3f}, LOD2 {ious[1]:.3f}\n"
-                     f"  maps base/normal/ORM: {LOD_MAPS[0]}/{LOD_MAPS[1]}/{LOD_MAPS[2]} px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS\n"
-                     f"  mean linear albedo: ({a['mean_albedo'][0]:.4f}, {a['mean_albedo'][1]:.4f}, {a['mean_albedo'][2]:.4f}); directional light term {a['light']:.3f} (limit {LIGHT_LIMIT})\n"
-                     f"  bytes LOD0/1/2: {info[0]['bytes']}/{info[1]['bytes']}/{info[2]['bytes']}")
+    if selected is None:
+        selected = [p for p in PIECES if not p.get("rejected")]
+    check(bool(selected), "No pieces selected for verification")
+    failures = []
+    for piece in selected:
+        try:
+            kind = piece["kind"]
+            info = [verify_file(piece, lod) for lod in range(3)]
+            a = info[0]
+            name = piece["name"]
+            x, y, z = a["size"]
+            check(a["tris"] <= BUDGET[kind], f"{name}: {a['tris']} triangles, budget {BUDGET[kind]}")
+            r1, r2 = info[1]["tris"] / a["tris"], info[2]["tris"] / a["tris"]
+            check(0.20 <= r1 <= 0.30, f"{name}: LOD1 is {r1:.1%} of LOD0, expected about 25%")
+            check(0.045 <= r2 <= 0.08, f"{name}: LOD2 is {r2:.1%} of LOD0, expected about 6%")
+            if kind == "boulder":
+                across = max(x, z)
+                check(2.0 <= across <= 6.0 and min(x, z) >= 2.0, f"{name}: {x:.2f} x {z:.2f} m across, expected 2 to 6")
+            elif kind == "slab":
+                check(4.0 <= max(x, z) <= 10.0, f"{name}: {max(x, z):.2f} m long, expected 4 to 10")
+                check(y <= 0.5 * max(x, z), f"{name}: {y:.2f} m high is not a slab")
+            elif piece.get("source") == "tripo":
+                check(abs(x - piece["fit"][1]) < 0.1, f"{name}: width missed the target")
+                check(abs(y - piece["height"]) < 0.1, f"{name}: height missed the target")
+            else:
+                check(20.0 <= x <= 40.0, f"{name}: {x:.2f} m wide, expected 20 to 40")
+                check(15.0 <= y <= 30.0, f"{name}: {y:.2f} m high, expected 15 to 30")
+            check(abs(a["lo"][1]) < 0.01, f"{name}: base is at y={a['lo'][1]:.3f}, expected 0")
+            cx, cz = (a["lo"][0] + a["hi"][0]) / 2, (a["lo"][2] + a["hi"][2]) / 2
+            check(abs(cx) < 0.01 and abs(cz) < 0.01, f"{name}: origin is ({cx:.3f}, {cz:.3f}) off the base centre")
+            ious = []
+            for lod in (1, 2):
+                b = info[lod]
+                drift = float(np.abs(np.concatenate([b["lo"] - a["lo"], b["hi"] - a["hi"]])).max())
+                limit = (0.03, 0.06)[lod - 1] * float(a["size"].max())
+                check(drift <= limit, f"{b['name']}: bounds drift {drift:.2f} m from LOD0, limit {limit:.2f}")
+                worst = 1.0
+                for axes in ((0, 1), (2, 1), (0, 2)):   # front, side, top
+                    s0 = silhouette(a["pos"], a["idx"], axes, a["lo"], a["hi"])
+                    s1 = silhouette(b["pos"], b["idx"], axes, a["lo"], a["hi"])
+                    worst = min(worst, float((s0 & s1).sum() / max(1, (s0 | s1).sum())))
+                floor = (0.95, 0.90)[lod - 1]
+                check(worst >= floor, f"{b['name']}: silhouette overlap {worst:.3f}, floor {floor}")
+                ious.append(worst)
+            check(a["light"] < LIGHT_LIMIT, f"{name}: base colour follows the surface direction ({a['light']:.3f}); baked light")
+            if piece.get("source") == "tripo":
+                check(float(np.abs(a["mean_albedo"] / TARGET_ALBEDO - 1).max()) <= ALBEDO_TOLERANCE,
+                      f"{name}: albedo missed the original kit target")
+            means[name] = a["mean_albedo"]
+            total += sum(i["bytes"] for i in info)
+            normal_line = ""
+            if piece.get("source") == "tripo":
+                normal_line = (f"  normal texels: outward; minimum Z {min(i['normal_min_z'] for i in info):.4f}; "
+                               f"maximum unit error {max(i['normal_max_unit_error'] for i in info):.4f}; "
+                               f"LOD0 mean Z {a['normal_mean_z']:.4f}\n")
+            lines.append(f"VERIFY {name}: PASS\n"
+                         f"  glTF Y-up size X/Y/Z metres: ({x:.2f}, {y:.2f}, {z:.2f}); base y={a['lo'][1]:.3f}; origin offset ({cx:.3f}, {cz:.3f})\n"
+                         f"  triangles LOD0/1/2: {a['tris']}/{info[1]['tris']}/{info[2]['tris']} ({r1:.1%}, {r2:.1%}); budget {BUDGET[kind]}\n"
+                         f"  silhouette overlap with LOD0 (worst of front, side, top): LOD1 {ious[0]:.3f}, LOD2 {ious[1]:.3f}\n"
+                         f"  maps base/normal/ORM: {LOD_MAPS[0]}/{LOD_MAPS[1]}/{LOD_MAPS[2]} px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS\n"
+                         f"{normal_line}  mean linear albedo: ({a['mean_albedo'][0]:.4f}, {a['mean_albedo'][1]:.4f}, {a['mean_albedo'][2]:.4f}); directional light term {a['light']:.3f} (limit {LIGHT_LIMIT})\n"
+                         f"  bytes LOD0/1/2: {info[0]['bytes']}/{info[1]['bytes']}/{info[2]['bytes']}")
+        except KitError as error:
+            failures.append(f"VERIFY {piece['name']}: FAIL\n  {error}")
+    if failures:
+        report = "\n".join(lines + failures) + "\n"
+        print(report, flush=True)
+        os.makedirs(TRIPO_ART, exist_ok=True)
+        with open(os.path.join(TRIPO_ART, "verify.txt"), "w") as f:
+            f.write(report)
+        raise KitError(f"Verification failed for {len(failures)} pieces. Read the per-piece results.")
     kit = np.mean(list(means.values()), axis=0)
     kit_lum = float(kit @ LUMA)
     worst = 0.0
@@ -1091,14 +1332,21 @@ def verify():
         worst = max(worst, dev)
         check(dev <= ALBEDO_TOLERANCE, f"{name}: mean albedo is {dev:.1%} from the kit mean, limit 8%")
     on_disk = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT))
-    extra = sorted(set(os.listdir(OUT)) - {p["name"] + s + ".glb" for p in PIECES for s in LOD_SUFFIX})
+    extra = sorted(set(os.listdir(OUT)) - {p["name"] + suffix + ".glb" for p in PIECES for suffix in LOD_SUFFIX} - {"pieces.json"})
     check(not extra, f"unexpected files in the kit directory: {extra}")
-    check(on_disk <= SIZE_LIMIT, f"kit is {on_disk / 1e6:.1f} MB, limit 80 MB")
-    for l in lines:
-        print(l)
-    print(f"VERIFY kit: PASS\n"
-          f"  kit mean linear albedo: ({kit[0]:.4f}, {kit[1]:.4f}, {kit[2]:.4f}); worst piece deviation {worst:.2%} (limit 8%)\n"
-          f"  directory size: {on_disk / 1e6:.2f} MB of 80 MB, 24 files", flush=True)
+    scan_bytes = sum(os.path.getsize(os.path.join(OUT, p["name"] + suffix + ".glb"))
+                     for p in SCAN_PIECES for suffix in LOD_SUFFIX)
+    check(scan_bytes <= SIZE_LIMIT, "The original scan kit exceeded 80 MB")
+    summary = (f"VERIFY selection: PASS\n"
+               f"  selection mean linear albedo: ({kit[0]:.4f}, {kit[1]:.4f}, {kit[2]:.4f}); worst piece deviation {worst:.2%} (limit 8%)\n"
+               f"  selected bytes: {total}; directory size: {on_disk / 1e6:.2f} MB; original scan kit: {scan_bytes / 1e6:.2f} MB of 80 MB")
+    report = "\n".join(lines + [summary]) + "\n"
+    print(report, flush=True)
+    if any(p.get("source") == "tripo" for p in selected):
+        os.makedirs(TRIPO_ART, exist_ok=True)
+        with open(os.path.join(TRIPO_ART, "verify.txt"), "w") as f:
+            f.write(report)
+
 
 
 # -------------------------------------------------------------------- renders
@@ -1267,8 +1515,8 @@ def size_text(name):
 
 
 def render_sheet():
-    cliffs = [p["name"] for p in PIECES if p["kind"] == "cliff"]
-    small = [p["name"] for p in PIECES if p["kind"] != "cliff"]
+    cliffs = [p["name"] for p in SCAN_PIECES if p["kind"] == "cliff"]
+    small = [p["name"] for p in SCAN_PIECES if p["kind"] != "cliff"]
 
     def labels(names, sep="   "):
         out = []
@@ -1435,7 +1683,7 @@ def render_wall():
 
     # Scree: the kit's boulders and slabs. Gravity sorts a fan: fines at the
     # crest, blocks at the toe, a few that rolled out onto the floor.
-    small = [p["name"] for p in PIECES if p["kind"] != "cliff"]
+    small = [p["name"] for p in SCAN_PIECES if p["kind"] != "cliff"]
     across = {}
     for name in small:
         lo, hi = bounds(pieces[name])
@@ -1483,9 +1731,351 @@ def render_all(which):
         render_wall()
 
 
+def measure_alignment(selected):
+    """Recover the source translation used when LOD0 was centred after decimation."""
+    report = {}
+    for piece in selected:
+        reset_scene()
+        src = import_scan(source_path(piece))
+        prepare_source(src, piece)
+        low = make_lod0(src, BUDGET[piece["kind"]])
+        low.data.validate(clean_customdata=False)
+        lo, hi = bounds(low)
+        shift = np.array([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])
+        path = os.path.join(TRIPO_ART, piece["name"] + "-build.json")
+        with open(path) as f:
+            build_stats = json.load(f)
+        build_stats["source_alignment_shift"] = shift.tolist()
+        with open(path, "w") as f:
+            json.dump(build_stats, f, indent=2)
+        area = sum(p.area for p in low.data.polygons)
+        texel = math.sqrt(area / (2048 * 2048 * build_stats["atlas_coverage"]))
+        report[piece["name"]] = dict(source_alignment_shift=shift.tolist(),
+                                     shift_metres=float(np.linalg.norm(shift)),
+                                     average_surface_texel_metres=texel,
+                                     shift_in_average_texels=float(np.linalg.norm(shift)) / texel,
+                                     tight_cage_metres=float(np.linalg.norm(hi - lo)) * 0.0012)
+        log("SOURCE ALIGNMENT", piece["name"], json.dumps(report[piece["name"]]))
+        with open(os.path.join(TRIPO_ART, "source-alignment.json"), "w") as f:
+            json.dump(report, f, indent=2)
+
+
+def prepare_normal_bake(piece):
+    """Load the full source and the exported LOD0 atlas for a normal-only bake."""
+    sc = reset_scene()
+    use_gpu(sc)
+    path, maps = local_tripo(piece, normal_only=True)
+    source_pixels = load_pixels(maps["nor_gl"])[::4, ::4, :3] * 2 - 1
+    source_stats = dict(mean=source_pixels.mean(axis=(0, 1)).tolist(),
+                        negative_z_fraction=float((source_pixels[..., 2] < 0).mean()),
+                        mean_length=float(np.linalg.norm(source_pixels, axis=2).mean()))
+    src = import_scan(path)
+    prepare_source(src, piece)
+    record = os.path.join(TRIPO_ART, piece["name"] + "-build.json")
+    with open(record) as f:
+        build_stats = json.load(f)
+    if "source_alignment_shift" in build_stats:
+        transform(src, move=build_stats["source_alignment_shift"])
+    mats = source_materials(src, maps)
+    set_source_mode(mats, "normal", maps, {})
+    low = import_piece(piece["name"])
+    low.data.materials.clear()
+    target = bpy.data.materials.new("normal_probe")
+    target.use_nodes = True
+    target.node_tree.nodes.new("ShaderNodeTexImage").name = "bake_target"
+    low.data.materials.append(target)
+    lo, hi = bounds(low)
+    extrusion = float(np.linalg.norm(hi - lo)) * 0.012
+    object_map = bake_pass(sc, src, low, "object_normal", 2048, extrusion)
+    mask = object_map.max(axis=2) > 1e-6
+    return sc, src, low, mask, extrusion, source_stats
+
+
+def probe_normals(selected):
+    """Measure normal projection failures at several cage distances."""
+    report = {}
+    for piece in selected:
+        sc, src, low, mask, extrusion, source_stats = prepare_normal_bake(piece)
+        trials = []
+        for factor in (1.0, 0.35, 0.1, 2.0):
+            pixels = bake_pass(sc, src, low, "normal", 2048, extrusion * factor)
+            normal = pixels * 2 - 1
+            length = np.linalg.norm(normal, axis=2)
+            missed = pixels.max(axis=2) < 1e-6
+            hit = mask & ~missed
+            trial = dict(cage_metres=extrusion * factor, factor=factor,
+                         missing_fraction=float(missed[mask].mean()),
+                         negative_z_fraction=float((normal[hit, 2] < 0).mean()),
+                         mean=normal[hit].mean(axis=0).tolist(),
+                         mean_unit_error=float(np.abs(length[hit] - 1).mean()))
+            trials.append(trial)
+            log("NORMAL PROBE", piece["name"], json.dumps(trial))
+            np.savez_compressed(os.path.join(TMP, f"{piece['name']}-normal-probe-{factor}.npz"),
+                                normal=normal.astype(np.float32), mask=mask, missed=missed)
+        report[piece["name"]] = dict(source_normal=source_stats, trials=trials)
+        with open(os.path.join(TRIPO_ART, "normal-probes.json"), "w") as f:
+            json.dump(report, f, indent=2)
+
+
+def replace_normal_map(piece, normal):
+    """Replace each embedded normal map. Preserve geometry and the other encoded maps."""
+    for lod, size in enumerate(LOD_MAPS):
+        path = os.path.join(OUT, piece["name"] + LOD_SUFFIX[lod] + ".glb")
+        doc, binary = read_glb(path)
+        images = [image_blob(doc, binary, i)[0] for i in range(3)]
+        nrm = downsample(normal, normal.shape[0] // size)
+        nrm /= np.maximum(np.linalg.norm(nrm, axis=2, keepdims=True), 1e-6)
+        n8 = to_u8(nrm * 0.5 + 0.5).astype(np.int32)
+        n8[..., :2] = np.minimum((n8[..., :2] + 1) // 2 * 2, 254)
+        n8[..., 2] = np.minimum((n8[..., 2] + 2) // 4 * 4, 252)
+        images[1] = png_bytes(n8.astype(np.uint8)[::-1])
+        views = [image["bufferView"] for image in doc["images"]]
+        check(views == list(range(len(doc["bufferViews"]) - 3, len(doc["bufferViews"]))),
+              "Normal replacement found an unexpected buffer layout. Rebuild the piece.")
+        data = bytearray(binary[:doc["bufferViews"][views[0]]["byteOffset"]])
+        for view, blob in zip(views, images):
+            data += b"\0" * (-len(data) % 4)
+            doc["bufferViews"][view] = dict(buffer=0, byteOffset=len(data), byteLength=len(blob))
+            data += blob
+        data += b"\0" * (-len(data) % 4)
+        doc["buffers"][0]["byteLength"] = len(data)
+        write_glb(path, doc, data)
+
+
+def repair_normals(selected, use_probes=False):
+    """Repair reversed projections without changing valid normal strength or geometry."""
+    record = os.path.join(TRIPO_ART, "normal-repairs.json")
+    report = {}
+    if os.path.exists(record):
+        with open(record) as f:
+            report = json.load(f)
+    for piece in selected:
+        check(piece.get("source") == "tripo", "Normal repair only supports Tripo pieces. Select a Tripo name.")
+        name = piece["name"]
+        doc, binary = read_glb(os.path.join(OUT, name + ".glb"))
+        before = decode(*image_blob(doc, binary, 1)) * 2 - 1
+        original = dict(mean=before.mean(axis=(0, 1)).tolist(),
+                        negative_z_fraction=float((before[..., 2] < 0).mean()))
+        paths = [os.path.join(TMP, f"{name}-normal-probe-{factor}.npz") for factor in (0.1, 0.35, 1.0)]
+        if use_probes and all(os.path.exists(path) for path in paths):
+            arrays = [np.load(path) for path in paths]
+            trials, mask = [a["normal"] for a in arrays], arrays[0]["mask"]
+            size, _ = size_text(name)
+            extrusion = float(np.linalg.norm(size)) * 0.012
+        else:
+            sc, src, low, mask, extrusion, source_stats = prepare_normal_bake(piece)
+            trials = [bake_pass(sc, src, low, "normal", 2048, extrusion * factor) * 2 - 1
+                      for factor in (0.1, 0.35, 1.0)]
+        normal, stats = combine_normal_trials(trials, mask)
+        with open(os.path.join(TRIPO_ART, name + "-build.json")) as f:
+            alignment = json.load(f).get("source_alignment_shift", [0, 0, 0])
+        first = report.get(name, {}).get("original_before", report.get(name, {}).get("before", original))
+        stats.update(before=original, original_before=first, source_alignment_shift=alignment,
+                     cage_metres=[extrusion * factor for factor in (0.1, 0.35, 1.0)])
+        replace_normal_map(piece, normal)
+        report[name] = stats
+        log("REPAIRED NORMALS", name, json.dumps(stats))
+        with open(os.path.join(TRIPO_ART, "normal-repairs.json"), "w") as f:
+            json.dump(report, f, indent=2)
+
+
+def farthest_points(points, count):
+    """Spread check points over the candidate surface."""
+    points = np.unique(points, axis=0)
+    chosen = [int(np.argmin(points[:, 1]))]
+    while len(chosen) < min(count, len(points)):
+        distance = ((points[:, None] - points[chosen]) ** 2).sum(axis=2).min(axis=1)
+        chosen.append(int(np.argmax(distance)))
+    return points[chosen[:count]]
+
+
+def footprint_area(points):
+    """Measure the convex footprint in glTF X/Z."""
+    points = sorted(set((float(p[0]), float(p[2])) for p in points))
+    if len(points) < 3:
+        return 0.0
+    def cross(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    halves = []
+    for sequence in (points, points[::-1]):
+        half = []
+        for point in sequence:
+            while len(half) >= 2 and cross(half[-2], half[-1], point) <= 0:
+                half.pop()
+            half.append(point)
+        halves += half[:-1]
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(halves, halves[1:] + halves[:1]))) / 2
+
+
+def write_metadata():
+    """Regenerate metadata for all accepted Tripo pieces with three exported LOD files."""
+    selected = [p for p in TRIPO_PIECES if not p.get("rejected")
+                and all(os.path.exists(os.path.join(OUT, p["name"] + suffix + ".glb")) for suffix in LOD_SUFFIX)]
+    entries = []
+    measurements = {}
+    for piece in selected:
+        path = os.path.join(OUT, piece["name"] + "_lod2.glb")
+        doc, binary = read_glb(path)
+        prim = doc["meshes"][0]["primitives"][0]
+        pos = np.unique(accessor(doc, binary, prim["attributes"]["POSITION"]), axis=0).astype(float)
+        lo, hi = pos.min(axis=0), pos.max(axis=0)
+        size, _ = size_text(piece["name"])
+        full_area = footprint_area(pos)
+        for band in (0.035, 0.05, 0.075, 0.10, 0.125, 0.15, 0.20, 0.25):
+            base = pos[pos[:, 1] <= lo[1] + size[1] * band]
+            coverage = footprint_area(base) / full_area
+            if len(base) >= 8 and coverage >= 0.25:
+                break
+        check(len(base) >= 8 and coverage >= 0.25, f"{piece['name']}: the lower foot had insufficient coverage")
+        points = farthest_points(base, 16 if piece["kind"] == "wall" else 26)
+        check(len(points) >= 3 and footprint_area(points) > 0, f"{piece['name']}: base checks had no footprint")
+        item = dict(name=piece["name"], kind=piece["kind"], size=size.tolist(),
+                    source=piece["asset"], placement="upright_yaw_only",
+                    base_band_fraction=band, base_hull_coverage=coverage,
+                    check_hull_coverage=footprint_area(points) / full_area)
+        if piece["kind"] == "wall":
+            back = []
+            for y in np.linspace(lo[1], hi[1], 11)[:-1]:
+                band = pos[(pos[:, 1] >= y) & (pos[:, 1] <= y + size[1] / 10)]
+                if len(band):
+                    back.append(band[np.argmin(band[:, 2])])
+            points = np.concatenate((points, np.array(back)))
+            probes = []
+            for slope in (45, 53.5, 62):
+                angle = math.radians(slope)
+                normal = np.array([0, math.cos(angle), math.sin(angle)])
+                offset = float((points @ normal).max()) + 0.15
+                centre = [0, 0, offset / normal[2]]
+                signed = pos @ normal - offset
+                probes.append(dict(slope_degrees=slope, point=centre, normal=normal.tolist(),
+                                   exposed_vertex_fraction=float((signed > 0).mean()),
+                                   maximum_relief=float(signed.max()),
+                                   maximum_check_distance=float((points @ normal - offset).max())))
+            item["mount_plane"] = dict(point=probes[1]["point"], normal=probes[1]["normal"],
+                                      reference_slope_degrees=53.5, burial_metres=0.15)
+            measurements[piece["name"]] = probes
+        check(len(points) <= 26, f"{piece['name']}: too many placement check points")
+        check(all(np.any(np.all(pos == point, axis=1)) for point in points),
+              f"{piece['name']}: placement check left the LOD2 vertices")
+        item["check_points"] = points.tolist()
+        entries.append(item)
+    metadata = dict(version=1, axes="glTF: X right, Y up, Z face", units="metres",
+                    placement_rule="Keep Y vertical. Rotate around Y to face downhill. Do not align the mount normal by a 3D rotation.",
+                    ground_translation_rule="After yaw and horizontal placement, lower Y until every check point is at least 0.15 m below terrain.",
+                    wall_plane_rule="For slope angle a, set n=(0,cos(a),sin(a)). Set d=max(dot(n,p)) + 0.15 over check_points. Set point=(0,0,d/n.z).",
+                    wall_translation_rule="Translate the yaw-rotated mounting point onto the terrain plane. Check points must remain inside terrain.",
+                    check_points_rule="Expand the lower band until it has eight vertices and 25 percent of the horizontal hull. Walls also check each rear height band.",
+                    pieces=entries)
+    with open(os.path.join(OUT, "pieces.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+    with open(os.path.join(TRIPO_ART, "placement-measurements.json"), "w") as f:
+        json.dump(measurements, f, indent=2)
+    log("wrote placement metadata", len(entries), "pieces")
+
+
+def render_mounted(selected):
+    """Show vertical wall placement on both endpoint slopes."""
+    with open(os.path.join(OUT, "pieces.json")) as f:
+        entries = {p["name"]: p for p in json.load(f)["pieces"]}
+    for piece in selected:
+        if piece["kind"] != "wall":
+            continue
+        points = np.array(entries[piece["name"]]["check_points"])
+        for slope in (45, 62):
+            sc, sun, cam = render_setup(samples=32)
+            obj = import_piece(piece["name"])
+            lo, hi = bounds(obj)
+            centre = (lo + hi) / 2
+            angle = math.radians(slope)
+            normal = np.array([0, math.cos(angle), math.sin(angle)])
+            offset = float((points @ normal).max()) + 0.15
+            add_plane("terrain", (300, 300), plain_material("terrain", (0.14, 0.17, 0.12)),
+                      location=(0, -offset / normal[2], 0), rotation=(angle, 0, 0))
+            cam.data.type = "ORTHO"
+            cam.data.ortho_scale = float(max(hi - lo)) * 1.3
+            for label, azimuth, elevation in (("front", -90, 0.18), ("right", -40, 0.18),
+                                               ("left", -140, 0.18), ("above", -90, 1.4)):
+                az = math.radians(azimuth)
+                eye = centre + np.array([math.cos(az), math.sin(az), elevation]) * float(max(hi - lo)) * 2
+                aim_camera(cam, eye, centre)
+                aim_sun(sun, azimuth + 62)
+                render_tile(sc, os.path.join(TRIPO_ART, f"{piece['name']}-mounted-{slope}-{label}.png"), 1024, 1024)
+
+
+def render_placed(selected):
+    """Inspect flat-terrain burial from the shipped check points."""
+    with open(os.path.join(OUT, "pieces.json")) as f:
+        entries = {p["name"]: p for p in json.load(f)["pieces"]}
+    report = {}
+    for piece in selected:
+        name = piece["name"]
+        points = np.array(entries[name]["check_points"])
+        burial = float(points[:, 1].max()) + 0.15
+        sc, sun, cam = render_setup(samples=32)
+        obj = import_piece(name)
+        transform(obj, move=(0, 0, -burial))
+        lo, hi = bounds(obj)
+        centre, size = (lo + hi) / 2, hi - lo
+        add_plane("ground", (500, 500), plain_material("ground", (0.20, 0.20, 0.20)))
+        cam.data.type = "ORTHO"
+        cam.data.ortho_scale = float(max(size)) * 1.20
+        aim_camera(cam, centre + np.array([0, -1, 0.08]) * float(max(size)) * 2, centre)
+        aim_sun(sun, -28)
+        render_tile(sc, os.path.join(TRIPO_ART, name + "-placed-flat-front.png"), 1024, 1024)
+        report[name] = dict(terrain="flat", margin=0.15, translation_y=-burial,
+                            highest_check_point_y=float(points[:, 1].max()) - burial)
+    with open(os.path.join(TRIPO_ART, "placed-flat-measurements.json"), "w") as f:
+        json.dump(report, f, indent=2)
+
+
+def render_tripo(selected, raw=False):
+    """Render cardinal faces and surface details under the kit's light."""
+    os.makedirs(TRIPO_ART, exist_ok=True)
+    for piece in selected:
+        sc, sun, cam = render_setup(samples=32)
+        obj = import_scan(source_path(piece)) if raw else import_piece(piece["name"])
+        lo, hi = bounds(obj)
+        if raw:
+            span = float(max(hi - lo))
+            transform(obj, scale=(20 / span,) * 3)
+            lo, hi = bounds(obj)
+            transform(obj, move=(-(lo[0]+hi[0])/2, -(lo[1]+hi[1])/2, -lo[2]))
+            lo, hi = bounds(obj)
+        centre = (lo + hi) / 2
+        size = hi - lo
+        add_plane("ground", (500, 500), plain_material("ground", (0.20, 0.20, 0.20)))
+        cam.data.type = "ORTHO"
+        cam.data.ortho_scale = float(max(size)) * 1.20
+        views = [("front", (0,-1,0.08)), ("side", (1,0,0.08)), ("top", (0,-0.001,1))]
+        if raw:
+            views = [("plus_z", (0,-1,0.05)), ("plus_x", (1,0,0.05)),
+                     ("minus_z", (0,1,0.05)), ("minus_x", (-1,0,0.05))]
+        else:
+            views.append(("close", (0,-1,0.08)))
+        for label, direction in views:
+            target = centre.copy()
+            if label == "close":
+                cam.data.ortho_scale = float(max(size)) * 0.29
+                target[2] = size[2] * 0.56
+            eye = target + np.array(direction) * float(max(size)) * 2
+            aim_camera(cam, eye, target)
+            aim_sun(sun, math.degrees(math.atan2(direction[1], direction[0])) + 62)
+            path = os.path.join(TRIPO_ART, piece["name"] + ("-raw-" if raw else "-") + label + ".png")
+            render_tile(sc, path, 1024, 1024)
+        if not raw and piece["kind"] == "wall":
+            cam.data.type = "PERSP"
+            cam.data.lens = 46
+            eye = centre.copy()
+            eye[1] = lo[1] - 50
+            aim_camera(cam, eye, centre)
+            aim_sun(sun, -28)
+            render_tile(sc, os.path.join(TRIPO_ART, piece["name"] + "-front-50m.png"), 1200, 1000)
+
+
 # ----------------------------------------------------------------------- main
 
 def main():
+    check_write_paths()
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     only = None
     which = ("sheet", "lods", "wall")
@@ -1494,16 +2084,55 @@ def main():
             only = argv[i + 1].split(",")
         if a == "--shots":
             which = argv[i + 1].split(",")
+    selected = [p for p in PIECES if not only or p["name"] in only]
+    if only:
+        check(set(only) <= {p["name"] for p in PIECES}, "Unknown piece in --only")
+    reading_outputs = "--verify-only" in argv or "--render" in argv or "--metadata" in argv or "--mounted" in argv or "--placed" in argv
+    if reading_outputs and not only:
+        selected = [p for p in selected if not p.get("rejected")]
+    if not reading_outputs:
+        for piece in selected[:]:
+            if piece.get("rejected") and "--diagnostic" not in argv:
+                if only:
+                    raise KitError(f"{piece['name']} failed visual review. Use --diagnostic to rebuild review evidence.")
+                log("SKIP", piece["name"], piece["rejected"])
+                selected.remove(piece)
+                continue
+            if piece.get("source") == "tripo" and not os.path.exists(source_path(piece)):
+                log("SKIP", piece["name"], "missing source", piece["asset"])
+                selected.remove(piece)
+    if "--measure-alignment" in argv:
+        measure_alignment(selected)
+        return
+    if "--repair-normals" in argv:
+        repair_normals(selected, use_probes="--use-probes" in argv)
+        return
+    if "--probe-normals" in argv:
+        probe_normals(selected)
+        return
+    if "--placed" in argv:
+        render_placed(selected)
+        return
+    if "--mounted" in argv:
+        render_mounted(selected)
+        return
+    if "--metadata" in argv:
+        write_metadata()
+        return
+    if "--raw-faces" in argv:
+        render_tripo([p for p in selected if p.get("source") == "tripo"], raw=True)
+        return
     if "--verify-only" in argv:
-        verify()
+        verify(selected)
         return
     if "--render" in argv:
-        render_all(which)
+        if only:
+            render_tripo(selected)
+        else:
+            render_all(which)
         return
     stats = []
-    for piece in PIECES:
-        if only and piece["name"] not in only:
-            continue
+    for piece in selected:
         stats.append(build_piece(piece))
     os.makedirs(TMP, exist_ok=True)
     record = os.path.join(TMP, "build_stats.json")

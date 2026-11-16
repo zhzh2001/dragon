@@ -1,0 +1,47 @@
+[
+  {
+    "file": "tripo-cliff-01.glb",
+    "bytes": 70050352,
+    "sha256": "b6ea719ce51b8d781d89f3ca8c0ffb153f126cb8701a93c483939b8d1462278e"
+  },
+  {
+    "file": "tripo-cliff-03.glb",
+    "bytes": 68342404,
+    "sha256": "26ab626ce9948bcb8e71e1f11a5b97c266eb654811ee8686832bda2b237f01b0"
+  },
+  {
+    "file": "tripo-cliff-04.glb",
+    "bytes": 69222844,
+    "sha256": "654cf2bc7cb7bee72671156c7e3b3fc596823e81e4e31d4f239c7792a8a73934"
+  },
+  {
+    "file": "tripo-cliff-05.glb",
+    "bytes": 65326440,
+    "sha256": "3026a5a9ad312f79c878fe789e02e740770246017821859c511c3858cc0130bf"
+  },
+  {
+    "file": "tripo-ridge-01.glb",
+    "bytes": 64606484,
+    "sha256": "cff31b8ff39542750c28e0f240ddbaa3576231a2829a8aeddaebc089372ba3f4"
+  },
+  {
+    "file": "tripo-scree-01.glb",
+    "bytes": 70666340,
+    "sha256": "72a7c10155ffa94feeb3d62833e7ee91b16fbcbbda8c739e980a36748a079d81"
+  },
+  {
+    "file": "tripo-boulder-01.glb",
+    "bytes": 67286572,
+    "sha256": "8e1ce44718ce4cce99c0ba3ecf6296d150167ef5ccd39bdf249725258a67a3b2"
+  },
+  {
+    "file": "tripo-boulder-02.glb",
+    "bytes": 67935664,
+    "sha256": "5027d837b6069f625984999e44764ffb128fbd7b582314f53d4583f71be58086"
+  },
+  {
+    "file": "tripo-boulder-03.glb",
+    "bytes": 66803772,
+    "sha256": "a60ad37f9fd2ea871000cb855b8b17c6f213bfae37eefb49834895d3e9ab5277"
+  }
+]
