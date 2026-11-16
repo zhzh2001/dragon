@@ -4314,11 +4314,6 @@ void App::studio_controls() {
             ImGui::SliderFloat("tuck fan close", &rig.tuck_converge_deg, 0.0f, 120.0f, "%.0f deg");
             ImGui::SliderFloat("elbow fold scale", &rig.wing_elbow_fold_scale, 0.0f, 2.0f);
             ImGui::SliderFloat("finger fold scale", &rig.wing_finger_fold_scale, 0.0f, 2.0f);
-            ImGui::SeparatorText("legs");
-            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 110.0f, "%.0f deg");
-            ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
-            ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
-                               "%.0f deg");
         } else if (scenario == game::StudioScenario::Flap) {
             ImGui::SeparatorText("wingbeat");
             ImGui::SliderFloat("recovery wrist", &rig.recovery_wrist_deg, -90.0f, 90.0f, "%.0f deg");
@@ -4327,11 +4322,6 @@ void App::studio_controls() {
             ImGui::SliderFloat("recovery hand droop", &rig.recovery_droop_deg, -45.0f, 60.0f,
                                "%.0f deg");
             ImGui::SliderFloat("stroke plane tilt", &rig.stroke_plane_tilt_deg, -45.0f, 45.0f,
-                               "%.0f deg");
-            ImGui::SeparatorText("legs");
-            ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 110.0f, "%.0f deg");
-            ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
-            ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f,
                                "%.0f deg");
         }
         if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||
@@ -4365,7 +4355,76 @@ void App::studio_controls() {
     }
 }
 
-void App::life_controls() {
+void App::flight_leg_controls() {
+    anim::RigTuning& rig = dragon_rig_.tuning;
+    // The legs in flight, joint by joint; on, it replaces the tuck and the
+    // trail. The postures rendered for the playtester on 2026-11-15
+    // (artifacts/leg-options/options.jpg, rows A to F): a starting point for
+    // any model with bent legs at bind.
+    struct Posture { const char* name; float on, hip, knee, hock, shoulder, elbow, wrist, splay; };
+    static const Posture kPostures[] = {
+        {"trail and tuck (hero's default)", 1.0f, 45.0f, 5.0f, 35.0f, 65.0f, -140.0f, 105.0f, -18.0f},
+        {"trail both", 1.0f, 45.0f, 5.0f, 35.0f, 40.0f, 60.0f, 30.0f, -18.0f},
+        {"hind bent under the belly", 1.0f, 30.0f, 20.0f, 30.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+        {"half hang", 1.0f, 18.0f, -12.0f, 38.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+        {"hang", 1.0f, 8.0f, -45.0f, 45.0f, 25.0f, -20.0f, 45.0f, -6.0f},
+        {"fold (the older tuck and trail)", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+    };
+    // The combo names the posture the sliders are at, so a dragged slider
+    // reads "custom" and a preset reads as itself.
+    ImGui::PushID("flight legs");
+    const bool pose_on = rig.leg_flight_pose > 0.5f;
+    const char* current = "custom";
+    for (const Posture& p : kPostures) {
+        const bool same_joints =
+            std::fabs(rig.hind_flight_hip_deg - p.hip) < 0.5f && std::fabs(rig.hind_flight_knee_deg - p.knee) < 0.5f &&
+            std::fabs(rig.hind_flight_hock_deg - p.hock) < 0.5f &&
+            std::fabs(rig.fore_flight_shoulder_deg - p.shoulder) < 0.5f &&
+            std::fabs(rig.fore_flight_elbow_deg - p.elbow) < 0.5f &&
+            std::fabs(rig.fore_flight_wrist_deg - p.wrist) < 0.5f &&
+            std::fabs(rig.leg_flight_splay_deg - p.splay) < 0.5f;
+        if ((p.on > 0.5f) == pose_on && (!pose_on || same_joints)) {
+            current = p.name;
+            break;
+        }
+    }
+    if (ImGui::BeginCombo("flight leg posture", current)) {
+        for (const Posture& p : kPostures) {
+            if (ImGui::Selectable(p.name, p.name == current)) {
+                rig.leg_flight_pose = p.on;
+                if (p.on > 0.5f) {
+                    rig.hind_flight_hip_deg = p.hip;
+                    rig.hind_flight_knee_deg = p.knee;
+                    rig.hind_flight_hock_deg = p.hock;
+                    rig.fore_flight_shoulder_deg = p.shoulder;
+                    rig.fore_flight_elbow_deg = p.elbow;
+                    rig.fore_flight_wrist_deg = p.wrist;
+                    rig.leg_flight_splay_deg = p.splay;
+                }
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (rig.leg_flight_pose > 0.5f) {
+        ImGui::SliderFloat("hind hip", &rig.hind_flight_hip_deg, -90.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("hind knee", &rig.hind_flight_knee_deg, -120.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("hind hock", &rig.hind_flight_hock_deg, -120.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("fore shoulder", &rig.fore_flight_shoulder_deg, -90.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("fore elbow", &rig.fore_flight_elbow_deg, -170.0f, 120.0f, "%.0f deg");
+        ImGui::SliderFloat("fore wrist", &rig.fore_flight_wrist_deg, -120.0f, 140.0f, "%.0f deg");
+        ImGui::SliderFloat("legs splay", &rig.leg_flight_splay_deg, -30.0f, 30.0f, "%.0f deg");
+    } else {
+        ImGui::SliderFloat("leg tuck", &rig.leg_tuck_deg, -60.0f, 110.0f, "%.0f deg");
+        ImGui::SliderFloat("leg trail", &rig.leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
+        ImGui::SliderFloat("front leg trail", &rig.front_leg_trail_deg, -30.0f, 90.0f, "%.0f deg");
+    }
+    if (ImGui::Button("save the legs to this model's rig profile")) {
+        anim::save_rig_tuning(rig, player_model().rig_tuning_path.c_str());
+    }
+    ImGui::PopID();
+}
+
+void App::life_controls(bool playtest) {
     anim::RigTuning& rig = dragon_rig_.tuning;
     // First, because the playtest looked for it and could not find it in
     // the Dragon panel behind the older-panels checkbox.
@@ -4375,33 +4434,37 @@ void App::life_controls() {
     ImGui::SliderFloat("tail beat wave", &rig.tail_beat_cycles, 0.0f, 1.5f, "%.2f cycles");
     ImGui::SliderFloat("tail sway in the glide", &rig.tail_flow_deg, 0.0f, 45.0f, "%.0f deg");
     ImGui::SliderFloat("tail sway period", &rig.tail_flow_period, 0.5f, 8.0f, "%.1f s");
-    ImGui::SeparatorText("air");
-    ImGui::SliderFloat("gusts", &rig.gust_deg, 0.0f, 6.0f, "%.1f deg");
-    ImGui::SliderFloat("gust heave", &rig.gust_heave_m, 0.0f, 0.6f, "%.2f m");
-    ImGui::SliderFloat("membrane flutter", &rig.flutter_deg, 0.0f, 8.0f, "%.1f deg");
-    ImGui::SliderFloat("flutter from speed", &rig.flutter_speed_start, 5.0f, 80.0f, "%.0f m/s");
+    if (!playtest) {
+        ImGui::SeparatorText("air");
+        ImGui::SliderFloat("gusts", &rig.gust_deg, 0.0f, 6.0f, "%.1f deg");
+        ImGui::SliderFloat("gust heave", &rig.gust_heave_m, 0.0f, 0.6f, "%.2f m");
+        ImGui::SliderFloat("membrane flutter", &rig.flutter_deg, 0.0f, 8.0f, "%.1f deg");
+        ImGui::SliderFloat("flutter from speed", &rig.flutter_speed_start, 5.0f, 80.0f, "%.0f m/s");
+    }
     ImGui::SeparatorText("limb physics");
     ImGui::SliderFloat("limb physics", &rig.limb_physics, 0.0f, 1.0f);
     ImGui::SliderFloat("limb stiffness", &rig.limb_stiffness, 4.0f, 120.0f, "%.0f /s^2");
-    ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
     ImGui::SliderFloat("limb damping", &rig.limb_damping, 0.05f, 1.5f);
-    ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
-    ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
-    ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
     ImGui::SliderFloat("limb range", &rig.limb_range_deg, 5.0f, 90.0f, "%.0f deg");
-    ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
-    ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
-    ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
-    ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
-    ImGui::SeparatorText("work in a held brake or turn");
-    ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
-    ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
-    ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
-    ImGui::SeparatorText("keyframed overlay (brake bank)");
-    if (!dragon_rig_.has_brake_bank_clips()) ImGui::TextDisabled("this species has no clip");
-    ImGui::TextDisabled("plays only while braking (Ctrl / LT, or the studio's brake)");
-    ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
-    ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
+    if (!playtest) {
+        ImGui::SliderFloat("limb foot stiffness", &rig.limb_tip_stiffness, 0.05f, 1.0f);
+        ImGui::SliderFloat("limb inertia", &rig.limb_inertia, 0.0f, 3.0f);
+        ImGui::SliderFloat("limb g response", &rig.limb_gravity, 0.0f, 3.0f);
+        ImGui::SliderFloat("limb brace", &rig.limb_brace, 0.0f, 6.0f);
+        ImGui::SliderFloat("limb turn lean", &rig.limb_turn_lean, 0.0f, 40.0f, "%.0f m/s^2");
+        ImGui::SliderFloat("limb turbulence", &rig.limb_turbulence, 0.0f, 15.0f, "%.1f m/s^2");
+        ImGui::SliderFloat("limb turbulence, glide share", &rig.limb_turbulence_glide, 0.0f, 1.0f);
+        ImGui::SliderFloat("limb brake paddle", &rig.limb_brake_paddle, 0.0f, 20.0f, "%.1f m/s^2");
+        ImGui::SeparatorText("work in a held brake or turn");
+        ImGui::SliderFloat("body work", &rig.work_body_deg, 0.0f, 6.0f, "%.1f deg");
+        ImGui::SliderFloat("wing work", &rig.work_wing_deg, 0.0f, 12.0f, "%.1f deg");
+        ImGui::SliderFloat("turn rate for full work", &rig.work_turn_rate, 0.1f, 2.0f, "%.2f rad/s");
+        ImGui::SeparatorText("keyframed overlay (brake bank)");
+        if (!dragon_rig_.has_brake_bank_clips()) ImGui::TextDisabled("this species has no clip");
+        ImGui::TextDisabled("plays only while braking (Ctrl / LT, or the studio's brake)");
+        ImGui::SliderFloat("clip overlay", &rig.clip_overlay, 0.0f, 3.0f);
+        ImGui::SliderFloat("clip rate", &rig.clip_overlay_rate, 0.25f, 2.0f);
+    }
     ImGui::SeparatorText("keyframed strikes (bite, claw, tail)");
     if (!dragon_rig_.has_attack_clips()) ImGui::TextDisabled("this species has no strike clips");
     ImGui::SliderFloat("strike clips", &rig.attack_clip, 0.0f, 2.0f);
@@ -4418,7 +4481,18 @@ void App::build_playtest_ui() {
     if (ImGui::CollapsingHeader("Animation studio", ImGuiTreeNodeFlags_DefaultOpen)) {
         studio_controls();
     }
-    if (ImGui::CollapsingHeader("Camera and light", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Legs in flight", ImGuiTreeNodeFlags_DefaultOpen)) {
+        flight_leg_controls();
+    }
+    if (ImGui::CollapsingHeader("Tail, limbs and strikes", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // The short list: what is open for the playtest. Every other life
+        // dial (air, the limbs' finer terms, work, the brake clip) is in the
+        // Dragon panel behind the checkbox above.
+        life_controls(true);
+    }
+    // Last and closed: the framing and the light were settled in an earlier
+    // round, and the list above is what is open now.
+    if (ImGui::CollapsingHeader("Camera and light")) {
         // The framing and the light the art target is judged in
         // (docs/concept/gaps/run-target.png). The chase preset's own dials;
         // 1/2/3 reload a preset over them.
@@ -4441,9 +4515,6 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("exposure", &post_settings_.exposure, 0.5f, 2.5f, "%.2f");
         ImGui::SliderFloat("contrast", &post_settings_.contrast, 0.8f, 1.5f, "%.2f");
         ImGui::SliderFloat("warmth", &post_settings_.temperature, -0.2f, 0.2f, "%.2f");
-    }
-    if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
-        life_controls();
     }
     ImGui::End();
 }
@@ -4480,7 +4551,7 @@ void App::build_dragon_ui() {
     // statue in a held brake or turn, and the playtest could not find them
     // inside "Flight response".
     if (ImGui::CollapsingHeader("Limbs, body and wings: life", ImGuiTreeNodeFlags_DefaultOpen)) {
-        life_controls();
+        life_controls(false);
     }
 
     if (ImGui::CollapsingHeader("Landing weight")) {
@@ -4674,47 +4745,7 @@ void App::build_dragon_ui() {
                                                                                               : rig.front_leg_tuck_deg;
             if (ImGui::SliderFloat("front leg tuck", &front, -60.0f, 120.0f, "%.0f deg")) rig.front_leg_tuck_deg = front;
         }
-        {
-            // The legs in flight, joint by joint; on, it replaces the tuck and the trail.
-            // The postures tried on the hero (docs/SHOWCASE.md, "The legs in
-            // flight"): a starting point for any model with bent legs at bind.
-            struct Posture { const char* name; float on, hip, knee, hock, shoulder, elbow, wrist, splay; };
-            static const Posture kPostures[] = {
-                {"dangle", 1.0f, 8.0f, -45.0f, 45.0f, 25.0f, -20.0f, 45.0f, -6.0f},
-                {"dangle, hind legs trailing", 1.0f, 30.0f, 20.0f, 30.0f, 25.0f, -20.0f, 45.0f, -6.0f},
-                {"trail and tuck", 1.0f, 45.0f, 5.0f, 35.0f, 65.0f, -140.0f, 105.0f, -18.0f},
-                {"trail both", 1.0f, 45.0f, 5.0f, 35.0f, 40.0f, 60.0f, 30.0f, -18.0f},
-                {"fold (tuck and trail)", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-            };
-            if (ImGui::BeginCombo("flight leg posture", "presets")) {
-                for (const Posture& p : kPostures) {
-                    if (ImGui::Selectable(p.name)) {
-                        rig.leg_flight_pose = p.on;
-                        if (p.on > 0.5f) {
-                            rig.hind_flight_hip_deg = p.hip;
-                            rig.hind_flight_knee_deg = p.knee;
-                            rig.hind_flight_hock_deg = p.hock;
-                            rig.fore_flight_shoulder_deg = p.shoulder;
-                            rig.fore_flight_elbow_deg = p.elbow;
-                            rig.fore_flight_wrist_deg = p.wrist;
-                            rig.leg_flight_splay_deg = p.splay;
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            bool pose = rig.leg_flight_pose > 0.5f;
-            if (ImGui::Checkbox("flight pose by joint", &pose)) rig.leg_flight_pose = pose ? 1.0f : 0.0f;
-            if (pose) {
-                ImGui::SliderFloat("hind hip", &rig.hind_flight_hip_deg, -90.0f, 120.0f, "%.0f deg");
-                ImGui::SliderFloat("hind knee", &rig.hind_flight_knee_deg, -120.0f, 120.0f, "%.0f deg");
-                ImGui::SliderFloat("hind hock", &rig.hind_flight_hock_deg, -120.0f, 120.0f, "%.0f deg");
-                ImGui::SliderFloat("fore shoulder", &rig.fore_flight_shoulder_deg, -90.0f, 120.0f, "%.0f deg");
-                ImGui::SliderFloat("fore elbow", &rig.fore_flight_elbow_deg, -170.0f, 120.0f, "%.0f deg");
-                ImGui::SliderFloat("fore wrist", &rig.fore_flight_wrist_deg, -120.0f, 140.0f, "%.0f deg");
-                ImGui::SliderFloat("legs splay", &rig.leg_flight_splay_deg, -30.0f, 30.0f, "%.0f deg");
-            }
-        }
+        flight_leg_controls();
         if (dragon_rig_.has_base_clip()) {
             ImGui::TextDisabled("clip '%s'%s", player_model().animations[size_t(player_model().idle_clip)].name.c_str(),
                                 player_model().idle_clip_hold >= 0.0f ? " (held at its last frame)" : "");

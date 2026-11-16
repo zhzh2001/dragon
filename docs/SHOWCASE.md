@@ -1886,11 +1886,11 @@ Three feedback reports came with it, six marks:
 
 | Report | Mark | State |
 |---|---|---|
-| 0013 | "transparent artifacts?" on the membrane's root panel | a Codex asset job, running |
-| 0013 | "prefer to dangle like front legs as well" on the hind leg | done, below |
+| 0013 | "transparent artifacts?" on the membrane's root panel | done, "The wrist hook and the root panel" below |
+| 0013 | "prefer to dangle like front legs as well" on the hind leg | done, then withdrawn: "The legs trail and tuck" below |
 | 0014 | "legs are ragdoll in melee attacks" | open, after the reference study |
 | 0014 | "tail too" | open, after the reference study |
-| 0015 | "malformed wing claw" | the same Codex job |
+| 0015 | "malformed wing claw" | done, the same section |
 | 0015 | "wings can have a larger flapping range" | open, after the reference study |
 
 ### The hind legs hang (17:20)
@@ -1911,6 +1911,69 @@ the beat, the brake, the dive and the chase camera:
 
 `--rig key=value,...` is new: it sets rig profile fields for one run, by
 the profile's own names. The six candidates were six commands.
+
+### The wrist hook and the root panel (18:15)
+
+A Codex job (gpt-6-astra, high, 298 k tokens, branch `hero-claws`, merged
+as f8ce6cb) rebuilt the hero's wings in the build scripts.
+
+- Each wrist carried three projections, 1.12, 0.84 and 0.30 m long. Now
+  one hook a side, 0.42 m straight and 0.49 m along its curve, 0.10 m
+  across at the base. The finger claws went from about 0.40 m to 0.30 m.
+- The root panel, between the flank and the arm, had no colour detail and
+  no normal relief. That was the pale ruled patch of feedback 0013; alpha
+  blending and doubled faces were not the cause. It now carries the
+  membrane's grain.
+
+The pairs on the playtester's own views are
+`artifacts/hero-claws/pair-feedback-wrist.jpg` and
+`pair-feedback-root.jpg`. Codex's mesh checks pass 112 of 112 and its rig
+checks 74 of 74. One limit remains: at the panel's narrow texture margins
+the detail stretches by up to 257 mm.
+
+### The legs trail and tuck (19:00)
+
+The playtester on the hang: "I find the dangling legs worse, maybe the
+previous tucked version is better? please give me some options to choose
+from". Six postures were rendered side by side from the side, the front
+quarter and below (`artifacts/leg-options/options.jpg`):
+
+| | Posture | Hind hip, knee, hock | Fore shoulder, elbow, wrist |
+|---|---|---|---|
+| A | hang | 8, -45, 45 | 25, -20, 45 |
+| B | hind bent under the belly (before 17:20) | 30, 20, 30 | 25, -20, 45 |
+| C | half hang | 18, -12, 38 | 25, -20, 45 |
+| D | trail and tuck | 45, 5, 35 | 65, -140, 105 |
+| E | trail both | 45, 5, 35 | 40, 60, 30 |
+| F | the older fold | (tuck and trail) | |
+
+The playtester chose D: the hind legs trail back along the tail and the
+fore legs fold to the chest. It is the hero's profile now
+(`assets/embercrest-hero.glb.rig.cfg`). The inspection set is
+`artifacts/leg-options/chosen-trail-and-tuck.jpg`: the glide from the
+side, behind, the front and above, the beat, the chase camera, landed, and
+the beat from below.
+
+The realistic references hang the hind legs (`docs/MOTION_REFERENCE.md`),
+and the hang was built from that. On this model it read as standing in the
+air: the references are slimmer animals. A reference decides what to try.
+The render on our own model decides what stays.
+
+The playtester also asked for the postures in the panel, and for the
+Playtest panel to hold only what is open for tuning. So:
+
+- "Legs in flight" is a header of the Playtest panel: the six postures in
+  one list that names the current one ("custom" once a slider moves), the
+  seven joint sliders, and a save button
+  (`artifacts/leg-options/playtest-panel.jpg`).
+- The studio's "leg tuck" and "leg trail" sliders are gone from the glide,
+  beat and dive scenarios. With the joint posture on, the rig did not read
+  them.
+- "Tail, limbs and strikes" keeps the tail, four limb physics dials and
+  the strike clips. The air, the limbs' finer terms, the work and the
+  brake clip are in the Dragon panel, behind "show the older tuning
+  panels".
+- "Camera and light" is last and closed.
 
 ## S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20)
 

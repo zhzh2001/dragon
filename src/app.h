@@ -365,7 +365,8 @@ private:
     // tuning panels stay one checkbox away (show_tuning_panels_).
     void build_playtest_ui();
     void studio_controls();
-    void life_controls();
+    void flight_leg_controls();
+    void life_controls(bool playtest);
     // Hand the chase camera this frame's head and the species' eye offsets.
     void feed_first_person_head(float dt);
     // Replace the targets with the training room's dummies, laid out ahead of
