@@ -357,6 +357,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | The blind critic, round 3: After round 3: more air, less aerosol (16:25) | `showcase/CRITIC.md` |
 | The blind critic, round 3: After round 3: fine tufts, reeds at the water (16:35) | `showcase/CRITIC.md` |
 | The blind critic, round 3: After round 3, tried and dropped: a softer flame (16:38) | `showcase/CRITIC.md` |
+| The blind critic, round 4 (2026-11-15, 20:25) | `showcase/CRITIC.md` |
 
 ## Sources
 

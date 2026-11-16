@@ -764,3 +764,25 @@ stacked puffs sum, more than by one puff's colours. A test of one puff
 alone, then five, then forty, would show where the orange is lost. The
 smoke at the flame's tip exists (`smoke_for`) and was out of the critic's
 frame; `--breathe --inspect 100 60 8` shows it.
+
+## The blind critic, round 4 (2026-11-15, 20:25)
+
+Twelve new views about the dragon in motion and the fire, on 45aa30e. The
+abridged report and the frames are in
+`artifacts/showcase-critic/round4/`. The mean is 4.1 and no frame reaches
+5; the views are new, so this does not compare with round 3's 2.88.
+
+What it ranks first:
+
+1. The wing membranes: "flat, opaque boards with straight rod bones and
+   no sag, translucency or bend". The critic calls this "the main reason
+   the dragon looks like a model and not an animal". It outranks every
+   pose and timing change of the day.
+2. The fire: "drawn, not hot". A hard outline (softened after the
+   renders), a dither pattern in the pale core, no light on what is
+   around it, a jet eight times the dragon's length, a fireball that is a
+   smear and not a ball, and a jet that leaves the mouth in a turn.
+3. The light: a flat haze, no low warm key, no rim, no strong shadows.
+
+The world items (floor, walls, forest, water) repeat rounds 1 to 3.
+
