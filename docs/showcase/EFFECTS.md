@@ -58,7 +58,11 @@ Four things were wrong on the way, each found on a render:
 
 Cost, paired on the frozen frame at 1920x1080 (`DRAGON_ABLATE_ALTERNATE=
 breath_volume`): 3.7 ms from the chase camera and 1.9 ms from the side as
-first built, 1.1 ms and 0.8 ms now. What cut it: no noise read where no
+first built, 1.1 ms and 0.8 ms after the cuts below. Those runs were not
+recorded. The recorded run of the committed build (`~/src/gpu-hist`,
+`research/dragon-m5/runs/20261116-0116-mac-m5-dragon-breath-volume-cost`)
+was made on a busy Mac and is noisier: 0.37 and 1.51 ms from the chase
+camera, 0.95 and 1.22 ms from the side. What cut it: no noise read where no
 gas can be, four octaves read once in place of eight reads, and five
 spine segments tried a step in place of fifteen. The window of five is
 centred on the capsule nearest in metres; centred on the nearest in
