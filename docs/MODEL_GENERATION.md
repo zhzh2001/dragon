@@ -1059,6 +1059,9 @@ cost.
 
 ### Tripo v3.1: it will not give you the file
 
+This is the free tier. An account with credits exports: see "Tripo v3.1 on
+an account with credits" below.
+
 Tripo generated the best-looking single result of the cloud services -- 1.96 M
 faces, textured, v3.1 "Best Quality", from one image for 55 of the 200 free
 monthly credits. **Then it refuses to export it.** The Export dialog offers
@@ -1084,6 +1087,99 @@ the dragon outright the way Hunyuan does (`仅支持人形标准化`) nor claims
 its named skeletons for it -- which is as close to a direct answer as the
 survey's "expect the wings to be skinned to the spine" is going to get without
 paying.
+
+### Tripo v3.1 on an account with credits: it exports, and the rig has wings (2026-11-15)
+
+The section above is the free tier. The user obtained a short-term account
+with 7,800 Studio credits, and the test ran on it through `chrome-use`. The
+whole chain worked: generate, export, retopologize, rig, export the rig. It
+cost 185 credits and about ten minutes of waiting.
+
+The input was the hero's own view plates (`docs/showcase/HERO.md`). The
+measuring scripts were a GLB reader (triangles, boundary and non-manifold
+edges, extents) and a four-view Blender render, one camera for every mesh.
+
+| Step | Credits | Wait | Result |
+|---|---|---|---|
+| H3.1 "Best Quality", one side image | 55 | 2 min | 1,894,090 triangles, closed, UV, 4K base colour, metal-rough and normal maps, 66.7 MB. The wings came out raised over the back |
+| H3.1, multi-view: front, left, back | 55 | 2 min | 1,869,167 triangles, 6 boundary and 5 non-manifold edges. The wings are spread, but swept back and pitched, so they are thin from above |
+| Retopologize: Triangle, Smart Mesh P1.0, at most 20,000 | 35 | 2 min | 19,280 triangles, 29,129 vertices, 79 boundary and 23 non-manifold edges, the textures kept (4K base colour, 2K for the others), 10.6 MB |
+| Auto Rig, type "Other" | 20 | 1.5 min | 101 joints, one skin, up to 4 influences a vertex (2.53 on average), no clip |
+| Text to motion, 5 s | 20 | 10 s | a clip for a humanoid; nothing was applied to the dragon |
+
+What changed against the earlier records:
+
+- Export works on this account. GLB with 4K textures downloads at once, the
+  rigged file too ("Export Skeleton").
+- The multi-view tab has four slots: front, left, right, back, the same
+  four the Hunyuan one-shot takes. This run filled three (front, left,
+  back). The third upload tab is a batch of separate generations (220
+  credits for four), not multi-view.
+- Auto Rig refuses the 1.87 M mesh ("Polygon Limit Exceeded") and offers the
+  retopology. It accepts the 19,280-triangle one.
+- The rig types are "Humanoid" and "Other". The named quadruped, avian and
+  serpentine types of the API's Rig v2.5 are not offered in the Studio.
+
+`artifacts/tripo-test/field.jpg` has the Hunyuan candidate
+(`embercrest-cand-hero-hunyuan.glb`), the Tripo multi-view mesh and its
+retopology on one camera. Tripo's scales are crisper and its colour more
+saturated. Hunyuan's wings lie flat, so the whole membrane shows from
+above. Tripo's are pitched and swept back and show mostly their edge from
+above, which is the worse bind pose for a creature that flies. The spans
+are close: 0.75 of the length for Hunyuan (1.173 long, 0.878 wide, 0.405
+high) and 0.83 for Tripo (0.981, 0.811, 0.369). The retopology is hard to
+tell from the full mesh at this size.
+
+#### The rig
+
+This answers the open question of whether Tripo puts a finger chain on a
+winged creature. It does. The skeleton, read from the exported GLB:
+
+| Part | Joints | Names |
+|---|---|---|
+| Root, then a chest chain of three | 4 | `tripo::Root`, `bone_1` to `bone_3` |
+| Neck and head, one chain, no jaw | 7 | `tripo::Head_0` to `tripo::Head_6` |
+| Each fore leg: four segments, then three toes of three | 16 | `bone_11` to `bone_26`, `bone_27` to `bone_42` |
+| Each wing: shoulder, arm, forearm, then three fingers of three | 12 | `bone_43` to `bone_54`, `bone_55` to `bone_66` |
+| Each hind leg: four segments, then two toes of two | 8 | `bone_67` to `bone_74`, `bone_75` to `bone_82` |
+| Spine | 4 | `tripo::Spine_0` to `tripo::Spine_3` |
+| Tail | 14 | `tripo::Tail_0` to `tripo::Tail_13` |
+
+The wings carry 25% of the skin's weight, on their own bones, not on the
+spine. `tripo::Head_5` carries 12%: the whole skull and both jaws.
+
+The skin was tested by posing it in Blender (`rig-pose.jpg` in the same
+folder): one wing down 40 degrees at the arm with each finger folded 15
+more, the other up 35, the tail curved 7 degrees a joint, the neck turned
+9 degrees a joint. The membrane follows its fingers without tearing, the
+tail bends as a smooth curve, and the neck turns without a kink.
+
+What it lacks for this engine:
+
+- A jaw. The mouth cannot open. The engine's rig needs the jaw hinge and a
+  `jaw_mask` (`tools/skeletons/*.json`).
+- The names. Only the head, spine and tail chains are named. The limbs are
+  `bone_N`, so a map to the contract of `src/anim/dragon_rig.cpp` has to be
+  written by position.
+- Three wing fingers, where the hero's membrane is built on its own measured
+  finger count and `wing_field`.
+- Eyes, and any clip. Text to motion and the presets are for humanoids.
+
+#### What it is good for
+
+The hero is not worth rebuilding on it: the hero's mesh, its measured
+skeleton and its surface are further along than this output. For a new
+creature it is the fastest route measured so far to a textured,
+20K-triangle, skinned mesh: about eight minutes and 165 credits, against
+the Hunyuan pipeline's generation, local decimation and a fitted skeleton.
+The steps it would still need are a jaw, the renamed bones and the species'
+three config files.
+
+Before any Tripo output ships, read the plan's licence. The account page
+shows a non-member plan and the privacy setting "Sharing Only", and the
+survey above recorded the free tier as CC BY 4.0, non-commercial and
+public. The four test files are `assets/embercrest-cand-hero-tripo31-*.glb`
+(git-ignored); none is in the game.
 
 ## Frameworks: is ComfyUI the right harness?
 
@@ -1536,10 +1632,12 @@ worker's report is beside it.
 Answered ones have been removed; the sections above hold the results. What is
 genuinely still unknown:
 
-- Whether Tripo's Rig v2.5 really puts a finger chain on a winged creature.
-  It is the last commercial candidate and needs paid API credits, since
-  Studio credits do not reach the API. Its free pre-check answers
-  `rig_type: "others"` for our dragon, which is not encouraging.
+- What licence a Tripo account with bought credits grants. The Studio's rig
+  does put finger chains on a winged quadruped ("Tripo v3.1 on an account
+  with credits"); whether its output may ship is not read yet.
+- Whether Tripo's rig can be mapped onto the engine's bone names and given
+  a jaw with less work than fitting `tools/skeletons/winged-quadruped.json`
+  to the same mesh. Not tried.
 - Whether decimating locally to under 30 K and **uploading that** to the
   Studio for 语义UV plus 纹理绘制 works. It is the only untested route that
   would keep multi-view geometry *and* get cloud PBR without 低模生成.
