@@ -1165,6 +1165,21 @@ What it lacks for this engine:
   finger count and `wing_field`.
 - Eyes, and any clip. Text to motion and the presets are for humanoids.
 
+#### Retopology: not the same question as Hunyuan's
+
+Hunyuan's own retopology (低模生成) is the stage this doc says to skip: at
+13,851 triangles it erased the wing fingers, the ridge spikes and the
+teeth, and decimating the 1.5 M mesh locally kept them. Tripo's did
+better on one test: at 19,280 triangles the fingers, the spikes and the
+horns are still there at render size, and the textures came through. Two
+cautions. It was judged at render size, not up close on the head. And it
+left 79 boundary and 23 non-manifold edges, where the full mesh had 6 and
+5.
+
+Tripo's rigger will not take the full mesh, so some reduction is needed
+to use its rig at all. Not tried: decimating the 1.87 M mesh locally, as
+for Hunyuan, and uploading that for the rig.
+
 #### What it is good for
 
 The hero is not worth rebuilding on it: the hero's mesh, its measured

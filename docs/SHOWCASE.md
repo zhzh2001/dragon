@@ -335,6 +335,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Feedback 0013 to 0015, and the turn to the dragon: A deeper, slower beat (19:08) | `showcase/PLAYTEST.md` |
 | S4 and S5, first pass: keyframed strikes (2026-11-15, 11:20) | `showcase/PLAYTEST.md` |
 | Strikes that hold, and legs that act (2026-11-15, 19:55) | `showcase/PLAYTEST.md` |
+| The beat, second pass: faster and deeper (2026-11-15, 22:58) | `showcase/PLAYTEST.md` |
 | The breath as a volume (2026-11-15, 20:11) | `showcase/EFFECTS.md` |
 | Fireballs as comets (2026-11-15, 20:21) | `showcase/EFFECTS.md` |
 | Sparks, a softer rim, and a final dither (20:30) | `showcase/EFFECTS.md` |

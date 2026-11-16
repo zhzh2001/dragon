@@ -437,3 +437,32 @@ Not done: an anticipation as long as the references' (20 frames and
 more). That delays the hit and is a gameplay decision. The tail's own
 motion in a bite or a claw is the clip's and was not changed. The stills
 show poses; the timing needs a playtest.
+
+## The beat, second pass: faster and deeper (2026-11-15, 22:58)
+
+The playtester, on the retuned beat: "the wingbeat is slow, and the
+flapping range is still limited".
+
+Measured from the front (`--studio 1 --inspect 180 17 6`), as the angle of
+the wingtip about the shoulder through one beat: +40 to -13 degrees, 53 in
+all, on a flight model that asked for +62 to -50. The rig spends much of
+the commanded angle on the fold and on the hand that trails, and the
+bottom of the stroke was shallow: the tips barely went under the body.
+
+| | Before | After |
+|---|---|---|
+| `flap_period` | 1.1 s | 0.85 s (1.18 beats a second, Century's rate) |
+| `flap_up_angle_deg` | 62 | 66 |
+| `flap_down_angle_deg` | -50 | -78 |
+| `wing_flap_limit_deg` (rig) | 66 | 90 |
+| The tip, from the front | +40 to -13 | +48 to -28, 76 in all |
+
+The gain is at the bottom. The top is limited by the wings themselves:
+at +90 they met over the head in a heart shape, and at +74 the tips still
+touched for one frame seen from behind. Speed with the flap held is
+unchanged (49.8 m/s after 15 s, both ways), so `flap_peak_force` stays.
+
+`artifacts/wingbeat/second-pass-before-after.jpg` has five frames of each
+beat from the front. The beat was looked at from the side, the rear and
+above, and in the chase view with the flap held. The roster's goldens did
+not move: the change is in the hero's two profiles.
