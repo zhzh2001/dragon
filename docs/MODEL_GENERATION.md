@@ -1196,6 +1196,92 @@ survey above recorded the free tier as CC BY 4.0, non-commercial and
 public. The four test files are `assets/embercrest-cand-hero-tripo31-*.glb`
 (git-ignored); none is in the game.
 
+### The overnight Tripo run (2026-11-16)
+
+The account from the test above had one day left and 7,615 credits. The
+night spent 3,890 of them on 72 models. They are in `assets/tripo-raw/`
+(git-ignored, 4.4 GB), each with a four-view render in the session's
+scratch folder and a contact sheet in `artifacts/tripo-overnight/`.
+
+The licence question from the test is answered. Tripo's terms (updated
+2026-11-13), section 5.2.2: content made with paid credits is "Paid
+Content", it belongs to the user, and it may be published and used
+commercially. Section 3.2 forbids removing the AI labels or metadata, so
+every Tripo asset that ships gets a line in `AI_DISCLOSURE.md`.
+
+#### How it was driven
+
+`tools/tripo_studio.py` drives the Studio's generate page through
+`chrome-use`: a text prompt, one image, or four view plates (front, left,
+right, back; the multi-view tab's four file inputs in that order). It does
+not call the Studio's API. Three traps cost time:
+
+- Chrome blocks a site's second automatic download. Export worked once and
+  then saved nothing, while the page's own `export-lite` call returned OK.
+- The viewer already loads the whole generation: every triangle and the
+  three 4K maps, as one meshopt-compressed GLB from a signed
+  `tripo-data` URL. Export only decodes that file in the page. The driver
+  downloads it and decodes it with `gltfpack -noq` (built from the
+  meshoptimizer in `build-*/_deps`, installed to `~/.local/bin`). The
+  result matched an exported file: same triangle count, same maps.
+- An upload of a 26 MB GLB stalled the `chrome-use` relay twice. A 5 MB
+  file went through.
+
+Two tabs (`TRIPO_SESSION=tripo2`) ran batches side by side without trouble.
+A generation took 104 to 291 s, 182 s on average, and 55 credits. None of
+68 logged jobs failed.
+
+#### What came out
+
+| Group | Models | Verdict |
+|---|---|---|
+| Cliff walls (text) | 10 | Good faces, but every one has a flaw for a wall set into a slope: a flat cap, a tiled or concrete back, or a mirrored face. The prompt words "closed back" produced the tiled back. Codex dropped the first three; none is in the game yet |
+| Tor, ridge crest, scree, six boulders, an outcrop, a gravel bar, river rocks | 12 | Six are in the kit and in the valley (`tools/rockkit.md`, "Tripo pieces"; `docs/showcase/WORLD.md`) |
+| Deadwood: logs, stump, snag, root plate | 5 | Good; not used yet |
+| Trees: a spruce and a beech | 2 | Not usable. The spruce reads as a cartoon, and both crowns are solid geometry where the forest needs alpha-tested cards |
+| Run props: three watchtowers, two spires, three hoards (one a trove), two ward stones | 10 | Being converted to the prop contract (`tools/props.md`) |
+| Ruin, cairn, bones, nest | 4 | Good; not used yet |
+| Prey: an ibex and a red deer | 2 | Good meshes; they would need a rig and clips |
+| The roster's species, from their view plates | 19 | Two runs each for Rimefang, Frostvein, Blightmaw, Ironroot, Stormsail, Tidewrack, Sunspear and Rimeplume, one each for Ashcoil, Cragjaw and Mossback. All follow their plates. Every one has its wings raised or pitched, so from above they show mostly their edge, as in the test above |
+| The hero | 6 | Three multi-view runs (the wing angle differs, the wings are raised in all), the head from the four head plates (crisp plates and frill), and two text prompts that came out standing like a biped |
+| The hero re-textured | 2 | See below |
+
+#### Re-texturing the hero on its own UVs
+
+The Studio's Texture tool takes an uploaded mesh and has a "Use Original
+UV" switch. The hero's geometry (no maps, 5 MB) went in with the front
+plate as the reference and "Remove Lighting" on, 20 credits at 4K. What
+came back kept the UVs: the membrane, horns and eyes match the hero's to
+0.00012, which is the download's quantization, and only 35 degenerate
+triangles were dropped from the hide. So its maps can be swapped into the
+rigged hero file without touching the mesh. It returns base colour only.
+
+In Blender, with base colour alone, the Tripo hide has crisp readable
+scales on the neck, flank and legs, but loses the current hide's dark back
+and crest: the animal is one even orange. In the engine, with the engine's
+hide grade, the three versions are close. The one with a flat normal on
+the hide shows the most readable scale plates on the neck and the flattest
+head. A text-guided version came out charcoal with pale horns and was
+discarded. The swap was not made: it is a call for the playtester.
+
+- `artifacts/tripo-overnight/hero-hide-blender.jpg`, left to right: the
+  current hide, the plate-guided Tripo hide, the text-guided one. Base
+  colour only, one Blender light.
+- `artifacts/tripo-overnight/hero-hide-engine.jpg`, top the body
+  (`--studio 9 --inspect 90 12 4`), bottom the head (`--inspect 120 4 2
+  --inspect-head`), left to right: the current hero, the Tripo colour with
+  the hero's own normal and roughness maps, the Tripo colour with a flat
+  normal on the hide.
+
+The two trial files are not in the repository. To build one, swap image 0
+(the hide's base colour) of `assets/embercrest-hero.glb` for image 2 of
+`assets/tripo-raw/tripo-hero-retex-01.glb`, and copy the hero's two `.cfg`
+files beside it under the new name.
+
+The contact sheets in `artifacts/tripo-overnight/` (walls, rocks,
+wood-trees, props, prey, species, hero) show every model from the front,
+the side, the back and above, labelled with its file name.
+
 ## Frameworks: is ComfyUI the right harness?
 
 **Yes, and it is genuinely agent-drivable.** Everything in this doc was run
