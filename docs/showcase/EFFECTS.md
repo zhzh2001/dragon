@@ -88,3 +88,28 @@ Open:
 - The jet does not meet the ground. The depth buffer cuts it; nothing
   splashes or burns where it lands.
 - Not played. The stills show the shape and not the motion.
+
+## Fireballs as comets (2026-11-15, 20:21)
+
+A fireball was an opaque sphere stretched along its path with two smaller
+spheres behind it: three flat beads from the side. The user had named the
+projectiles with the breath as "still too simplistic".
+
+A round is now drawn through the breath's march
+(`BreathVolume::draw_comet`): a spine of six nodes laid back along its
+path over eight radii, the head its youngest end. So the head is pale and
+whole and the tail cools and tears, by the same rules that shape the jet.
+It has no state. The eight rounds nearest the camera are comets, each one
+fullscreen draw that leaves all but its own pixels at the bound test. The
+rest are the spheres, as is every round on a retro tier. A rival's round
+keeps its colours and its growth with distance.
+
+The pair: `artifacts/breath-volume/fireball-before-after.jpg`.
+
+`--spit` holds the fireball alone, one every cooldown, as `--breathe`
+holds the breath: `--attack` covers a round with the flame.
+
+Open: the cost of eight comets on screen was not measured. A round has no
+flash as it leaves the mouth and its impact is the old burst of
+particles.
+

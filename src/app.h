@@ -179,6 +179,7 @@ struct Options {
     // --breathe holds the breath alone: the flame without the boost, the
     // bite and the fireballs that --attack puts over it.
     bool breathe = false;
+    bool spit = false;  // --spit: hold the fireball alone
     // --bots N replaces the sentinels with N bot dragons at startup.
     int bots = 0;
     // --bot-range N spawns the bots N metres out instead of 650, so a capture
@@ -322,6 +323,9 @@ private:
     // rivals' breaths, and every breath on a retro tier, are puffs.
     gfx::BreathVolume breath_volume_;
     gfx::BreathVolumeSettings breath_volume_settings_;
+    // The rounds drawn as comets this frame (indices into
+    // combat_.projectiles()): draw_combat leaves their spheres out.
+    std::vector<int> comet_rounds_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),

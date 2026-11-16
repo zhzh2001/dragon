@@ -101,6 +101,21 @@ public:
     void draw(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
               const BreathVolumeSettings& settings, float time_seconds);
 
+    // A fireball through the same march: a spine laid back along its path,
+    // the head its youngest end, so the round is a pale ball with a torn,
+    // cooling tail and not an opaque bead. No state: call it once a round a
+    // frame, in the same pass as draw().
+    struct Comet {
+        core::Vec3 position;
+        core::Vec3 velocity;
+        float radius = 2.0f;  // the head's, metres
+        core::Vec3 hot{2.4f, 1.15f, 0.35f};
+        core::Vec3 cool{1.0f, 0.2f, 0.03f};
+        float brightness = 1.0f;
+    };
+    void draw_comet(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
+                    const BreathVolumeSettings& settings, const Comet& comet, float time_seconds);
+
     // For tests and probes: the spine, youngest first.
     struct Node {
         core::Vec3 position;
@@ -125,6 +140,10 @@ private:
         core::Vec4 nodes[kMaxNodes];  // xyz position, w radius
         core::Vec4 info[kMaxNodes];   // x age 0..1, y 1 when joined to the next (older) node
     };
+
+    // The bounds of `count` filled nodes, then the draw.
+    void submit(Device& device, rhi::Pass* pass, const SceneUniforms& scene, Uniforms& u, int count,
+                const BreathVolumeSettings& settings);
 
     Device* device_ = nullptr;
     PipelineCache* pipelines_ = nullptr;

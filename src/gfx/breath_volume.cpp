@@ -177,6 +177,22 @@ void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, c
     }
     if (count < 2) return;
 
+    const float speed = jet_.range * drag / (1.0f - std::exp(-drag * life));
+    u.params = core::Vec4{camera.z_near, time_seconds, float(count), float(std::clamp(settings.steps, 8, 96))};
+    u.shape = core::Vec4{settings.extinction * jet_.cover, 1.0f / std::max(settings.noise_size, 0.1f),
+                         settings.erosion, settings.flow * speed};
+    u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke), jet_.brightness};
+    u.hot = core::Vec4{jet_.hot.x, jet_.hot.y, jet_.hot.z, 0.0f};
+    u.cool = core::Vec4{jet_.cool.x, jet_.cool.y, jet_.cool.z, 0.0f};
+    u.axis = core::Vec4{direction_.x, direction_.y, direction_.z, 0.0f};
+    submit(device, pass, scene, u, count, settings);
+}
+
+void BreathVolume::submit(Device& device, rhi::Pass* pass, const SceneUniforms& scene, Uniforms& u, int count,
+                          const BreathVolumeSettings& settings) {
+    rhi::Pipeline* pipeline = pipelines_ ? pipelines_->get(pipeline_) : nullptr;
+    if (!pipeline || count < 2) return;
+    u.params.z = float(count);
     core::Vec3 lo = core::Vec3{u.nodes[0].x, u.nodes[0].y, u.nodes[0].z};
     core::Vec3 hi = lo;
     float widest = 0.0f;
@@ -189,14 +205,6 @@ void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, c
     // The noise can push the edge out by 0.45 radii at most (breath_volume.hlsl).
     const float reach = core::length(hi - lo) * 0.5f + widest * (1.0f + std::clamp(settings.erosion, 0.0f, 0.45f));
 
-    const float speed = jet_.range * drag / (1.0f - std::exp(-drag * life));
-    u.params = core::Vec4{camera.z_near, time_seconds, float(count), float(std::clamp(settings.steps, 8, 96))};
-    u.shape = core::Vec4{settings.extinction * jet_.cover, 1.0f / std::max(settings.noise_size, 0.1f),
-                         settings.erosion, settings.flow * speed};
-    u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke), jet_.brightness};
-    u.hot = core::Vec4{jet_.hot.x, jet_.hot.y, jet_.hot.z, 0.0f};
-    u.cool = core::Vec4{jet_.cool.x, jet_.cool.y, jet_.cool.z, 0.0f};
-    u.axis = core::Vec4{direction_.x, direction_.y, direction_.z, 0.0f};
     u.bounds = core::Vec4{centre.x, centre.y, centre.z, reach};
     // A capsule from the youngest node to the oldest, as wide as the node
     // that stands furthest off that line needs. From the chase camera the
@@ -227,6 +235,32 @@ void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, c
     depth.sampler = point_;
     rhi.bind_fragment_textures(pass, 0, &depth, 1);
     rhi.draw(pass, 3, 1, 0, 0);
+}
+
+void BreathVolume::draw_comet(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
+                              const BreathVolumeSettings& settings, const Comet& comet, float time_seconds) {
+    if (!pass || !available_ || !device.depth()) return;
+    const float speed = core::length(comet.velocity);
+    const core::Vec3 back = speed > 1e-3f ? comet.velocity * (-1.0f / speed) : core::Vec3{0.0f, 0.0f, 1.0f};
+    // Six nodes: the head a little ahead of the round's centre, then the
+    // tail thinning over eight radii. Age runs head to tail, which is what
+    // makes the head pale and whole and the tail orange and torn.
+    constexpr int kNodes = 6;
+    Uniforms u = {};
+    for (int i = 0; i < kNodes; ++i) {
+        const float along = float(i) / float(kNodes - 1);
+        const core::Vec3 p = comet.position + back * (comet.radius * (8.0f * along - 0.3f));
+        u.nodes[i] = core::Vec4{p.x, p.y, p.z, comet.radius * core::lerpf(1.0f, 0.3f, along)};
+        u.info[i] = core::Vec4{along * 0.97f, i + 1 < kNodes ? 1.0f : 0.0f, 0.0f, 0.0f};
+    }
+    u.params = core::Vec4{camera.z_near, time_seconds, float(kNodes), float(std::clamp(settings.steps / 2, 8, 48))};
+    u.shape = core::Vec4{settings.extinction, 1.0f / std::max(settings.noise_size, 0.1f), settings.erosion * 0.8f,
+                         std::max(speed * 0.2f, 12.0f)};
+    u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke) * 0.5f, comet.brightness};
+    u.hot = core::Vec4{comet.hot.x, comet.hot.y, comet.hot.z, 0.0f};
+    u.cool = core::Vec4{comet.cool.x, comet.cool.y, comet.cool.z, 0.0f};
+    u.axis = core::Vec4{back.x, back.y, back.z, 0.0f};
+    submit(device, pass, scene, u, kNodes, settings);
 }
 
 }  // namespace gfx

@@ -282,6 +282,8 @@ Options parse_options(int argc, char** argv) {
             options.attack = true;
         } else if (arg == "--breathe") {
             options.breathe = true;
+        } else if (arg == "--spit") {
+            options.spit = true;
         } else if (arg == "--bots" && i + 1 < argc) {
             options.combat = true;
             options.bots = SDL_atoi(argv[++i]);
@@ -8052,6 +8054,11 @@ game::CombatInput App::read_combat_input() const {
         in.breath = true;
         return in;
     }
+    // --spit: fireballs alone, one every cooldown, for a capture of a round.
+    if (options_.spit) {
+        in.fire = true;
+        return in;
+    }
 
     if (demo_active()) {
         in.cycle_target = demo_decision_.cycle_target;
@@ -8218,6 +8225,9 @@ void App::draw_combat(rhi::Pass* pass) {
     for (const game::Projectile& projectile : combat_.projectiles()) {
         if (ablated("projectiles")) break;
         if (!projectile.alive) continue;
+        // Drawn as a comet in the pause before this pass resumed.
+        const int round_index = int(&projectile - combat_.projectiles().data());
+        if (std::find(comet_rounds_.begin(), comet_rounds_.end(), round_index) != comet_rounds_.end()) continue;
         const bool mine = projectile.team == game::Team::Player;
         core::Vec3 colour = mine ? core::Vec3{1.0f, 0.45f, 0.10f} : core::Vec3{0.45f, 0.80f, 1.0f};
         if (projectile.element != game::Element::None) colour = game::element_colour(projectile.element);
@@ -9811,8 +9821,25 @@ void App::render() {
     // The breath's volume (gfx/breath_volume.h) reads the same depth and is
     // blended over the clouds in the same pause.
     const bool cloud_pass = world_.scene().clouds2.x > 0.5f;
-    const bool breath_pass = breath_volume_.active() && breath_volume_settings_.enabled && !ablated("breath_volume");
-    if (cloud_pass || breath_pass) {
+    const bool volume_on = breath_volume_.available() && breath_volume_settings_.enabled && !ablated("breath_volume");
+    const bool breath_pass = volume_on && breath_volume_.active();
+    // The rounds in the air are comets through the same march
+    // (BreathVolume::draw_comet): the eight nearest the camera, each a
+    // fullscreen draw that leaves all but its own few pixels at once. The
+    // rest, and every round on a retro tier, are the spheres of draw_combat.
+    comet_rounds_.clear();
+    if (volume_on && !ablated("projectiles")) {
+        const std::vector<game::Projectile>& rounds = combat_.projectiles();
+        for (size_t i = 0; i < rounds.size(); ++i) {
+            if (rounds[i].alive) comet_rounds_.push_back(int(i));
+        }
+        const core::Vec3 eye = camera.position;
+        std::sort(comet_rounds_.begin(), comet_rounds_.end(), [&](int a, int b) {
+            return core::distance(rounds[size_t(a)].position, eye) < core::distance(rounds[size_t(b)].position, eye);
+        });
+        if (comet_rounds_.size() > 8) comet_rounds_.resize(8);
+    }
+    if (cloud_pass || breath_pass || !comet_rounds_.empty()) {
         CORE_PROFILE("clouds");
         device_.end_pass(pass);
         if (cloud_pass) clouds_.render(device_, camera, aspect, world_.scene(), atmosphere_, cloud_settings_);
@@ -9820,6 +9847,28 @@ void App::render() {
         if (cloud_pass) clouds_.apply(device_, over, camera, world_.scene());
         if (breath_pass) {
             breath_volume_.draw(device_, over, camera, world_.scene(), breath_volume_settings_, time_seconds_);
+        }
+        for (const int index : comet_rounds_) {
+            const game::Projectile& round = combat_.projectiles()[size_t(index)];
+            const bool mine = round.team == game::Team::Player;
+            gfx::BreathVolume::Comet comet;
+            comet.position = round.position;
+            comet.velocity = round.velocity;
+            // Incoming fire is drawn larger with distance, as its sphere was
+            // (draw_combat says why).
+            const float taper = core::smoothstep(5.0f, 250.0f, core::distance(camera.position, round.position));
+            comet.radius = round.radius * 0.8f * (mine ? 1.0f : core::lerpf(0.8f, 2.2f, taper));
+            if (round.element != game::Element::None) {
+                const core::Vec3 colour = game::element_colour(round.element);
+                comet.hot = core::lerp(colour, core::Vec3::one(), 0.25f) * 2.2f;
+                comet.cool = colour * 0.6f;
+            } else if (!mine) {
+                // The shared hostile blue (emit_flame).
+                comet.hot = core::Vec3{1.3f, 1.7f, 2.2f};
+                comet.cool = core::Vec3{0.2f, 0.4f, 1.0f};
+            }
+            breath_volume_.draw_comet(device_, over, camera, world_.scene(), breath_volume_settings_, comet,
+                                      time_seconds_);
         }
         device_.end_pass(over);
         pass = device_.resume_main_pass();
