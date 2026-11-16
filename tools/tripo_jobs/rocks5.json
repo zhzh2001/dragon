@@ -1,0 +1,58 @@
+[
+ {
+  "name": "tripo-outcrop-11",
+  "prompt": "A low rocky outcrop of grey granite emerging from a grassy slope, about 12 metres long and 3 metres high, rounded slabs with cracks, flat underside. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-outcrop-12",
+  "prompt": "A cluster of jagged grey limestone outcrop blocks about 8 metres across, sharp edges, karst pits and grooves, flat underside. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-slab-13",
+  "prompt": "A large tilted flat slab of grey slate rock about 6 metres long leaning on a smaller block, layered edge, lichen patches, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-slab-14",
+  "prompt": "A broken stack of flat sandstone slabs about 5 metres wide, layered and offset like steps, weathered edges, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-tor-15",
+  "prompt": "A granite tor of stacked rounded blocks about 8 metres high, deep horizontal and vertical joints, pale lichen, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-tor-16",
+  "prompt": "A tall narrow rock pinnacle of fractured grey gneiss about 12 metres high, leaning slightly, broken top, rubble around the foot, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-boulder-17",
+  "prompt": "A huge angular boulder of grey granite about 6 metres across, split into two halves by a wide crack, sharp fresh fracture faces, flat underside. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-boulder-18",
+  "prompt": "A moss-covered rounded boulder about 3 metres across, thick green moss on top and grey rock on the sides, flat underside. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-boulder-19",
+  "prompt": "A pair of medium angular grey boulders about 2 metres each leaning together, lichen spots, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-boulder-20",
+  "prompt": "A flat low boulder of dark basalt about 4 metres long and 1 metre high, rough vesicular surface, flat underside. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-riverbank-21",
+  "prompt": "A riverbank strip of rounded wet river stones and pebbles about 10 metres long and 4 metres wide, mixed grey and brown cobbles, a few larger rounded rocks, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-riverbank-22",
+  "prompt": "A group of five smooth water-polished grey boulders about 1 to 2 metres across arranged in a loose line, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-talus-23",
+  "prompt": "A talus pile of large angular grey blocks about 15 metres wide, blocks 1 to 3 metres across jumbled together, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-ledge-24",
+  "prompt": "A rocky ledge step of grey granite about 10 metres wide and 4 metres high, a flat top and a broken vertical front with cracks, flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ }
+]

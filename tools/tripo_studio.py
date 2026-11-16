@@ -15,7 +15,8 @@ Each model is written to OUT_DIR/NAME.glb (default assets/tripo-raw/,
 git-ignored). A batch file is a JSON list of
 {"name": ..., "prompt": ...}, {"name": ..., "image": ...} or
 {"name": ..., "views": DIR} objects. TRIPO_SESSION names the chrome-use
-session, so two batches can run in two tabs.
+session, so two batches can run in two tabs. TRIPO_BROWSER pins the
+session to one Chrome profile when several are connected.
 """
 
 import json
@@ -27,6 +28,8 @@ import time
 from pathlib import Path
 
 SESSION = os.environ.get("TRIPO_SESSION", "tripo")
+# The Chrome profile that holds the Tripo login (`chrome-use browsers` lists them).
+BROWSER = os.environ.get("TRIPO_BROWSER")
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = Path(os.environ.get("TRIPO_OUT", ROOT / "assets" / "tripo-raw"))
 GLTFPACK = os.environ.get("GLTFPACK", str(Path.home() / ".local/bin/gltfpack"))
@@ -34,7 +37,8 @@ GENERATE_URL = "https://studio.tripo3d.ai/workspace/generate"
 
 
 def cu(*args, check=True, timeout=120):
-    r = subprocess.run(["chrome-use", "--session", SESSION, *args],
+    pin = ["--browser", BROWSER] if BROWSER else []
+    r = subprocess.run(["chrome-use", "--session", SESSION, *pin, *args],
                        capture_output=True, text=True, timeout=timeout,
                        stdin=subprocess.DEVNULL)
     out = r.stdout + r.stderr

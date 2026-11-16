@@ -1,0 +1,50 @@
+[
+ {
+  "name": "tripo-wall2-01",
+  "image": "assets/tripo-raw/plates/wall-plate-a.png"
+ },
+ {
+  "name": "tripo-wall2-02",
+  "image": "assets/tripo-raw/plates/wall-plate-b.png"
+ },
+ {
+  "name": "tripo-wall2-03",
+  "image": "assets/tripo-raw/plates/wall-plate-c.png"
+ },
+ {
+  "name": "tripo-wall2-04",
+  "prompt": "A section of layered grey limestone cliff about 30 metres wide and 25 metres high, horizontal beds of different thickness with recessed bands and blocky overhangs, vertical joints splitting it into columns. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-05",
+  "prompt": "A massive grey granite crag about 25 metres wide and 30 metres high, sheer fractured faces with vertical cracks, exfoliating slabs and dark water streaks, a rounded broken summit. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-06",
+  "prompt": "A rock buttress of tilted sedimentary strata about 30 metres long, the layers dipping at 30 degrees, a steep scarp face on one side and a rougher stepped face on the other. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-07",
+  "prompt": "A broad weathered cliff block of brown-grey sandstone about 35 metres wide and 20 metres high, deep horizontal ledges, a cave-like hollow at the base and fallen blocks against it. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-08",
+  "prompt": "A tall rock pillar cluster of grey basalt columns about 25 metres high, several fused hexagonal columns of different heights, cracked and weathered, a rubble apron around the foot. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-09",
+  "prompt": "A long low rock wall of fractured grey schist about 40 metres long and 12 metres high, sharp foliated edges, ragged irregular crest, scree around its foot. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-10",
+  "prompt": "A cliff corner of grey granite about 25 metres high, two rough faces meeting at a weathered vertical arete, blocky ledges, a jagged uneven summit. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-11",
+  "prompt": "A mountain rock spur about 30 metres long rising from 5 metres at one end to 20 metres at the other, fractured grey gneiss with banded layers, a broken crest of rock teeth. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ },
+ {
+  "name": "tripo-wall2-12",
+  "prompt": "A weathered granite dome outcrop about 30 metres across and 15 metres high, onion-skin exfoliation sheets peeling off its sides, deep cracks, a few large loose blocks. Shaped as a freestanding rock formation with natural broken rock on every side including the back, an irregular jagged top, sitting on a flat base. Realistic photogrammetry rock scan, no vegetation, no snow."
+ }
+]

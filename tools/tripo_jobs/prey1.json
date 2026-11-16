@@ -1,0 +1,34 @@
+[
+ {
+  "name": "tripo-goat-01",
+  "prompt": "A mountain goat, white shaggy coat, short black horns, a beard, about 1 metre at the shoulder. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-chamois-01",
+  "prompt": "A chamois, brown summer coat with a black and white face, short hooked horns, slender legs. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-boar-01",
+  "prompt": "A wild boar, coarse dark bristly coat, small tusks, a heavy front and a long snout. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-bighorn-01",
+  "prompt": "A bighorn sheep ram, brown coat with a white rump, huge curled horns. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-elk-01",
+  "prompt": "A bull elk (wapiti), tan body and dark brown neck mane, large branching antlers. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-wolf-01",
+  "prompt": "A grey wolf, thick grey and tan coat, bushy tail hanging down. Realistic, highly detailed, standing in a neutral pose with all four legs straight and visible, mouth closed, natural fur colours."
+ },
+ {
+  "name": "tripo-eagle-01",
+  "prompt": "A golden eagle in flight with its wings spread flat and straight out to the sides, dark brown plumage with golden nape, tail fanned, legs tucked. Realistic, highly detailed, symmetric top-down pose."
+ },
+ {
+  "name": "tripo-raven-01",
+  "prompt": "A common raven in flight with its wings spread flat and straight out to the sides, glossy black plumage, wedge tail fanned. Realistic, highly detailed, symmetric pose."
+ }
+]
