@@ -1233,18 +1233,37 @@ A generation took 104 to 291 s, 182 s on average, and 55 credits. None of
 
 #### What came out
 
-| Group | Models | Verdict |
-|---|---|---|
-| Cliff walls (text) | 10 | Good faces, but every one has a flaw for a wall set into a slope: a flat cap, a tiled or concrete back, or a mirrored face. The prompt words "closed back" produced the tiled back. Codex dropped the first three; none is in the game yet |
-| Tor, ridge crest, scree, six boulders, an outcrop, a gravel bar, river rocks | 12 | Six are in the kit and in the valley (`tools/rockkit.md`, "Tripo pieces"; `docs/showcase/WORLD.md`) |
-| Deadwood: logs, stump, snag, root plate | 5 | Good; not used yet |
-| Trees: a spruce and a beech | 2 | Not usable. The spruce reads as a cartoon, and both crowns are solid geometry where the forest needs alpha-tested cards |
-| Run props: three watchtowers, two spires, three hoards (one a trove), two ward stones | 10 | Being converted to the prop contract (`tools/props.md`) |
-| Ruin, cairn, bones, nest | 4 | Good; not used yet |
-| Prey: an ibex and a red deer | 2 | Good meshes; they would need a rig and clips |
-| The roster's species, from their view plates | 19 | Two runs each for Rimefang, Frostvein, Blightmaw, Ironroot, Stormsail, Tidewrack, Sunspear and Rimeplume, one each for Ashcoil, Cragjaw and Mossback. All follow their plates. Every one has its wings raised or pitched, so from above they show mostly their edge, as in the test above |
-| The hero | 6 | Three multi-view runs (the wing angle differs, the wings are raised in all), the head from the four head plates (crisp plates and frill), and two text prompts that came out standing like a biped |
-| The hero re-textured | 2 | See below |
+| Group | Models | Credits | Verdict |
+|---|---|---|---|
+| Cliff walls (text) | 10 | 550 | Good faces, but every one has a flaw for a wall set into a slope: a flat cap, a tiled or concrete back, or a mirrored face. The prompt words "closed back" produced the tiled back. Codex dropped the first three; none is in the game yet |
+| Tor, ridge crest, scree, six boulders, an outcrop, a gravel bar, river rocks | 12 | 660 | Six are in the kit and in the valley (`tools/rockkit.md`, "Tripo pieces"; `docs/showcase/WORLD.md`) |
+| Deadwood: logs, stump, snag, root plate | 5 | 275 | Good; not used yet |
+| Trees: a spruce and a beech | 2 | 110 | Not usable. The spruce reads as a cartoon, and both crowns are solid geometry where the forest needs alpha-tested cards |
+| Run props: three watchtowers, two spires, three hoards (one a trove), two ward stones | 10 | 550 | The watchtower and the spire replaced the run's towers (`tools/props.md`, `artifacts/props/v3/`). Codex rejected its hoard and ward-stone conversions after two attempts, so the old props stay |
+| Ruin, cairn, bones, nest | 4 | 220 | Good; not used yet |
+| Prey: an ibex and a red deer | 2 | 110 | Good meshes; they would need a rig and clips |
+| The roster's species, from their view plates | 19 | 1,045 | Two runs each for Rimefang, Frostvein, Blightmaw, Ironroot, Stormsail, Tidewrack, Sunspear and Rimeplume, one each for Ashcoil, Cragjaw and Mossback. All follow their plates. Every one has its wings raised or pitched, so from above they show mostly their edge, as in the test above |
+| The hero | 6 | 330 | Three multi-view runs (the wing angle differs, the wings are raised in all), the head from the four head plates (crisp plates and frill), and two text prompts that came out standing like a biped |
+| The hero re-textured | 2 | 40 | See below |
+
+#### Credits
+
+A generation with H3.1 "Best Quality" costs 55 credits and a 4K
+re-texture costs 20. The night made 70 generations (3,850 credits) and two
+re-textures (40), 3,890 in all, which the table splits by group. The
+balance went from 7,615 to 3,725. The Studio's header reads the balance,
+and `assets/tripo-raw/log.jsonl` keeps it before and after each job. The
+two tabs ran side by side, so a job's before-and-after difference can
+include the other tab's job; the totals come from the counts.
+
+The account and its credits expire at the end of 2026-11-16. Credits do
+not carry over, so the 3,725 left are lost unless they are spent that day.
+
+Where the credits went, by result: the rock and run-prop groups (1,210
+credits) put eight models in the game, six rocks and two towers. The
+species (1,045), the walls (550) and the hero (370 with the re-textures)
+put nothing in the game. The deadwood, ruin and prey groups (605) bought
+good meshes that wait for a use.
 
 #### Re-texturing the hero on its own UVs
 
