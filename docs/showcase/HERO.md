@@ -670,3 +670,29 @@ bend under load" in the studio's wingbeat section and the Dragon panel.
 The load is read from the wingtip's motion and the bend moves the
 wingtip. The loop is negative: a tip that bends up reads as a rising tip,
 which lowers the load. It was stable in every run.
+
+## The rim's grain (2026-11-15, 22:12)
+
+Rounds 4 and 5 named single bright pixels along the wing's edges and
+over the mane. They were the hide's rim (`skinned.hlsl`, S3): the rim is
+the square of the grazing angle, and where the mapped normal turns
+faster than a pixel, on the sub-pixel scales of the neck and on every
+silhouette, one pixel in ten caught it. Counted as pixels more than 45
+levels over the median of their 5 by 5 neighbours, on the dragon in the
+upstroke frame: 606 with the rim, 71 without it.
+
+Three changes, all on the modern tier:
+
+- Where the grazing angle jumps from one pixel to the next (its
+  `fwidth` times 3), the rim takes a fixed mean, 0.5, in place of its
+  own value. The dots together were the mane's glow against the sun;
+  zeroing them took 8 levels off the mane. With the mean it keeps its
+  brightness (63.5 to 61.3) and loses the grain.
+- The specular lobe widens by the normal's variance across the pixel
+  (Kaplanyan and others, 2016). On its own this took 5% of the dots.
+- The light through a membrane is 0.12 of its full value on a spar,
+  where it was 0.5: a finger is bone.
+
+The count went from 635 to 224 in the upstroke frame and from 795 to 277
+in the glide. `artifacts/rim-grain/before-after.jpg` has the head and
+wing root at 2.5 times. The Metal goldens were captured again.

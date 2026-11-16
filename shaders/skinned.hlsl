@@ -163,6 +163,9 @@ TEXTURE2D(base_colour, 1);
 TEXTURE2D(normal_map, 2);
 TEXTURE2D(orm_map, 3);
 
+static const float RIM_STEADY = 3.0;
+static const float RIM_MEAN = 0.5;
+
 float4 fs_main(VertexOut input) : SV_Target {
     float3 normal = normalize(input.world_normal);
     float3 to_sun = normalize(scene.sun.xyz);
@@ -236,7 +239,10 @@ float4 fs_main(VertexOut input) : SV_Target {
         transmitted = membrane * behind * through * (0.35 + 0.65 * forward * forward) * scene.local_light_color.w;
         // The sheet is thinnest in the middle of a panel and thick along a
         // finger: the light through it follows.
-        transmitted *= 0.5 + 0.8 * smoothstep(0.0, 0.55, input.panel);
+        // On a spar almost none: a finger is bone, and lit through like
+        // the sheet, the pixels along its edge that face from the sun were a
+        // row of bright dots.
+        transmitted *= 0.12 + 1.18 * smoothstep(0.0, 0.5, input.panel);
     }
 #endif
 
@@ -261,6 +267,21 @@ float4 fs_main(VertexOut input) : SV_Target {
     // roughness map is really being asked to convey.
     float3 half_vector = normalize(to_sun + to_camera);
     float alpha = roughness * roughness;
+    float unsteady = 0.0;  // how far the normal turns across this pixel, 0 to 1
+#ifdef ATMOSPHERE
+    // Where the normal turns faster than a pixel can show -- the edge of a
+    // wing bone, a mane spike, a scale at a distance -- one pixel caught the
+    // lobe's peak and its neighbours did not: single white pixels along
+    // every edge, crawling in motion. The lobe widens by the normal's
+    // variance across the pixel (Kaplanyan and others, "Filtering
+    // Distributions of Normals for Shading Antialiasing", 2016), so the
+    // same energy is spread over the pixels the highlight really covers.
+    float3 turn_x = ddx(normal);
+    float3 turn_y = ddy(normal);
+    float turn = 0.5 * (dot(turn_x, turn_x) + dot(turn_y, turn_y));
+    alpha = sqrt(saturate(alpha * alpha + min(turn, 0.18)));
+    unsteady = saturate(turn * 4.0);
+#endif
     float n_dot_h = saturate(dot(normal, half_vector));
     float denominator = n_dot_h * n_dot_h * (alpha * alpha - 1.0) + 1.0;
     float distribution = (alpha * alpha) / max(3.14159265 * denominator * denominator, 1e-4);
@@ -306,7 +327,17 @@ float4 fs_main(VertexOut input) : SV_Target {
     // backlit animal has. Without it a dragon seen against the sun was a
     // black cut-out. Not on the membrane, which transmits instead.
     if (scene.clouds2.y > 0.0) {
-        float graze = 1.0 - saturate(dot(normal, to_camera));
+        // Off the mapped normal where it holds still, and off the face where
+        // it does not: at a distance each scale of the neck is under a pixel,
+        // and the mapped normal's grazing angle lit one pixel in ten, a
+        // scatter of orange dots over the mane.
+        float graze = 1.0 - saturate(dot(normalize(lerp(normal, face, unsteady)), to_camera));
+        // And its mean where the grazing angle itself jumps from one pixel
+        // to the next: a rim one pixel wide is a row of dots, lit or not by
+        // where the pixel's centre fell. Those dots together were the
+        // mane's glow against the sun, so the pixel takes what they
+        // averaged to and the glow stays without the grain.
+        graze = lerp(graze, RIM_MEAN, saturate(fwidth(graze) * RIM_STEADY));
         float against = saturate(dot(-to_camera, to_sun) * 0.5 + 0.5);
         float reach = saturate(dot(normal, to_sun) + 0.75);  // the edge is side-on to the sun
         // The body's own shadow only dims it: the map cannot tell the lit

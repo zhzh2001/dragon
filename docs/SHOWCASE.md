@@ -281,6 +281,21 @@ ring cuts frames 3 and 5), how bright the wind lines are, and the wing
 poses the critic names (the far wing's root in the glide, the fold on the
 ground, the near wing over the jaw while breathing).
 
+After the blind critic's rounds 4 to 6 (2026-11-15, evening), what is
+not yet done, in the order six rounds agree on:
+
+- The wings. The membrane bows and the fingers bend, and the critic
+  still reads planks on rods outside the upstroke. The next step is
+  geometry: slack modelled into the membrane, thinner fingers, a fold
+  that creases on the ground.
+- The ground and the cliffs: the meadow has drifts and is still a sheet;
+  no stones, no relief in the rock.
+- The flame: no hot point at the jaws, no smoke that breaks from the
+  edge. Its length is the breath's range, nine dragons, and is the
+  playtester's call.
+- Clouds read as cotton balls up close; the river's edge is
+  stair-stepped from above; the water's ripples tile.
+
 ## Where each section is
 
 Code comments and other documents cite sections by name ("SHOWCASE.md,
@@ -307,6 +322,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | S3, as built: the rim, the clear coat and the cornea (2026-11-15) | `showcase/HERO.md` |
 | A membrane that billows (2026-11-15, 21:14) | `showcase/HERO.md` |
 | Fingers that bend (2026-11-15, 21:49) | `showcase/HERO.md` |
+| The rim's grain (2026-11-15, 22:12) | `showcase/HERO.md` |
 | The feedback tool (2026-11-14) | `showcase/PLAYTEST.md` |
 | The first playtest of the hero, and the profile pass (2026-11-14) | `showcase/PLAYTEST.md` |
 | The first reports from the feedback tool (2026-11-14, 23:08) | `showcase/PLAYTEST.md` |
@@ -368,6 +384,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | The blind critic, round 3: After round 3, tried and dropped: a softer flame (16:38) | `showcase/CRITIC.md` |
 | The blind critic, round 4 (2026-11-15, 20:25) | `showcase/CRITIC.md` |
 | The blind critic, round 5 (2026-11-15, 21:30) | `showcase/CRITIC.md` |
+| The blind critic, round 6 (2026-11-15, 22:07) | `showcase/CRITIC.md` |
 
 ## Sources
 

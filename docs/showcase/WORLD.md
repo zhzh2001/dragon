@@ -189,10 +189,10 @@ not run with the grid.
   bluer (0.60, 0.80, 0.56 of its colour), three quarters of the way.
 - Above 0.56 to 0.72: drifts gone to seed, 60% toward the dry grass and
   20% brighter.
-- Worn tracks: the ridge of a third noise at 118 m, a line about a metre
-  wide, half the sand's colour. A ridge is a contour and a contour
-  closes, so whole tracks were rings. The drift field cuts them into
-  lengths. After the cut few remain; they are a detail, not the change.
+- Worn tracks, tried and removed the same evening: the ridge of a third
+  noise, a line about a metre wide. Whole, they were rings; cut into
+  lengths by the drift field, the blind critic's sixth round still read
+  them as "paths or stains with no purpose".
 
 The grass on the walls takes the same field, which breaks their sheets
 of one green too. `artifacts/meadow-drifts/before-after.jpg` has the

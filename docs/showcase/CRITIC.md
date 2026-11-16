@@ -816,3 +816,27 @@ What it puts next:
 3. The flame's edge: no dark, broken, smoky fringe, and the pale core
    sits mid-plume and not at the mouth. Its length is nine dragons.
 4. The body's shadow side is a dark brown mass in rear views.
+
+## The blind critic, round 6 (2026-11-15, 22:07)
+
+`artifacts/showcase-critic/round6/` has fourteen frames and the report.
+The mean is 3.8, against 4.25 an hour earlier. This agent scored every
+repeated frame at or below round 5's score, two unchanged frames 0.8
+lower. The numbers of two rounds by two agents do not compare to better
+than about half a point, so they show neither a gain nor a loss from the
+changes between them.
+
+What its wording confirms: the membrane's billow where the fingers span
+it, the flame on the mouth with no hatch, the fire's light on the chest
+and its reflection in the river ("the best fire moment"), the fireball's
+head and tail.
+
+What it does not see: the fingers' bend ("straight rods everywhere"), the
+flame's skin of smoke ("no dark broken edge and no soot"), a hot point
+at the jaws, and the meadow's drifts as patches ("fine noise"). It read
+the tracks as "stains with no purpose"; they are removed.
+
+Six rounds now agree on the order: wings, ground and cliffs, flame,
+trees, water. Shader and rig tuning has moved single frames and not the
+order. The next step for the wings is geometry: a membrane with slack
+modelled in, and thinner fingers.
