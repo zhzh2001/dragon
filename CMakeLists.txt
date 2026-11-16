@@ -91,6 +91,7 @@ target_sources(dragon PRIVATE
   src/gfx/taa.cpp
   src/gfx/ssao.cpp
   src/gfx/clouds.cpp
+  src/gfx/breath_volume.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp

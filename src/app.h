@@ -12,6 +12,7 @@
 #include "gfx/render_tier.h"
 #include "gfx/atmosphere.h"
 #include "gfx/taa.h"
+#include "gfx/breath_volume.h"
 #include "gfx/clouds.h"
 #include "gfx/dynamic_resolution.h"
 #include "gfx/ssao.h"
@@ -77,6 +78,7 @@ struct Options {
     std::string flight; // --flight key=value,... over the player's flight tuning
     std::string chase;  // --chase key=value,... over the chase camera's tuning
     std::string clouds;  // --clouds key=value,... (gfx/clouds.h)
+    std::string breath;  // --breath key=value,... (gfx/breath_volume.h)
     std::string terrain;  // --terrain key=value,... (game/terrain.h)
     // --aa off|fxaa|taa (--no-taa is off): the modern tier's anti-aliasing,
     // -1 for the default (FXAA).
@@ -316,6 +318,10 @@ private:
     bool dynamic_resolution_saved_ = false;
     gfx::Clouds clouds_;
     gfx::CloudSettings cloud_settings_;
+    // The player's breath as a marched volume (gfx/breath_volume.h); the
+    // rivals' breaths, and every breath on a retro tier, are puffs.
+    gfx::BreathVolume breath_volume_;
+    gfx::BreathVolumeSettings breath_volume_settings_;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),

@@ -195,6 +195,8 @@ Options parse_options(int argc, char** argv) {
             options.chase = argv[++i];  // key=value,... (game/chase_camera.h)
         } else if (arg == "--clouds" && i + 1 < argc) {
             options.clouds = argv[++i];  // key=value,... (gfx/clouds.h)
+        } else if (arg == "--breath" && i + 1 < argc) {
+            options.breath = argv[++i];  // key=value,... (gfx/breath_volume.h)
         } else if (arg == "--terrain" && i + 1 < argc) {
             options.terrain = argv[++i];  // key=value,... (game/terrain.h)
         } else if (arg == "--sun" && i + 1 < argc) {
@@ -608,6 +610,8 @@ bool App::init(const Options& options) {
                                     {"shade_lift", &shade_lift_stops_}});
     }
     if (!options.clouds.empty()) cloud_settings_.parse(options.clouds);
+    breath_volume_.init(&device_, &pipelines_);
+    if (!options.breath.empty()) breath_volume_settings_.parse(options.breath);
     if (!options.terrain.empty()) terrain_settings_.parse(options.terrain);
     if (options.sun_elevation > -90.0f) lighting_.sun_elevation_deg = options.sun_elevation;
     if (options.sun_azimuth >= 0.0f) lighting_.sun_azimuth_deg = options.sun_azimuth;
@@ -881,6 +885,7 @@ void App::select_course(int index) {
 }
 
 void App::respawn_dragon() {
+    breath_volume_.clear();  // a jet from before the reset would hang where the dragon was
     // Airborne in the valley corridor, already at a comfortable cruise, facing
     // along the valley. Starting from a stall on the ground would make every
     // test begin with a recovery.
@@ -1997,6 +2002,7 @@ void App::shutdown() {
         taa_.shutdown();
         ssao_.shutdown();
         clouds_.shutdown();
+        breath_volume_.shutdown();
         shadow_.shutdown(device_);
         particles_.shutdown();
         debug_.shutdown();
@@ -2715,9 +2721,30 @@ void App::update(float dt) {
             audio_.play(audio::Clip::Explosion, 1.2f / (1.0f + d * d / (170.0f * 170.0f)));
         }
         if (combat_.breathing()) {
-            emit_flame(combat_.breath_origin(), combat_.breath_direction(),
-                       combat_.tuning.breath_range * combat_.player_breath.range, false, dt,
-                       &player_breath_);
+            const float range = combat_.tuning.breath_range * combat_.player_breath.range;
+            // The player's flame is a marched volume where the tier has one
+            // (gfx/breath_volume.h), soot and all; the puffs are for the rest.
+            const bool volume = breath_volume_.available() && breath_volume_settings_.enabled &&
+                                !ablated("breath_volume");
+            if (volume) {
+                gfx::BreathJet jet;
+                jet.hot = player_breath_.hot;
+                jet.cool = player_breath_.cool;
+                jet.buoyancy = player_breath_.buoyancy;
+                jet.drag = player_breath_.drag;
+                jet.life = player_breath_.life;
+                jet.size_end = player_breath_.size_end;
+                jet.spread = player_breath_.spread;
+                jet.brightness = player_breath_.brightness;
+                jet.cover = player_breath_.cover;
+                jet.range = range;
+                // The origin is the head joint; the jaws are a little on.
+                breath_volume_.feed(combat_.breath_origin() +
+                                        combat_.breath_direction() * breath_volume_settings_.mouth_forward,
+                                    combat_.breath_direction(), flight_.state().velocity, jet, dt);
+            } else {
+                emit_flame(combat_.breath_origin(), combat_.breath_direction(), range, false, dt, &player_breath_);
+            }
         }
         for (const game::BreathCone& flame : combat_.hostile_breaths()) {
             // A bot tagged its cone with its model index; an untagged cone
@@ -3124,6 +3151,7 @@ void App::update(float dt) {
     {
         CORE_PROFILE("update: particles");
         particles_.update(dt);
+        breath_volume_.update(dt);
     }
 
     // ---- ears ----
@@ -4486,6 +4514,21 @@ void App::build_playtest_ui() {
     }
     if (ImGui::CollapsingHeader("Legs in flight", ImGuiTreeNodeFlags_DefaultOpen)) {
         flight_leg_controls();
+    }
+    if (breath_volume_.available() && ImGui::CollapsingHeader("Breath", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // The player's flame as a marched volume (gfx/breath_volume.h). Off,
+        // it is the puffs the rivals and the retro tiers have.
+        gfx::BreathVolumeSettings& b = breath_volume_settings_;
+        ImGui::Checkbox("breath as a volume", &b.enabled);
+        ImGui::SliderFloat("width at the tip", &b.end_radius, 0.3f, 2.0f, "x%.2f");
+        ImGui::SliderFloat("width at the jaws", &b.mouth_radius, 0.1f, 1.5f, "%.2f m");
+        ImGui::SliderFloat("ragged edge", &b.erosion, 0.0f, 1.5f);
+        ImGui::SliderFloat("eddy size", &b.noise_size, 0.4f, 3.0f, "%.2f radii");
+        ImGui::SliderFloat("flow along the jet", &b.flow, 0.0f, 1.5f);
+        ImGui::SliderFloat("opacity", &b.extinction, 0.1f, 3.0f, "%.2f /m");
+        ImGui::SliderFloat("pale core", &b.core, 1.0f, 8.0f);
+        ImGui::SliderFloat("body brightness", &b.gain, 0.5f, 4.0f);
+        ImGui::SliderFloat("soot at the tip", &b.smoke, 0.0f, 1.0f);
     }
     if (ImGui::CollapsingHeader("Tail, limbs and strikes", ImGuiTreeNodeFlags_DefaultOpen)) {
         // The short list: what is open for the playtest. Every other life
@@ -9765,12 +9808,19 @@ void App::render() {
     // The volumetric clouds (gfx/clouds.h) read the depth of everything
     // opaque, so the main pass pauses for them and resumes for what is
     // blended over them: the breath, the particles.
-    if (world_.scene().clouds2.x > 0.5f) {
+    // The breath's volume (gfx/breath_volume.h) reads the same depth and is
+    // blended over the clouds in the same pause.
+    const bool cloud_pass = world_.scene().clouds2.x > 0.5f;
+    const bool breath_pass = breath_volume_.active() && breath_volume_settings_.enabled && !ablated("breath_volume");
+    if (cloud_pass || breath_pass) {
         CORE_PROFILE("clouds");
         device_.end_pass(pass);
-        clouds_.render(device_, camera, aspect, world_.scene(), atmosphere_, cloud_settings_);
+        if (cloud_pass) clouds_.render(device_, camera, aspect, world_.scene(), atmosphere_, cloud_settings_);
         rhi::Pass* over = device_.begin_color_pass(device_.scene_target(), false);
-        clouds_.apply(device_, over, camera, world_.scene());
+        if (cloud_pass) clouds_.apply(device_, over, camera, world_.scene());
+        if (breath_pass) {
+            breath_volume_.draw(device_, over, camera, world_.scene(), breath_volume_settings_, time_seconds_);
+        }
         device_.end_pass(over);
         pass = device_.resume_main_pass();
     }
