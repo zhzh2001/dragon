@@ -306,7 +306,7 @@ radii, so a crag with a radius of 70 m drew its 24,000 triangles out to
 crags against 17.0, 17.3 and 17.0 ms without. No difference shows above
 the spread. The first three pairs were not logged. The second three are
 in `~/src/gpu-hist`,
-`research/dragon-m5/runs/20261120-2308-mac-m5-dragon-wall-crags-cost`.
+`research/dragon-m5/runs/20261120-2309-mac-m5-dragon-wall-crags-cost`.
 
 The pairs, without the crags on the left, cropped and not scaled:
 `artifacts/showcase-walls/crag-rows-before-after.jpg` (the far wall and
