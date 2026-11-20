@@ -77,6 +77,11 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Tripo ridge family (2026-11-16): `tripo-ridge-01`; `ridge_a` and inspection renders | Tripo generated the source mesh with paid credits. Codex used the same Blender rock kit pipeline. |
 | Tripo scree family (2026-11-16): `tripo-scree-01`; `scree_a` and inspection renders | Tripo generated the source mesh with paid credits. Codex used the same Blender rock kit pipeline. |
 | Tripo boulder family (2026-11-16): `tripo-boulder-01`, `-02`, `-03`; `boulder_d`, `boulder_e`, `boulder_f` and inspection renders | Tripo generated the source meshes with paid credits. Codex used the same Blender rock kit pipeline. |
+| Tripo landmark `tower_ruin` from `tripo-ruin-tower-02` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `arch_ruin` from `tripo-arch-04` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `stone_circle` from `tripo-standing-stones-05` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `monolith` from `tripo-monolith-06` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `cairn` from `tripo-cairn-15` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
 | Contact sheets and hero-hide comparisons of the overnight Tripo run and the second spend the next day (`artifacts/tripo-overnight/`), 72 and 67 meshes, most of them **not** used | **Tripo** H3.1 in its Studio, with paid credits: text, image and multi-view generation, and the Texture tool on the hero's own mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 

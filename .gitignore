@@ -89,3 +89,4 @@ build-hero-rig-cache/
 # Raw Tripo Studio exports (tools/tripo_studio.py): 70 MB each, kept on this
 # machine. The processed pieces are what the game loads.
 assets/tripo-raw/
+build-landmarks-cache/
