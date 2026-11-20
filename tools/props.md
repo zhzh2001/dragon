@@ -317,3 +317,25 @@ A procedural spire rebuild passed in `build/procedural-props-check/`, without `-
 It retained 1,388 triangles, one 512 PNG, and the original dimensions and socket clearance.
 The rejected-pile CLI check exited 1 and left its file unchanged.
 Byte comparisons confirmed that both hoards and the ward match their saved v2 GLBs.
+
+## Fourth hoard attempt: Tripo hoard 10 (2026-11-20)
+
+We kept the existing hoard after two conversions of `tripo-hoard-10.glb`.
+Pass 1 used the smoothed atlas and three-distance projection. Its coverage check passed, but neighbour filling affected 20.83% of surface texels.
+Pass 2 kept source UVs and baked the reduced mesh directly. Rock detail improved, but gold retained folded highlights.
+Both candidates read as dark rock discs at 250 m. The original showed clearer gold, chests, and colour separation.
+
+We inspected all six full-size views in `artifacts/props/v4/{original,pass1,pass2}/`. The renders used matching cameras, lighting, floor and AgX settings.
+Both cameras used a 1200 × 1000 frame at distances of 27 m and 250 m.
+Both candidates passed the skin, identity-transform, map, triangle and dimension checks.
+Both had 19,503 triangles, dimensions (16.020, 5.519, 16.026) m, and three embedded 2048 PNG maps.
+Pass 2's metallic channel ranged from 0 to 1. Values exceeded 0.5 in 50.85% of the texture.
+Normal builds retain the rejection guard. Review builds force all outputs into `build-landmarks-cache/hoard/passN/`.
+
+Set `hoard_pass` to 1 or 2 to repeat a pass.
+
+```sh
+hoard_pass=2
+mkdir -p build-landmarks-cache/hoard/tmp
+TMPDIR="$PWD/build-landmarks-cache/hoard/tmp" /opt/homebrew/bin/blender -b --factory-startup --python tools/build_props.py -- --from-tripo assets/tripo-raw --prop hoard_pile --hoard-review-pass "$hoard_pass" --render
+```

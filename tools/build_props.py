@@ -15,6 +15,8 @@ import struct
 import sys
 import traceback
 
+sys.dont_write_bytecode = True
+
 import bpy
 import bmesh
 from mathutils import Matrix, Vector
@@ -608,6 +610,16 @@ def verify(path,name):
         assert len(normal_links)==1 and normal_links[0].from_node.type=='NORMAL_MAP'
         assert normal_links[0].from_node.space=='TANGENT'
         assert bsdf.inputs['Metallic'].is_linked and bsdf.inputs['Roughness'].is_linked
+        if name == 'hoard_pile':
+            import numpy as np
+            separate=bsdf.inputs['Metallic'].links[0].from_node
+            metal_image=separate.inputs[0].links[0].from_node.image
+            pixels=np.empty(len(metal_image.pixels),dtype=np.float32)
+            metal_image.pixels.foreach_get(pixels)
+            metal=pixels.reshape(-1,4)[:,2]
+            metal_share=float((metal>.5).mean())
+            assert metal.max()>.8 and metal.min()<.2 and metal_share>.01, 'Missing gold metallic variation'
+            print(f'  metallic channel range={metal.min():.3f}..{metal.max():.3f}; pixels above 0.5={metal_share:.2%}: PASS',flush=True)
     assert tuple(reimage.size)==(w,h) and reimage.packed_file,'Missing reimported embedded texture'
     assert len(obj.vertex_groups)==1 and obj.vertex_groups[0].name=='root'
     assert all(len(v.groups)==1 and abs(v.groups[0].weight-1)<1e-6 for v in obj.data.vertices)
@@ -677,8 +689,15 @@ def main():
     parser.add_argument('--verify-only',action='store_true');parser.add_argument('--render',action='store_true')
     parser.add_argument('--output-dir',type=Path,default=ROOT/'assets'/'props')
     parser.add_argument('--from-tripo',type=Path,help='Read-only directory of Tripo source GLBs')
+    parser.add_argument('--render-dir',type=Path,help='Directory for comparison renders')
+    parser.add_argument('--hoard-review-pass',type=int,choices=(1,2),help='Rebuild a rejected hoard trial in its cache directory')
     parser.add_argument('--prop',choices=('watchtower','spire_tower','hoard_pile','hoard_trove','ward_stone'))
     args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
+    if args.hoard_review_pass:
+        if not args.from_tripo or args.prop != 'hoard_pile':
+            parser.error('--hoard-review-pass requires --from-tripo and --prop hoard_pile')
+        args.output_dir=ROOT/'build-landmarks-cache/hoard'/f'pass{args.hoard_review_pass}'
+        args.render_dir=args.output_dir/'renders'
     args.output_dir.mkdir(parents=True,exist_ok=True)
     if args.from_tripo:
         sys.path.insert(0,str(ROOT/'tools'))
@@ -688,6 +707,7 @@ def main():
         path=args.output_dir/(name+'.glb')
         check_path=path
         rejected=tripo_props.REJECTED.get(name) if args.from_tripo and not args.verify_only else None
+        if args.hoard_review_pass: rejected=None
         if rejected:
             if args.prop: raise RuntimeError(f'{name}: {rejected}')
             print(f'KEEP {name}: {rejected}',flush=True)
@@ -695,7 +715,7 @@ def main():
             check_path=path.with_name(path.stem+'.pending.glb')
             clear()
             if args.from_tripo:
-                obj=tripo_props.build(name,args.from_tripo)
+                obj=tripo_props.build(name,args.from_tripo,hoard_review_pass=args.hoard_review_pass or 2)
             else: obj=builder().mesh(name,atlas(name))
             skin(obj)
             assert all(m.type=='ARMATURE' for m in obj.modifiers)
@@ -704,7 +724,7 @@ def main():
             canonicalize_root(check_path)
         obj=verify(check_path,name)
         if check_path!=path: check_path.replace(path)
-        if args.render: render(name,obj,ROOT/'artifacts/props/v3' if args.from_tripo else None)
+        if args.render: render(name,obj,args.render_dir or (ROOT/'artifacts/props/v3' if args.from_tripo else None))
 
 
 if __name__=='__main__':

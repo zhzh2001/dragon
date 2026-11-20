@@ -82,6 +82,11 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Tripo rock kit (2026-11-20), `crag_c` from `tripo-crag2-07` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Tripo rock kit (2026-11-20), `crag_d` from `tripo-crag2-08` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Tripo rock kit (2026-11-20), `crag_e` from `tripo-wall2-05` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo landmark `tower_ruin` from `tripo-ruin-tower-02` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `arch_ruin` from `tripo-arch-04` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `stone_circle` from `tripo-standing-stones-05` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `monolith` from `tripo-monolith-06` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo landmark `cairn` from `tripo-cairn-15` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
 | Contact sheets and hero-hide comparisons of the overnight Tripo run and the second spend the next day (`artifacts/tripo-overnight/`), 72 and 67 meshes, most of them **not** used | **Tripo** H3.1 in its Studio, with paid credits: text, image and multi-view generation, and the Texture tool on the hero's own mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 
