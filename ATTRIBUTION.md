@@ -69,6 +69,15 @@ The derived kit files and their inspection renders may enter the public reposito
 `tools/rockkit.md` records the source files, processing and rejected pieces.
 The large raw exports stay local and untracked.
 
+### Wall crags and rocks (2026-11-20)
+
+The same paid Tripo terms cover these meshes and their inspection renders.
+- `tripo-crag2-02` supplied `crag_a`.
+- `tripo-crag2-06` supplied `crag_b`.
+- `tripo-crag2-07` supplied `crag_c`.
+- `tripo-crag2-08` supplied `crag_d`.
+- `tripo-wall2-05` supplied `crag_e`.
+
 ## Tripo run props (2026-11-16)
 
 The task brief records that the prop sources used paid credits.

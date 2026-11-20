@@ -1,0 +1,43 @@
+VERIFY crag_a: PASS
+  glTF Y-up size X/Y/Z metres: (49.86, 50.05, 55.78); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 23640/5910/1476 (25.0%, 6.2%); budget 24000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.972
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.9095
+  mean linear albedo: (0.2237, 0.2000, 0.1730); directional light term 0.004 (limit 0.15)
+  bytes LOD0/1/2: 5335280/1682864/534136
+VERIFY crag_b: PASS
+  glTF Y-up size X/Y/Z metres: (60.16, 58.03, 65.22); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 23640/5910/1476 (25.0%, 6.2%); budget 24000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.979
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0250; LOD0 mean Z 0.8890
+  mean linear albedo: (0.2206, 0.1971, 0.1703); directional light term 0.004 (limit 0.15)
+  bytes LOD0/1/2: 5601516/1750456/557092
+VERIFY crag_c: PASS
+  glTF Y-up size X/Y/Z metres: (53.42, 54.07, 50.70); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 23639/5909/1477 (25.0%, 6.2%); budget 24000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.993, LOD2 0.974
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.9004
+  mean linear albedo: (0.2282, 0.2044, 0.1771); directional light term 0.004 (limit 0.15)
+  bytes LOD0/1/2: 5463752/1745736/567084
+VERIFY crag_d: PASS
+  glTF Y-up size X/Y/Z metres: (40.08, 47.03, 34.81); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 23640/5910/1476 (25.0%, 6.2%); budget 24000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.995, LOD2 0.984
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0248; LOD0 mean Z 0.9256
+  mean linear albedo: (0.2312, 0.2059, 0.1776); directional light term 0.034 (limit 0.15)
+  bytes LOD0/1/2: 5330084/1744280/582012
+VERIFY crag_e: PASS
+  glTF Y-up size X/Y/Z metres: (61.74, 52.03, 43.48); base y=0.000; origin offset (0.000, 0.000)
+  triangles LOD0/1/2: 23640/5910/1476 (25.0%, 6.2%); budget 24000
+  silhouette overlap with LOD0 (worst of front, side, top): LOD1 0.992, LOD2 0.976
+  maps base/normal/ORM: 2048/1024/512 px per LOD; normal PNG; ORM packed, metallic 0; tangents: PASS
+  normal texels: outward; minimum Z 0.0039; maximum unit error 0.0251; LOD0 mean Z 0.8762
+  mean linear albedo: (0.2303, 0.2062, 0.1786); directional light term 0.025 (limit 0.15)
+  bytes LOD0/1/2: 6018212/1927888/622624
+VERIFY selection: PASS
+  selection mean linear albedo: (0.2268, 0.2027, 0.1753); worst piece deviation 2.87% (limit 8%)
+  selected bytes: 39463016; directory size: 156.11 MB; original scan kit: 70.54 MB of 80 MB

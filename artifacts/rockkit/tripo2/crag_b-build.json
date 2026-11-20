@@ -1,0 +1,79 @@
+{
+  "light_before": [
+    0.2556,
+    0.6171,
+    1.0234
+  ],
+  "light_after": [
+    -0.0,
+    0.0,
+    0.0
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 0.986,
+  "atlas_coverage": 0.531,
+  "normal_projection": {
+    "cage_factors": [
+      0.1,
+      0.35,
+      1.0
+    ],
+    "contribution_fractions": [
+      0.9871088035108703,
+      0.00690993973430694,
+      0.0014464125245686
+    ],
+    "flat_fraction": 0.00015567777482174445,
+    "invalid_filled_fraction": 0.004379166455432414,
+    "unfilled_surface_fraction": 0.0,
+    "negative_z_fraction": 0.0,
+    "mean": [
+      0.0005333916077631591,
+      -0.003925253656993595,
+      0.8968375484853209
+    ],
+    "cage_metres": [
+      0.127224267072422,
+      0.4452849347534769,
+      1.2722426707242198
+    ]
+  },
+  "mesh_light_after": [
+    0.12529,
+    0.00128
+  ],
+  "mean_albedo": [
+    0.231,
+    0.2071,
+    0.1792
+  ],
+  "name": "crag_b",
+  "asset": "tripo-crag2-06.glb",
+  "scan_triangles": 1884438,
+  "scale": 66.973,
+  "triangles": [
+    23640,
+    5910,
+    1476
+  ],
+  "islands_dropped": 129,
+  "size_blender_xyz": [
+    60.16,
+    65.22,
+    58.03
+  ],
+  "seconds": 76.7,
+  "source": "tripo-crag2-06.glb",
+  "rotation_blender": [
+    0,
+    0,
+    -35
+  ],
+  "source_alignment_shift": [
+    -0.03827857971191406,
+    -0.00397491455078125,
+    0.028239767998456955
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}

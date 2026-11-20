@@ -521,3 +521,88 @@ VERIFY selection: PASS
   selection mean linear albedo: (0.2271, 0.2035, 0.1761); worst piece deviation 2.93% (limit 8%)
   selected bytes: 46094152; directory size: 116.65 MB; original scan kit: 70.54 MB of 80 MB
 ```
+
+## Wall crags and more rocks (2026-11-20)
+
+### Wall crags
+
+| Piece | Tripo source | X, Y, Z (m) | Triangles LOD0/1/2 | Mean linear albedo RGB |
+|---|---|---|---|---|
+| `crag_a` | `tripo-crag2-02` | 49.86, 50.05, 55.78 | 23640/5910/1476 | 0.2237, 0.2000, 0.1730 |
+| `crag_b` | `tripo-crag2-06` | 60.16, 58.03, 65.22 | 23640/5910/1476 | 0.2206, 0.1971, 0.1703 |
+| `crag_c` | `tripo-crag2-07` | 53.42, 54.07, 50.70 | 23639/5909/1477 | 0.2282, 0.2044, 0.1771 |
+| `crag_d` | `tripo-crag2-08` | 40.08, 47.03, 34.81 | 23640/5910/1476 | 0.2312, 0.2059, 0.1776 |
+| `crag_e` | `tripo-wall2-05` | 61.74, 52.03, 43.48 | 23640/5910/1476 | 0.2303, 0.2062, 0.1786 |
+
+The builder cuts the lowest 3.5% and scales each source uniformly to height.
+It turns the selected face toward glTF +Z before it bakes the maps.
+Each crag has up to 26 base samples from LOD2, the coarsest mesh.
+The builder divides the negative-Z vertices into three height groups.
+It takes four farthest-point samples per group for the rear checks.
+
+The row uses a 400 m plane at 55 degrees.
+Each joint overlaps by 15% of the narrower neighbour's projected width.
+The builder rotates the check points with each crag before it measures burial.
+The highest base check sits 0.15 m below the plane along its normal.
+[Row placement measurements](../artifacts/rockkit/tripo2/row-placement.json)
+
+The source review excluded four wall candidates.
+
+| Source | Reason | Evidence |
+|---|---|---|
+| `tripo-crag2-05` | A broad smooth face wraps around the top. A deep shelf cuts across the opposite face. | [Crag source views](../artifacts/tripo-overnight/day2-crags-rocks.jpg) |
+| `tripo-wall2-07` | The broad upper block stands on a narrow neck. The exposed outline resembles a pedestal. | [Wall source views](../artifacts/tripo-overnight/day2-walls.jpg) |
+| `tripo-wall2-08` | Straight parallel columns form a narrow pillar with a level crown. | [Wall source views](../artifacts/tripo-overnight/day2-walls.jpg) |
+| `tripo-crag-02` | Grass covers the low roof. A vertical cut exposes the end of the terrain patch. | [Earlier rock source views](../artifacts/tripo-overnight/rocks.jpg) |
+
+Run these commands from the worktree root. The build needs the local Tripo GLBs and ffmpeg.
+
+```sh
+mkdir -p build-rockkit-cache/tmp
+export TMPDIR="$PWD/build-rockkit-cache/tmp"
+export BLENDER_USER_RESOURCES="$PWD/build-rockkit-cache/blender"
+export XDG_CACHE_HOME="$PWD/build-rockkit-cache/cache"
+kit() {
+  /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+    --python tools/build_rockkit.py -- "$@" </dev/null
+}
+walls=crag_a,crag_b,crag_c,crag_d,crag_e
+kit --only "$walls"
+kit --metadata --only "$walls"
+kit --verify-only --only "$walls"
+kit --render --only "$walls"
+kit --row
+shasum -a 256 -c artifacts/rockkit/tripo2/original-sha256.txt
+```
+
+SHA-256 matched all 42 original GLBs. The six earlier placement entries also matched.
+Each new wall has 26 base points and 12 rear points from its LOD2 vertex buffer.
+[Placement and hash audit](../artifacts/rockkit/tripo2/audit-walls.txt)
+
+The first row exposed strips of the plane between all five faces.
+I changed the order and yaw and moved the shoulders along the slope to meet their neighbours.
+The second staging uses a grainy rock material on the same plane.
+[Rejected 250 m row](../artifacts/rockkit/tripo2/rejected-row-250.png)
+
+The close views show soft grain on the broad faces and sharp triangles along some fractures.
+The left shoulder of `crag_e` has two dark pits visible from above.
+Its forward face has a deep vertical joint. Its broken crown remains visible from above.
+
+The revised row forms one band at 250 m. The overhead view shows the narrow saddles between shoulders.
+At 80 m, perspective enlarges the nearest spur. The left edge of the test plane enters the frame.
+[250 m](../artifacts/rockkit/tripo2/row-250.png) · [80 m](../artifacts/rockkit/tripo2/row-80.png) · [60 degrees above](../artifacts/rockkit/tripo2/row-top.png)
+
+The file verifier reported the following results.
+
+```text
+VERIFY crag_a: PASS
+VERIFY crag_b: PASS
+VERIFY crag_c: PASS
+VERIFY crag_d: PASS
+VERIFY crag_e: PASS
+VERIFY selection: PASS
+selection mean linear albedo: (0.2268, 0.2027, 0.1753); worst piece deviation 2.87% (limit 8%)
+  selected bytes: 39463016; directory size: 156.11 MB; original scan kit: 70.54 MB of 80 MB
+```
+
+[Full verification output](../artifacts/rockkit/tripo2/verify-walls.txt)
