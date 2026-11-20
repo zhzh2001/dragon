@@ -59,6 +59,9 @@ public:
     // boulder at 25 radii is 75 m out; a 30 m cliff piece 750 m).
     float lod1_radii = 22.0f;
     float lod2_radii = 80.0f;
+    // And no further than this in metres, whatever the piece's size.
+    float lod1_metres = 320.0f;
+    float lod2_metres = 1000.0f;
     // The colour: each piece's mean albedo pulled to the terrain's rock
     // (palette Rock and RockDark at `tone`, times `brightness`), by
     // `colour_match` (0 the scan as it is). The scan's contrast stays.
@@ -75,6 +78,12 @@ public:
     // over this many metres above it.
     float contact_height = 1.0f;
     float contact = 1.0f;
+    // The detail layer on a large piece (rock.hlsl): the terrain's scanned
+    // rock on the three world planes. 1 as built, 0 none; it scales the
+    // size a piece counts as, so above 1 smaller pieces take it too.
+    float detail = 1.0f;
+    // The terrain's rock scan (a normal in rgb, luminance in a); not owned.
+    void set_detail(rhi::Texture* map) { detail_ = map; }
 
 private:
     struct Level {
@@ -101,6 +110,7 @@ private:
     PipelineHandle pipeline_ = INVALID_PIPELINE;
     PipelineHandle depth_pipeline_ = INVALID_PIPELINE;
     rhi::Sampler* sampler_ = nullptr;
+    rhi::Texture* detail_ = nullptr;
     Piece pieces_[ROCK_PIECES];
     bool loaded_ = false;
     rhi::Buffer* frame_instances_ = nullptr;

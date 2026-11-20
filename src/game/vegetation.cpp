@@ -125,6 +125,9 @@ constexpr int KIT_CLIFFS[3] = {5, 6, 7};
 // The Tripo crags (a tor, a ridge crest) and the scree cone.
 constexpr int KIT_CRAGS[2] = {8, 9};
 constexpr int KIT_SCREE = 10;
+// The Tripo wall crags, crag_a to crag_e (tools/rockkit.md, "Wall crags").
+constexpr int KIT_WALLS[5] = {14, 15, 16, 17, 18};
+constexpr int KIT_WALL_COUNT = 5;
 
 // A piece's radius on the ground at scale 1: half its larger footprint side.
 float footprint_radius(int piece) {
@@ -179,12 +182,97 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
         return core::Vec4{n.x, n.y, n.z, core::dot(n, p)};
     };
 
-    // ---- cliff pieces, first: the boulders keep out of their footprints.
     struct Footprint {
         float x, z, r;
     };
     std::vector<Footprint> cliffs;
     float cliff_sink_sum = 0.0f;
+
+    // ---- wall crags, first: rows along the steep faces. A crag stands
+    // upright, its face (+Z) down the fall line, and sinks until its base
+    // outline is under the ground. On a face of 45 degrees and more that
+    // puts its back half inside the slope and leaves its face standing its
+    // whole height over the ground at its foot, so a row is a cliff band and
+    // not rocks set on a slope. Everything else keeps out of the footprints.
+    size_t wall_count = 0, wall_rows = 0;
+    if (settings.walls) {
+        const float spacing = core::maxf(settings.wall_spacing, 60.0f);
+        const int cells = int((2.0f * extent) / spacing);
+        for (int iz = 0; iz < cells; ++iz) {
+            for (int ix = 0; ix < cells; ++ix) {
+                CellHash hash(ix, iz, settings.seed * 23u + 29u);
+                const float jx = hash.next();
+                const float jz = hash.next();
+                const float keep = hash.next();
+                const float length_roll = hash.next();
+                const float side_roll = hash.next();
+                float x = -extent + (float(ix) + 0.15f + 0.7f * jx) * spacing;
+                float z = -extent + (float(iz) + 0.15f + 0.7f * jz) * spacing;
+                if (keep > settings.wall_cover) continue;
+                const int length = 5 + int(length_roll * float(std::max(settings.wall_length - 5, 0)) + 0.5f);
+                int misses = 0;
+                const float side = side_roll < 0.5f ? -1.0f : 1.0f;
+                int last_piece = -1;
+                bool row_started = false;
+                for (int i = 0; i < length; ++i) {
+                    const float pick_roll = hash.next();
+                    const float scale_roll = hash.next();
+                    const float yaw_roll = hash.next();
+                    const float shade_roll = hash.next();
+                    const float moss_roll = hash.next();
+                    const float id_roll = hash.next();
+                    if (std::fabs(x) > extent || std::fabs(z) > extent) break;
+                    const float height = terrain.height_at(x, z);
+                    const core::Vec3 n = terrain.normal_at(x, z);
+                    const float flat = std::sqrt(n.x * n.x + n.z * n.z);
+                    if (flat < 0.05f) break;
+                    const core::Vec3 downhill{n.x / flat, 0.0f, n.z / flat};
+                    const core::Vec3 strike{downhill.z * side, 0.0f, -downhill.x * side};
+                    // A gap in the face: step over it, twice at most.
+                    if (height < floor + settings.wall_above_floor || height > settings.crag_scree_ceiling ||
+                        1.0f - n.y < settings.wall_slope) {
+                        if (++misses > 2) break;
+                        x += strike.x * 30.0f;
+                        z += strike.z * 30.0f;
+                        continue;
+                    }
+                    int pick = int(pick_roll * float(KIT_WALL_COUNT) * 0.999f);
+                    if (KIT_WALLS[pick] == last_piece) pick = (pick + 1) % KIT_WALL_COUNT;
+                    const int piece = KIT_WALLS[pick];
+                    last_piece = piece;
+                    const gfx::RockPieceInfo& info = gfx::rock_piece(piece);
+                    const float scale = settings.wall_scale * (0.75f + 0.5f * scale_roll);
+                    // About the vertical by yaw, +Z goes to (sin, 0, cos).
+                    const float yaw = std::atan2(downhill.x, downhill.z) + (yaw_roll - 0.5f) * core::radians(36.0f);
+                    gfx::RockInstance rock;
+                    rock.position_scale = core::Vec4{x, height, z, scale};
+                    const core::Vec3 lean = core::normalize_or(core::lerp(core::Vec3::up(), n, settings.wall_lean), core::Vec3::up());
+                    rock.rotation = to_vec4(core::normalize(core::rotation_between(core::Vec3::up(), lean) *
+                                                            core::Quat::from_axis_angle(core::Vec3::up(), yaw)));
+                    const float extra = bury_check_points(terrain, rock, piece, 0.3f);
+                    kit_extra_sink_ = core::maxf(kit_extra_sink_, extra);
+                    rock.ground = ground_plane(x, z);
+                    rock.params = core::Vec4{0.92f + 0.16f * shade_roll, moss_at(height, moss_roll) * 0.6f, id_roll, 0.0f};
+                    if (wall_count == 0)
+                        LOG_INFO("rocks: first wall crag %s at (%.0f, %.0f, %.0f), scale %.2f, sunk %.1f m, facing (%.2f, %.2f)",
+                                 info.name, double(x), double(height), double(z), double(scale), double(extra),
+                                 double(downhill.x), double(downhill.z));
+                    kit_rocks_[piece].push_back(rock);
+                    cliffs.push_back(Footprint{x, z, footprint_radius(piece) * scale});
+                    ++wall_count;
+                    row_started = true;
+                    // The next crag: along the contour, overlapping this one.
+                    const float step = info.size.x * scale * settings.wall_step;
+                    x += strike.x * step;
+                    z += strike.z * step;
+                }
+                if (row_started) ++wall_rows;
+            }
+        }
+    }
+    const size_t wall_footprints = cliffs.size();
+
+    // ---- cliff pieces: the boulders keep out of their footprints.
     {
         const float spacing = core::maxf(settings.cliff_spacing, 24.0f);
         const int cells = int((2.0f * extent) / spacing);
@@ -202,6 +290,11 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                 if (keep > settings.cliff_cover * (0.2f + 1.2f * field * field)) continue;
                 const float height = terrain.height_at(x, z);
                 if (height < t.water_level + 4.0f) continue;
+                bool in_wall = false;
+                for (size_t w = 0; w < wall_footprints; ++w) {
+                    const Footprint& f = cliffs[w];
+                    if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < 1.2f * f.r * f.r) in_wall = true;
+                }
                 const int piece = KIT_CLIFFS[int(hash.next() * 2.999f)];
                 const float scale_roll = hash.next();
                 const float scale = settings.cliff_scale * (0.8f + 0.4f * scale_roll);
@@ -225,7 +318,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                 const float gradient_x = float(sum_hx / sum_xx);
                 const float gradient_z = float(sum_hz / sum_xx);
                 const core::Vec3 n = core::normalize(core::Vec3{-gradient_x, 1.0f, -gradient_z});
-                if (1.0f - n.y < settings.cliff_slope) continue;
+                if (1.0f - n.y < settings.cliff_slope || in_wall) continue;
                 // A cliff is steep all across, not a steep patch on a shoulder.
                 if (1.0f - terrain.normal_at(x, z).y < settings.cliff_slope * 0.8f) continue;
                 const float yaw_roll = hash.next();
@@ -481,10 +574,11 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
     }
     size_t total = 0;
     for (const auto& list : kit_rocks_) total += list.size();
-    LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims; %zu crags, %zu scree), "
-             "worst extra sink %.2f m",
-             total, cliffs.size() - crag_count - scree_count, double(cliff_sink_sum / float(cliffs.size() > crag_count + scree_count ? cliffs.size() - crag_count - scree_count : 1)),
-             crag_count, scree_count, double(kit_extra_sink_));
+    const size_t shells = cliffs.size() - crag_count - scree_count - wall_count;
+    LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims; %zu crags, %zu scree, "
+             "%zu wall crags in %zu rows), worst extra sink %.2f m",
+             total, shells, double(cliff_sink_sum / float(shells > 0 ? shells : 1)), crag_count, scree_count, wall_count,
+             wall_rows, double(kit_extra_sink_));
 }
 
 void Vegetation::plant(const Terrain& terrain, const VegetationSettings& settings) {

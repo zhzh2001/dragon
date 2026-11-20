@@ -655,6 +655,7 @@ bool App::init(const Options& options) {
         terrain_rock_texture_ = load_scan("terrain_rock");
         terrain_scree_texture_ = load_scan("terrain_scree");
         world_.set_terrain_scans(terrain_rock_texture_, terrain_scree_texture_);
+        foliage_.rock_kit().set_detail(terrain_rock_texture_);  // the large pieces' detail layer (rock.hlsl)
         ground_scan_textures_[0] = load_scan("terrain_grass");
         ground_scan_textures_[1] = load_scan("terrain_forest");
         ground_scan_textures_[2] = load_scan("terrain_gravel");
@@ -1621,6 +1622,9 @@ game::VegetationSettings App::vegetation_for_tier() const {
     v.grass = v.grass && tier_.budget.grass_radius_scale > 0.0f;
     v.sward = v.sward && tier_.tier == gfx::Tier::Modern;
     v.rock_kit = tier_.tier == gfx::Tier::Modern && foliage_.rock_kit().loaded();
+    // DRAGON_NO_WALL_CRAGS=1: the valley without the rows of wall crags, for a
+    // before-and-after.
+    v.walls = v.walls && !SDL_getenv("DRAGON_NO_WALL_CRAGS");
     return v;
 }
 
@@ -1989,6 +1993,7 @@ void App::shutdown() {
         release_prop(ward_prop_);
         device_.rhi().destroy(terrain_detail_texture_);
         terrain_detail_texture_ = nullptr;
+        foliage_.rock_kit().set_detail(nullptr);
         device_.rhi().destroy(terrain_rock_texture_);
         device_.rhi().destroy(terrain_scree_texture_);
         terrain_rock_texture_ = terrain_scree_texture_ = nullptr;
@@ -3727,8 +3732,12 @@ void App::build_ui(float dt) {
                     ImGui::SliderFloat("moss", &kit.moss, 0.0f, 2.0f, "%.2f");
                     ImGui::SliderFloat("contact band", &kit.contact_height, 0.05f, 2.0f, "%.2f m");
                     ImGui::SliderFloat("contact strength", &kit.contact, 0.0f, 1.0f, "%.2f");
+                    ImGui::SliderFloat("detail on large pieces", &kit.detail, 0.0f, 3.0f, "%.2f");
+                    ImGui::SetItemTooltip("The terrain's scanned rock over a crag's own maps; above 1 smaller pieces take it too");
                     ImGui::SliderFloat("LOD1 from", &kit.lod1_radii, 2.0f, 100.0f, "%.0f radii");
                     ImGui::SliderFloat("LOD2 from", &kit.lod2_radii, 10.0f, 300.0f, "%.0f radii");
+                    ImGui::SliderFloat("LOD1 no further than", &kit.lod1_metres, 50.0f, 2000.0f, "%.0f m");
+                    ImGui::SliderFloat("LOD2 no further than", &kit.lod2_metres, 100.0f, 4000.0f, "%.0f m");
                     ImGui::TextDisabled("%u pieces, %u drawn, %u triangles", kit.count(), kit.drawn(),
                                         kit.drawn_triangles());
                     // Its placement (game::Vegetation::place_kit): replants.
@@ -3750,6 +3759,15 @@ void App::build_ui(float dt) {
                     replant_now |= ImGui::SliderFloat("cliff bury", &v.cliff_bury, 0.0f, 6.0f, "%.1f m");
                     replant_now |= ImGui::SliderFloat("cliff rim showing", &v.cliff_rim_tolerance, 0.0f, 6.0f, "%.1f m");
                     ImGui::SetItemTooltip("How far a cliff piece's rim may stand out of the ground; its foot is always buried");
+                    replant_now |= ImGui::Checkbox("wall crags in rows", &v.walls);
+                    replant_now |= ImGui::SliderFloat("wall row spacing", &v.wall_spacing, 60.0f, 800.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("wall row cover", &v.wall_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("wall slope", &v.wall_slope, 0.1f, 0.9f, "%.2f (1 - normal y)");
+                    replant_now |= ImGui::SliderInt("wall row length", &v.wall_length, 3, 14, "%d crags");
+                    replant_now |= ImGui::SliderFloat("wall crag step", &v.wall_step, 0.4f, 1.2f, "%.2f of width");
+                    replant_now |= ImGui::SliderFloat("wall crag scale", &v.wall_scale, 0.3f, 3.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("wall crag lean", &v.wall_lean, 0.0f, 1.0f, "%.2f to the slope");
+                    replant_now |= ImGui::SliderFloat("wall above floor", &v.wall_above_floor, 0.0f, 400.0f, "%.0f m");
                     replant_now |= ImGui::SliderFloat("crag spacing", &v.crag_spacing, 30.0f, 500.0f, "%.0f m");
                     replant_now |= ImGui::SliderFloat("crag cover", &v.crag_cover, 0.0f, 1.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("crag slope from", &v.crag_slope_min, 0.0f, 0.6f, "%.2f");

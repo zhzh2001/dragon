@@ -333,9 +333,12 @@ left, from 16 m, from 60 m and from the chase camera, cropped and not
 scaled.
 
 Cost, paired on the frozen frame at 1920x1080 with two Blender jobs
-sharing the Mac: 1.34 ms from the chase camera and 1.32 ms from the side,
-against 1.59 and 1.30 ms for the old shading. The new path reads no more
-noise than the old one.
+sharing the Mac: 1.22 ms from the chase camera and 0.41 ms from the side,
+against 1.12 and 0.53 ms for the old shading (`~/src/gpu-hist`,
+`research/dragon-m5/runs/20261120-2254-mac-m5-dragon-breath-sensor-cost`,
+one run each). An earlier unrecorded pass gave 1.34 and 1.32 ms against
+1.59 and 1.30 ms. The two shadings are not told apart at this noise. The
+new path reads no more noise than the old one.
 
 `--breath style=0` is the old shading, and so is the Playtest panel's
 "light as a camera sees it" when off. The `fire` golden was captured

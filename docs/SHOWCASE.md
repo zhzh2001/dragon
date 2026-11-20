@@ -434,6 +434,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | The pale core at the jaws, and a skin of smoke (2026-11-15, 21:37) | `showcase/EFFECTS.md` |
 | Smoke off the marched breath (2026-11-15, 21:53) | `showcase/EFFECTS.md` |
 | Fire through a sensor (2026-11-20, 17:53) | `showcase/EFFECTS.md` |
+| Wall crags in rows (2026-11-20, 18:18) | `showcase/WORLD.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |

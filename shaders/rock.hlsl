@@ -9,7 +9,8 @@
 
 struct RockParams {
     float4 albedo_scale;  // rgb the piece's mean pulled to the terrain's rock, a the moss
-    float4 contact;       // x the contact band (m), y its strength, z the terrain's tint
+    float4 contact;       // x the contact band (m), y its strength, z the terrain's tint,
+                          // w the piece's largest side at scale 1 (m), 0 for no detail layer
 };
 
 struct VertexIn {
@@ -31,6 +32,7 @@ struct VertexOut {
     float2 uv : TEXCOORD3;
     float4 ground : TEXCOORD4;
     float4 params : TEXCOORD5;
+    float detail : TEXCOORD6;  // how much of the detail layer this piece takes, 0..1
 };
 
 ConstantBuffer<RockParams> rock : UNIFORM_SLOT(1);
@@ -53,6 +55,10 @@ VertexOut vs_main(VertexIn input) {
     o.uv = input.uv;
     o.ground = input.ground;
     o.params = input.params;
+    // A piece's maps are 1024 across whatever its size. On a crag 60 to
+    // 100 m wide a texel is a hand across, and the face is smooth clay up
+    // close; the detail layer is for those. A boulder needs none.
+    o.detail = saturate((rock.contact.w * input.position_scale.w - 14.0) / 30.0);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     return o;
 }
@@ -63,7 +69,31 @@ DEPTH2D(shadow_map, 0);
 TEXTURE2D(base_colour, 1);
 TEXTURE2D(normal_map, 2);
 TEXTURE2D(orm_map, 3);
+// The terrain's scanned rock (terrain.hlsl's rock_map: a normal in rgb, the
+// scan's luminance in a), on the three world planes.
+TEXTURE2D(detail_map, 6);
 #include "noise.hlsl"
+
+// terrain.hlsl's triplanar_scan: the bent normal by the whiteout blend, and
+// the luminance. The position's screen gradients are handed in: the caller
+// samples inside a branch, where a sampler has none of its own and takes
+// the smallest mip, a flat grey.
+float4 rock_detail(float3 p, float3 n, float scale, float3 px, float3 py) {
+    float3 w = pow(abs(n), (float3)4.0);
+    w /= max(w.x + w.y + w.z, 1e-4);
+    px *= scale;
+    py *= scale;
+    float4 sx = detail_map.SampleGrad(detail_map_sampler, p.zy * scale, px.zy, py.zy);
+    float4 sy = detail_map.SampleGrad(detail_map_sampler, p.xz * scale, px.xz, py.xz);
+    float4 sz = detail_map.SampleGrad(detail_map_sampler, p.xy * scale, px.xy, py.xy);
+    float3 tx = sx.xyz * 2.0 - 1.0, ty = sy.xyz * 2.0 - 1.0, tz = sz.xyz * 2.0 - 1.0;
+    // The scan's relief is shallow for a face seen from a flight: deepened.
+    tx.xy *= 2.6, ty.xy *= 2.6, tz.xy *= 2.6;
+    float3 nx = float3(tx.xy + n.zy, abs(tx.z) * n.x).zyx;
+    float3 ny = float3(ty.xy + n.xz, abs(ty.z) * n.y).xzy;
+    float3 nz = float3(tz.xy + n.xy, abs(tz.z) * n.z);
+    return float4(normalize(nx * w.x + ny * w.y + nz * w.z), sx.a * w.x + sy.a * w.y + sz.a * w.z);
+}
 
 float4 fs_main(VertexOut input) : SV_Target {
     float3 geometric = normalize(input.world_normal);
@@ -80,13 +110,29 @@ float4 fs_main(VertexOut input) : SV_Target {
         float3 sampled = normal_map.Sample(normal_map_sampler, input.uv).xyz * 2.0 - 1.0;
         normal = normalize(tangent * sampled.x + bitangent * sampled.y + normal * sampled.z);
     }
+    // The detail layer on a large piece: the terrain's rock at 4 m and at
+    // 15 m a repeat, bending the mapped normal and carrying its own light
+    // and dark. Gone by 450 m, where its grain is under a pixel.
+    float detail_tone = 1.0;
+    float detail_amount = input.detail * (1.0 - smoothstep(180.0, 450.0, distance(scene.camera_position.xyz, input.world_position)));
+    float3 position_dx = ddx(input.world_position);
+    float3 position_dy = ddy(input.world_position);
+    if (detail_amount > 0.001) {
+        float4 fine = rock_detail(input.world_position, normal, 1.0 / 4.0, position_dx, position_dy);
+        float4 broad = rock_detail(input.world_position + 31.0, normal, 1.0 / 15.0, position_dx, position_dy);
+        float3 bent = normalize(fine.xyz + broad.xyz);
+        normal = normalize(lerp(normal, bent, detail_amount * 0.9));
+        // The scan's luminance sits about its middle; spread, it is the
+        // rock's light and dark grain.
+        detail_tone = lerp(1.0, clamp(1.0 + (0.5 * fine.a + 0.5 * broad.a - 0.5) * 2.2, 0.45, 1.6), detail_amount);
+    }
     float3 orm = orm_map.Sample(orm_map_sampler, input.uv).rgb;
     float occlusion = orm.r;
     float roughness = clamp(orm.g, 0.05, 1.0);
 
     // The scan's colour, its mean pulled to the terrain's rock (the scale
     // per piece, gfx::RockKit::colour_match): the contrast is the scan's.
-    float3 albedo = base_colour.Sample(base_colour_sampler, input.uv).rgb * rock.albedo_scale.rgb * input.params.x;
+    float3 albedo = base_colour.Sample(base_colour_sampler, input.uv).rgb * rock.albedo_scale.rgb * input.params.x * detail_tone;
     float2 q = input.world_position.xz;
     // The terrain's broken-rock tint (terrain.hlsl): the same warm and cool
     // drift over the world, so a boulder takes the colour of the face it

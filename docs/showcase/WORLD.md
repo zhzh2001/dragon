@@ -248,3 +248,81 @@ is gone.
 
 The Metal goldens pass without a new capture; the largest tile difference
 was 4.1.
+
+## Wall crags in rows (2026-11-20, 18:18)
+
+The valley walls were the open gap after two Tripo spends: long wall
+pieces failed three times, and the second spend found that one massive
+lopsided crag is the shape Tripo makes well (`MODEL_GENERATION.md`, "The
+second spend"). Codex (`gpt-6.2-astra`, medium) built five of them into
+the kit from `tripo-crag2-02`, `-05` to `-08` and `tripo-wall2-05`, `-07`
+(`tools/rockkit.md`, "Wall crags and more rocks"; the brief is
+`tools/showcase/crags-brief.md`). They are `crag_a` to `crag_e`, 47 to
+58 m high, 24,000 triangles at most.
+
+`Vegetation::place_kit` stands them in rows, before everything else:
+
+- A row may start in each 300 m cell, kept at 0.7, where the ground is
+  steeper than 0.3 (1 minus the normal's y, about 46 degrees), at least
+  25 m over the valley floor and under the snow line's 370 m.
+- It runs along the contour for 5 to 12 crags, a crag every 0.6 of its
+  width, so neighbours overlap. It steps over a gap in the face twice
+  and then ends.
+- A crag stands with its face (+Z) down the fall line, turned up to 18
+  degrees either way, leaning 0.3 of the way back to the slope's normal,
+  at 1.2 to 2 times its size (60 to 115 m high). It sinks until its base
+  outline is under the ground. On such a face that puts its back half
+  inside the slope and leaves its face standing over the ground at its
+  foot.
+- Cliff shells, crags, scree and boulders keep out of the rows.
+
+Run seed 3 has 78 wall crags in 16 rows; the arena has 115 in 19. The log
+names the first with its position and facing, for a `--cam` on it.
+`DRAGON_NO_WALL_CRAGS=1` leaves them out, and the dials are under Terrain >
+Vegetation > Rocks ("wall crags in rows" and the seven below it).
+
+Three things were wrong on the way, each found on a render:
+
+1. At the kit's own scale, rows of 3 to 7, upright: two rocks on a
+   hillside, not a band. Rows are now longer, the crags 1.6 times the
+   size, and they lean back.
+2. A face 100 m wide on a 1024 map is smooth clay from 90 m. A large
+   piece now takes a detail layer (`rock.hlsl`, `RockKit::detail`): the
+   terrain's scanned rock on the three world planes, at 4 m and 15 m a
+   repeat, its relief deepened 2.6 times, bending the mapped normal and
+   carrying its own grain. A piece takes it by its size: none under 14 m
+   across, all of it from 44 m. It is gone by 450 m.
+3. The detail layer did nothing at first. Its samples sat inside a
+   branch, where a sampler has no screen gradients and takes the smallest
+   mip. The gradients are now taken outside the branch and handed in.
+
+Cost, `gpu: median` at 1920x1080 on run seed 3, three runs each,
+interleaved, with two Blender jobs sharing the Mac. As first built: 20.4,
+18.5 and 19.0 ms with the crags against 18.6, 17.0 and 16.3 ms without,
+about 2 ms. A level of detail was chosen by distance in the piece's own
+radii, so a crag with a radius of 70 m drew its 24,000 triangles out to
+1.5 km. The levels now also have limits in metres (320 and 1,000;
+`RockKit::lod1_metres`, `lod2_metres`): 17.0, 18.1 and 16.9 ms with the
+crags against 17.0, 17.3 and 17.0 ms without. No difference shows above
+the spread. The first three pairs were not logged. The second three are
+in `~/src/gpu-hist`,
+`research/dragon-m5/runs/20261120-2308-mac-m5-dragon-wall-crags-cost`.
+
+The pairs, without the crags on the left, cropped and not scaled:
+`artifacts/showcase-walls/crag-rows-before-after.jpg` (the far wall and
+the left wall from the chase camera on run seed 3, and a row from 240 m),
+and `crag-detail-before-after.jpg` (a face from 90 m without and with the
+detail layer). The Metal goldens were captured again: every scene has a
+slope in it.
+
+What is weak:
+
+- The rows cover little of a wall 600 m high. They stop at the snow line,
+  and one row is one band 60 to 100 m high.
+- Two crags that meet at a wide angle leave a dark slot between them.
+- Five shapes repeat. From the air two rows can be told as the same set.
+- The crags are greyer and darker than the sunlit heightfield behind
+  them on a wall that faces the sun.
+- A crag has no collision. `Terrain::height_at` reads the heightfield,
+  so the dragon flies through a buttress.
+

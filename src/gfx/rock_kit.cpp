@@ -293,8 +293,13 @@ void RockKit::prepare(Device& device, const SceneUniforms& scene, const Reach& r
             // A cliff piece, or a boulder grown past 4 m across, carries
             // as far as the old big kinds did.
             const float far = (cliff || radius > 4.0f) ? reach.big : reach.small;
-            const float in_radii = distance / core::maxf(radius, 0.5f);
-            const int level = in_radii < lod1_radii ? 0 : in_radii < lod2_radii ? 1 : 2;
+            // By its size on the screen, in radii, and for a large piece by
+            // metres too: a wall crag's radius is 70 m and more, and in radii
+            // alone 80 of them drew 24,000 triangles each out to 1.5 km.
+            const float r = core::maxf(radius, 0.5f);
+            const int level = distance < core::minf(lod1_radii * r, lod1_metres)   ? 0
+                              : distance < core::minf(lod2_radii * r, lod2_metres) ? 1
+                                                                                   : 2;
             if (distance < reach.shadow) scratch_[1][p][level].push_back(rock);
             if (distance > far || !frustum.sees(centre, radius)) continue;
             RockInstance drawn = rock;
@@ -376,7 +381,9 @@ void RockKit::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene, 
                                target.z / core::maxf(mean.z, 0.01f)};
         const core::Vec3 scale = core::lerp(core::Vec3::one(), match, colour_match);
         params.albedo_scale = core::Vec4{scale.x, scale.y, scale.z, moss};
-        params.contact = core::Vec4{contact_height, contact, terrain_tint, 0.0f};
+        const core::Vec3 size = rock_piece(p).size;
+        params.contact = core::Vec4{contact_height, contact, terrain_tint,
+                                    detail_ ? core::maxf(size.x, core::maxf(size.y, size.z)) * detail : 0.0f};
         rhi.push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(params));
         rhi.push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(params));
         rhi::TextureBinding maps[3] = {};
@@ -385,6 +392,11 @@ void RockKit::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene, 
         maps[2].texture = piece.orm;
         for (rhi::TextureBinding& m : maps) m.sampler = sampler_;
         rhi.bind_fragment_textures(pass, 1, maps, 3);
+        // The detail layer's map, or any map where there is none: the slot must hold one.
+        rhi::TextureBinding fine = {};
+        fine.texture = detail_ ? detail_ : piece.normal;
+        fine.sampler = sampler_;
+        rhi.bind_fragment_textures(pass, 6, &fine, 1);
         for (int l = 0; l < ROCK_LODS; ++l) {
             const Range& r = main_[p][l];
             if (r.count == 0) continue;

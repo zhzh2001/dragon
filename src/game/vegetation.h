@@ -113,6 +113,22 @@ struct VegetationSettings {
     // line (gfx::SceneSettings::snow_line, 400), since loose rock on clean
     // snow reads as pasted on.
     float crag_scree_ceiling = 370.0f;
+    // Wall crags (crag_a to crag_e, 50 m tall): rows along a steep face,
+    // each crag upright with its face downhill and its back in the slope,
+    // so a row reads as a cliff band. One row may start in a
+    // `wall_spacing` cell, kept at `wall_cover`, where the ground is at
+    // least `wall_slope` steep (1 - the normal's y); it runs along the
+    // contour for up to `wall_length` crags, a crag every `wall_step` of
+    // its width.
+    bool walls = true;
+    float wall_spacing = 300.0f;
+    float wall_cover = 0.7f;
+    float wall_slope = 0.3f;
+    int wall_length = 12;
+    float wall_step = 0.6f;
+    float wall_scale = 1.6f;
+    float wall_lean = 0.3f;  // how far a crag leans back to the slope's normal, 0 upright
+    float wall_above_floor = 25.0f;
 
     float wind = 1.0f;
     uint32_t seed = 7;
