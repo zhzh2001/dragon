@@ -7,10 +7,10 @@ import bpy
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {'watchtower':'tripo-watchtower-01.glb', 'spire_tower':'tripo-spire-01.glb',
-           'hoard_pile':'tripo-hoard-01.glb', 'hoard_trove':'tripo-hoard-02.glb',
+           'hoard_pile':'tripo-hoard-10.glb', 'hoard_trove':'tripo-hoard-02.glb',
            'ward_stone':'tripo-wardstone-02.glb'}
 REJECTED = {
-    'hoard_pile': 'Pass 2 normal projection left 0.20% uncovered. Keep the procedural prop.',
+    'hoard_pile': 'Hoard 10 pass 2 retained crumpled gold and weak distant readability. Keep the procedural prop.',
     'hoard_trove': 'Pass 2 retained stretched wood grain and crumpled shading. Keep the procedural prop.',
     'ward_stone': 'Pass 2 retained stretched tips and crumpled shading. Keep the procedural prop.',
 }
@@ -59,7 +59,7 @@ def candidates():
         props.clear();obj=fit(import_source(path),name)
         props.render(name,obj,ROOT/'artifacts/props/v3/candidates',path.stem,True)
 
-def build(name, source_dir):
+def build(name, source_dir, hoard_review_pass=2):
     """Bake source colour, surface normals, and metal response onto a new atlas."""
     import numpy as np
     spec=importlib.util.spec_from_file_location('rockkit',ROOT/'tools/build_rockkit.py')
@@ -69,7 +69,20 @@ def build(name, source_dir):
     if name=='watchtower': prepare_watchtower(src)
     if name=='spire_tower': detail=prepare_spire(src,kit)
     if name=='ward_stone': prepare_ward(src)
-    low=kit.make_lod0(src,7800 if name=='ward_stone' else 19800)
+    # Hoard 10 keeps source UVs to avoid stretched cage projections.
+    direct = name == 'hoard_pile' and hoard_review_pass == 2
+    if direct:
+        activate(src)
+        bpy.ops.object.duplicate()
+        low = bpy.context.object
+        mod = low.modifiers.new('dec', 'DECIMATE')
+        mod.ratio = 19800 * .985 / kit.tri_count(low)
+        mod.use_collapse_triangulate = True
+        kit.apply_modifier(low, mod)
+        mod = low.modifiers.new('tri', 'TRIANGULATE')
+        kit.apply_modifier(low, mod)
+    else:
+        low=kit.make_lod0(src,7800 if name=='ward_stone' else 19800)
     if detail is not None:
         import bmesh
         bm=bmesh.new();bm.from_mesh(low.data)
@@ -80,9 +93,10 @@ def build(name, source_dir):
         for p in low.data.polygons: p.use_smooth=True
         for e in low.data.edges: e.use_edge_sharp=False
         low.data.normals_split_custom_set([(0,0,0)]*len(low.data.loops))
-    kit.unwrap(low)
+    if not direct: kit.unwrap(low)
     low.name=name
-    mat=bpy.data.materials.new(name+'_tripo');mat.use_nodes=True
+    mat=src.data.materials[0].copy() if direct else bpy.data.materials.new(name+'_tripo')
+    mat.name=name+'_tripo';mat.use_nodes=True
     low.data.materials.clear();low.data.materials.append(mat)
     for p in low.data.polygons: p.material_index=0
     nt=mat.node_tree;shader=nt.nodes.get('Principled BSDF')
@@ -90,7 +104,7 @@ def build(name, source_dir):
     scene=bpy.context.scene;scene.render.engine='CYCLES';scene.cycles.samples=4
     size=1024 if name=='ward_stone' else 2048
     source_mats=[]
-    for m in src.data.materials:
+    for m in (low.data.materials if direct else src.data.materials):
         bs=next(n for n in m.node_tree.nodes if n.type=='BSDF_PRINCIPLED')
         output=next(n for n in m.node_tree.nodes if n.type=='OUTPUT_MATERIAL')
         source_mats.append((m,bs,output))
@@ -117,12 +131,13 @@ def build(name, source_dir):
         img=bpy.data.images.new(name+'_'+kind,size,size,alpha=False)
         img.colorspace_settings.name='sRGB' if kind=='basecolor' else 'Non-Color'
         target.image=img;nt.nodes.active=target
-        activate(low);src.select_set(True)
+        activate(low)
+        if not direct: src.select_set(True)
         bpy.ops.object.bake(type='NORMAL' if kind=='normal' else 'EMIT',
-            normal_space='TANGENT',use_selected_to_active=True,
+            normal_space='TANGENT',use_selected_to_active=not direct,
             cage_extrusion=.3 if name.startswith('hoard') else .12,
             max_ray_distance=1.0 if name.startswith('hoard') else .5,margin=16,use_clear=True)
-        if kind=='normal' and (name.startswith('hoard') or name=='ward_stone'):
+        if kind=='normal' and not direct and (name.startswith('hoard') or name=='ward_stone'):
             trials=[]
             longest=kit.np_from_image(img)[...,:3]*2-1
             for extrusion in ((.03,.105) if name.startswith('hoard') else (.012,.042)):
@@ -137,6 +152,8 @@ def build(name, source_dir):
             img.pixels.foreach_set(rgba.ravel())
             print('NORMAL PROJECTION',name,stats,flush=True)
         img.pack();baked[kind]=img
+    output=next(n for n in nt.nodes if n.type=='OUTPUT_MATERIAL')
+    nt.links.new(shader.outputs['BSDF'],output.inputs['Surface'])
     target.image=baked['basecolor'];nt.links.new(target.outputs['Color'],shader.inputs['Base Color'])
     normal=nt.nodes.new('ShaderNodeTexImage');normal.image=baked['normal']
     normalmap=nt.nodes.new('ShaderNodeNormalMap');nt.links.new(normal.outputs['Color'],normalmap.inputs['Color'])
