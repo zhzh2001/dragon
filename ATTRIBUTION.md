@@ -18,6 +18,7 @@ hobby project's reading, not legal advice.
 | HUD fonts (`assets/fonts/`): Barlow Condensed, Fira Sans | yes, OFL 1.1 | yes | yes | Licence text beside each, and in `THIRD_PARTY_NOTICES.md` |
 | `assets/textures/terrain_rock.png`, `terrain_scree.png`, `terrain_grass.png`, `terrain_forest.png`, `terrain_gravel.png` | yes, CC0 | yes | yes | Baked from Poly Haven's `rock_face_03`, `gray_rocks`, `leafy_grass`, `forest_leaves_04` and `dry_river_pebbles` scans (below) |
 | Tripo additions in `assets/props/rockkit/` | yes, labelled AI-generated | yes | yes | Paid output; section 5.2.2 (below) |
+| Tripo prey in `assets/props/prey_*.glb` and their review renders | yes, labelled AI-generated | yes | yes | Paid output under section 5.2.2 (below) |
 | Tripo landmark kit in `assets/props/landmarks/` and its review renders | yes, labelled AI-generated | yes | yes | Paid output under section 5.2.2 (below) |
 | Hunyuan-generated roster (`assets/<species>.glb`, about 50 MB each) | **no**, gitignored for size | **yes, labelled AI-generated** | yes | Outputs are ours (clause 5.3); the label is required (3.3); see below |
 | `assets/props/grazer.glb` (Hunyuan-derived, 3.5 MB) | yes, labelled | yes | yes | As above, and small enough to track |

@@ -92,3 +92,5 @@ assets/tripo-raw/
 build-landmarks-cache/
 # Trial copies of the hero with Tripo's hide (tools/hide/tripo_hide_trial.py).
 assets/embercrest-hero-tripo*.cfg
+
+build-prey-cache/
