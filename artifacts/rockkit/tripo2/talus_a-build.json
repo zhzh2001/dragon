@@ -1,0 +1,78 @@
+{
+  "light_before": [
+    -0.0717,
+    -0.3408,
+    1.5757
+  ],
+  "light_after": [
+    -0.0003,
+    -0.0,
+    0.0009
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.466,
+  "atlas_coverage": 0.505,
+  "normal_projection": {
+    "cage_factors": [
+      0.1,
+      0.35,
+      1.0
+    ],
+    "contribution_fractions": [
+      0.9660958227025805,
+      0.02637901654160822,
+      0.00225011062259337
+    ],
+    "flat_fraction": 0.0013246467138028752,
+    "invalid_filled_fraction": 0.003950403419414971,
+    "unfilled_surface_fraction": 0.0,
+    "negative_z_fraction": 0.0,
+    "mean": [
+      -0.005915762676126655,
+      0.00642043740619404,
+      0.8158637189512116
+    ],
+    "cage_metres": [
+      0.03492197865754,
+      0.12222692530138998,
+      0.3492197865754
+    ]
+  },
+  "mesh_light_after": [
+    0.05107
+  ],
+  "mean_albedo": [
+    0.231,
+    0.2071,
+    0.1792
+  ],
+  "name": "talus_a",
+  "asset": "tripo-talus-23.glb",
+  "scan_triangles": 1903453,
+  "scale": 19.918,
+  "triangles": [
+    11819,
+    2953,
+    737
+  ],
+  "islands_dropped": 13810,
+  "size_blender_xyz": [
+    19.02,
+    20.08,
+    9.05
+  ],
+  "seconds": 150.3,
+  "source": "tripo-talus-23.glb",
+  "rotation_blender": [
+    0,
+    0,
+    -25
+  ],
+  "source_alignment_shift": [
+    0.004506111145019531,
+    -0.0007348060607910156,
+    0.019626295194029808
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}

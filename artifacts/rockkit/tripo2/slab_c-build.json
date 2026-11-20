@@ -1,0 +1,79 @@
+{
+  "light_before": [
+    0.0344,
+    0.0051,
+    1.2918
+  ],
+  "light_after": [
+    -0.0001,
+    -0.0,
+    0.0
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.03,
+  "atlas_coverage": 0.638,
+  "normal_projection": {
+    "cage_factors": [
+      0.1,
+      0.35,
+      1.0
+    ],
+    "contribution_fractions": [
+      0.9980634593498334,
+      0.0015266650774803077,
+      4.259417984159449e-05
+    ],
+    "flat_fraction": 8.219929443114726e-06,
+    "invalid_filled_fraction": 0.00035906146340151143,
+    "unfilled_surface_fraction": 0.0,
+    "negative_z_fraction": 0.0,
+    "mean": [
+      -0.00538657902390356,
+      -0.002693153433102819,
+      0.9376831554889096
+    ],
+    "cage_metres": [
+      0.011061834733053236,
+      0.03871642156568632,
+      0.11061834733053234
+    ]
+  },
+  "mesh_light_after": [
+    0.10753,
+    0.00102
+  ],
+  "mean_albedo": [
+    0.2318,
+    0.2078,
+    0.1798
+  ],
+  "name": "slab_c",
+  "asset": "tripo-outcrop-32.glb",
+  "scan_triangles": 1996848,
+  "scale": 8.151,
+  "triangles": [
+    7878,
+    1968,
+    492
+  ],
+  "islands_dropped": 0,
+  "size_blender_xyz": [
+    8.0,
+    4.0,
+    2.21
+  ],
+  "seconds": 154.3,
+  "source": "tripo-outcrop-32.glb",
+  "rotation_blender": [
+    0,
+    0,
+    -90
+  ],
+  "source_alignment_shift": [
+    -0.0002853870391845703,
+    -0.002697765827178955,
+    0.0034021909814327955
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}

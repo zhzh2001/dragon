@@ -606,3 +606,71 @@ selection mean linear albedo: (0.2268, 0.2027, 0.1753); worst piece deviation 2.
 ```
 
 [Full verification output](../artifacts/rockkit/tripo2/verify-walls.txt)
+
+### Additional rocks
+
+| Piece | Tripo source | X, Y, Z (m) | Triangles LOD0/1/2 | Mean linear albedo RGB |
+|---|---|---|---|---|
+| `pinnacle_a` | `tripo-pinnacle-27` | 19.92, 22.02, 18.01 | 19697/4924/1418 | 0.2325, 0.2084, 0.1806 |
+| `outcrop_a` | `tripo-outcrop-12` | 19.01, 10.33, 14.77 | 19699/4923/1231 | 0.2239, 0.2000, 0.1729 |
+| `outcrop_b` | `tripo-outcrop-31` | 17.01, 3.83, 16.23 | 19700/4924/1230 | 0.2301, 0.2058, 0.1768 |
+| `talus_a` | `tripo-talus-23` | 19.02, 9.05, 20.08 | 11819/2953/737 | 0.2139, 0.1920, 0.1660 |
+| `bank_a` | `tripo-riverbank-21` | 20.99, 2.08, 11.78 | 19700/4924/1292 | 0.2317, 0.2077, 0.1798 |
+| `slab_c` | `tripo-outcrop-32` | 8.00, 2.21, 4.00 | 7878/1968/492 | 0.2280, 0.2041, 0.1767 |
+
+The source sheet shows the slab candidate leaning on support stones.
+Cutting below that slab would leave a steep standing plate.
+The low wedge from `tripo-outcrop-32` gives `slab_c` a low, broad profile.
+
+| Source | Reason | Evidence |
+|---|---|---|
+| `tripo-slab-25` | The tilted main plate rests on two stones. | [Slab source views](../artifacts/tripo-overnight/day2-crags-rocks.jpg) |
+| `tripo-tor-16` | The narrow leaning tower repeats the pinnacle's role. | [Tor source views](../artifacts/tripo-overnight/day2-rocks.jpg) |
+| `tripo-riverbank-22` | The rock cluster has open gaps and lacks a continuous bank profile. | [Bank source views](../artifacts/tripo-overnight/day2-rocks.jpg) |
+| `tripo-boulder-29` | The large rounded block and loose chip repeat forms in the existing boulder set. | [Boulder source views](../artifacts/tripo-overnight/day2-crags-rocks.jpg) |
+| `tripo-boulder-33` | The separate pitted blocks form a short cluster. The bank fills the river-edge role. | [Boulder source views](../artifacts/tripo-overnight/day2-crags-rocks.jpg) |
+
+Use the shell function above to rebuild the additional rocks.
+
+```sh
+rocks=pinnacle_a,outcrop_a,outcrop_b,talus_a,bank_a,slab_c
+kit --only "$rocks"
+kit --metadata --only "$rocks"
+kit --verify-only --only "$rocks"
+kit --render --only "$rocks"
+kit --verify-only
+shasum -a 256 -c artifacts/rockkit/tripo2/original-sha256.txt
+```
+
+The first LOD2 meshes lost small stones along their silhouettes.
+The worst overlap measured 0.886 for the pinnacle, 0.895 for the mound and 0.815 for the bank.
+The pinnacle uses outline weights to retain the rubble around its foot.
+The mound and bank keep their triangle budgets.
+The builder moves convex corners outward after decimation to recover the volume of individual stones.
+It clamps the base at its original floor.
+
+The bank has a straight end visible from above. Its close view shows soft texture and angular stones.
+The thin end of the slab overhangs its base.
+The bank's texture padding shifted its average colour outside the kit tolerance.
+The builder scales its full base texture to the kit target after filling the padding.
+
+All 25 pieces passed the kit verifier. The 33 new GLBs and placement data added 88,830,271 bytes.
+All 42 original GLBs matched their recorded SHA-256 hashes. All 47 requested images measure 1920 by 1080 pixels.
+[Full kit verification](../artifacts/rockkit/tripo2/verify.txt) · [File and placement audit](../artifacts/rockkit/tripo2/audit-final.txt)
+
+The file verifier reported the following results.
+
+```text
+VERIFY pinnacle_a: PASS
+VERIFY outcrop_a: PASS
+VERIFY outcrop_b: PASS
+VERIFY talus_a: PASS
+VERIFY bank_a: PASS
+VERIFY slab_c: PASS
+VERIFY selection: PASS
+selection mean linear albedo: (0.2267, 0.2030, 0.1755); worst piece deviation 5.63% (limit 8%)
+  selected bytes: 49325788; directory size: 205.48 MB; original scan kit: 70.54 MB of 80 MB
+  added GLBs and full manifest: 88846133 bytes (limit 90000000)
+```
+
+[Full verification output](../artifacts/rockkit/tripo2/verify-rocks.txt)

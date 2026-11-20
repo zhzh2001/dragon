@@ -72,11 +72,18 @@ The large raw exports stay local and untracked.
 ### Wall crags and rocks (2026-11-20)
 
 The same paid Tripo terms cover these meshes and their inspection renders.
+
 - `tripo-crag2-02` supplied `crag_a`.
 - `tripo-crag2-06` supplied `crag_b`.
 - `tripo-crag2-07` supplied `crag_c`.
 - `tripo-crag2-08` supplied `crag_d`.
 - `tripo-wall2-05` supplied `crag_e`.
+- `tripo-pinnacle-27` supplied `pinnacle_a`.
+- `tripo-outcrop-12` supplied `outcrop_a`.
+- `tripo-outcrop-31` supplied `outcrop_b`.
+- `tripo-talus-23` supplied `talus_a`.
+- `tripo-riverbank-21` supplied `bank_a`.
+- `tripo-outcrop-32` supplied `slab_c`.
 
 ## Tripo run props (2026-11-16)
 

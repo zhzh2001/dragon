@@ -1,0 +1,79 @@
+{
+  "light_before": [
+    -0.2861,
+    0.051,
+    1.1421
+  ],
+  "light_after": [
+    -0.0,
+    0.0002,
+    0.0009
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.214,
+  "atlas_coverage": 0.574,
+  "normal_projection": {
+    "cage_factors": [
+      0.1,
+      0.35,
+      1.0
+    ],
+    "contribution_fractions": [
+      0.9767765139258779,
+      0.011983224232769993,
+      0.0021218607661099634
+    ],
+    "flat_fraction": 0.0005488214650172984,
+    "invalid_filled_fraction": 0.008569579610224755,
+    "unfilled_surface_fraction": 3.733479353859173e-05,
+    "negative_z_fraction": 0.0,
+    "mean": [
+      0.0004147094822299171,
+      0.009493088723447169,
+      0.820733430248999
+    ],
+    "cage_metres": [
+      0.028995322712782812,
+      0.10148362949473984,
+      0.2899532271278281
+    ]
+  },
+  "mesh_light_after": [
+    0.29928,
+    0.01081
+  ],
+  "mean_albedo": [
+    0.2738,
+    0.2452,
+    0.2133
+  ],
+  "name": "bank_a",
+  "asset": "tripo-riverbank-21.glb",
+  "scan_triangles": 1962496,
+  "scale": 21.393,
+  "triangles": [
+    19700,
+    4924,
+    1292
+  ],
+  "islands_dropped": 19651,
+  "size_blender_xyz": [
+    20.99,
+    11.78,
+    2.08
+  ],
+  "seconds": 93.4,
+  "source": "tripo-riverbank-21.glb",
+  "rotation_blender": [
+    0,
+    0,
+    0
+  ],
+  "source_alignment_shift": [
+    -0.007724285125732422,
+    -0.0025501251220703125,
+    0.005088449455797672
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}
