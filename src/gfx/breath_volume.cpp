@@ -39,6 +39,9 @@ void BreathVolumeSettings::parse(const std::string& list) {
         } else if (key == "steps") {
             steps = int(value);
             found = true;
+        } else if (key == "style") {
+            style = int(value);
+            found = true;
         }
         for (const Field& f : fields) {
             if (key == f.key) {
@@ -246,7 +249,7 @@ void BreathVolume::submit(Device& device, rhi::Pass* pass, const SceneUniforms& 
             hull = std::max(hull, core::length(p - (a + ab * t)) + u.nodes[i].w * swell);
         }
         u.hull_a = core::Vec4{a.x, a.y, a.z, hull};
-        u.hull_b = core::Vec4{b.x, b.y, b.z, 0.0f};
+        u.hull_b = core::Vec4{b.x, b.y, b.z, settings.style != 0 ? 1.0f : 0.0f};  // w: the shading (breath_volume.hlsl)
     }
 
     rhi::Device& rhi = device.rhi();

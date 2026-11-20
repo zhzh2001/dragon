@@ -281,3 +281,73 @@ breath from 120 m, before and after.
 
 The new random draws shift the particle sequence, so the `fire` golden's
 streaks and embers moved; it was captured again.
+
+## Fire through a sensor (2026-11-20, 17:53)
+
+The flame was three flat tones: a cream blotch, one orange, a brown rim.
+It read as a painted shape, and it was no brighter than the sunlit rock
+behind it. The cause was in two places.
+
+- The composite's tonemap keeps hue. Any fire colour above about 1 shows
+  as its hue at full strength, so brightness inside the flame carries no
+  form. Only hue and darkness do.
+- The shader read the mean heat of the ray through a stepped ramp. A mean
+  is nearly the same across the jet, and the steps were the only shapes.
+
+Two attempts kept the mean and failed on a render. Summing each step's
+colour through a continuous ramp gave one airbrushed orange, as the first
+build of the volume had (`f1` to `f3` in the session; not kept).
+
+What works is what a camera does. Hot gas is thin and its light adds along
+the ray. The sum then goes through a curve that saturates one channel at
+a time, `1 - exp(-L)` on each of red, green and blue. An orange light
+that is weak shows deep orange; stronger, its red is full and the green
+catches up, and it shows yellow; stronger still, pale. So the depth of
+gas and its heat show as hue, and the form of the flame comes out of the
+sum without a ramp. The result is divided by one minus its luminance, the
+inverse of the composite's curve, so what is shown is what was meant and
+a bright flame is bright enough to bloom.
+
+In `breath_volume.hlsl` (`summed`, when `hull_b.w` is 1):
+
+- The temperature: the old cooling along the jet, a round profile, and
+  the broad noise cut into billows with creases between. A metre of gas
+  emits as the fourth power of it, more on the ridges of the fine noise
+  (the tongues), and up to five times more at the jaws.
+- The hue of a sample goes from the profile's cool colour to its hot one
+  with the temperature. Every element uses the same curve: frost goes
+  from blue to white, blight from green to pale yellow.
+- Gas under a temperature of 0.3 is smoke. It adds no light of its own,
+  takes a little of the day's, and hides what is behind it. `smoke` sets
+  how much. The far third of the jet goes dark and lifts off the top.
+- A flame bright enough to saturate hides the scene behind it. A thin one
+  adds to it.
+
+Against the open points above: the pale core is at the jaws from every
+view, and from the chase camera the jet is a pale centre in an orange
+ball behind the horns. Smoke breaks from the far end. A fireball's head
+is pale and whole, with a halo from the bloom; its tail is smoke.
+
+`artifacts/breath-volume/sensor-before-after.jpg`: the old shading on the
+left, from 16 m, from 60 m and from the chase camera, cropped and not
+scaled.
+
+Cost, paired on the frozen frame at 1920x1080 with two Blender jobs
+sharing the Mac: 1.34 ms from the chase camera and 1.32 ms from the side,
+against 1.59 and 1.30 ms for the old shading. The new path reads no more
+noise than the old one.
+
+`--breath style=0` is the old shading, and so is the Playtest panel's
+"light as a camera sees it" when off. The `fire` golden was captured
+again; no other scene moved.
+
+Open:
+
+- The body is soft from 16 m. The noise is value noise four octaves deep,
+  and its finest eddy is a third of the jet's radius.
+- Stone's breath is dust and glows like a flame. Storm's starts well
+  ahead of the jaws, as it did before.
+- A fireball's tail goes straight to smoke. A short flame between the
+  head and the smoke would be better.
+- Not played. The stills do not show the motion.
+

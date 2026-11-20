@@ -10,6 +10,9 @@
 // depth of gas. Summed puffs had no such bound, and went to one flat colour
 // under a tonemap that keeps hue.
 //
+// That is the older shading (jet.hull_b.w 0). The default sums the light
+// itself and saturates it a channel at a time: see `summed` below.
+//
 // Alpha blending gives rgb * a + scene * (1 - a): the light, and the scene
 // through what the gas lets pass. The modern tier only.
 #include "scene_common.hlsl"
@@ -25,7 +28,7 @@ struct BreathUniforms {
     float4 axis;    // xyz the jet's direction at the mouth
     float4 bounds;  // xyz a sphere's centre, w its radius: the whole jet
     float4 hull_a;  // xyz one end of a capsule about the whole jet, w its radius
-    float4 hull_b;  // xyz the other end
+    float4 hull_b;  // xyz the other end, w the shading: 0 the ramp on the mean heat, 1 fire summed a sample
     float4 nodes[BREATH_NODES];  // xyz position, w radius; the youngest first
     float4 info[BREATH_NODES];   // x age 0..1, y 1 when joined to the next node
 };
@@ -164,6 +167,12 @@ float4 fs_main(BreathVertex input) : SV_Target {
     float through = 1.0;
     float heat_sum = 0.0;
     float lit_sum = 0.0;
+    float3 glow_sum = float3(0.0, 0.0, 0.0);
+    bool summed = jet.hull_b.w > 0.5;
+    float smoke_sum = 0.0;
+    float3 hot_hue = hot / peak;
+    float3 cool_hue = jet.cool.rgb / max(max(jet.cool.r, jet.cool.g), max(jet.cool.b, 1e-3));
+    float3 smoke_colour = (scene.sky_zenith.rgb * 0.6 + scene.sun_color.rgb * scene.sun.w * 0.2) * float3(0.10, 0.085, 0.075);
     bool entered = false;
     int steps = int(jet.params.w + 0.5);
     int inside = 0;
@@ -244,7 +253,37 @@ float4 fs_main(BreathVertex input) : SV_Target {
         density *= lerp(1.0, smoothstep(0.3, 0.62, fine), wear * 0.9);
         density *= 1.0 - smoothstep(0.72, 1.0, age);
 
-        if (density > 0.001) {
+        if (summed && density > 0.001) {
+            // Fire as a camera sees it (EFFECTS.md, "Fire through a sensor").
+            // Hot gas is thin and adds its light along the ray; the sum goes
+            // through a curve that saturates a channel at a time, as film
+            // and sensors do. So a deep or hot part of the flame is pale
+            // yellow, a thin or cool part is orange and then red, and the
+            // form of the gas shows as hue. Cool gas is smoke, which hides.
+            float along = pow(1.0 - age, BREATH_COOLING);
+            float axis_heat = lerp(0.8, 1.0, along) * (1.0 - 0.8 * smoothstep(0.45, 1.0, age));
+            float radial = saturate(1.0 - q);
+            // Billows: the broad noise cut to lobes with creases between.
+            float billow = smoothstep(0.38, 0.62, n);
+            float temp = axis_heat * (0.12 + 0.88 * pow(radial, 0.5));
+            temp *= lerp(1.0, 0.42 + 0.58 * billow, 0.5 + 0.5 * wear);
+            temp *= 0.8 + 0.2 * fine;
+            temp = max(temp, jet.axis.w * saturate(1.0 - q * 1.7) * pow(1.0 - age, 2.0));
+            temp = max(temp, jet.axis.w * 0.8 * radial * (1.0 - age) * (0.5 + 0.5 * billow));
+            temp = saturate(temp);
+            float per_metre = jet.shape.x * min(1.0, 1.5 / s.z) * density;
+            // The light a metre of gas adds: steep in the temperature, and
+            // many times over at the jaws, where the jet is a hand across.
+            float emit = temp * temp * temp * temp * 4.5 * jet.colour.y * (1.0 + jet.colour.x * along * along);
+            // Tongues: the ridges of the fine noise burn brighter.
+            emit *= 0.3 + 2.4 * ridge * (0.4 + 0.6 * fine);
+            float3 hue = lerp(cool_hue, hot_hue, smoothstep(0.22, 0.62, temp));
+            float cold = 1.0 - smoothstep(0.08, 0.3, temp);
+            float kept = exp(-per_metre * (0.12 + 1.6 * jet.colour.z * cold) * ds);
+            glow_sum += through * per_metre * ds * emit * hue;
+            smoke_sum += through * (1.0 - kept) * cold;
+            through *= kept;
+        } else if (density > 0.001) {
             // Hot on the axis and at the jaws, cooling outward and along,
             // and hot in the tongues: between them the body is a deep
             // orange, so the flame has lines in it and not one glow.
@@ -274,13 +313,27 @@ float4 fs_main(BreathVertex input) : SV_Target {
         t += ds;
     }
     float cover = 1.0 - through;
-    if (cover < 0.003) discard;
+    if (!summed && cover < 0.003) discard;
     // The colour is read off the mean heat the ray met, through a ramp with
     // steep steps, and the edge off the cover the same way. Summing each
     // step's own colour gave the right hues and no shapes: every boundary
     // in the gas was averaged along the ray into a glow. A ramp on the mean
     // puts an edge where the mean crosses a step, so the tongues and the
     // silhouette are lines.
+    if (summed) {
+        // The sensor: each channel saturates on its own.
+        float3 shown = (1.0 - exp(-glow_sum)) * jet.colour.w;
+        float bright = max(shown.r, max(shown.g, shown.b));
+        // The composite's tonemap is a curve on the luminance that keeps
+        // hue. Its inverse, so that what is shown is what was meant, and so
+        // that a bright flame is bright enough to bloom.
+        float luma = dot(shown, float3(0.2126, 0.7152, 0.0722));
+        float3 light = shown / (1.0 - min(luma, 0.9)) + smoke_colour * smoke_sum;
+        // A flame bright enough to saturate hides what is behind it.
+        float alpha = 1.0 - through * (1.0 - saturate(bright));
+        if (alpha < 0.003) discard;
+        return float4(light / alpha, alpha);
+    }
     float mean_heat = heat_sum / cover;
     float3 emission = lerp(fringe, body, smoothstep(0.03, 0.2, mean_heat));
     emission = lerp(emission, pale, smoothstep(0.28, 0.5, mean_heat));

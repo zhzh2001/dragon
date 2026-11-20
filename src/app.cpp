@@ -4610,6 +4610,10 @@ void App::build_playtest_ui() {
         // it is the puffs the rivals and the retro tiers have.
         gfx::BreathVolumeSettings& b = breath_volume_settings_;
         ImGui::Checkbox("breath as a volume", &b.enabled);
+        // The shading (breath_volume.hlsl): the gas's light summed and put
+        // through a sensor's curve, or the older ramp on the mean heat.
+        bool sensor = b.style != 0;
+        if (ImGui::Checkbox("light as a camera sees it", &sensor)) b.style = sensor ? 1 : 0;
         ImGui::SliderFloat("width at the tip", &b.end_radius, 0.3f, 2.0f, "x%.2f");
         ImGui::SliderFloat("width at the jaws", &b.mouth_radius, 0.1f, 1.5f, "%.2f m");
         ImGui::SliderFloat("ragged edge", &b.erosion, 0.0f, 1.5f);

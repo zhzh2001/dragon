@@ -24,6 +24,10 @@
 //      weight them, and the pixel's colour is the mean heat the ray met,
 //      read through a ramp: a pale core at the jaws, the breath's hot
 //      colour, its cool one at the rim. Never brighter than the ramp's top.
+//      Since 2026-11-20 that is `style` 0. The default sums the gas's
+//      light along the ray and puts the sum through a curve that saturates
+//      a channel at a time, as a camera does, so depth and heat show as
+//      hue (docs/showcase/EFFECTS.md, "Fire through a sensor").
 //
 // The modern tier only: it reads the scene's depth, and the march is past
 // what the retro tiers' shader models hold. They keep the puffs.
@@ -57,6 +61,7 @@ struct BreathJet {
 struct BreathVolumeSettings {
     bool enabled = true;
     int steps = 56;              // march steps a pixel may take
+    int style = 1;               // 1: fire summed a sample, through a continuous ramp; 0: the ramp on the mean heat
     float mouth_radius = 0.38f;  // metres at the jaws
     float mouth_forward = 1.0f;  // metres from the head joint to the jaws, along the aim
     float end_radius = 1.0f;     // times the puffs' own reach sideways at the tip (size_end + range x spread)
