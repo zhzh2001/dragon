@@ -1,0 +1,9 @@
+PASS 42/42 original GLBs matched SHA-256 and the committed blobs.
+PASS 6 previous placement entries matched.
+New GLBs: 15; bytes: 39463016
+crag_a 26 base points, 12 rear points: PASS
+crag_b 26 base points, 12 rear points: PASS
+crag_c 26 base points, 12 rear points: PASS
+crag_d 26 base points, 12 rear points: PASS
+crag_e 26 base points, 12 rear points: PASS
+PASS additional files and manifest fit within 90 MB.

@@ -77,6 +77,11 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Tripo ridge family (2026-11-16): `tripo-ridge-01`; `ridge_a` and inspection renders | Tripo generated the source mesh with paid credits. Codex used the same Blender rock kit pipeline. |
 | Tripo scree family (2026-11-16): `tripo-scree-01`; `scree_a` and inspection renders | Tripo generated the source mesh with paid credits. Codex used the same Blender rock kit pipeline. |
 | Tripo boulder family (2026-11-16): `tripo-boulder-01`, `-02`, `-03`; `boulder_d`, `boulder_e`, `boulder_f` and inspection renders | Tripo generated the source meshes with paid credits. Codex used the same Blender rock kit pipeline. |
+| Tripo rock kit (2026-11-20), `crag_a` from `tripo-crag2-02` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `crag_b` from `tripo-crag2-06` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `crag_c` from `tripo-crag2-07` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `crag_d` from `tripo-crag2-08` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `crag_e` from `tripo-wall2-05` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Contact sheets and hero-hide comparisons of the overnight Tripo run and the second spend the next day (`artifacts/tripo-overnight/`), 72 and 67 meshes, most of them **not** used | **Tripo** H3.1 in its Studio, with paid credits: text, image and multi-view generation, and the Texture tool on the hero's own mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 

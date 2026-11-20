@@ -13,6 +13,7 @@ Use --render --only NAME for individual front, side, top and close views.
 Use --raw-faces --only NAME before choosing a Tripo wall orientation.
 Use --metadata to regenerate placement data from the exported Tripo pieces.
 Use --mounted --only NAME to inspect wall burial at 45 and 62 degrees.
+Use --row to render all wall crags on the 55-degree slope.
 Use --placed --only NAME to inspect flat-terrain burial from placement check points.
 Use --repair-normals --only NAME to repeat the normal-only bake.
 Install ffmpeg before encoding Tripo packed maps. Their JPEGs need full chroma resolution.
@@ -114,12 +115,27 @@ TRIPO_PIECES = [
     dict(name="boulder_e", kind="boulder", asset="tripo-boulder-02.glb", fit=(0, 5)),
     dict(name="boulder_f", kind="boulder", asset="tripo-boulder-03.glb", fit=(1, 4)),
 ]
+WALL_CRAGS = [
+    ("crag_a", "crag2-02", 50, -52),
+    ("crag_b", "crag2-06", 58, -35),
+    ("crag_c", "crag2-07", 54, -78),
+    ("crag_d", "crag2-08", 47, -125),
+    ("crag_e", "wall2-05", 52, -95),
+]
+for name, source, height, yaw in WALL_CRAGS:
+    TRIPO_PIECES.append(dict(name=name, asset=f"tripo-{source}.glb", kind="wall_crag",
+                             fit=(2, height), rot=(0, 0, yaw), round_two=True))
 for piece in TRIPO_PIECES:
     piece.update(source="tripo", cuts=[((0.5, 0.5, 0.035), (0, 0, -1))])
 PIECES += TRIPO_PIECES
 BUDGET = {"boulder": 8000, "slab": 8000, "cliff": 20000, "wall": 20000,
-          "crag": 20000, "mound": 12000}
+          "crag": 20000, "mound": 12000, "wall_crag": 24000}
 TRIPO_ART = os.path.join(ART, "tripo")
+TRIPO2_ART = os.path.join(ART, "tripo2")
+
+
+def review_dir(piece):
+    return TRIPO2_ART if piece.get("round_two") else TRIPO_ART
 
 
 def check_write_paths():
@@ -1074,11 +1090,11 @@ def build_piece(piece):
                  seconds=round(time.time() - t0, 1))
     log("BUILT", json.dumps(stats))
     if piece.get("source") == "tripo":
-        os.makedirs(TRIPO_ART, exist_ok=True)
+        os.makedirs(review_dir(piece), exist_ok=True)
         stats.update(source=piece["asset"], rotation_blender=piece.get("rot", (0, 0, 0)),
                      source_alignment_shift=[float(value) for value in shift],
                      occlusion="constant 1.0", full_high_mesh_normal_bake=True)
-        with open(os.path.join(TRIPO_ART, name + "-build.json"), "w") as f:
+        with open(os.path.join(review_dir(piece), name + "-build.json"), "w") as f:
             json.dump(stats, f, indent=2)
     return stats
 
@@ -1256,6 +1272,7 @@ def verify(selected=None):
     if selected is None:
         selected = [p for p in PIECES if not p.get("rejected")]
     check(bool(selected), "No pieces selected for verification")
+    report_dir = TRIPO2_ART if any(p.get("round_two") for p in selected) else TRIPO_ART
     failures = []
     for piece in selected:
         try:
@@ -1274,6 +1291,11 @@ def verify(selected=None):
             elif kind == "slab":
                 check(4.0 <= max(x, z) <= 10.0, f"{name}: {max(x, z):.2f} m long, expected 4 to 10")
                 check(y <= 0.5 * max(x, z), f"{name}: {y:.2f} m high is not a slab")
+            elif piece.get("round_two"):
+                axis, target = piece["fit"]
+                check(abs((x, z, y)[axis] - target) < 0.3, f"{name}: size missed the uniform fit")
+                if kind == "wall_crag":
+                    check(45 <= y <= 60, f"{name}: wall height fell outside 45 to 60 metres")
             elif piece.get("source") == "tripo":
                 check(abs(x - piece["fit"][1]) < 0.1, f"{name}: width missed the target")
                 check(abs(y - piece["height"]) < 0.1, f"{name}: height missed the target")
@@ -1320,8 +1342,8 @@ def verify(selected=None):
     if failures:
         report = "\n".join(lines + failures) + "\n"
         print(report, flush=True)
-        os.makedirs(TRIPO_ART, exist_ok=True)
-        with open(os.path.join(TRIPO_ART, "verify.txt"), "w") as f:
+        os.makedirs(report_dir, exist_ok=True)
+        with open(os.path.join(report_dir, "verify.txt"), "w") as f:
             f.write(report)
         raise KitError(f"Verification failed for {len(failures)} pieces. Read the per-piece results.")
     kit = np.mean(list(means.values()), axis=0)
@@ -1343,8 +1365,8 @@ def verify(selected=None):
     report = "\n".join(lines + [summary]) + "\n"
     print(report, flush=True)
     if any(p.get("source") == "tripo" for p in selected):
-        os.makedirs(TRIPO_ART, exist_ok=True)
-        with open(os.path.join(TRIPO_ART, "verify.txt"), "w") as f:
+        os.makedirs(report_dir, exist_ok=True)
+        with open(os.path.join(report_dir, "verify.txt"), "w") as f:
             f.write(report)
 
 
@@ -1907,9 +1929,10 @@ def footprint_area(points):
     return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(halves, halves[1:] + halves[:1]))) / 2
 
 
-def write_metadata():
+def write_metadata(only=None):
     """Regenerate metadata for all accepted Tripo pieces with three exported LOD files."""
     selected = [p for p in TRIPO_PIECES if not p.get("rejected")
+                and (not only or p["name"] in only)
                 and all(os.path.exists(os.path.join(OUT, p["name"] + suffix + ".glb")) for suffix in LOD_SUFFIX)]
     entries = []
     measurements = {}
@@ -1957,6 +1980,10 @@ def write_metadata():
         check(len(points) <= 26, f"{piece['name']}: too many placement check points")
         check(all(np.any(np.all(pos == point, axis=1)) for point in points),
               f"{piece['name']}: placement check left the LOD2 vertices")
+        if piece["kind"] == "wall_crag":
+            rear = pos[pos[:, 2] < 0]
+            bands = np.array_split(rear[np.argsort(rear[:, 1], kind="stable")], 3)
+            item["rear_points"] = np.concatenate([farthest_points(b, 4) for b in bands]).tolist()
         item["check_points"] = points.tolist()
         entries.append(item)
     metadata = dict(version=1, axes="glTF: X right, Y up, Z face", units="metres",
@@ -1966,10 +1993,17 @@ def write_metadata():
                     wall_translation_rule="Translate the yaw-rotated mounting point onto the terrain plane. Check points must remain inside terrain.",
                     check_points_rule="Expand the lower band until it has eight vertices and 25 percent of the horizontal hull. Walls also check each rear height band.",
                     pieces=entries)
+    if only:
+        with open(os.path.join(OUT, "pieces.json")) as f:
+            metadata = json.load(f)
+        by_name = {item["name"]: item for item in metadata["pieces"]}
+        by_name.update({item["name"]: item for item in entries})
+        metadata["pieces"] = list(by_name.values())
     with open(os.path.join(OUT, "pieces.json"), "w") as f:
         json.dump(metadata, f, indent=2)
-    with open(os.path.join(TRIPO_ART, "placement-measurements.json"), "w") as f:
-        json.dump(measurements, f, indent=2)
+    if not only or measurements:
+        with open(os.path.join(TRIPO_ART, "placement-measurements.json"), "w") as f:
+            json.dump(measurements, f, indent=2)
     log("wrote placement metadata", len(entries), "pieces")
 
 
@@ -2028,11 +2062,80 @@ def render_placed(selected):
         json.dump(report, f, indent=2)
 
 
+def render_crag_row():
+    """Place the yawed base checks beneath a 55-degree plane."""
+    with open(os.path.join(OUT, "pieces.json")) as f:
+        walls = [p for p in json.load(f)["pieces"] if p["kind"] == "wall_crag"]
+    check(bool(walls), "The manifest contained no wall crags. Build the placement data first.")
+    sc, sun, cam = render_setup(samples=16)
+    aim_sun(sun, -32)
+    slope = math.radians(55)
+    tangent = math.tan(slope)
+    slope_rock = noise_material("slope rock", (0.84 * TARGET_ALBEDO, 1.55 * TARGET_ALBEDO),
+                                scale=0.09, bump=0.38)
+    plane = add_plane("slope", (400, 450), slope_rock, rotation=(slope, 0, 0))
+    # These random yaws and contour heights join the exposed shoulders after burial.
+    layout = [("crag_b", -11.98, 0), ("crag_e", -16.73, -5), ("crag_a", 16.35, -4),
+              ("crag_d", -18.82, -5), ("crag_c", -19.78, -10)]
+    by_name = {item["name"]: item for item in walls}
+    check(set(by_name) == {name for name, _, _ in layout}, "The row layout missed a wall crag.")
+    right, last_width = 0, 0
+    placed = []
+    surface = []
+    for name, yaw, rise in layout:
+        item = by_name[name]
+        obj = import_piece(name)
+        obj.rotation_mode = "XYZ"
+        transform(obj, rot=(0, 0, yaw))
+        lo, hi = bounds(obj)
+        width = hi[0] - lo[0]
+        overlap = 0.15 * min(last_width, width)
+        x = right - overlap - lo[0]
+        right = x + hi[0]
+        last_width = width
+        a = math.radians(yaw)
+        checks = np.array(item["check_points"])
+        depth = checks[:, 0] * math.sin(a) - checks[:, 2] * math.cos(a)
+        above = checks[:, 1] - tangent * depth
+        dz = -above.max() - 0.15 / math.cos(slope)
+        obj.location = (x, rise / tangent, dz + rise)
+        coords = np.array([v.co[:] for v in obj.data.vertices]) + np.array(obj.location)
+        exposed = coords[coords[:, 2] > tangent * coords[:, 1]]
+        check(len(exposed) > 0, f"{item['name']}: the slope covered the whole crag")
+        surface.append(exposed)
+        placed.append(dict(name=item["name"], yaw_degrees=yaw, overlap_metres=overlap,
+                           offset_blender=list(obj.location), max_base_plane_distance=float(
+                               (above.max() + dz) * math.cos(slope))))
+    # Centre the plane beneath the row.
+    plane.location.x = right / 2
+    vertices = np.concatenate(surface)
+    centre = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
+    for label, distance, elevation in (("250", 250, 0), ("80", 80, 0), ("top", 250, 60)):
+        angle = math.radians(elevation)
+        bearing = math.radians(19 if elevation == 0 else 0)
+        horizontal = np.array([math.sin(bearing), -math.cos(bearing), 0])
+        direction = horizontal * math.cos(angle) + np.array([0, 0, math.sin(angle)])
+        eye = centre + direction * distance
+        aim_camera(cam, eye, centre)
+        delta = vertices - eye
+        depth = -delta @ direction
+        across = delta @ np.array([math.cos(bearing), math.sin(bearing), 0])
+        vertical = delta @ (-horizontal * math.sin(angle) + np.array([0, 0, math.cos(angle)]))
+        half_frame = max(np.max(abs(across) / depth),
+                         np.max(abs(vertical) / depth) * 16 / 9)
+        cam.data.lens = cam.data.sensor_width / (2 * half_frame * 1.12)
+        render_tile(sc, os.path.join(TRIPO2_ART, f"row-{label}.png"), 1920, 1080)
+    with open(os.path.join(TRIPO2_ART, "row-placement.json"), "w") as f:
+        json.dump(placed, f, indent=2)
+
+
 def render_tripo(selected, raw=False):
     """Render cardinal faces and surface details under the kit's light."""
-    os.makedirs(TRIPO_ART, exist_ok=True)
     for piece in selected:
-        sc, sun, cam = render_setup(samples=32)
+        folder = review_dir(piece)
+        os.makedirs(folder, exist_ok=True)
+        wide = piece.get("round_two", False)
+        sc, sun, cam = render_setup(samples=12 if wide else 32)
         obj = import_scan(source_path(piece)) if raw else import_piece(piece["name"])
         lo, hi = bounds(obj)
         if raw:
@@ -2054,14 +2157,17 @@ def render_tripo(selected, raw=False):
             views.append(("close", (0,-1,0.08)))
         for label, direction in views:
             target = centre.copy()
+            if wide:
+                extent = size[[0, 1]] if label == "top" else size[[1 if label == "side" else 0, 2]]
+                cam.data.ortho_scale = 1.22 * max(extent[0], extent[1] * 16 / 9)
             if label == "close":
                 cam.data.ortho_scale = float(max(size)) * 0.29
                 target[2] = size[2] * 0.56
             eye = target + np.array(direction) * float(max(size)) * 2
             aim_camera(cam, eye, target)
             aim_sun(sun, math.degrees(math.atan2(direction[1], direction[0])) + 62)
-            path = os.path.join(TRIPO_ART, piece["name"] + ("-raw-" if raw else "-") + label + ".png")
-            render_tile(sc, path, 1024, 1024)
+            path = os.path.join(folder, piece["name"] + ("-raw-" if raw else "-") + label + ".png")
+            render_tile(sc, path, *((1920, 1080) if wide else (1024, 1024)))
         if not raw and piece["kind"] == "wall":
             cam.data.type = "PERSP"
             cam.data.lens = 46
@@ -2087,7 +2193,7 @@ def main():
     selected = [p for p in PIECES if not only or p["name"] in only]
     if only:
         check(set(only) <= {p["name"] for p in PIECES}, "Unknown piece in --only")
-    reading_outputs = "--verify-only" in argv or "--render" in argv or "--metadata" in argv or "--mounted" in argv or "--placed" in argv
+    reading_outputs = "--row" in argv or "--verify-only" in argv or "--render" in argv or "--metadata" in argv or "--mounted" in argv or "--placed" in argv
     if reading_outputs and not only:
         selected = [p for p in selected if not p.get("rejected")]
     if not reading_outputs:
@@ -2101,6 +2207,9 @@ def main():
             if piece.get("source") == "tripo" and not os.path.exists(source_path(piece)):
                 log("SKIP", piece["name"], "missing source", piece["asset"])
                 selected.remove(piece)
+    if "--row" in argv:
+        render_crag_row()
+        return
     if "--measure-alignment" in argv:
         measure_alignment(selected)
         return
@@ -2117,7 +2226,7 @@ def main():
         render_mounted(selected)
         return
     if "--metadata" in argv:
-        write_metadata()
+        write_metadata(only)
         return
     if "--raw-faces" in argv:
         render_tripo([p for p in selected if p.get("source") == "tripo"], raw=True)

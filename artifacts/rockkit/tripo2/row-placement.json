@@ -1,0 +1,57 @@
+[
+  {
+    "name": "crag_b",
+    "yaw_degrees": -11.98,
+    "overlap_metres": 0.0,
+    "offset_blender": [
+      29.072202682495117,
+      0.0,
+      -43.104923248291016
+    ],
+    "max_base_plane_distance": -0.15000000000000108
+  },
+  {
+    "name": "crag_e",
+    "yaw_degrees": -16.73,
+    "overlap_metres": 8.958073711395263,
+    "offset_blender": [
+      81.80155181884766,
+      -3.50103759765625,
+      -29.653173446655273
+    ],
+    "max_base_plane_distance": -0.14999999999999905
+  },
+  {
+    "name": "crag_a",
+    "yaw_degrees": 16.35,
+    "overlap_metres": 6.90876874923706,
+    "offset_blender": [
+      129.6147003173828,
+      -2.800830125808716,
+      -26.751678466796875
+    ],
+    "max_base_plane_distance": -0.14999999999999905
+  },
+  {
+    "name": "crag_d",
+    "yaw_degrees": -18.82,
+    "overlap_metres": 6.258926010131836,
+    "offset_blender": [
+      166.79299926757812,
+      -3.50103759765625,
+      -27.332141876220703
+    ],
+    "max_base_plane_distance": -0.14999999999999905
+  },
+  {
+    "name": "crag_c",
+    "yaw_degrees": -19.78,
+    "overlap_metres": 6.258926010131836,
+    "offset_blender": [
+      204.57908630371094,
+      -7.0020751953125,
+      -43.76947784423828
+    ],
+    "max_base_plane_distance": -0.15000000000000108
+  }
+]
