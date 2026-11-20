@@ -31,7 +31,8 @@ void BreathVolumeSettings::parse(const std::string& list) {
                                 {"erosion", &erosion},           {"flow", &flow},
                                 {"core", &core},                 {"gain", &gain},
                                 {"smoke", &smoke},               {"sparks", &sparks},
-                                {"light", &light}};
+                                {"light", &light},               {"ground_fire", &ground_fire},
+                                {"ground_height", &ground_height}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;
@@ -89,6 +90,7 @@ void BreathVolume::shutdown() {
 
 void BreathVolume::clear() {
     nodes_.clear();
+    fires_.clear();
     owed_ = 0.0f;
     fed_ = fed_last_ = false;
 }
@@ -143,8 +145,87 @@ void BreathVolume::update(float dt) {
     }
     const float life = std::max(jet_.life, 0.05f);
     while (!nodes_.empty() && nodes_.back().age >= life) nodes_.pop_back();
+    for (GroundFire& fire : fires_) fire.age += dt;
+    fires_.erase(std::remove_if(fires_.begin(), fires_.end(), [](const GroundFire& f) { return f.age >= f.life; }),
+                 fires_.end());
     fed_last_ = fed_;
     fed_ = false;
+}
+
+void BreathVolume::ignite(core::Vec3 ground, float radius, float life, float spacing, float seed) {
+    if (!available_ || life <= 0.0f) return;
+    for (GroundFire& fire : fires_) {
+        const core::Vec3 d = fire.position - ground;
+        if (core::dot(d, d) < spacing * spacing) {
+            // Fed again: it burns on from near its start, and no second
+            // patch stands in the first.
+            fire.age = std::min(fire.age, 0.25f * fire.life);
+            return;
+        }
+    }
+    if (int(fires_.size()) >= kMaxFires) fires_.erase(fires_.begin());
+    GroundFire fire;
+    fire.position = ground;
+    fire.radius = radius;
+    fire.life = life;
+    fire.seed = seed;
+    fire.hot = jet_.hot;
+    fire.cool = jet_.cool;
+    fire.brightness = jet_.brightness;
+    fires_.push_back(fire);
+}
+
+void BreathVolume::draw_ground_fires(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
+                                     const BreathVolumeSettings& settings, float time_seconds) {
+    if (!pass || !available_ || !device.depth() || fires_.empty()) return;
+    fire_order_.clear();
+    for (int i = 0; i < int(fires_.size()); ++i) fire_order_.push_back(i);
+    const core::Vec3 eye = camera.position;
+    std::sort(fire_order_.begin(), fire_order_.end(), [&](int a, int b) {
+        return core::distance(fires_[size_t(a)].position, eye) < core::distance(fires_[size_t(b)].position, eye);
+    });
+    constexpr int kPerDraw = 5;   // three nodes each, of the sixteen
+    constexpr int kDraws = 3;
+    const int shown = std::min(int(fire_order_.size()), kPerDraw * kDraws);
+    for (int first = 0; first < shown; first += kPerDraw) {
+        Uniforms u = {};
+        int count = 0;
+        const GroundFire& lead = fires_[size_t(fire_order_[size_t(first)])];
+        for (int k = first; k < std::min(first + kPerDraw, shown); ++k) {
+            const GroundFire& fire = fires_[size_t(fire_order_[size_t(k)])];
+            const float spent = core::saturate(fire.age / fire.life);
+            // It catches in a fifth of a second, stands, and sinks as it
+            // burns out. Age is what cools and tears the gas (the shader):
+            // the base is young while the patch is fresh, and the tip is
+            // always old.
+            const float caught = core::smoothstep(0.0f, 0.2f, fire.age);
+            const float height = fire.radius * settings.ground_height * caught * (1.0f - 0.55f * spent * spent) *
+                                 (0.85f + 0.3f * std::sin(time_seconds * 7.0f + fire.seed * 40.0f));
+            const float base_age = 0.12f + 0.6f * std::pow(spent, 1.6f);
+            const core::Vec3 lean{0.25f * std::sin(time_seconds * 1.7f + fire.seed * 19.0f), 0.0f,
+                                  0.25f * std::cos(time_seconds * 1.3f + fire.seed * 31.0f)};
+            const core::Vec3 base = fire.position + core::Vec3{0.0f, fire.radius * 0.25f, 0.0f};
+            const core::Vec3 mid = base + (core::Vec3::up() + lean * 0.5f) * (height * 0.5f);
+            const core::Vec3 tip = base + (core::Vec3::up() + lean) * height;
+            const float fat = (0.8f + 0.3f * caught) * (1.0f - 0.35f * spent * spent);
+            u.nodes[count] = core::Vec4{base.x, base.y, base.z, fire.radius * fat};
+            u.info[count++] = core::Vec4{base_age, 1.0f, 0.0f, 0.0f};
+            u.nodes[count] = core::Vec4{mid.x, mid.y, mid.z, fire.radius * 0.8f * fat};
+            u.info[count++] = core::Vec4{core::lerpf(base_age, 1.0f, 0.45f), 1.0f, 0.0f, 0.0f};
+            u.nodes[count] = core::Vec4{tip.x, tip.y, tip.z, fire.radius * 0.3f * fat};
+            u.info[count++] = core::Vec4{0.97f, 0.0f, 0.0f, 0.0f};  // not joined to the next patch's base
+        }
+        u.params = core::Vec4{camera.z_near, time_seconds, float(count), float(std::clamp(settings.steps / 2, 8, 48))};
+        // Twice the jet's opacity: a patch is a body two to four metres
+        // across. The noise climbs at a flame's pace.
+        u.shape = core::Vec4{settings.extinction * 2.0f, 1.0f / std::max(settings.noise_size, 0.1f), settings.erosion,
+                             7.0f};
+        u.colour = core::Vec4{settings.core * 0.5f, settings.gain, core::saturate(settings.smoke), lead.brightness};
+        u.hot = core::Vec4{lead.hot.x, lead.hot.y, lead.hot.z, 0.0f};
+        u.cool = core::Vec4{lead.cool.x, lead.cool.y, lead.cool.z, 0.0f};
+        u.axis = core::Vec4{0.0f, 1.0f, 0.0f, 0.0f};
+        submit(device, pass, scene, u, count, settings);
+    }
 }
 
 bool BreathVolume::sample(float along, const BreathVolumeSettings& settings, core::Vec3& position,

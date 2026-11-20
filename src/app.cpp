@@ -2749,6 +2749,29 @@ void App::update(float dt) {
                 breath_volume_.feed(combat_.breath_origin() +
                                         combat_.breath_direction() * breath_volume_settings_.mouth_forward,
                                     combat_.breath_direction(), flight_.state().velocity, jet, dt);
+                // Where the jet meets the ground, the ground burns
+                // (BreathVolume::ignite): twelve points along the jet, each
+                // tried against the terrain under it. Not on water.
+                if (breath_volume_settings_.ground_fire > 0.0f) {
+                    for (int i = 1; i <= 14; ++i) {
+                        core::Vec3 at, drift;
+                        float radius = 1.0f;
+                        if (!breath_volume_.sample(float(i) / 14.5f, breath_volume_settings_, at, drift, radius)) break;
+                        const float ground = terrain_.height_at(at.x, at.z);
+                        if (at.y - radius * 0.6f > ground || ground < terrain_settings_.water_level + 0.3f) continue;
+                        // A patch off the jet's line, so a pass leaves a
+                        // ragged strip and not beads on a string.
+                        const float seed = std::fabs(particle_unit());
+                        const float side_x = particle_unit();
+                        const float side_z = particle_unit();
+                        const float patch = core::clampf(radius * 0.4f, 1.4f, 4.0f) * (0.7f + 0.6f * seed);
+                        const float px = at.x + side_x * radius * 0.6f;
+                        const float pz = at.z + side_z * radius * 0.6f;
+                        breath_volume_.ignite(core::Vec3{px, terrain_.height_at(px, pz), pz}, patch,
+                                              breath_volume_settings_.ground_fire * (0.75f + 0.5f * seed), patch * 1.15f,
+                                              seed);
+                    }
+                }
                 // Sparks: bright dashes thrown off the jet's skin, the near
                 // half more than the far, each leaving sideways and up and
                 // slowing in the air. A volume alone is a body with no grit.
@@ -4648,6 +4671,8 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("body brightness", &b.gain, 0.5f, 4.0f);
         ImGui::SliderFloat("soot at the tip", &b.smoke, 0.0f, 1.0f);
         ImGui::SliderFloat("light on the dragon and the ground", &b.light, 0.0f, 30.0f, "%.1f");
+        ImGui::SliderFloat("the ground burns for", &b.ground_fire, 0.0f, 10.0f, "%.1f s");
+        ImGui::SliderFloat("ground flame height", &b.ground_height, 0.5f, 4.0f, "%.2f radii");
     }
     if (ImGui::CollapsingHeader("Tail, limbs and strikes", ImGuiTreeNodeFlags_DefaultOpen)) {
         // The short list: what is open for the playtest. Every other life
@@ -10078,6 +10103,7 @@ void App::render() {
     const bool cloud_pass = world_.scene().clouds2.x > 0.5f;
     const bool volume_on = breath_volume_.available() && breath_volume_settings_.enabled && !ablated("breath_volume");
     const bool breath_pass = volume_on && breath_volume_.active();
+    const bool fire_pass = volume_on && breath_volume_.burning();
     // The rounds in the air are comets through the same march
     // (BreathVolume::draw_comet): the eight nearest the camera, each a
     // fullscreen draw that leaves all but its own few pixels at once. The
@@ -10094,12 +10120,17 @@ void App::render() {
         });
         if (comet_rounds_.size() > 8) comet_rounds_.resize(8);
     }
-    if (cloud_pass || breath_pass || !comet_rounds_.empty()) {
+    if (cloud_pass || breath_pass || fire_pass || !comet_rounds_.empty()) {
         CORE_PROFILE("clouds");
         device_.end_pass(pass);
         if (cloud_pass) clouds_.render(device_, camera, aspect, world_.scene(), atmosphere_, cloud_settings_);
         rhi::Pass* over = device_.begin_color_pass(device_.scene_target(), false);
         if (cloud_pass) clouds_.apply(device_, over, camera, world_.scene());
+        // What burns on the ground first: the jet is over it.
+        if (fire_pass) {
+            breath_volume_.draw_ground_fires(device_, over, camera, world_.scene(), breath_volume_settings_,
+                                             time_seconds_);
+        }
         if (breath_pass) {
             breath_volume_.draw(device_, over, camera, world_.scene(), breath_volume_settings_, time_seconds_);
         }

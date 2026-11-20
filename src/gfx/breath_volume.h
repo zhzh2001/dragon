@@ -76,6 +76,8 @@ struct BreathVolumeSettings {
     float sparks = 70.0f;        // sparks thrown off the jet a second (the app emits them)
     float light = 8.0f;          // the light a breath throws on what is near it (scene_common.hlsl, local_light):
                                  // a metre of flame's, in the scene's units at a metre. The hostile breaths' too.
+    float ground_fire = 3.2f;    // seconds a patch of ground burns where the jet met it; 0 for none
+    float ground_height = 1.3f;  // a patch's flame, in its own radii at its tallest
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);
@@ -129,6 +131,31 @@ public:
     bool sample(float along, const BreathVolumeSettings& settings, core::Vec3& position, core::Vec3& velocity,
                 float& radius) const;
 
+    // Where the jet meets the ground it leaves fire (docs/showcase/
+    // EFFECTS.md, "The ground burns"): a patch that burns for `life`
+    // seconds, a short flame through the same march, its colours the jet's
+    // at the time. The caller finds the contact (it has the terrain) and
+    // calls ignite(); a patch within `spacing` of a burning one feeds that
+    // one instead. At most kMaxFires burn; the oldest goes first.
+    struct GroundFire {
+        core::Vec3 position;  // on the ground
+        float radius = 2.0f;  // metres at its base
+        float age = 0.0f;
+        float life = 3.0f;
+        float seed = 0.0f;    // 0..1, its own flicker and lean
+        core::Vec3 hot{2.4f, 1.15f, 0.35f};
+        core::Vec3 cool{1.0f, 0.2f, 0.03f};
+        float brightness = 1.0f;
+    };
+    static constexpr int kMaxFires = 48;
+    void ignite(core::Vec3 ground, float radius, float life, float spacing, float seed);
+    const std::vector<GroundFire>& ground_fires() const { return fires_; }
+    bool burning() const { return available_ && !fires_.empty(); }
+    // In the same pass as draw(): the fifteen patches nearest the camera,
+    // five to a draw.
+    void draw_ground_fires(Device& device, rhi::Pass* pass, const Camera& camera, const SceneUniforms& scene,
+                           const BreathVolumeSettings& settings, float time_seconds);
+
     // For tests and probes: the spine, youngest first.
     struct Node {
         core::Vec3 position;
@@ -165,6 +192,8 @@ private:
     bool available_ = false;
 
     std::vector<Node> nodes_;  // youngest first
+    std::vector<GroundFire> fires_;  // oldest first
+    std::vector<int> fire_order_;    // scratch: the fires by distance to the eye
     BreathJet jet_;
     core::Vec3 mouth_ = {};
     core::Vec3 direction_ = core::Vec3::forward();

@@ -840,3 +840,46 @@ Six rounds now agree on the order: wings, ground and cliffs, flame,
 trees, water. Shader and rig tuning has moved single frames and not the
 order. The next step for the wings is geometry: a membrane with slack
 modelled in, and thinner fingers.
+
+## The blind critic, round 7 (2026-11-20, 18:40)
+
+`artifacts/showcase-critic/round7/` has sixteen frames and the report.
+The mean is 4.0, against 3.8 in round 6: no change the numbers can show.
+
+What its wording confirms: the flame from the chase camera in a turn "has
+a core, a darker fringe and a smoky tail", the best fire of the set. The
+crags' "texture is good up close". The dragon's body, head and leg poses
+are "at floor quality" in the glide from below, the best frame.
+
+What it does not accept:
+
+- The crags as cliffs. They are "objects set on a slope", "a row of
+  loaves along the wall foot", with "no vertical joints, no layers and no
+  ledges", and "the grass runs right up to them". The fault is the shape
+  and the join, not the surface. Tripo's crags are rounded lumps: a cliff
+  band wants faces with joints, and scree at its foot.
+- The flame from the side: "an even, cream-orange tube of constant
+  width", "a beam". The sensor's curve gave it hue and a core. It did
+  not give it tongues, a width that changes, or an end that breaks up.
+- The fireball: "a white disc with a smear".
+- The arch: "a generated mesh dropped onto a lawn", with no rubble at
+  its feet.
+- The fire's reflection in the river: "a coarse checker of orange
+  pixels".
+
+Its order is new in one place. The rock kit is first, because the crags
+and landmarks put more of it in every frame. Then the walls' banding, the
+ground, the particles and rings with no context, and the wings. The wind
+lines read as "scratches on the lens" in five frames.
+
+What follows from it, in order:
+
+1. Scree and rubble at the foot of every crag row and landmark, and the
+   terrain's rock colour running up to them. `talus_a` and `scree_a` are
+   in the kit and are not placed there.
+2. The jet's shape from the side: a width that pulses, tongues that
+   leave it, an end that rolls up.
+3. The wind lines: fewer and fainter, or only at speed. They are the
+   playtester's call (`SHOWCASE.md`, "Open questions").
+4. The wings are still waiting on the answer about new geometry.
+

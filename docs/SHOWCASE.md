@@ -436,6 +436,8 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Fire through a sensor (2026-11-20, 17:53) | `showcase/EFFECTS.md` |
 | Wall crags in rows (2026-11-20, 18:18) | `showcase/WORLD.md` |
 | Landmarks, and five more rocks (2026-11-20, 18:32) | `showcase/WORLD.md` |
+| The ground burns (2026-11-20, 18:55) | `showcase/EFFECTS.md` |
+| The blind critic, round 7 (2026-11-20, 18:40) | `showcase/CRITIC.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
 | The valley walls: fewer, larger buttresses (2026-11-15, 12:17) | `showcase/WORLD.md` |

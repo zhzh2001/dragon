@@ -354,3 +354,56 @@ Open:
   head and the smoke would be better.
 - Not played. The stills do not show the motion.
 
+## The ground burns (2026-11-20, 18:55)
+
+The jet did not meet the ground: the depth buffer cut it, and nothing
+burned where it landed. The reference study's two dragons both leave "a
+burning line on the ground for 1.7 s and more" (`MOTION_REFERENCE.md`,
+"Breath and projectiles in the references").
+
+Where the jet meets the ground it now leaves patches that burn
+(`BreathVolume::ignite`, `draw_ground_fires`):
+
+- The contact. Each frame the app tries fourteen points along the jet
+  against the terrain under them. A point within 0.6 of the jet's radius
+  of the ground lights a patch beside it, up to 0.6 radii off the jet's
+  line, so a pass leaves a ragged strip. Not on water.
+- A patch. 1 to 5 m in radius, burning 2.4 to 4 s (`ground_fire`, 3.2 s
+  in the middle). A point that lands within 1.15 radii of a burning
+  patch feeds that one, which burns on from near its start. At most 48
+  burn; the oldest goes first.
+- The flame. Three nodes of the same march: a base, a middle and a tip,
+  1.3 radii high (`ground_height`), leaning and flickering by its own
+  seed. Age is what cools and tears the gas, so the base is young while
+  the patch is fresh and the tip is always old: a pale foot, an orange
+  body, smoke off the top. It catches in a fifth of a second, and it
+  sinks and narrows as it burns out.
+- The draw. The fifteen patches nearest the camera, five to a fullscreen
+  draw, before the jet.
+
+`artifacts/breath-volume/ground-fire-before-after.jpg`: where a dive's
+jet landed, 1.3 s after, without and with the fire, cropped and not
+scaled. The command is `--breathe --input -0.35,0,0,0,0,0 --frames 200
+--cam 440,85,-2225,525,46,-2290`; `--breath ground_fire=0` is without.
+
+Cost, paired on the frozen frame of that view at 1920x1080
+(`DRAGON_ABLATE_ALTERNATE=breath_volume`, one run, not recorded): 2.76 ms
+for the jet and fifteen patches together, about 1.4 ms over the jet
+alone. Five patches share a draw, and its bound is one capsule about all
+five, so a ray between two patches steps through air.
+
+The Metal goldens pass without a new capture: no golden scene's jet
+reaches the ground.
+
+Open:
+
+- The patches throw no light on the grass. The breath's light is one
+  line (`local_light`), and it is the jet's.
+- Nothing is left when a patch burns out: no scorch, no smoke that
+  lingers.
+- A rival's breath lights nothing, and neither does a fireball's impact.
+- A patch on a steep slope stands straight up from one point of it.
+- The breath's fuel lasts about three seconds in the arena, so a strafe
+  lights a short strip.
+- The cost wants a bound a patch.
+
