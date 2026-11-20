@@ -82,6 +82,8 @@ public:
     // rock on the three world planes. 1 as built, 0 none; it scales the
     // size a piece counts as, so above 1 smaller pieces take it too.
     float detail = 1.0f;
+    // A landmark's own colours, times this.
+    float landmark_brightness = 1.2f;
     // The terrain's rock scan (a normal in rgb, luminance in a); not owned.
     void set_detail(rhi::Texture* map) { detail_ = map; }
 

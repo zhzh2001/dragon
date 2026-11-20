@@ -129,6 +129,16 @@ struct VegetationSettings {
     float wall_scale = 1.6f;
     float wall_lean = 0.3f;  // how far a crag leans back to the slope's normal, 0 upright
     float wall_above_floor = 25.0f;
+    // Landmarks (a ruined tower, an arch, a stone circle, a monolith, a
+    // cairn; tools/landmarks.md): one may stand in each `landmark_spacing`
+    // cell, kept at `landmark_cover`, on the gentlest ground of a few
+    // tries that suits its kind. Trees keep `landmark_clearing` of its
+    // radius clear around it.
+    bool landmarks = true;
+    float landmark_spacing = 450.0f;
+    float landmark_cover = 0.8f;
+    float landmark_scale = 1.8f;
+    float landmark_clearing = 1.6f;
 
     float wind = 1.0f;
     uint32_t seed = 7;
@@ -164,6 +174,12 @@ public:
     float crown_shade_half() const { return crown_shade_half_; }
     // The kit's pieces where rock_kit is on (empty otherwise).
     const std::vector<gfx::RockInstance>& kit_rocks(int piece) const { return kit_rocks_[piece]; }
+    // Where trees do not stand: a disc about each landmark and wall crag
+    // (x, z, radius), filled by the kit's placement.
+    struct Clearing {
+        float x, z, r;
+    };
+    const std::vector<Clearing>& clearings() const { return clearings_; }
     // Legacy rocks and kit pieces together.
     size_t rock_count() const;
     // How far the kit's placement had to sink pieces past their planned
@@ -185,6 +201,7 @@ private:
     std::vector<PlantInstance> rocks_[gfx::ROCK_KINDS];
     std::vector<gfx::RockInstance> kit_rocks_[gfx::ROCK_PIECES];
     float kit_extra_sink_ = 0.0f;
+    std::vector<Clearing> clearings_;
     void place_rocks(const Terrain& terrain, const VegetationSettings& settings);
     void place_kit(const Terrain& terrain, const VegetationSettings& settings);
     core::Noise forest_{7};

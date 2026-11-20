@@ -136,7 +136,8 @@ bool RockKit::load(Device& device) {
         Piece& piece = pieces_[p];
         const char* name = rock_piece(p).name;
         for (int l = 0; l < ROCK_LODS; ++l) {
-            const std::string path = core::paths::asset("props/rockkit/" + std::string(name) + suffix[l] + ".glb");
+            const std::string path = core::paths::asset(std::string(rock_piece(p).landmark ? "props/landmarks/" : "props/rockkit/") +
+                                                        name + suffix[l] + ".glb");
             cgltf_options options;
             std::memset(&options, 0, sizeof(options));
             cgltf_data* data = nullptr;
@@ -379,10 +380,14 @@ void RockKit::draw(Device& device, rhi::Pass* pass, const SceneUniforms& scene, 
         const core::Vec3 mean = piece.mean_albedo;
         const core::Vec3 match{target.x / core::maxf(mean.x, 0.01f), target.y / core::maxf(mean.y, 0.01f),
                                target.z / core::maxf(mean.z, 0.01f)};
-        const core::Vec3 scale = core::lerp(core::Vec3::one(), match, colour_match);
+        // A landmark keeps its own colours: masonry and carved stone are
+        // not the valley's bedrock, and take none of its warm and cool drift.
+        const bool landmark = rock_piece(p).landmark;
+        const core::Vec3 scale = landmark ? core::Vec3::one() * landmark_brightness
+                                          : core::lerp(core::Vec3::one(), match, colour_match);
         params.albedo_scale = core::Vec4{scale.x, scale.y, scale.z, moss};
         const core::Vec3 size = rock_piece(p).size;
-        params.contact = core::Vec4{contact_height, contact, terrain_tint,
+        params.contact = core::Vec4{contact_height, contact, landmark ? 0.0f : terrain_tint,
                                     detail_ ? core::maxf(size.x, core::maxf(size.y, size.z)) * detail : 0.0f};
         rhi.push_uniforms(rhi::Stage::Vertex, 1, &params, sizeof(params));
         rhi.push_uniforms(rhi::Stage::Fragment, 1, &params, sizeof(params));

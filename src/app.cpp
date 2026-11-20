@@ -3733,6 +3733,7 @@ void App::build_ui(float dt) {
                     ImGui::SliderFloat("contact band", &kit.contact_height, 0.05f, 2.0f, "%.2f m");
                     ImGui::SliderFloat("contact strength", &kit.contact, 0.0f, 1.0f, "%.2f");
                     ImGui::SliderFloat("detail on large pieces", &kit.detail, 0.0f, 3.0f, "%.2f");
+                    ImGui::SliderFloat("landmark brightness", &kit.landmark_brightness, 0.3f, 2.0f, "%.2f");
                     ImGui::SetItemTooltip("The terrain's scanned rock over a crag's own maps; above 1 smaller pieces take it too");
                     ImGui::SliderFloat("LOD1 from", &kit.lod1_radii, 2.0f, 100.0f, "%.0f radii");
                     ImGui::SliderFloat("LOD2 from", &kit.lod2_radii, 10.0f, 300.0f, "%.0f radii");
@@ -3768,6 +3769,11 @@ void App::build_ui(float dt) {
                     replant_now |= ImGui::SliderFloat("wall crag scale", &v.wall_scale, 0.3f, 3.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("wall crag lean", &v.wall_lean, 0.0f, 1.0f, "%.2f to the slope");
                     replant_now |= ImGui::SliderFloat("wall above floor", &v.wall_above_floor, 0.0f, 400.0f, "%.0f m");
+                    replant_now |= ImGui::Checkbox("landmarks", &v.landmarks);
+                    replant_now |= ImGui::SliderFloat("landmark spacing", &v.landmark_spacing, 150.0f, 2500.0f, "%.0f m");
+                    replant_now |= ImGui::SliderFloat("landmark cover", &v.landmark_cover, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("landmark scale", &v.landmark_scale, 0.5f, 4.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("landmark clearing", &v.landmark_clearing, 0.5f, 4.0f, "%.2f radii");
                     replant_now |= ImGui::SliderFloat("crag spacing", &v.crag_spacing, 30.0f, 500.0f, "%.0f m");
                     replant_now |= ImGui::SliderFloat("crag cover", &v.crag_cover, 0.0f, 1.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("crag slope from", &v.crag_slope_min, 0.0f, 0.6f, "%.2f");

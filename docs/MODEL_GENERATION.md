@@ -1394,6 +1394,29 @@ the Studio's asset lists. So the same Texture job ran again for 20 credits:
 project `a5742629-4c38-4c03-937c-a753a4d7b5a2`). Its UVs match the hero's:
 89% of them fall in the same 0.001 cell, and the rest are within one cell.
 
+The hide trial (2026-11-20). `tools/hide/tripo_hide_trial.py` builds two
+copies of the hero from `tripo-hero-retex-03`: `embercrest-hero-tripo.glb`
+with Tripo's hide colour whole, and `embercrest-hero-tripo-detail.glb`
+with the hero's own broad colour and Tripo's fine detail. Neither is in
+git. In the engine the three are hard to tell apart:
+`artifacts/tripo-overnight/hero-hide-trial-head.jpg` and
+`hero-hide-trial-back.jpg` have the current hero, the Tripo hide and the
+detail blend, left to right, cropped and not scaled. The Tripo hide's neck
+plates are a little cleaner and brighter from 4 m. From the chase camera
+no difference shows. The hero's normal map and the engine's hide grade
+carry the look, and the base colour's detail is under them. The swap is
+not worth making on this evidence. To look in play:
+`--models assets/embercrest-hero.glb,assets/embercrest-hero-tripo.glb,assets/embercrest-hero-tripo-detail.glb`
+and `M`.
+
+The conversions (2026-11-20, two Codex jobs on `gpt-6.2-astra`): five wall
+crags and six rocks into the rock kit (414 k tokens, 49 minutes, medium),
+and five landmarks with a failed hoard (477 k tokens, 45 minutes, high).
+Both jobs together took 4% of the work profile's week.
+`docs/showcase/WORLD.md`, "Wall crags in rows" and "Landmarks, and five
+more rocks", say what the engine does with them. The six standing prey
+are the conversion still open, with `bank_a`'s placement.
+
 What a later Codex job can take from this run, in order of value: the
 crags as a valley-wall set; the six standing prey for rigging; the pass
 gate, the keep and `hoard-10` as run props; and the good rocks into the

@@ -246,7 +246,7 @@ void test_rock_kit_is_set_into_the_ground() {
     game::VegetationSettings settings;
     settings.rock_kit = true;
     vegetation.plant(terrain, settings);
-    int boulders = 0, cliffs = 0, floating = 0;
+    int boulders = 0, cliffs = 0, landmarks = 0, floating = 0;
     for (int p = 0; p < gfx::ROCK_PIECES; ++p) {
         const gfx::RockPieceInfo& info = gfx::rock_piece(p);
         for (const gfx::RockInstance& r : vegetation.kit_rocks(p)) {
@@ -265,6 +265,10 @@ void test_rock_kit_is_set_into_the_ground() {
                 ++cliffs;
                 // Only on the steep faces.
                 CHECK(1.0f - r.ground.y >= settings.cliff_slope * 0.8f - 1e-4f);
+            } else if (info.landmark) {
+                // A landmark stands on gentle ground, its base just under it.
+                ++landmarks;
+                CHECK(1.0f - r.ground.y <= 0.26f + 1e-4f);
             } else {
                 ++boulders;
                 // Sunk at least 15% of its height: its origin, the base's
@@ -274,8 +278,8 @@ void test_rock_kit_is_set_into_the_ground() {
             }
         }
     }
-    std::printf("  %d boulders and slabs, %d cliff pieces, worst extra sink %.2f m, %d floating check points\n",
-                boulders, cliffs, double(vegetation.kit_extra_sink()), floating);
+    std::printf("  %d boulders and slabs, %d cliff pieces, %d landmarks, worst extra sink %.2f m, %d floating check points\n",
+                boulders, cliffs, landmarks, double(vegetation.kit_extra_sink()), floating);
     CHECK(boulders > 100);
     CHECK(cliffs > 5);
     CHECK(floating == 0);

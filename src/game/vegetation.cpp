@@ -67,6 +67,7 @@ void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& s
     for (auto& list : rocks_) list.clear();
     for (auto& list : kit_rocks_) list.clear();
     kit_extra_sink_ = 0.0f;
+    clearings_.clear();
     if (!settings.rocks) return;
     if (settings.rock_kit) {
         place_kit(terrain, settings);
@@ -119,15 +120,33 @@ namespace {
 constexpr int KIT_BOULDERS[6] = {0, 1, 2, 11, 12, 13};
 constexpr int KIT_BOULDER_COUNT = 6;
 // slab_a (3) is left out: its scan has a hollow under one side that reads
-// as a black cave at any sink (docs/SHOWCASE.md, S6). Both entries slab_b.
-constexpr int KIT_SLABS[2] = {4, 4};
+// as a black cave at any sink (docs/SHOWCASE.md, S6).
+constexpr int KIT_SLABS[2] = {4, 28};  // slab_b and the Tripo slab_c
 constexpr int KIT_CLIFFS[3] = {5, 6, 7};
 // The Tripo crags (a tor, a ridge crest) and the scree cone.
-constexpr int KIT_CRAGS[2] = {8, 9};
-constexpr int KIT_SCREE = 10;
+// And since 2026-11-20 a pinnacle, two outcrops and a talus mound.
+constexpr int KIT_CRAGS[5] = {8, 9, 24, 25, 26};
+constexpr int KIT_CRAG_COUNT = 5;
+constexpr int KIT_SCREE[2] = {10, 27};
 // The Tripo wall crags, crag_a to crag_e (tools/rockkit.md, "Wall crags").
 constexpr int KIT_WALLS[5] = {14, 15, 16, 17, 18};
 constexpr int KIT_WALL_COUNT = 5;
+// The landmarks (tools/landmarks.md), and the ground each asks for: the
+// steepest it stands on (1 - the normal's y) and its height over the valley
+// floor, from and to, in metres.
+struct LandmarkRule {
+    int piece;
+    float max_slope;
+    float above_from, above_to;
+};
+constexpr LandmarkRule KIT_LANDMARKS[5] = {
+    {19, 0.14f, 25.0f, 280.0f},  // tower_ruin: a bench or a shoulder over the floor
+    {20, 0.12f, 2.0f, 160.0f},   // arch_ruin: the floor and the low benches
+    {21, 0.07f, 2.0f, 130.0f},   // stone_circle: a flat meadow
+    {22, 0.20f, 2.0f, 300.0f},   // monolith
+    {23, 0.26f, 50.0f, 340.0f},  // cairn: shoulders and crests
+};
+constexpr int KIT_LANDMARK_COUNT = 5;
 
 // A piece's radius on the ground at scale 1: half its larger footprint side.
 float footprint_radius(int piece) {
@@ -259,6 +278,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                                  double(downhill.x), double(downhill.z));
                     kit_rocks_[piece].push_back(rock);
                     cliffs.push_back(Footprint{x, z, footprint_radius(piece) * scale});
+                    clearings_.push_back(Clearing{x, z, footprint_radius(piece) * scale * 0.8f});
                     ++wall_count;
                     row_started = true;
                     // The next crag: along the contour, overlapping this one.
@@ -424,7 +444,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                     if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < 4.0f * f.r * f.r) clear = false;
                 }
                 if (!clear) continue;
-                const int piece = KIT_CRAGS[pick < 0.5f ? 0 : 1];
+                const int piece = KIT_CRAGS[int(pick * float(KIT_CRAG_COUNT) * 0.999f)];
                 const float scale = settings.crag_scale * (0.75f + 0.5f * scale_roll);
                 if (place_upright(piece, x, z, scale, yaw, settings.crag_sink, 0.0f, shade, moss, id)) ++crag_count;
             }
@@ -468,8 +488,62 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                 }
                 if (!clear) continue;
                 const float scale = settings.scree_scale * (0.7f + 0.6f * scale_roll);
-                if (place_upright(KIT_SCREE, x, z, scale, yaw, settings.scree_sink, 0.8f, shade, moss, id))
+                if (place_upright(KIT_SCREE[id < 0.5f ? 0 : 1], x, z, scale, yaw, settings.scree_sink, 0.8f, shade, moss, id))
                     ++scree_count;
+            }
+        }
+    }
+
+    // ---- landmarks: one a cell at most, on the first of a few tries in
+    // the cell whose ground suits its kind. Upright, sunk until its base is
+    // under the ground; trees and boulders keep clear of it.
+    size_t landmark_count = 0;
+    if (settings.landmarks) {
+        const float spacing = core::maxf(settings.landmark_spacing, 150.0f);
+        const int cells = int((2.0f * extent) / spacing);
+        for (int iz = 0; iz < cells; ++iz) {
+            for (int ix = 0; ix < cells; ++ix) {
+                CellHash hash(ix, iz, settings.seed * 37u + 41u);
+                const float keep = hash.next();
+                const float kind_roll = hash.next();
+                const float scale_roll = hash.next();
+                const float yaw = hash.next() * core::TWO_PI;
+                const float shade = hash.next();
+                const float moss = hash.next();
+                const float id = hash.next();
+                if (keep > settings.landmark_cover) continue;
+                const LandmarkRule& rule = KIT_LANDMARKS[int(kind_roll * float(KIT_LANDMARK_COUNT) * 0.999f)];
+                const float scale = settings.landmark_scale * (0.85f + 0.3f * scale_roll);
+                const float radius = footprint_radius(rule.piece) * scale;
+                // Most of a cell is mountain: many tries, each two draws.
+                for (int attempt = 0; attempt < 60; ++attempt) {
+                    const float jx = hash.next();
+                    const float jz = hash.next();
+                    const float x = -extent + (float(ix) + 0.1f + 0.8f * jx) * spacing;
+                    const float z = -extent + (float(iz) + 0.1f + 0.8f * jz) * spacing;
+                    const float height = terrain.height_at(x, z);
+                    if (height < t.water_level + 3.0f) continue;
+                    if (height < floor + rule.above_from || height > floor + rule.above_to) continue;
+                    // Gentle under the whole footprint, not at its centre alone.
+                    float steepest = 1.0f - terrain.normal_at(x, z).y;
+                    for (int corner = 0; corner < 4; ++corner) {
+                        const float cx = x + ((corner & 1) ? radius : -radius) * 0.7f;
+                        const float cz = z + ((corner & 2) ? radius : -radius) * 0.7f;
+                        steepest = core::maxf(steepest, 1.0f - terrain.normal_at(cx, cz).y);
+                        if (terrain.height_at(cx, cz) < t.water_level + 1.0f) steepest = 1.0f;
+                    }
+                    if (steepest > rule.max_slope) continue;
+                    bool clear = true;
+                    for (const Footprint& f : cliffs) {
+                        const float reach = f.r + radius;
+                        if ((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z) < reach * reach) clear = false;
+                    }
+                    if (!clear) continue;
+                    if (!place_upright(rule.piece, x, z, scale, yaw, 0.02f, 0.0f, shade, moss * 0.4f, id)) continue;
+                    clearings_.push_back(Clearing{x, z, radius * settings.landmark_clearing});
+                    ++landmark_count;
+                    break;
+                }
             }
         }
     }
@@ -574,11 +648,11 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
     }
     size_t total = 0;
     for (const auto& list : kit_rocks_) total += list.size();
-    const size_t shells = cliffs.size() - crag_count - scree_count - wall_count;
+    const size_t shells = cliffs.size() - crag_count - scree_count - wall_count - landmark_count;
     LOG_INFO("rocks: %zu kit pieces (%zu cliff pieces, sunk %.2f m on average to bury their rims; %zu crags, %zu scree, "
-             "%zu wall crags in %zu rows), worst extra sink %.2f m",
+             "%zu wall crags in %zu rows, %zu landmarks), worst extra sink %.2f m",
              total, shells, double(cliff_sink_sum / float(shells > 0 ? shells : 1)), crag_count, scree_count, wall_count,
-             wall_rows, double(kit_extra_sink_));
+             wall_rows, landmark_count, double(kit_extra_sink_));
 }
 
 void Vegetation::plant(const Terrain& terrain, const VegetationSettings& settings) {
@@ -631,6 +705,13 @@ void Vegetation::plant(const Terrain& terrain, const VegetationSettings& setting
             if (height < t.water_level + 2.0f || height > treeline) continue;
             const Vec3 normal = terrain.normal_at(x, z);
             if (normal.y < settings.tree_max_slope) continue;
+            // Not inside a landmark or a wall crag (the modern tier's kit;
+            // the list is empty on the others, and no draw is skipped).
+            bool cleared = false;
+            for (const Clearing& c : clearings_) {
+                if ((x - c.x) * (x - c.x) + (z - c.z) * (z - c.z) < c.r * c.r) cleared = true;
+            }
+            if (cleared) continue;
             // Thin out toward the treeline instead of stopping at a ruler line.
             const float to_line = (treeline - height) / 90.0f;
             if (hash.next() > core::saturate(to_line + 0.1f)) continue;

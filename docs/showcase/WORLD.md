@@ -255,7 +255,7 @@ The valley walls were the open gap after two Tripo spends: long wall
 pieces failed three times, and the second spend found that one massive
 lopsided crag is the shape Tripo makes well (`MODEL_GENERATION.md`, "The
 second spend"). Codex (`gpt-6.2-astra`, medium) built five of them into
-the kit from `tripo-crag2-02`, `-05` to `-08` and `tripo-wall2-05`, `-07`
+the kit from `tripo-crag2-02`, `-06`, `-07`, `-08` and `tripo-wall2-05`
 (`tools/rockkit.md`, "Wall crags and more rocks"; the brief is
 `tools/showcase/crags-brief.md`). They are `crag_a` to `crag_e`, 47 to
 58 m high, 24,000 triangles at most.
@@ -325,4 +325,66 @@ What is weak:
   them on a wall that faces the sun.
 - A crag has no collision. `Terrain::height_at` reads the heightfield,
   so the dragon flies through a buttress.
+
+## Landmarks, and five more rocks (2026-11-20, 18:32)
+
+The valley had rock, trees and a river, and nothing built or old in it but
+the run's two towers. Codex (`gpt-6.2-astra`, high, 477 k tokens, 45
+minutes) converted five Tripo landmarks into `assets/props/landmarks/`
+(`tools/landmarks.md`; the brief is `tools/showcase/landmarks-brief.md`):
+a ruined round tower, a ruined arch, a circle of standing stones, a
+monolith and a cairn. It rejected five more after two passes each: the
+keep (it lost part of its rear arch), the bridge (its masonry smeared at
+250 m), the dragon skeleton (limbs collapsed to sheets), the snag and the
+log. Its third try at the hoard pile also failed, and the old pile stays
+(`tools/props.md`).
+
+The kit draws the landmarks (`gfx/rock_piece.h`, `landmark`): the same
+files, levels of detail and shader, from their own folder and in their own
+colours. They are not pulled to the terrain's rock and take none of its
+warm and cool drift. `RockKit::landmark_brightness` is 1.2.
+
+`Vegetation::place_kit` stands one in each 450 m cell, kept at 0.8, on the
+first of 60 tries in the cell whose ground suits the kind picked for it:
+
+| Landmark | Steepest ground (1 - normal y) | Over the valley floor |
+|---|---|---|
+| `tower_ruin` | 0.14 | 25 to 280 m |
+| `arch_ruin` | 0.12 | 2 to 160 m |
+| `stone_circle` | 0.07 | 2 to 130 m |
+| `monolith` | 0.20 | 2 to 300 m |
+| `cairn` | 0.26 | 50 to 340 m |
+
+The slope is read at the centre and at four points 0.7 of the radius out.
+A landmark stands upright at 1.5 to 2.1 times its file's size: the tower
+35 to 48 m high, the arch 21 to 29 m, the circle 34 to 47 m across. A
+dragon is 12 m long. Trees keep 1.6 radii clear around a landmark and
+0.8 of a wall crag's radius (`Vegetation::clearings`). Run seed 3 has 20
+landmarks and the arena 17. At 800 m a cell and 16 tries the arena had 5:
+of 1,610 tries 1,429 were on ground outside the kind's height band.
+
+Five more Tripo rocks from the same Codex job as the wall crags
+(`tools/rockkit.md`): `pinnacle_a`, `outcrop_a` and `outcrop_b` join the
+crags, `talus_a` alternates with the scree cone, and `slab_c` is the
+second slab. `bank_a`, a riverbank strip, is in the folder and not yet in
+the piece table: it needs a placement along the river.
+
+The kit is now 29 pieces and 87 maps at 1024. It loads in 0.9 s (0.23 s
+for the first eight). Its maps are not compressed: about 490 MB with mips
+by the first eight's 134 MB. That wants block compression before more
+pieces go in.
+
+`artifacts/showcase-walls/landmarks.jpg`: the arch, the circle, the tower
+and the monolith in run seed 3, cropped and not scaled. The Metal goldens
+pass without a new capture; the largest tile difference was 4.9.
+
+What is weak:
+
+- A landmark has no collision, as a crag has none.
+- The stone is dark in a mountain's shadow, and the detail layer's grain
+  is strong on the arch's blocks.
+- A landmark's place is not known to the run. A cache or a tower can
+  stand beside one, or inside the circle.
+- The tower stands alone on its bench. A keep and a bridge were the
+  pieces that would have made a place of it, and both failed conversion.
 
