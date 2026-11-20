@@ -87,6 +87,12 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Tripo landmark `stone_circle` from `tripo-standing-stones-05` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
 | Tripo landmark `monolith` from `tripo-monolith-06` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
 | Tripo landmark `cairn` from `tripo-cairn-15` and its inspection renders | Tripo generated the source mesh with paid credits. Codex converted it in Blender. |
+| Tripo rock kit (2026-11-20), `pinnacle_a` from `tripo-pinnacle-27` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `outcrop_a` from `tripo-outcrop-12` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `outcrop_b` from `tripo-outcrop-31` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `talus_a` from `tripo-talus-23` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `bank_a` from `tripo-riverbank-21` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
+| Tripo rock kit (2026-11-20), `slab_c` from `tripo-outcrop-32` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Contact sheets and hero-hide comparisons of the overnight Tripo run and the second spend the next day (`artifacts/tripo-overnight/`), 72 and 67 meshes, most of them **not** used | **Tripo** H3.1 in its Studio, with paid credits: text, image and multi-view generation, and the Texture tool on the hero's own mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 

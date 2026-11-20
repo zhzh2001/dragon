@@ -1,0 +1,79 @@
+{
+  "light_before": [
+    0.8715,
+    -0.0247,
+    0.8158
+  ],
+  "light_after": [
+    0.0002,
+    0.0001,
+    0.0001
+  ],
+  "contrast_gain": 0.75,
+  "log_sd_before": 1.102,
+  "atlas_coverage": 0.469,
+  "normal_projection": {
+    "cage_factors": [
+      0.1,
+      0.35,
+      1.0
+    ],
+    "contribution_fractions": [
+      0.9802840154326397,
+      0.011344869714079617,
+      0.002559237613376309
+    ],
+    "flat_fraction": 0.0006410793704011318,
+    "invalid_filled_fraction": 0.005170797869503265,
+    "unfilled_surface_fraction": 0.0,
+    "negative_z_fraction": 0.0,
+    "mean": [
+      -0.003408203471293106,
+      0.002984021066660874,
+      0.8944219810743008
+    ],
+    "cage_metres": [
+      0.041673532433925534,
+      0.14585736351873935,
+      0.4167353243392553
+    ]
+  },
+  "mesh_light_after": [
+    0.11819,
+    0.00154
+  ],
+  "mean_albedo": [
+    0.2314,
+    0.2074,
+    0.1795
+  ],
+  "name": "pinnacle_a",
+  "asset": "tripo-pinnacle-27.glb",
+  "scan_triangles": 1964207,
+  "scale": 23.267,
+  "triangles": [
+    19697,
+    4924,
+    1418
+  ],
+  "islands_dropped": 5227,
+  "size_blender_xyz": [
+    19.92,
+    18.01,
+    22.02
+  ],
+  "seconds": 176.0,
+  "source": "tripo-pinnacle-27.glb",
+  "rotation_blender": [
+    0,
+    0,
+    -80
+  ],
+  "source_alignment_shift": [
+    -0.00033473968505859375,
+    -0.008307456970214844,
+    0.014168055728077888
+  ],
+  "occlusion": "constant 1.0",
+  "full_high_mesh_normal_bake": true
+}

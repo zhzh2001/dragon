@@ -1,0 +1,17 @@
+PASS 42/42 original GLBs matched SHA-256 and the committed blobs.
+PASS 11 previous placement entries matched.
+New GLBs: 33; bytes: 88788804
+crag_a 26 base points, 12 rear points: PASS
+crag_b 26 base points, 12 rear points: PASS
+crag_c 26 base points, 12 rear points: PASS
+crag_d 26 base points, 12 rear points: PASS
+crag_e 26 base points, 12 rear points: PASS
+pinnacle_a 26 base points, 0 rear points: PASS
+outcrop_a 26 base points, 0 rear points: PASS
+outcrop_b 26 base points, 0 rear points: PASS
+talus_a 26 base points, 0 rear points: PASS
+bank_a 26 base points, 0 rear points: PASS
+slab_c 13 base points, 0 rear points: PASS
+PASS additional files and manifest fit within 90 MB.
+PASS exact directory growth: 88830271 bytes of 90000000.
+PASS 47 requested views at 1920 x 1080.

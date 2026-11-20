@@ -125,11 +125,22 @@ WALL_CRAGS = [
 for name, source, height, yaw in WALL_CRAGS:
     TRIPO_PIECES.append(dict(name=name, asset=f"tripo-{source}.glb", kind="wall_crag",
                              fit=(2, height), rot=(0, 0, yaw), round_two=True))
+MORE_ROCKS = [
+    ("pinnacle_a", "pinnacle-27", "crag", (2, 22), -80),
+    ("outcrop_a", "outcrop-12", "crag", (0, 19), -80),
+    ("outcrop_b", "outcrop-31", "crag", (0, 17), -20),
+    ("talus_a", "talus-23", "mound", (0, 19), -25),
+    ("bank_a", "riverbank-21", "bank", (0, 21), 0),
+    ("slab_c", "outcrop-32", "slab", (0, 8), -90),
+]
+for name, source, kind, fit, yaw in MORE_ROCKS:
+    TRIPO_PIECES.append(dict(name=name, asset=f"tripo-{source}.glb", kind=kind,
+                             fit=fit, rot=(0, 0, yaw), round_two=True))
 for piece in TRIPO_PIECES:
     piece.update(source="tripo", cuts=[((0.5, 0.5, 0.035), (0, 0, -1))])
 PIECES += TRIPO_PIECES
 BUDGET = {"boulder": 8000, "slab": 8000, "cliff": 20000, "wall": 20000,
-          "crag": 20000, "mound": 12000, "wall_crag": 24000}
+          "crag": 20000, "mound": 12000, "wall_crag": 24000, "bank": 20000}
 TRIPO_ART = os.path.join(ART, "tripo")
 TRIPO2_ART = os.path.join(ART, "tripo2")
 
@@ -853,6 +864,9 @@ def bake_maps(sc, src, low, maps, mats, size, name):
     if maps.get("constant_ao"):
         base, residual = correct_mesh_light(low, base, normals, valid, rock)
         stats["mesh_light_after"] = residual
+    if name == "bank_a":
+        # Pebble borders occupy enough padding to shift the full atlas mean.
+        base *= TARGET_ALBEDO / base.mean(axis=(0, 1))
     orm, v2 = dilate_fill(orm, valid, 24)
     orm[~v2] = orm[valid].mean(axis=0)
     tn, _ = dilate_fill(tn, valid, 24)
@@ -1050,6 +1064,31 @@ def make_lod(low, ratio, protect_outline=False):
     return o
 
 
+def restore_rubble_volume(obj, strength):
+    """Move convex corners outward to recover volume lost during decimation."""
+    mesh = obj.data
+    pos = np.array([v.co[:] for v in mesh.vertices])
+    faces = np.array([p.vertices[:] for p in mesh.polygons])
+    face_normals = np.cross(pos[faces[:, 1]] - pos[faces[:, 0]], pos[faces[:, 2]] - pos[faces[:, 0]])
+    normals = np.zeros_like(pos)
+    for corner in faces.T:
+        np.add.at(normals, corner, face_normals)
+    normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
+
+    edges = np.array([e.vertices[:] for e in mesh.edges])
+    start, end = np.concatenate([edges, edges[:, ::-1]]).T
+    mean = np.zeros_like(pos)
+    np.add.at(mean, start, pos[end])
+    mean /= np.maximum(np.bincount(start, minlength=len(pos))[:, None], 1)
+    convexity = ((pos - mean) * normals).sum(axis=1)
+    distance = np.clip(strength * convexity, 0, 0.13 * np.ptp(pos, axis=0).min())
+    floor = pos[:, 2].min()
+    pos += distance[:, None] * normals
+    pos[:, 2] = np.maximum(pos[:, 2], floor)
+    mesh.vertices.foreach_set("co", pos.ravel())
+    mesh.update()
+
+
 def build_piece(piece):
     t0 = time.time()
     name = piece["name"]
@@ -1076,7 +1115,12 @@ def build_piece(piece):
     os.makedirs(OUT, exist_ok=True)
     tris = []
     for lod, ratio in enumerate(LOD_RATIOS):
-        obj = low if lod == 0 else make_lod(low, ratio, protect_outline=name == "scree_a" and lod == 2)
+        outline = lod == 2 and name in ("scree_a", "talus_a", "bank_a", "pinnacle_a")
+        if lod == 2 and name == "pinnacle_a":
+            ratio = 0.072
+        obj = low if lod == 0 else make_lod(low, ratio, protect_outline=outline)
+        if lod == 2 and name in ("talus_a", "bank_a"):
+            restore_rubble_volume(obj, 0.30 if name == "talus_a" else 0.60)
         if lod and piece.get("source") == "tripo":
             repaired = obj.data.validate(verbose=True, clean_customdata=False)
             log(name, f"LOD{lod} mesh repairs:", repaired)
@@ -1362,6 +1406,13 @@ def verify(selected=None):
     summary = (f"VERIFY selection: PASS\n"
                f"  selection mean linear albedo: ({kit[0]:.4f}, {kit[1]:.4f}, {kit[2]:.4f}); worst piece deviation {worst:.2%} (limit 8%)\n"
                f"  selected bytes: {total}; directory size: {on_disk / 1e6:.2f} MB; original scan kit: {scan_bytes / 1e6:.2f} MB of 80 MB")
+    if any(p.get("round_two") for p in selected):
+        new_files = [os.path.join(OUT, p["name"] + suffix + ".glb")
+                     for p in TRIPO_PIECES if p.get("round_two") for suffix in LOD_SUFFIX]
+        new_bytes = sum(os.path.getsize(path) for path in new_files if os.path.isfile(path))
+        manifest_bytes = os.path.getsize(os.path.join(OUT, "pieces.json"))
+        check(new_bytes + manifest_bytes <= 90_000_000, "The additions exceeded 90 MB with placement data.")
+        summary += f"\n  added GLBs and full manifest: {new_bytes + manifest_bytes} bytes (limit 90000000)"
     report = "\n".join(lines + [summary]) + "\n"
     print(report, flush=True)
     if any(p.get("source") == "tripo" for p in selected):
@@ -2160,10 +2211,14 @@ def render_tripo(selected, raw=False):
             if wide:
                 extent = size[[0, 1]] if label == "top" else size[[1 if label == "side" else 0, 2]]
                 cam.data.ortho_scale = 1.22 * max(extent[0], extent[1] * 16 / 9)
+            if piece["name"] == "slab_c" and label == "side":
+                cam.data.ortho_scale *= 1.18
             if label == "close":
                 cam.data.ortho_scale = float(max(size)) * 0.29
                 target[2] = size[2] * 0.56
-            eye = target + np.array(direction) * float(max(size)) * 2
+            # Keep all orthographic rays above the ground for broad, low rocks.
+            distance = float(max(size)) * (8 if wide and piece["kind"] != "wall_crag" else 2)
+            eye = target + np.array(direction) * distance
             aim_camera(cam, eye, target)
             aim_sun(sun, math.degrees(math.atan2(direction[1], direction[0])) + 62)
             path = os.path.join(folder, piece["name"] + ("-raw-" if raw else "-") + label + ".png")
