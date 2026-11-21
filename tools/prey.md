@@ -7,6 +7,7 @@ The mouth attachment follows the animated `head` matrix.
 | Animal | Tripo source | Width × height × length (m) | Shoulder (m) | Triangles | Bones | Mouth at bind (X, Y, Z) | Mouth in head coordinates (X, Y, Z) |
 |---|---|---|---:|---:|---:|---|---|
 | [elk](../assets/props/prey_elk.glb) | `tripo-elk-01.glb` | 1.088 × 2.348 × 2.400 | 1.54 | 8,897 | 28 | (0.000, 1.365, 1.500) | (0.000, -0.235, 0.360) |
+| [bighorn](../assets/props/prey_bighorn.glb) | `tripo-bighorn-01.glb` | 0.765 × 1.653 × 1.698 | 1.23 | 8,893 | 28 | (-0.370, 1.180, 0.792) | (-0.280, -0.180, 0.092) |
 | [boar](../assets/props/prey_boar.glb) | `tripo-boar-01.glb` | 0.501 × 0.887 × 1.599 | 0.86 | 8,801 | 28 | (0.040, 0.399, 0.835) | (0.040, -0.131, 0.195) |
 
 ## Build
@@ -55,6 +56,10 @@ elk PASS | 1.088 x 2.348 x 2.400 m | 8897 triangles | 28 bones | bind error 1.11
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 2.51 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.43 cm
   run   0.55 s | min sole 0.03 cm | max nearest sole 8.00 cm | stance free flight
+bighorn PASS | 0.765 x 1.653 x 1.698 m | 8893 triangles | 28 bones | bind error 6.76e-08 m
+  graze 4.00 s | min sole 0.19 cm | max nearest sole 0.30 cm | stance 1.65 cm
+  walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.40 cm
+  run   0.55 s | min sole -0.05 cm | max nearest sole 6.67 cm | stance free flight
 boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.69e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 1.18 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.36 cm
@@ -64,6 +69,7 @@ boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.6
 | Animal | Minimum mouth height in graze (cm) | Suspended run samples / 241 | Review renders |
 |---|---:|---:|---|
 | elk | 2.88 | 86 | [Sheets and stills](../artifacts/prey/elk/) |
+| bighorn | 2.91 | 83 | [Sheets and stills](../artifacts/prey/bighorn/) |
 | boar | 0.49 | 70 | [Sheets and stills](../artifacts/prey/boar/) |
 
 ## Visual review
@@ -74,6 +80,11 @@ Blender re-imports each final GLB before rendering. A sky and a sun at 30 degree
 The first elk graze stretched skin between the inner forelegs and the belly. The second fit removed those spikes.
 The antler tines keep their shape throughout the drop. The deepest graze uses a pronounced foreleg crouch.
 The short fur tufts under the neck look angular in close views.
+
+The first ram fit stretched the skin between the neck and shoulder during the graze.
+The second fit lowers the neck pivots, spreads the head weights across the neck and widens the foreleg stance.
+Both horns keep their curls through the head turn. The lowest skull vertex clears the ground by 5 mm at mid-cycle.
+The ram folds its forelegs sharply and bunches its coat above the neck. The opposite-side close-up shows this fold.
 
 The first boar pose left the snout 1.5 cm above ground.
 The revised clip holds the snout at the turf for 1.52 seconds and sweeps it sideways between the tusks.

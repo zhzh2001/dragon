@@ -298,8 +298,8 @@ AXIAL = {
         (0, 0.99, -0.19),
         (0, 1.00, 0.06),
         (-0.025, 1.01, 0.31),
-        (-0.045, 1.12, 0.45),
-        (-0.07, 1.25, 0.59),
+        (-0.045, 0.99, 0.36),
+        (-0.07, 1.17, 0.53),
         (-0.09, 1.36, 0.70),
         (0.02, 1.08, -0.56),
         (0.02, 1.03, -0.65),
@@ -506,6 +506,8 @@ def fit(name, coords, triangles):
     weight = weight * (1 - tailmask[:, None]) + tail_weight * tailmask[:, None]
     x, y, z = p.T
     tangent = joints[6] - joints[5]
+    if name == "bighorn":
+        tangent = np.array([-0.02, 0.11, 0.11])
     tangent /= np.linalg.norm(tangent)
     rigid = (p - joints[6]) @ tangent > -0.035 * h
     if name == "elk":
@@ -535,11 +537,39 @@ def fit(name, coords, triangles):
             np.sort(np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]])), axis=1), axis=0
         )
         edges = edges[edges[:, 0] != edges[:, 1]]
+        # A broad surface blend joins the rigid horns to the lower neck.
+        if name == "bighorn":
+            import heapq
+
+            adjacency = [[] for _ in wp]
+            for a, b in edges:
+                distance = float(np.linalg.norm(wp[a] - wp[b]))
+                adjacency[a].append((b, distance))
+                adjacency[b].append((a, distance))
+            distances = np.full(len(wp), np.inf)
+            queue = []
+            for i in np.where(rigid[first])[0]:
+                distances[i] = 0
+                heapq.heappush(queue, (0, int(i)))
+            radius = 0.35 * h
+            while queue:
+                distance, i = heapq.heappop(queue)
+                if distance > distances[i] or distance > radius:
+                    continue
+                for k, length in adjacency[i]:
+                    candidate = distance + length
+                    if candidate < distances[k] and candidate < radius:
+                        distances[k] = candidate
+                        heapq.heappush(queue, (candidate, k))
+            blend = 1 - _smooth(0, radius, distances)
+            blend[fixed] = 0
+            ww *= 1 - blend[:, None]
+            ww[:, names.index("head")] += blend
         src = np.r_[edges[:, 0], edges[:, 1]]
         dst = np.r_[edges[:, 1], edges[:, 0]]
         factor = 1 / np.maximum(np.linalg.norm(wp[src] - wp[dst], axis=1), h * 0.008)
         divisor = np.bincount(src, weights=factor, minlength=len(wp))
-        for _ in range(5):
+        for _ in range(12 if name == "bighorn" else 5):
             accum = np.zeros_like(ww)
             np.add.at(accum, src, ww[dst] * factor[:, None])
             mean = accum / np.maximum(divisor[:, None], 1e-12)
@@ -619,7 +649,7 @@ def set_body_height(angles, names, rest, dy):
 
 
 def grazing_turn(name):
-    return math.radians({"bighorn": 48, "chamois": -15, "goat": -20}.get(name, 0))
+    return math.radians({"bighorn": 36, "chamois": -15, "goat": -20}.get(name, 0))
 
 
 def turn_y(angle):
@@ -630,11 +660,11 @@ def turn_y(angle):
 def grazing_pitch(spec, names, parents, rest):
     """Find the smallest shared bend that brings the mouth to the turf."""
     joints = [names.index(n) for n in ("spine_01", "spine_02", "chest", "neck_01", "neck_02", "head")]
-    target = 0.046 if spec["name"] == "bighorn" else 0.012 * spec["length"]
+    target = 0.030 if spec["name"] == "bighorn" else 0.012 * spec["length"]
     head = names.index("head")
     mouth = np.array(spec["mouth"]) - rest[head]
     # Distribute the reach along the back and both neck joints.
-    profile = np.radians([15, 9, 10, 48, 33, -32])
+    profile = np.radians([21, 10, 10, 30, 23, -14] if spec["name"] == "bighorn" else [15, 9, 10, 48, 33, -32])
     drop = {"elk": 0.13, "bighorn": 0.27, "boar": 0.06, "chamois": 0.25, "goat": 0.20}[spec["name"]]
 
     def pose(amount):
@@ -663,6 +693,13 @@ def grazing_pitch(spec, names, parents, rest):
             return pose(amount)[1]
         prev = amount
     raise ValueError(f"{spec['name']} could not reach the turf.")
+
+
+def gltf_quat(matrix):
+    from mathutils import Matrix
+
+    q = Matrix(matrix.tolist()).to_quaternion()
+    return [q.x, q.y, q.z, q.w]
 
 
 def root_in_turf(names, parents, rest, pitch, yaw, nose, lower, time):
@@ -737,6 +774,7 @@ def bake_clips(spec, names, parents, rest, points, weights):
                     if clip == "run":
                         pitch[i] = 0.10 + 0.055 * math.sin(t - 0.5 * segment)
             pos, cumulative = sagittal_world(rest, parents, pitch)
+            splay = {}
             for side, front, ids, sole in chains:
                 leg_length = rest[ids[0], 1] - rest[ids[-1], 1]
                 stride = lift = fold = 0.0
@@ -762,13 +800,34 @@ def bake_clips(spec, names, parents, rest, points, weights):
                     stride *= leg_length
                     lift *= leg_length
                 target = planar(rest[ids[-1]]) + [stride, lift + 0.003 - sole]
+                if clip == "graze" and front and spec["name"] == "bighorn":
+                    # Widen the ram's stance so the inside foreleg clears the jaw.
+                    shoulder = pos[ids[0]]
+                    dx = rest[ids[-1], 0] - shoulder[0]
+                    goal_x = dx + (0.15 if side == "l" else -0.15)
+                    goal_y = target[1] - shoulder[1]
+                    projected_y = -math.sqrt(goal_y**2 + goal_x**2 - dx**2)
+                    roll = math.atan2(goal_y, goal_x) - math.atan2(projected_y, dx)
+                    target[1] = shoulder[1] + projected_y
+                    splay[tuple(ids)] = roll
+                    fold = 1.30 * lower
                 pitch[ids] = leg_pose(
                     rest, ids, pos[ids[0]], cumulative[parents[ids[0]]], target, front, fold
                 )
             # Compose local pitch and yaw into glTF quaternions in XYZW order.
             sx, cx = np.sin(pitch * 0.5), np.cos(pitch * 0.5)
             sy, cy = np.sin(yaw * 0.5), np.cos(yaw * 0.5)
-            keys.append(np.column_stack((sx * cy, cx * sy, sx * sy, cx * cy)))
+            rotations = np.column_stack((sx * cy, cx * sy, sx * sy, cx * cy))
+            for ids, roll in splay.items():
+                c, s = math.cos(roll), math.sin(roll)
+                rotate = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+                parent_angle = cumulative[parents[ids[0]]]
+                rotations[ids[0]] = gltf_quat(
+                    grazer.rx(-parent_angle) @ rotate @ grazer.rx(parent_angle + pitch[ids[0]])
+                )
+                wrist_pitch = parent_angle + sum(pitch[i] for i in ids[:-1])
+                rotations[ids[-1]] = gltf_quat(grazer.rx(-wrist_pitch) @ rotate.T)
+            keys.append(rotations)
         keys.append(keys[0].copy())
         clips[clip] = np.array(keys, np.float32)
     return clips
@@ -1299,11 +1358,13 @@ def render(path, spec):
     sky = nodes.new("ShaderNodeTexSky")
     sky.sky_type = "SINGLE_SCATTERING"
     sky.sun_elevation = math.radians(30)
-    sky.sun_rotation = math.radians(-45)
+    # The ram looks to its right at bind. Light and photograph that side.
+    side = -1 if spec["name"] == "bighorn" else 1
+    sky.sun_rotation = math.radians(-45 if side == 1 else -135)
     sky.sun_disc = False
     nodes.get("Background").inputs["Strength"].default_value = 0.065
     world.node_tree.links.new(sky.outputs["Color"], nodes.get("Background").inputs["Color"])
-    sun_direction = Vector((0.612372, -0.612372, 0.5))
+    sun_direction = Vector((side * 0.612372, -0.612372, 0.5))
     bpy.ops.object.light_add(type="SUN")
     sun = bpy.context.object
     sun.name = "Sun at 30 degrees"
@@ -1364,7 +1425,9 @@ def render(path, spec):
         scene.render.resolution_y = height
         box = bounds(points)
         target = sum(box, Vector()) / len(box)
-        camera.location = target + Vector(direction).normalized() * length * 8
+        direction = Vector(direction)
+        direction.x *= side
+        camera.location = target + direction.normalized() * length * 8
         camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
         camera.data.ortho_scale = 1
         bpy.context.view_layer.update()
@@ -1492,6 +1555,8 @@ def render(path, spec):
         ("run-top", "run", 0.375, (0, -0.001, 1)),
         ("walk-feet", "walk", 0.125, (1, -0.65, 0.18)),
     ]
+    if spec["name"] == "bighorn":
+        views.append(("graze-neck", "graze", deep_phase, (-1, -0.55, 0.22)))
     for name, clip, phase, direction in views:
         if not wanted(name):
             continue
@@ -1503,6 +1568,10 @@ def render(path, spec):
             reach = max((head - mouth).length * 1.25, length * 0.18)
             points = [p for p in points if (p - mouth).length < reach]
             points.extend((mouth, head, Vector((mouth.x, mouth.y, 0))))
+        elif name == "graze-neck":
+            shoulder = arm.matrix_world @ arm.pose.bones["upper_arm_l"].head
+            center = (shoulder + mouth_position()) * 0.5
+            points = [p for p in points if (p - center).length < length * 0.35]
         elif name == "walk-feet":
             cutoff = max(p.z for p in points) * 0.45
             points = [p for p in points if p.z < cutoff]
