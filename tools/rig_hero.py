@@ -1591,6 +1591,23 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
         check(not fresh, 'wing_' + side + ' membrane intersections',
               f'{len(fresh)} membrane triangles cut the arm or the body when folded and not at rest; {len(after)} cut it folded; {len(before)} cut it at rest; {int((~attached).sum())} membrane triangles tested, {int(attached.sum())} attached to the hide; {len(solid_tri)} arm and body triangles')
         checks[-1]['fresh'] = [rest['membrane'][mt[k]].mean(0).round(3).tolist() for k in sorted(fresh)][:40]
+    if '_SHEET_ID' in geo['membrane']:
+        for fold in (False, True):
+            set_pose(rig, 'wingfold' if fold else 'bind', eyes)
+            for side in ('l','r'):
+                for stem, angle in (('thigh',45),('shin',5),('ankle',35)):
+                    rotate(rig, stem+'_'+side, (1,0,0), -angle)
+            bpy.context.view_layer.update()
+            trail = evaluated(objects)
+            leg_names = [i for i,n in enumerate(names) if n.startswith(('thigh_', 'shin_', 'ankle_', 'foot_', 'toe_hind_'))]
+            skin = geo['hide']['tri']
+            legs = skin[(hw[:,leg_names].sum(1)[skin]>.5).all(1)]
+            web = geo['membrane']['tri']
+            leg_tree = BVHTree.FromPolygons(trail['hide'].tolist(),legs.tolist(),all_triangles=True)
+            sheet_tree = BVHTree.FromPolygons(trail['membrane'].tolist(),web.tolist(),all_triangles=True)
+            hits = leg_tree.overlap(sheet_tree)
+            label = 'folded' if fold else 'open'
+            check(not hits, 'trailing hind legs, '+label, f'hip 45, knee 5, hock 35 degrees; {len(hits)} membrane and leg triangle intersections')
     set_pose(rig, 'crouch', eyes)
     posed = evaluated(objects)
     for side, sign in [('l', -1), ('r', 1)]:

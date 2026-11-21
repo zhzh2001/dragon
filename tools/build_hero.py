@@ -5422,14 +5422,23 @@ def v6_rails():
     old = {k: plan["target_" + k][:, [0, 2, 1]] * [1, 1, -1] for k in W5_CHAINS}
     with open(SKELETON) as f:
         bones = {b[0]: b for b in json.load(f)["bones"]}
+    # The exported distal fit shortened the leading finger by 90 mm at its socket.
+    for key in ("f1","f2"):
+        x = old[key][:,0]
+        x -= .090*smoothstep((x-7.6)/1.75)
     new = old.copy()
     for key, name in (("f2", "finger_2"), ("f3", "finger_3"), ("spur", "spur_")):
         a, mid = bones["wing_" + name + "a_r"][1:3]
         end = bones["wing_" + name + "b_r"][2]
-        # Sample the quadratic through the two joints and the tip.
-        a, mid, end = np.array([a, mid, end])
-        t = np.linspace(0, 1, 65)[:, None]
-        new[key] = (1-t)*a + t*end + 4*t*(1-t)*(mid-(a+end)/2)
+        # Round the joint over a short interval so the bone stays inside the shaft.
+        curve = w5_curve([a,mid,end],np.linspace(0,1,65))
+        for _ in range(7):
+            curve[1:-1] = (curve[:-2]+2*curve[1:-1]+curve[2:])/4
+        new[key] = curve
+    leading = w5_curve(old["f1"],np.linspace(0,1,65))
+    for _ in range(5):
+        leading[1:-1] = (leading[:-2]+2*leading[1:-1]+leading[2:])/4
+    new["f1"] = leading
     return old, new
 
 
@@ -5447,12 +5456,17 @@ def v6_move_shafts(p, old, new):
             d = np.linalg.norm(q-foot, axis=1)
             use = d < distance
             distance[use] = d[use]
-            if key not in ("f2", "f3", "spur"):
+            if key in ("arm", "fore"):
                 out[use] = q[use]
                 continue
             u = (cum[i] + t[use]*lengths[i])/cum[-1]
             # Preserve the claw and its socket as a rigid unit beyond the sculpt tip.
-            out[use] = w5_curve(new[key], u) + q[use] - foot[use]
+            radial = q[use]-foot[use]
+            axis = delta/lengths[i]
+            along = (radial@axis)[:,None]*axis
+            # Keep axial claw length while narrowing the socket and shaft together.
+            scale = 1 - .66*smoothstep((u-.08)/.9)
+            out[use] = w5_curve(new[key], u) + along + scale[:,None]*(radial-along)
     out[:, 0] *= np.sign(p[:, 0])
     return out
 
@@ -5460,7 +5474,7 @@ def v6_move_shafts(p, old, new):
 def v6_surface(hide, indices, rails):
     tree = BVHTree.FromPolygons(hide.tolist(), indices.tolist(), all_triangles=True)
     nt, ns = 24, 10
-    t = np.linspace(0, 1, nt+1)
+    t = np.r_[0, .009, .022, np.linspace(.055, 1, nt-2)]
     z = -1 + 4.76*t
     y = np.interp(z, [-1, .9, 1.5, 2.4, 3.76], [3.20, 3.20, 2.98, 2.55, 2.09])
     flank = []
@@ -5472,21 +5486,41 @@ def v6_surface(hide, indices, rails):
     # Match the existing arm at the two leading boundaries.
     arm = np.vstack([lines[0][0], rails["arm"]])
     leads = [arm, rails["fore"], None, None]
-    points, cells, shares, ids = [], [], [], {}
+    points, cells, shares, half_widths, ids = [], [], [], [], {}
     for panel, (left, right) in enumerate(zip(lines, lines[1:])):
         rows = []
+        tip_line = right[-1] - left[-1]
+        inward = .5*(left[0]+right[0]-left[-1]-right[-1])
+        inward -= v6_unit(tip_line)*np.dot(inward,v6_unit(tip_line))
+        inset = .125*np.linalg.norm(tip_line)*v6_unit(inward)
         for j, u in enumerate(t):
             row = []
-            for i, s in enumerate(np.linspace(0, 1, ns+1)):
+            width = np.linalg.norm(right[j]-left[j])
+            # Two samples near each shaft resolve the 90 mm fillet.
+            edge = min(.10, .09/max(width,.001))
+            stations = [0, .42*edge, edge, .18, .34, .5, .66, .82, 1-edge, 1-.42*edge, 1]
+            for i, s in enumerate(stations):
                 pt = (1-s)*left[j] + s*right[j]
                 if leads[panel] is not None:
                     lead = w5_curve(leads[panel], s)
                     pt += (1-u)**3 * (lead - (1-s)*left[0] - s*right[0])
+                arch = 4*s*(1-s)
+                pt += inset * (arch*u**3)
+                # Gravity pulls the panel down between its supports.
+                pt[1] -= .040*width*arch*(1-(1-u)**8)
                 k = tuple(np.round(pt, 6))
                 if k not in ids:
                     ids[k] = len(points)
                     points.append(pt)
                     shares.append(s if panel == 0 else -1.)
+                    dist = width*min(s,1-s)
+                    if panel == 0:
+                        dist = width*(1-s)
+                    if leads[panel] is not None:
+                        dist = min(dist, np.linalg.norm(pt-w5_curve(leads[panel],s)))
+                    # Both skins rise into the shaft. Their spacing elsewhere remains 20 mm.
+                    fillet = (1-smoothstep(dist/.09))*(.043-.025*u)
+                    half_widths.append(.010 + fillet)
                 row.append(ids[k])
             rows.append(row)
         for row, following in zip(rows, rows[1:]):
@@ -5502,9 +5536,10 @@ def v6_surface(hide, indices, rails):
     border = edges[first[counts == 1]]
     a, b = border.T
     size = len(p)
-    shell = np.vstack([p+.010*n, p-.010*n])
+    offset = np.array(half_widths)[:,None]*n
+    shell = np.vstack([p+offset, p-offset])
     faces = np.vstack([tri, tri[:, ::-1]+size, np.c_[b, a, a+size], np.c_[b, a+size, b+size]])
-    # Give the rim its own texture coordinates and smoothing normals.
+    # Store the two face charts separately.
     uv = v6_chart(p)
     uv = np.vstack([uv, uv+[0,.5]])
     right = dict(POSITION=shell, TEXCOORD_0=uv, _SHEET_S=np.tile(shares, 2),
@@ -5514,7 +5549,34 @@ def v6_surface(hide, indices, rails):
     faces = np.vstack([faces, faces[:, ::-1]+len(shell)])
     attrs["NORMAL"] = v6_normals(attrs["POSITION"], faces)
     attrs["TANGENT"] = v6_tangents(attrs["POSITION"], attrs["NORMAL"], attrs["TEXCOORD_0"], faces)
-    return attrs, faces
+    return attrs, faces, lines
+
+
+def v6_rim(sheet, faces):
+    # Give rim vertices their own normals and a narrow strip beside the upper face.
+    side = len(sheet["POSITION"])//2
+    n = side//2
+    rim = np.ptp((faces%side)//n,axis=1)>0
+    faces = faces.copy()
+    ids, inverse = np.unique(faces[rim],return_inverse=True)
+    faces[rim] = len(sheet["POSITION"])+inverse.reshape(-1,3)
+    for key in sheet:
+        sheet[key] = np.concatenate([sheet[key],sheet[key][ids]])
+    # A two-pixel edge strip keeps both lips on the same patch of skin.
+    uv = sheet["TEXCOORD_0"]
+    lower = ids%side>=n
+    uv[-len(ids):,1] -= lower*(.5-2/2048)
+    sheet["NORMAL"] = v6_normals(sheet["POSITION"],faces)
+    tangent = v6_tangents(sheet["POSITION"],sheet["NORMAL"],uv,faces)
+    # A vertical edge projects to a line in the atlas. Use its longest edge as the tangent.
+    missing = np.linalg.norm(tangent[:,:3],axis=1)<.5
+    for i in np.flatnonzero(missing):
+        neighbors = np.unique(faces[(faces==i).any(1)])
+        edges = sheet["POSITION"][neighbors]-sheet["POSITION"][i]
+        edges -= (edges@sheet["NORMAL"][i])[:,None]*sheet["NORMAL"][i]
+        tangent[i,:3] = v6_unit(edges[np.linalg.norm(edges,axis=1).argmax()])
+    sheet["TANGENT"] = tangent
+    return faces
 
 
 def v6_normals(p, tri):
@@ -5550,26 +5612,67 @@ def v6_store(doc, binary, view, data):
     binary.extend(data)
 
 
-def v6_measures(p, tri, seam):
-    # Measure each fore-aft cut between its intersections with the shell's middle surface.
-    right = tri[(p[tri, 0] > 0).all(1)]
-    a, b, c = p[right].transpose(1, 0, 2)
-    cross = np.cross(b-a, c-a)
-    top = cross[:, 1] > 0
-    # Use one sheet face. Exclude the rim using triangles that contain a pair of shell twins.
-    short = np.minimum.reduce([np.linalg.norm(b-a,axis=1),np.linalg.norm(c-a,axis=1),np.linalg.norm(c-b,axis=1)])
-    selected = top & (short > .030)
+def v6_measures(p, tri, seam, sheet_ids=None):
+    # Collapse both faces to their common middle, then count each triangle once.
+    right = np.flatnonzero(p[:,0]>0)
+    face = tri[(p[tri,0]>0).all(1)]
+    if sheet_ids is None:
+        unique, inv = np.unique(np.round(p[right],6),axis=0,return_inverse=True)
+        tree = KDTree(len(unique))
+        for i,pt in enumerate(unique):
+            tree.insert(pt,i)
+        tree.balance()
+        twins = np.array([tree.find_n(pt,2)[1][1] for pt in unique])
+        assert np.all(twins[twins]==np.arange(len(unique)))
+        _, local = np.unique(np.minimum(np.arange(len(unique)),twins),return_inverse=True)
+        ids = local[inv]
+    else:
+        ids = sheet_ids[right].astype(int)
+    # UV seams can repeat one position, so average each distinct position only once.
+    points, which = np.unique(np.c_[ids,p[right]],axis=0,return_index=True)
+    distinct = ids[which]
+    mid = np.zeros((ids.max()+1,3))
+    np.add.at(mid,distinct,points[:,1:])
+    mid /= np.bincount(distinct)[:,None]
+    remap = np.zeros(len(p),int)
+    remap[right] = ids
+    faces = np.unique(np.sort(remap[face],axis=1),axis=0)
+    faces = faces[(np.diff(faces,axis=1)>0).all(1)]
+    a,b,c = mid[faces].transpose(1,0,2)
     cuts = []
-    for x in (1.15, 3.43):
+    for station in (1.15,3.43):
         hits = []
-        for start, end in ((a,b), (b,c), (c,a)):
-            sel = selected & ((start[:,0]-x)*(end[:,0]-x)<0)
-            f = (x-start[sel,0])/(end[sel,0]-start[sel,0])
-            hits.extend(start[sel]+f[:,None]*(end[sel]-start[sel]))
+        for start,end in ((a,b),(b,c),(c,a)):
+            sel = (start[:,0]-station)*(end[:,0]-station)<0
+            t = (station-start[sel,0])/(end[sel,0]-start[sel,0])
+            hits.extend(start[sel]+t[:,None]*(end[sel]-start[sel]))
         h = np.array(hits)
         cuts.append(float(np.linalg.norm(h[h[:,2].argmax()]-h[h[:,2].argmin()])))
-    return dict(body_m=cuts[0], wrist_m=cuts[1], seam_m=float(np.ptp(p[seam,2])),
-                area_m2=float(np.linalg.norm(cross[selected],axis=1).sum()/2))
+    # Fit a plane to the entire sheet. Integrate over each triangle to avoid bias from mesh density.
+    cross = np.cross(b-a, c-a)
+    area = np.linalg.norm(cross, axis=1) / 2
+    vertices = mid[faces]
+    centre = np.average(vertices.mean(axis=1), axis=0, weights=area)
+    offsets = vertices - centre
+    centroids = offsets.mean(axis=1)
+    covariance = (np.einsum("n,nki,nkj->ij", area, offsets, offsets)
+                  + 9 * np.einsum("n,ni,nj->ij", area, centroids, centroids)) / (12 * area.sum())
+    normal = np.linalg.eigh(covariance)[1][:, 0]
+    aft = v6_unit(np.array([0., 0., 1.]) - normal[2] * normal)
+    lateral = np.cross(normal, aft)
+    chords = []
+    for anchor in ([1.15, 3.68, -.88], [3.43, 5.68, -.58]):
+        station = anchor @ lateral
+        hits = []
+        for start, end in ((a, b), (b, c), (c, a)):
+            first, last = start @ lateral - station, end @ lateral - station
+            keep = first * last < 0
+            t = first[keep] / (first[keep] - last[keep])
+            hits.extend((start[keep] + t[:, None] * (end[keep] - start[keep])) @ aft)
+        chords.append(float(np.ptp(hits)))
+    return dict(body_m=cuts[0], wrist_m=cuts[1], seam_m=float(np.ptp(mid[remap[right[seam[right]]], 2])),
+                area_m2=float(area.sum()), plan_body_m=chords[0], plan_wrist_m=chords[1],
+                plan_area_m2=float(np.abs(cross @ normal).sum() / 2))
 
 
 def stage_wide():
@@ -5596,9 +5699,10 @@ def stage_wide():
         tri = accessor(doc, original, prim["indices"]).astype(int).reshape(-1,3)
         if name == "membrane":
             metrics["v5c"] = v6_measures(p, tri, read("_SHEET_EDGE")>.5)
-            fields_out, tri = v6_surface(hide, hide_tri, new)
-            metrics["v6"] = v6_measures(fields_out["POSITION"], tri, fields_out["_SHEET_EDGE"]>.5)
-            v6_material(doc, original, binary, prim, p, fields, tri)
+            fields_out, tri, rails = v6_surface(hide, hide_tri, new)
+            metrics["v6"] = v6_measures(fields_out["POSITION"], tri, fields_out["_SHEET_EDGE"]>.5, fields_out["_SHEET_ID"])
+            v6_material(doc, original, binary, prim, p, fields, fields_out, tri, rails)
+            tri = v6_rim(fields_out, tri)
         else:
             changed = abs(p[:,0]) > 2.2
             out = p.copy()
@@ -5687,7 +5791,57 @@ def v6_sample(image, uv):
     return (1-v)*((1-u)*image[y,x]+u*image[y,x+1])+v*((1-u)*image[y+1,x]+u*image[y+1,x+1])
 
 
-def v6_material(doc, original, binary, prim, p, fields, unused):
+def v6_veins(lines):
+    """Trace smaller vessels from the spars into the four membrane panels."""
+    rng = np.random.default_rng(61021)
+    out = np.zeros((1024,2048), np.float32)
+    def draw(path, radius, strength):
+        for j,(a,b) in enumerate(zip(path,path[1:])):
+            r = radius*(1-.80*j/(len(path)-1))
+            pad = max(1,3*r)
+            lo = np.maximum(np.floor(np.minimum(a,b)-pad).astype(int),[0,0])
+            hi = np.minimum(np.ceil(np.maximum(a,b)+pad).astype(int),[2047,1023])
+            if np.any(hi < lo):
+                continue
+            y,x = np.mgrid[lo[1]:hi[1]+1,lo[0]:hi[0]+1]
+            d = b-a
+            t = np.clip(((x-a[0])*d[0]+(y-a[1])*d[1])/max(d@d,1e-10),0,1)
+            e = ((x-a[0]-d[0]*t)**2+(y-a[1]-d[1]*t)**2)/max(.35,r)**2
+            window = out[lo[1]:hi[1]+1, lo[0]:hi[0]+1]
+            np.maximum(window, strength*(1-.65*j/(len(path)-1))*np.exp(-.5*e), out=window)
+    for left,right in zip(lines,lines[1:]):
+        def path(t0,t1,s0,s1):
+            u = np.linspace(0,1,25)
+            t = t0+(t1-t0)*u
+            s = s0+(s1-s0)*u**.83 + .012*np.sin(2*np.pi*u)*np.sin(np.pi*u)
+            p = (1-s[:,None])*w5_curve(left,t)+s[:,None]*w5_curve(right,t)
+            return v6_chart(p)*2048
+        for j,u in enumerate(np.linspace(.13,.85,10)):
+            s = float(j%2)
+            span = (1-2*s)*rng.uniform(.32,.65)
+            end = min(.99,u+rng.uniform(.12,.24))
+            draw(path(u,end,s,s+span),1.7,.75)
+            for where in (.35,.65):
+                draw(path(u+(end-u)*where,end+.015,s+span*where**.83,s+span*(where+.03)),.86,.48)
+    return out
+
+
+def v6_local_mean(tile, radius):
+    # Subtract lighting from the donor while keeping its small wrinkles and veins.
+    mean = tile
+    for axis in (0,1):
+        pad = [(0,0)]*3
+        pad[axis] = (radius,radius)
+        expanded = np.pad(mean,pad,mode='reflect')
+        integral = np.cumsum(expanded,axis=axis,dtype=np.float64)
+        integral = np.concatenate([np.take(integral,[0],axis=axis)*0,integral],axis=axis)
+        n = tile.shape[axis]
+        mean = (np.take(integral,np.arange(n)+2*radius+1,axis=axis)-
+                np.take(integral,np.arange(n),axis=axis))/(2*radius+1)
+    return mean
+
+
+def v6_material(doc, original, binary, prim, p, fields, sheet, faces, rails):
     # Read the donor's colour, normals and roughness from the delivered version 5c.
     maps = {}
     images = {im["name"]:im for im in doc["images"]}
@@ -5704,7 +5858,9 @@ def v6_material(doc, original, binary, prim, p, fields, unused):
     normals = accessor(doc,original,fields["NORMAL"])
     tangents = accessor(doc,original,fields["TANGENT"])
     forward = v6_unit(np.array([0.,-.85,1.]))
-    donor = np.c_[(p[:,0]-3.48)/2.24, ((p-[0,4.12,0])@forward+1.08)/2.25]
+    # Take only skin inside the elbow-to-third-finger panel. Its borders carry baked bone shadows.
+    depth = (p-[0,4.12,0])@forward
+    donor = np.c_[(p[:,0]-3.09-.24*(depth+.32))/1.19, (depth+.32)/1.54]
     geom = np.cross(p[tri[:,1]]-p[tri[:,0]],p[tri[:,2]]-p[tri[:,0]])
     tiles = {k:[] for k in maps}
     for upper in (True,False):
@@ -5735,19 +5891,45 @@ def v6_material(doc, original, binary, prim, p, fields, unused):
     x = (xx+.5)*13.8/2048-.25
     d = (yy+.5)*13.8/2048-1.65
     # Reflect a physical chart at each edge to avoid a wrap seam.
-    q = np.stack([(x-1.13)/2.24,(d+.3)/2.25],axis=2)
+    flow = .16*np.sin(.88*x+.53*d) + .12*np.sin(1.34*d-.31*x)
+    q = np.stack([(x-.24*d+flow)/1.19, (d+.15*np.sin(x*.9)+.12*x)/1.54],axis=2)
     reflected = 1-abs(np.mod(q,2)-1)
     sign = np.where(np.mod(q,2)<1,1,-1)
-    for key,faces in tiles.items():
+    veins = v6_veins(rails)
+    # Bake thickness from the distance between the two constructed faces.
+    n = len(sheet["POSITION"])//4
+    world = .5*(sheet["POSITION"][:n]+sheet["POSITION"][n:2*n])
+    gauge = np.linalg.norm(sheet["POSITION"][:n]-sheet["POSITION"][n:2*n],axis=1)
+    upper_tri = faces[(faces<n).all(1)]
+    face, weights = v6_raster(v6_chart(world)*[1,2],upper_tri,2048,1024)
+    gauge_map = (weights*gauge[upper_tri[face]]).sum(2)
+    gauge_map[face<0] = .02
+    for key, face_tiles in tiles.items():
         halves = []
-        for i,tile in enumerate(faces):
+        for i,tile in enumerate(face_tiles):
+            if key == "normal":
+                detail = tile*2-1
+                power = (detail[:,:,:2]**2).mean(2,keepdims=True)
+                amplitude = np.sqrt(v6_local_mean(power,65).clip(1e-7))
+                detail[:,:,:2] *= np.clip(.035/amplitude,.60,1.8)
+                tile = .5+.5*v6_unit(detail)
+            if key == "base":
+                log_color = np.log(np.maximum(srgb_to_linear(tile), .0001))
+                detail = log_color-v6_local_mean(log_color,60)
+                target = [.53,.094,.021] if i==0 else [.64,.154,.047]
+                tile = linear_to_srgb(target*np.exp(np.clip(detail,-1.2,1.2)))
             pixels = v6_sample(tile,reflected.reshape(-1,2)).reshape(1024,2048,3)
             if key == "normal":
-                pixels[:,:,:2] = .5+(pixels[:,:,:2]-.5)*sign
+                detail = pixels*2-1
+                detail[:,:,:2] *= 2.8*sign
+                dy,dx = np.gradient(veins)
+                detail[:,:,:2] -= .22*np.stack([dx,dy],axis=2)
+                pixels = .5+.5*v6_unit(detail)
             if key == "base":
-                pixels *= [0.85,.76,.71] if i==0 else [1.,1.04,1.09]
+                pixels *= 1-veins[:,:,None]*[.10,.24,.24]
             if key == "thickness":
-                pixels *= (1+.35*(1-smoothstep((x-.5)/.9)))[:,:,None]
+                pixels = .22 + .25*pixels
+                pixels += (.13*(1-smoothstep((x-.50)/.85)) + 1.3*(gauge_map-.02) + .055*veins)[:,:,None]
             halves.append(to_u8(pixels))
         atlas = np.vstack(halves)
         if key == "thickness":

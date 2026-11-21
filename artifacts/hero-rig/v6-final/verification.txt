@@ -3,8 +3,8 @@ PASS armature contract: 77 joints, 1 skin, 1 imported armature
 PASS new names avoid mapper aliases: []
 PASS six meshes: eye_l, eye_r, hide, horn, membrane, mouth
 PASS material records unchanged: materials, image records, and texture records compared
-PASS source buffer unchanged: 26771104 original binary bytes compared, including every embedded image
-PASS rig.cfg present: every Embercrest key kept; 58 values differ: attack_clip, attack_clip_under, bite_duration, claw_duration, finger_load_curl_deg, flutter_deg, flutter_speed_start, foot_hang_deg, fore_flight_elbow_deg, fore_flight_shoulder_deg, fore_flight_wrist_deg, front_leg_trail_deg, front_leg_tuck_deg, gesture_anticipation, gesture_hold, gesture_legs, gesture_strike_out, glide_breath_deg, glide_trim_deg, gust_deg, gust_heave_m, hind_flight_hip_deg, hind_flight_hock_deg, hind_flight_knee_deg, jaw_open_deg, jaw_rest_deg, leg_flight_pose, leg_flight_splay_deg, leg_trail_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, recovery_droop_deg, recovery_elbow_deg, recovery_finger_deg, recovery_wrist_deg, tail_beat_cycles, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_duration, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg, wing_downstroke_fraction, wing_flap_limit_deg, wing_phase_delay, wing_recovery_extend_phase, wing_recovery_fold_deg
+PASS source buffer unchanged: 27172720 original binary bytes compared, including every embedded image
+PASS rig.cfg present: every Embercrest key kept; 60 values differ: attack_clip, attack_clip_under, bite_duration, claw_duration, finger_load_curl_deg, flutter_deg, flutter_speed_start, foot_hang_deg, fore_flight_elbow_deg, fore_flight_shoulder_deg, fore_flight_wrist_deg, front_leg_trail_deg, front_leg_tuck_deg, gesture_anticipation, gesture_hold, gesture_legs, gesture_strike_out, glide_breath_deg, glide_trim_deg, ground_wing_fan_deg, ground_wing_hand_elev_deg, gust_deg, gust_heave_m, hind_flight_hip_deg, hind_flight_hock_deg, hind_flight_knee_deg, jaw_open_deg, jaw_rest_deg, leg_flight_pose, leg_flight_splay_deg, leg_trail_deg, leg_tuck_deg, limb_damping, limb_gravity, limb_inertia, limb_range_deg, limb_stiffness, limb_tip_stiffness, limb_turbulence, recovery_droop_deg, recovery_elbow_deg, recovery_finger_deg, recovery_wrist_deg, tail_beat_cycles, tail_beat_deg, tail_beat_lag, tail_damping_scale, tail_duration, tail_flow_cycles, tail_flow_deg, tail_flow_period, tail_flow_vertical, tail_range_deg, tail_tip_stiffness, toe_curl_deg, wing_downstroke_fraction, wing_flap_limit_deg, wing_phase_delay, wing_recovery_extend_phase, wing_recovery_fold_deg
 PASS flight.cfg present: every Embercrest key kept; 6 values differ: flap_down_angle_deg, flap_downstroke_fraction, flap_peak_force, flap_period, flap_up_angle_deg, ground_offset
 PASS inverse binds reconcile: maximum matrix error 2.43390027e-07
 PASS measured skeleton hierarchy: maximum anchor error 4.4408921e-16 m; wrong parents []
@@ -17,7 +17,7 @@ PASS hide influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
 PASS horn source geometry: 6696 triangles; all source attributes and indices compared
 PASS horn influences: max sum error 0; unweighted 0; maximum 1
 PASS membrane source geometry: 8032 triangles; all source attributes and indices compared
-PASS membrane influences: max sum error 1.78813934e-07; unweighted 0; maximum 4
+PASS membrane influences: max sum error 1.1920929e-07; unweighted 0; maximum 4
 PASS mouth source geometry: 4644 triangles; all source attributes and indices compared
 PASS mouth influences: max sum error 1.1920929e-07; unweighted 0; maximum 3
 PASS hide jaw mask retained: the jaw weight is the source mask, with the two corner ramps averaged; 51 vertices differ from the source, by at most 0.002318
@@ -29,14 +29,14 @@ PASS socket_l fixed: 362 exported vertices follow head
 PASS eye_r rigid: 546 vertices at weight 1
 PASS lid_r topology: six rings of 36 unique positions
 PASS socket_r fixed: 372 exported vertices follow head
-PASS hide mirrored field: exported weight against the field at the mirrored position; max 0.018352; RMS 0.001822; 50347 of 104305 vertices carry the field, the rest are spikes, jaw and lids
-PASS membrane mirrored surface: left vertex against the right membrane at the mirrored point; max 0.000001; RMS 0.000000; 2010 vertices within 4 mm of the mirrored surface; 0 farther
-PASS hide mirrored weights: max 0.016042; RMS 0.000520; 5559 pairs within 2 mm of their mirror image; 20542 left vertices have no such partner; 121 more pairs have a spike on one side or both: 119 lead with the same bone, 2 with joined bones, 0 with bones apart
-PASS membrane mirrored weights: max 0.000001; RMS 0.000000; 2010 pairs within 2 mm of their mirror image; 0 left vertices have no such partner
-PASS horn mirrored weights: max 0.000000; RMS 0.000000; 345 pairs within 2 mm of their mirror image; 1493 left vertices have no such partner
+PASS hide mirrored field: exported weight against the field at the mirrored position; max 0.018352; RMS 0.001818; 50539 of 104305 vertices carry the field, the rest are spikes, jaw and lids
+PASS membrane mirrored surface: left vertex against the right membrane at the mirrored point; max 0.000007; RMS 0.000000; 2226 vertices within 4 mm of the mirrored surface; 0 farther
+PASS hide mirrored weights: max 0.016042; RMS 0.000511; 5577 pairs within 2 mm of their mirror image; 20524 left vertices have no such partner; 121 more pairs have a spike on one side or both: 119 lead with the same bone, 2 with joined bones, 0 with bones apart
+PASS membrane mirrored weights: max 0.000007; RMS 0.000000; 2010 pairs within 2 mm of their mirror image; 0 left vertices have no such partner
+PASS horn mirrored weights: max 0.000000; RMS 0.000000; 346 pairs within 2 mm of their mirror image; 1492 left vertices have no such partner
 PASS mouth mirrored weights: max 0.000001; RMS 0.000000; 93 pairs within 2 mm of their mirror image; 1136 left vertices have no such partner; 2 more pairs set a tooth against the gum and are not compared
 PASS Blender bind pose: max vertex displacement 2.81154547e-07 m
-PASS root seam bind: maximum lateral gap 0.000 mm across 1846 samples
+PASS root seam bind: maximum lateral gap 0.000 mm across 2810 samples
 PASS wrist_l count bind: 1 connected claws
 PASS wrist_l owner bind: all thumb vertices follow wing_wrist_l
 PASS wrist_l rigid length bind: 0.4152 m rest, 0.4152 m posed
@@ -53,7 +53,7 @@ PASS blink_r closure: inner-edge height spread 0.001599879 m; threshold 0.005 m
 PASS blink_r ball coverage: 0/10517 rays exposed across nine directions; minimum hide distance 0.010729 m
 PASS eye_l independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
 PASS eye_r independence: 25 degrees; max lid motion 0 m; eye motion 0.062647 m
-PASS root seam fold: maximum lateral gap 0.000 mm across 1846 samples
+PASS root seam fold: maximum lateral gap 0.000 mm across 2810 samples
 PASS wrist_l count fold: 1 connected claws
 PASS wrist_l owner fold: all thumb vertices follow wing_wrist_l
 PASS wrist_l rigid length fold: 0.4152 m rest, 0.4152 m posed
@@ -62,10 +62,12 @@ PASS wrist_r count fold: 1 connected claws
 PASS wrist_r owner fold: all thumb vertices follow wing_wrist_r
 PASS wrist_r rigid length fold: 0.4152 m rest, 0.4152 m posed
 PASS wrist_r seated fold: maximum base gap 0.000 mm
-PASS wing_l membrane stretch: elbow 80 and wrist 80 degrees; 6024 edges; longest 1.3976 of rest; shortest 0.2963; 49 over 1.3
-PASS wing_l membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 209 cut it folded; 209 cut it at rest; 4016 membrane triangles tested, 0 attached to the hide; 93888 arm and body triangles
-PASS wing_r membrane stretch: elbow 80 and wrist 80 degrees; 6024 edges; longest 1.3976 of rest; shortest 0.2963; 49 over 1.3
-PASS wing_r membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 210 cut it folded; 210 cut it at rest; 4016 membrane triangles tested, 0 attached to the hide; 93888 arm and body triangles
+PASS wing_l membrane stretch: elbow 80 and wrist 80 degrees; 6240 edges; longest 1.3776 of rest; shortest 0.2327; 44 over 1.3
+PASS wing_l membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 220 cut it folded; 222 cut it at rest; 4016 membrane triangles tested, 0 attached to the hide; 93901 arm and body triangles
+PASS wing_r membrane stretch: elbow 80 and wrist 80 degrees; 6240 edges; longest 1.3776 of rest; shortest 0.2327; 44 over 1.3
+PASS wing_r membrane intersections: 0 membrane triangles cut the arm or the body when folded and not at rest; 211 cut it folded; 213 cut it at rest; 4016 membrane triangles tested, 0 attached to the hide; 93901 arm and body triangles
+PASS trailing hind legs, open: hip 45, knee 5, hock 35 degrees; 0 membrane and leg triangle intersections
+PASS trailing hind legs, folded: hip 45, knee 5, hock 35 degrees; 0 membrane and leg triangle intersections
 PASS fore_l volume: 60-degree elbow/knee; rest 0.646477 m3; posed 0.607076 m3; change 6.0947%; simple boundary loops [25, 71, 31, 14, 14, 5]; valid True
 PASS hind_l volume: 60-degree elbow/knee; rest 1.104550 m3; posed 1.253994 m3; change 13.5299%; simple boundary loops [75, 28, 22, 17]; valid True
 PASS fore_r volume: 60-degree elbow/knee; rest 0.644180 m3; posed 0.605239 m3; change 6.0451%; simple boundary loops [14, 24, 74, 10, 27]; valid True
