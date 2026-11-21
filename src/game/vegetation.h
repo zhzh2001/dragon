@@ -139,6 +139,15 @@ struct VegetationSettings {
     float landmark_cover = 0.8f;
     float landmark_scale = 1.8f;
     float landmark_clearing = 1.6f;
+    // What lies at the foot of a wall crag and about a landmark, so neither
+    // stands on clean grass: `foot_scree` talus mounds a crag (the share
+    // of crags that get one, then a second), `foot_rubble` boulders a crag
+    // spilled down the fall line, and `landmark_rubble` small blocks about
+    // a landmark's base.
+    float foot_scree = 1.0f;
+    float foot_scree_scale = 2.2f;
+    int foot_rubble = 10;
+    int landmark_rubble = 10;
 
     float wind = 1.0f;
     uint32_t seed = 7;

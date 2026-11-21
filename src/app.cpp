@@ -3797,6 +3797,10 @@ void App::build_ui(float dt) {
                     replant_now |= ImGui::SliderFloat("landmark cover", &v.landmark_cover, 0.0f, 1.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("landmark scale", &v.landmark_scale, 0.5f, 4.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("landmark clearing", &v.landmark_clearing, 0.5f, 4.0f, "%.2f radii");
+                    replant_now |= ImGui::SliderFloat("scree at a wall crag's foot", &v.foot_scree, 0.0f, 1.0f, "%.2f");
+                    replant_now |= ImGui::SliderFloat("foot scree scale", &v.foot_scree_scale, 0.5f, 3.0f, "%.2f");
+                    replant_now |= ImGui::SliderInt("rubble under a wall crag", &v.foot_rubble, 0, 20);
+                    replant_now |= ImGui::SliderInt("rubble about a landmark", &v.landmark_rubble, 0, 20);
                     replant_now |= ImGui::SliderFloat("crag spacing", &v.crag_spacing, 30.0f, 500.0f, "%.0f m");
                     replant_now |= ImGui::SliderFloat("crag cover", &v.crag_cover, 0.0f, 1.0f, "%.2f");
                     replant_now |= ImGui::SliderFloat("crag slope from", &v.crag_slope_min, 0.0f, 0.6f, "%.2f");

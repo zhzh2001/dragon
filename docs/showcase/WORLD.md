@@ -388,3 +388,43 @@ What is weak:
 - The tower stands alone on its bench. A keep and a bridge were the
   pieces that would have made a place of it, and both failed conversion.
 
+## Scree and rubble at the feet (2026-11-20, 19:20)
+
+The blind critic's seventh round put the rock kit first: the crags are
+"objects set on a slope", "the grass runs right up to them", and the arch
+stands on "a smooth slope with no rubble" (`CRITIC.md`). `place_kit` now
+puts three things at the feet:
+
+- A talus mound where each wall crag's face meets the ground, and a
+  second at 0.7 (`talus_a` or `scree_a`, 1.5 to 3 times its size, leaning
+  0.85 of the way to the slope). The foot is the downhill edge of the
+  crag's base, which the placement buries to the ground's level.
+- Ten boulders under each wall crag, spilled down the fall line, large
+  near the face and smaller the further they rolled.
+- Ten small blocks about each landmark's base, most of them close in.
+
+Run seed 3 goes from 3,823 kit pieces to 4,904: 133 more mounds and
+about 950 blocks. The dials are under Terrain > Vegetation > Rocks
+("scree at a wall crag's foot" and the three below it).
+
+`artifacts/showcase-walls/foot-scree-before-after.jpg`: the crag row and
+the arch, the critic's frames on the left, cropped and not scaled. The
+change is plain at the crags' feet and small at the arch. The Metal
+goldens were captured again.
+
+The detail layer now starts at 45 m across and is whole from 75 m (it
+was 14 and 44): a talus mound took it and did not need it.
+
+Cost: not measured cleanly. A Codex job's Blender renders held the Mac
+at a load average of 87. Three interleaved pairs against
+`DRAGON_NO_WALL_CRAGS=1` read 1.5, 1.8 and 1.2 ms for the crags with
+their scree and rubble, before the detail layer's change; the crags
+alone were 0.2 ms an hour earlier. Three more pairs after the change
+read from -1.3 to +13 ms and say nothing. Measure again on an idle Mac
+and record it.
+
+What is weak: the mounds are heaps beside the crags, not a fan that runs
+up their faces. The grass still meets rock at a line between them. A
+band of the terrain's own rock colour under each row needs a mask the
+terrain shader can read.
+

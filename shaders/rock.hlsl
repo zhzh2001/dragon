@@ -58,7 +58,10 @@ VertexOut vs_main(VertexIn input) {
     // A piece's maps are 1024 across whatever its size. On a crag 60 to
     // 100 m wide a texel is a hand across, and the face is smooth clay up
     // close; the detail layer is for those. A boulder needs none.
-    o.detail = saturate((rock.contact.w * input.position_scale.w - 14.0) / 30.0);
+    // None under 45 m across, all of it from 75 m: a talus mound at a crag's
+    // foot is 45 m and has texels enough; six more fetches a pixel on a
+    // hundred of them cost a millisecond.
+    o.detail = saturate((rock.contact.w * input.position_scale.w - 45.0) / 30.0);
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
     return o;
 }

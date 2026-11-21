@@ -214,6 +214,13 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
     // whole height over the ground at its foot, so a row is a cliff band and
     // not rocks set on a slope. Everything else keeps out of the footprints.
     size_t wall_count = 0, wall_rows = 0;
+    // Where each wall crag's face meets the ground, and each landmark's
+    // base: scree and rubble go there once the pieces that place them exist.
+    struct Foot {
+        float x, z, radius;
+        core::Vec3 downhill;
+    };
+    std::vector<Foot> wall_feet, landmark_sites;
     if (settings.walls) {
         const float spacing = core::maxf(settings.wall_spacing, 60.0f);
         const int cells = int((2.0f * extent) / spacing);
@@ -279,6 +286,9 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                     kit_rocks_[piece].push_back(rock);
                     cliffs.push_back(Footprint{x, z, footprint_radius(piece) * scale});
                     clearings_.push_back(Clearing{x, z, footprint_radius(piece) * scale * 0.8f});
+                    // The base is buried to its downhill edge: the face's foot.
+                    const float front = 0.5f * info.size.z * scale;
+                    wall_feet.push_back(Foot{x + downhill.x * front, z + downhill.z * front, 0.5f * info.size.x * scale, downhill});
                     ++wall_count;
                     row_started = true;
                     // The next crag: along the contour, overlapping this one.
@@ -494,6 +504,36 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
         }
     }
 
+    // ---- scree at the foot of the wall crags: a talus mound or two where
+    // each face meets the ground, leaning with the slope. A crag on clean
+    // grass was an object set on a hillside (the blind critic's seventh
+    // round: "the grass runs right up to them").
+    for (size_t i = 0; i < wall_feet.size(); ++i) {
+        const Foot& foot = wall_feet[i];
+        CellHash hash(int(i), 3, settings.seed * 43u + 7u);
+        for (int k = 0; k < 2; ++k) {
+            const float keep = hash.next();
+            const float along = hash.next();
+            const float down = hash.next();
+            const float scale_roll = hash.next();
+            const float yaw = hash.next() * core::TWO_PI;
+            const float shade = hash.next();
+            const float moss = hash.next();
+            const float id = hash.next();
+            if (keep > settings.foot_scree * (k == 0 ? 1.0f : 0.7f)) continue;
+            const int piece = KIT_SCREE[id < 0.5f ? 0 : 1];
+            const float scale = settings.foot_scree_scale * (0.7f + 0.7f * scale_roll);
+            const float reach = footprint_radius(piece) * scale;
+            const core::Vec3 strike{foot.downhill.z, 0.0f, -foot.downhill.x};
+            const float side = (along - 0.5f) * 1.4f * foot.radius;
+            const float out = reach * (0.15f + 0.5f * down);
+            const float x = foot.x + strike.x * side + foot.downhill.x * out;
+            const float z = foot.z + strike.z * side + foot.downhill.z * out;
+            if (terrain.height_at(x, z) < t.water_level + 2.0f) continue;
+            if (place_upright(piece, x, z, scale, yaw, 0.3f, 0.85f, shade, moss, id)) ++scree_count;
+        }
+    }
+
     // ---- landmarks: one a cell at most, on the first of a few tries in
     // the cell whose ground suits its kind. Upright, sunk until its base is
     // under the ground; trees and boulders keep clear of it.
@@ -541,6 +581,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                     if (!clear) continue;
                     if (!place_upright(rule.piece, x, z, scale, yaw, 0.02f, 0.0f, shade, moss * 0.4f, id)) continue;
                     clearings_.push_back(Clearing{x, z, radius * settings.landmark_clearing});
+                    landmark_sites.push_back(Foot{x, z, radius, core::Vec3::up()});
                     ++landmark_count;
                     break;
                 }
@@ -557,12 +598,15 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
         }
         return false;
     };
+    // Rubble lies against a crag's foot and a landmark's base, inside their
+    // footprints: it skips the test that keeps the groups out of them.
+    bool rubble = false;
     // One rock: oriented, sunk, checked, pushed. `slope_n` the ground's normal.
     const auto place_one = [&](int piece, float x, float z, float scale, float yaw, float lean_roll, float lean_dir,
                                float sink_roll, float shade_roll, float moss_roll, float hash_roll) {
         const float height = terrain.height_at(x, z);
         if (height < t.water_level + 1.0f) return;
-        if (in_cliff(x, z)) return;
+        if (!rubble && in_cliff(x, z)) return;
         const core::Vec3 n = terrain.normal_at(x, z);
         const core::Vec3 up = core::normalize_or(core::lerp(core::Vec3::up(), n, settings.rock_tilt), core::Vec3::up());
         // A few degrees of its own lean, so a group is not one tilt.
@@ -646,6 +690,59 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
             }
         }
     }
+    // ---- rubble: blocks spilled down the fall line under each wall crag,
+    // large near the face and small further out, and small blocks about a
+    // landmark's base.
+    rubble = true;
+    for (size_t i = 0; i < wall_feet.size(); ++i) {
+        const Foot& foot = wall_feet[i];
+        CellHash hash(int(i), 5, settings.seed * 47u + 11u);
+        const core::Vec3 strike{foot.downhill.z, 0.0f, -foot.downhill.x};
+        for (int k = 0; k < settings.foot_rubble; ++k) {
+            const float along = hash.next();
+            const float down = hash.next();
+            const float piece_roll = hash.next();
+            const float scale_roll = hash.next();
+            const float yaw = hash.next() * core::TWO_PI;
+            const float lean = hash.next();
+            const float lean_dir = hash.next() * core::TWO_PI;
+            const float sink = hash.next();
+            const float shade = hash.next();
+            const float moss = hash.next();
+            const float id = hash.next();
+            const int piece = KIT_BOULDERS[int(piece_roll * (float(KIT_BOULDER_COUNT) - 0.001f))];
+            const float out = down * down * foot.radius * 1.6f;
+            // Smaller the further it rolled.
+            const float scale = settings.rock_large_scale * (0.5f + 1.3f * scale_roll) * (1.0f - 0.55f * down);
+            const float side = (along - 0.5f) * 2.0f * foot.radius;
+            place_one(piece, foot.x + strike.x * side + foot.downhill.x * out, foot.z + strike.z * side + foot.downhill.z * out,
+                      scale, yaw, lean, lean_dir, sink, shade, moss, id);
+        }
+    }
+    for (size_t i = 0; i < landmark_sites.size(); ++i) {
+        const Foot& site = landmark_sites[i];
+        CellHash hash(int(i), 9, settings.seed * 53u + 13u);
+        for (int k = 0; k < settings.landmark_rubble; ++k) {
+            const float angle = hash.next() * core::TWO_PI;
+            const float reach = hash.next();
+            const float piece_roll = hash.next();
+            const float scale_roll = hash.next();
+            const float yaw = hash.next() * core::TWO_PI;
+            const float lean = hash.next();
+            const float lean_dir = hash.next() * core::TWO_PI;
+            const float sink = hash.next();
+            const float shade = hash.next();
+            const float moss = hash.next();
+            const float id = hash.next();
+            const int piece = KIT_BOULDERS[int(piece_roll * (float(KIT_BOULDER_COUNT) - 0.001f))];
+            const float distance = site.radius * (0.5f + 0.7f * reach * reach);
+            const float scale = settings.rock_large_scale * (0.3f + 0.6f * scale_roll * scale_roll);
+            place_one(piece, site.x + std::cos(angle) * distance, site.z + std::sin(angle) * distance, scale, yaw, lean,
+                      lean_dir, sink, shade, moss * 0.5f, id);
+        }
+    }
+    rubble = false;
+
     size_t total = 0;
     for (const auto& list : kit_rocks_) total += list.size();
     const size_t shells = cliffs.size() - crag_count - scree_count - wall_count - landmark_count;
