@@ -396,10 +396,11 @@ flight controls.
   `export_public.sh --ref COMMIT` exports `main` up to the last commit worth
   shipping. Ask before an export that moves the mirror.
 - **Delegate complex 3D model rigging -- and asset repair when it is more than
-  a one-liner -- to gpt-6-astra on the work account:
-  `codex-profiles cli work exec -m gpt-6-astra -c model_reasoning_effort=high
-  -s danger-full-access` (the user's call, 2026-11-04; it replaces
-  gpt-6.1-sol, 2026-10-04). Medium is enough for props and clips. The work
+  a one-liner -- to gpt-6.2-astra on the work account:
+  `codex-profiles cli work exec -m gpt-6.2-astra -c model_reasoning_effort=high
+  -s danger-full-access` (the user's call, 2026-11-20: "use the new gpt-6.2
+  family"; it replaces gpt-6-astra, 2026-11-04, and gpt-6.1-sol, 2026-10-04).
+  Medium is enough for props and clips. The work
   profile's own default is gpt-6.1-sol, so pass `-m`. Never start it without
   checking usage first -- see below.** Do not delegate to Fable 5.1 any more
   (the user's call, 2026-09-26); when Codex has no headroom, do the work in
@@ -439,6 +440,8 @@ flight controls.
   | decimate and animate a prey creature (three baked clips), 2026-09-25 | 80,127 |
   | improve the demo pilot, measured on eight 12-minute headless runs per pass, 2026-09-26 | 325,999 -- the whole 5-hour window from 100%; it hit the limit before committing |
   | measure one creature's membrane field and rebuild | 75,737 |
+  | wall crags and six rocks into the rock kit, gpt-6.2-astra medium, 2026-11-20 | 413,767 |
+  | a landmark kit of five with a failed hoard, gpt-6.2-astra high, 2026-11-20 | 477,367 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**
