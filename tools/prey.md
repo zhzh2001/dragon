@@ -10,6 +10,7 @@ The mouth attachment follows the animated `head` matrix.
 | [bighorn](../assets/props/prey_bighorn.glb) | `tripo-bighorn-01.glb` | 0.765 × 1.653 × 1.698 | 1.23 | 8,893 | 28 | (-0.370, 1.180, 0.792) | (-0.280, -0.180, 0.092) |
 | [boar](../assets/props/prey_boar.glb) | `tripo-boar-01.glb` | 0.501 × 0.887 × 1.599 | 0.86 | 8,801 | 28 | (0.040, 0.399, 0.835) | (0.040, -0.131, 0.195) |
 | [chamois](../assets/props/prey_chamois.glb) | `tripo-chamois-01.glb` | 0.352 × 1.199 × 1.200 | 0.92 | 8,893 | 28 | (0.123, 0.850, 0.694) | (0.033, -0.110, 0.154) |
+| [goat](../assets/props/prey_goat.glb) | `tripo-goat-01.glb` | 0.471 × 1.006 × 1.399 | 0.88 | 8,839 | 28 | (0.107, 0.610, 0.774) | (0.087, -0.180, 0.134) |
 
 ## Build
 
@@ -65,11 +66,15 @@ bighorn PASS | 0.765 x 1.653 x 1.698 m | 8893 triangles | 28 bones | bind error 
 boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.69e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 1.18 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.36 cm
-  run   0.55 s | min sole 0.19 cm | max nearest sole 3.68 cm | stance free flight
+  run   0.55 s | min sole 0.19 cm | max nearest sole 3.68 cm | stance 1.37 cm
 chamois PASS | 0.352 x 1.199 x 1.200 m | 8893 triangles | 28 bones | bind error 6.36e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 2.68 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.38 cm
   run   0.55 s | min sole 0.18 cm | max nearest sole 4.94 cm | stance 1.73 cm
+goat PASS | 0.471 x 1.006 x 1.399 m | 8839 triangles | 28 bones | bind error 5.30e-08 m
+  graze 4.00 s | min sole 0.24 cm | max nearest sole 0.30 cm | stance 2.86 cm
+  walk  1.20 s | min sole 0.29 cm | max nearest sole 0.30 cm | stance 0.37 cm
+  run   0.55 s | min sole 0.07 cm | max nearest sole 4.51 cm | stance 2.14 cm
 ```
 
 | Animal | Minimum mouth height in graze (cm) | Suspended run samples / 241 | Review renders |
@@ -78,6 +83,7 @@ chamois PASS | 0.352 x 1.199 x 1.200 m | 8893 triangles | 28 bones | bind error 
 | bighorn | 2.91 | 83 | [Sheets and stills](../artifacts/prey/bighorn/) |
 | boar | 0.49 | 70 | [Sheets and stills](../artifacts/prey/boar/) |
 | chamois | 1.44 | 75 | [Sheets and stills](../artifacts/prey/chamois/) |
+| goat | 1.68 | 82 | [Sheets and stills](../artifacts/prey/goat/) |
 
 ## Visual review
 
@@ -104,5 +110,10 @@ The short legs tuck close to the chest during the bound. Its belly hides much of
 The first chamois fit pinched the forelegs in the deepest graze.
 The second fit widens the foreleg stance and lowers the neck pivots. The muzzle reaches the ground between the forelegs.
 The bent forelegs still show angular creases near the shoulders. The shoulders and hips keep their shape during walk and run.
+
+A forehoof obscured the goat's muzzle in the first grazing close-up.
+The second fit widens the foreleg stance and spreads the bend through the neck.
+The muzzle clears the turf by 8 mm at mid-cycle. Both horns keep their shape.
+The shaggy coat hides the upper forelegs in profile and looks angular around the shoulder.
 
 No reviewed animal was rejected.
