@@ -741,15 +741,49 @@ bool App::init(const Options& options) {
     load_prop(core::paths::asset(kPropFiles[2]).c_str(), spire_prop_, "prop_spire");
     load_prop(core::paths::asset(kPropFiles[3]).c_str(), trove_prop_, "prop_trove");
     load_prop(core::paths::asset(kPropFiles[5]).c_str(), ward_prop_, "prop_ward");
-    if (load_prop(core::paths::asset(kPropFiles[4]).c_str(), grazer_prop_, "prop_grazer", &grazer_clips_)) {
-        static const char* const names[3] = {"graze", "walk", "run"};
-        for (int c = 0; c < 3; ++c) {
-            for (size_t i = 0; i < grazer_clips_.size(); ++i) {
-                if (grazer_clips_[i].name == names[c]) grazer_clip_[c] = int(i);
+    {
+        // The herds' animals (PreyKind). The Mossback on every tier; the
+        // wild ones on the modern tier, each at a size that puts its body
+        // where the grazer's is (the hit volumes are the grazer's): an elk
+        // 2.4 m long in its file is 5.3 m here, a great elk beside a 12 m
+        // dragon.
+        struct KindFile {
+            const char* file;
+            const char* tag;
+            float scale, tint, dead_lift;
+            bool wild;
+        };
+        static const KindFile files[kMaxPreyKinds] = {
+            {kPropFiles[4], "prop_grazer", 1.0f, 1.5f, 0.8f, false},  // lifted: the hide is dark
+            {"props/prey_elk.glb", "prey_elk", 2.2f, 1.0f, 0.32f, true},
+            {"props/prey_bighorn.glb", "prey_bighorn", 2.6f, 1.0f, 0.26f, true},
+            {"props/prey_boar.glb", "prey_boar", 2.6f, 1.0f, 0.3f, true},
+            {"props/prey_chamois.glb", "prey_chamois", 3.0f, 1.0f, 0.18f, true},
+            {"props/prey_goat.glb", "prey_goat", 2.8f, 1.0f, 0.2f, true},
+        };
+        prey_kinds_ok_.clear();
+        for (int k = 0; k < kMaxPreyKinds; ++k) {
+            const KindFile& f = files[k];
+            PreyKind& kind = prey_kinds_[k];
+            if (f.wild && tier_.tier != gfx::Tier::Modern) continue;
+            const std::string path = core::paths::asset(f.file);
+            if (f.wild && !std::ifstream(path, std::ios::binary)) continue;  // not shipped: no warning
+            if (!load_prop(path.c_str(), kind.prop, f.tag, &kind.clips)) continue;
+            kind.scale = f.scale;
+            kind.tint = f.tint;
+            kind.dead_lift = f.dead_lift;
+            kind.wild = f.wild;
+            static const char* const names[3] = {"graze", "walk", "run"};
+            for (int c = 0; c < 3; ++c) {
+                kind.clip[c] = -1;
+                for (size_t i = 0; i < kind.clips.size(); ++i) {
+                    if (kind.clips[i].name == names[c]) kind.clip[c] = int(i);
+                }
             }
+            LOG_INFO("%s: %d joints, clips graze %d, walk %d, run %d", f.tag, kind.prop.skeleton.count(), kind.clip[0],
+                     kind.clip[1], kind.clip[2]);
+            prey_kinds_ok_.push_back(k);
         }
-        LOG_INFO("grazer clips: graze %d, walk %d, run %d", grazer_clip_[0], grazer_clip_[1],
-                 grazer_clip_[2]);
     }
     // Fixed function pays per vertex (each software-transformed and sent):
     // 66 for a fireball instead of 247.
@@ -1989,7 +2023,8 @@ void App::shutdown() {
         release_prop(hoard_prop_);
         release_prop(spire_prop_);
         release_prop(trove_prop_);
-        release_prop(grazer_prop_);
+        for (PreyKind& kind : prey_kinds_) release_prop(kind.prop);
+        prey_kinds_ok_.clear();
         release_prop(ward_prop_);
         device_.rhi().destroy(terrain_detail_texture_);
         terrain_detail_texture_ = nullptr;
@@ -6044,6 +6079,9 @@ void App::populate_valley(uint32_t seed, int depth) {
         prey_slots_.push_back(slot);
     }
     run_alive_.assign(combat_.sentinels().size(), 1);
+    // Which animals this valley has: its herds take the kinds in turn from
+    // one the seed picks, so two valleys do not field the same two.
+    prey_kind_offset_ = int(layout.seed % 7919u);
     for (const game::RunHerd& herd : layout.herds) {
         LOG_INFO("  herd of %d at %.0f,%.0f,%.0f", herd.count, double(herd.position.x),
                  double(herd.position.y), double(herd.position.z));
@@ -7049,6 +7087,14 @@ void App::update_prey(float dt, const game::CombatEvents& events) {
 
 // ---- the herd, drawn ----
 
+// A herd is one kind of animal, dealt by its number from the kinds that
+// loaded. Null when none did (the placeholder body is drawn).
+const App::PreyKind* App::prey_kind_for(const game::Prey& prey) const {
+    if (prey_kinds_ok_.empty()) return nullptr;
+    const size_t n = prey_kinds_ok_.size();
+    return &prey_kinds_[prey_kinds_ok_[size_t((prey.herd < 0 ? 0 : prey.herd) + prey_kind_offset_) % n]];
+}
+
 // One grazer's pose: its gait's clip at its own phase, a carcass lying on its
 // side at the bind pose. Returns false for one that is not drawn.
 bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core::Mat4>& skin, bool main_view) {
@@ -7060,8 +7106,12 @@ bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core:
     if (clip == game::PreyClip::Dead) {
         facing = facing * core::Quat::from_axis_angle(core::Vec3::unit_z(), core::HALF_PI);
     }
-    const float scale = prey_.tuning.scale;
-    model = core::Mat4::trs(prey.position + core::Vec3{0.0f, clip == game::PreyClip::Dead ? 0.8f * scale : 0.0f, 0.0f},
+    const PreyKind* kind = prey_kind_for(prey);
+    if (!kind) return false;
+    // The herd's scale is the grazer's; a wild kind has its own over it.
+    const float scale = kind->wild ? kind->scale * wild_prey_size_ : prey_.tuning.scale * kind->scale;
+    model = core::Mat4::trs(prey.position +
+                                core::Vec3{0.0f, clip == game::PreyClip::Dead ? kind->dead_lift * scale : 0.0f, 0.0f},
                             facing, core::Vec3(scale));
     // Not posed for nothing: a grazer behind the camera, or too small to draw,
     // skipped before its 37 joints are (a twelfth of the Pi 1B's frame went
@@ -7069,15 +7119,19 @@ bool App::pose_prey(const game::Prey& prey, core::Mat4& model, std::vector<core:
     if (main_view) {
         gfx::ModelUniforms at;
         at.model = model;
-        if (!world_.skinned_in_view(grazer_prop_.mesh, at)) return false;
+        if (!world_.skinned_in_view(kind->prop.mesh, at)) return false;
     }
-    const anim::Skeleton& skeleton = grazer_prop_.skeleton;
+    const anim::Skeleton& skeleton = kind->prop.skeleton;
     grazer_pose_.reset_to_bind(skeleton);
-    const int which = clip == game::PreyClip::Run ? grazer_clip_[2]
-                      : clip == game::PreyClip::Walk ? grazer_clip_[1]
-                      : clip == game::PreyClip::Graze ? grazer_clip_[0]
+    const int which = clip == game::PreyClip::Run ? kind->clip[2]
+                      : clip == game::PreyClip::Walk ? kind->clip[1]
+                      : clip == game::PreyClip::Graze ? kind->clip[0]
                                                       : -1;
-    if (which >= 0) grazer_clips_[size_t(which)].sample(prey.clip_time, grazer_pose_);
+    if (which >= 0) {
+        // The herd's clock runs at the grazer's clip lengths; every kind's
+        // clips are those lengths (tools/prey.md).
+        kind->clips[size_t(which)].sample(prey.clip_time, grazer_pose_);
+    }
     anim::compute_world_matrices(skeleton, grazer_pose_, grazer_world_);
     anim::compute_skinning_matrices(skeleton, grazer_world_, skin);
     return true;
@@ -7089,15 +7143,14 @@ void App::draw_prey(rhi::Pass* pass) {
     for (const game::Prey& prey : prey_.animals()) {
         if (core::distance(eye, prey.position) > 2200.0f) continue;
         core::Mat4 model;
-        if (grazer_prop_.ok) {
+        if (const PreyKind* kind = prey_kind_for(prey)) {
             if (!pose_prey(prey, model, grazer_skin_, true)) continue;
             gfx::ModelUniforms m;
             m.model = model;
-            // Lifted like the towers: the hide is dark, and a herd in a valley read as black.
-            const float char_ = 1.5f * (1.0f - 0.75f * prey.burnt);
+            // The grazer is lifted like the towers: its hide is dark, and a herd in a valley read as black.
+            const float char_ = kind->tint * (1.0f - 0.75f * prey.burnt);
             m.tint = core::Vec4{char_, char_, char_, 0.0f};
-            world_.draw_skinned(device_, pass, grazer_prop_.mesh, m, grazer_skin_,
-                                grazer_prop_.textures, model_sampler_);
+            world_.draw_skinned(device_, pass, kind->prop.mesh, m, grazer_skin_, kind->prop.textures, model_sampler_);
         } else if (sphere_mesh_.valid() && prey.state != game::PreyState::Eaten) {
             // No prop: a hide-brown body the size of one.
             gfx::ModelUniforms m;
@@ -7112,16 +7165,16 @@ void App::draw_prey(rhi::Pass* pass) {
 }
 
 void App::draw_prey_shadows(rhi::Pass* shadow_pass) {
-    if (!run_mode_ || !grazer_prop_.ok) return;
+    if (!run_mode_ || prey_kinds_ok_.empty()) return;
     const core::Vec3 eye = active_camera().position;
     for (const game::Prey& prey : prey_.animals()) {
         if (core::distance(eye, prey.position) > 900.0f) continue;
         core::Mat4 model;
-        if (!pose_prey(prey, model, grazer_skin_)) continue;
+        const PreyKind* kind = prey_kind_for(prey);
+        if (!kind || !pose_prey(prey, model, grazer_skin_)) continue;
         gfx::ModelUniforms m;
         m.model = model;
-        world_.draw_skinned_depth(device_, shadow_pass, grazer_prop_.mesh, shadow_.light_view_proj(), m,
-                                  grazer_skin_);
+        world_.draw_skinned_depth(device_, shadow_pass, kind->prop.mesh, shadow_.light_view_proj(), m, grazer_skin_);
     }
 }
 
@@ -9278,6 +9331,8 @@ void App::build_combat_ui() {
         ImGui::SliderFloat("growth per meal", &p.growth, 0.0f, 80.0f, "%.0f");
         ImGui::SliderFloat("health per meal", &p.heal, 0.0f, 60.0f, "%.0f");
         ImGui::SliderFloat("prey health", &p.health, 1.0f, 100.0f, "%.0f");
+        ImGui::SliderFloat("wild prey size", &wild_prey_size_, 0.4f, 2.0f, "x%.2f");
+        ImGui::SetItemTooltip("The elk, bighorn, boar, chamois and goat (the modern tier), over their own size");
         ImGui::SliderFloat("carcass lasts", &p.carcass_time, 5.0f, 240.0f, "%.0f s");
         ImGui::TreePop();
     }

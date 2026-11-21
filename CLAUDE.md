@@ -442,6 +442,7 @@ flight controls.
   | measure one creature's membrane field and rebuild | 75,737 |
   | wall crags and six rocks into the rock kit, gpt-6.2-astra medium, 2026-11-20 | 413,767 |
   | a landmark kit of five with a failed hoard, gpt-6.2-astra high, 2026-11-20 | 477,367 |
+  | rig five quadrupeds from static meshes, three clips each, gpt-6.2-astra high, 2026-11-20 | 418,469 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**

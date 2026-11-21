@@ -27,6 +27,7 @@ What 2026-11-20 built, each with its own section:
 | Talus mounds and rubble at the feet of the crags and landmarks | `showcase/WORLD.md`, "Scree and rubble at the feet" |
 | Blind critic round 7 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round7` |
 | The Tripo hide on the hero, tried: no visible gain | `MODEL_GENERATION.md`, "The hide trial" |
+| Five wild animals rigged from Tripo meshes, one kind a herd: an elk, a bighorn, a boar, a chamois, a goat | `showcase/WORLD.md`, "Wild herds" |
 | Three Codex conversions on `gpt-6.2-astra`: crags and rocks, landmarks, prey | `tools/rockkit.md`, `tools/landmarks.md`, `tools/prey.md`; the briefs are in `tools/showcase/` |
 
 Waiting on the user:
@@ -37,7 +38,8 @@ Waiting on the user:
   that. It is a Codex asset job. Do not start it without the answer.
 - The playtest of the new picture: breathe in a low pass and in a dive
   at the ground (F; the flame, and the fire it leaves), spit (G), fly a
-  run past the crag rows (`--run 3`), and find a landmark. And still open
+  run past the crag rows (`--run 3`), find a landmark, and hunt a herd
+  (elk, bighorn, boar, chamois or goat by the valley's seed). And still open
   from 2026-11-15: the beat (`--studio 1`, and Space held in play).
 - Calls that are the user's: the flame's length (155 m, about nine
   dragons); how much the plume smokes from the chase camera; the wind
@@ -90,7 +92,8 @@ Things a new session would otherwise learn the slow way:
   80. A `gpu: median` taken then is not a measurement; even paired runs
   wandered by 13 ms. The crags' scree and rubble want a clean cost run.
 - Codex on `gpt-6.2-astra`: 414 k and 477 k tokens for the two kit jobs,
-  45 to 49 minutes each, 4% of the work profile's week together. Both
+  45 to 49 minutes each, 4% of the work profile's week together; 418 k
+  and 67 minutes to rig five animals. Both
   stayed inside their worktrees and rejected their own weak pieces with
   renders.
 - The Vulkan, D3D12 and D3D11 golden sets are stale since 2026-11-15.
@@ -444,6 +447,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Wall crags in rows (2026-11-20, 18:18) | `showcase/WORLD.md` |
 | Landmarks, and five more rocks (2026-11-20, 18:32) | `showcase/WORLD.md` |
 | Scree and rubble at the feet (2026-11-20, 19:20) | `showcase/WORLD.md` |
+| Wild herds (2026-11-20, 19:50) | `showcase/WORLD.md` |
 | The ground burns (2026-11-20, 18:55) | `showcase/EFFECTS.md` |
 | The blind critic, round 7 (2026-11-20, 18:40) | `showcase/CRITIC.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |

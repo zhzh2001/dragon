@@ -491,7 +491,7 @@ private:
     // The second generation (tools/props.md): a second tower silhouette and a
     // second cache, so a valley is not one repeated shape; and the grazer, a
     // skinned prey animal with three baked clips (tools/grazer.md).
-    PropModel spire_prop_, trove_prop_, grazer_prop_;
+    PropModel spire_prop_, trove_prop_;
     // The ward stone (tools/props.md): the flying sentinel and the training
     // target, a cage of basalt shards about the glowing core the engine
     // draws. Before it both were a plain sphere.
@@ -504,8 +504,25 @@ private:
     rhi::Texture* terrain_scree_texture_ = nullptr;
     rhi::Texture* ground_scan_textures_[3] = {nullptr, nullptr, nullptr};  // grass, forest, gravel
     gfx::NoiseLattice noise_lattice_;  // made only on a tier that bakes noise
-    std::vector<anim::AnimationClip> grazer_clips_;  // graze, walk, run
-    int grazer_clip_[3] = {-1, -1, -1};
+    // What a herd is made of. Kind 0 is the Mossback grazer
+    // (tools/grazer.md); the rest are the wild animals rigged from Tripo
+    // meshes (tools/prey.md: an elk, a bighorn, a boar, a chamois, a goat),
+    // on the modern tier. A herd is one kind, dealt by its number.
+    struct PreyKind {
+        PropModel prop;
+        std::vector<anim::AnimationClip> clips;
+        int clip[3] = {-1, -1, -1};  // graze, walk, run
+        float scale = 1.0f;          // over the file's own size
+        float tint = 1.0f;
+        float dead_lift = 0.8f;      // a carcass on its side: its half width, in the file's metres
+        bool wild = false;           // takes `wild_prey_size_`
+    };
+    static constexpr int kMaxPreyKinds = 6;
+    PreyKind prey_kinds_[kMaxPreyKinds];
+    std::vector<int> prey_kinds_ok_;  // the kinds that loaded
+    int prey_kind_offset_ = 0;        // from the valley's seed: which kind its first herd is
+    float wild_prey_size_ = 1.0f;     // the wild kinds drawn this much larger or smaller
+    const PreyKind* prey_kind_for(const game::Prey& prey) const;
     anim::Pose grazer_pose_;
     std::vector<core::Mat4> grazer_world_, grazer_skin_;
     game::VegetationSettings vegetation_for_tier() const;

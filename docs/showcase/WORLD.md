@@ -428,3 +428,38 @@ up their faces. The grass still meets rock at a line between them. A
 band of the terrain's own rock colour under each row needs a mask the
 terrain shader can read.
 
+## Wild herds (2026-11-20, 19:50)
+
+A run's herds were one animal, the Mossback grazer. Codex
+(`gpt-6.2-astra`, high, 418 k tokens, 67 minutes) rigged five Tripo
+animals to the grazer's contract (`tools/prey.md`; the brief is
+`tools/showcase/prey-brief.md`): an elk, a bighorn ram, a boar, a chamois
+and a goat. Each has 28 bones, under 8,900 triangles, a 1024 colour map,
+and the three clips `graze`, `walk` and `run` at the grazer's lengths.
+
+The engine fields them on the modern tier (`App::PreyKind`). A herd is
+one kind. A valley's herds take the kinds in turn, starting from one its
+seed picks, so two valleys do not field the same animals. Each wild kind
+is drawn at a size that puts its body where the grazer's is, because the
+herd's hit volumes are the grazer's: the elk 2.2 times its file's size
+(5.3 m long), the bighorn and the boar 2.6 (4.4 and 4.2 m), the chamois 3
+(3.6 m), the goat 2.8 (3.9 m). They are great beasts beside a 12 m
+dragon, not their real size. "wild prey size" in the Combat panel's
+"prey (live)" scales them. The retro tiers keep the grazer alone.
+
+`artifacts/prey/wild-herds-in-game.jpg`: the elk in its forest, then the
+bighorn, the boar, the chamois and the goat with the trees hidden
+(`--hide-vegetation`), each frame at half size. Find a herd from the
+log's `herd of 6 at x,y,z` and put a `--cam` 20 m from it. The Metal
+goldens pass without a new capture: no golden scene has a herd in view.
+
+What is weak:
+
+- Codex's own note: the ram and the chamois fold their forelegs sharply
+  in the deepest graze, and some shoulder creases are angular up close.
+- The bighorn's run reads as a scramble from above.
+- A carcass lies on its side at the bind pose, as the grazer's does.
+- Nothing hunts yet: the wolf, the eagle and the raven are raw meshes.
+- Not played. The swoop, the bite and the burn on a small animal want
+  the playtester.
+

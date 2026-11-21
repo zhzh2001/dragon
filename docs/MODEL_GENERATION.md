@@ -1414,8 +1414,9 @@ crags and six rocks into the rock kit (414 k tokens, 49 minutes, medium),
 and five landmarks with a failed hoard (477 k tokens, 45 minutes, high).
 Both jobs together took 4% of the work profile's week.
 `docs/showcase/WORLD.md`, "Wall crags in rows" and "Landmarks, and five
-more rocks", say what the engine does with them. The six standing prey
-are the conversion still open, with `bank_a`'s placement.
+more rocks", say what the engine does with them. A third job rigged five
+of the standing prey (418 k tokens, 67 minutes, high; "Wild herds"). The
+wolf, the eagle and the raven are still raw, and `bank_a` has no placement.
 
 What a later Codex job can take from this run, in order of value: the
 crags as a valley-wall set; the six standing prey for rigging; the pass
