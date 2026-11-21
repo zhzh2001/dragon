@@ -65,7 +65,7 @@ bighorn PASS | 0.765 x 1.653 x 1.698 m | 8893 triangles | 28 bones | bind error 
 boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.69e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 1.18 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.36 cm
-  run   0.55 s | min sole 0.19 cm | max nearest sole 3.68 cm | stance free flight
+  run   0.55 s | min sole 0.19 cm | max nearest sole 3.68 cm | stance 1.37 cm
 chamois PASS | 0.352 x 1.199 x 1.200 m | 8893 triangles | 28 bones | bind error 6.36e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 2.68 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.38 cm
