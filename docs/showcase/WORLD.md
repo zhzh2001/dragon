@@ -464,3 +464,46 @@ What is weak:
 - Not played. The swoop, the bite and the burn on a small animal want
   the playtester.
 
+
+## Four herds, and every kind in a run (2026-11-20, 23:38)
+
+The playtester asked for different prey in the same run. A valley had two
+herds, and a flight often met one. `RunSettings::herds` is 4 now (the
+Run panel's "herds"). The herds take the kinds in turn, and each valley
+of a run goes on where the last one stopped, so three valleys field all
+six kinds. The run's seed picks the first.
+
+## The run's frame at 1080p (2026-11-20, 23:38)
+
+The playtester: "fps also drops down to 30-40 further into run". Their
+display is 1920x1080, fullscreen, vsync off, dynamic resolution off (it
+is on by default only over 1300 lines; `docs/FIDELITY.md`).
+
+Measured headless at 1920x1080, `--run 3 --autopilot`, 12,000 frames,
+on an M5 that Safari and other sessions were loading (load average 20 to
+46), so every number is high:
+
+- The GPU's time was 15 to 18 ms for the first 2,400 frames and 20 to
+  28 ms from there to frame 9,600. That is 36 to 50 fps.
+- Frozen at frame 1500 the frame cost 12.8 ms, at frame 3200 19.0 ms.
+- At 1280x720 the frame at 3200 cost 13.2 ms against 20.6: the cost
+  follows the pixel count.
+- No part explains it alone. Switched off one at a time at frame 3200
+  (`DRAGON_ABLATE_ALTERNATE`): the player 1.5 ms, the terrain 1.4,
+  water 0.9, grass 0.7, clouds 0.7, mist 0.5, the atmosphere 0.5, the
+  shadows 0.7, the breath 0.5, ambient occlusion 0.3, the rock kit 0.02,
+  trees 0.03. Together 7 ms. With all of them off the frame fell by
+  12.6 ms, to 6.4 ms: what is left is the post stack and the passes with
+  no switch.
+
+So the frame is bound by shading over the whole screen, a part hidden is
+replaced by the part behind it, and nothing added on 2026-11-20 is the
+cause. `rocks` and `rock_shadows` are new `DRAGON_ABLATE` terms.
+
+Not done: the same measurement on a quiet machine, and against the
+build of 2026-11-14, when the run's frame was recorded at 11 ms
+(`docs/GAPS.md`, "The suspected performance regression"). Until then it
+is not known whether the frame grew or the machine was busy. Dynamic
+resolution with its 900-line floor would hold 60 fps at 1080p by drawing
+the world at 83%; the playtester turned it off once, at 60%, so turning
+it on is their call.

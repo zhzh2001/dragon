@@ -873,6 +873,8 @@ private:
         char note[200] = {};
     };
     bool feedback_active_ = false;
+    bool feedback_was_free_ = false;  // the free camera's state when the tool opened
+    float raw_dt_ = 1.0f / 60.0f;     // the frame's step before the tool holds the world
     int feedback_speed_ = 0;      // 0 held still, 1 an eighth speed, 2 a quarter
     int feedback_step_ = 0;       // frames still to advance while held still
     int feedback_capture_ = 0;    // 0 idle, 1 the clean frame, 2 the marked one

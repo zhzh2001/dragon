@@ -114,6 +114,10 @@ public:
     // And the sward's, much nearer: its blades are under a pixel past it.
     float sward_fade_start = 30.0f;
     float sward_fade_end = 46.0f;
+// The rock kit in the main pass and in the shadow cascades: off to measure
+    // each (DRAGON_ABLATE's `rocks` and `rock_shadows`).
+    bool draw_kit = true;
+    bool draw_kit_shadows = true;
     bool draw_sward = true;  // off under DRAGON_ABLATE=sward, to time it
     // Past this camera distance a crown's detail cards are dropped and its
     // coarse cards carry it: the impostor, without a second mesh or a second

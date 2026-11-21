@@ -23,8 +23,8 @@ struct BreathUniforms {
     float4 params;  // x the near plane, y time (s), z the node count, w the march's steps
     float4 shape;   // x extinction (1/m), y 1 / noise size (1/m), z erosion (radii), w the noise's speed (m/s)
     float4 colour;  // x core gain, y body gain, z soot at the tip, w brightness
-    float4 hot;     // rgb
-    float4 cool;    // rgb
+    float4 hot;     // rgb; w 0 a flame, 1 to 2 a lit medium (mist, gas, spray, grit) and how white its core is
+    float4 cool;    // rgb; w the light a medium gives of its own
     float4 axis;    // xyz the jet's direction at the mouth
     float4 bounds;  // xyz a sphere's centre, w its radius: the whole jet
     float4 hull_a;  // xyz one end of a capsule about the whole jet, w its radius
@@ -80,6 +80,10 @@ float breath_noise(float3 p) {
 // Nearest in metres, not in radii: far off, the widest capsule is the
 // nearest in radii from anywhere, and a window about it stepped clean over
 // the thin end at the jaws.
+// The direction from the spine's axis out to the last point breath_spine
+// was asked about: a lit medium's surface normal, near enough.
+static float3 spine_outward = float3(0.0, 1.0, 0.0);
+
 float4 breath_spine(float3 p, float swell, int from, int to, out int nearest) {
     float4 best = float4(1e6, 1.0, 1.0, 1e6);
     nearest = max(from, 0);
@@ -101,6 +105,7 @@ float4 breath_spine(float3 p, float swell, int from, int to, out int nearest) {
             best.x = q;
             best.y = lerp(jet.info[i].x, jet.info[i + 1].x, t);
             best.z = r;
+            spine_outward = (p - (a + ab * t)) / max(d, 1e-4);
         }
     }
     return best;
@@ -173,12 +178,22 @@ float4 fs_main(BreathVertex input) : SV_Target {
     float lit_sum = 0.0;
     float3 glow_sum = float3(0.0, 0.0, 0.0);
     bool summed = jet.hull_b.w > 0.5;
+    // A breath that is not fire (EFFECTS.md, "A breath that is not fire"):
+    // mist, gas, spray or grit, lit by the sun and the sky as the world is.
+    bool medium = summed && jet.hot.w > 0.5;
+    float whiten = saturate(jet.hot.w - 1.0);
+    float3 medium_sum = float3(0.0, 0.0, 0.0);
     float smoke_sum = 0.0;
     float3 hot_hue = hot / peak;
     float3 cool_hue = jet.cool.rgb / max(max(jet.cool.r, jet.cool.g), max(jet.cool.b, 1e-3));
     float3 smoke_colour = (scene.sky_zenith.rgb * 0.6 + scene.sun_color.rgb * scene.sun.w * 0.2) * float3(0.10, 0.085, 0.075);
     bool entered = false;
     int steps = int(jet.params.w + 0.5);
+    // A soft cloud has no tongues to resolve: longer steps and fewer of
+    // them. Blight's cloud across the middle of a 1080p frame cost 3.2 ms
+    // at the flame's step.
+    if (medium) steps = min(steps, 30);
+    float step_radii = medium ? 0.3 : 0.22;
     int inside = 0;
     int near_segment = 0;
     int from = 0, to = BREATH_NODES;
@@ -206,7 +221,7 @@ float4 fs_main(BreathVertex input) : SV_Target {
             continue;
         }
         ++inside;
-        float ds = clamp(s.z * 0.22, 0.06, 2.6);
+        float ds = clamp(s.z * step_radii, 0.06, 2.6);
         if (!entered) {
             t += ds * dither;
             entered = true;
@@ -257,7 +272,7 @@ float4 fs_main(BreathVertex input) : SV_Target {
         // A jet at the jaws, torn to rags by the tip: the broad noise moves
         // the edge, the fine one frays it and opens gaps in the body.
         float q = s.x + max((n - 0.5) * 2.0 * jet.shape.z * wear, -out_reach) + (fine - 0.5) * 0.3 * wear;
-        if (summed_style) {
+        if (summed_style && !medium) {
             // The width pulses: swellings a few radii long that travel down
             // the jet with the gas, as a breath comes in surges. Read off
             // the broadest octave, along the axis alone.
@@ -274,7 +289,32 @@ float4 fs_main(BreathVertex input) : SV_Target {
         density *= lerp(1.0, smoothstep(0.3, 0.62, fine), wear * 0.9);
         density *= 1.0 - smoothstep(0.72, 1.0, age);
 
-        if (summed && density > 0.001) {
+        if (medium && density > 0.001) {
+            // Matter, not light: each step hides what is behind it and
+            // shows its own colour under the sun and the sky. Dense and
+            // pale on the axis, thin and of the breath's cool colour at
+            // the rim; the billows' creases are in shade.
+            float radial = saturate(1.0 - q);
+            float billow = smoothstep(0.38, 0.62, n);
+            float along = pow(1.0 - age, 2.0);
+            float3 core_colour = lerp(hot_hue, float3(1.0, 1.0, 1.0), whiten);
+            float3 rim_colour = lerp(lerp(cool_hue, hot_hue, 0.35) * 0.6, core_colour * 0.75, whiten * 0.6);
+            float3 albedo = lerp(rim_colour, core_colour, saturate(pow(radial, 0.6) * (0.55 + 0.45 * billow)));
+            albedo *= 0.62 + 0.38 * fine;
+            // The side toward the sun is lit, the far side and the creases
+            // are in the body's own shade. The normal is the direction out
+            // from the axis, bent by the billows.
+            float3 nrm = normalize(spine_outward + (float3(o1, o2, o3) - 0.5) * 1.2);
+            float shade = (0.35 + 0.65 * billow) * lerp(1.0, 0.55, radial * (1.0 - billow));
+            float3 lit = albedo * (direct_sun(nrm, shade) + ambient_light(nrm));
+            // Its own light, where it has any: cold fire in a frost jet's
+            // core, the heat in grit.
+            lit += hot_hue * (jet.cool.w * jet.colour.w * 2.2 * along * radial * radial * (0.4 + 1.6 * ridge));
+            float per_metre = jet.shape.x * min(1.0, 1.5 / s.z) * density;
+            float kept = exp(-per_metre * 2.4 * ds);
+            medium_sum += through * (1.0 - kept) * lit;
+            through *= kept;
+        } else if (summed && density > 0.001) {
             // Fire as a camera sees it (EFFECTS.md, "Fire through a sensor").
             // Hot gas is thin and adds its light along the ray; the sum goes
             // through a curve that saturates a channel at a time, as film
@@ -341,6 +381,10 @@ float4 fs_main(BreathVertex input) : SV_Target {
     // in the gas was averaged along the ray into a glow. A ramp on the mean
     // puts an edge where the mean crosses a step, so the tongues and the
     // silhouette are lines.
+    if (medium) {
+        if (cover < 0.003) discard;
+        return float4(medium_sum / cover, cover);
+    }
     if (summed) {
         // The sensor: each channel saturates on its own.
         float3 shown = (1.0 - exp(-glow_sum)) * jet.colour.w;

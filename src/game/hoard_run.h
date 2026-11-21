@@ -131,7 +131,7 @@ struct HoardRunSettings {
     float depth_enemy_aggression = 0.12f;
     // Prey: herds of grazers on the valley floor, eaten for growth and health
     // (prey.h). Per valley.
-    int herds = 2;
+    int herds = 4;  // 2 before 2026-11-20: a flight met one kind of animal, and the valley has six
     int herd_size = 6;
 };
 

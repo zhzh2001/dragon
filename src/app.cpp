@@ -2096,8 +2096,20 @@ void App::pump_events() {
             const bool tool_key = event.type == SDL_EVENT_KEY_DOWN &&
                                   (event.key.scancode == SDL_SCANCODE_F2 ||
                                    event.key.scancode == SDL_SCANCODE_ESCAPE);
-            if ((event.type == SDL_EVENT_KEY_DOWN && !tool_key) ||
-                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_MOTION) {
+            // The view is a camera while the tool is open: the right button
+            // held turns it, and the free camera's keys move it when no note
+            // has the keyboard.
+            const SDL_Scancode code = event.type == SDL_EVENT_KEY_DOWN ? event.key.scancode : SDL_SCANCODE_UNKNOWN;
+            const bool move_key = !ui_.wants_keyboard() &&
+                                  (code == SDL_SCANCODE_W || code == SDL_SCANCODE_A || code == SDL_SCANCODE_S ||
+                                   code == SDL_SCANCODE_D || code == SDL_SCANCODE_Q || code == SDL_SCANCODE_E ||
+                                   code == SDL_SCANCODE_LSHIFT || code == SDL_SCANCODE_RSHIFT);
+            const bool look_button = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                                     event.button.button == SDL_BUTTON_RIGHT && !ui_.wants_mouse();
+            const bool look_motion = event.type == SDL_EVENT_MOUSE_MOTION && input_.mouse_down(SDL_BUTTON_RIGHT);
+            if ((event.type == SDL_EVENT_KEY_DOWN && !tool_key && !move_key) ||
+                (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !look_button) ||
+                (event.type == SDL_EVENT_MOUSE_MOTION && !look_motion)) {
                 consumed = true;
             }
         }
@@ -2210,7 +2222,19 @@ void App::set_feedback_active(bool active) {
     feedback_active_ = active;
     feedback_step_ = 0;
     feedback_speed_ = 0;
-    if (!active) return;
+    if (!active) {
+        // Back to the view the tool was opened from.
+        free_camera_ = feedback_was_free_;
+        return;
+    }
+    // The tool's view is the free camera, detached where the view already
+    // is: a held frame can be looked at from any side before it is marked.
+    feedback_was_free_ = free_camera_;
+    if (!free_camera_) {
+        const gfx::Camera from = active_camera();
+        camera_.set_position(from.position, from.position + from.forward() * 60.0f);
+        free_camera_ = true;
+    }
     set_mouse_captured(false);
     if (mouse_look_) {
         mouse_look_ = false;
@@ -2436,6 +2460,9 @@ bool App::build_feedback_ui() {
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Feedback", nullptr, ImGuiWindowFlags_NoCollapse)) {
         ImGui::TextWrapped("Click the picture to mark what is wrong. Give each mark a note, then save.");
+        ImGui::TextDisabled("View: hold the right mouse button to look,");
+        ImGui::TextDisabled("W A S D to move, Q E down and up, Shift fast.");
+        ImGui::TextDisabled("A mark stays where it is on the screen.");
         ImGui::Spacing();
         ImGui::TextUnformatted("Time");
         ImGui::RadioButton("held still", &feedback_speed_, 0);
@@ -2664,7 +2691,13 @@ void App::update(float dt) {
     // frame's head; it is fed again, with this frame's dt, after the rig runs.
     feed_first_person_head(0.0f);
     chase_.update(dragon_state(), &terrain_, read_free_look(dt), dt);
-    if (free_camera_) camera_.update(input_, dt, mouse_look_);
+    // In the feedback tool the world's step is near nothing; the camera
+    // moves on the frame's real one, and turns while the right button is held.
+    if (free_camera_ && feedback_active_) {
+        camera_.update(input_, raw_dt_, input_.mouse_down(SDL_BUTTON_RIGHT) && !ui_.wants_mouse());
+    } else if (free_camera_) {
+        camera_.update(input_, dt, mouse_look_);
+    }
 
     // Inspection view: a tight orbit locked to the dragon, for looking at the
     // rig rather than at the world.
@@ -2780,6 +2813,16 @@ void App::update(float dt) {
                 jet.brightness = player_breath_.brightness;
                 jet.cover = player_breath_.cover;
                 jet.range = range;
+                // Fire and storm give light. The rest are matter, lit as the
+                // world is (BreathJet::medium): rime and spray are white at
+                // the core, gas and grit keep their colour.
+                switch (player_breath_.element) {
+                    case game::Element::Frost: jet.medium = 1.0f, jet.whiten = 0.45f, jet.glow = 0.45f; break;
+                    case game::Element::Blight: jet.medium = 1.0f, jet.whiten = 0.1f, jet.glow = 0.12f; break;
+                    case game::Element::Tide: jet.medium = 1.0f, jet.whiten = 0.5f, jet.glow = 0.12f; break;
+                    case game::Element::Stone: jet.medium = 1.0f, jet.whiten = 0.2f, jet.glow = 0.1f; break;
+                    default: break;
+                }
                 // The origin is the head joint; the jaws are a little on.
                 breath_volume_.feed(combat_.breath_origin() +
                                         combat_.breath_direction() * breath_volume_settings_.mouth_forward,
@@ -2787,7 +2830,7 @@ void App::update(float dt) {
                 // Where the jet meets the ground, the ground burns
                 // (BreathVolume::ignite): twelve points along the jet, each
                 // tried against the terrain under it. Not on water.
-                if (breath_volume_settings_.ground_fire > 0.0f) {
+                if (breath_volume_settings_.ground_fire > 0.0f && player_breath_.element == game::Element::Fire) {
                     for (int i = 1; i <= 14; ++i) {
                         core::Vec3 at, drift;
                         float radius = 1.0f;
@@ -6079,9 +6122,10 @@ void App::populate_valley(uint32_t seed, int depth) {
         prey_slots_.push_back(slot);
     }
     run_alive_.assign(combat_.sentinels().size(), 1);
-    // Which animals this valley has: its herds take the kinds in turn from
-    // one the seed picks, so two valleys do not field the same two.
-    prey_kind_offset_ = int(layout.seed % 7919u);
+    // Which animals this valley has: its herds take the kinds in turn, and
+    // the next valley of the run goes on where this one stopped, so a run
+    // of three valleys fields every kind. The run's seed picks the first.
+    prey_kind_offset_ = int(run_seed_ % 7919u) + depth * int(layout.herds.size());
     for (const game::RunHerd& herd : layout.herds) {
         LOG_INFO("  herd of %d at %.0f,%.0f,%.0f", herd.count, double(herd.position.x),
                  double(herd.position.y), double(herd.position.z));
@@ -9883,6 +9927,8 @@ void App::render() {
     foliage_.bake_impostors(device_, scene);
     // The rock kit's frame: culled and streamed before the shadow pass.
     foliage_.prepare_rocks(device_, scene);
+    foliage_.draw_kit = !ablated("rocks");
+    foliage_.draw_kit_shadows = !ablated("rock_shadows");
 
     foliage_.reset_crown_counts();
     // Shadow pass first: the main pass samples what it writes.
@@ -10457,6 +10503,7 @@ void App::run() {
         frame_cursor_ = (frame_cursor_ + 1) % FRAME_HISTORY;
         if (frame_filled_ < FRAME_HISTORY) ++frame_filled_;
         // After the history, so the fps readout stays the real frame's.
+        raw_dt_ = dt;
         dt = feedback_dt(dt);
 
         mark = SDL_GetTicksNS();

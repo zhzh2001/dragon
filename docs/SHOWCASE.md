@@ -8,7 +8,17 @@ scope here.
 
 ## Where it stands (2026-11-20, 19:30)
 
-Read this first when you pick the work up. The 26 suites pass and the
+Read this first when you pick the work up.
+
+Later the same night (23:50) the playtester's second round was answered:
+the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
+has four herds and a run fields all six kinds, and frost, blight, tide
+and stone are shaded as matter and not as flame
+(`docs/showcase/EFFECTS.md`, "A breath that is not fire"). The run's
+frame at 1080p is 20 to 28 ms on a busy machine and its cause is not
+found (`docs/showcase/WORLD.md`, "The run's frame at 1080p"): measure it
+on a quiet machine against the build of 2026-11-14 first.
+ The 26 suites pass and the
 Metal goldens match on `main`. The session of 2026-11-20 put the Tripo
 models of 2026-11-16 into the game and changed the fire.
 

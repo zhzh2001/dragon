@@ -289,8 +289,10 @@ void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, c
     u.shape = core::Vec4{settings.extinction * jet_.cover, 1.0f / std::max(settings.noise_size, 0.1f),
                          settings.erosion, settings.flow * speed};
     u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke), jet_.brightness};
-    u.hot = core::Vec4{jet_.hot.x, jet_.hot.y, jet_.hot.z, 0.0f};
-    u.cool = core::Vec4{jet_.cool.x, jet_.cool.y, jet_.cool.z, 0.0f};
+    // hot.w: 0 a flame, 1 to 2 a lit medium and how white its core is.
+    u.hot = core::Vec4{jet_.hot.x, jet_.hot.y, jet_.hot.z,
+                       jet_.medium > 0.5f ? 1.0f + core::saturate(jet_.whiten) : 0.0f};
+    u.cool = core::Vec4{jet_.cool.x, jet_.cool.y, jet_.cool.z, jet_.glow};
     u.axis = core::Vec4{direction_.x, direction_.y, direction_.z, 0.0f};
     submit(device, pass, scene, u, count, settings);
 }

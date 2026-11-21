@@ -466,3 +466,27 @@ unchanged (49.8 m/s after 15 s, both ways), so `flap_peak_force` stays.
 beat from the front. The beat was looked at from the side, the rear and
 above, and in the chase view with the flap held. The roster's goldens did
 not move: the change is in the hero's two profiles.
+
+## Feedback 0016: the fore legs trail, and a camera in F2 (2026-11-20, 23:38)
+
+Report 0016, on the brake: "front legs unnatural folding. if cannot fix,
+use the backwards folding". In the chest fold ("trail and tuck", chosen
+on 2026-11-15) the elbow turned 140 degrees. The forearm doubled over
+the upper arm and the skin cracked at the shoulder. A milder fold (50,
+-95, 60) read as reaching forward. No angle mended it; new skin weights
+would be an asset job.
+
+The hero's profile is "trail both" now: fore shoulder 40, elbow 60,
+wrist 30. The fore legs lie back along the belly. Before and after from
+the report's camera: `artifacts/feedback-0016/forelegs-before-after.jpg`.
+The inspection set (side, rear, front, above, the beat, landed, the chase
+camera, the brake): `artifacts/feedback-0016/forelegs-inspection.jpg`.
+
+The playtester also asked for F2 to be navigable like a camera mode. The
+feedback tool's view is the free camera now, detached where the view was
+when the tool opened. Hold the right mouse button to look. W A S D move,
+Q and E go down and up, Shift is fast. The keys move the camera only
+while no note has the keyboard. The camera moves on the frame's real
+step, since the tool holds the world's. A mark stays where it is on the
+screen, so frame the view before marking. Closing the tool returns to
+the view it was opened from. Not yet tried in a window by the playtester.

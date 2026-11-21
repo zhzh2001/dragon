@@ -1142,7 +1142,7 @@ void Foliage::draw_trees(Device& device, rhi::Pass* pass, const SceneUniforms& s
     // The rocks after: their pipeline again, and the slots it reads.
     if (crowns != pipeline || impostors_active()) bind_crown_slots(device, pass, pipeline, scene);
     // The scanned kit, on the modern tier: its own pipeline and maps.
-    if (kit_.loaded()) {
+    if (kit_.loaded() && draw_kit) {
         kit_.draw(device, pass, scene, atmosphere_);
         return;
     }
@@ -1459,7 +1459,7 @@ void Foliage::draw_trees_depth(Device& device, rhi::Pass* pass,
             }
         }
     }
-    if (kit_.loaded()) {
+    if (kit_.loaded() && draw_kit_shadows) {
         kit_.draw_depth(device, pass, light_view_proj);
         // Back to the plants' pipeline for the impostor quads after.
         device.rhi().bind_pipeline(pass, pipeline);

@@ -442,3 +442,45 @@ Open: tongues that break off and burn out alone, and an end that rolls
 up, want gas that leaves the spine. That is particles lit as the volume
 is, or a second, slower layer of nodes.
 
+
+## A breath that is not fire (2026-11-20, 23:38)
+
+The playtester: "the fire effects don't fit on other elements, and blight
+tanks fps significantly". Every element went through the flame's shading:
+light summed along the ray and put through a sensor curve. Frost was a
+blue flame, blight a yellow one, and each left fire on the ground.
+
+Fire and storm give light. The other four are matter. `BreathJet::medium`
+marks a jet as matter, and `breath_volume.hlsl` then shades each step as
+a body the sun and the sky light:
+
+- The colour is an albedo, pale on the axis (`whiten` takes it toward
+  white) and the breath's cool colour at the rim.
+- The light is the world's own, through `direct_sun` and
+  `ambient_light`. The normal is the direction out from the spine's
+  axis, bent by the noise, and the creases between billows are in shade.
+- Each step hides what is behind it. There is no sensor curve, no smoke
+  and no bloom.
+- `glow` adds a share of a flame's light in the core.
+
+| Element | Reads as | whiten | glow |
+|---|---|---|---|
+| Frost | mist | 0.45 | 0.45 |
+| Blight | gas | 0.1 | 0.12 |
+| Tide | spray | 0.5 | 0.12 |
+| Stone | grit | 0.2 | 0.1 |
+
+The values are in `App`'s feed of the jet. Only fire sets the ground
+alight now. Before and after: `artifacts/breath-volume/elements-before-after.jpg`
+(the old storm frame is empty: the capture came after its breath ran out).
+
+Cost. A cloud has no tongues to resolve, so a medium takes steps of 0.3
+radii (the flame's are 0.22), at most 30 of them, and skips the surge's
+two noise reads. Blight's cloud across the middle of a 1080p frame, 2.5 s
+into a breath, cost 3.2 ms with the flame's steps and 2.6 ms with these
+(`DRAGON_ABLATE_ALTERNATE=breath_volume`, frozen at frame 150, on an M5
+that other work was loading). At 0.36 radii it was 2.5 ms and the cloud
+showed a hatch. At the start of a breath blight costs 1.65 ms, fire 2.14.
+
+Weak: the four are soft clouds of one build. Tide does not fall as water
+and frost leaves no rime. Storm is still a violet flame and not an arc.

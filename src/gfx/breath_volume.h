@@ -56,6 +56,14 @@ struct BreathJet {
     float brightness = 0.85f;
     float cover = 0.9f;
     float range = 60.0f;  // metres: the launch speed is solved against it
+    // What the gas is. 0: flame, which gives its own light (the summed
+    // shading). 1: a medium the sun and the sky light and that hides what
+    // is behind it -- frost's mist, blight's gas, tide's spray, stone's
+    // grit (docs/showcase/EFFECTS.md, "A breath that is not fire"). A
+    // medium leaves no fire on the ground.
+    float medium = 0.0f;
+    float whiten = 0.0f;  // a medium's core, 0 its hot colour to 1 white: spray and rime are white
+    float glow = 0.0f;    // the light a medium gives of its own, as a share of a flame's
 };
 
 struct BreathVolumeSettings {
