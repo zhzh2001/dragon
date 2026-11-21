@@ -336,6 +336,8 @@ def sheet_weights(points, bones, names, side, body, chains=None):
     score = np.array(score).T
     third = -np.partition(-score, 2, axis=1)[:, 2:3] if score.shape[1] > 2 else np.zeros((len(score), 1))
     share = np.maximum(score - third, 0)
+    # All finger chains meet at the wrist. The arm owns that shared vertex.
+    share[share.max(1) == 0, 0] = 1
     share /= share.sum(1, keepdims=True)
     return four(sum(share[:, k, None] * parts[k] for k in range(len(parts))))
 
@@ -471,7 +473,16 @@ class Wing:
         self.solved = four(copy)
         self.solved[self.pinned] = self.pin_target
         # Mesh version 5: a membrane whose vertices nearly all have an offset twin is one sheet.
-        local = sheet_twins(u[shell])
+        if '_SHEET_ID' in membrane:
+            # The builder numbers both faces of each cross-section alike, including the thick fillets.
+            ids = np.full(n, -1, int)
+            ids[inverse[len(hid):]] = membrane['_SHEET_ID'][mid]
+            pairs = np.argsort(ids[shell]).reshape(-1, 2)
+            assert np.all(ids[shell[pairs[:, 0]]] == ids[shell[pairs[:, 1]]])
+            local = np.empty(len(shell), int)
+            local[pairs] = pairs[:, ::-1]
+        else:
+            local = sheet_twins(u[shell])
         has = local >= 0
         self.sheet = has.mean() > .8
         if self.sheet:
@@ -503,6 +514,13 @@ class Wing:
                     mirror=np.array([names.index(n[:-2]+('_r' if n.endswith('_l') else '_l')) if n.endswith(('_l','_r')) else i for i,n in enumerate(names)])
                     opposite=np.array([body[other[other_tree.find(Vector(x*np.array([-1,1,1])))[1]]] for x in q],float)
                     wa=.5*(wa+opposite[:,mirror])
+                    if '_SHEET_ID' in membrane:
+                        # Anchor each row at its own flank station, above the trailing thigh.
+                        seam = mid_point[sv[shell] == 0]
+                        seam = seam[np.argsort(seam[:, 2])]
+                        anchor = np.stack([np.interp(q[:, 2], seam[:, 2], seam[:, axis]) for axis in range(3)], axis=1)
+                        spine = ['root', 'chest'] + [b for b in names if b.startswith('tail_')]
+                        wa = near_field(anchor, bones, spine, .35)
                     s_ = sv[shell][root][:, None]
                     self.sheet_w[root] = four(s_ * wb + (1 - s_) * wa)
                     # Fold relaxation moved the flank boundary away from the body. Pin both faces to the body row.
