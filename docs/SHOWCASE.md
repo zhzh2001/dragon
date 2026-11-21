@@ -450,7 +450,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Scree and rubble at the feet (2026-11-20, 19:20) | `showcase/WORLD.md` |
 | Wild herds (2026-11-20, 19:50) | `showcase/WORLD.md` |
 | The ground burns (2026-11-20, 18:55) | `showcase/EFFECTS.md` |
-| A jet that surges (2026-11-20, 20:10) | `showcase/EFFECTS.md` |
+| A jet that surges (2026-11-20, 19:56) | `showcase/EFFECTS.md` |
 | The blind critic, round 7 (2026-11-20, 18:40) | `showcase/CRITIC.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |

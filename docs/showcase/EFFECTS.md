@@ -407,7 +407,7 @@ Open:
   lights a short strip.
 - The cost wants a bound a patch.
 
-## A jet that surges (2026-11-20, 20:10)
+## A jet that surges (2026-11-20, 19:56)
 
 The blind critic's seventh round on the flame from the side: "an even,
 cream-orange tube of constant width", "a beam". Two changes to the summed
@@ -431,6 +431,12 @@ views, before on the left, cropped and not scaled. The jet has a neck
 and a swelling and a ragged lower edge. It is still a cone: the change
 is plain beside the old frame and modest alone. The `fire` golden was
 captured again.
+
+Cost, paired on the frozen frame at 1920x1080, two runs each on a shared
+Mac (not recorded): 1.93 and 1.99 ms from the chase camera against 1.59
+and 1.57 ms for the old shading in the same minute, and 0.35 and 0.41 ms
+from the side. The wider bound and two more noise reads cost about
+0.4 ms where the jet is seen end on.
 
 Open: tongues that break off and burn out alone, and an end that rolls
 up, want gas that leaves the spine. That is particles lit as the volume
