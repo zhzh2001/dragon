@@ -415,13 +415,14 @@ goldens were captured again.
 The detail layer now starts at 45 m across and is whole from 75 m (it
 was 14 and 44): a talus mound took it and did not need it.
 
-Cost: not measured cleanly. A Codex job's Blender renders held the Mac
-at a load average of 87. Three interleaved pairs against
-`DRAGON_NO_WALL_CRAGS=1` read 1.5, 1.8 and 1.2 ms for the crags with
-their scree and rubble, before the detail layer's change; the crags
-alone were 0.2 ms an hour earlier. Three more pairs after the change
-read from -1.3 to +13 ms and say nothing. Measure again on an idle Mac
-and record it.
+Cost, `gpu: median` at 1920x1080 on run seed 3, three interleaved pairs
+against `DRAGON_NO_WALL_CRAGS=1` (which takes the scree and rubble with
+the crags): 19.2, 18.5 and 18.0 ms with them against 18.3, 17.5 and
+17.5 ms without, 0.8 ms on average (`~/src/gpu-hist`,
+`research/dragon-m5/runs/20261121-0049-mac-m5-dragon-wall-crags-scree-cost`).
+The Mac was shared, at a load average of 18 to 58. The crags alone were
+0.2 ms. An earlier try, under a Codex job's Blender renders at a load
+average of 87, wandered by 13 ms between pairs and was dropped.
 
 What is weak: the mounds are heaps beside the crags, not a fan that runs
 up their faces. The grass still meets rock at a line between them. A

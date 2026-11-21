@@ -90,7 +90,7 @@ Things a new session would otherwise learn the slow way:
   the breath after frame 200 shows none.
 - A Codex job's Blender renders can hold the Mac at a load average over
   80. A `gpu: median` taken then is not a measurement; even paired runs
-  wandered by 13 ms. The crags' scree and rubble want a clean cost run.
+  wandered by 13 ms. Wait for the job, or measure before starting it.
 - Codex on `gpt-6.2-astra`: 414 k and 477 k tokens for the two kit jobs,
   45 to 49 minutes each, 4% of the work profile's week together; 418 k
   and 67 minutes to rig five animals. Both
