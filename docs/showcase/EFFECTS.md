@@ -482,5 +482,9 @@ into a breath, cost 3.2 ms with the flame's steps and 2.6 ms with these
 that other work was loading). At 0.36 radii it was 2.5 ms and the cloud
 showed a hatch. At the start of a breath blight costs 1.65 ms, fire 2.14.
 
+Measured again at 23:39 with the machine quiet (load average 4): blight
+1.91 ms at frame 150, frost 1.80 and fire 2.60 at frame 80. The record is
+`~/src/gpu-hist`, `20261121-0439-mac-m5-dragon-element-breath-cost`.
+
 Weak: the four are soft clouds of one build. Tide does not fall as water
 and frost leaves no rime. Storm is still a violet flame and not an arc.
