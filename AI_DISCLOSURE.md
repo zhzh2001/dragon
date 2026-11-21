@@ -94,6 +94,7 @@ Recorded as of 2026-10-01. The history is itself evidence: the commits carry
 | Tripo rock kit (2026-11-20), `bank_a` from `tripo-riverbank-21` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Tripo rock kit (2026-11-20), `slab_c` from `tripo-outcrop-32` | Tripo generated the mesh with paid credits. Codex used Blender to cut, bake and grade the rock and render inspection views. |
 | Tripo prey (2026-11-20), `prey_elk` from `tripo-elk-01` | Tripo generated the mesh with paid credits. Codex used Blender to rig, animate, bake and render the animal. |
+| Tripo prey (2026-11-20), `prey_boar` from `tripo-boar-01` | Tripo generated the mesh with paid credits. Codex used Blender to rig, animate, bake and render the animal. |
 | Contact sheets and hero-hide comparisons of the overnight Tripo run and the second spend the next day (`artifacts/tripo-overnight/`), 72 and 67 meshes, most of them **not** used | **Tripo** H3.1 in its Studio, with paid credits: text, image and multi-view generation, and the Texture tool on the hero's own mesh |
 | Docs, commit messages, the capture and probe scripts | Claude and Codex, as for the code |
 

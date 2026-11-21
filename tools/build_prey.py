@@ -665,8 +665,31 @@ def grazing_pitch(spec, names, parents, rest):
     raise ValueError(f"{spec['name']} could not reach the turf.")
 
 
+def root_in_turf(names, parents, rest, pitch, yaw, nose, lower, time):
+    """Sweep the snout sideways while its lowest surface follows the ground."""
+    neck, head = names.index("neck_02"), names.index("head")
+    yaw[neck] = lower * 0.09 * math.sin(3 * time)
+    yaw[head] = lower * 0.13 * math.sin(3 * time - 0.25)
+    pitch[head] += lower * 0.045 * math.sin(5 * time)
+    if lower < 0.80:
+        return
+    pos, cumulative = sagittal_world(rest, parents, pitch)
+    neck_basis = grazer.rx(cumulative[neck]) @ turn_y(yaw[neck])
+    origin = pos[neck] + neck_basis @ (rest[head] - rest[neck])
+    basis = neck_basis @ grazer.rx(pitch[head]) @ turn_y(yaw[head])
+    height = origin[1] + (nose @ basis[1]).min()
+    pelvis = names.index("pelvis")
+    shift = pos[pelvis, 1] - rest[pelvis, 1]
+    # Fade in the contact constraint during the last part of the descent.
+    influence = _smooth(0.80, 1.0, lower)
+    set_body_height(pitch, names, rest, shift + influence * (0.002 - height))
+
+
 def bake_clips(spec, names, parents, rest, points, weights):
     deep = grazing_pitch(spec, names, parents, rest)
+    if spec["name"] == "boar":
+        head = names.index("head")
+        nose = points[(weights[:, head] > 0.99) & (points[:, 2] > 0.74)] - rest[head]
     chains = []
     for side in ("l", "r"):
         for front, stems in [
@@ -686,13 +709,15 @@ def bake_clips(spec, names, parents, rest, points, weights):
             yaw = np.zeros(len(names))
             if clip == "graze":
                 lower = (1 - math.cos(t)) * 0.5
+                if spec["name"] == "boar":
+                    reach = min(1.0, min(phase, 1 - phase) / 0.31)
+                    lower = 0.5 - 0.5 * math.cos(math.pi * reach)
                 pitch = deep * lower
                 turn = grazing_turn(spec["name"]) * lower
                 yaw[names.index("neck_02")] = 0.3 * turn
                 yaw[names.index("head")] = 0.7 * turn + lower * 0.065 * math.sin(3 * t)
                 if spec["name"] == "boar":
-                    pitch[names.index("head")] -= lower * 0.04 * (1 + math.cos(5 * t))
-                    yaw[names.index("neck_02")] = lower * 0.07 * math.sin(3 * t)
+                    root_in_turf(names, parents, rest, pitch, yaw, nose, lower, t)
             elif clip == "walk":
                 set_body_height(pitch, names, rest, -spec["shoulder"] * (0.033 + 0.009 * math.cos(2 * t)))
                 pitch[names.index("chest")] = 0.022 * math.sin(2 * t)
