@@ -490,3 +490,53 @@ while no note has the keyboard. The camera moves on the frame's real
 step, since the tool holds the world's. A mark stays where it is on the
 screen, so frame the view before marking. Closing the tool returns to
 the view it was opened from. Not yet tried in a window by the playtester.
+
+## Feedback 0017 and 0018, and the third round's small asks (2026-11-21, 00:58)
+
+- 0017, "can tuck slightly lower like this", marked on the fore leg in the
+  brake. In the glide the fore leg lay pressed into the belly. The
+  shoulder went from 40 to 25 degrees, and the leg hangs a hand's width
+  under it. `artifacts/feedback-0016/forelegs-0017-lower.jpg`: before,
+  after, the side, the brake.
+- 0018, "strange shadow" and "shadow artifacts (picky though)", on the
+  wing's underside. The light through a membrane took one shadow lookup,
+  and the map's texels showed as a stair along each shadow's edge. It
+  takes nine now, over 0.2 m. The stair is a soft band, not gone.
+  `artifacts/feedback-0016/membrane-shadow-0018-before-after.jpg`. The
+  first mark's panel between the arm and the flank is new geometry in
+  mesh version 6 (`HERO.md`).
+- "a charged shot is wrongly followed by a regular when releasing the
+  button". A hold that had let a full charge go still counted its release
+  as a tap. `Combat` remembers that a hold has fired; a test in
+  `tests/test_combat.cpp` holds past full and lets go.
+- "reduce wind lines and boost effects". Thermal wind lines: 5 a second a
+  column (14), 14 to 22 m long (22 to 36), at 0.6 of their brightness.
+  Speed streaks: from 65 m/s (55), 40 a second (120), at 0.6. The boost's
+  wingtip threads, its streaks and its zoom scale with a new "boost
+  effects" slider (Camera panel, "Field of view"), 0.4 by default: 36
+  threads a second a side (90), a streak for every two, 9 degrees of zoom
+  (14).
+
+## The beat, third pass: the stroke reaches under the body (2026-11-21, 00:58)
+
+The playtester: "the flapping range can increase more, check out other
+sources". The profile said 66 degrees up and 78 down. On screen, from the
+front, the tips stopped about 35 degrees under the level. The rig's
+`wing_flap_limit_deg` was 90, and the hand lags the arm, so the outer
+wing never saw the angle the flight model asked for.
+
+What the sources give is in `docs/MOTION_REFERENCE.md`, "Wingbeat
+amplitude". In short: take-off and climb use the largest strokes, the
+downstroke below the level is what makes thrust, and a large animal
+beats slower.
+
+Now `flap_up_angle_deg` 72, `flap_down_angle_deg` -125 and the ceiling
+130. The tips reach about 55 degrees under and curl in at the bottom. At
+-145 the hands met under the belly. Eight frames of the beat from the
+front, before over after: `artifacts/wingbeat/deeper-stroke-before-after.jpg`.
+Also looked at: the side at the bottom of the stroke, from above, the
+chase camera with the flap held, landed, the pull-out.
+
+Not done: one stroke serves cruise and climb. The sources want a
+shallower cruise beat (125 to 140 degrees in all) and the deep one for
+take-off and climbing.

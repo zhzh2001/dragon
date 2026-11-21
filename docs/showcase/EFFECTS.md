@@ -488,3 +488,60 @@ Measured again at 23:39 with the machine quiet (load average 4): blight
 
 Weak: the four are soft clouds of one build. Tide does not fall as water
 and frost leaves no rime. Storm is still a violet flame and not an arc.
+
+## Six breaths, six materials (2026-11-21, 00:58)
+
+The playtester, after "A breath that is not fire": "the breaths still look
+strange other than fire/storm. please reference other games like glyde for
+more realistic breath types". A search found little written on how other
+games draw their breaths (`docs/MOTION_REFERENCE.md`, "Breaths that are
+not fire"). What it did give: separate the elements by what they do to
+density and light, not by colour. Fire rises and emits. Frost sinks and
+scatters. Gas sinks slowly and stays. Lightning is a line with no volume.
+Water is a coherent jet that falls and breaks up. Grit is matte and
+ballistic.
+
+`App::look_for` holds each element's look past its profile's colours:
+
+| Element | The jet | Thrown off it | Left on the ground | Light on what is near |
+|---|---|---|---|---|
+| Fire | flame, summed light | sparks | marched flame patches | 1 |
+| Frost | white fog, falls | slow pale glints that fall | a white cloud, 7 s | 0.12 |
+| Blight | gas, 5 m/s2 heavier than its profile | a few green drips | a green cloud, 10 s | 0.1 |
+| Storm | arcs; the volume at 45% is their glow | fast short sparks | nothing | 1.5 |
+| Tide | a jet 0.6 as wide, white to the rim, falls | many drops | a pale mist, 2.5 s | 0 |
+| Stone | matte grit, glowing only at the jaws | chips that fall | dust, 5 s | 0.15 |
+
+Storm is drawn by `App::emit_storm_arc`: a line from the jaws to 82% to
+100% of the range, broken by midpoint displacement into 32 pieces, each
+piece a thin white streak inside a wider violet one, alive for three
+frames. Twenty-eight arcs a second flicker. One arc in two throws a fork
+of seven pieces. A streak is brightest at its middle, so pieces laid end
+to end were a row of dashes; each is drawn 2.2 times its length.
+
+What a medium leaves on the ground is smoke puffs, twelve a second for
+the whole contact, each spreading to 2.4 times its size. They were first
+marched patches, as fire's are. Fifteen of them about a landed dragon
+covered the screen three times over: 11.6 ms a frame at 1080p for blight,
+and 8.8 ms at 16 steps with two noise octaves, where the steps also
+showed as arcs. As smoke the same frame costs 0.7 ms with every particle
+in the scene, and 0.17 ms measured again on the broad-wing hero
+(`~/src/gpu-hist`, `20261121-0556-mac-m5-dragon-blight-ground-cloud-cost`).
+This is the frame-rate drop the playtester met with blight.
+
+A medium's jet reads two noise octaves, not four, and takes at most 24
+steps. Sheets: `artifacts/breath-volume/elements-materials.jpg` (top row
+the first pass, bottom row this one).
+
+Weak, and not done:
+
+- Not seen by a playtester yet. The ground clouds were checked in one
+  headless view, a frost jet in a dive; the breath's meter runs out
+  before most staged views reach the ground.
+- Nothing stays on the ground itself: no rime, no wet ground, no scorch
+  from an arc, no pool of acid. Each needs a mark the terrain shader reads.
+- Tide does not refract and has no bright line along it. It is a teal
+  spray, not water.
+- The arcs go where the breath points. They do not fork to the target or
+  to the ground, and nothing flashes when one lands.
+- The rivals' breaths are still puffs in their element's colours.

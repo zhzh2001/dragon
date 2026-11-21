@@ -537,3 +537,71 @@ The earlier no-new-species sequencing was explicitly expanded for original
 elemental dragon designs. Six concepts and two playable candidates (Sunspear
 and Rimeplume) are recorded in `artifacts/elemental-expansion/README.md`. These
 are optional candidates pending human playtest, not default-roster replacements.
+
+## Mechanics to consider, from the user's other dragon work (2026-11-21, 00:59)
+
+The user asked for new mechanics for the hoard run and for survival, drawn
+from their other directories. A subagent read them (not this repository):
+`~/src/cloud-llm` (a comparative study of 23 dragon works under
+`results-pvc/dragons/study/`, fiction and video notes), `~/src/content-lib`
+(a catalogue of 734 dragon works, 616 of them games), `~/src/agent-gaming`
+(a harness for Golden Treasure: The Great Green), `~/src/SpiritGuide` (a
+battle simulator for Dragon Spirits), and the older prototypes. None of
+these is a decision. Each names what it would touch.
+
+For the hoard run:
+
+1. Fire from food. Eating prey fills the breath past full for a while,
+   and a long flight without a meal shortens the breath (the study's Age
+   of Fire entry: "Fatty flesh brims the bladder"). It ties the herds to
+   the fight: `Combat`'s breath meter, `PreyHerds`.
+2. Hoard as scale. At a cache, the dragon banks the hoard for score or
+   eats a share for armour that lasts the run, and armour costs climb
+   rate ("Scaled dragons eat the metal. It gets turned into armor"). One
+   choice a cache: `HoardRun`, the flight tuning.
+3. The sleep at the pass. Growth happens in a sleep between valleys
+   (Golden Treasure's Great Sleeps). The player picks one of three boons
+   on waking. Towers left standing behind raise the chance of waking to
+   hunters. It gives the pass gate a decision and a reason to clear a
+   valley.
+4. Ground effects that do something. The six breaths now leave clouds
+   (`docs/showcase/EFFECTS.md`). Make them rules: blight's cloud harms
+   what stays in it, frost slows what it touches and stills a stretch of
+   river, tide puts out ground fire and a tower's brazier, stone's dust
+   spoils a tower's aim, storm jumps between drenched targets, fire
+   spreads over dry grass. The user's notes favour systems with rules
+   that can be played against each other.
+5. Throat and belly. A bite on a rival's throat stops its breath for
+   some seconds ("cannot use any skills requiring breath or song"), and
+   a tower has a weak plate at its back. A rival can do the same to the
+   player. `Combat`'s melee, the statuses.
+6. Bait and false quarry. From the user's own reversal ideas: a cache
+   that is bait with crossbows hidden about it, a rival that plays dead,
+   tracking bolts that the roll dodges. One trap a valley from the
+   second on: `RunLayout`.
+7. The approach. A herd senses a dragon by sight and scatters. Coming
+   out of the sun, along the mist or low behind a ridge gives the first
+   strike a bonus (Golden Treasure: scent masking "doubles the time it
+   takes for prey to sense your presence").
+8. Carrying. A kill is carried to a ledge or a landmark and eaten there
+   for the full meal; eaten where it fell, the dragon is on the ground in
+   the open. The landmarks get a use.
+
+For a survival mode (`docs/ROADMAP.md` had it as the open-world
+candidate, "can't fly -> glide -> fly -> carry prey -> breathe fire"):
+
+9. The arc of a life. Start as a hatchling that cannot fly, in one
+   valley that stays. Each stage unlocks a verb. Day of Dragons and
+   Golden Treasure both do this.
+10. Overhunting. A herd breeds back only from what is left ("Overhunt a
+    forest one year, and you will starve the next"). Hunger and seasons:
+    a winter with thin herds.
+11. A lair. A cave or a landmark holds the hoard and is where the dragon
+    sleeps and heals (one full rest a day). Hunters come for a hoard that
+    has grown.
+12. Lives and what carries over. One "second wind" a run that returns to
+    the valley's start (Golden Treasure's sigils), and a bestiary: a
+    species hunted enough times gives a small lasting perk.
+
+The smallest of these to try first are 1 and 4: both use what the game
+already draws, and both make the elements matter outside a fight.

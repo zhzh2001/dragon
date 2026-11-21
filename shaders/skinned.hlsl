@@ -234,7 +234,25 @@ float4 fs_main(VertexOut input) : SV_Target {
 #ifdef ATMOSPHERE
     float behind = saturate(-dot(face, to_sun));
     if (membrane > 0.01 && behind > 0.0) {
+        // Nine lookups across the sun's direction, over a hand's width.
+        // One lookup put the map's texels on the sheet as a stair along
+        // every shadow's edge: light through skin is scattered, and its
+        // shadows are soft (feedback 0018, "shadow artifacts").
+        float3 across_a = normalize(cross(to_sun, abs(to_sun.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0)));
+        float3 across_b = cross(to_sun, across_a);
+        float spread = 0.2;  // metres: the near cascade's texel is a few centimetres
         float through = sun_visibility(input.world_position, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position + across_a * spread, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position - across_a * spread, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position + across_b * spread, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position - across_b * spread, -face, shadow_map, shadow_map_sampler);
+        float3 diag_a = (across_a + across_b) * (spread * 0.5);
+        float3 diag_b = (across_a - across_b) * (spread * 0.5);
+        through += sun_visibility(input.world_position + diag_a, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position - diag_a, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position + diag_b, -face, shadow_map, shadow_map_sampler);
+        through += sun_visibility(input.world_position - diag_b, -face, shadow_map, shadow_map_sampler);
+        through /= 9.0;
         float forward = saturate(dot(-to_camera, to_sun));
         transmitted = membrane * behind * through * (0.35 + 0.65 * forward * forward) * scene.local_light_color.w;
         // The sheet is thinnest in the middle of a panel and thick along a

@@ -10,6 +10,17 @@ scope here.
 
 Read this first when you pick the work up.
 
+The third round (2026-11-21, 01:10): the hero has broad wings (mesh
+version 6, `docs/showcase/HERO.md`; version 5c is kept beside it), the
+beat reaches under the body, each breath has its own material and storm
+is arcs (`docs/showcase/EFFECTS.md`, "Six breaths, six materials"), the
+charged shot's stray second shot is fixed, the wind lines and the boost
+are cut to about a third, and feedback 0017 and 0018 are answered
+(`docs/showcase/PLAYTEST.md`). Blight's frame-rate drop was the marched
+ground clouds, now smoke. Waiting on a playtest of all of it. Queued:
+the Tripo sources that failed (`docs/MODEL_GENERATION.md`), and the
+mechanics in `docs/DIRECTION.md`, "Mechanics to consider".
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

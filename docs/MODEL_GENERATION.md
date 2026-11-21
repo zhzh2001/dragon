@@ -1900,3 +1900,24 @@ genuinely still unknown:
   shoulder and the leg at ±35°, and its shoulder mass sits outboard of the leg
   column, so a large forward reach would shear the fur along the hump line;
   neither was tested past 35 degrees. Cosmetic at prey distance.
+
+## Queued: a second try at the Tripo sources that failed (2026-11-21, 00:58)
+
+The user's call: "please queue the tripo models redo for future". Nothing
+was generated or converted for this. The queue, from the conversions of
+2026-11-20 (`tools/landmarks.md`, `tools/prey.md`, `tools/props.md`):
+
+| Source | What failed | What a second try needs |
+|---|---|---|
+| `tripo-ruin-keep-01` | noisy wall shading at 250 m, then a distorted window lintel and a lost rear arch | a decimation that protects openings, or a new generation |
+| `tripo-bridge-03` | a foot above ground at LOD2, then stone courses stretched into bright strips at 250 m | a bake that keeps the courses; it also needs a placement over the river |
+| `tripo-bones-16` (the dragon skeleton) | the far view lost the rib cage, then limbs and vertebrae became pointed sheets | thin parts do not survive this decimation: a higher budget or impostor cards for the far levels |
+| `tripo-snag-01` | LOD1 lost branch cover, then two branch clumps floated | the same, and a wood material path in the kit's shader |
+| `tripo-log-01` | rounded branch stubs became thin spikes | the same |
+| `tripo-hoard-10` | the fourth hoard to fail: both passes read as dark rock discs at 250 m, the gold with folded highlights | a metallic bake that holds at distance, or a hand-built pile |
+| the wolf, the eagle, the raven | never rigged | a predator's and a bird's skeleton and clips; they are not grazers |
+| `bank_a` | converted, not placed | a placement rule along the river's edge |
+| the hero's Tripo hide | no gain seen in the engine | nothing, unless the user judges the sheets differently |
+
+One Codex job of the size of 2026-11-20's (about 450,000 tokens, 7% of
+the work profile's week) covers the landmarks; the animals are a second.

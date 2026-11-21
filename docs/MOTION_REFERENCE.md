@@ -169,3 +169,54 @@ Formulas to hand:
 
 See `docs/showcase/PLAYTEST.md`, "Feedback 0013 to 0015, and the turn to
 the dragon", for what each number became in the rig and the effects.
+
+## Wingbeat amplitude, read on 2026-11-21
+
+A web search for stroke angles, done by a subagent from text sources. No
+frame or figure was kept.
+
+- Pigeons (Berg and Biewener 2010): downstroke amplitude, beat frequency
+  and downstroke speed are greatest at take-off and fall with each beat
+  after it. The stroke plane tilts 47 to 60 degrees down in take-off.
+- Geese, 578 take-offs (arXiv 2512.20894): no stroke amplitude, but the
+  elbow closes from 128 degrees in the flap to 52 in the raise and the
+  wrist from 164 to 126. The wing folds a good deal on the way up.
+- Bats: the wrist flexes and the hand wing folds on the upstroke; in some
+  flights the tips touch at the top. Lift rises with the fold's amplitude.
+  A wind-tunnel abstract found more amplitude gave more force for less
+  power than more frequency.
+- Pterosaurs (Padian): a stroke 40 degrees under the level is treated as
+  the least for useful thrust. Frequency and amplitude fall with size.
+- Animated dragons: no source with angles was found. A DreamWorks talk on
+  flap cycles says the up and down strokes differ in shape.
+
+What follows from it, as a judgment and not a measurement: a cruise beat
+of 125 to 140 degrees in all with the wrist folded 25 to 35 degrees on
+the way up; a take-off or climb beat of 160 to 185 degrees, tips near
+meeting above and well under the body below, the wrist folded 40 to 60
+degrees and open again before the top; the downstroke 50% to 55% of the
+beat; the body dropping on the upstroke and rising on the downstroke.
+The game's beat after this date is in `docs/showcase/PLAYTEST.md`, "The
+beat, third pass".
+
+## Breaths that are not fire, read on 2026-11-21
+
+The playtester asked for other games' breaths as references, Glyde The
+Dragon first. Text sources say little about how any of them looks:
+
+- Glyde The Dragon: its store page names "8 elemental forms with more
+  than 60 different abilities" and describes none. No devlog or wiki on
+  its breaths was found. Its free prologue would have to be watched.
+- Elden Ring: Borealis breathes a cone of freezing fog that lingers;
+  Lansseax's lightning is red and held in the hand before a slam.
+- Monster Hunter: Lagiacrus's breath is electric.
+- Cold fog (carbon dioxide, liquid nitrogen): denser than air, it sinks
+  and stays within a few feet of the ground, thinning as it warms.
+
+The rest is general knowledge, used as design advice: a fire hose's jet
+holds a narrow core, breaks into drops, falls in an arc and ends in
+white spray; heavy gases hug the ground and stay; an arc is thin, jagged,
+branching and flickers 20 to 60 times a second; a sandblast is matte,
+fast and falls. What was built from it is in `docs/showcase/EFFECTS.md`,
+"Six breaths, six materials". Still to do: watch Glyde's prologue and
+Century's frost and write down what each breath does.

@@ -696,3 +696,43 @@ Three changes, all on the modern tier:
 The count went from 635 to 224 in the upstroke frame and from 795 to 277
 in the glide. `artifacts/rim-grain/before-after.jpg` has the head and
 wing root at 2.5 times. The Metal goldens were captured again.
+
+## Mesh version 6: broad wings (2026-11-21, 00:58)
+
+The playtester on the wings: "they do look too thin". From above each
+wing was a blade 3 to 4 m from front to back on a 19 m span, and the
+flank behind the shoulder was bare. Seven critic rounds had named the
+wings first.
+
+A Codex job (gpt-6.2-astra, high, 23 minutes, 371,261 tokens; the brief is
+`tools/showcase/hero-wide-wings-brief.md`, its record `tools/hero-build.md`,
+"Version 6") rebuilt the wing sheet by construction:
+
+| In the bind pose | Version 5c | Version 6 |
+|---|---:|---:|
+| Chord at the body | 1.70 m | 4.83 m |
+| Chord at the wrist | 2.96 m | 5.61 m |
+| Area of one wing | 18.86 m2 | 41.23 m2 |
+| Wingspan | 18.99 m | 18.98 m |
+
+Fingers 2 and 3 and the elbow rib are longer and swept back. The membrane
+runs along the flank past the hip onto the tail's base. The trailing edge
+hangs in a scallop between each pair of tips. The mesh passes 112 checks
+and the rig 76; the longest folded edge is 1.38 of rest against 1.6. The
+bone contract holds (`fingers 3/3`). The profile's `ground_wing_hand_elev_deg`
+went from -20 to -6 and `ground_wing_fan_deg` from 8 to 6.
+
+It is `assets/embercrest-hero.glb` on this machine now. Version 5c is
+kept beside it as `assets/embercrest-hero-v5c.glb` with its profiles, for
+a comparison in play (`--models assets/embercrest-hero.glb,assets/embercrest-hero-v5c.glb`
+and `M`). Pairs, old on the left: `artifacts/hero-build/v6-final-*.jpg`.
+In the game with the deeper beat: `artifacts/hero-build/v6-in-game.jpg`
+(the chase camera, the beat from the side and the front, the glide,
+landed, the top of the stroke).
+
+Worse than version 5c, known:
+
+- Folded on the ground the wing is a heavy cloak over the flank and the
+  hind leg. The fold was tuned for a narrow wing.
+- The membrane's large panels are lit in flat facets from some angles.
+- In the close view the near wing hides most of the body.
