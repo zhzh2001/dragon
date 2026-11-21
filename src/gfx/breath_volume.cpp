@@ -309,8 +309,10 @@ void BreathVolume::submit(Device& device, rhi::Pass* pass, const SceneUniforms& 
         widest = std::max(widest, u.nodes[i].w);
     }
     const core::Vec3 centre = (lo + hi) * 0.5f;
-    // The noise can push the edge out by 0.45 radii at most (breath_volume.hlsl).
-    const float reach = core::length(hi - lo) * 0.5f + widest * (1.0f + std::clamp(settings.erosion, 0.0f, 0.45f));
+    // The noise can push the edge out by 0.45 radii at most, 0.7 in the
+    // summed shading (breath_volume.hlsl, reach_cap).
+    const float reach_cap = settings.style != 0 ? 0.7f : 0.45f;
+    const float reach = core::length(hi - lo) * 0.5f + widest * (1.0f + std::clamp(settings.erosion, 0.0f, reach_cap));
 
     u.bounds = core::Vec4{centre.x, centre.y, centre.z, reach};
     // A capsule from the youngest node to the oldest, as wide as the node
@@ -322,7 +324,7 @@ void BreathVolume::submit(Device& device, rhi::Pass* pass, const SceneUniforms& 
         const core::Vec3 b{u.nodes[count - 1].x, u.nodes[count - 1].y, u.nodes[count - 1].z};
         const core::Vec3 ab = b - a;
         const float len2 = std::max(core::dot(ab, ab), 1e-6f);
-        const float swell = 1.0f + std::clamp(settings.erosion, 0.0f, 0.45f);
+        const float swell = 1.0f + std::clamp(settings.erosion, 0.0f, reach_cap);
         float hull = 0.0f;
         for (int i = 0; i < count; ++i) {
             const core::Vec3 p{u.nodes[i].x, u.nodes[i].y, u.nodes[i].z};

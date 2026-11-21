@@ -407,3 +407,32 @@ Open:
   lights a short strip.
 - The cost wants a bound a patch.
 
+## A jet that surges (2026-11-20, 20:10)
+
+The blind critic's seventh round on the flame from the side: "an even,
+cream-orange tube of constant width", "a beam". Two changes to the summed
+shading (`breath_volume.hlsl`, `summed_style`):
+
+- The width pulses. A sample's distance from the axis is scaled by 0.72
+  to 1.42 from a noise read along the jet alone, which travels with the
+  gas: swellings a few radii long, with necks between them.
+- The gas is torn from the jaws on. `wear` starts at 0.62 (it was 0.4),
+  and the noise may carry the edge 0.7 radii out (it was 0.45), so
+  tongues leave the body. The jet's bounds grew by the same.
+
+One thing was wrong on the way. The pulse first read the scrolled
+distance along the jet divided by the local radius. The scroll is
+hundreds of metres and the radius changes along the jet, so the quotient
+raced, and the jet near the jaws was a comb of bars. It now reads the
+noise's own octave coordinates, this scale's and the next one's blended.
+
+`artifacts/breath-volume/surge-before-after.jpg`: the critic's two side
+views, before on the left, cropped and not scaled. The jet has a neck
+and a swelling and a ragged lower edge. It is still a cone: the change
+is plain beside the old frame and modest alone. The `fire` golden was
+captured again.
+
+Open: tongues that break off and burn out alone, and an end that rolls
+up, want gas that leaves the spine. That is particles lit as the volume
+is, or a second, slower layer of nodes.
+

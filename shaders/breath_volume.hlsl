@@ -149,8 +149,12 @@ float4 fs_main(BreathVertex input) : SV_Target {
     }
 
     float time = jet.params.y;
-    // The noise can push the edge this far out, in radii (kBreathOut below).
-    float swell = 1.0 + min(jet.shape.z, 0.45);
+    bool summed_style = jet.hull_b.w > 0.5;
+    // The noise can push the edge this far out, in radii: 0.45 for the older
+    // shading, 0.7 for the summed one, whose tongues leave the body
+    // (BreathVolume::submit bounds the jet by the same).
+    float reach_cap = summed_style ? 0.7 : 0.45;
+    float swell = 1.0 + min(jet.shape.z, reach_cap);
     float3 hot = jet.hot.rgb;
     float peak = max(max(hot.r, hot.g), max(hot.b, 1e-3));
     float3 pale = lerp(hot / peak, float3(1.0, 1.0, 1.0), 0.45) * peak * jet.colour.x;
@@ -211,10 +215,14 @@ float4 fs_main(BreathVertex input) : SV_Target {
         }
         ds = min(ds, t1 - t);
         float age = s.y;
-        float wear = 0.4 + 0.6 * age;
+        // How torn the gas is: little at the jaws and all of it at the tip. The
+        // summed shading starts higher, so the jet is ragged from the jaws on
+        // and not a smooth tube for its first third (the blind critic's
+        // seventh round: "an even tube", "a beam").
+        float wear = summed_style ? 0.62 + 0.38 * age : 0.4 + 0.6 * age;
         // Past where the noise can carry the edge at this age: no gas, and
         // no need to read the noise to know it.
-        float out_reach = min(jet.shape.z * wear, 0.45);
+        float out_reach = min(jet.shape.z * wear, reach_cap);
         if (s.x >= 1.0 + out_reach) {
             t += ds;
             continue;
@@ -249,6 +257,19 @@ float4 fs_main(BreathVertex input) : SV_Target {
         // A jet at the jaws, torn to rags by the tip: the broad noise moves
         // the edge, the fine one frays it and opens gaps in the body.
         float q = s.x + max((n - 0.5) * 2.0 * jet.shape.z * wear, -out_reach) + (fine - 0.5) * 0.3 * wear;
+        if (summed_style) {
+            // The width pulses: swellings a few radii long that travel down
+            // the jet with the gas, as a breath comes in surges. Read off
+            // the broadest octave, along the axis alone.
+            // In the noise's own octave coordinates, this scale's and the
+            // next one's blended as the body's are. Dividing the scrolled
+            // distance by the local radius instead made a comb: the scroll
+            // is hundreds of metres, and the radius changes along the jet.
+            float along_axis = dot(base, jet.axis.xyz);
+            float surge = lerp(breath_noise(float3(along_axis * 0.22, 7.3, time * 0.9)),
+                               breath_noise(float3(along_axis * 0.11, 7.3, time * 0.9)), blend);
+            q *= lerp(0.72, 1.42, surge);
+        }
         float density = saturate((1.0 - q) * 5.0);
         density *= lerp(1.0, smoothstep(0.3, 0.62, fine), wear * 0.9);
         density *= 1.0 - smoothstep(0.72, 1.0, age);

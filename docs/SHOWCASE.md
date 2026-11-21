@@ -54,8 +54,9 @@ If no answer has come, the next items, in the critic's order:
 1. The join between rock and ground: a band of the terrain's own rock
    colour under each crag row (it needs a mask the terrain shader
    reads), and scree that runs up a face.
-2. The jet from the side: "an even tube", "a beam". A width that pulses,
-   tongues that leave it, an end that rolls up.
+2. The jet from the side: it surges now (`showcase/EFFECTS.md`, "A jet
+   that surges") and is still a cone. Tongues that break off, and an
+   end that rolls up.
 3. The rock kit's memory: 87 maps at 1024, not compressed, about 490 MB.
    Block compression before more pieces go in.
 4. The river's stair-stepped edge from above, and the fire's reflection
@@ -449,6 +450,7 @@ Code comments and other documents cite sections by name ("SHOWCASE.md,
 | Scree and rubble at the feet (2026-11-20, 19:20) | `showcase/WORLD.md` |
 | Wild herds (2026-11-20, 19:50) | `showcase/WORLD.md` |
 | The ground burns (2026-11-20, 18:55) | `showcase/EFFECTS.md` |
+| A jet that surges (2026-11-20, 20:10) | `showcase/EFFECTS.md` |
 | The blind critic, round 7 (2026-11-20, 18:40) | `showcase/CRITIC.md` |
 | The river's streaks and whirls (2026-11-15, 11:55) | `showcase/WORLD.md` |
 | Trees in a mountain's shadow: what does not work (2026-11-15, 12:05) | `showcase/WORLD.md` |
