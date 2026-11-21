@@ -9,6 +9,54 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 6 (2026-11-21)
+
+The rig keeps all 77 joints. Finger 1 keeps its leading position.
+Both segments of fingers 2 and 3 and both segments of the elbow rib follow the swept shafts.
+The table gives right-side joint and tip positions in glTF metres. The left side reverses X.
+
+| Chain | Middle joint (X, Y, Z) | Tip (X, Y, Z) |
+|---|---|---|
+| `wing_finger_2a_r`, `wing_finger_2b_r` | 5.77, 5.24, 1.78 | 7.77, 3.84, 4.12 |
+| `wing_finger_3a_r`, `wing_finger_3b_r` | 4.75, 5.07, 2.16 | 5.76, 3.20, 4.85 |
+| `wing_spur_a_r`, `wing_spur_b_r` | 2.83, 4.13, 2.36 | 3.01, 3.13, 4.76 |
+
+Each flank station follows a blend of the root, chest and nearby tail bones.
+Weights shift toward the arm and rib across the root panel.
+The rig pins both faces along the flank. A shared vertex identifier keeps opposite faces together through the thickened shaft borders.
+
+Run the rig builder from the worktree after building the static mesh.
+
+```sh
+HERO_RIG_CACHE="$PWD/build-hero-cache/v6" HERO_RIG_ART="$PWD/artifacts/hero-rig/v6-final" \
+  /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 2 --python tools/rig_hero.py -- --no-render </dev/null
+```
+
+The verifier passed all 76 checks. The 74 version 5c checks retain their thresholds.
+Two new checks trail the hind legs with hip 45°, knee 5° and hock 35°.
+The membrane and hind legs had zero triangle intersections with wings open and folded.
+At 80° elbow and wrist fold, the longest edge reached 1.3776 times rest on both wings. The limit is 1.6.
+The fold introduced zero new membrane intersections with the arm or body.
+The maximum flank gap was 0.000 mm across 2,810 samples in both poses. [Rig checks](../artifacts/hero-rig/v6-final/verification.txt)
+
+The first landed view showed the long hand hanging into the grass.
+The final profile raises the hand and closes the fan slightly.
+
+| Ground profile key | Version 5c | Version 6 |
+|---|---:|---:|
+| `ground_wing_hand_elev_deg` | −20 | −6 |
+| `ground_wing_fan_deg` | 8 | 6 |
+
+The final standing studio pose put the lowest membrane point 1.34 m above the lowest hide point.
+The folded hand still hangs beside the flank. The dive uses the version 5c profile values.
+[Landed](../artifacts/hero-build/v6-final-landed.jpg) · [Dive](../artifacts/hero-build/v6-final-dive.jpg)
+
+All nine final engine runs reported the same mapping.
+
+```text
+mapped rig: neck 3, tail 8, wing root 3/3, fingers 3/3, legs 3/3, front legs 3/3, feet 4, jaw jaw
+```
+
 ## Mesh version 5c (2026-11-15)
 
 The mesh now has one curved thumb claw per wrist. All three finger claws remain and measure less than 0.35 m.

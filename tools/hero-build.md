@@ -6,6 +6,65 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 6: broad wings (2026-11-21)
+
+Version 6 doubles the visible wing area and keeps the 19 m span. The delivered static and rigged files are in `assets/`.
+
+| Bind measurement | Version 5c | Version 6 |
+|---|---:|---:|
+| Chord at shoulder, in wing plane | 1.697 m | 4.829 m |
+| Chord at wrist, in wing plane | 2.959 m | 5.612 m |
+| Area of one wing, in wing plane | 18.859 m² | 41.232 m² |
+| Area of one curved wing surface | 20.087 m² | 44.260 m² |
+| Flank seam, front to back | 2.200 m | 4.760 m |
+| Wingspan, including claws | 18.992 m | 18.981 m |
+| Hide triangles | 104,251 | 104,251 |
+| Horn triangles | 6,696 | 6,696 |
+| Membrane triangles | 7,912 | 8,032 |
+| Hide, horn and membrane triangles | 118,859 | 118,979 |
+
+Chord is the straight distance from the leading edge to the trailing edge.
+The builder averages the two membrane faces and fits a plane to the right wing, weighting each triangle by area.
+It projects the dragon's rearward direction onto that plane and measures along it through the shoulder and wrist.
+The projected area grew 118.6%. The curved surface area grew 120.3%. [Measurements](../artifacts/hero-build/v6-measurements.json)
+
+### Shape and surface
+
+Four panels connect the flank, elbow rib and three fingers. Finger 1 carries the leading edge.
+The builder bends the sculpted shafts along the new bone paths. It tapers their outer ends to 34% of their original radius.
+The shoulder, elbow and wrist keep their version 5c positions.
+The shoulder and hind hip centres lie only 1.48 m apart along the body.
+To reach the requested body chord, the seam passes above the hip and ends on the tail base, at Z +3.76 m.
+
+Each trailing arc bends inward by 11.6% to 12.3% of the distance between its supports.
+Those distances range from 2.23 m to 3.60 m. The longest straight segment measures 0.615 m.
+The builder lowers each panel centre by up to 4% of its width.
+The shell measures 20 mm between supports. A 90 mm transition thickens the membrane beside each shaft.
+Every shell edge has two adjacent triangles, including the rim.
+
+All panels use the same texture scale of about 148 pixels per metre in the texture plane.
+Wrinkles come from inside a version 5c membrane panel. Branching veins follow the fingers.
+The upper face is darker and more saturated. The builder also regenerates the thickness map.
+Only the three embedded membrane maps changed. The body, head, legs, tail and their maps retain their source data.
+
+### Build and checks
+
+Run from the worktree with the version 5c static GLB, its thickness map and `build-hero-cache/wing5_plan.npz` in place.
+The first run saves both version 5c assets under `build-hero-cache/v6/`. Later runs read those copies.
+
+```sh
+HERO_WING=v6 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 2 --python tools/build_hero.py </dev/null
+```
+
+The mesh passed all 112 checks. The surface check now locates samples through the exported texture coordinates.
+It uses the same root and neighbor regions, in metres, and the same thresholds as version 5c. [Mesh checks](../artifacts/hero-build/v6-verification.txt)
+
+The first engine pass showed dark shaft outlines repeated across several panels. The final texture samples the skin between shafts.
+Both passes have nine full-size engine pairs, with version 5c on the left.
+The scallops show most clearly from above. The wider panels also show in the chase view.
+On the ground, the folded wing still covers much of the flank. In the close view, the near wing hides most of the torso.
+[Above](../artifacts/hero-build/v6-final-above.jpg) · [Chase](../artifacts/hero-build/v6-final-chase.jpg) · [Landed](../artifacts/hero-build/v6-final-landed.jpg) · [Close](../artifacts/hero-build/v6-final-close.jpg)
+
 ## Version 5c: one wrist claw and a detailed root panel (2026-11-15)
 
 The wrist carried two joined blades and a lower spur. The root panel used a plain colour fill and flat normals.
