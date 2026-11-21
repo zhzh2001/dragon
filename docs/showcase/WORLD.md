@@ -500,6 +500,16 @@ So the frame is bound by shading over the whole screen, a part hidden is
 replaced by the part behind it, and nothing added on 2026-11-20 is the
 cause. `rocks` and `rock_shadows` are new `DRAGON_ABLATE` terms.
 
+Measured again on 2026-11-21 at 01:05, 4,800 frames, the machine quiet at
+the start (load average 3): the same shape. The GPU's time is 15.4 ms a
+frame for the first 2,400 frames and 23.8 to 25.4 ms after. The step is
+at 40 s, when the demo pilot leaves 200 m of height and descends to a
+cache. So the frame costs about 8 ms more near the ground than at
+height, and that is the drop the playtester meets "further into run".
+At the frozen frame 3200, paired: the rivals 1.5 ms, prey 0.6, the
+towers and the run's objects 0.9, the vegetation with every shadow 3.0
+(the vegetation alone 1.2). The parts still do not add up to the step.
+
 Not done: the same measurement on a quiet machine, and against the
 build of 2026-11-14, when the run's frame was recorded at 11 ms
 (`docs/GAPS.md`, "The suspected performance regression"). Until then it
