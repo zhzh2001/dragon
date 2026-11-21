@@ -785,14 +785,44 @@ private:
         float opacity;
     };
     static BreathSmoke smoke_for(game::Element element);
+    // How an element's breath is drawn past its profile's colours
+    // (docs/showcase/EFFECTS.md, "Six breaths, six materials").
+    struct BreathLook {
+        float medium = 0.0f;   // gfx::BreathJet's three
+        float whiten = 0.0f;
+        float glow = 0.0f;
+        float width = 1.0f;    // over the profile's spread and end size
+        float buoyancy = 0.0f; // added to the profile's
+        // What it leaves on the ground where the jet meets it. Fire: the
+        // marched patches (BreathVolume::ignite). A medium: a low cloud of
+        // smoke puffs, `cloud_life` seconds each, in `cloud` (lit colour).
+        float cloud_life = 0.0f;
+        float cloud_size = 1.0f;
+        float cloud_opacity = 0.3f;
+        core::Vec3 cloud{0.5f, 0.5f, 0.5f};
+        float light = 1.0f;    // the light it throws on what is near, over fire's
+        float bits = 1.0f;     // the thrown particles' rate over fire's sparks
+        float bit_speed = 1.0f;
+        float bit_gravity = -7.0f;
+        float bit_life = 1.0f;
+        float bit_glow = 2.6f;
+        core::Vec3 bit_colour{0.0f, 0.0f, 0.0f};  // zero: the breath's own hot colour, whitened
+    };
+    static BreathLook look_for(game::Element element);
+    void emit_storm_arc(core::Vec3 from, core::Vec3 direction, float range);
+    float storm_arc_owed_ = 0.0f;
+    float ground_cloud_owed_ = 0.0f;
     void set_local_light(gfx::SceneUniforms& scene) const;
     void on_touchdown(float sink);
     bool incoming_warning_ = true;  // Combat panel: arcs toward shots about to hit
     void emit_speed_streak(float strength);
     // Speed streaks (Camera panel): past this airspeed they start, and reach
     // this many a second 40 m/s faster.
-    float speed_streak_from_ = 55.0f;
-    float speed_streak_rate_ = 120.0f;
+    // 55 m/s and 120 a second before 2026-11-21: the playtester asked for
+    // fewer wind lines, and a blind critic read them as scratches on the lens.
+    float speed_streak_from_ = 65.0f;
+    float speed_streak_rate_ = 40.0f;
+    float boost_effects_ = 0.4f;  // the boost's threads, streaks and FOV surge, 1 as they were
     void update_downwash(float dt);
     // Spray off the river (App::update_spray): a dragon skimming the water,
     // or beating its wings low over it, throws up a sheet of it. Puffs a
@@ -810,7 +840,7 @@ private:
     void emit_thermal_motes(float dt);
     float player_lift_ = 0.0f;  // m/s of rising air at the player, for the HUD
     float thermal_motes_ = 60.0f;  // motes a second from a nearby column (Flight panel)
-    float thermal_streaks_ = 14.0f;  // wind lines a second up each column within 1.4 km (Flight panel)
+    float thermal_streaks_ = 5.0f;  // wind lines a second up each column within 1.4 km (Flight panel)
     // The hour of a run's valley (game/time_of_day.h, GAPS.md G8), the
     // modern tier's: the sun's height and bearing, its colour through the
     // air, and the valley mist. Off, or with --sun, the run keeps the arena's.

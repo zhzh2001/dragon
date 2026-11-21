@@ -192,8 +192,9 @@ float4 fs_main(BreathVertex input) : SV_Target {
     // A soft cloud has no tongues to resolve: longer steps and fewer of
     // them. Blight's cloud across the middle of a 1080p frame cost 3.2 ms
     // at the flame's step.
-    if (medium) steps = min(steps, 30);
+    if (medium) steps = min(steps, 24);
     float step_radii = medium ? 0.3 : 0.22;
+    float step_most = medium ? 3.5 : 2.6;
     int inside = 0;
     int near_segment = 0;
     int from = 0, to = BREATH_NODES;
@@ -221,7 +222,7 @@ float4 fs_main(BreathVertex input) : SV_Target {
             continue;
         }
         ++inside;
-        float ds = clamp(s.z * step_radii, 0.06, 2.6);
+        float ds = clamp(s.z * step_radii, 0.06, step_most);
         if (!entered) {
             t += ds * dither;
             entered = true;
@@ -257,10 +258,12 @@ float4 fs_main(BreathVertex input) : SV_Target {
         // Four octaves read once. The three finest are this scale's fBm, the
         // three coarsest the next scale's, and the weights slide from one
         // to the other.
-        float o0 = breath_noise(base * 0.5);
+        // A cloud reads two octaves: its finest and its broadest are not
+        // seen in a body with no tongues.
         float o1 = breath_noise(base);
         float o2 = breath_noise(base * 2.0);
-        float o3 = breath_noise(base * 4.0);
+        float o0 = medium ? o1 : breath_noise(base * 0.5);
+        float o3 = medium ? o2 : breath_noise(base * 4.0);
         float n = (0.5 * blend * o0 + (0.5 - 0.25 * blend) * o1 + (0.25 - 0.125 * blend) * o2 +
                    0.125 * (1.0 - blend) * o3) / 0.875;
         n = saturate((n - 0.5) * 1.9 + 0.5);
@@ -299,7 +302,10 @@ float4 fs_main(BreathVertex input) : SV_Target {
             float along = pow(1.0 - age, 2.0);
             float3 core_colour = lerp(hot_hue, float3(1.0, 1.0, 1.0), whiten);
             float3 rim_colour = lerp(lerp(cool_hue, hot_hue, 0.35) * 0.6, core_colour * 0.75, whiten * 0.6);
-            float3 albedo = lerp(rim_colour, core_colour, saturate(pow(radial, 0.6) * (0.55 + 0.45 * billow)));
+            // White water and rime are white to the edge: the more a medium
+            // whitens, the less of the rim's colour it keeps.
+            float3 albedo = lerp(rim_colour, core_colour,
+                                 saturate(pow(radial, 0.6) * (0.55 + 0.45 * billow) + whiten * 0.45));
             albedo *= 0.62 + 0.38 * fine;
             // The side toward the sun is lit, the far side and the creases
             // are in the body's own shade. The normal is the direction out

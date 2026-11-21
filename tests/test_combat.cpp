@@ -994,6 +994,29 @@ void test_abilities() {
         }
         CHECK(std::fabs(damage - c.tuning.fireball_damage * c.tuning.charged_damage) < 0.01f);
     }
+    // Held past full and then let go: the charged shot, and no plain shot
+    // after it, at the release or when the reload ends.
+    {
+        Combat c;
+        c.reset(nullptr, Vec3::zero(), 5u, 0);
+        c.abilities.charged_shot = true;
+        game::CombatInput hold;
+        hold.fire_held = true;
+        int charged = 0, plain = 0;
+        auto count = [&](const game::CombatEvents& e) {
+            if (e.charged_fired) ++charged;
+            else if (e.fired) ++plain;
+        };
+        for (int i = 0; i < 90 && charged == 0; ++i) count(c.update(dt, player, hold));
+        for (int i = 0; i < 6; ++i) count(c.update(dt, player, hold));  // still down for a tenth of a second
+        for (int i = 0; i < 240; ++i) count(c.update(dt, player, game::CombatInput{}));
+        CHECK(charged == 1);
+        CHECK(plain == 0);
+        // Held on, it charges again: the soak's held button fires every charge.
+        for (int i = 0; i < 400; ++i) count(c.update(dt, player, hold));
+        CHECK(charged >= 2);
+        CHECK(plain == 0);
+    }
     // A charged shot seeks: a target 25 degrees off the nose, beyond what
     // the aim assist bends, is still struck by a full charge.
     {

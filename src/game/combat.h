@@ -690,6 +690,7 @@ private:
     Status player_status_;
     float charge_ = 0.0f;
     bool charging_ = false;
+    bool hold_fired_ = false;  // this hold of the button has already let a charged shot go
     float fury_ = 0.0f;
     int pounce_ = -1;
     bool was_boosting_pounce_ = false;

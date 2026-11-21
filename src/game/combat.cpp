@@ -1090,8 +1090,15 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
             charging_ = true;
             if (fire_timer_ <= 0.0f) charge_ = core::minf(charge_ + dt / core::maxf(tuning.charge_time, 0.05f), 1.0f);
         }
-        const bool release = charging_ && (!(input.fire_held || input.fire) || charge_ >= 1.0f);
+        const bool held = input.fire_held || input.fire;
+        const bool release = charging_ && (!held || charge_ >= 1.0f);
         if (!can) {
+            charging_ = false;
+            charge_ = 0.0f;
+        } else if (release && !held && hold_fired_ && charge_ < tuning.charge_min) {
+            // Let go after a full charge already left on this hold: nothing
+            // more. Before, the release counted as a tap, and a plain shot
+            // followed the charged one (at once, or when the reload ended).
             charging_ = false;
             charge_ = 0.0f;
         } else if (release && fire_timer_ <= 0.0f) {
@@ -1099,9 +1106,11 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
                                     ? 0.0f
                                     : (charge_ - tuning.charge_min) / core::maxf(1.0f - tuning.charge_min, 1e-3f);
             shoot(power);
+            hold_fired_ = held;  // it left at full with the button still down
             charging_ = false;
             charge_ = 0.0f;
         }
+        if (!held) hold_fired_ = false;
     } else if (input.fire && player_alive && !jammed && fire_timer_ <= 0.0f) {
         shoot(0.0f);
     }
