@@ -38,7 +38,7 @@ Two opposing rotations lower the pelvis for the crouch. The root stays fixed.
 The source mouths are closed. The skull carries the muzzle, ears and head ornaments.
 The builder blends weights across the leg attachments and assigns each sole to its hoof.
 
-The three clips use 121, 73 and 67 keys per moving joint.
+The three clips use 121, 73 and 67 keys per joint.
 The walk cycles through left hind, left fore, right hind and right fore with 66% stance.
 The run uses 28% stance and staggers each limb pair.
 The leg solver scales targets to leg length and counter-rotates the hooves.
@@ -47,7 +47,8 @@ The leg solver scales targets to leg length and counter-rotates the hooves.
 
 The verifier reads the exported GLB and samples 241 poses per clip.
 It checks the inverse bind matrices, normalized weights, quaternion rotations, linear interpolation and identical loop endpoints.
-It measures the lowest weighted hoof vertices after skinning.
+Each clip keys every joint, including stationary joints. The root keeps its bind rotation.
+The verifier measures the lowest weighted hoof vertices after skinning.
 The limits are 5 cm of penetration and 6.5 cm of stance gap for every animal.
 During the run, the verifier counts samples with all four soles more than 1 cm above ground.
 
@@ -59,7 +60,7 @@ elk PASS | 1.088 x 2.348 x 2.400 m | 8897 triangles | 28 bones | bind error 1.11
 bighorn PASS | 0.765 x 1.653 x 1.698 m | 8893 triangles | 28 bones | bind error 6.76e-08 m
   graze 4.00 s | min sole 0.19 cm | max nearest sole 0.30 cm | stance 1.65 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.40 cm
-  run   0.55 s | min sole -0.05 cm | max nearest sole 6.67 cm | stance free flight
+  run   0.55 s | min sole -0.05 cm | max nearest sole 6.67 cm | stance 3.41 cm
 boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.69e-08 m
   graze 4.00 s | min sole 0.27 cm | max nearest sole 0.30 cm | stance 1.18 cm
   walk  1.20 s | min sole 0.30 cm | max nearest sole 0.30 cm | stance 0.36 cm
@@ -75,7 +76,11 @@ boar PASS | 0.501 x 0.887 x 1.599 m | 8801 triangles | 28 bones | bind error 5.6
 ## Visual review
 
 The sheets show phases 0/8 through 7/8 from left to right across each row.
-Blender re-imports each final GLB before rendering. A sky and a sun at 30 degrees light the ground.
+Blender re-imports each final GLB before rendering. The renderer starts each clip from the bind pose.
+It checks every imported joint against the sampled glTF transform at each review pose.
+In the original ram export, switching from run to walk drew a hoof 15.8 cm below ground.
+Keying stationary joints restored the same hoof to 0.3 cm above ground.
+A sky and a sun at 30 degrees light the ground.
 
 The first elk graze stretched skin between the inner forelegs and the belly. The second fit removed those spikes.
 The antler tines keep their shape throughout the drop. The deepest graze uses a pronounced foreleg crouch.

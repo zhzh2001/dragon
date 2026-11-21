@@ -322,8 +322,8 @@ AXIAL = {
         (0, 0.72, -0.12),
         (0, 0.73, 0.07),
         (0, 0.74, 0.23),
-        (0.015, 0.79, 0.35),
-        (0.045, 0.88, 0.44),
+        (0.012, 0.72, 0.28),
+        (0.04, 0.84, 0.42),
         (0.09, 0.96, 0.54),
         (0, 0.80, -0.34),
         (0, 0.78, -0.41),
@@ -334,8 +334,8 @@ AXIAL = {
         (0, 0.64, -0.13),
         (0, 0.65, 0.08),
         (0, 0.67, 0.28),
-        (0.005, 0.73, 0.41),
-        (0.01, 0.79, 0.52),
+        (0.005, 0.65, 0.35),
+        (0.01, 0.745, 0.49),
         (0.02, 0.79, 0.64),
         (0, 0.73, -0.43),
         (0.01, 0.72, -0.52),
@@ -538,7 +538,7 @@ def fit(name, coords, triangles):
         )
         edges = edges[edges[:, 0] != edges[:, 1]]
         # A broad surface blend joins the rigid horns to the lower neck.
-        if name == "bighorn":
+        if name in ("bighorn", "goat"):
             import heapq
 
             adjacency = [[] for _ in wp]
@@ -551,7 +551,7 @@ def fit(name, coords, triangles):
             for i in np.where(rigid[first])[0]:
                 distances[i] = 0
                 heapq.heappush(queue, (0, int(i)))
-            radius = 0.35 * h
+            radius = (0.35 if name == "bighorn" else 0.28) * h
             while queue:
                 distance, i = heapq.heappop(queue)
                 if distance > distances[i] or distance > radius:
@@ -569,7 +569,7 @@ def fit(name, coords, triangles):
         dst = np.r_[edges[:, 1], edges[:, 0]]
         factor = 1 / np.maximum(np.linalg.norm(wp[src] - wp[dst], axis=1), h * 0.008)
         divisor = np.bincount(src, weights=factor, minlength=len(wp))
-        for _ in range(12 if name == "bighorn" else 5):
+        for _ in range(12 if name in ("bighorn", "goat") else 5):
             accum = np.zeros_like(ww)
             np.add.at(accum, src, ww[dst] * factor[:, None])
             mean = accum / np.maximum(divisor[:, None], 1e-12)
@@ -800,17 +800,18 @@ def bake_clips(spec, names, parents, rest, points, weights):
                     stride *= leg_length
                     lift *= leg_length
                 target = planar(rest[ids[-1]]) + [stride, lift + 0.003 - sole]
-                if clip == "graze" and front and spec["name"] == "bighorn":
-                    # Widen the ram's stance so the inside foreleg clears the jaw.
+                if clip == "graze" and front and spec["name"] in ("bighorn", "chamois", "goat"):
+                    # A wider stance clears the jaw and opens the folded foreleg.
                     shoulder = pos[ids[0]]
                     dx = rest[ids[-1], 0] - shoulder[0]
-                    goal_x = dx + (0.15 if side == "l" else -0.15)
+                    spread = {"bighorn": 0.15, "chamois": 0.16, "goat": 0.13}[spec["name"]]
+                    goal_x = dx + (spread if side == "l" else -spread)
                     goal_y = target[1] - shoulder[1]
                     projected_y = -math.sqrt(goal_y**2 + goal_x**2 - dx**2)
                     roll = math.atan2(goal_y, goal_x) - math.atan2(projected_y, dx)
                     target[1] = shoulder[1] + projected_y
                     splay[tuple(ids)] = roll
-                    fold = 1.30 * lower
+                    fold = (1.30 if spec["name"] == "bighorn" else 0.52) * lower
                 pitch[ids] = leg_pose(
                     rest, ids, pos[ids[0]], cumulative[parents[ids[0]]], target, front, fold
                 )
@@ -882,8 +883,7 @@ def export(path, name, points, normals, triangles, uvs, tex, names, parents, res
         time = accessor(np.linspace(0, DUR[clip], len(keys)), "SCALAR")
         samplers, channels = [], []
         for i in range(len(names)):
-            if np.all(keys[:, i] == (0, 0, 0, 1)):
-                continue
+            # Write every joint so switching clips also restores stationary bones.
             samplers.append(dict(input=time, output=accessor(keys[:, i], "VEC4"), interpolation="LINEAR"))
             channels.append(dict(sampler=len(samplers) - 1, target=dict(node=i, path="rotation")))
         animations.append(dict(name=clip, samplers=samplers, channels=channels))
@@ -1183,6 +1183,7 @@ def verify(path, spec):
     assert 0 < scale <= 1
     penetration_limit, contact_limit = 0.05 * scale, 0.065 * scale
     walk_offsets = {"foot_l": 0.0, "hand_l": 0.25, "foot_r": 0.5, "hand_r": 0.75}
+    run_offsets = {"foot_l": 0.0, "hand_l": 0.49, "foot_r": 0.035, "hand_r": 0.525}
     reports = {}
     all_feet = np.logical_or.reduce(list(feet.values()))
     selected_feet = {name: mask[all_feet] for name, mask in feet.items()}
@@ -1208,7 +1209,10 @@ def verify(path, spec):
             assert values.shape == (len(times), 4)
             assert values[0].tobytes() == values[-1].tobytes(), (name, "loop seam")
             assert np.max(abs(np.linalg.norm(values, axis=1) - 1)) < 1e-5
+            if target["node"] == bone["root"]:
+                assert np.all(values == [0, 0, 0, 1]), "The root moved"
             tracks.append((target["node"], times, values))
+        assert targeted == set(ids), "A clip omitted joint rotations"
         minimum, nearest, stance_gap, level_error = math.inf, -math.inf, -math.inf, 0.0
         mouth_heights = []
         flight_samples = 0
@@ -1239,8 +1243,11 @@ def verify(path, spec):
             mouth_heights.append(float((world[head_index] @ mouth_local)[1]))
             for key, height in heights.items():
                 foot_ranges[key].append(mesh[selected_soles[key]].mean(0))
-                stance = name == "graze" or (
-                    name == "walk" and (time / duration - walk_offsets[key]) % 1 < 0.66
+                phase = time / duration
+                stance = (
+                    name == "graze"
+                    or (name == "walk" and (phase - walk_offsets[key]) % 1 < 0.66)
+                    or (name == "run" and (phase - run_offsets[key]) % 1 < 0.28)
                 )
                 if stance:
                     stance_gap = max(stance_gap, height)
@@ -1249,10 +1256,10 @@ def verify(path, spec):
                     displacement = mesh[mask, 1] - bind_feet[mask, 1]
                     level_error = max(level_error, float(np.ptp(displacement)))
         assert minimum >= -penetration_limit, (name, "sole penetration", minimum)
+        assert stance_gap <= contact_limit, (name, "stance gap", stance_gap)
+        assert level_error <= 0.025 * scale, (name, "sole tilt or distortion", level_error)
         if name != "run":
             assert nearest <= contact_limit, (name, "continuous support", nearest)
-            assert stance_gap <= contact_limit, (name, "stance gap", stance_gap)
-            assert level_error <= 0.025 * scale, (name, "sole tilt or distortion", level_error)
         else:
             assert flight_samples >= 2, ("run lacked a suspended phase", nearest)
         sweeps = {key: float(np.ptp(np.array(points)[:, 2])) for key, points in foot_ranges.items()}
@@ -1268,8 +1275,8 @@ def verify(path, spec):
             "sampled_poses": 241,
             "sole_min_m": minimum,
             "worst_nearest_sole_m": nearest,
-            "stance_gap_m": stance_gap if name != "run" else None,
-            "stance_sole_height_change_m": level_error if name != "run" else None,
+            "stance_gap_m": stance_gap,
+            "stance_sole_height_change_m": level_error,
             "flight_samples": flight_samples,
             "mouth_min_m": min(mouth_heights),
             "mouth_max_m": max(mouth_heights),
@@ -1292,6 +1299,57 @@ def verify(path, spec):
     }
 
 
+def imported_skin_check(path, arm):
+    """Compare each posed Blender joint with its independently sampled glTF skin transform."""
+    from mathutils import Quaternion
+
+    source = PreyGLB(path)
+    joint_ids = source.j["skins"][0]["joints"]
+    nodes = source.j["nodes"]
+    parents = {child: i for i, node in enumerate(nodes) for child in node.get("children", [])}
+    inverse_bind = (
+        source.acc(source.j["skins"][0]["inverseBindMatrices"]).reshape(-1, 4, 4).transpose(0, 2, 1)
+    )
+    convert = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    arm_world = np.array(arm.matrix_world)
+    bones = [arm.pose.bones[nodes[i]["name"]] for i in joint_ids]
+    inverse_rest = np.linalg.inv([arm_world @ np.array(b.bone.matrix_local) for b in bones])
+    tracks = {}
+    for animation in source.j["animations"]:
+        clip = animation["name"]
+        tracks[clip] = {}
+        for channel in animation["channels"]:
+            sampler = animation["samplers"][channel["sampler"]]
+            tracks[clip][channel["target"]["node"]] = (
+                source.acc(sampler["input"]).ravel(),
+                source.acc(sampler["output"]),
+            )
+
+    def check(clip, phase):
+        transforms = {}
+        for i in joint_ids:
+            local = np.eye(4)
+            local[:3, 3] = nodes[i]["translation"]
+            if i in tracks[clip]:
+                times, rotations = tracks[clip][i]
+                t = phase * times[-1]
+                k = min(np.searchsorted(times, t, side="right") - 1, len(times) - 2)
+                f = float((t - times[k]) / (times[k + 1] - times[k]))
+                a, b = (Quaternion((q[3], *q[:3])) for q in rotations[k : k + 2])
+                local[:3, :3] = a.slerp(b, f).to_matrix()
+            transforms[i] = transforms[parents[i]] @ local if i in parents else local
+        expected = convert @ (np.array([transforms[i] for i in joint_ids]) @ inverse_bind) @ convert.T
+        actual = arm_world @ np.array([np.array(b.matrix) for b in bones]) @ inverse_rest
+        error = np.abs(expected - actual).max(axis=(1, 2))
+        if error.max() > 0.003:
+            joint = bones[error.argmax()].name
+            raise ValueError(
+                f"{clip} at {phase:.4f}: Blender differed from glTF on {joint} by {error.max():.6f}."
+            )
+
+    return check
+
+
 def render(path, spec):
     """Render the exported animal and write labelled evidence sheets."""
     import json
@@ -1304,7 +1362,7 @@ def render(path, spec):
     import bpy
     import numpy as np
     from bpy_extras.object_utils import world_to_camera_view
-    from mathutils import Vector
+    from mathutils import Matrix, Vector
 
     root = Path(path).resolve().parents[2]
     out = root / "artifacts" / "prey" / spec["name"]
@@ -1395,7 +1453,16 @@ def render(path, spec):
     head_bind = arm.matrix_world @ arm.data.bones["head"].matrix_local
     mouth_local = head_bind.inverted() @ mouth
 
+    imported_check = imported_skin_check(path, arm)
+    previous_clip = None
+
     def pose(clip, phase):
+        nonlocal previous_clip
+        if previous_clip != clip:
+            arm.animation_data.action = None
+            for bone in arm.pose.bones:
+                bone.matrix_basis = Matrix.Identity(4)
+            previous_clip = clip
         action = actions[clip]
         arm.animation_data.action = action
         if action.slots:
@@ -1404,6 +1471,7 @@ def render(path, spec):
         frame = start + phase * (end - start)
         scene.frame_set(math.floor(frame), subframe=frame % 1)
         bpy.context.view_layer.update()
+        imported_check(clip, phase)
 
     def mouth_position():
         return arm.matrix_world @ arm.pose.bones["head"].matrix @ mouth_local
@@ -1551,7 +1619,12 @@ def render(path, spec):
         ("three-quarter", "walk", 0.125, (1, -1.2, 0.48)),
         ("walk-front", "walk", 0.125, (0, -1, 0.10)),
         ("walk-rear", "walk", 0.625, (0, 1, 0.10)),
-        ("graze-head", "graze", deep_phase, (1, -0.65, 0.24)),
+        (
+            "graze-head",
+            "graze",
+            deep_phase,
+            (-0.45, -1, 0.28) if spec["name"] == "goat" else (1, -0.65, 0.24),
+        ),
         ("run-top", "run", 0.375, (0, -0.001, 1)),
         ("walk-feet", "walk", 0.125, (1, -0.65, 0.18)),
     ]
