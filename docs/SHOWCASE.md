@@ -6,91 +6,98 @@ section 6 as the order of work for the modern tier's picture. `FIDELITY.md`
 stays the record of the rendering techniques. The retro tiers are out of
 scope here.
 
-## Where it stands (2026-11-16, 18:48)
+## Where it stands (2026-11-20, 19:30)
 
 Read this first when you pick the work up. The 26 suites pass and the
-Metal goldens match on `main` after the overnight Tripo run. No engine code
-changed after it; the day added Tripo models and records only.
+Metal goldens match on `main`. The session of 2026-11-20 put the Tripo
+models of 2026-11-16 into the game and changed the fire.
 
 The standing direction (the user's, 2026-11-15): the visual showcase
 first, gameplay later; the dragon, its animation and its effects before
 the world; ignore the rings and the placeholder sphere.
 
-What the evening of 2026-11-15 built, each with its own section:
+What 2026-11-20 built, each with its own section:
 
 | Work | Where |
 |---|---|
-| The breath as a marched volume; fireballs as comets; sparks, smoke, the pale core at the jaws, a skin of soot, a released flame that burns out | `showcase/EFFECTS.md` |
-| The breath's light as a line, on the dragon, the banks and the river; lens ghosts kept to the sun | `showcase/EFFECTS.md` |
-| The membrane's bow between the fingers; the hero's fingers bending under load; the rim's grain filtered | `showcase/HERO.md` |
-| The beat, two passes: now 0.85 s, the tip sweeping 76 degrees | `showcase/PLAYTEST.md` |
-| The meadow in drifts | `showcase/WORLD.md` |
-| Blind critic rounds 4, 5 and 6 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round4` to `round6` |
-| The Tripo test on an account with credits | `MODEL_GENERATION.md`, "Tripo v3.1 on an account with credits" |
-| The overnight Tripo run (2026-11-16): 72 models, six rock pieces and two towers in the game | `MODEL_GENERATION.md`, "The overnight Tripo run"; `showcase/WORLD.md`, "Tripo crags, scree and boulders"; `tools/props.md`, the Tripo section |
-| The second Tripo spend (2026-11-16, day): 67 models, none in the game yet; crags, prey, landmarks and rocks wait for a Codex job | `MODEL_GENERATION.md`, "The second spend"; `artifacts/tripo-overnight/day2-*.jpg` |
+| The flame's light summed along the ray and saturated a channel at a time, as a sensor does: a pale core, an orange body, smoke at the tip. The fireball too | `showcase/EFFECTS.md`, "Fire through a sensor" |
+| Fire left on the ground where the jet lands | `showcase/EFFECTS.md`, "The ground burns" |
+| Five Tripo wall crags, 50 m high, in rows on the steep faces; a detail layer on large rocks; level-of-detail limits in metres | `showcase/WORLD.md`, "Wall crags in rows" |
+| Five Tripo landmarks (a ruined tower, an arch, a stone circle, a monolith, a cairn) and five more rocks | `showcase/WORLD.md`, "Landmarks, and five more rocks" |
+| Talus mounds and rubble at the feet of the crags and landmarks | `showcase/WORLD.md`, "Scree and rubble at the feet" |
+| Blind critic round 7 | `showcase/CRITIC.md`, `artifacts/showcase-critic/round7` |
+| The Tripo hide on the hero, tried: no visible gain | `MODEL_GENERATION.md`, "The hide trial" |
+| Three Codex conversions on `gpt-6.2-astra`: crags and rocks, landmarks, prey | `tools/rockkit.md`, `tools/landmarks.md`, `tools/prey.md`; the briefs are in `tools/showcase/` |
 
 Waiting on the user:
 
 - A yes or no on new wing geometry for the hero (slack modelled into the
-  membrane, thinner fingers, a fold that creases on the ground). Six
-  critic rounds put the wings first, and shader and rig tuning has not
-  changed that. It is a Codex asset job (`CLAUDE.md`, "Delegate complex 3D
-  model rigging"): check `codex-profiles usage` first. Do not start it
-  without the answer.
-- The playtest of the evening's changes: the beat (`--model
-  assets/embercrest-hero.glb --studio 1`, and Space held in play), the
-  breath and the fireball (F, G; `--breathe`, `--spit`), a low pass over
-  the river while breathing (`--skim --breathe`). The last feedback, "the
-  wingbeat is slow, and the flapping range is still limited", is answered
-  by the second pass and not yet seen by the playtester.
-- Two calls that are the user's: the flame's length (the breath's range,
-  155 m, about nine dragons) and whether the plume's smoke is too much
-  from the chase camera.
-- The Tripo licence is settled: output from paid credits may ship
-  (`MODEL_GENERATION.md`, "The overnight Tripo run"). Three looks from that
-  night want the playtester's eye: the crags and scree on the slopes, the
-  slender Tripo watchtower against the old broad keep
-  (`artifacts/props/v3/compare-game-watchtower.png`), and a Tripo hide on
-  the hero, not switched on (`artifacts/tripo-overnight/hero-hide-*.jpg`
-  show the first version; the file to try is now `tripo-hero-retex-03`,
-  see "The second spend").
-- The Tripo credits are spent; the account expires at the end of
-  2026-11-16. Its 79 kept models are in `assets/tripo-raw/` (5 GB, not in
-  git). The valley walls are still the open gap, but the second spend
-  found the shape that works: single lopsided crags in a row, not long
-  wall pieces (`tripo-wall2-05`, `-07`, `tripo-crag2-02`, `-05` to `-08`).
-  The next Codex asset jobs, in order: those crags as a wall set, the six
-  standing prey for rigging, the pass gate, the keep and `tripo-hoard-10`
-  as run props, and the good rocks into the kit.
+  membrane, thinner fingers, a fold that creases on the ground). Seven
+  critic rounds name the wings, and shader and rig tuning has not changed
+  that. It is a Codex asset job. Do not start it without the answer.
+- The playtest of the new picture: breathe in a low pass and in a dive
+  at the ground (F; the flame, and the fire it leaves), spit (G), fly a
+  run past the crag rows (`--run 3`), and find a landmark. And still open
+  from 2026-11-15: the beat (`--studio 1`, and Space held in play).
+- Calls that are the user's: the flame's length (155 m, about nine
+  dragons); how much the plume smokes from the chase camera; the wind
+  lines, which the critic read as "scratches on the lens" in five
+  frames; the landmarks' size (a tower 35 to 48 m high) and how many
+  stand in a valley (about 20).
+- The Tripo hide on the hero: the comparison shows no gain, so the swap
+  was not made. Say so if it is wanted anyway.
 
-If no answer has come, the next items in order are in "Open questions"
-below: the flame's hot point at the jaws and smoke that breaks from its
-edge, the river's stair-stepped edge from above, the clouds up close.
+If no answer has come, the next items, in the critic's order:
+
+1. The join between rock and ground: a band of the terrain's own rock
+   colour under each crag row (it needs a mask the terrain shader
+   reads), and scree that runs up a face.
+2. The jet from the side: "an even tube", "a beam". A width that pulses,
+   tongues that leave it, an end that rolls up.
+3. The rock kit's memory: 87 maps at 1024, not compressed, about 490 MB.
+   Block compression before more pieces go in.
+4. The river's stair-stepped edge from above, and the fire's reflection
+   in it ("a coarse checker of orange pixels").
+5. `bank_a` along the river; the keep, the bridge and the dragon
+   skeleton, which failed conversion and would make places of the
+   landmarks.
 
 Things a new session would otherwise learn the slow way:
 
 - The blind critic's scores do not compare between rounds to better than
-  half a point: a different agent scores each round, and round 6 scored
-  unchanged frames 0.8 lower than round 5. Use its wording, and its
-  ranking within one round.
-- A view chosen to show one thing from far off (a fireball at 75 m, the
-  plume at 120 m) scores as a poor picture. Give the critic framed shots.
+  half a point: a different agent scores each round. Use its wording, and
+  its ranking within one round.
+- A view chosen to show one thing from far off scores as a poor picture.
+  Give the critic framed shots.
 - `--inspect 180` is the front and `--inspect 0` the rear.
 - The hero is `--model assets/embercrest-hero.glb`. The default roster
-  flies the generated Embercrest, which is what the goldens show, so a
-  change in the hero's profiles moves no golden.
-- A rig dial that changes a silhouette goes in a species' profile at 0 in
-  the code (`finger_load_curl_deg`): the roster has seven bind poses.
+  flies the generated Embercrest, which is what the goldens show.
+- Under a tonemap that keeps hue, brightness inside a bright thing
+  carries no form: only hue and darkness do. The flame's form came from
+  saturating its summed light a channel at a time, not from a ramp.
+- A texture sample inside a branch has no screen gradients and reads the
+  smallest mip. Take `ddx` and `ddy` outside and use `SampleGrad`
+  (`rock.hlsl`, `rock_detail`).
+- The kit chose a level of detail by distance in the piece's own radii.
+  A piece 100 m across then drew its full mesh out to 1.5 km. The levels
+  have limits in metres now.
+- Tripo's crags are rounded lumps. The critic reads them as "loaves". A
+  cliff band wants faces with joints, which Tripo did not make in three
+  tries; a row of crags is rock on a wall, not the wall.
+- The breath's fuel lasts about three seconds in the arena. A capture of
+  the breath after frame 200 shows none.
+- A Codex job's Blender renders can hold the Mac at a load average over
+  80. A `gpu: median` taken then is not a measurement; even paired runs
+  wandered by 13 ms. The crags' scree and rubble want a clean cost run.
+- Codex on `gpt-6.2-astra`: 414 k and 477 k tokens for the two kit jobs,
+  45 to 49 minutes each, 4% of the work profile's week together. Both
+  stayed inside their worktrees and rejected their own weak pieces with
+  renders.
+- The Vulkan, D3D12 and D3D11 golden sets are stale since 2026-11-15.
+  They need `golden.py capture` on x99.
 - The hero's build cache is `build-hero-cache/` in the main checkout
-  (3.1 GB, ignored). No worktree exists; `tools/hero-build.md` says how a
-  new one links to it.
-- The Vulkan, D3D12 and D3D11 golden sets are stale since the evening's
-  shader changes. They need `golden.py capture` on x99.
-- Tried and dropped the same evening: three times the boulders on the
-  valley floor (dots from the air), the hide's sky reflection at 2.2 (no
-  visible gain), worn tracks in the meadow ("stains"), the membrane's bow
-  on vertices weighted to the arm (561 vertices, nothing to see).
+  (3.1 GB, ignored). `tools/hero-build.md` says how a worktree links to
+  it.
 
 The record is in parts since 2026-11-15. This file holds the study, the
 decisions, the order of work and the open questions. What was built is in
