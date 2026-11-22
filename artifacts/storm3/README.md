@@ -168,3 +168,15 @@ The leg intersection check found no wing vertices inside the shins at either fra
 
 At turn frame 260, the leading tip extends 5.32 m sideways from the shoulder. It previously reached 6.58 m.
 At dive frame 300, that distance fell from 5.50 m to 4.17 m. Both poses keep the tips on their own side.
+
+### Captures and checks
+
+The comparison pairs eight poses at one image pixel per captured pixel. [Before and after](pass2/before-after.jpg)
+The contact sheet includes all 47 requested views. The two sets share the same nine Embercrest reference frames. [All final views](pass2/views.jpg)
+The original front landing camera cuts off the near wrist. Some side cameras cut off the leading wingtip at stroke extremes.
+The full frames retain the requested camera positions. [Before frames](pass2/before/) and [after frames](pass2/after/)
+
+I checked the landing in flight and the switch from Embercrest to Storm3.
+Both final GLBs retain 80,000 triangles, 55 named joints, the triangle indices, UV coordinates, maps and graded materials.
+The glide, leg tuck, dive and turn met their targets. The cruise stroke, inner membrane and ground fold retain the differences described above.
+The pass took about 29 minutes, including two asset rebuilds and the engine captures.
