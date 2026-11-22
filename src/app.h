@@ -217,6 +217,21 @@ struct Options {
     // (clock, belly, level, day_seconds, hunger_seconds), for a capture.
     bool wilds = false;
     std::string wilds_set;
+    // --menu: open the start screen (a launch with no arguments does, in a
+    // window). It picks the mode (practice, arena, hoard run, the wilds),
+    // the dragon and the settings a player wants; Esc brings it back in play.
+    bool menu = false;
+    // --menu-start N: the start screen, with Start pressed at frame 30 on
+    // mode N (0 practice, 1 arena, 2 hoard run, 3 the wilds): the headless
+    // check that each mode starts from it.
+    int menu_start = -1;
+    // --designs new|old|old-only: which of a species' two designs the
+    // default roster shows (O swaps them in play). old-only does not load
+    // the second designs at all, for a quick start.
+    std::string designs = "new";
+    // --toggle-designs N: press O every N frames, the soak of the swap
+    // (it re-initialises the player's rig and every rival's).
+    int toggle_designs = 0;
     // --run-empty: the run with no rivals and no towers, so the autopilot can
     // fly the corridor to the pass -- the soak for the banking path.
     bool run_empty = false;
@@ -271,6 +286,30 @@ public:
     // roster's files that exist here; one empty entry when none does (the
     // generated greybox).
     static std::vector<std::string> roster_paths(const Options& options);
+    // ---- the start screen (docs/DIRECTION.md, "The start screen") ----
+    enum PlayMode : int { kPractice = 0, kArena, kHoard, kWilds, kPlayModes };
+    void open_menu(bool in_play);
+    void close_menu();
+    void start_mode(int mode);
+    void update_menu();
+    void draw_menu();
+    void menu_change(int row, int step);
+    void menu_activate(int row);
+    int menu_rows() const;
+    void load_player_settings();
+    void save_player_settings() const;
+    bool menu_open_ = false;
+    bool menu_in_play_ = false;  // opened over a game with Esc: the world holds, and Resume is offered
+    int menu_row_ = 0;
+    int menu_mode_ = kHoard;
+    int play_mode_ = -1;         // what was started from the menu, -1 nothing yet
+    bool menu_pad_was_[6] = {};
+    bool menu_camera_ = false;   // the launch screen has the free camera, and gives it back
+    // The roster's two sets of designs (kDesignPairs in app.cpp).
+    bool model_listed(int index) const;
+    int next_listed_model(int from) const;
+    void set_new_designs(bool on);
+    bool new_designs_ = true;
     // --bake-packs: builds and writes the pack of every roster model and
     // every prop. False when any fails.
     static bool bake_packs(const Options& options);
@@ -802,6 +841,7 @@ private:
     // loosed behind the player.
     void spawn_rival(int rival_index, bool hunter);
     std::unique_ptr<BotShip> make_bot(int index);
+    void dress_bot(BotShip& bot, int model);
     void draw_run_world(rhi::Pass* pass);
     void draw_run_hud();
     void apply_bot_skill(int level);
@@ -893,6 +933,10 @@ private:
     bool studio_range_laid_ = false;
     // Where a breath of pieces thrown now would land, for the HUD.
     core::Vec3 breath_landing_;
+    void mark_trees_in_breath(float dt);
+    float tree_mark_owed_ = 0.0f;
+    uint32_t tree_mark_start_ = 0;
+    bool breath_piece_damage_ = false;  // a breath of pieces lands its damage piece by piece, not by the cone
     bool breath_landing_valid_ = false;
     float matter_sound_cooldown_[4] = {};
     // A breath of matter as pieces, and what every breath leaves on the
@@ -1044,6 +1088,10 @@ private:
     // spring state that animates them belongs to each DragonRig.
     struct LoadedModel {
         std::string path = "generated";  // what was loaded, for the UI and logs
+        // The same species' other design in the roster, or -1, and which
+        // this one is: 0 the only one, 1 the first, 2 the second.
+        int partner = -1;
+        int design = 0;
         anim::DragonShape shape;         // only meaningful for the generated fallback
         anim::Skeleton skeleton;
         anim::DragonJoints joints;

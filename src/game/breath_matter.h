@@ -59,6 +59,9 @@ struct MatterPiece {
     float life = 1.0f;
     float seed = 0.0f;     // 0..1: which mesh, which shade
     bool resting = false;  // on the ground, still
+    // Seconds of flight before it falls as a thrown thing does: until then
+    // it flies straight, the breath's reach long (MatterTuning::arc).
+    float flat = 0.0f;
     // The seconds of held breath this piece carries: one over the rate it
     // was thrown at. What it is worth when it meets a target.
     float share = 0.0f;
@@ -98,19 +101,21 @@ struct MatterAim {
 
 struct MatterTuning {
     // Frost.
-    float lance_rate = 22.0f;      // a second while the breath is held
+    float lance_rate = 40.0f;      // a second while the breath is held
     float lance_speed = 80.0f;     // m/s, over the breather's own
-    float lance_length = 1.6f;     // metres, half the crystal's length
+    float lance_length = 0.5f;     // metres, half the crystal's length: slivers in the cloud, not spears (1.6 until 2026-11-22)
     float lance_spread = 0.07f;    // radians
     float lance_tumble = 7.0f;     // rad/s end over end: flying point first, a lance seen from behind is a dot
     float spike_share = 0.5f;      // of the lances that reach the ground, how many leave a spike
     float spike_life = 14.0f;      // seconds
+    float spike_size = 1.0f;       // metres: what a lance leaves is its own size, not the lance's
     // Stone.
-    float boulder_rate = 10.0f;
+    float boulder_rate = 30.0f;
     float boulder_speed = 70.0f;
-    float boulder_size = 0.65f;    // metres, radius
+    float boulder_size = 0.2f;     // metres, radius: cobbles in the dust (0.65 until 2026-11-22)
     float boulder_spread = 0.09f;
     float rubble_life = 10.0f;
+    float rubble_size = 0.4f;      // metres, radius of what a stone leaves half in the ground
     // Tide.
     float water_speed = 60.0f;
     float water_width = 0.45f;     // metres, radius at the jaws: a torrent, for a dragon ten metres long
@@ -128,6 +133,12 @@ struct MatterTuning {
     // angle, it crossed the aim at one distance only ("the arc makes it
     // harder to aim").
     float aim_share = 0.5f;
+    // How far the pieces are thrown things. 0 (the default since
+    // 2026-11-22): they fly straight along the aim for the breath's reach,
+    // as the cloud and the damage cone do, and only then fall. 1: thrown
+    // above the aim and falling all the way, as above. The playtester on
+    // the thrown breath: "I don't like arc and second aim at all".
+    float arc = 0.0f;
     // All.
     float mark_life = 40.0f;       // seconds a mark stays on the ground
     float mark_size = 1.0f;        // over each element's own radius

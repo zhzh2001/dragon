@@ -241,7 +241,11 @@ VertexOut vs_main(VertexIn input) {
             o.albedo = lerp(o.albedo, float3(0.1, 0.08, 0.03), 0.9 * k);
             stripped = stripped || (card && k > 0.5);
             if (blade) from_base.y *= 1.0 - 0.5 * k;
-        } else if (kind > 3.5 && kind < 4.5) {
+        } else if (kind < 3.5) {
+            // Lightning: scorched, and the leaves gone where it was strongest.
+            o.albedo = lerp(o.albedo, float3(0.04, 0.035, 0.04), 0.8 * k);
+            stripped = stripped || (card && k > 0.6 && frac(input.params.z * 3.7 + input.color.y * 57.0) > 0.4);
+        } else if (kind < 4.5) {
             o.albedo *= 1.0 - 0.3 * k;
             if (blade) from_base.y *= 1.0 - 0.3 * k;
         } else if (kind > 4.5) {

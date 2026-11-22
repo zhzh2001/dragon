@@ -96,9 +96,54 @@ void test_stone_rests() {
     CHECK(count(matter, game::MatterKind::Boulder) == 0);
 }
 
-void test_stream_falls() {
-    std::printf("water arcs down, sheds drops and wets the ground; acid the same\n");
+// The default since 2026-11-22: the pieces fly straight along the aim for
+// the breath's reach, as the cloud and the cone do, and fall only past it.
+void test_straight() {
+    std::printf("by default a stream and a stone fly straight for the reach, then fall\n");
+    const float dt = 1.0f / 60.0f;
     game::BreathMatter water;
+    CHECK(water.tuning.arc == 0.0f);
+    float lowest = 200.0f, highest = 200.0f, farthest = 0.0f;
+    for (int i = 0; i < 120; ++i) {
+        water.emit(game::Element::Tide, Vec3{0.0f, 200.0f, 0.0f}, Vec3::forward(), Vec3::zero(), 150.0f, dt);
+        water.update(dt, flat_ground, -100.0f, {});
+        for (const game::MatterPiece& p : water.pieces()) {
+            if (p.kind != game::MatterKind::WaterSlug) continue;
+            lowest = minf(lowest, p.position.y);
+            highest = maxf(highest, p.position.y);
+            farthest = maxf(farthest, -p.position.z);
+        }
+    }
+    std::printf("  the stream: %.2f to %.2f m high over %.0f m\n", double(lowest), double(highest), double(farthest));
+    CHECK(lowest > 199.9f && highest < 200.1f);
+    CHECK(farthest > 80.0f);
+
+    // A stone thrown with a short reach: level until it has flown it, lower after.
+    game::BreathMatter stone;
+    stone.tuning.boulder_spread = 0.0f;
+    stone.emit(game::Element::Stone, Vec3{0.0f, 200.0f, 0.0f}, Vec3::forward(), Vec3::zero(), 35.0f, 0.2f);
+    CHECK(count(stone, game::MatterKind::Boulder) >= 1);
+    float at_reach = 0.0f, later = 0.0f;
+    for (int i = 0; i < 120; ++i) {
+        stone.update(dt, flat_ground, -100.0f, {});
+        float y = 0.0f;
+        int n = 0;
+        for (const game::MatterPiece& p : stone.pieces()) {
+            if (p.kind == game::MatterKind::Boulder) y += p.position.y, ++n;
+        }
+        if (n == 0) break;
+        if (i == 20) at_reach = y / float(n);   // a third of a second: 23 m of the 35
+        if (i == 90) later = y / float(n);      // a second and a half: well past it
+    }
+    std::printf("  a stone: %.2f m high inside the reach, %.2f m past it\n", double(at_reach), double(later));
+    CHECK(std::fabs(at_reach - 200.0f) < 0.05f);
+    CHECK(later < 195.0f);
+}
+
+void test_stream_falls() {
+    std::printf("thrown (arc 1), water arcs down, sheds drops and wets the ground; acid the same\n");
+    game::BreathMatter water;
+    water.tuning.arc = 1.0f;
     const float dt = 1.0f / 60.0f;
     for (int i = 0; i < 30; ++i) {
         water.emit(game::Element::Tide, Vec3{0.0f, 200.0f, 0.0f}, Vec3::forward(), Vec3::zero(), 150.0f, dt);
@@ -208,6 +253,7 @@ int main() {
     test_rates();
     test_frost_lands();
     test_stone_rests();
+    test_straight();
     test_stream_falls();
     test_marks_merge();
     test_targets_and_water();

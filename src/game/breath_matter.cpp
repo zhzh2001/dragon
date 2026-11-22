@@ -152,7 +152,11 @@ void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry,
                               : element == Element::Stone ? t.boulder_speed
                               : element == Element::Tide  ? t.water_speed
                                                           : t.acid_speed;
-    const Vec3 dir = solve_throw(mouth, direction, carry, reach, throw_speed, gravity_of(primary), aim);
+    const float arc = core::saturate(t.arc);
+    const Vec3 dir = arc > 0.01f ? solve_throw(mouth, direction, carry, reach, throw_speed, gravity_of(primary) * arc, aim)
+                                 : core::normalize_or(direction, Vec3::forward());
+    // Straight for the breath's reach, then it falls.
+    const float flat = arc < 0.99f ? core::maxf(reach, 10.0f) / core::maxf(throw_speed, 1.0f) : 0.0f;
     const Vec3 side = core::normalize_or(core::cross(dir, Vec3::up()), Vec3::right());
     const Vec3 lift = core::cross(side, dir);
     float rate = 0.0f, speed = 1.0f, spread = 0.0f;
@@ -185,6 +189,7 @@ void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry,
         MatterPiece p;
         p.seed = seed;
         p.share = 1.0f / core::maxf(rate, 1.0f);
+        p.flat = flat;
         p.orientation = core::look_rotation(thrown, lift);
         switch (element) {
             case Element::Frost: {
@@ -323,7 +328,7 @@ void BreathMatter::land(const MatterPiece& piece, Vec3 at, float ground, bool on
                     const float tall = unit01();
                     // It leans back the way it came.
                     spike(ground_point, Vec3{-down_range.x * 0.55f + x * 0.25f, 0.0f, -down_range.z * 0.55f + z * 0.25f},
-                          piece.scale.z * (0.7f + 0.6f * tall));
+                          tuning.spike_size * (0.7f + 0.6f * tall));
                 }
             }
             break;
@@ -358,8 +363,9 @@ void BreathMatter::land(const MatterPiece& piece, Vec3 at, float ground, bool on
                     rest.kind = MatterKind::Rubble;
                     rest.resting = true;
                     rest.velocity = Vec3::zero();
-                    rest.scale = piece.scale * 0.8f;
-                    rest.position = ground_point + Vec3{0.0f, piece.scale.y * 0.25f, 0.0f};
+                    rest.scale = piece.scale * (tuning.rubble_size / core::maxf(piece.scale.y, 0.01f));
+                    rest.flat = 0.0f;
+                    rest.position = ground_point + Vec3{0.0f, tuning.rubble_size * 0.25f, 0.0f};
                     rest.age = 0.0f;
                     rest.life = tuning.rubble_life;
                     add(rest);
@@ -459,7 +465,7 @@ void BreathMatter::update(float dt, const std::function<float(float, float)>& gr
             pieces_[i] = p;
             continue;
         }
-        p.velocity.y += gravity_of(p.kind) * dt;
+        p.velocity.y += gravity_of(p.kind) * (p.age < p.flat ? core::saturate(tuning.arc) : 1.0f) * dt;
         p.velocity = p.velocity * std::exp(-drag_of(p.kind) * dt);
         p.position = p.position + p.velocity * dt;
         if (is_slug(p.kind) || is_drop(p.kind)) {

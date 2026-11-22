@@ -67,6 +67,18 @@ const char* const kPropFiles[] = {"props/watchtower.glb", "props/hoard_pile.glb"
 
 }  // namespace
 
+// A species' first design and its second. The Playtest panel's "new
+// designs", O in play and --designs show one or the other: the player and
+// every rival change together, so the two can be compared in one scene.
+struct DesignPair {
+    const char* first;
+    const char* second;
+};
+constexpr DesignPair kDesignPairs[] = {
+    {"embercrest", "embercrest-hero"}, {"frostvein", "frost2"}, {"ironroot", "stone2"},
+    {"stormsail", "storm2"},           {"tidewrack", "tide2"},  {"blightmaw", "blight2"},
+};
+
 std::vector<std::string> App::roster_paths(const Options& options) {
     std::vector<std::string> roster;
     for (const std::string& path : options.models) roster.push_back(core::paths::resolve_cli(path));
@@ -78,6 +90,16 @@ std::vector<std::string> App::roster_paths(const Options& options) {
         for (const char* name : kDefaultRoster) {
             const std::string path = core::paths::asset(std::string(name) + ".glb");
             if (std::ifstream(path).good()) roster.push_back(path);
+        }
+        // The second designs (kDesignPairs), after the first: the hero and
+        // the five second-round elementals, where they are on the machine.
+        // The modern tier's only: each is 80,000 triangles with 4K maps and
+        // none has a retro-tier pack.
+        if (options.tier == gfx::Tier::Modern && options.designs != "old-only") {
+            for (const DesignPair& pair : kDesignPairs) {
+                const std::string path = core::paths::asset(std::string(pair.second) + ".glb");
+                if (std::ifstream(path).good()) roster.push_back(path);
+            }
         }
         if (roster.empty()) roster.push_back(std::string());
     }
@@ -142,7 +164,10 @@ Options parse_options(int argc, char** argv) {
     // on its command line was double-clicked: open on the game itself, a hoard
     // run on a fresh valley, not on the rally course a development build
     // starts in for its headless recipes.
-    if (argc <= 1) options.run = true;
+    // A launch with nothing asked for opens the start screen. It was the
+    // hoard run until 2026-11-22: a first-time player met a HUD and three
+    // rivals with no word on what the game was.
+    if (argc <= 1) options.menu = true;
 #endif
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -296,6 +321,15 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--run") {
             options.run = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--toggle-designs" && i + 1 < argc) {
+            options.toggle_designs = SDL_atoi(argv[++i]);
+        } else if (arg == "--menu") {
+            options.menu = true;
+        } else if (arg == "--menu-start" && i + 1 < argc) {
+            options.menu = true;
+            options.menu_start = SDL_atoi(argv[++i]);
+        } else if (arg == "--designs" && i + 1 < argc) {
+            options.designs = argv[++i];  // new (the default), old, or old-only (the second designs not loaded)
         } else if (arg == "--wilds") {
             options.run = true;
             options.wilds = true;
@@ -694,8 +728,30 @@ bool App::init(const Options& options) {
             load_model(path, *model);
             models_.push_back(std::move(model));
         }
-        player_model_ = 0;
-        LOG_INFO("model roster: %zu entry(s)", models_.size());
+        // Pair the designs, by file name, in the default roster only: a
+        // roster given on the command line is flown as given.
+        if (options_.models.empty() && options_.model.empty()) {
+            auto stem = [](const std::string& path) {
+                const size_t slash = path.find_last_of("/\\");
+                const size_t from = slash == std::string::npos ? 0 : slash + 1;
+                const size_t dot = path.rfind(".glb");
+                return path.substr(from, dot == std::string::npos ? std::string::npos : dot - from);
+            };
+            for (const DesignPair& pair : kDesignPairs) {
+                int first = -1, second = -1;
+                for (size_t i = 0; i < models_.size(); ++i) {
+                    if (stem(models_[i]->path) == pair.first) first = int(i);
+                    if (stem(models_[i]->path) == pair.second) second = int(i);
+                }
+                if (first < 0 || second < 0) continue;
+                models_[size_t(first)]->partner = second, models_[size_t(first)]->design = 1;
+                models_[size_t(second)]->partner = first, models_[size_t(second)]->design = 2;
+            }
+        }
+        new_designs_ = options_.designs != "old";
+        // The player flies the roster's first species, in the design shown.
+        player_model_ = !model_listed(0) && models_[0]->partner >= 0 ? models_[0]->partner : next_listed_model(-1);
+        LOG_INFO("model roster: %zu entry(s), %s designs", models_.size(), new_designs_ ? "new" : "old");
         for (size_t i = 0; i < models_.size(); ++i) {
             LOG_INFO("  [%zu] %s (%d joints, scale %.3f)", i, models_[i]->path.c_str(),
                      models_[i]->skeleton.count(), double(models_[i]->asset.scale));
@@ -874,6 +930,12 @@ bool App::init(const Options& options) {
             wing_growth_ = wing_growth_target_;
             dragon_rig_.wing_growth = wing_growth_;
         }
+    }
+
+    // The start screen, with what the player chose last time.
+    if (options.menu && !options.hide_ui) {
+        load_player_settings();
+        open_menu(false);
     }
 
     if (options.has_camera) {
@@ -2142,13 +2204,21 @@ void App::pump_events() {
         return;
     }
 
-    // Escape releases the mouse first and only quits once the cursor is already
-    // free, so it never feels like the game trapped the pointer.
+    // The start screen has the keys while it is open.
+    if (menu_open_) {
+        update_menu();
+        if (menu_open_ && options_.menu_start >= 0 && frame_index_ == 30) start_mode(options_.menu_start);
+        return;
+    }
+    // Escape releases the mouse first, and then opens the start screen over
+    // the game (it quit until 2026-11-22; Quit is on that screen now).
     if (input_.pressed(SDL_SCANCODE_ESCAPE)) {
         if (mouse_captured_) {
             set_mouse_captured(false);
-        } else {
+        } else if (options_.hide_ui) {
             running_ = false;
+        } else {
+            open_menu(true);
         }
     }
 
@@ -2210,12 +2280,17 @@ void App::pump_events() {
     // manoeuvre keeps playing and only the creature under it changes.
     if (options_.cycle_models > 0 && models_.size() > 1 &&
         frame_index_ > 0 && frame_index_ % options_.cycle_models == 0) {
-        set_player_model((player_model_ + 1) % int(models_.size()));
+        set_player_model(next_listed_model(player_model_));
     }
     if (input_.pressed(SDL_SCANCODE_M) && models_.size() > 1) {
-        set_player_model((player_model_ + 1) % int(models_.size()));
+        set_player_model(next_listed_model(player_model_));
     }
-    if (input_.pressed(SDL_SCANCODE_F1)) show_panels_ = !show_panels_;
+    // O: the other designs, old or new, on the player and every rival.
+    const bool soak_designs = options_.toggle_designs > 0 && frame_index_ > 0 && frame_index_ % options_.toggle_designs == 0;
+    if (input_.pressed(SDL_SCANCODE_O) || soak_designs) set_new_designs(!new_designs_);
+    // ` hides the panels (F1 before 2026-11-22, which a laptop's top row
+    // gives to the screen's brightness; it still works).
+    if (input_.pressed(SDL_SCANCODE_GRAVE) || input_.pressed(SDL_SCANCODE_F1)) show_panels_ = !show_panels_;
     if (input_.pressed(SDL_SCANCODE_1)) apply_camera_preset(0);
     if (input_.pressed(SDL_SCANCODE_2)) apply_camera_preset(1);
     if (input_.pressed(SDL_SCANCODE_3)) apply_camera_preset(2);
@@ -2265,6 +2340,8 @@ void App::set_feedback_active(bool active) {
 }
 
 float App::feedback_dt(float dt) {
+    // The start screen over a game in progress holds the world as the tool does.
+    if (menu_open_ && menu_in_play_ && !feedback_active_) return 1e-6f;
     if (!feedback_active_) return dt;
     // Held still is not zero: a step of nothing divides by it (DRAGON_FREEZE_AT).
     if (feedback_capture_ != 0) return 1e-6f;
@@ -2763,6 +2840,24 @@ void App::update(float dt) {
         free_camera_ = true;
     }
 
+    // The start screen at launch: a slow swing about the dragon on the
+    // stand, seen from its front quarter and set right of centre, clear of
+    // the text.
+    if (menu_open_ && !menu_in_play_ && !options_.inspect && !options_.has_camera) {
+        const game::FlightState& s = dragon_state();
+        const float angle = core::radians(150.0f + 16.0f * std::sin(time_seconds_ * 0.15f));
+        const float elevation = core::radians(7.0f);
+        const float d = 25.0f;
+        const core::Vec3 eye = s.position + core::rotate(s.orientation, core::Vec3{std::sin(angle) * std::cos(elevation) * d,
+                                                                                  std::sin(elevation) * d,
+                                                                                  std::cos(angle) * std::cos(elevation) * d});
+        const core::Vec3 view = core::normalize_or(s.position - eye, core::Vec3::forward());
+        const core::Vec3 right = core::normalize_or(core::cross(view, core::Vec3::up()), core::Vec3::right());
+        camera_.set_position(eye, s.position - right * 7.5f + core::Vec3{0.0f, 1.0f, 0.0f});
+        free_camera_ = true;
+        menu_camera_ = true;
+    }
+
     // The studio's breath range: dummies laid out ahead of the standing
     // dragon the first frame the scenario runs, and again when it moves.
     if (studio_range() && !studio_range_laid_) {
@@ -2782,7 +2877,10 @@ void App::update(float dt) {
         // (update_breath_matter); the cone is for the rest.
         const bool volume_breath = breath_volume_.available() && breath_volume_settings_.enabled &&
                                    !ablated("breath_volume");
-        combat_.breath_as_pieces = volume_breath && look_for(player_breath_.element).pieces;
+        // By the cone unless the Breath section's "damage by the piece" is
+        // ticked (the playtester, 2026-11-22: "no need to deal damage for
+        // each piece").
+        combat_.breath_as_pieces = breath_piece_damage_ && volume_breath && look_for(player_breath_.element).pieces;
         // Fire leaves the MOUTH the rig animates, not a fixed body offset. The
         // rig runs later this frame, so this is last frame's head -- one frame
         // of lag on a body-attached point is invisible.
@@ -2872,8 +2970,10 @@ void App::update(float dt) {
                 feed_player_breath(combat_.breath_origin(), combat_.breath_direction(), fighter.velocity, range, dt,
                                    aimed ? &aim : nullptr);
             }
-            // And where it would land, for the HUD's mark.
-            if (combat_.breath_as_pieces) {
+            // And where it would land, for the HUD's mark: only for a
+            // breath that is thrown (MatterTuning::arc). A straight one
+            // goes where the aim marker is.
+            if (breath_matter_.tuning.arc > 0.5f && volume_breath && look_for(player_breath_.element).pieces) {
                 breath_landing_valid_ = breath_matter_.predict(
                     player_breath_.element,
                     combat_.breath_origin() + combat_.breath_direction() * breath_volume_settings_.mouth_forward,
@@ -3331,7 +3431,9 @@ void App::update(float dt) {
     }
 
     // The rally stands down in a run: the corridor is the course.
-    if (!studio_active_ && !run_mode_) rally_.update(flight_.state(), dt);
+    // A mode started from the start screen has no time trial in it: its rings
+    // stood in the practice room and the arena as if they were the game.
+    if (!studio_active_ && !run_mode_ && play_mode_ < 0) rally_.update(flight_.state(), dt);
     if (rally_.just_passed_ring()) split_flash_ = 1.6f;
     if (rally_.just_missed_ring()) miss_flash_ = 1.2f;
     split_flash_ = core::maxf(split_flash_ - dt, 0.0f);
@@ -3563,13 +3665,14 @@ void App::build_ui(float dt) {
     // The feedback tool draws with the panels hidden too, and on the two
     // frames it captures nothing else may be drawn.
     if (build_feedback_ui()) return;
+    if (menu_open_) return;  // the start screen stands alone (draw_hud)
 
     // The tuning panels cover most of the screen, which is right while tuning
     // and useless while playing. One key clears the lot; the HUD stays.
     if (!show_panels_) {
         ImDrawList* draw = ImGui::GetForegroundDrawList();
         draw->AddText(ImVec2(12.0f, ImGui::GetIO().DisplaySize.y - 22.0f),
-                      IM_COL32(200, 210, 225, 130), "F1  panels");
+                      IM_COL32(200, 210, 225, 130), "`  panels");
         return;
     }
 
@@ -4098,6 +4201,10 @@ void App::draw_hud() {
     // strip off the right edge, the reticle off the screen.
     hud_.begin(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     if (show_fps_) draw_fps();
+    if (menu_open_ && !feedback_active_) {
+        draw_menu();
+        return;
+    }
     if (!show_hud_ || studio_active_) return;
     const ui::Tokens& tk = hud_.tokens();
     const float width = hud_.width();
@@ -4148,7 +4255,7 @@ void App::draw_hud() {
 
     // During a match the rally readout stands down: you are fighting, not
     // racing, and the checkpoint marker collides with the scoreline.
-    if (match_.phase() != game::MatchPhase::Idle || run_mode_) return;
+    if (match_.phase() != game::MatchPhase::Idle || run_mode_ || play_mode_ >= 0) return;
 
     const game::Course& course = rally_.course();
     if (course.rings.empty()) return;
@@ -4709,6 +4816,11 @@ void App::build_playtest_ui() {
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     ImGui::Begin("Playtest");
     ImGui::Checkbox("show the older tuning panels", &show_tuning_panels_);
+    {
+        bool designs = new_designs_;
+        if (ImGui::Checkbox("new designs (O)", &designs)) set_new_designs(designs);
+        ImGui::SetItemTooltip("The hero and the second-round elementals, or the first designs: the player and every rival change together.");
+    }
     if (ImGui::CollapsingHeader("The wilds", wilds_mode_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
         wilds_controls();
     }
@@ -4749,16 +4861,16 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("marks on the ground", &breath_marks_, 0.0f, 1.0f, "%.2f");
         if (ImGui::TreeNode("the pieces")) {
             game::MatterTuning& m = breath_matter_.tuning;
-            ImGui::SliderFloat("ice lances", &m.lance_rate, 2.0f, 40.0f, "%.0f /s");
+            ImGui::SliderFloat("ice lances", &m.lance_rate, 2.0f, 80.0f, "%.0f /s");
             ImGui::SliderFloat("lance speed", &m.lance_speed, 40.0f, 200.0f, "%.0f m/s");
-            ImGui::SliderFloat("lance length", &m.lance_length, 0.5f, 4.0f, "%.1f m");
+            ImGui::SliderFloat("lance length", &m.lance_length, 0.15f, 4.0f, "%.2f m");
             ImGui::SliderFloat("lance spread", &m.lance_spread, 0.0f, 0.2f, "%.3f rad");
             ImGui::SliderFloat("lance tumble", &m.lance_tumble, 0.0f, 20.0f, "%.1f rad/s");
             ImGui::SliderFloat("lances that leave a spike", &m.spike_share, 0.0f, 1.0f, "%.2f");
             ImGui::SliderFloat("a spike stands for", &m.spike_life, 2.0f, 40.0f, "%.0f s");
-            ImGui::SliderFloat("boulders", &m.boulder_rate, 1.0f, 30.0f, "%.0f /s");
+            ImGui::SliderFloat("boulders", &m.boulder_rate, 1.0f, 60.0f, "%.0f /s");
             ImGui::SliderFloat("boulder speed", &m.boulder_speed, 30.0f, 160.0f, "%.0f m/s");
-            ImGui::SliderFloat("boulder size", &m.boulder_size, 0.2f, 1.5f, "%.2f m");
+            ImGui::SliderFloat("boulder size", &m.boulder_size, 0.08f, 1.5f, "%.2f m");
             ImGui::SliderFloat("rubble lies for", &m.rubble_life, 2.0f, 40.0f, "%.0f s");
             ImGui::SliderFloat("water speed", &m.water_speed, 30.0f, 140.0f, "%.0f m/s");
             ImGui::SliderFloat("water width", &m.water_width, 0.1f, 0.8f, "%.2f m");
@@ -4766,7 +4878,12 @@ void App::build_playtest_ui() {
             ImGui::SliderFloat("acid speed", &m.acid_speed, 30.0f, 140.0f, "%.0f m/s");
             ImGui::SliderFloat("acid width", &m.acid_width, 0.05f, 0.6f, "%.2f m");
             ImGui::SliderFloat("acid drops", &m.acid_drops, 0.0f, 200.0f, "%.0f /s");
-            ImGui::SliderFloat("aimed at this share of the reach", &m.aim_share, 0.1f, 1.0f, "%.2f");
+            ImGui::SliderFloat("thrown in an arc", &m.arc, 0.0f, 1.0f, "%.2f");
+            ImGui::SetItemTooltip("0: the pieces fly straight for the breath's reach. 1: thrown above the aim, with a ring where they land.");
+            ImGui::SliderFloat("an arc is aimed at this share of the reach", &m.aim_share, 0.1f, 1.0f, "%.2f");
+            ImGui::Checkbox("damage by the piece", &breath_piece_damage_);
+            ImGui::SliderFloat("a spike's size", &m.spike_size, 0.3f, 3.0f, "%.1f m");
+            ImGui::SliderFloat("rubble's size", &m.rubble_size, 0.1f, 1.5f, "%.2f m");
             ImGui::SliderFloat("a mark stays for", &m.mark_life, 2.0f, 60.0f, "%.0f s");
             ImGui::SliderFloat("mark size", &m.mark_size, 0.3f, 3.0f, "x%.2f");
             ImGui::TreePop();
@@ -5510,25 +5627,70 @@ void App::set_player_model(int index) {
     LOG_INFO("player model: [%d] %s", index, model.path.c_str());
 }
 
+// Which roster entries are in play: a design of the kind being shown, or a
+// species with only one.
+bool App::model_listed(int index) const {
+    if (index < 0 || size_t(index) >= models_.size()) return false;
+    const int design = models_[size_t(index)]->design;
+    return design == 0 || design == (new_designs_ ? 2 : 1);
+}
+
+int App::next_listed_model(int from) const {
+    const int count = int(models_.size());
+    for (int step = 1; step <= count; ++step) {
+        const int index = ((from < 0 ? -1 : from) + step) % count;
+        if (model_listed(index)) return index;
+    }
+    return from < 0 ? 0 : from;
+}
+
+void App::set_new_designs(bool on) {
+    if (on == new_designs_) return;
+    new_designs_ = on;
+    auto other = [this](int index) {
+        const int partner = model_at(index).partner;
+        return !model_listed(index) && partner >= 0 ? partner : index;
+    };
+    set_player_model(other(player_model_));
+    for (const auto& bot : bots_) {
+        const int wear = other(bot->model);
+        if (wear != bot->model) dress_bot(*bot, wear);
+    }
+    LOG_INFO("designs: %s", new_designs_ ? "new" : "old");
+}
+
+// The model a bot wears: its rig, its pose and its handling follow the
+// species. Its element and its hide are its own (make_bot, spawn_rival).
+void App::dress_bot(BotShip& bot, int model) {
+    bot.model = model;
+    LoadedModel& worn = model_at(bot.model);
+    bot.rig.init(worn.skeleton, worn.joints);
+    bot.rig.set_model_scale(worn.asset.scale);
+    apply_idle_clip(worn, bot.rig);
+    bot.rig.tuning = worn.rig_tuning;
+    bot.flight.tuning = worn.flight_tuning;
+}
+
 std::unique_ptr<App::BotShip> App::make_bot(int index) {
     auto bot = std::make_unique<BotShip>();
     bot->slot = combat_.spawn_external(bot_health_, 6.5f);
     // Deal the roster round-robin, skipping the player's own entry when
     // there is anything else to fly. With a one-model roster this is the
     // player's model for everyone, exactly as it was before.
-    bot->model = models_.size() > 1
-                     ? int((size_t(player_model_) + 1 + size_t(index)) % models_.size())
-                     : player_model_;
-    LoadedModel& worn = model_at(bot->model);
-    bot->rig.init(worn.skeleton, worn.joints);
+    {
+        int deal = player_model_;
+        for (int n = 0; n <= index && models_.size() > 1; ++n) {
+            deal = next_listed_model(deal);
+            if (deal == player_model_) deal = next_listed_model(deal);
+        }
+        bot->model = deal;
+    }
     // Far rigs step every 50 ms (update_bots); staggered, so they do not all
     // step on the same frame.
     bot->rig_dt = 0.0167f * float(bots_.size() % 3);
-    bot->rig.set_model_scale(worn.asset.scale);
-    apply_idle_clip(worn, bot->rig);
     // Pose and handling both follow the species, not the player.
-    bot->rig.tuning = worn.rig_tuning;
-    bot->flight.tuning = worn.flight_tuning;
+    dress_bot(*bot, bot->model);
+    LoadedModel& worn = model_at(bot->model);
     bot->pilot.tuning = bot_tuning_;
     // Four hides, cycling: rust, bone, moss, violet. Recoloured at the
     // texture's own luminance (a multiplicative tint on this dark hide
@@ -7007,6 +7169,326 @@ void App::spawn_rival(int rival_index, bool hunter) {
     bot->pilot.reset(seed);
     bot->was_alive = true;
     bots_.push_back(std::move(bot));
+}
+
+// ---- the start screen ----
+// What a player meets first: the mode, the dragon, and the settings that are
+// a player's and not a developer's. Drawn with the HUD kit on the left of
+// the frame over the live world; at launch the dragon glides on the studio's
+// stand behind it, and over a game in progress (Esc) the world holds. Keys,
+// the mouse and a gamepad's d-pad all drive it: ImGui's own navigation is
+// off everywhere (CLAUDE.md), so the screen reads the input itself.
+
+namespace {
+const char* const kModeNames[] = {"PRACTICE", "ARENA", "HOARD RUN", "THE WILDS"};
+const char* const kModeText[] = {
+    "Six still targets and no return fire. Learn the breath, the bite and the dodge.",
+    "A deathmatch against rival dragons, each of its own element.",
+    "Three valleys, head to pass. Take the hoards, grow, and leave before the hunters come.",
+    "No end. Eat to live, grow by what you do, find what is there, sleep to save. A first version.",
+};
+enum MenuRow : int { kRowMode = 0, kRowDragon, kRowDesigns, kRowGraphics, kRowFullscreen, kRowFps, kRowVolume, kRowSettings };
+
+// "frost2" -> "Frost2", "gold-dragon" -> "Gold dragon".
+std::string dragon_name(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    const size_t from = slash == std::string::npos ? 0 : slash + 1;
+    const size_t dot = path.rfind(".glb");
+    std::string name = path.substr(from, dot == std::string::npos || dot < from ? std::string::npos : dot - from);
+    if (name == "embercrest-hero") name = "embercrest";  // one species, its second design
+    for (char& c : name) {
+        if (c == '-' || c == '_') c = ' ';
+    }
+    if (!name.empty()) name[0] = char(std::toupper(static_cast<unsigned char>(name[0])));
+    return name;
+}
+}  // namespace
+
+// The rows past the settings: Resume (over a game only), Start, Quit.
+int App::menu_rows() const { return kRowSettings + (menu_in_play_ ? 3 : 2); }
+
+void App::open_menu(bool in_play) {
+    menu_open_ = true;
+    menu_in_play_ = in_play;
+    menu_row_ = in_play ? kRowSettings : kRowSettings;  // on Resume, or on Start
+    set_mouse_captured(false);
+    if (mouse_look_) {
+        mouse_look_ = false;
+        if (!options_.headless) SDL_SetWindowRelativeMouseMode(device_.window(), false);
+    }
+    if (!in_play) {
+        // The backdrop: the dragon in the studio's glide, where the picked
+        // species and design can be seen before anything starts.
+        studio_active_ = true;
+        studio_scenario_ = int(game::StudioScenario::Glide);
+        studio_time_ = 0.0f;
+        studio_centre_ = flight_.state().position + core::Vec3{0.0f, 45.0f, 0.0f};
+    }
+}
+
+void App::close_menu() {
+    menu_open_ = false;
+    menu_in_play_ = false;
+    if (menu_camera_) free_camera_ = false;
+    menu_camera_ = false;
+}
+
+void App::start_mode(int mode) {
+    mode = std::clamp(mode, 0, int(kPlayModes) - 1);
+    studio_active_ = false;
+    if (run_mode_ && mode != kHoard && mode != kWilds) end_run();
+    if (mode == kPractice || mode == kArena) {
+        match_.abandon();
+        bots_.clear();
+        arena_wave_ = 0;
+        combat_.reset(&terrain_, flight_.state().position, 20260824u, 0);
+        respawn_dragon();
+    }
+    switch (mode) {
+        case kPractice: spawn_training_room(); break;
+        case kArena: start_match(); break;
+        case kHoard: start_run(fresh_seed()); break;
+        default: start_wilds(0, true); break;
+    }
+    apply_camera_preset(0);
+    play_mode_ = mode;
+    menu_mode_ = mode;
+    save_player_settings();
+    close_menu();
+    LOG_INFO("start screen: %s", kModeNames[mode]);
+}
+
+void App::load_player_settings() {
+    if (options_.headless) return;
+    std::ifstream file(core::paths::user("player.cfg"));
+    std::string key, value;
+    while (file >> key >> value) {
+        if (key == "mode") menu_mode_ = std::clamp(SDL_atoi(value.c_str()), 0, int(kPlayModes) - 1);
+        if (key == "volume") audio_.set_master(core::saturate(float(SDL_atof(value.c_str()))));
+        if (key == "designs" && options_.designs == "new") set_new_designs(value != "old");
+        if (key == "dragon" && options_.models.empty() && options_.model.empty()) {
+            for (size_t i = 0; i < models_.size(); ++i) {
+                std::string name = dragon_name(models_[i]->path);
+                for (char& c : name) {
+                    if (c == ' ') c = '-';
+                }
+                if (name == value && model_listed(int(i))) set_player_model(int(i));
+            }
+        }
+    }
+}
+
+void App::save_player_settings() const {
+    if (options_.headless) return;
+    std::ofstream file(core::paths::user("player.cfg"));
+    if (!file) return;
+    std::string name = dragon_name(models_[size_t(player_model_)]->path);
+    for (char& c : name) {
+        if (c == ' ') c = '-';
+    }
+    file << "mode " << menu_mode_ << "\n";
+    file << "designs " << (new_designs_ ? "new" : "old") << "\n";
+    file << "dragon " << name << "\n";
+    file << "volume " << audio_.master() << "\n";
+}
+
+// A row's value, one step left or right.
+void App::menu_change(int row, int step) {
+    switch (row) {
+        case kRowMode: menu_mode_ = (menu_mode_ + step + int(kPlayModes)) % int(kPlayModes); break;
+        case kRowDragon: {
+            if (models_.size() < 2) break;
+            int next = player_model_;
+            const int count = int(models_.size());
+            for (int n = 0; n < count; ++n) {
+                next = (next + step + count) % count;
+                if (model_listed(next)) break;
+            }
+            set_player_model(next);
+            break;
+        }
+        case kRowDesigns: set_new_designs(!new_designs_); break;
+        case kRowGraphics: {
+            // The presets a player picks from: ultra to very-low, clamped to what the tier and device allow.
+            const int now = graphics_.preset_level(tier_.tier, device_limits_);
+            for (int n = 1; n <= 5; ++n) {
+                const int want = ((now < 0 ? 1 : now) + step * n + 50) % 5;
+                const gfx::GraphicsSettings next = gfx::GraphicsSettings::preset(want, tier_.tier, device_limits_);
+                if (next == graphics_) continue;  // clamped onto the one in force
+                graphics_pending_ = next;
+                apply_graphics(next);
+                save_graphics();
+                break;
+            }
+            break;
+        }
+        case kRowFullscreen:
+            fullscreen_pending_ = !fullscreen_pending_;
+            save_graphics();
+            break;
+        case kRowFps:
+            show_fps_ = !show_fps_;
+            save_graphics_key("fps", show_fps_ ? "1" : "0");
+            break;
+        case kRowVolume: audio_.set_master(core::saturate(std::round(audio_.master() * 10.0f + float(step)) / 10.0f)); break;
+        default: break;
+    }
+}
+
+void App::menu_activate(int row) {
+    if (row < kRowSettings) {
+        menu_change(row, 1);
+        return;
+    }
+    const int action = row - kRowSettings + (menu_in_play_ ? 0 : 1);  // 0 resume, 1 start, 2 quit
+    if (action == 0) {
+        save_player_settings();
+        close_menu();
+    } else if (action == 1) {
+        start_mode(menu_mode_);
+    } else {
+        save_player_settings();
+        running_ = false;
+    }
+}
+
+void App::update_menu() {
+    const bool pad = input_.has_gamepad();
+    const SDL_GamepadButton buttons[6] = {SDL_GAMEPAD_BUTTON_DPAD_UP,    SDL_GAMEPAD_BUTTON_DPAD_DOWN,
+                                          SDL_GAMEPAD_BUTTON_DPAD_LEFT,  SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
+                                          SDL_GAMEPAD_BUTTON_SOUTH,      SDL_GAMEPAD_BUTTON_EAST};
+    bool tapped[6] = {};
+    for (int b = 0; b < 6; ++b) {
+        const bool down = pad && input_.gamepad_button(buttons[b]);
+        tapped[b] = down && !menu_pad_was_[b];
+        menu_pad_was_[b] = down;
+    }
+    const int rows = menu_rows();
+    if (input_.pressed(SDL_SCANCODE_UP) || input_.pressed(SDL_SCANCODE_W) || tapped[0]) menu_row_ = (menu_row_ + rows - 1) % rows;
+    if (input_.pressed(SDL_SCANCODE_DOWN) || input_.pressed(SDL_SCANCODE_S) || tapped[1]) menu_row_ = (menu_row_ + 1) % rows;
+    if (input_.pressed(SDL_SCANCODE_LEFT) || input_.pressed(SDL_SCANCODE_A) || tapped[2]) menu_change(menu_row_, -1);
+    if (input_.pressed(SDL_SCANCODE_RIGHT) || input_.pressed(SDL_SCANCODE_D) || tapped[3]) menu_change(menu_row_, 1);
+    if (input_.pressed(SDL_SCANCODE_RETURN) || input_.pressed(SDL_SCANCODE_SPACE) || tapped[4]) {
+        // Enter on a setting starts the game: the settings change with left and right.
+        if (menu_row_ < kRowSettings) menu_activate(kRowSettings + (menu_in_play_ ? 1 : 0));
+        else menu_activate(menu_row_);
+        return;
+    }
+    if (input_.pressed(SDL_SCANCODE_ESCAPE) || tapped[5]) {
+        if (menu_in_play_) {
+            save_player_settings();
+            close_menu();
+        } else {
+            running_ = false;
+        }
+    }
+}
+
+void App::draw_menu() {
+    const ui::Tokens& tk = hud_.tokens();
+    ImDrawList* draw = hud_.draw();
+    const float width = hud_.width();
+    const float height = hud_.height();
+    auto px = [this](float units) { return hud_.px(units); };
+
+    // The left of the frame darkens for the text; the dragon keeps the right.
+    const float shade_w = core::minf(width * 0.62f, px(820.0f));
+    draw->AddRectFilledMultiColor(ImVec2(0.0f, 0.0f), ImVec2(shade_w, height), IM_COL32(8, 9, 12, 225),
+                                  IM_COL32(8, 9, 12, 0), IM_COL32(8, 9, 12, 0), IM_COL32(8, 9, 12, 225));
+    if (menu_in_play_) draw->AddRectFilled(ImVec2(0.0f, 0.0f), ImVec2(width, height), IM_COL32(8, 9, 12, 90));
+
+    const float x = px(64.0f);
+    const float value_x = x + px(170.0f);
+    const float row_w = px(470.0f);
+    hud_.numeral(ImVec2(x, px(54.0f)), "DRAGON", tk.accent, 84.0f);
+    hud_.label(ImVec2(x + px(3.0f), px(142.0f)), menu_in_play_ ? "paused" : "fly, breathe, grow", tk.text_dim, 15.0f);
+
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+    const bool clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+    const bool moved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;
+    char text[160];
+    float y = px(196.0f);
+    int hit_row = -1, hit_step = 0;
+
+    auto setting = [&](int row, const char* name, const char* value, bool arrows) {
+        const float row_h = px(40.0f);
+        const bool selected = menu_row_ == row;
+        const bool hover = mouse.x >= x - px(12.0f) && mouse.x <= x + row_w && mouse.y >= y && mouse.y < y + row_h;
+        if (hover && moved) menu_row_ = row;
+        if (selected) {
+            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(3.0f)), ImVec2(x + row_w, y + row_h - px(3.0f)),
+                                IM_COL32(255, 235, 200, 18), px(4.0f));
+            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(3.0f)), ImVec2(x - px(10.0f), y + row_h - px(3.0f)), tk.accent);
+        }
+        hud_.label(ImVec2(x, y + px(13.0f)), name, selected ? tk.text : tk.text_dim, 13.0f);
+        const float value_w = hud_.label_width(value, 19.0f);
+        if (arrows) hud_.label(ImVec2(value_x, y + px(9.0f)), "<", selected ? tk.accent : tk.text_dim, 19.0f);
+        hud_.label(ImVec2(value_x + px(24.0f), y + px(9.0f)), value, selected ? tk.accent : tk.text, 19.0f);
+        if (arrows) hud_.label(ImVec2(value_x + px(36.0f) + value_w, y + px(9.0f)), ">", selected ? tk.accent : tk.text_dim, 19.0f);
+        if (hover && clicked) {
+            hit_row = row;
+            // The left arrow steps back; anywhere else on the row steps on.
+            hit_step = mouse.x < value_x + px(20.0f) && mouse.x > value_x - px(10.0f) ? -1 : 1;
+        }
+        y += row_h;
+    };
+
+    setting(kRowMode, "MODE", kModeNames[menu_mode_], true);
+    hud_.label(ImVec2(value_x + px(24.0f), y - px(4.0f)), kModeText[menu_mode_], tk.text_dim, 12.0f);
+    y += px(26.0f);
+    {
+        const LoadedModel& model = player_model();
+        if (model.breath_file) {
+            std::snprintf(text, sizeof(text), "%s  ·  %s", dragon_name(model.path).c_str(), game::element_name(model.breath.element));
+        } else {
+            std::snprintf(text, sizeof(text), "%s", dragon_name(model.path).c_str());
+        }
+        setting(kRowDragon, "DRAGON", text, models_.size() > 1);
+    }
+    setting(kRowDesigns, "DESIGNS", new_designs_ ? "New" : "First", true);
+    {
+        const int preset = graphics_.preset_level(tier_.tier, device_limits_);
+        setting(kRowGraphics, "GRAPHICS", preset >= 0 ? gfx::preset_name(preset) : "custom", true);
+    }
+    setting(kRowFullscreen, "FULLSCREEN",
+            fullscreen_pending_ == fullscreen_ ? (fullscreen_ ? "On" : "Off") : (fullscreen_pending_ ? "On, after a restart" : "Off, after a restart"),
+            true);
+    setting(kRowFps, "FRAME RATE", show_fps_ ? "Shown" : "Hidden", true);
+    std::snprintf(text, sizeof(text), "%d", int(std::lround(audio_.master() * 10.0f)));
+    setting(kRowVolume, "VOLUME", text, true);
+
+    // The actions.
+    y += px(18.0f);
+    auto action = [&](int row, const char* name, bool primary) {
+        const float row_h = px(46.0f);
+        const bool selected = menu_row_ == row;
+        const float w = px(260.0f);
+        const bool hover = mouse.x >= x - px(12.0f) && mouse.x <= x + w && mouse.y >= y && mouse.y < y + row_h;
+        if (hover && moved) menu_row_ = row;
+        const ImVec2 a(x - px(14.0f), y + px(3.0f)), b(x + w, y + row_h - px(3.0f));
+        if (selected) {
+            draw->AddRectFilled(a, b, primary ? tk.accent : IM_COL32(255, 235, 200, 40), px(4.0f));
+        } else {
+            draw->AddRect(a, b, tk.plate_edge, px(4.0f), 0, px(1.0f));
+        }
+        hud_.numeral(ImVec2(x, y + px(8.0f)), name, selected ? (primary ? IM_COL32(18, 20, 24, 255) : tk.text) : tk.text, 26.0f);
+        if (hover && clicked) hit_row = row, hit_step = 0;
+        y += row_h;
+    };
+    int row = kRowSettings;
+    if (menu_in_play_) action(row++, "RESUME", true);
+    std::snprintf(text, sizeof(text), "%s %s", play_mode_ == menu_mode_ && menu_in_play_ ? "RESTART" : "START", kModeNames[menu_mode_]);
+    action(row++, text, !menu_in_play_);
+    action(row++, "QUIT", false);
+
+    hud_.label(ImVec2(x, height - px(58.0f)),
+               "W S or arrows: move    A D: change    Enter: start    Esc: back    ` panels    F2 feedback", tk.text_dim, 11.0f);
+
+    if (hit_row >= 0) {
+        menu_row_ = hit_row;
+        if (hit_row < kRowSettings) menu_change(hit_row, hit_step);
+        else menu_activate(hit_row);
+    }
 }
 
 // ---- the wilds (game/wilds.h; docs/DIRECTION.md, "The wilds") ----
@@ -8790,6 +9272,9 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
         jet.size_end *= look.width;
         jet.spread *= look.width;
         jet.buoyancy += look.buoyancy;
+        // A breath of pieces is as straight as its pieces: a jet that
+        // sinks under a straight stream is two breaths.
+        if (look.pieces) jet.buoyancy *= core::saturate(breath_matter_.tuning.arc);
         // Storm is arcs, twenty-eight a second, and the volume only
         // their glow.
         if (player_breath_.element == game::Element::Storm) {
@@ -8812,6 +9297,7 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
             breath_matter_.emit(player_breath_.element, origin + direction * breath_volume_settings_.mouth_forward,
                                 direction, carry, range, dt, aim);
         }
+        mark_trees_in_breath(dt);
         // Where the jet meets the ground, the ground burns
         // (BreathVolume::ignite): twelve points along the jet, each
         // tried against the terrain under it. Not on water.
@@ -9309,6 +9795,66 @@ void App::draw_breath_matter(rhi::Pass* pass) {
 
 // What a breath left on the ground, into the scene block for the terrain
 // (terrain.hlsl, ground_marks).
+// The trees a breath passes through. A mark was only ever made where the
+// breath met the ground, so a breath held level through the crowns, which
+// is most breaths from the air, left the trees as they were ("some trees
+// don't react to breaths"). Each tree whose trunk or crown is inside the
+// jet gets a mark at its foot, which is where the plants' shader judges a
+// plant (foliage.hlsl). Six times a second, and at most four trees a time:
+// a mark near another of its element renews that one.
+void App::mark_trees_in_breath(float dt) {
+    if (breath_marks_ <= 0.0f) return;
+    tree_mark_owed_ += dt * 6.0f;
+    if (tree_mark_owed_ < 1.0f) return;
+    tree_mark_owed_ = 0.0f;
+    constexpr int kPoints = 12;
+    core::Vec3 points[kPoints];
+    float radii[kPoints];
+    int count = 0;
+    for (int i = 1; i <= kPoints; ++i) {
+        core::Vec3 drift;
+        if (!breath_volume_.sample(float(i) / (float(kPoints) + 0.5f), breath_volume_settings_, points[count], drift,
+                                   radii[count])) {
+            break;
+        }
+        ++count;
+    }
+    if (count < 2) return;
+    const core::Vec3 middle = (points[0] + points[count - 1]) * 0.5f;
+    const float span = core::distance(points[0], points[count - 1]) * 0.5f + 14.0f;
+    static const float kCrown[gfx::TREE_KINDS] = {3.0f, 3.6f, 3.6f, 0.6f};  // spruce, pine, broadleaf, snag
+    int marked = 0;
+    // Not the same four each time: start at a different tree. A count of
+    // its own: a draw from the particles' stream here moved every spark
+    // after it (the fire golden).
+    tree_mark_start_ += 7919u;
+    const size_t start = size_t(tree_mark_start_);
+    for (int k = 0; k < gfx::TREE_KINDS && marked < 4; ++k) {
+        const auto& trees = vegetation_.trees(gfx::TreeKind(k));
+        const float height = gfx::Foliage::tree_height(gfx::TreeKind(k));
+        for (size_t n = 0; n < trees.size() && marked < 4; ++n) {
+            const game::PlantInstance& tree = trees[(n + start) % trees.size()];
+            const core::Vec3 foot{tree.position_scale.x, tree.position_scale.y, tree.position_scale.z};
+            const float dx = foot.x - middle.x;
+            const float dz = foot.z - middle.z;
+            if (dx * dx + dz * dz > span * span) continue;
+            const float scale = tree.position_scale.w;
+            const float crown = kCrown[k] * scale;
+            for (int i = 0; i < count; ++i) {
+                const float px = points[i].x - foot.x;
+                const float pz = points[i].z - foot.z;
+                const float reach = radii[i] * 0.7f + crown * 0.8f;
+                if (px * px + pz * pz > reach * reach) continue;
+                if (points[i].y < foot.y - 1.0f || points[i].y > foot.y + height * scale + radii[i] * 0.7f) continue;
+                breath_matter_.mark(player_breath_.element, foot, core::clampf(crown * 1.4f, 3.0f, 7.0f),
+                                    breath_matter_.tuning.mark_life);
+                ++marked;
+                break;
+            }
+        }
+    }
+}
+
 void App::set_ground_marks(gfx::SceneUniforms& scene) const {
     int count = 0;
     if (breath_marks_ > 0.0f && !ablated("marks")) {
@@ -9321,6 +9867,7 @@ void App::set_ground_marks(gfx::SceneUniforms& scene) const {
                 case game::Element::Tide: look = core::Vec4{0.42f, 0.46f, 0.5f, 1.0f + 0.85f * k}; break;  // wet: darker
                 case game::Element::Blight: look = core::Vec4{0.07f, 0.09f, 0.03f, 0.85f * k}; break;      // eaten black
                 case game::Element::Stone: look = core::Vec4{0.3f, 0.27f, 0.23f, 0.7f * k}; break;         // grit
+                case game::Element::Storm: look = core::Vec4{0.05f, 0.045f, 0.05f, 0.55f * k}; break;      // scorched
                 default: look = core::Vec4{0.03f, 0.028f, 0.025f, 0.8f * k}; break;                        // soot
             }
             // The element rides in the alpha, four to a step, for the
@@ -9354,11 +9901,12 @@ App::BreathLook App::look_for(game::Element element) const {
                 // And snow: white grains, which are what a blast of cold
                 // air carries and what shows against a pale sky.
                 l.cover = 0.22f, l.width = 0.75f, l.whiten = 0.4f, l.glow = 0.4f;
-                l.shards = 520.0f, l.shard_length = 0.45f, l.shard_glow = 4.0f, l.shard_width = 0.06f;
+                l.shards = 520.0f, l.shard_length = 0.28f, l.shard_glow = 4.0f, l.shard_width = 0.04f;
                 l.shard_colour = core::Vec3{0.72f, 0.92f, 1.3f};
                 // Grains, not flakes the size of a hand (the playtester:
                 // "make particles smaller").
-                l.chips = 700.0f, l.chip_size = 0.07f, l.chip_soft = 0.15f, l.chip_gravity = -4.0f;
+                // 0.07 m until 2026-11-22: "the frost/stone particles are still too large".
+                l.chips = 900.0f, l.chip_size = 0.04f, l.chip_soft = 0.15f, l.chip_gravity = -4.0f;
                 l.chip_colour = core::Vec3{0.96f, 0.98f, 1.0f};
                 l.cloud_opacity = 0.4f;
             }
@@ -9372,13 +9920,13 @@ App::BreathLook App::look_for(game::Element element) const {
                 l.shards = 700.0f, l.shard_length = 0.12f, l.shard_glow = 5.0f, l.shard_width = 0.05f;
                 l.chips *= mix, l.bits *= mix, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             } else if (styles.frost_style > 1.5f) {
-                // Ice lances (game/breath_matter.h). Behind them a thin
-                // wake of style 1's vapour and snow, and a little of the
+                // Style 1's vapour and snow, whole at mix 1, with slivers
+                // of ice in it (game/breath_matter.h) and a little of the
                 // frozen air: the ground under the jet rimes.
                 l.pieces = true;
                 l.frozen_air = mix > 0.01f;
-                l.cover *= mix, l.width = 0.6f, l.whiten = 0.4f, l.glow = 0.5f;
-                l.shards = 140.0f + l.shards * mix * 0.5f, l.shard_length = 0.35f, l.shard_glow = 4.0f;
+                l.cover *= mix, l.width = core::lerpf(0.6f, l.width, mix), l.whiten = 0.4f, l.glow = 0.5f;
+                l.shards = 140.0f + l.shards * mix * 0.5f, l.shard_glow = 4.0f;
                 l.chips *= mix, l.bits = 0.3f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
@@ -9401,7 +9949,7 @@ App::BreathLook App::look_for(game::Element element) const {
                 // water at a glance. No lit cloud where it lands: that was
                 // a ball of lime light on the grass.
                 l.pieces = true;
-                l.liquid = 0.0f, l.cover = 0.3f * mix, l.width = 0.32f, l.whiten = 0.05f, l.glow = 0.25f, l.buoyancy = 2.0f;
+                l.liquid = 0.0f, l.cover = 0.5f * mix, l.width = 0.45f, l.whiten = 0.05f, l.glow = 0.25f, l.buoyancy = 0.0f;
                 l.chips *= mix, l.bits = 0.0f, l.cloud_life = 0.0f, l.smoke = mix;
             }
             break;
@@ -9426,7 +9974,7 @@ App::BreathLook App::look_for(game::Element element) const {
                 // A stream of water as one tube and its drops; about it a
                 // fine white spray and style 1's foam flecks by `mix`.
                 l.pieces = true;
-                l.liquid = 0.0f, l.cover = 0.3f * mix, l.width = 0.4f, l.whiten = 0.9f, l.glow = 0.0f, l.buoyancy = -24.0f;
+                l.liquid = 0.0f, l.cover = 0.45f * mix, l.width = 0.45f, l.whiten = 0.9f, l.glow = 0.0f, l.buoyancy = -24.0f;
                 l.chips *= mix, l.bits = 0.0f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
@@ -9439,13 +9987,14 @@ App::BreathLook App::look_for(game::Element element) const {
             if (styles.stone_style > 0.5f) {
                 // Gravel: the dust thin, and stones in it that fall.
                 l.cover = 0.4f, l.width = 0.8f;
-                l.chips = 520.0f, l.chip_size = 0.2f, l.chip_soft = 0.0f;
+                // 0.2 m until 2026-11-22: grit, not fists.
+                l.chips = 800.0f, l.chip_size = 0.09f, l.chip_soft = 0.0f;
                 l.chip_colour = core::Vec3{0.2f, 0.17f, 0.14f};
             }
             if (styles.stone_style > 1.5f) {
-                // Boulders; behind them style 1's dust and gravel by `mix`.
+                // Style 1's dust and gravel, whole at mix 1, with cobbles in it.
                 l.pieces = true;
-                l.cover *= mix, l.width = 0.6f;
+                l.cover *= mix, l.width = core::lerpf(0.6f, l.width, mix);
                 l.chips *= mix, l.bits = 0.3f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
@@ -9511,6 +10060,34 @@ void App::emit_storm_arc(core::Vec3 from, core::Vec3 direction, float range) {
     for (int i = 0; i + 1 < kPoints; ++i) {
         // Wider with the distance, so the far end is not under a pixel.
         piece(points[i], points[i + 1], 1.0f + 2.5f * float(i) / float(kPoints), 1.0f);
+    }
+    // Where it ends: a burst of light. From behind, an arc is foreshortened
+    // to a scribble and nothing said how far it reached (report 0027,
+    // "breath range hard to see"); a flash has a size, and so a distance.
+    {
+        gfx::Particle flash;
+        flash.position = points[kPoints - 1];
+        flash.life = 0.09f;
+        flash.size_start = 2.6f;
+        flash.size_end = 4.2f;
+        flash.color_start = core_colour;
+        flash.color_end = halo;
+        flash.brightness = 3.2f;
+        particles_.spawn(flash);
+        for (int i = 0; i < 2; ++i) {
+            gfx::Particle spark;
+            spark.position = points[kPoints - 1];
+            spark.velocity = across(26.0f) + dir * 6.0f;
+            spark.acceleration = core::Vec3{0.0f, -9.0f, 0.0f};
+            spark.drag = 2.5f;
+            spark.life = 0.22f;
+            spark.size_start = 0.35f;
+            spark.size_end = 0.1f;
+            spark.color_start = core_colour;
+            spark.color_end = halo;
+            spark.brightness = 4.0f;
+            particles_.spawn(spark);
+        }
     }
     if (particle_unit() > 0.0f) {
         const int pick = 6 + int(std::fabs(particle_unit()) * 18.0f);
@@ -11221,7 +11798,7 @@ void App::render() {
             // Only the live checkpoint casts a shadow. Shadowing all of them costs
             // little but reads as clutter, and the shadow's job here is to tell you
             // where the next ring is relative to the ground.
-            if (const game::Ring* next = run_mode_ ? nullptr : rally_.next_ring()) {
+            if (const game::Ring* next = run_mode_ || play_mode_ >= 0 ? nullptr : rally_.next_ring()) {
                 gfx::ModelUniforms model;
                 model.model = core::Mat4::trs(next->position, next->orientation,
                                               core::Vec3(next->radius / RING_MESH_RADIUS));
@@ -11326,7 +11903,8 @@ void App::render() {
     // rings that instancing would be premature. Hidden in the studio, whose
     // whole point is an uncluttered look at the dragon.
     static const game::Course no_course;
-    const game::Course& course = (studio_active_ || run_mode_ || ablated("rings")) ? no_course : rally_.course();
+    const game::Course& course =
+        (studio_active_ || run_mode_ || play_mode_ >= 0 || ablated("rings")) ? no_course : rally_.course();
     for (size_t i = 0; i < course.rings.size(); ++i) {
         const game::Ring& ring = course.rings[i];
         const int index = int(i);

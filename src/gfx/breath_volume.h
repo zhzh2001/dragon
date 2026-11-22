@@ -106,7 +106,7 @@ struct BreathVolumeSettings {
     // frozen air: its vapour, its bits and its smoke, as a share. The
     // playtester on bare pieces: "all elements can combine with style 1 a
     // bit". 0 is the pieces alone.
-    float mix = 0.35f;
+    float mix = 1.0f;
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);
