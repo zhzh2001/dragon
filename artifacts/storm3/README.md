@@ -113,3 +113,16 @@ The first tuck put the foot slightly above the hip. Lowering the hip angle by 10
 Spring stiffness is 110, tip stiffness is 0.85, damping is 0.95 and angular range is 0.6°.
 Across a complete 54-frame beat, maximum foot displacement fell from 0.455 m to 0.040 m. Total travel fell from 0.775 m to 0.169 m.
 I measured the foot joint relative to the hip and removed the trunk rotation at each frame.
+
+### 3. Wingbeat height
+
+The leading tip already reached 37.8° above level and 31.2° below. The innermost hook stayed at least 5.7° below the shoulder.
+I measured each angle from the shoulder to the same skin point throughout the beat.
+The new leading tip reaches 41.8° above and 29.7° below. The innermost hook now reaches 19.6° above the shoulder.
+The climb reaches 41.6° above and 36.2° below. The wing clears the hanging-leg position at the bottom.
+The cruise still reaches 12.1° farther above level than below.
+
+I set the shared wing leveling to 0.45 and the wing rest to −28°.
+The upper stroke command is 51°. The lower commands are −49° in cruise and −64° in climb.
+The powered stroke takes 48% of the cycle in both profiles. Peak force fell to 7500 to preserve the impulse.
+The stroke plane tilts 12° forward.
