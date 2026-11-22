@@ -103,3 +103,13 @@ PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --pytho
 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
   --python tools/storm3_flapcheck.py
 ```
+
+### 2. Flight legs
+
+One alternating tuck angle straightened the shin. The limb springs then let the feet swing through each reversal.
+I set `leg_flight_pose` to 1 and the hip, knee and hock to 9°, 27° and 47°. Hip splay is −12°.
+The foot now trails 2.33 m behind the hip and 0.35 m below it. The former glide put it 1.09 m below.
+The first tuck put the foot slightly above the hip. Lowering the hip angle by 10° brought the claws alongside the tail.
+Spring stiffness is 110, tip stiffness is 0.85, damping is 0.95 and angular range is 0.6°.
+Across a complete 54-frame beat, maximum foot displacement fell from 0.455 m to 0.040 m. Total travel fell from 0.775 m to 0.169 m.
+I measured the foot joint relative to the hip and removed the trunk rotation at each frame.
