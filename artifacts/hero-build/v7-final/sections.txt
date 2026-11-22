@@ -1,0 +1,37 @@
+Right wing. The first columns identify the two fingers and the distance along them as a fraction of finger length.
+Each chord runs between 2% and 98% of the distance between finger axes in the wing plan.
+The midpoint sag is the vertical distance below the straight chord, divided by its length.
+chord 2 3 0.25 width 0.603 midpoint sag % 3.28 maximum % 3.28
+chord 2 3 0.35 width 0.852 midpoint sag % 3.55 maximum % 3.57
+chord 2 3 0.45 width 1.096 midpoint sag % 3.8 maximum % 4.05
+chord 2 3 0.55 width 1.343 midpoint sag % 3.59 maximum % 3.6
+chord 2 3 0.65 width 1.578 midpoint sag % 3.66 maximum % 3.67
+chord 2 3 0.75 width 1.811 midpoint sag % 3.57 maximum % 3.59
+chord 2 3 0.85 width 2.055 midpoint sag % 3.57 maximum % 3.59
+
+The colour sample uses the embedded base JPEG and linear sRGB luminance.
+The samples cover 45% to 80% of finger length. The middle covers the central fifth of each chord.
+panel 1 2 edge/mid linear 0.021427049313298786 0.1991224698841248 relative 0.8923926098055743 midgap range 0.03399978571809249 0.034000097831568994 0.04131122570902955
+panel 2 3 edge/mid linear 0.020943659955196904 0.18097016754010686 relative 0.8842700968901113 midgap range 0.03399984543607584 0.03400001797691325 0.037819425273783125
+
+Right finger sections. Columns give the finger number, fraction along the shaft, intersection samples and thickness in metres.
+Thickness uses the vertical axis projected onto the cross-section.
+1 0.001 88 0.323
+1 0.025 76 0.309
+1 0.06 114 0.354
+1 0.88 56 0.092
+1 0.985 50 0.117
+2 0.001 72 0.308
+2 0.025 90 0.287
+2 0.06 144 0.402
+2 0.88 66 0.09
+2 0.985 56 0.108
+3 0.001 83 0.371
+3 0.025 128 0.308
+3 0.06 120 0.303
+3 0.88 56 0.13
+3 0.985 62 0.136
+
+In plan, the rim centre at the outside of the rolled edge matches the 5c midline within 0.001 mm away from the elbow.
+This sample starts 1.35 m from the centreline and excludes edges within 1.35 m of the elbow.
+Including the elbow sleeve, the largest plan deviation is 33.12 mm.

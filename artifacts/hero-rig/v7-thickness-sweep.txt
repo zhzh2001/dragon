@@ -1,0 +1,24 @@
+Counts are intersecting upper and lower triangle pairs before shader displacement.
+Columns give shell, pose, frame and intersection count. Pose 0 is beat, 1 is dive and 2 is ground.
+Full uses the delivered gap. Minimum scales that gap to 72%. The other trials use uniform 19.8 mm and 1 mm gaps.
+
+full 0 222 intersections 18
+full 0 250 intersections 1425
+full 1 131 intersections 1307
+full 1 300 intersections 54
+full 2 300 intersections 1966
+minimum 0 222 intersections 18
+minimum 0 250 intersections 1465
+minimum 1 131 intersections 1484
+minimum 1 300 intersections 54
+minimum 2 300 intersections 2140
+v5c 0 222 intersections 18
+v5c 0 250 intersections 1577
+v5c 1 131 intersections 1761
+v5c 1 300 intersections 54
+v5c 2 300 intersections 2496
+one-mm 0 222 intersections 64
+one-mm 0 250 intersections 1642
+one-mm 1 131 intersections 1903
+one-mm 1 300 intersections 116
+one-mm 2 300 intersections 2753

@@ -1,0 +1,13 @@
+Peak crossed vertex counts in the beat, dive and ground poses.
+The diagnostic tests sampled frames 1 through 296 in steps of five, plus frames 222, 230, 250 and 300.
+Each trial used a temporary profile copy.
+
+current 263 882 762
+upstroke 15 245 882 762
+recovery droop 8 232 882 762
+dive converge 35 263 149 668
+dive converge 15 263 138 668
+ground fan 15 263 882 766
+ground sweep 68 263 882 746
+ground sweep 48 263 882 736
+ground fan 20 sweep 68 263 882 742

@@ -9,6 +9,71 @@ Git ignores the file. It stays in `assets/` of this worktree for the main sessio
 A first worker fitted a rig to mesh version 1 and stopped with 7 of 54 checks failing.
 This record describes the second rig. "What was wrong with the first rig" lists what changed and why.
 
+## Mesh version 7 (2026-11-22)
+
+The 5c rebuild passed 74 of 74 rig checks, including the original 56.
+Version 7 passes those same 74 checks. The three new checks fail during the beat, dive fold and ground fold.
+Both worktree profiles keep their original values.
+
+### Weights and fold
+
+Version 5c found opposite-face partners by distance within 12–30 mm.
+Version 7 writes a shared location number in `_SHEET_ID`.
+The two faces use `_SHEET_LEVEL` values +1 and −1. Five intermediate values follow the rounded edge.
+The solver gives each location one set of joint weights across both faces and its edge vertices.
+The exported shell has 4,942 paired locations. The skeleton keeps all 77 joint names and bind positions.
+
+The existing test bends the elbow and wrist 80°. The longest edge reaches 1.3966 times its rest length on both wings.
+The limit remains 1.6. Neither wing introduces an arm or body intersection during that fold.
+The flank seam measures 0.000 mm in the rest pose and the test fold.
+
+The engine reports the following bone mapping.
+
+```text
+mapped rig: neck 3, tail 8, wing root 3/3, fingers 3/3, legs 3/3, front legs 3/3, feet 4, jaw jaw
+```
+
+### Opposing faces in motion
+
+The verifier replays each pose for 300 frames at 60 frames per second, using the engine’s joint transforms.
+It measures each upper vertex against the oriented lower surface at the matching location.
+It also tests upper and lower triangles for intersection. It records the first intersecting frame and counts opposing triangle pairs there.
+The test runs before the shader adds its panel bow. The rest mesh has zero opposing triangle intersections.
+
+| Pose | Most upper vertices across in one frame | Worst signed gap | Opposing triangle pairs at frame 1 |
+|---|---:|---:|---:|
+| Beat | 267 | −75.44 mm | 1,132 |
+| Dive fold | 885 | −76.33 mm | 1,351 |
+| Ground fold | 762 | −79.14 mm | 1,360 |
+
+```text
+VERIFICATION 74 passed; 3 failed
+FAILED: 3 verification gates. Output and renders were preserved.
+```
+
+A separate test held the centre surface and weights fixed while reducing the distance between faces.
+At 1 mm, the beat still had 1,642 intersecting pairs at frame 250. The dive had 1,903 at frame 131.
+The ground fold had 2,753 at frame 300. The animated centre surface folds across itself.
+The delivered shell retains the reduced elbow thickness that passed the original fold.
+
+Diagnostic profile copies tested the controls without changing the asset profiles.
+Sampling every fifth frame gave 263 crossed vertices in the beat, 882 in the dive and 762 on the ground.
+Changing `recovery_droop_deg` from 20 to 8 reduced the sampled beat count to 232.
+Changing `tuck_converge_deg` from 60 to 15 reduced the sampled dive count to 138.
+Changing `ground_wing_hand_sweep_deg` from 88 to 48 reduced the sampled ground count to 736.
+Each control reduced crossings. All three poses still need work.
+
+The pose probe uses the engine's rig and studio state. Its saved joint matrices include hashes of both worktree profiles.
+If either profile changes, capture new poses before running the separation check.
+Link the probe with the existing engine animation and studio objects. Run it from the worktree.
+
+```sh
+build-hero-cache/v7-pose-probe assets/embercrest-hero.glb build-hero-cache/v7-poses.bin
+python3 artifacts/hero-rig/v7-pack-poses.py build-hero-cache/v7-poses.bin assets/embercrest-hero.glb artifacts/hero-rig/v7-studio-palettes.npz
+```
+
+[Full verifier output](../artifacts/hero-rig/v7-final/verification.txt) · [Thickness sweep](../artifacts/hero-rig/v7-thickness-sweep.txt) · [Profile trials](../artifacts/hero-rig/v7-final/profile-trials.txt) · [Pose probe](../artifacts/hero-rig/v7-pose-probe.cpp)
+
 ## Mesh version 5c (2026-11-15)
 
 The mesh now has one curved thumb claw per wrist. All three finger claws remain and measure less than 0.35 m.

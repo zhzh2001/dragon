@@ -6,6 +6,95 @@ The result is one unrigged dragon in six meshes and five materials. This file
 records what the script does, the numbers, the decisions, the weak points, and
 what the rigging step needs.
 
+## Version 7: wings with thickness (2026-11-22)
+
+Version 7 keeps the 5c wing plan and replaces its 19.8 mm membrane with a tapered shell.
+The material reads heavier in chase. The three new rig checks still find opposing faces crossing during animation.
+The worktree contains both GLBs and the regenerated thickness PNG.
+
+| Measurement on the exported mesh | Version 5c | Version 7 |
+|---|---:|---:|
+| Face separation within 150 mm of a spar or the flank | 19.8 mm | 62–82 mm |
+| Face separation in the open panel interior | 19.8 mm | 34 mm |
+| Trailing edge | Straight 19.8 mm wall | 78 mm across, six rounded segments |
+| Mean panel normal-map tilt | 6.16° | 17.60° |
+| Membrane triangles | 7,912 | 22,640 |
+| Hide, membrane and horn triangles | 118,859 | 133,587 |
+| Wingspan | 18.992 m | 18.992 m |
+
+The thickness check measures 1,538 locations near a spar or the flank and 466 in the open interior.
+The interior sample starts 500 mm from a support and 250 mm from the edge.
+The mesh has 288 rounded edge locations across both wings.
+The largest angle between a panel corner normal and its triangle normal is 24.505°.
+
+### Shell and skin
+
+The builder keeps both texture layouts from the second wing sculpt.
+It splits edges near the bones, flank and outline. Each new upper vertex has a matching lower vertex.
+The rounded hem turns inward to meet the old outline.
+Beyond the elbow sleeve, the exposed hem follows the old edge within 0.001 mm in plan.
+The membrane rim shifts by up to 33 mm around the elbow, where the arm covers it. Both faces rise over a 175 mm fillet, a curved join to the bone.
+The forearm still shows a visible seam under direct light. The folded root also has angular corners.
+
+The builder sets the downward bow between adjacent finger shafts after smoothing the surface.
+Across seven sections between fingers 2 and 3, the midpoint sags 3.28–3.80% of its width.
+Those sections span 0.60–2.06 m and run from 25% to 85% of finger length.
+
+The builder thickens each finger at the wrist and narrows the shaft toward its claw.
+Cross-sections at 98.5% of finger length measure 117, 108 and 136 mm vertically, perpendicular to the shaft.
+The same sections at the wrist measure 323, 308 and 371 mm. The tip ratios are 0.36, 0.35 and 0.37.
+The claws keep their original contact. Some shafts remain visible above the skin.
+
+Only the finger sleeves change in the hide mesh. The body, head, legs, tail, horns and their texture bytes match the released static asset.
+The rig adjusts weights at the wing attachment.
+
+### Material
+
+The builder draws folds in metres from the elbow, wrist and finger joints. Fold spacing ranges from 23 to 46 mm.
+Smaller raised veins fork from the main veins. The builder combines this relief with the normal map from the wing sculpt.
+It measures both normal maps on the same panel texels, over 200 mm from a support, after JPEG encoding.
+Mean tilt increases by a factor of 2.86.
+
+The base map darkens and desaturates skin near the bones and darkens the veins.
+Both faces retain the orange-brown hue. The upper face is darker than the underside.
+Between fingers 2 and 3, mean upper-face linear luminance is 0.0209 beside a bone and 0.1810 in the middle.
+The bone region is 88.4% darker than the middle. The roughness channel ranges from 0.45 to 0.80 before JPEG encoding.
+The thickness PNG stores measured face separation divided by 82 mm. White marks the thickest skin.
+
+### Checks and engine views
+
+The full 5c rebuild passed 112 mesh checks and 74 rig checks before either pass.
+The old combined triangle limit was 120,000. Version 7 allows 136,000 combined and 24,000 for the membrane.
+All 118 final mesh checks pass. The rig passes all 74 existing checks and fails three new separation checks.
+The first pass used 36–88 mm and introduced three arm intersections per wing in the 80° fold.
+Thinning the elbow removed all six. The rig record gives the remaining failures and the thickness sweep.
+
+The left half of each pair shows the main checkout's 5c asset. Each half retains the original pixel scale.
+In chase, the dark shafts and shaded panels give the wing more weight. The individual veins are hard to distinguish at that distance.
+At 9 m, the lit rim has a visible band across the outer panels. Several stretches still look thin against the sky.
+The main checkout changed its flight and rig settings during the first pass. Both worktree profiles keep their original settings.
+The matched chase, under and rear-beat pairs apply the worktree settings to the old model for comparison.
+
+[Chase](../artifacts/hero-build/v7-final-chase.jpg) · [Edge](../artifacts/hero-build/v7-final-edge.jpg) · [Close](../artifacts/hero-build/v7-final-close.jpg) · [Hem](../artifacts/hero-build/v7-final-hem.jpg) · [Under](../artifacts/hero-build/v7-final-under.jpg) · [Above](../artifacts/hero-build/v7-final-above.jpg) · [Rear beat](../artifacts/hero-build/v7-final-rear-beat.jpg) · [Landed](../artifacts/hero-build/v7-final-landed.jpg) · [Landed rear](../artifacts/hero-build/v7-final-landed-rear.jpg) · [Dive](../artifacts/hero-build/v7-final-dive.jpg)
+
+[Matched chase](../artifacts/hero-build/v7-matched-chase.jpg) · [Matched under](../artifacts/hero-build/v7-matched-under.jpg) · [Matched rear beat](../artifacts/hero-build/v7-matched-rear-beat.jpg) · [Mesh checks](../artifacts/hero-build/v7-final/verification.txt) · [Panel and finger sections](../artifacts/hero-build/v7-final/sections.txt)
+
+### Rebuild
+
+Run these commands from the worktree. The reference must be the released 5c static asset.
+Its SHA-256 is `123f90e97e2c9ee9456b3c4e9d642cf552f5f716e712228af78875f2968f608e`.
+The exporter copies the original non-wing data and the sculpt maps from that reference.
+
+```sh
+mkdir -p build-hero-cache/tmp
+cp ~/src/game-claude/assets/embercrest-hero-static.glb build-hero-cache/v5c-reference.glb
+export TMPDIR="$PWD/build-hero-cache/tmp"
+export HERO_WING=v7
+export HERO_BODY="$PWD/assets/embercrest-cand-hero-body2-hunyuan.glb"
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 --python tools/build_hero.py
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 --python tools/rig_hero.py -- --no-render
+```
+
 ## Version 5c: one wrist claw and a detailed root panel (2026-11-15)
 
 The wrist carried two joined blades and a lower spur. The root panel used a plain colour fill and flat normals.
