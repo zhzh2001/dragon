@@ -60,6 +60,27 @@
     -0.484,
     -0.46
   ],
+  "flight_bind_pitch_deg": {
+    "root": -61,
+    "neck_01": -60,
+    "neck_02": -55,
+    "neck_03": -47,
+    "head": 13,
+    "tail_01": -27,
+    "tail_02": -19,
+    "tail_03": -13,
+    "tail_04": -9,
+    "tail_05": -5,
+    "tail_06": 0,
+    "thigh_l": -32,
+    "thigh_r": -32,
+    "wing_root_l": -32,
+    "wing_root_r": -32,
+    "wing_arm_l": -8,
+    "wing_arm_r": -8,
+    "wing_wrist_l": 0,
+    "wing_wrist_r": 0
+  },
   "bones": [
     ["root", [0, 0.1, 0.212], [0, 0.144, 0.272], null],
     ["chest", [0, 0.144, 0.272], [0, 0.183, 0.339], "root"],

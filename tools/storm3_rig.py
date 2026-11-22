@@ -1,4 +1,7 @@
-"""Fit Storm3's measured wyvern skeleton and bind the tail rudder."""
+"""Fit Storm3's standing skeleton before grading and material repair.
+
+After material repair, bake both standing GLBs with storm3_flight_bind.py.
+"""
 from pathlib import Path
 import sys
 

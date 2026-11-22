@@ -80,3 +80,26 @@ Three builds, colour correction and engine inspection took about 11 minutes.
 
 The glide stood 35 degrees up: the bind keeps the sheet's raised wings. `wing_rest_deg -20` in the rig profile lowers the wing in flight.
 The flight profile has no stroke keys, so the beat moved down with the rest. Renders: `artifacts/elemental-round3/`. The record: `docs/MODEL_GENERATION.md`, "The third round modelled".
+
+## Second pass: postures and wingbeat
+
+### 1. Glide
+
+The standing bind pose carried the shoulders and neck upright in flight. The hip-to-shoulder line rose 71.6° at glide frame 200.
+I pitched the trunk forward 61° in Blender and carried the skin with the joints.
+The three neck segments use absolute pitch changes of −60°, −55° and −47°. The skull turns up 13° to level the muzzle.
+The tail straightens progressively toward the fluke. The new trunk rises 10.6° and the neck rises 14.0° from its base to the skull.
+The glide now meets the 15° trunk target.
+
+For a clean rebuild, complete the original rig, grade and material repair above first.
+Copy the standing raw and repaired GLBs into a separate directory before baking the flight bind.
+The script preserves the image data, UV coordinates, triangle indices and 55 joint names.
+
+```sh
+mkdir -p build-rig-cache/asset/standing
+cp assets/storm3-raw.glb assets/storm3.glb build-rig-cache/asset/standing/
+PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_flight_bind.py -- build-rig-cache/asset/standing assets
+PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_flapcheck.py
+```
