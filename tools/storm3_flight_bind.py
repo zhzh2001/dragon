@@ -17,12 +17,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(TOOLS))
 from hide.glbio import read_glb, write_glb
 from hide.meshdata import accessor, joint_names, primitive
+from storm3_web import fade as smooth, fair_inner_web
 from tide2_flapcheck import positions
-
-
-def smooth(t):
-    t = np.clip(t, 0, 1)
-    return t * t * (3 - 2 * t)
 
 
 def widen_attachment(mesh, names, wing_field):
@@ -154,6 +150,7 @@ def build(source, target):
     mesh = primitive(doc, blob)
     names = joint_names(doc)
     coords, deltas, joints, weights = sculpt(raw, mesh, names, spec)
+    fair_inner_web(mesh['POSITION'], coords, names, deltas, spec)
     normals, tangents = turn_shading(mesh, coords)
     attributes = dict(POSITION=coords, NORMAL=normals, TANGENT=tangents,
                       JOINTS_0=joints, WEIGHTS_0=weights)

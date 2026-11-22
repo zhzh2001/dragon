@@ -111,7 +111,7 @@ I set `leg_flight_pose` to 1 and the hip, knee and hock to 9°, 27° and 47°. H
 The foot now trails 2.33 m behind the hip and 0.35 m below it. The former glide put it 1.09 m below.
 The first tuck put the foot slightly above the hip. Lowering the hip angle by 10° brought the claws alongside the tail.
 Spring stiffness is 110, tip stiffness is 0.85, damping is 0.95 and angular range is 0.6°.
-Across a complete 54-frame beat, maximum foot displacement fell from 0.455 m to 0.040 m. Total travel fell from 0.775 m to 0.169 m.
+Across a complete 54-frame beat, maximum foot displacement fell from 0.455 m to 0.041 m. Total travel fell from 0.775 m to 0.183 m.
 I measured the foot joint relative to the hip and removed the trunk rotation at each frame.
 
 ### 3. Wingbeat height
@@ -126,3 +126,20 @@ I set the shared wing leveling to 0.45 and the wing rest to −28°.
 The upper stroke command is 51°. The lower commands are −49° in cruise and −64° in climb.
 The powered stroke takes 48% of the cycle in both profiles. Peak force fell to 7500 to preserve the impulse.
 The stroke plane tilts 12° forward.
+
+### 4. Membrane and recovery
+
+The inner web joined the moving wing to the fixed flank across a narrow strip.
+The first rebuild spread the wing weights across 1,155 points. Rotating the body still rolled the inner web into a tube.
+The second rebuild fitted both faces of the web between the arm and trailing edge. It moved 3,236 inner points.
+In the bind pose, the rolled edge rose 1.18 m above its endpoints before the repair. The repair removed that rise.
+At 45° of shoulder depression, the rise fell from 1.45 m to 0.34 m.
+
+I reduced recovery flex to 4° at the elbow, 10° at the wrist and 8° at the fingers.
+Recovery droop is 8°, upstroke fold is 15°, twist is 10° and phase delay is 0.035 cycles.
+The hand starts reopening at phase 0.79. The flank stays still as the hand narrows and opens.
+The wing-only check moved none of the 35,360 body vertices across 41 poses.
+
+The large fold is gone. A small notch remains beside the innermost rib, clearest in rear frame 221.
+The inner hook still travels 0.14 m across the centerline during cruise recovery. It previously crossed by 0.38 m.
+The shared finger flex controls all four ribs. An independent recovery angle for the fourth rib would let it clear the spine.
