@@ -583,8 +583,11 @@ every sliver pointed away from the chase camera and drew as a dot.
 
 Cost at 1080p, paired, the breath and the particles together
 (`DRAGON_ABLATE_ALTERNATE=breath_volume,particles`, frozen at frame 110,
-on a busy machine): frost 2.6 ms (the cloud 2.2), tide 2.0 (0.6), blight
-2.0 (4.9), stone 2.1 (2.6).
+load average 8 to 9): frost 2.34 ms (the cloud 2.30), tide 2.12 (2.26),
+blight 2.03 (2.25), stone 2.29 (2.11). No style is shown to cost more
+than its cloud. A first, unlogged run under a heavier load printed 0.6
+to 4.9 ms for the same eight. The record is in `~/src/gpu-hist`,
+`20261122-0512-mac-m5-dragon-breath-styles-cost`.
 
 Sheets: `artifacts/breath-volume/styles-chase-before-after.jpg` (the
 chase camera, the cloud on the left) and `styles-side.jpg`.

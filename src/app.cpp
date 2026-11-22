@@ -10648,11 +10648,11 @@ void App::render() {
 void App::log_telemetry() const {
     const game::FlightState& s = flight_.state();
     LOG_INFO("t=%6.2f y=%7.1f clr=%6.1f spd=%5.1f climb=%6.1f g=%4.1f aoa=%5.1f "
-             "flap=%.2f tuck=%.2f brake=%.2f %s%s%s",
+             "flap=%.2f effort=%.2f tuck=%.2f brake=%.2f %s%s%s",
              double(frame_index_) / 60.0, double(s.position.y), double(s.ground_clearance),
              double(s.airspeed), double(s.climb_rate), double(s.g_load),
              double(core::degrees(s.angle_of_attack)), double(s.flap_amplitude),
-             double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
+             double(s.flap_effort), double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
              s.stalling ? "STALL " : "", "");
     {
         const rhi::ResourceStats g = device_.rhi().stats();
