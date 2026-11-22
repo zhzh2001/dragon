@@ -16,7 +16,7 @@
     "metres": 19
   },
   "ground_offset": 2.9117422789452694,
-  "repaired_zero_tangents": 9,
+  "repaired_zero_tangents": 10,
   "source_images": [
     {
       "name": "texture_pbr_20250901",
