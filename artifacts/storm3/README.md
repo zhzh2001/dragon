@@ -156,3 +156,15 @@ On a level floor, the hind toes touch and the wrist pad sits 10 mm below them. T
 The neck rises 39° and the muzzle faces forward. The tips still flare outward and the inner membrane stays broad across the flank. The neck sits lower than the concept.
 The engine distributes ground neck pitch evenly. A separate `ground_head_pitch_deg` would allow a steeper neck with a level muzzle.
 A separate `ground_wing_tip_sweep_deg` would turn the last finger segment inward. The ground solver currently aims only segments with a child.
+
+### 6. Dive and turn
+
+The old speed sweep opened the extended wing forward during the dive release. The inner hook crossed the spine by 0.07 m at full tuck.
+I set the speed sweep to 14° aft, starting at 34 m/s. The turn uses −20° of forward sweep under load.
+A 52° dive sweep brought the web through the legs. A 44° sweep cleared the shins at full tuck but caught them during release.
+The final profile uses the original 40° sweep. The ribs converge 37° and droop 5°.
+The nearest inner tip stays 1.61 m from the centerline at full tuck and 1.10 m away during release.
+The leg intersection check found no wing vertices inside the shins at either frame. It still flagged contact at the chest attachment.
+
+At turn frame 260, the leading tip extends 5.32 m sideways from the shoulder. It previously reached 6.58 m.
+At dive frame 300, that distance fell from 5.50 m to 4.17 m. Both poses keep the tips on their own side.
