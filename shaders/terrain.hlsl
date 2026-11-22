@@ -608,6 +608,11 @@ float4 fs_main(VertexOut input) : SV_Target {
         float crown_half = scene.thermal_count.y;
         float2 crown_uv = input.world_position.xz / max(crown_half, 1.0) * 0.5 + 0.5;
         float crown = crown_shade_map.Sample(crown_shade_map_sampler, saturate(crown_uv)).r;
+        // Nothing past the map. Clamped, the edge's texels ran on over the
+        // ground outside the playable extent as stripes hundreds of metres
+        // long (playtest report 0019).
+        float2 crown_edge = min(crown_uv, 1.0 - crown_uv);
+        crown *= saturate(min(crown_edge.x, crown_edge.y) * 200.0);
         crown *= step(0.5, crown_half) * (1.0 - smoothstep(250.0, 600.0, camera_distance)) * (1.0 - rocky);
         ambient *= 1.0 - 0.7 * crown;
         // And some of the sun. A low sun reaches under a crown from the
