@@ -146,13 +146,30 @@ if not any(wing_bones.values()) or WING is None:
     print('WING_FIELD_SKIPPED',
           'no wing* bones' if not any(wing_bones.values()) else 'no wing_field in skeleton',
           flush=True)
-from frost2_wing_surface import select_wing_surface
-wing_surface = select_wing_surface(body.data, fitted((WING['span_x'][0], 0, 0)).x)
-for index in wing_surface:
+# The membrane selection excluded the crystals. The heat bind still gave them wing-root weight.
+# At |X| 0.080, the connected wing clears the crystals and forelegs on both sides.
+from tide2_shoulder import limit_wing_heat
+# Keep the sculpt's shoulder shape when leveling its raised wing for the bind pose.
+# The original heat describes that rest shape inside the socket.
+socket_heat = {}
+upper_wing = {side: {body.vertex_groups[prefix + side].index for prefix in ('wing_root_', 'wing_arm_')}
+              for side in ('l', 'r')}
+for v in body.data.vertices:
+    x, y, z = v.co
+    radius = math.sqrt(((abs(x) - .076) / .076)**2 + ((y - .122) / .067)**2 + ((z - .244) / .086)**2)
+    if radius >= 1.:
+        continue
+    side = 'l' if x < 0 else 'r'
+    heat = sum(g.weight for g in v.groups if g.group in upper_wing[side])
+    if heat:
+        socket_heat[v.index] = (side, heat, 1. - smoothstep(.45, 1., radius))
+# Spread the bend along the upper wing. A short transition pinched the web on the downstroke.
+wing_share = limit_wing_heat(body, lambda co: abs(co.x) - .080, .064)
+for index, share_at_root in wing_share.items():
     v = body.data.vertices[index]
     co=canonical(v.co)
     x,y,z=co
-    blend=(smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
+    blend=(share_at_root*smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
            *(1-smoothstep(*WING['fade_y'],y)))
     if blend==0:
         continue
@@ -282,7 +299,20 @@ bpy.context.view_layer.update()
 bpy.ops.object.select_all(action='DESELECT');body.select_set(True)
 bpy.context.view_layer.objects.active=body
 skin=next(m for m in body.modifiers if m.type=='ARMATURE')
+# Bake the missing root rotation once. The crystals keep their body weights during flight.
+socket_offset = {}
+root_rotations = {}
+for side in upper_wing:
+    root = rig.pose.bones['wing_root_' + side]
+    root_rotations[side] = root.matrix @ root.bone.matrix_local.inverted()
+for index, (side, heat, falloff) in socket_heat.items():
+    v = body.data.vertices[index]
+    current = sum(g.weight for g in v.groups if g.group in upper_wing[side])
+    if current < heat:
+        socket_offset[index] = (root_rotations[side] @ v.co - v.co) * ((heat - current) * falloff)
 bpy.ops.object.modifier_apply(modifier=skin.name)
+for index, offset in socket_offset.items():
+    body.data.vertices[index].co += offset
 body.select_set(False);rig.select_set(True);bpy.context.view_layer.objects.active=rig
 bpy.ops.object.mode_set(mode='POSE');bpy.ops.pose.armature_apply(selected=False)
 bpy.ops.object.mode_set(mode='OBJECT')

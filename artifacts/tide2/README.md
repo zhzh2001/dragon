@@ -60,3 +60,38 @@ mapped rig: neck 3, tail 8, wing root 3/3, fingers 7/7, legs 3/3, front legs 3/3
 The final front landing view shows thin strips stretching from two cheek fins toward the folded wing.
 The wing mask overlaps the outer cheek tips at their height. The third build reproduced the same joint weights.
 I stopped at the three-build limit. The cheek fins and body length still fail inspection.
+
+## Flap check
+
+The original left cheek fin traveled 1.40887 m. The left haunch traveled 0.21435 m.
+The foreleg near its fin traveled 0.11291 m. All 699 vertices on the outer left foreleg fin already had zero wing weight.
+The right cheek had the largest travel, 1.82316 m at XYZ (0.070714, 0.238905, 0.391403).
+That vertex carried 0.367 head, 0.330 right first finger, 0.173 neck and 0.130 jaw weight.
+
+The cheek and haunch crossed the membrane field's coordinate gates.
+The foreleg vertex sat below the field and still carried 6.2% wing-root weight from the automatic bind.
+At |X| 0.060, mesh edges separate the lower wing from the foreleg.
+The upper arm joins the back closer to the spine. The shoulder cut slopes inward above Z 0.205.
+The builder eases wing weight over 0.023 model units on the wing side.
+The chest takes the released weight at the shoulder. The original body bones share it elsewhere.
+
+Run the check on the final model from this worktree.
+
+```sh
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 2 --python tools/tide2_flapcheck.py
+```
+
+The check follows mesh edges from each tip to the measured shoulder rim.
+Texture coordinates identify the same rim vertices before and after the builder levels the wings.
+The check compares every pair of 41 poses from +72° to −125°.
+The other wing joints fold 30° at the top and open at the bottom.
+The engine draws Tide2 at a 12.2 m span.
+
+Before repair, 3,526 body vertices exceeded 2 cm. After the second build, all 41,305 body vertices measured 0.00000 m.
+The first build pinched the inner web. The second build transferred shoulder weight to the chest and followed the sloped attachment.
+The seven fingers and both membranes stay attached through the stroke. The wrist still forms a broad pleat on the recovery.
+All 96 joints, 80,000 triangles, texture coordinates and source maps passed comparison with the previous build.
+The engine mapped all chains without a joint warning. [Compare the six rear poses](flap-weights/before-after.jpg).
+
+Final raw SHA-256 `9330cbf735137be8c7fa0ab50a2c1b674f2fbd3d54cba56cf05dcb62bd59e469`.
+Final material SHA-256 `72c6bdbeb020303c61900d6a0b979ee3a3c51c99a76a0e248e60a2da8661f7b9`.

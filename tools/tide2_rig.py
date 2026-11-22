@@ -119,10 +119,19 @@ right_bones = {name: end for name, _, end, _ in bones if name.endswith('_r')}
 rib_count = sum(name.startswith('wing_finger_') and name.endswith('a_r') for name in right_bones)
 ribs = [(right_bones[f'wing_finger_{i}a_r'], right_bones[f'wing_finger_{i}b_r']) for i in range(1, rib_count + 1)]
 rib_angles = [math.atan2(tip[1] - hub.y, tip[0] - hub.x) for mid, tip in ribs]
-for v in body.data.vertices:
+# The coordinate gates painted the cheek and haunch. Heat also reached the foreleg.
+# Follow each connected wing from its tip and taper both weights at the shoulder.
+from tide2_shoulder import limit_wing_heat
+def shoulder_distance(co):
+    # The upper arm joins the back closer to the spine than the lower web.
+    return abs(co.x) - .060 + .30 * max(0., min(.060, co.z - .205))
+
+wing_share = limit_wing_heat(body, shoulder_distance, .023)
+for index, share_at_root in wing_share.items():
+    v = body.data.vertices[index]
     co=canonical(v.co)
     x,y,z=co
-    blend=(smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
+    blend=(share_at_root*smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
            *(1-smoothstep(*WING['fade_y'],y)))
     if blend==0:
         continue

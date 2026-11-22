@@ -67,3 +67,38 @@ mapped rig: neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3
 ```
 
 The third fold lifted the inner spur clear of the hind leg. The long outer tips still project behind the standing body.
+
+## Flap check
+
+The right shoulder crystal traveled 1.57524 m at XYZ (0.122480, 0.147126, 0.282892).
+It carried 83.37% right wing root, 7.63% neck_02, 6.52% right upper arm and 2.48% neck_01.
+The left foreleg traveled 0.13015 m. Across the body, 8,975 vertices exceeded 2 cm.
+
+The membrane field already stopped at the connected wing. The automatic bind left wing-root weight outside that surface.
+The builder now removes that weight from both sides of the body.
+At |X| 0.075, the wing still connects to the foreleg. At |X| 0.080, it separates on both sides.
+The chest supports the inner web. Wing weight increases across the first 0.064 model units of the wing.
+The builder uses the original shoulder weights once to lower the sculpted wing into its resting pose.
+The exported model uses the corrected weights during flight.
+
+Run the check on the final model from this worktree.
+
+```sh
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 2 --python tools/stone2_flapcheck.py
+```
+
+The check finds the measured shoulder rim by its texture coordinates.
+It compares every pair of 41 wing-only poses at the engine's 19 m span.
+
+After the third rebuild, all 53,102 body vertices measured 0.00000 m, including the crystals and forelegs.
+The raw and final exports kept all 74 joint transforms, 80,000 triangles and all corner texture coordinates.
+The raw export kept the three source maps byte for byte.
+
+Both membranes and all four fingers on each wing stayed attached throughout the captured stroke.
+The first build pinched the shoulder. The second restored its resting angle. The third spread the bend along the upper wing.
+A crease below each shoulder crystal remains visible on the downstroke, especially in rear frames 224 and 232.
+The third build met the body motion limit but missed the smooth shoulder target.
+The engine mapped every chain without a joint warning. [Compare the six rear poses](flap-weights/before-after.jpg).
+
+Final raw SHA-256 `6956cdf6b995a722101d31429f8f2e7a349aa4cb9137d63aa6f46fee53aa87ab`.
+Final material SHA-256 `d456a4b7a925719d4cbb0fc0d48163710ef1cfd7c254f3679e92d8a4d670c4b8`.

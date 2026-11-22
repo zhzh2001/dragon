@@ -79,6 +79,20 @@ if TEXTURED:
 mod = body.modifiers.new('Silhouette simplification', 'DECIMATE')
 mod.ratio = TARGET / len(body.data.polygons)
 bpy.ops.object.modifier_apply(modifier=mod.name)
+# The fang repair leaves 79,999 triangles after decimation. Bisect one exposed fang edge.
+# The new vertex interpolates the edge's position and texture coordinates.
+if len(body.data.polygons) == TARGET - 1:
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    edge = max((e for e in bm.edges if e.is_boundary and fang_region(e.verts[0].co)),
+               key=lambda e: e.calc_length())
+    face = edge.link_faces[0]
+    opposite = next(v for v in face.verts if v not in edge.verts[:])
+    _, midpoint = bmesh.utils.edge_split(edge, edge.verts[0], .5)
+    bmesh.utils.face_split(face, midpoint, opposite)
+    bm.to_mesh(body.data)
+    bm.free()
+assert len(body.data.polygons) == TARGET
 for p in body.data.polygons:
     p.use_smooth = True
 print('SIMPLIFIED',len(body.data.vertices),len(body.data.polygons),flush=True)
@@ -149,10 +163,18 @@ def in_plane(point):
     offset = Vector(point) - hub
     return Vector((offset.dot(span), offset.dot(forward)))
 rib_angles = [math.atan2(in_plane(tip).y, in_plane(tip).x) for mid, tip in ribs]
-for v in body.data.vertices:
+# Both haunches crossed the membrane gates. Trace the wing from its tip above the foreleg.
+# The sloped shoulder cut follows the arm down to the chest.
+from tide2_shoulder import limit_wing_heat
+def shoulder_distance(co):
+    return abs(co.x) - .070 + .50 * max(0., min(.060, co.z - .200))
+
+wing_share = limit_wing_heat(body, shoulder_distance, .024)
+for index, share_at_root in wing_share.items():
+    v = body.data.vertices[index]
     co=canonical(v.co)
     x,y,z=co
-    blend=(smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
+    blend=(share_at_root*smoothstep(*WING['span_x'],abs(x))*smoothstep(*WING['span_z'],z)
            *(1-smoothstep(*WING['fade_y'],y)))
     if blend==0:
         continue
