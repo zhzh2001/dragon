@@ -44,6 +44,7 @@
 #include "game/terrain.h"
 #include "game/thermals.h"
 #include "game/time_of_day.h"
+#include "game/wilds.h"
 #include "game/vegetation.h"
 #include "gfx/foliage.h"
 #include "gfx/debug_draw.h"
@@ -209,6 +210,13 @@ struct Options {
     // With no seed the clock picks one; --seed N fixes it.
     bool run = false;
     uint32_t seed = 0;
+    // --wilds [seed]: the wilds (game/wilds.h), the run's valleys with no
+    // end: hunger, a day and a night, levels, places to find. With no seed
+    // a window continues the saved one; a headless run neither reads nor
+    // writes the save. --wilds-set key=value,... over its state and dials
+    // (clock, belly, level, day_seconds, hunger_seconds), for a capture.
+    bool wilds = false;
+    std::string wilds_set;
     // --run-empty: the run with no rivals and no towers, so the autopilot can
     // fly the corridor to the pass -- the soak for the banking path.
     bool run_empty = false;
@@ -755,6 +763,38 @@ private:
     void end_run();
     uint32_t fresh_seed() const;
     void update_run(float dt, const game::CombatEvents& events);
+    // ---- the wilds (game/wilds.h; docs/DIRECTION.md, "The wilds") ----
+    // The run's valleys lived in: `continue_saved` reads the save (a window
+    // only), else `seed` starts a new one.
+    void start_wilds(uint32_t seed, bool continue_saved);
+    void shape_wilds(game::HoardRunSettings& settings) const;
+    void save_wilds();
+    // A fall is not the end there: before the run sees the death.
+    void wilds_fall(game::CombatEvents& events);
+    void update_wilds(float dt);
+    void wilds_sleep();
+    void wilds_note(const char* text, const char* under);
+    void wilds_gained(const game::WildsEvents& events);
+    void apply_wilds_sun();
+    void draw_wilds_hud();
+    void wilds_controls();
+    // The growth stage in play: the run's, or the wilds' from its level.
+    game::GrowthStage player_stage() const;
+    bool wilds_mode_ = false;
+    bool wilds_starting_ = false;
+    game::Wilds wilds_;
+    float wilds_flash_ = 0.0f;
+    std::string wilds_text_, wilds_under_;
+    // What the hour does to the tuned sunlight: the twilight's dip and the
+    // moon's colour.
+    float wilds_tint_[3] = {1.0f, 1.0f, 1.0f};
+    float wilds_sun_before_[2] = {19.0f, 235.0f};
+    int wilds_stage_ = 0;
+    bool wilds_grew_ = false;
+    bool wilds_sleep_requested_ = false;
+    bool wilds_night_hunters_ = true;
+    float wilds_find_range_ = 70.0f;    // metres past a landmark's own radius
+    float wilds_sleep_clear_ = 250.0f;  // no enemy nearer than this, to sleep
     // A rival at its post in the layout, or (rival_index -1, hunter) a hunter
     // loosed behind the player.
     void spawn_rival(int rival_index, bool hunter);

@@ -129,14 +129,14 @@ struct MatterTuning {
     // harder to aim").
     float aim_share = 0.5f;
     // All.
-    float mark_life = 22.0f;       // seconds a mark stays on the ground
+    float mark_life = 40.0f;       // seconds a mark stays on the ground
     float mark_size = 1.0f;        // over each element's own radius
     int max_pieces = 420;
 };
 
 class BreathMatter {
 public:
-    static constexpr int kMaxMarks = 16;
+    static constexpr int kMaxMarks = 24;
 
     MatterTuning tuning;
 

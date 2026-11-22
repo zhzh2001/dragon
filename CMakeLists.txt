@@ -93,6 +93,7 @@ target_sources(dragon PRIVATE
   src/gfx/clouds.cpp
   src/gfx/breath_volume.cpp
   src/game/breath_matter.cpp
+  src/game/wilds.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp
@@ -555,6 +556,14 @@ add_executable(test_breath_matter
 target_include_directories(test_breath_matter PRIVATE src)
 target_compile_options(test_breath_matter PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME breath_matter COMMAND test_breath_matter)
+
+add_executable(test_wilds
+  tests/test_wilds.cpp
+  src/game/wilds.cpp
+)
+target_include_directories(test_wilds PRIVATE src)
+target_compile_options(test_wilds PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME wilds COMMAND test_wilds)
 
 add_executable(test_time_of_day
   tests/test_time_of_day.cpp

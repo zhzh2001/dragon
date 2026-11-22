@@ -47,6 +47,20 @@ same hour: static, wings raised, not rigged
 discussion has its first half written (`docs/DIRECTION.md`, "Loop shapes
 for the mechanics discussion") and waits for the user's answers.
 
+The sixth round (2026-11-22, 13:00). The breaths of matter are aimed (the
+throw is solved for the aimed point, with a landing ring on the HUD),
+deal their damage by the piece, are heard, carry a share of the cloud
+with them, and mark the plants and rocks they land among; the acid no
+longer looks like the water. Studio 14 is a breath range for all of it
+(`docs/showcase/EFFECTS.md`, "The pieces mixed, aimed, heard";
+`docs/showcase/PLAYTEST.md`, "The sixth round"). Codex rigged the five
+second-round dragons: all stand, fold and fly, none is named or in the
+roster, and their wings are short (`docs/MODEL_GENERATION.md`, "The five
+rigged"). The wilds is a first version of a survival mode on the run's
+valleys: hunger, a day and a night, levels, places to find, sleep to
+save (`docs/DIRECTION.md`, "The wilds"). It is a frame with nothing
+hung on it yet, and what goes on it waits for the user's answers.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide
@@ -55,7 +69,7 @@ and stone are shaded as matter and not as flame
 frame at 1080p is 20 to 28 ms on a busy machine and its cause is not
 found (`docs/showcase/WORLD.md`, "The run's frame at 1080p"): measure it
 on a quiet machine against the build of 2026-11-14 first.
- The 27 suites pass and the
+ The 28 suites pass and the
 Metal goldens match on `main`. The session of 2026-11-20 put the Tripo
 models of 2026-11-16 into the game and changed the fire.
 

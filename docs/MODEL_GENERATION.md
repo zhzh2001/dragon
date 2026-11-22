@@ -2064,3 +2064,63 @@ Two traps met on the way, now in `tools/hunyuan_oneshot.md`:
 Not done: nothing is decimated, rigged or in the roster. The next step
 for each is the hero's: a wing part from Hunyuan, a staged build and a
 rig by a Codex job each, about 800,000 tokens a creature.
+
+## The five rigged (2026-11-22, 13:00)
+
+The user, 11:55: "feel free to use codex to rig new models and other 3d
+intensive jobs." Two Codex jobs ran side by side, each in its own
+worktree, from one brief (`tools/showcase/elemental-rig-brief.md`):
+gpt-6.2-astra at high effort, the measured-skeleton route Frostvein
+took, one Blender process a job, thirteen engine views a creature
+looked at before a commit. Both finished in about 35 minutes.
+
+| Job | Creatures | Tokens |
+|---|---|---|
+| a | `frost2`, `stone2`, `storm2` | 459,647 |
+| b | `tide2`, `blight2` | 458,984 |
+
+The cost is by the job and not by the creature: two creatures cost what
+three did. A third job of one creature would be the dearest way to rig
+it.
+
+What came back, each at 80,000 triangles with its own
+`tools/skeletons/<name>.json`, its rig, flight and breath profiles, and
+`artifacts/<name>/README.md` on how it was measured:
+
+| Name | Body against the hero's 14.2 m | Load line | Weak point |
+|---|---|---|---|
+| `frost2` | 92% | fingers 3/3 | A small angular highlight on the inner wing |
+| `stone2` | 91% | fingers 4/4 | The wings are bare spars with little membrane: the sheet's obsidian wing came out as rods. The outer tips stand behind the body when folded |
+| `storm2` | 94% | fingers 4/4 | The near wing hook covers part of the muzzle in the side glide |
+| `tide2` | 145%, then 93% (below) | fingers 7/7 | Two cheek-fin tips stretch toward the folded wings. Three attempts used |
+| `blight2` | 95% | fingers 4/4 | The front fangs were fused and are cut apart: their tips are blunt close up |
+
+Every chain maps and no joint warns. All five stand, fold their wings,
+fly, dive and open their jaws. The sheets, six creatures landed and in
+the glide with the hero first:
+`artifacts/elemental-round2/five-rigged-landed.jpg` and
+`five-rigged-glide.jpg`.
+
+### Tide2's size, and `model_span_m`
+
+The engine sizes a model by its wingspan: the bind pose's width becomes
+the flight model's 19 m. Tide2's wings are short for its body, so at 19 m
+its body was 20.6 m against the hero's 14.2. A rig profile can now say
+its own span: `model_span_m 12.2` in `tide2.glb.rig.cfg` draws it at a
+12.2 m span and a 13.3 m body, and its `ground_offset` went from 4.61 to
+2.96 with it. The flight model still assumes 19 m of wing: the key
+changes what is drawn, not how it flies.
+
+### What they are not yet
+
+- The wingspans are short. The brief's second pass (widen the wing to
+  1.6 of the body before binding) was not done. Job a found that at
+  the engine's fixed 19 m span a 1.6 ratio puts the body at 84% of the
+  hero's, under the brief's floor of 85%. Job b used its attempts on
+  tide2. With `model_span_m` the body's size no longer depends on the
+  span, so the pass is open again.
+- They have the old species' breath profiles with the element set. None
+  has a name.
+- They are not in the default roster. `--model assets/frost2.glb`, or
+  `--models` with several, loads them. The models are local and not
+  committed, like every generated mesh (`ATTRIBUTION.md`).

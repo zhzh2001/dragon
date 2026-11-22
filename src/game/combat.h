@@ -502,6 +502,9 @@ public:
     // Health back, capped at the maximum (a kill's reward in a run, and the
     // top-up when growth raises the maximum).
     void heal(float amount);
+    // Hunger's damage (game/wilds.h): no element, no flash, no knock, and
+    // never below `floor`.
+    void starve(float amount, float floor);
 
     // ---- player state ----
     float health() const { return health_; }

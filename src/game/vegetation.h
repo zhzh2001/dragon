@@ -189,6 +189,13 @@ public:
         float x, z, r;
     };
     const std::vector<Clearing>& clearings() const { return clearings_; }
+    // The landmarks that stand (x, z, the piece's radius, which piece of
+    // the kit): what the wilds counts as places to find.
+    struct Landmark {
+        float x, z, r;
+        int piece;
+    };
+    const std::vector<Landmark>& landmarks() const { return landmarks_; }
     // Legacy rocks and kit pieces together.
     size_t rock_count() const;
     // How far the kit's placement had to sink pieces past their planned
@@ -211,6 +218,7 @@ private:
     std::vector<gfx::RockInstance> kit_rocks_[gfx::ROCK_PIECES];
     float kit_extra_sink_ = 0.0f;
     std::vector<Clearing> clearings_;
+    std::vector<Landmark> landmarks_;
     void place_rocks(const Terrain& terrain, const VegetationSettings& settings);
     void place_kit(const Terrain& terrain, const VegetationSettings& settings);
     core::Noise forest_{7};

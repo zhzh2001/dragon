@@ -68,6 +68,7 @@ void Vegetation::place_rocks(const Terrain& terrain, const VegetationSettings& s
     for (auto& list : kit_rocks_) list.clear();
     kit_extra_sink_ = 0.0f;
     clearings_.clear();
+    landmarks_.clear();
     if (!settings.rocks) return;
     if (settings.rock_kit) {
         place_kit(terrain, settings);
@@ -582,6 +583,7 @@ void Vegetation::place_kit(const Terrain& terrain, const VegetationSettings& set
                     if (!place_upright(rule.piece, x, z, scale, yaw, 0.02f, 0.0f, shade, moss * 0.4f, id)) continue;
                     clearings_.push_back(Clearing{x, z, radius * settings.landmark_clearing});
                     landmark_sites.push_back(Foot{x, z, radius, core::Vec3::up()});
+                    landmarks_.push_back(Landmark{x, z, radius, rule.piece});
                     ++landmark_count;
                     break;
                 }

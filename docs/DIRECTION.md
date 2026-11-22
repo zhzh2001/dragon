@@ -746,3 +746,61 @@ is already worth playing.
    illusions, time)?
 5. Which beasts would the user most want to fight? The list above is a
    guess.
+
+## The wilds: a first version of the survival mode (2026-11-22, 13:00)
+
+The user, 11:55: "we need a new survival/exploration/rpg mode for new
+mechanics." This section is what was built without waiting for answers,
+and what was left out on purpose. The questions that decide the rest
+are in the session's report, and their answers belong here.
+
+### What it is
+
+`--wilds [seed]`, or the Playtest panel's "The wilds". The hoard run's
+valleys with the end taken out, and four things added. The rules are
+`game/wilds.h`, with no renderer in them and a suite of their own.
+
+| Part | Rule | Where it meets the game |
+|---|---|---|
+| Hunger | The belly empties in 7 minutes of gliding, faster flapping (x2.6) and breathing (+0.5). A grazer is two fifths of a belly. Above half, health mends 2% a second. Empty, health falls to a floor of 10% and stays there | The herds, which the run already had. The valley has two more of them |
+| The day | A day and a night are 12 minutes. The sun follows the clock. The night is a moon on the same arc: dim, blue | The hunters fly only by night, and a valley has the run's count of them. A night lived through awake is 80 experience, slept through 40 |
+| Growth | Experience from a meal (12), a kill (40), a place found (60), a night. Twenty levels, each needing 1.35 times the last | The level drives the run's growth table. Size, health, reach and the stages' abilities (the charged shot, the second breath, the ram, the fury) follow the level and not the hoard |
+| Places | A landmark flown within 70 m counts once. So does a hoard taken, and a pass crossed | The kit's ruins, arches, circles, stones and cairns, which stood in every valley and meant nothing |
+| Sleep | N, landed, from the evening on, with no enemy within 250 m. The clock goes to dawn, half the health comes back, the state is saved | `wilds.txt` in the user directory. R returns to it |
+| A fall | Not the end. The dragon wakes at the valley head at the next dawn, half fed, without its progress toward the next level | Replaces the run's "RUN LOST" |
+
+A pass leads to the next valley and there is no last one. Each valley
+deeper has the run's harder enemies.
+
+### What it does not have, on purpose
+
+Each of these is a decision the user has not made, so none is built.
+
+- A world. It is a chain of valleys, one loaded at a time, entered at
+  the head. There is no map, no way back through a pass, and nothing
+  remembered about a valley left behind.
+- A home. The dragon sleeps anywhere safe. A nest that is a place, with
+  things kept there, is the first thing "survival" usually means and is
+  not here.
+- Anything to spend. Experience buys levels on one track. There is no
+  choice in growth: no skills, no stats, no second breath chosen.
+- Followers, magic and the larger beasts. The loop shapes above
+  ("Loop shapes for the mechanics discussion") are what this mode is
+  meant to carry. It carries none of them yet.
+- A night sky. The night is the day's sky under a dim blue light, with
+  no stars and no moon's disc. With the sun under the horizon the
+  atmosphere renders wrong (orange clouds, ground lit from under), which
+  is why the night is a moon.
+- Balance. No number in it has been played.
+
+### Status breaths, not built
+
+The user, same message: "can also have low/no damage breath/magic that
+has stronger status effects like sleep/paralysis/etc. might not be a
+good idea." The doubt is fair for the fight as it is now: a rival that
+is asleep is a rival not fought, and the fight is the game's best part.
+In the wilds the same breath has uses the arena cannot give it. A beast
+put to sleep can be passed, robbed or taken alive, and a herd held still
+is a meal for a dragon too weak to chase it. So the idea belongs to this
+mode or to none. It waits for the user's answer on followers: sleep and
+paralysis are how most games let a player take a creature alive.

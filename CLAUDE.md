@@ -49,7 +49,7 @@ tools/build_shadercross.sh        # once per machine: the HLSL compiler (P1)
 cmake -S . -B build -G Ninja      # first time, or after adding files
 cmake --build build
 ./build/dragon
-ctest --test-dir build            # twenty-seven suites, plain executables, no framework
+ctest --test-dir build            # twenty-eight suites, plain executables, no framework
 ```
 
 Windows is cross-built here and only run on x99-windows (`docs/PORTING.md`,
@@ -129,6 +129,8 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--bots N` | Spawn N bot dragons instead of sentinels. |
 | `--match` | Start a deathmatch from the CLI (with `--bots N`). |
 | `--run [seed]` | The hoard run (`DIRECTION.md` row 3): one generated valley flown head to pass, rivals at posts and towers on the slopes along it, three hoard caches to land on, the pass gate, death ending it, results text. No seed picks one from the clock; the seed is printed and on the results screen so a good valley can be flown again. `--seed N` also sets it. |
+| `--wilds [seed]` | The wilds (`game/wilds.h`; `DIRECTION.md`, "The wilds"): the run's valleys with no end. Hunger that the herds feed, a day and a night (the sun follows the clock, and the night is a moon), levels that drive the run's growth, landmarks to find, hunters only by night, N to sleep on the ground and save. A window with no seed continues `wilds.txt` in the user directory; a headless run neither reads nor writes it. With `--autopilot` the demo pilot lives in it. `--telemetry` adds a `wilds:` line. |
+| `--wilds-set key=value,...` | Over the wilds' state and dials, for a capture: `clock` (0 midnight, 0.5 noon), `belly`, `level`, `day_seconds`, `hunger_seconds`. `--wilds 7 --wilds-set clock=0` is midnight. |
 | `--hunters-after S` | In a run, loose the first hunter after S seconds instead of two minutes, for a capture of one. |
 | `--walk F[,T]` | Once grounded, walk at F (-1..1) turning at T: with `--input -0.25,0,0,0,0,0` it lands and then walks, the in-game check of the stride. |
 | `--skim` | Spawn six metres over the river, flying along it: how the spray off the water gets onto a capture. |
@@ -192,7 +194,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | Shift | Tuck wings and dive |
 | Ctrl | Flare and brake |
 | W/S, A/D on the ground | Walk forward and back, turn in place (the gamepad stick pushed away is forward). Space leaps back into the air |
-| R | Restart the run (in a hoard run: the same valley again, from the head) |
+| R | Restart the run (in a hoard run: the same valley again, from the head; in the wilds: back to the last sleep) |
 | Right-drag / right stick | Free look -- orbit the view without steering. Stick Y is inverted by default |
 | M | Cycle the player onto the next model in the roster (`--models`). The studio scenario keeps playing, so this is how two species are compared under one manoeuvre |
 | V | First person, from just above and behind the animated head. The eye is composed from the head's measured mesh so every species frames like `dragon.glb` (horn tips at the bottom of the frame); the two composition dials are in the Camera panel, and a species can nudge the result from its rig profile |
@@ -210,6 +212,7 @@ animation scenarios and picks which creature is on the stand. Every panel except
 | U | Swap to the second breath and back (adult on; in the arena it walks all six elements) -- gamepad Y |
 | H | Release the fury when its pip is full (ancient on) -- gamepad left-stick click |
 | Enter | Rematch from the arena results; in a hoard run that has ended, a new valley |
+| N | In the wilds: sleep. Landed, from the evening on, with no enemy within 250 m. The night passes and the state is saved |
 | P | Hands-off: the demo pilot takes (or gives back) the controls; the HUD says what it is doing |
 | Esc | Release the mouse if captured; again to quit |
 
@@ -445,6 +448,8 @@ flight controls.
   | rig five quadrupeds from static meshes, three clips each, gpt-6.2-astra high, 2026-11-20 | 418,469 |
   | rebuild the hero's wings broader, refit the rig, nine engine pairs, gpt-6.2-astra high, 2026-11-21 | 371,261 |
   | give the hero's wings a thick shell, a hem, relief and value maps, refit the rig, ten engine pairs, gpt-6.2-astra high, 2026-11-22 | 550,683 |
+  | rig three one-shot dragons by their own measured skeletons, thirteen engine views each, gpt-6.2-astra high, 2026-11-22 | 459,647 |
+  | rig two more the same way, in a second job beside it, 2026-11-22 | 458,984 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**
@@ -564,15 +569,15 @@ src/anim/    skeleton, GPU skinning, glTF loader, procedural dragon rig
 src/game/    flight model, chase + debug cameras, terrain, vegetation,
              course/rally, autopilot, combat, breath profiles, a breath of matter
              as pieces and the marks it leaves, elements and status effects, bots, match loop, the hoard run, prey herds, the
-             demo pilot, studio
+             demo pilot, the wilds (hunger, levels, the day), studio
 src/audio/   synthesized audio -- every sound generated at startup
 src/editor/  ImGui integration: context, the two HUD faces, the panel theme
 src/ui/      the HUD kit -- tokens, primitives, text -- every readout draws through it
 src/scene/   (empty) entity storage, transform hierarchy
 src/phys/    (empty) Jolt integration, deferred until something needs it
 shaders/     HLSL, hot-reloaded from the source tree
-tests/       twenty-seven suites: feedback, math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
-             combat, bot, match, vegetation, breath, breath_matter, thermals, time_of_day
+tests/       twenty-eight suites: feedback, math, camera, camera_rig, flight, rally, anim, skin_partition, skin_lod, model_pack, graphics_settings, noise_lattice, texture_budget, hoard_run, demo_pilot, element, prey, erosion, dynamic_resolution,
+             combat, bot, match, vegetation, breath, breath_matter, thermals, time_of_day, wilds
 docs/        the detail -- see the table above
 ```
 

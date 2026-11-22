@@ -296,6 +296,12 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--run") {
             options.run = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--wilds") {
+            options.run = true;
+            options.wilds = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') options.seed = uint32_t(SDL_atoi(argv[++i]));
+        } else if (arg == "--wilds-set" && i + 1 < argc) {
+            options.wilds_set = argv[++i];  // key=value,... (game/wilds.h)
         } else if (arg == "--skim") {
             options.skim = true;
         } else if (arg == "--hunters-after" && i + 1 < argc) {
@@ -852,7 +858,11 @@ bool App::init(const Options& options) {
     }
     if (options.run) {
         if (options.hunters_after > 0.0f) run_dials_.pressure_after = options.hunters_after;
-        start_run(initial_run_seed_);
+        if (options.wilds) {
+            start_wilds(initial_run_seed_, options.seed == 0);
+        } else {
+            start_run(initial_run_seed_);
+        }
         for (int v = 0; v < options.valley; ++v) {
             if (hoard_run_.skip_valley()) advance_valley();
         }
@@ -2157,7 +2167,9 @@ void App::pump_events() {
                               frame_index_ % options_.restart_every == 0;
     if (input_.pressed(SDL_SCANCODE_R) || soak_restart) {
         // In a run, R flies the same valley again from the head.
-        if (run_mode_) start_run(run_seed_);
+        // In the wilds, R wakes where the dragon last slept.
+        if (wilds_mode_) start_wilds(wilds_.state().seed, true);
+        else if (run_mode_) start_run(run_seed_);
         else respawn_dragon();
     }
     if (input_.pressed(SDL_SCANCODE_V)) chase_.first_person = !chase_.first_person;
@@ -2191,6 +2203,8 @@ void App::pump_events() {
     }
     // Hands-off: the demo pilot takes (or gives back) the controls.
     if (input_.pressed(SDL_SCANCODE_P)) set_autopilot(!autopilot_);
+    // N: sleep, in the wilds.
+    if (wilds_mode_ && input_.pressed(SDL_SCANCODE_N)) wilds_sleep_requested_ = true;
     // M cycles the roster. The point is comparing species with the scenario
     // held still, so this deliberately does not touch the studio state: the
     // manoeuvre keeps playing and only the creature under it changes.
@@ -2825,6 +2839,7 @@ void App::update(float dt) {
         match_.update(dt, events);
         if (run_mode_) {
             CORE_PROFILE("update: run + prey");
+            if (wilds_mode_) wilds_fall(events);
             update_run(dt, events);
         }
         for (const game::Impact& impact : combat_.impacts()) {
@@ -4092,6 +4107,7 @@ void App::draw_hud() {
 
     if (combat_enabled_ && !ablated("hud_combat")) draw_combat_hud();
     if (run_mode_ && !ablated("hud_run")) draw_run_hud();
+    if (wilds_mode_ && !ablated("hud_run")) draw_wilds_hud();
     if (autopilot_ && !ablated("hud_autopilot")) {
         // Hands-off, and what the pilot is doing: a demo that explains itself.
         char text[96];
@@ -4693,6 +4709,9 @@ void App::build_playtest_ui() {
     ImGui::SetNextWindowSize(ImVec2(390, 0), ImGuiCond_FirstUseEver);
     ImGui::Begin("Playtest");
     ImGui::Checkbox("show the older tuning panels", &show_tuning_panels_);
+    if (ImGui::CollapsingHeader("The wilds", wilds_mode_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
+        wilds_controls();
+    }
     if (ImGui::CollapsingHeader("Animation studio", ImGuiTreeNodeFlags_DefaultOpen)) {
         studio_controls();
     }
@@ -5455,6 +5474,14 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
     if (rig_loaded) {
         LOG_INFO("loaded model rig from %s", out.rig_tuning_path.c_str());
     }
+    // The profile's own span over the flight model's 19 m (RigTuning::model_span_m).
+    if (out.imported && out.rig_tuning.model_span_m > 0.0f) {
+        const float k = out.rig_tuning.model_span_m / 19.0f;
+        out.asset.scale *= k;
+        out.asset.offset = out.asset.offset * k;
+        LOG_INFO("%s: drawn at a %.1f m span, scale %.4f", out.path.c_str(), double(out.rig_tuning.model_span_m),
+                 double(out.asset.scale));
+    }
     game::load_tuning(out.flight_tuning, out.flight_tuning_path.c_str());
     if (!options_.flight.empty()) game::apply_tuning(out.flight_tuning, options_.flight);
     out.breath_file = game::load_breath_profile(out.breath, out.breath_path.c_str());
@@ -5935,7 +5962,9 @@ void App::build_demo_world(game::DemoWorld& world) {
         // The pressure deadline still bounds unsuccessful cache attempts.
         world.rush = world.in_run &&
                      (hoard_run_.caches_collected() >= demo_.tuning.caches_before_rush ||
-                      best < 0 || hoard_run_.elapsed() > hoard_run_.pressure_start());
+                      best < 0 ||
+                      // The wilds has no deadline: its hunters' clock is the night.
+                      (!wilds_mode_ && hoard_run_.elapsed() > hoard_run_.pressure_start()));
         if (world.rush) best = -1;
         if (best >= 0) {
             world.has_cache = true;
@@ -5986,6 +6015,13 @@ void App::start_run(uint32_t seed) {
         capture_growth_base();
     }
     run_mode_ = true;
+    // Only start_wilds starts the wilds: a run started any other way is a run.
+    if (!wilds_mode_ && wilds_starting_) {
+        wilds_sun_before_[0] = lighting_.sun_elevation_deg;
+        wilds_sun_before_[1] = lighting_.sun_azimuth_deg;
+    }
+    wilds_mode_ = wilds_starting_;
+    wilds_starting_ = false;
     combat_enabled_ = true;
     match_.abandon();
     last_kill_element_ = game::Element::None;
@@ -6019,6 +6055,7 @@ void App::start_run(uint32_t seed) {
     settings.seed = seed;
     game::TerrainSettings terrain = arena_terrain_;
     const game::ValleyKind kind = game::apply_valley_kind(seed, terrain, settings);
+    if (wilds_mode_) shape_wilds(settings);
     if (options_.run_empty) {
         settings.rivals = 0;
         settings.defences = 0;
@@ -6230,6 +6267,7 @@ void App::advance_valley() {
     game::TerrainSettings terrain = arena_terrain_;
     const game::ValleyKind kind = game::apply_valley_kind(seed, terrain, settings);
     game::apply_depth(depth, settings);
+    if (wilds_mode_) shape_wilds(settings);
     if (options_.run_empty) {
         settings.rivals = 0;
         settings.defences = 0;
@@ -6633,7 +6671,7 @@ const char* App::stage_unlock_text(game::GrowthStage stage) const {
 // the arena grants them all, so each can be tried without a run.
 void App::update_abilities() {
     const bool run = run_mode_ && hoard_run_.phase() != game::HoardPhase::Idle;
-    const int stage = run ? int(hoard_run_.stage()) : 99;
+    const int stage = run ? int(player_stage()) : 99;
     game::Abilities& a = combat_.abilities;
     a.charged_shot = stage >= 1;
     a.ram = stage >= 3;
@@ -6726,6 +6764,12 @@ void App::emit_fury(core::Vec3 centre) {
 
 void App::end_run() {
     run_mode_ = false;
+    if (wilds_mode_) {
+        save_wilds();
+        wilds_mode_ = false;
+        lighting_.sun_elevation_deg = wilds_sun_before_[0];
+        lighting_.sun_azimuth_deg = wilds_sun_before_[1];
+    }
     combat_.hostile_damage_scale = 1.0f;
     hoard_run_.abandon();
     bots_.clear();
@@ -6963,16 +7007,337 @@ void App::spawn_rival(int rival_index, bool hunter) {
     bots_.push_back(std::move(bot));
 }
 
+// ---- the wilds (game/wilds.h; docs/DIRECTION.md, "The wilds") ----
+// The first version of the mode the larger mechanics are meant to hang on.
+// It is the hoard run's valleys with the end taken out: no last valley, no
+// results screen, hunters only by night. What it adds is in game::Wilds
+// (hunger, levels, the day, places found), and this is where each of those
+// meets the game: the belly is fed by the herds, the level drives the run's
+// growth table (so size, health, reach and the stages' abilities follow it),
+// the clock is the sun and at night a moon, a landmark flown close to is a
+// place found, and sleeping on the ground passes the night and saves.
+
+game::GrowthStage App::player_stage() const {
+    if (!wilds_mode_) return hoard_run_.stage();
+    return game::GrowthStage(std::min(int(wilds_.growth()), int(game::GrowthStage::Ancient)));
+}
+
+void App::shape_wilds(game::HoardRunSettings& settings) const {
+    settings.valleys = 9999;         // no last valley: a pass leads to the next
+    settings.pressure_after = 1.0f;  // the hunters' clock is the night (update_wilds), not the run's
+    settings.max_hunters = 0;
+    settings.herds += 2;             // a valley to live off
+}
+
+void App::wilds_note(const char* text, const char* under) {
+    wilds_text_ = text;
+    wilds_under_ = under;
+    wilds_flash_ = 5.0f;
+}
+
+void App::wilds_gained(const game::WildsEvents& events) {
+    if (events.levels_gained <= 0) return;
+    char text[48];
+    std::snprintf(text, sizeof(text), "LEVEL %d", wilds_.state().level);
+    wilds_note(text, "");
+    combat_.heal(0.15f * combat_.tuning.max_health);
+    audio_.play(audio::Clip::Boost, 0.7f, 1.2f);
+    LOG_INFO("wilds: level %d on day %d", wilds_.state().level, wilds_.state().day);
+}
+
+void App::save_wilds() {
+    wilds_.mutable_state().valley = hoard_run_.valley();
+    if (options_.headless) return;
+    std::ofstream file(core::paths::user("wilds.txt"));
+    if (file) file << wilds_.save();
+}
+
+void App::start_wilds(uint32_t seed, bool continue_saved) {
+    game::WildsState state;
+    bool loaded = false;
+    if (continue_saved && !options_.headless) {
+        std::ifstream file(core::paths::user("wilds.txt"));
+        if (file) {
+            std::stringstream text;
+            text << file.rdbuf();
+            const game::WildsState saved = game::Wilds::load(text.str());
+            if (saved.seed != 0) {
+                state = saved;
+                loaded = true;
+            }
+        }
+    }
+    if (!loaded) state.seed = seed != 0 ? seed : fresh_seed();
+    wilds_.reset(state);
+    wilds_starting_ = true;
+    start_run(state.seed);
+    for (int v = 0; v < state.valley; ++v) {
+        if (hoard_run_.skip_valley()) advance_valley();
+    }
+    if (!options_.wilds_set.empty()) {
+        game::WildsState& w = wilds_.mutable_state();
+        float level = float(w.level);
+        parse_dials(options_.wilds_set, {{"clock", &w.clock}, {"belly", &w.hunger}, {"level", &level},
+                                         {"day_seconds", &wilds_.tuning.day_seconds},
+                                         {"hunger_seconds", &wilds_.tuning.hunger_seconds}});
+        w.level = std::clamp(int(level), 1, wilds_.tuning.max_level);
+        w.clock = core::clampf(w.clock, 0.0f, 0.999f);
+    }
+    // The dragon as grown as its level, at once.
+    apply_growth(wilds_.growth());
+    growth_scale_ = growth_scale_target_;
+    wing_growth_ = wing_growth_target_;
+    dragon_rig_.wing_growth = wing_growth_;
+    combat_.revive();
+    wilds_stage_ = int(player_stage());
+    wilds_grew_ = false;
+    apply_wilds_sun();
+    char text[48];
+    std::snprintf(text, sizeof(text), "THE WILDS  DAY %d", wilds_.state().day);
+    wilds_note(text, "eat to live. land and sleep (N) to pass the night and save");
+    LOG_INFO("wilds: %s, seed %u, valley %d, day %d, level %d", loaded ? "continued" : "new", state.seed,
+             hoard_run_.valley() + 1, wilds_.state().day, wilds_.state().level);
+}
+
+// A fall is not the end of the wilds: the dragon wakes at the valley head
+// at the next dawn, without the progress toward its next level. Before the
+// run's update, which would end the run on the same event.
+void App::wilds_fall(game::CombatEvents& events) {
+    if (hoard_run_.phase() != game::HoardPhase::Flying) return;
+    if (!events.player_died && combat_.alive()) return;
+    events.player_died = false;
+    wilds_.fall();
+    respawn_dragon();
+    audio_.play(audio::Clip::KnockOut, 1.0f);
+    char text[48];
+    std::snprintf(text, sizeof(text), "YOU FELL  DAY %d", wilds_.state().day);
+    wilds_note(text, "the progress toward the next level is lost");
+    LOG_INFO("wilds: fell, fall %d, day %d", wilds_.state().falls, wilds_.state().day);
+    save_wilds();
+}
+
+// The sun from the clock, and by night a moon on the same arc: with the
+// sun below the horizon the sky and the clouds render wrong (the clouds
+// orange, the ground lit from under), so the night is a dim blue light
+// from above instead. The light dips through each twilight, which is also
+// what hides the light changing sides.
+void App::apply_wilds_sun() {
+    wilds_tint_[0] = wilds_tint_[1] = wilds_tint_[2] = 1.0f;
+    if (!atmosphere_.available() || options_.sun_elevation > -90.0f) return;
+    const float height = wilds_.sun_height();
+    const bool night = wilds_.night();
+    lighting_.sun_azimuth_deg = 90.0f + 180.0f * wilds_.arc();
+    lighting_.sun_elevation_deg = 4.0f + ((night ? 40.0f : 58.0f) - 4.0f) * std::fabs(height);
+    const float day = core::smoothstep(-0.12f, 0.12f, height);
+    const float dip = core::lerpf(0.45f, 1.0f, core::smoothstep(0.0f, 0.25f, std::fabs(height)));
+    const float moon[3] = {0.10f, 0.16f, 0.30f};
+    for (int c = 0; c < 3; ++c) wilds_tint_[c] = core::lerpf(moon[c], 1.0f, day) * dip;
+}
+
+void App::wilds_sleep() {
+    const game::FlightState& s = flight_.state();
+    if (!s.grounded) {
+        wilds_note("LAND TO SLEEP", "");
+        return;
+    }
+    for (const game::Sentinel& enemy : combat_.sentinels()) {
+        if (!enemy.alive || enemy.prey || enemy.passive) continue;
+        if (core::distance(enemy.position, s.position) < wilds_sleep_clear_) {
+            wilds_note("NOT SAFE HERE", "an enemy is too near to sleep");
+            return;
+        }
+    }
+    game::WildsEvents events;
+    if (!wilds_.sleep(events)) {
+        wilds_note("NOT TIRED", "the sun is high: sleep from the evening on");
+        return;
+    }
+    combat_.heal(0.5f * combat_.tuning.max_health);
+    save_wilds();
+    char text[48];
+    std::snprintf(text, sizeof(text), "DAY %d", wilds_.state().day);
+    wilds_note(text, options_.headless ? "slept" : "slept and saved");
+    wilds_gained(events);
+    LOG_INFO("wilds: slept to day %d, belly %.2f", wilds_.state().day, double(wilds_.state().hunger));
+}
+
+void App::update_wilds(float dt) {
+    wilds_flash_ = core::maxf(wilds_flash_ - dt, 0.0f);
+    if (hoard_run_.phase() != game::HoardPhase::Flying || hoard_run_.awaiting_valley()) return;
+    const game::FlightState& s = flight_.state();
+    const game::WildsEvents events = wilds_.update(dt, s.grounded ? 0.0f : s.flap_amplitude, combat_.breathing());
+
+    // The belly: fed, the dragon mends; empty, it weakens, to a floor.
+    const float full = combat_.tuning.max_health;
+    const float rate = wilds_.health_rate();
+    if (rate > 0.0f) combat_.heal(rate * full * dt);
+    if (rate < 0.0f) combat_.starve(-rate * full * dt, wilds_.tuning.starve_floor * full);
+
+    // Places: a landmark flown close to counts once, and so does a hoard taken.
+    static const char* const kLandmarkNames[5] = {"A RUINED TOWER", "A BROKEN ARCH", "A STONE CIRCLE", "A STANDING STONE",
+                                                  "A CAIRN"};
+    const auto& landmarks = vegetation_.landmarks();
+    for (size_t i = 0; i < landmarks.size(); ++i) {
+        const game::Vegetation::Landmark& place = landmarks[i];
+        const int id = hoard_run_.valley() * 1000 + int(i);
+        if (wilds_.found(id)) continue;
+        const float dx = s.position.x - place.x;
+        const float dz = s.position.z - place.z;
+        const float reach = place.r + wilds_find_range_;
+        if (dx * dx + dz * dz > reach * reach) continue;
+        if (s.position.y - terrain_.height_at(place.x, place.z) > 160.0f) continue;
+        game::WildsEvents found;
+        if (wilds_.find(id, found)) {
+            char text[64];
+            std::snprintf(text, sizeof(text), "FOUND: %s", kLandmarkNames[std::clamp(place.piece - 19, 0, 4)]);
+            wilds_note(text, "");
+            audio_.play(audio::Clip::Boost, 0.5f, 1.5f);
+            wilds_gained(found);
+        }
+    }
+    if (hoard_run_.just_collected()) {
+        game::WildsEvents found;
+        wilds_.find(hoard_run_.valley() * 1000 + 900 + hoard_run_.caches_collected(), found);
+        wilds_gained(found);
+    }
+
+    // The night's danger: the run's hunters, loosed only while it is dark.
+    hoard_run_.settings.max_hunters = wilds_night_hunters_ && wilds_.night() ? std::max(run_dials_.max_hunters, 1) : 0;
+
+    if (events.night_began) {
+        wilds_note("NIGHT FALLS", wilds_night_hunters_ ? "hunters fly by night. land and sleep (N), or fight"
+                                                       : "land and sleep (N)");
+    }
+    if (events.day_began) {
+        char text[48];
+        std::snprintf(text, sizeof(text), "DAY %d", wilds_.state().day);
+        wilds_note(text, events.night_survived ? "a night lived through" : "");
+    }
+    if (events.starving_began) wilds_note("STARVING", "eat: the herds are marked on the valley floor");
+    wilds_gained(events);
+
+    if (wilds_sleep_requested_) wilds_sleep();
+    wilds_sleep_requested_ = false;
+
+    const int stage = int(player_stage());
+    if (stage > wilds_stage_) wilds_grew_ = true;
+    wilds_stage_ = stage;
+    apply_wilds_sun();
+}
+
+void App::draw_wilds_hud() {
+    const ui::Tokens& tk = hud_.tokens();
+    const float width = hud_.width();
+    const float height = hud_.height();
+    const float margin = hud_.margin();
+    const game::WildsState& w = wilds_.state();
+    char line[96];
+
+    // The plate, top left under the run's strip: the day, the belly, the level.
+    const float plate_w = hud_.px(206.0f);
+    const float plate_h = hud_.px(92.0f);
+    const ImVec2 min(margin, margin + hud_.px(58.0f));
+    hud_.plate(min, ImVec2(min.x + plate_w, min.y + plate_h));
+    const float x = min.x + hud_.px(12.0f);
+    const float inner = plate_w - hud_.px(24.0f);
+    const bool night = wilds_.night();
+    std::snprintf(line, sizeof(line), "DAY %d", w.day);
+    hud_.numeral(ImVec2(x, min.y + hud_.px(5.0f)), line, tk.text, 22.0f);
+    const int hour = int(w.clock * 24.0f);
+    const int minute = int((w.clock * 24.0f - float(hour)) * 60.0f);
+    std::snprintf(line, sizeof(line), "%s  %02d:%02d", night ? "NIGHT" : "DAY", hour, minute);
+    hud_.label(ImVec2(min.x + plate_w - hud_.px(12.0f), min.y + hud_.px(10.0f)), line, night ? tk.text : tk.text_dim,
+               11.0f, ui::Align::Right);
+    // How much of the daylight, or of the night, is gone.
+    hud_.bar(ImVec2(x, min.y + hud_.px(31.0f)), inner, hud_.px(3.0f), wilds_.arc(), night ? tk.text_dim : tk.accent);
+
+    const float bar_x = x + hud_.px(52.0f);
+    const float bar_w = inner - hud_.px(52.0f);
+    ImU32 belly = tk.accent;
+    if (w.hunger < 0.2f) {
+        const bool blink = wilds_.starving() && std::fmod(time_seconds_, 0.6f) < 0.3f;
+        belly = blink ? tk.text : tk.danger;
+    }
+    hud_.label(ImVec2(x, min.y + hud_.px(44.0f)), "BELLY", wilds_.starving() ? tk.danger : tk.text_dim, 11.0f);
+    hud_.bar(ImVec2(bar_x, min.y + hud_.px(46.0f)), bar_w, hud_.px(9.0f), w.hunger, belly);
+    std::snprintf(line, sizeof(line), "LV %d", w.level);
+    hud_.label(ImVec2(x, min.y + hud_.px(66.0f)), line, tk.text, 11.0f);
+    hud_.bar(ImVec2(bar_x, min.y + hud_.px(68.0f)), bar_w, hud_.px(9.0f), wilds_.xp_share(), tk.text_dim);
+
+    if (wilds_flash_ > 0.0f && !wilds_text_.empty()) {
+        const float fade = core::saturate(wilds_flash_);
+        const ImU32 colour = (tk.accent & 0x00FFFFFF) | (ImU32(245.0f * fade) << 24);
+        hud_.numeral(ImVec2(width * 0.5f, height * 0.36f), wilds_text_.c_str(), colour, 36.0f, ui::Align::Centre);
+        if (!wilds_under_.empty()) {
+            hud_.label(ImVec2(width * 0.5f, height * 0.36f + hud_.px(42.0f)), wilds_under_.c_str(),
+                       (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
+        }
+    }
+}
+
+void App::wilds_controls() {
+    if (!wilds_mode_) {
+        if (ImGui::Button("continue the wilds")) start_wilds(0, true);
+        ImGui::SameLine();
+        if (ImGui::Button("a new wilds")) start_wilds(fresh_seed(), false);
+        ImGui::TextDisabled("the run's valleys with no end: hunger, a day and a night,\nlevels, places to find. N sleeps on the ground and saves.");
+    } else {
+        game::WildsState& w = wilds_.mutable_state();
+        ImGui::Text("day %d  level %d  meals %d  kills %d  finds %zu  nights %d  falls %d", w.day, w.level, w.meals,
+                    w.kills, w.finds.size(), w.nights, w.falls);
+        if (ImGui::Button("sleep (N)")) wilds_sleep_requested_ = true;
+        ImGui::SameLine();
+        if (ImGui::Button("save")) save_wilds();
+        ImGui::SameLine();
+        if (ImGui::Button("leave")) end_run();
+        ImGui::SliderFloat("the hour", &w.clock, 0.0f, 0.999f);
+        ImGui::SliderFloat("the belly", &w.hunger, 0.0f, 1.0f);
+        ImGui::SliderInt("level", &w.level, 1, wilds_.tuning.max_level);
+    }
+    game::WildsTuning& t = wilds_.tuning;
+    ImGui::SliderFloat("a day and night, seconds", &t.day_seconds, 60.0f, 3600.0f);
+    ImGui::SliderFloat("full belly to empty, seconds", &t.hunger_seconds, 60.0f, 1800.0f);
+    ImGui::SliderFloat("effort's hunger", &t.effort_hunger, 0.0f, 4.0f);
+    ImGui::SliderFloat("the breath's hunger", &t.breath_hunger, 0.0f, 4.0f);
+    ImGui::Checkbox("hunters fly by night", &wilds_night_hunters_);
+    if (ImGui::TreeNode("health, experience, places")) {
+        ImGui::SliderFloat("mends when fed above", &t.fed_above, 0.0f, 1.0f);
+        ImGui::SliderFloat("mend a second", &t.mend_per_second, 0.0f, 0.1f, "%.3f");
+        ImGui::SliderFloat("starve a second", &t.starve_per_second, 0.0f, 0.1f, "%.3f");
+        ImGui::SliderFloat("starving stops at", &t.starve_floor, 0.0f, 0.5f);
+        ImGui::SliderFloat("experience for level 2", &t.xp_first_level, 20.0f, 400.0f);
+        ImGui::SliderFloat("each level times", &t.xp_growth, 1.0f, 2.0f);
+        ImGui::SliderInt("top level", &t.max_level, 5, 40);
+        ImGui::SliderFloat("a meal", &t.xp_meal, 0.0f, 100.0f);
+        ImGui::SliderFloat("a kill", &t.xp_kill, 0.0f, 200.0f);
+        ImGui::SliderFloat("a place found", &t.xp_find, 0.0f, 200.0f);
+        ImGui::SliderFloat("a night lived through", &t.xp_night, 0.0f, 300.0f);
+        ImGui::SliderFloat("a place is found within, m", &wilds_find_range_, 20.0f, 300.0f);
+        ImGui::SliderFloat("no enemy within, m, to sleep", &wilds_sleep_clear_, 50.0f, 600.0f);
+        ImGui::TreePop();
+    }
+}
+
 void App::update_run(float dt, const game::CombatEvents& events) {
     hoard_run_.update(dt, flight_.state(), combat_.alive(), events);
     if (hoard_run_.just_crossed()) {
         // Banked at the pass; the next valley is laid out under the dragon.
         advance_valley();
+        if (wilds_mode_) {
+            // A pass crossed is a place found, and worth keeping.
+            game::WildsEvents found;
+            if (wilds_.find(100000 + hoard_run_.valley(), found)) wilds_note("A NEW VALLEY", "the pass is behind you");
+            wilds_gained(found);
+            save_wilds();
+        }
     }
     update_prey(dt, events);
+    if (wilds_mode_) update_wilds(dt);
     // Growth, continuous: the tuning follows the hoard every frame, and the
     // size eases after it -- most of it in the first second.
-    if (hoard_run_.phase() == game::HoardPhase::Flying) apply_growth(hoard_run_.growth_level());
+    if (hoard_run_.phase() == game::HoardPhase::Flying) {
+        apply_growth(wilds_mode_ ? wilds_.growth() : hoard_run_.growth_level());
+    }
     growth_scale_ = core::damp(growth_scale_, growth_scale_target_, 0.5f, dt);
     wing_growth_ = core::damp(wing_growth_, wing_growth_target_, 0.5f, dt);
     dragon_rig_.wing_growth = wing_growth_;
@@ -7017,6 +7382,7 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         if (bounty <= 0.0f || kills_to_pay <= 0) continue;
         --kills_to_pay;
         hoard_run_.award(bounty);
+        if (wilds_mode_) wilds_gained(wilds_.kill());
         combat_.heal(r.heal_on_kill);
         char text[64];
         std::snprintf(text, sizeof(text), "+%.0f  %s", double(bounty), what);
@@ -7038,15 +7404,17 @@ void App::update_run(float dt, const game::CombatEvents& events) {
         collect_flash_ = 2.0f;
     }
     combat_.player_size = growth_scale_;
-    if (hoard_run_.just_grew()) {
+    const bool grew = wilds_mode_ ? wilds_grew_ : hoard_run_.just_grew();
+    wilds_grew_ = false;
+    if (grew) {
         // Crossing a stage is a second wind on top of the steady growth.
         combat_.heal(25.0f);
         audio_.play(audio::Clip::Boost, 1.0f, 0.75f);
         grew_flash_ = 3.5f;
         LOG_INFO("run: grew into %s at %.0f s (growth %.0f)",
-                 hoard_run_.stage() == game::GrowthStage::Young ? "a young dragon"
-                 : hoard_run_.stage() == game::GrowthStage::Adult ? "an adult"
-                 : hoard_run_.stage() == game::GrowthStage::Elder ? "an elder" : "an ancient",
+                 player_stage() == game::GrowthStage::Young ? "a young dragon"
+                 : player_stage() == game::GrowthStage::Adult ? "an adult"
+                 : player_stage() == game::GrowthStage::Elder ? "an elder" : "an ancient",
                  double(hoard_run_.elapsed()), double(hoard_run_.growth()));
     }
     if (hoard_run_.just_banked() || hoard_run_.just_lost()) {
@@ -7112,6 +7480,9 @@ void App::update_prey(float dt, const game::CombatEvents& events) {
     }
     if (eaten.eaten > 0) {
         for (int i = 0; i < eaten.eaten; ++i) hoard_run_.feed(prey_.tuning.growth);
+        if (wilds_mode_) {
+            for (int i = 0; i < eaten.eaten; ++i) wilds_gained(wilds_.eat(1.0f));
+        }
         combat_.heal(prey_.tuning.heal * float(eaten.eaten));
         prey_flash_ = 2.0f;
         snatch_pending_ = snatch_pending_ || eaten.by_swoop;
@@ -7300,7 +7671,11 @@ void App::draw_run_hud() {
         // How deep: the valley of the descent, and what the passes banked.
         {
             hud_.label(ImVec2(x, min.y + hud_.px(5.0f)), "VALLEY", tk.text_dim, 10.0f);
-            std::snprintf(line, sizeof(line), "%d/%d", hoard_run_.valley() + 1, hoard_run_.settings.valleys);
+            if (wilds_mode_) {
+                std::snprintf(line, sizeof(line), "%d", hoard_run_.valley() + 1);  // the wilds has no last valley
+            } else {
+                std::snprintf(line, sizeof(line), "%d/%d", hoard_run_.valley() + 1, hoard_run_.settings.valleys);
+            }
             hud_.numeral(ImVec2(x, min.y + hud_.px(13.0f)), line, valley_flash_ > 0.0f ? tk.accent : tk.text,
                          28.0f);
             x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(18.0f);
@@ -7316,11 +7691,13 @@ void App::draw_run_hud() {
         x += core::maxf(hud_.numeral_width(line, 28.0f), hud_.px(40.0f)) + hud_.px(20.0f);
         // Growth: the stage, and a bar toward the next.
         {
-            const char* stage = game::growth_stage_name(hoard_run_.stage());
+            const char* stage = game::growth_stage_name(player_stage());
             hud_.label(ImVec2(x, min.y + hud_.px(8.0f)), stage,
                        grew_flash_ > 0.0f ? tk.accent : tk.text, 13.0f);
-            hud_.bar(ImVec2(x, min.y + hud_.px(28.0f)), hud_.px(96.0f), hud_.px(5.0f),
-                     hoard_run_.growth_progress(), tk.accent);
+            // In the wilds, the way through the stage: its levels are in the wilds' own plate.
+            const float through = wilds_mode_ ? wilds_.growth() - std::floor(core::minf(wilds_.growth(), 3.999f))
+                                              : hoard_run_.growth_progress();
+            hud_.bar(ImVec2(x, min.y + hud_.px(28.0f)), hud_.px(96.0f), hud_.px(5.0f), through, tk.accent);
             x += hud_.px(112.0f);
         }
         // One pip per cache: filled when taken, filling while you sit on it.
@@ -7463,10 +7840,10 @@ void App::draw_run_hud() {
         if (grew_flash_ > 0.0f) {
             const float fade = core::saturate(grew_flash_);
             const ImU32 colour = (tk.accent & 0x00FFFFFF) | (ImU32(245.0f * fade) << 24);
-            std::snprintf(line, sizeof(line), "YOU GREW: %s", game::growth_stage_name(hoard_run_.stage()));
+            std::snprintf(line, sizeof(line), "YOU GREW: %s", game::growth_stage_name(player_stage()));
             hud_.numeral(ImVec2(width * 0.5f, height * 0.20f), line, colour, 44.0f, ui::Align::Centre);
             hud_.label(ImVec2(width * 0.5f, height * 0.20f + hud_.px(50.0f)),
-                       stage_unlock_text(hoard_run_.stage()),
+                       stage_unlock_text(player_stage()),
                        (tk.text & 0x00FFFFFF) | (ImU32(220.0f * fade) << 24), 14.0f, ui::Align::Centre);
         }
     }
@@ -10611,6 +10988,10 @@ void App::render() {
         lighting_.sun_color[0] = sun_colour_tuned_[0] * sun_colour_ratio_.x;
         lighting_.sun_color[1] = sun_colour_tuned_[1] * sun_colour_ratio_.y;
         lighting_.sun_color[2] = sun_colour_tuned_[2] * sun_colour_ratio_.z;
+        // The wilds' hour: the twilight's dip, the moon's colour.
+        if (wilds_mode_) {
+            for (int c = 0; c < 3; ++c) lighting_.sun_color[c] *= wilds_tint_[c];
+        }
     }
     shadow_.update(camera, lighting_.sun_direction());
     taa_.begin_frame(camera, aspect, device_.world_width(), device_.world_height());
@@ -11166,6 +11547,14 @@ void App::log_telemetry() const {
              double(core::degrees(s.angle_of_attack)), double(s.flap_amplitude),
              double(s.flap_effort), double(s.wing_tuck), double(s.wing_brake), s.grounded ? "GROUNDED " : "",
              s.stalling ? "STALL " : "", "");
+    if (wilds_mode_) {
+        const game::WildsState& w = wilds_.state();
+        LOG_INFO("   wilds: day %d hour %.2f%s belly %.2f level %d (%.0f%%) meals %d kills %d finds %zu nights %d "
+                 "falls %d health %.0f/%.0f",
+                 w.day, double(w.clock * 24.0f), wilds_.night() ? " night" : "", double(w.hunger), w.level,
+                 double(wilds_.xp_share() * 100.0f), w.meals, w.kills, w.finds.size(), w.nights, w.falls,
+                 double(combat_.health()), double(combat_.tuning.max_health));
+    }
     {
         const rhi::ResourceStats g = device_.rhi().stats();
         LOG_INFO("   gpu: %u buffers %.1f MB, %u textures %.1f MB, %u pipelines%s", g.buffers,

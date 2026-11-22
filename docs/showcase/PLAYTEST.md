@@ -663,3 +663,56 @@ can hold them for a mark.
 ### The breaths
 
 `docs/showcase/EFFECTS.md`, "Breaths of matter as pieces".
+
+## The sixth round: the breaths aimed and mixed, a breath range, five rigs, the wilds (2026-11-22, 13:00)
+
+The playtester, 2026-11-22 11:55: "bug: animation studio breath element
+wrong if switched with U. all elements can combine with style 1 a bit,
+make particles smaller (frost and stone), frost style 3 can also mix.
+blight looks too similar to water, the arc makes it harder to aim, looks
+good though. for interaction consider plants and other objects
+destruction too, and create a studio/scenario for testing. please update
+damage cone and sfx. can also have low/no damage breath/magic that has
+stronger status effects like sleep/paralysis/etc. might not be a good
+idea. feel free to use codex to rig new models and other 3d intensive
+jobs. we need a new survival/exploration/rpg mode for new mechanics.
+please grill me in the end". No new report came with it: 0024 is still
+the last.
+
+| Ask | Answer |
+|---|---|
+| The studio's element is wrong after U | Fixed. U left its swap flag set, and the studio's list set only the first choice. Picking from the list now clears the swap (`App::choose_player_element`), and the list shows the element in use |
+| Mix style 1 into every breath; smaller bits; frost 3 too | `mix` (0.35), the Breath section's "cloud with the pieces": that share of the cloud rides with the pieces, on all four breaths and on frozen air. The frost's and the stone's bits are smaller |
+| Blight looks like water | The acid is a thick liquid now: gobs on a thread, yellow-green, no white air in it, with a thin gas about it. The water stays a hose's stream that whitens |
+| The arc is hard to aim | The throw is solved for the aimed point (`BreathMatter::solve_throw`), and a ring on the HUD shows where the pieces will land |
+| The damage cone | A breath of pieces lands its damage piece by piece (`Combat::breath_piece_hit`), each piece carrying its share of a second of the breath. The cone is the cloud breaths' only |
+| The sounds | A piece that lands is heard: ice shatters, rock cracks, water splashes, acid hisses, quieter with distance. The studio's breath has its voice. None of this was heard: every check was headless |
+| Plants and other objects | A mark on the ground reaches the plants that stand in it: fire strips and chars, frost rimes, blight strips and withers, tide darkens, stone fells them away from the hit. Rocks take the marks too. Towers, caches and landmarks do not. Far trees (the impostors) do not, and a plant's shadow does not follow it |
+| A scenario for testing | Studio 14, the breath range: the dragon stands and sweeps, four dummies on the left with the fight live, open ground and plants on the right, no fuel limit. `--studio 14 --breathe --element NAME` |
+| Status breaths | Not built. `docs/DIRECTION.md`, "Status breaths, not built" |
+| Codex for rigging | Two jobs rigged the five second-round dragons. `docs/MODEL_GENERATION.md`, "The five rigged" |
+| A survival, exploration, RPG mode | A first version, `--wilds`. `docs/DIRECTION.md`, "The wilds" |
+
+The breaths' record is `docs/showcase/EFFECTS.md`, "The pieces mixed,
+aimed, heard, and what they do to plants". Its sheets are
+`artifacts/breath-volume/mixed-chase-and-side.jpg`,
+`range-six-breaths.jpg` and `range-plants.jpg`.
+
+### The lens shapes, a second guess
+
+The fifth round blamed soft sprites. This round found a tinted wedge of
+light on the ground under the four breaths of matter: each had the
+flame's local light, which a stream of water has no reason to throw.
+The pieces and the frozen air throw none now. Whether that was the
+shape the playtester saw is not known.
+
+### What was checked and what was not
+
+Checked by render: each breath in the range from behind and from the
+side, the plants before and after, the five rigged dragons landed and in
+the glide beside the hero, the wilds at noon, dusk, midnight and dawn.
+Checked by the demo pilot: the wilds for five minutes of play.
+
+Not checked: any sound, any of it in motion at a player's frame rate,
+the wilds with a hand on the controls, a night with its hunter fought,
+the save read back in a window (a headless run does not write it).

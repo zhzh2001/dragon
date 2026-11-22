@@ -541,6 +541,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(leg_brake_damping),
     RIG_FLOAT_FIELD(leg_brake_toe_spread_deg),
     RIG_FLOAT_FIELD(leg_dive_trail_deg),
+    RIG_FLOAT_FIELD(model_span_m),
     RIG_FLOAT_FIELD(foot_hang_deg),
     RIG_FLOAT_FIELD(toe_curl_deg),
     RIG_FLOAT_FIELD(foot_follow),

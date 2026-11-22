@@ -856,6 +856,11 @@ struct RigTuning {
     float leg_brake_toe_spread_deg = 28.0f;
     // Extra hip trail in a tuck, for species with a relaxed hanging glide.
     float leg_dive_trail_deg = 0.0f;
+    // The wingspan this creature is drawn at, metres; 0 for the flight
+    // model's 19. A model is sized by its span, so one whose wings are
+    // short for its body comes out with a body too long: tide2 was 20.6 m
+    // against the hero's 14.2 (docs/MODEL_GENERATION.md, "The five rigged").
+    float model_span_m = 0.0f;
     // In flight the feet hang: ankle dropped, claws part-curled -- a perched
     // bird's relaxed foot, not a planted one. This asset parents its feet to the
     // body, so nothing else would ever move them once the ground idle fades.

@@ -234,6 +234,11 @@ void Combat::heal(float amount) {
     health_ = core::minf(health_ + amount, tuning.max_health);
 }
 
+void Combat::starve(float amount, float floor) {
+    if (health_ <= 0.0f || amount <= 0.0f || health_ <= floor) return;
+    health_ = core::maxf(health_ - amount, floor);
+}
+
 void Combat::revive() {
     health_ = tuning.max_health;
     breath_ = 1.0f;
