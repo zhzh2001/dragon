@@ -86,7 +86,7 @@ The flight profile has no stroke keys, so the beat moved down with the rest. Ren
 ### 1. Glide
 
 The standing bind pose carried the shoulders and neck upright in flight. The hip-to-shoulder line rose 71.6° at glide frame 200.
-I pitched the trunk forward 61° in Blender and carried the skin with the joints.
+The rig has no flight-only trunk pitch control. I pitched the trunk forward 61° in Blender and carried the skin with the joints.
 The three neck segments use absolute pitch changes of −60°, −55° and −47°. The skull turns up 13° to level the muzzle.
 The tail straightens progressively toward the fluke. The new trunk rises 10.6° and the neck rises 14.0° from its base to the skull.
 The glide now meets the 15° trunk target.
@@ -140,6 +140,19 @@ Recovery droop is 8°, upstroke fold is 15°, twist is 10° and phase delay is 0
 The hand starts reopening at phase 0.79. The flank stays still as the hand narrows and opens.
 The wing-only check moved none of the 35,360 body vertices across 41 poses.
 
-The large fold is gone. A small notch remains beside the innermost rib, clearest in rear frame 221.
+The large fold is gone. A small notch remains beside the innermost rib, visible in rear frames 221 and 235. Side frame 228 shows a bright strip along the folded edge.
 The inner hook still travels 0.14 m across the centerline during cruise recovery. It previously crossed by 0.38 m.
-The shared finger flex controls all four ribs. An independent recovery angle for the fourth rib would let it clear the spine.
+The shared finger flex controls all four ribs. A separate fourth-rib angle, such as `recovery_finger4_deg`, would let it clear the spine.
+
+### 5. Ground stance
+
+The old stance held the hand at 55° and fanned the ribs upright. Its floor height also matched the standing bind.
+I set the body pitch to 27°, hip to 14°, neck to 1° and tail to 48°. The floor offset is 3.09 m.
+The upper arm aims −18° in sweep and −21° in elevation. The forearm aims −60° and −65°.
+The hand sweeps back 118° and rises 25°. All four ribs share that direction.
+
+Each wrist now stands 3.20 m ahead of its hind foot and 1.48 m farther out. The former distances were 2.74 m and 1.16 m.
+On a level floor, the hind toes touch and the wrist pad sits 10 mm below them. The body clears the floor by 0.58 m.
+The neck rises 39° and the muzzle faces forward. The tips still flare outward and the inner membrane stays broad across the flank. The neck sits lower than the concept.
+The engine distributes ground neck pitch evenly. A separate `ground_head_pitch_deg` would allow a steeper neck with a level muzzle.
+A separate `ground_wing_tip_sweep_deg` would turn the last finger segment inward. The ground solver currently aims only segments with a child.
