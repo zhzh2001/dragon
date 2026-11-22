@@ -32,7 +32,9 @@ void BreathVolumeSettings::parse(const std::string& list) {
                                 {"core", &core},                 {"gain", &gain},
                                 {"smoke", &smoke},               {"sparks", &sparks},
                                 {"light", &light},               {"ground_fire", &ground_fire},
-                                {"ground_height", &ground_height}};
+                                {"ground_height", &ground_height}, {"frost_style", &frost_style},
+                                {"tide_style", &tide_style},     {"blight_style", &blight_style},
+                                {"stone_style", &stone_style}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;
@@ -289,9 +291,10 @@ void BreathVolume::draw(Device& device, rhi::Pass* pass, const Camera& camera, c
     u.shape = core::Vec4{settings.extinction * jet_.cover, 1.0f / std::max(settings.noise_size, 0.1f),
                          settings.erosion, settings.flow * speed};
     u.colour = core::Vec4{settings.core, settings.gain, core::saturate(settings.smoke), jet_.brightness};
-    // hot.w: 0 a flame, 1 to 2 a lit medium and how white its core is.
+    // hot.w: 0 a flame, 1 to 2 a lit medium and how white its core is, 3
+    // to 4 the same for a liquid.
     u.hot = core::Vec4{jet_.hot.x, jet_.hot.y, jet_.hot.z,
-                       jet_.medium > 0.5f ? 1.0f + core::saturate(jet_.whiten) : 0.0f};
+                       jet_.medium > 0.5f ? (jet_.liquid > 0.5f ? 3.0f : 1.0f) + core::saturate(jet_.whiten) : 0.0f};
     u.cool = core::Vec4{jet_.cool.x, jet_.cool.y, jet_.cool.z, jet_.glow};
     u.axis = core::Vec4{direction_.x, direction_.y, direction_.z, 0.0f};
     submit(device, pass, scene, u, count, settings);

@@ -181,7 +181,9 @@ float4 fs_main(BreathVertex input) : SV_Target {
     // A breath that is not fire (EFFECTS.md, "A breath that is not fire"):
     // mist, gas, spray or grit, lit by the sun and the sky as the world is.
     bool medium = summed && jet.hot.w > 0.5;
-    float whiten = saturate(jet.hot.w - 1.0);
+    // And a medium that is a liquid (BreathJet::liquid): water, acid.
+    bool liquid = medium && jet.hot.w > 2.5;
+    float whiten = saturate(jet.hot.w - (liquid ? 3.0 : 1.0));
     float3 medium_sum = float3(0.0, 0.0, 0.0);
     float smoke_sum = 0.0;
     float3 hot_hue = hot / peak;
@@ -275,6 +277,8 @@ float4 fs_main(BreathVertex input) : SV_Target {
         // A jet at the jaws, torn to rags by the tip: the broad noise moves
         // the edge, the fine one frays it and opens gaps in the body.
         float q = s.x + max((n - 0.5) * 2.0 * jet.shape.z * wear, -out_reach) + (fine - 0.5) * 0.3 * wear;
+        // A liquid holds together: the noise moves its edge a third as far.
+        if (liquid) q = s.x + (n - 0.5) * 0.7 * wear + (fine - 0.5) * 0.16 * wear;
         if (summed_style && !medium) {
             // The width pulses: swellings a few radii long that travel down
             // the jet with the gas, as a breath comes in surges. Read off
@@ -291,8 +295,47 @@ float4 fs_main(BreathVertex input) : SV_Target {
         float density = saturate((1.0 - q) * 5.0);
         density *= lerp(1.0, smoothstep(0.3, 0.62, fine), wear * 0.9);
         density *= 1.0 - smoothstep(0.72, 1.0, age);
+        if (liquid) {
+            // A body with an edge, whole at the jaws and broken into drops
+            // from the middle of its length on.
+            density = smoothstep(0.0, 0.16, 1.0 - q) * (1.0 - smoothstep(0.82, 1.0, age));
+            density *= lerp(1.0, smoothstep(0.4, 0.58, fine), saturate(age * 2.4 - 0.15));
+        }
 
-        if (medium && density > 0.001) {
+        if (liquid && density > 0.001) {
+            // Water as it is seen: dark and of its own colour where the
+            // eye looks into it, the sky's mirror at a grazing angle, a
+            // point of the sun where the surface turns it to the eye, and
+            // white where it has taken in air, which is more of it the
+            // further it has flown.
+            float3 nrm = normalize(spine_outward + (float3(o1, o2, o3) - 0.5) * 0.8);
+            float facing = saturate(dot(nrm, -ray));
+            float mirror = pow(1.0 - facing, 3.0);
+            // Foam in strands along the flow (the fine noise's ridges),
+            // more of them the further the water has flown.
+            // One more read of the noise, drawn out five times along the
+            // jet: at the body's own scale the foam was marbling.
+            float3 sp = np - jet.axis.xyz * (dot(np, jet.axis.xyz) * 0.6);
+            float strand = breath_noise(sp * 2.6);
+            float foam = saturate(whiten * (strand * 2.4 - 1.0 + 1.4 * age));
+            // Looked into, water is dark and of its own colour. A body that
+            // was pale all through read as paste. The more a liquid whitens
+            // the less of the breath's hue it keeps: water is blue-grey,
+            // acid stays green.
+            float3 hue = lerp(hot_hue, float3(0.3, 0.58, 0.8), whiten);
+            float3 into = lerp(hue * 0.08, hue * 0.38, facing * 0.6);
+            float3 albedo = lerp(into, float3(0.94, 0.96, 0.97), foam);
+            float3 lit = albedo * (direct_sun(nrm, 1.0) + ambient_light(nrm));
+            float3 bounce = reflect(ray, nrm);
+            float3 sky = lerp(scene.sky_horizon.rgb, scene.sky_zenith.rgb, saturate(bounce.y * 0.5 + 0.5));
+            lit = lerp(lit, sky, mirror * 0.6 * (1.0 - foam));
+            float glint = pow(saturate(dot(bounce, normalize(scene.sun.xyz))), 24.0);
+            lit += scene.sun_color.rgb * (scene.sun.w * glint * 4.0 * (1.0 - 0.6 * foam));
+            lit += hot_hue * (jet.cool.w * jet.colour.w * 1.2 * (0.4 + 0.6 * facing));
+            float kept = exp(-jet.shape.x * 7.0 * density * ds);
+            medium_sum += through * (1.0 - kept) * lit;
+            through *= kept;
+        } else if (medium && density > 0.001) {
             // Matter, not light: each step hides what is behind it and
             // shows its own colour under the sun and the sky. Dense and
             // pale on the axis, thin and of the breath's cool colour at

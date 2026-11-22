@@ -2820,6 +2820,8 @@ void App::update(float dt) {
                 jet.medium = look.medium;
                 jet.whiten = look.whiten;
                 jet.glow = look.glow;
+                jet.liquid = look.liquid;
+                jet.cover *= look.cover;
                 jet.size_end *= look.width;
                 jet.spread *= look.width;
                 jet.buoyancy += look.buoyancy;
@@ -2930,6 +2932,77 @@ void App::update(float dt) {
                     spark.color_end = own ? player_breath_.cool : look.bit_colour * 0.6f;
                     spark.brightness = look.bit_glow;
                     particles_.spawn(spark);
+                }
+                // Needles that ride the jet (frost): each a short line of
+                // light along the gas's own motion, a few of them bright.
+                // They are what is seen from behind, where the vapour is
+                // looked through end on.
+                breath_shards_owed_ += dt * look.shards;
+                while (breath_shards_owed_ >= 1.0f) {
+                    breath_shards_owed_ -= 1.0f;
+                    const float pick = std::fabs(particle_unit());
+                    const float side_x = particle_unit();
+                    const float side_y = particle_unit();
+                    const float side_z = particle_unit();
+                    const float pace = std::fabs(particle_unit());
+                    core::Vec3 at, drift;
+                    float radius = 1.0f;
+                    if (!breath_volume_.sample(0.02f + 0.8f * pick, breath_volume_settings_, at, drift, radius)) break;
+                    const core::Vec3 side{side_x, side_y, side_z};
+                    gfx::Particle shard;
+                    shard.kind = gfx::ParticleKind::Streak;
+                    shard.position = at + side * (radius * 0.75f);
+                    shard.velocity = drift * (0.85f + 0.3f * pace) + side * 1.5f;
+                    shard.acceleration = core::Vec3{0.0f, -4.0f, 0.0f};
+                    shard.drag = 0.5f;
+                    shard.life = 0.2f + 0.3f * pace;
+                    // A sliver that tumbles: its length lies any way, not
+                    // along its flight. Along it, every needle pointed away
+                    // from the chase camera and was a dot.
+                    const float turn_x = particle_unit();
+                    const float turn_y = particle_unit();
+                    const float turn_z = particle_unit();
+                    shard.stretch = core::normalize_or(core::Vec3{turn_x, turn_y, turn_z}, core::Vec3::up()) *
+                                    (look.shard_length * (0.3f + 0.7f * pace));
+                    shard.size_start = 0.16f;
+                    shard.size_end = 0.05f;
+                    shard.color_start = look.shard_colour;
+                    shard.color_end = look.shard_colour * 0.7f;
+                    // One in eight is a face turned to the sun.
+                    shard.brightness = look.shard_glow * (pace > 0.875f ? 3.5f : 1.0f);
+                    particles_.spawn(shard);
+                }
+                // Pieces that ride the jet and fall out of it: gravel, drops
+                // of acid, flecks of foam. Not light: lit colour, opaque.
+                breath_chips_owed_ += dt * look.chips;
+                while (breath_chips_owed_ >= 1.0f) {
+                    breath_chips_owed_ -= 1.0f;
+                    const float pick = std::fabs(particle_unit());
+                    const float side_x = particle_unit();
+                    const float side_y = particle_unit();
+                    const float side_z = particle_unit();
+                    const float pace = std::fabs(particle_unit());
+                    const float seed = particle_unit() * 0.5f + 0.5f;
+                    core::Vec3 at, drift;
+                    float radius = 1.0f;
+                    if (!breath_volume_.sample(0.05f + 0.85f * pick, breath_volume_settings_, at, drift, radius)) break;
+                    const core::Vec3 side{side_x, side_y, side_z};
+                    gfx::Particle chip;
+                    chip.kind = gfx::ParticleKind::Smoke;
+                    chip.seed = seed;
+                    chip.soft = look.chip_soft;
+                    chip.position = at + side * (radius * 0.8f);
+                    chip.velocity = drift * (0.7f + 0.4f * pace) + side * (2.0f + 3.0f * pace);
+                    chip.acceleration = core::Vec3{0.0f, look.chip_gravity, 0.0f};
+                    chip.drag = 0.6f;
+                    chip.life = 0.6f + 0.7f * pace;
+                    chip.fade_in = 0.02f;
+                    chip.size_start = look.chip_size * (0.6f + 0.8f * seed);
+                    chip.size_end = chip.size_start * (1.0f + 1.5f * look.chip_soft);
+                    chip.color_start = look.chip_colour;
+                    chip.color_end = look.chip_colour;
+                    chip.brightness = 0.95f;
+                    particles_.spawn(chip);
                 }
                 // And what the flame leaves (smoke_for, as the puffs do):
                 // smoke off the far third of the jet, from its skin, slow,
@@ -4806,6 +4879,11 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("light on the dragon and the ground", &b.light, 0.0f, 30.0f, "%.1f");
         ImGui::SliderFloat("the ground burns for", &b.ground_fire, 0.0f, 10.0f, "%.1f s");
         ImGui::SliderFloat("ground flame height", &b.ground_height, 0.5f, 4.0f, "%.2f radii");
+        ImGui::SeparatorText("What each breath is made of (0: the cloud)");
+        ImGui::SliderFloat("frost: ice needles", &b.frost_style, 0.0f, 1.0f, "%.0f");
+        ImGui::SliderFloat("tide: a rope of water", &b.tide_style, 0.0f, 1.0f, "%.0f");
+        ImGui::SliderFloat("blight: a stream of acid", &b.blight_style, 0.0f, 1.0f, "%.0f");
+        ImGui::SliderFloat("stone: gravel", &b.stone_style, 0.0f, 1.0f, "%.0f");
     }
     if (ImGui::CollapsingHeader("Tail, limbs and strikes", ImGuiTreeNodeFlags_DefaultOpen)) {
         // The short list: what is open for the playtest. Every other life
@@ -8402,8 +8480,9 @@ void App::set_local_light(gfx::SceneUniforms& scene) const {
 
 // Fire and storm are light. The other four are matter, and each has its own
 // weight, what it throws off and what it leaves on the ground.
-App::BreathLook App::look_for(game::Element element) {
+App::BreathLook App::look_for(game::Element element) const {
     BreathLook l;
+    const gfx::BreathVolumeSettings& styles = breath_volume_settings_;
     switch (element) {
         case game::Element::Frost:  // a heavy white fog that falls and lies on the ground; ice glints
             l.medium = 1.0f, l.whiten = 0.7f, l.glow = 0.1f;
@@ -8411,6 +8490,18 @@ App::BreathLook App::look_for(game::Element element) {
             l.cloud = core::Vec3{0.88f, 0.94f, 1.0f};
             l.bits = 0.8f, l.bit_speed = 0.35f, l.bit_gravity = -9.0f, l.bit_life = 1.4f, l.bit_glow = 1.6f;
             l.bit_colour = core::Vec3{0.8f, 0.95f, 1.2f};
+            if (styles.frost_style > 0.5f) {
+                // Ice, not fog: the vapour thin and narrow, and in it a
+                // few hundred needles that ride the jet and glint.
+                // And snow: white grains, which are what a blast of cold
+                // air carries and what shows against a pale sky.
+                l.cover = 0.22f, l.width = 0.75f, l.whiten = 0.4f, l.glow = 0.4f;
+                l.shards = 520.0f, l.shard_length = 0.7f, l.shard_glow = 4.0f;
+                l.shard_colour = core::Vec3{0.72f, 0.92f, 1.3f};
+                l.chips = 520.0f, l.chip_size = 0.15f, l.chip_soft = 0.15f, l.chip_gravity = -4.0f;
+                l.chip_colour = core::Vec3{0.96f, 0.98f, 1.0f};
+                l.cloud_opacity = 0.4f;
+            }
             break;
         case game::Element::Blight:  // a slow gas that sinks and lingers longest; drips
             l.medium = 1.0f, l.whiten = 0.1f, l.glow = 0.1f, l.buoyancy = -5.0f;
@@ -8418,6 +8509,13 @@ App::BreathLook App::look_for(game::Element element) {
             l.cloud = core::Vec3{0.5f, 0.62f, 0.06f};
             l.bits = 0.35f, l.bit_speed = 0.2f, l.bit_gravity = -14.0f, l.bit_life = 1.2f, l.bit_glow = 0.9f;
             l.bit_colour = core::Vec3{0.75f, 1.0f, 0.2f};
+            if (styles.blight_style > 0.5f) {
+                // Acid: a stream that falls, drops off it, and the gas only
+                // where it lands.
+                l.liquid = 1.0f, l.whiten = 0.25f, l.glow = 0.3f, l.width = 0.42f, l.buoyancy = -9.0f;
+                l.chips = 90.0f, l.chip_size = 0.2f, l.chip_soft = 0.2f;
+                l.chip_colour = core::Vec3{0.55f, 0.8f, 0.1f};
+            }
             break;
         case game::Element::Storm:  // arcs (emit_storm_arc); the volume is their glow
             l.width = 0.45f, l.light = 1.5f;
@@ -8429,6 +8527,13 @@ App::BreathLook App::look_for(game::Element element) {
             l.cloud = core::Vec3{0.8f, 0.86f, 0.88f};
             l.bits = 1.8f, l.bit_speed = 0.45f, l.bit_gravity = -16.0f, l.bit_life = 1.3f, l.bit_glow = 1.3f;
             l.bit_colour = core::Vec3{0.85f, 1.0f, 1.0f};
+            if (styles.tide_style > 0.5f) {
+                // Water: a rope with an edge that arcs down, foam flecks
+                // off its far half.
+                l.liquid = 1.0f, l.whiten = 0.8f, l.glow = 0.0f, l.width = 0.5f, l.buoyancy = -24.0f;
+                l.chips = 520.0f, l.chip_size = 0.13f, l.chip_soft = 0.05f;
+                l.chip_colour = core::Vec3{0.92f, 0.96f, 0.98f};
+            }
             break;
         case game::Element::Stone:  // matte grit, glowing only at the jaws; dust on the ground, flying chips
             l.medium = 1.0f, l.whiten = 0.2f, l.glow = 0.16f;
@@ -8436,6 +8541,12 @@ App::BreathLook App::look_for(game::Element element) {
             l.cloud = core::Vec3{0.55f, 0.42f, 0.26f};
             l.bits = 1.2f, l.bit_speed = 0.9f, l.bit_gravity = -15.0f, l.bit_life = 1.1f, l.bit_glow = 1.0f;
             l.bit_colour = core::Vec3{1.0f, 0.75f, 0.45f};
+            if (styles.stone_style > 0.5f) {
+                // Gravel: the dust thin, and stones in it that fall.
+                l.cover = 0.4f, l.width = 0.8f;
+                l.chips = 380.0f, l.chip_size = 0.42f, l.chip_soft = 0.0f;
+                l.chip_colour = core::Vec3{0.2f, 0.17f, 0.14f};
+            }
             break;
         default: break;  // fire: the flame, its sparks, the ground alight
     }
@@ -9911,6 +10022,10 @@ void App::build_flight_ui() {
     if (ImGui::CollapsingHeader("Propulsion")) {
         ImGui::SliderFloat("flap force", &t.flap_peak_force, 0.0f, 30000.0f, "%.0f N");
         ImGui::SliderFloat("flap period", &t.flap_period, 0.3f, 2.5f, "%.2f s");
+        ImGui::SliderFloat("stroke up", &t.flap_up_angle_deg, 20.0f, 100.0f, "%.0f deg");
+        ImGui::SliderFloat("stroke down, climb", &t.flap_down_angle_deg, -150.0f, -20.0f, "%.0f deg");
+        ImGui::SliderFloat("stroke down, cruise", &t.flap_cruise_down_angle_deg, -150.0f, 0.0f, "%.0f deg (0: as the climb)");
+        ImGui::SliderFloat("cruise from", &t.flap_effort_speed, 10.0f, 60.0f, "%.0f m/s");
         ImGui::SliderFloat("glide thrust", &t.glide_thrust, 0.0f, 6000.0f, "%.0f N");
         ImGui::SliderFloat("take-off lift", &t.takeoff_lift, 0.0f, 3.0f, "%.2fx weight");
         ImGui::SliderFloat("take-off lift to speed", &t.takeoff_lift_speed, 5.0f, 50.0f, "%.0f m/s");

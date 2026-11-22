@@ -34,6 +34,20 @@ float wingbeat_curve(float phase, float downstroke_fraction) {
 
 namespace game {
 
+
+float flap_down_angle(const FlightTuning& tuning, float effort) {
+    const float full = core::radians(tuning.flap_down_angle_deg);
+    if (tuning.flap_cruise_down_angle_deg == 0.0f) return full;
+    return core::lerpf(core::radians(tuning.flap_cruise_down_angle_deg), full, core::saturate(effort));
+}
+
+float flap_effort_target(const FlightTuning& tuning, float airspeed, float climb_rate) {
+    const float fast = core::maxf(tuning.flap_effort_speed, 1.0f);
+    const float slow = 1.0f - core::smoothstep(fast * 0.6f, fast, airspeed);
+    const float climbing = core::smoothstep(1.0f, core::maxf(tuning.flap_effort_climb, 1.5f), climb_rate);
+    return core::saturate(core::maxf(slow, climbing) + tuning.flap_effort_bias);
+}
+
 void FlightModel::reset(Vec3 position, Quat orientation, float airspeed) {
     state_ = FlightState();
     state_.position = position;
@@ -208,7 +222,9 @@ void FlightModel::integrate_forces(const FlightInput& input, float dt) {
 
     // Blend between the resting dihedral and the current point in the beat.
     const float up_angle = core::radians(tuning.flap_up_angle_deg);
-    const float down_angle = core::radians(tuning.flap_down_angle_deg);
+    state_.flap_effort = core::damp(state_.flap_effort,
+                                    flap_effort_target(tuning, airspeed, state_.velocity.y), 0.35f, dt);
+    const float down_angle = flap_down_angle(tuning, state_.flap_effort);
     const float centre = (up_angle + down_angle) * 0.5f;
     const float half_range = (up_angle - down_angle) * 0.5f;
     const float beating =
@@ -568,6 +584,8 @@ const Field FIELDS[] = {
     FIELD(boost_force),          FIELD(takeoff_lift),        FIELD(takeoff_lift_speed),
     FIELD(takeoff_lift_height),
     FIELD(flap_up_angle_deg),    FIELD(flap_down_angle_deg),
+    FIELD(flap_cruise_down_angle_deg), FIELD(flap_effort_speed), FIELD(flap_effort_climb),
+    FIELD(flap_effort_bias),
     FIELD(flap_downstroke_fraction), FIELD(glide_dihedral_deg), FIELD(flap_blend),
     FIELD(tuck_lift_loss),       FIELD(tuck_drag_loss),      FIELD(brake_drag_gain),
     FIELD(brake_lift_gain),      FIELD(pitch_rate),          FIELD(yaw_rate),

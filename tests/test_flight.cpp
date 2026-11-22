@@ -464,6 +464,25 @@ void test_presets_all_fly() {
     }
 }
 
+// The stroke is shallow in a fast level cruise and full when slow or
+// climbing; a tuning without the cruise key keeps one depth.
+void test_stroke_depth_follows_effort() {
+    FlightTuning tuning;
+    tuning.flap_down_angle_deg = -120.0f;
+    CHECK(std::fabs(flap_down_angle(tuning, 0.0f) - core::radians(-120.0f)) < 1e-5f);
+    tuning.flap_cruise_down_angle_deg = -80.0f;
+    tuning.flap_effort_speed = 30.0f;
+    tuning.flap_effort_climb = 8.0f;
+    CHECK(std::fabs(flap_down_angle(tuning, 0.0f) - core::radians(-80.0f)) < 1e-5f);
+    CHECK(std::fabs(flap_down_angle(tuning, 1.0f) - core::radians(-120.0f)) < 1e-5f);
+    CHECK(flap_effort_target(tuning, 40.0f, 0.0f) < 0.01f);   // fast and level: a cruise
+    CHECK(flap_effort_target(tuning, 12.0f, 0.0f) > 0.99f);   // slow: the full stroke
+    CHECK(flap_effort_target(tuning, 40.0f, 9.0f) > 0.99f);   // climbing: the full stroke
+    CHECK(flap_effort_target(tuning, 40.0f, -5.0f) < 0.01f);  // sinking: a cruise
+    tuning.flap_effort_bias = 1.0f;
+    CHECK(flap_effort_target(tuning, 40.0f, 0.0f) > 0.99f);
+}
+
 void test_tuning_round_trip() {
     std::printf("tuning saves and loads without drift\n");
     FlightTuning original = game::tuning_preset_agile();
@@ -729,6 +748,7 @@ int main() {
     test_extreme_inputs_stay_finite();
     test_ground_stops_the_dragon();
     test_presets_all_fly();
+    test_stroke_depth_follows_effort();
     test_tuning_round_trip();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

@@ -282,7 +282,10 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
                                    ? std::cos(core::PI * phase / down)
                                    : -std::cos(core::PI * (phase - down) / (1.0f - down));
             const float up_angle = core::radians(flight.flap_up_angle_deg);
-            const float down_angle = core::radians(flight.flap_down_angle_deg);
+            // The studio's flap is a cruise at 32 m/s; --flight flap_effort_bias=1
+            // shows the full stroke.
+            state.flap_effort = flap_effort_target(flight, 32.0f, 0.0f);
+            const float down_angle = flap_down_angle(flight, state.flap_effort);
             state.wing_angle = (up_angle + down_angle) * 0.5f +
                                (up_angle - down_angle) * 0.5f * beat;
             break;

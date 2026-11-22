@@ -60,6 +60,21 @@ struct FlightTuning {
     // A deep downstroke is where the power reads; the upstroke redistribution
     // in the rig keeps the raised wings clear of each other.
     float flap_down_angle_deg = -42.0f;
+    // The stroke's depth follows the effort. A flyer beats deepest at
+    // take-off and in a climb and shallower once it is fast and level
+    // (docs/MOTION_REFERENCE.md, "Wingbeat amplitude"). With one depth for
+    // both, a stroke deep enough for the climb hung the wings under the body
+    // in a cruise (the playtester, 2026-11-21: "a bit unnatural"). The
+    // downstroke's end when the effort is 0; 0 keeps one depth at every
+    // speed, which is every species without the key.
+    float flap_cruise_down_angle_deg = 0.0f;
+    // Level flight at this airspeed and faster is a cruise; at 0.6 of it
+    // and slower the stroke is the full one.
+    float flap_effort_speed = 30.0f;
+    // A climb at this rate (m/s) takes the full stroke.
+    float flap_effort_climb = 8.0f;
+    // Added to the effort: 1 holds the full stroke, for a capture of it.
+    float flap_effort_bias = 0.0f;
     float flap_downstroke_fraction = 0.40f;
     // Resting dihedral: gliding wings sit slightly raised, not dead flat.
     float glide_dihedral_deg = 9.0f;
@@ -194,6 +209,12 @@ struct FlightInput {
 
 // Everything the flight model produces. The derived fields exist for telemetry
 // and for driving procedural animation, and are cheap to keep.
+// The downstroke's end, radians, at an effort of 0 (cruise) to 1 (take-off,
+// climb): FlightTuning::flap_cruise_down_angle_deg to flap_down_angle_deg.
+float flap_down_angle(const FlightTuning& tuning, float effort);
+// The effort a flyer at `airspeed`, climbing at `climb_rate`, puts in a beat.
+float flap_effort_target(const FlightTuning& tuning, float airspeed, float climb_rate);
+
 struct FlightState {
     core::Vec3 position = core::Vec3::zero();
     core::Quat orientation = core::Quat::identity();
@@ -223,6 +244,9 @@ struct FlightState {
     float flap_phase = 0.0f;
     // How much of a full beat is currently being flown: 0 gliding, 1 full.
     float flap_amplitude = 0.0f;
+    // 0 in a fast level cruise, 1 slow or climbing: how deep the stroke goes
+    // (FlightTuning::flap_cruise_down_angle_deg).
+    float flap_effort = 1.0f;
     // Final wing angle in radians, positive up. The renderer uses this
     // directly, so the visible wing and the thrust it produces can never
     // disagree -- and bots and replays get the same animation for free.

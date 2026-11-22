@@ -328,6 +328,8 @@ private:
     std::vector<int> comet_rounds_;
     float breath_smoke_owed_ = 0.0f;  // smoke owed off the marched breath (emitted in whole puffs)
     float breath_sparks_owed_ = 0.0f;
+    float breath_shards_owed_ = 0.0f;
+    float breath_chips_owed_ = 0.0f;
     // The modern tier's anti-aliasing: 0 off, 1 FXAA (in the composite),
     // 2 the temporal resolve. FXAA by default since the first TAA playtest
     // found the moving forest "very smeared": the smear was a bug (fixed),
@@ -807,8 +809,24 @@ private:
         float bit_life = 1.0f;
         float bit_glow = 2.6f;
         core::Vec3 bit_colour{0.0f, 0.0f, 0.0f};  // zero: the breath's own hot colour, whitened
+        float liquid = 0.0f;   // gfx::BreathJet::liquid
+        float cover = 1.0f;    // over the profile's opacity
+        // Needles of light that ride the jet (ice): how many a second,
+        // their length in metres and their brightness.
+        float shards = 0.0f;
+        float shard_length = 1.0f;
+        float shard_glow = 3.0f;
+        core::Vec3 shard_colour{1.0f, 1.0f, 1.0f};
+        // Solid pieces that ride the jet and fall (gravel, drops, foam):
+        // how many a second, their size in metres, their lit colour and
+        // how soft their edge is.
+        float chips = 0.0f;
+        float chip_size = 0.25f;
+        float chip_soft = 0.0f;
+        float chip_gravity = -16.0f;
+        core::Vec3 chip_colour{0.4f, 0.35f, 0.3f};
     };
-    static BreathLook look_for(game::Element element);
+    BreathLook look_for(game::Element element) const;
     void emit_storm_arc(core::Vec3 from, core::Vec3 direction, float range);
     float storm_arc_owed_ = 0.0f;
     float ground_cloud_owed_ = 0.0f;

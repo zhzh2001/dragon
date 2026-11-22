@@ -64,6 +64,10 @@ struct BreathJet {
     float medium = 0.0f;
     float whiten = 0.0f;  // a medium's core, 0 its hot colour to 1 white: spray and rime are white
     float glow = 0.0f;    // the light a medium gives of its own, as a share of a flame's
+    // A medium that is a liquid: a body with an edge, opaque in a hand's
+    // width, that mirrors the sky at a grazing angle, glints in the sun and
+    // breaks into foam and drops toward its tip.
+    float liquid = 0.0f;
 };
 
 struct BreathVolumeSettings {
@@ -86,6 +90,14 @@ struct BreathVolumeSettings {
                                  // a metre of flame's, in the scene's units at a metre. The hostile breaths' too.
     float ground_fire = 3.2f;    // seconds a patch of ground burns where the jet met it; 0 for none
     float ground_height = 1.3f;  // a patch's flame, in its own radii at its tallest
+    // What each breath of matter is made of (the app's look_for). 0 is the
+    // cloud of 2026-11-21, which from the chase camera, end on, was a ball
+    // of fog whatever the element ("frost doesn't seem like ice, tide
+    // unlike water").
+    float frost_style = 1.0f;    // 1: a thin vapour full of ice needles that glint
+    float tide_style = 1.0f;     // 1: a rope of water with an edge, a glint and foam (BreathJet::liquid)
+    float blight_style = 1.0f;   // 1: a stream of acid, liquid as the tide's, with fumes where it lands
+    float stone_style = 1.0f;    // 1: a blast of gravel in thin dust
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);
