@@ -1,0 +1,15 @@
+SHA-256 fingerprints for the rendered assets and profiles.
+
+Version 7
+589672ad9ea824a8e2f11148be56617ea4869d0b0945fccdd19a286c93f49ad2  assets/embercrest-hero.glb
+c0ae90d35e92ac65efa1daf9ce3e465448f0655cd1cd46d7cc8577417c8e998f  assets/embercrest-hero-static.glb
+7f1afd55df44f962dcbc3752d4a279daf761d13d6c515457933aafabbb679f83  assets/embercrest-hero-membrane-thickness.png
+98f12928dd1274575109429b578aac9e20a84ff06668b126ac017372d65688c3  assets/embercrest-hero.glb.rig.cfg
+668da34ce76ddfc8a81dc9abec7cdaeca57f13cdac12e58751809dcc2f313a28  assets/embercrest-hero.glb.flight.cfg
+
+Main checkout
+893dc367db9c0dfef53fd5fad2da2b0b32ee11b77d0276176a367b755261d362  assets/embercrest-hero.glb
+123f90e97e2c9ee9456b3c4e9d642cf552f5f716e712228af78875f2968f608e  assets/embercrest-hero-static.glb
+244b81b13506f6d5206e3345a13283f0a015ece8684c1848da028d0e8d253cc2  assets/embercrest-hero.glb.rig.cfg
+c957629afc4a30a624ffd4fa66118b797fd4fbb9fc648baae3ab28010a682175  assets/embercrest-hero.glb.flight.cfg
+b15a64f11f0ed43658565c67514b1fb61e2ee43b9bbacfd2395562d18e8aad24  build/dragon

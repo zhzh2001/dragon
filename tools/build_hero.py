@@ -38,7 +38,6 @@ from mathutils.kdtree import KDTree
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "build-hero-cache")
-ART = os.environ.get("HERO_BUILD_ART", os.path.join(ROOT, "artifacts", "hero-build"))
 BODY_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-hunyuan.glb")
 HEAD_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-head-hunyuan.glb")
 # The wingless body sculpt. HERO_BODY names another one; see "Swapping the body" in tools/hero-build.md.
@@ -55,6 +54,8 @@ if WING_SOURCE not in ("v2", "v3", "v5", "v7"):
     raise SystemExit("HERO_WING must be v2, v3, v5 or v7")
 WING_V3 = WING_SOURCE == "v3"
 WING_V7 = WING_SOURCE == "v7"
+DEFAULT_ART = os.path.join(ROOT, "artifacts", "hero-build", "v7-final" if WING_V7 else "")
+ART = os.environ.get("HERO_BUILD_ART", DEFAULT_ART)
 WING_V5 = WING_SOURCE in ("v5", "v7")
 WING5_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing2-hunyuan.glb")
 SKELETON = os.path.join(ROOT, "tools", "skeletons", "embercrest-hero.json")
@@ -4733,7 +4734,47 @@ def v7_supports(points):
     return np.array(distances).T
 
 
-def v7_shell(obj, hide):
+def v7_panel_camber(mid, tri, boundary_distance):
+    """Set the downward bow between neighboring finger shafts in the rest pose."""
+    marks = w5_targets()
+    fingers = (("hub","f1a","f1b","f1c"), ("hub","f2a","f2b"), ("hub","f3a","f3b"))
+    fractions = np.linspace(.025,1.,81)
+    across = np.linspace(0.,1.,31)
+    lines = []
+    for keys in fingers:
+        points = np.array([marks[key] for key in keys])
+        arc = np.r_[0,np.linalg.norm(np.diff(points,axis=0),axis=1).cumsum()]
+        lines.append(np.column_stack([np.interp(fractions*arc[-1],arc,points[:,i]) for i in range(3)]))
+    surface = BVHTree.FromPolygons(mid.tolist(),tri.tolist(),all_triangles=True)
+    rows = np.flatnonzero(mid[:,0] > 0)
+    for left,right in zip(lines,lines[1:]):
+        grid = left[:,None,:]*(1-across[None,:,None]) + right[:,None,:]*across[None,:,None]
+        height = np.empty(grid.shape[:2])
+        for i,j in np.ndindex(grid.shape[:2]):
+            p = grid[i,j]
+            hit = surface.ray_cast(Vector((p[0],p[1],10)), Vector((0,0,-1)))[0]
+            if hit is None:
+                hit = surface.find_nearest(Vector(p))[0]
+            height[i,j] = hit.z
+        span = np.linalg.norm(np.column_stack([right[:,:2]-left[:,:2],height[:,-1]-height[:,0]]),axis=1)
+        chord = height[:,[0]]*(1-across) + height[:,[-1]]*across
+        target = chord - .037*span[:,None]*4*across*(1-across)
+        # Close the correction smoothly at the shared wrist and the finger tips.
+        change = (target-height)*smoothstep((fractions-.025)/.16)[:,None]
+        change *= smoothstep((1-fractions)/.12)[:,None]
+        grid[:,:,2] = change
+        slot = np.arange(grid.shape[0]*grid.shape[1]).reshape(grid.shape[:2])
+        a,b,c,d = slot[:-1,:-1],slot[:-1,1:],slot[1:,1:],slot[1:,:-1]
+        faces = np.concatenate([np.stack([a,b,c],-1).reshape(-1,3),np.stack([a,c,d],-1).reshape(-1,3)])
+        patch = BVHTree.FromPolygons(grid.reshape(-1,3).tolist(),faces.tolist(),all_triangles=True)
+        for i in rows:
+            x,y,_ = mid[i]
+            hit = patch.ray_cast(Vector((x,y,10)),Vector((0,0,-1)))[0]
+            if hit is not None:
+                mid[i,2] += hit.z*smoothstep(boundary_distance[i]/.12)
+
+
+def v7_shell(obj):
     """Retain both UV charts and roll the boundary inward around a six-segment half circle."""
     old = obj.data
     pos = coords(obj)
@@ -4833,13 +4874,19 @@ def v7_shell(obj, hide):
     boundary_indices = np.flatnonzero(count[inv] == 1)
     bedges = sides[boundary_indices]
     border = np.unique(bedges)
+    original_outline = mid[border,:2].copy()
     bd = nearest(mid[border], mid)
     bone = v7_supports(mid)
     flank = nearest(mid[seam > .5], mid)
     d1, d2 = np.sort(np.column_stack([bone,flank]),axis=1)[:,:2].T
     width = 4*d1*d2 / np.maximum(d1+d2, 1e-8)
     near = 1 - smoothstep((d1-.12)/.36)
-    half = (.036 + .052*near) * .5
+    half = (.034 + .048*near) * .5
+    elbow = w5_targets()["elbow"]
+    folded_contact = np.linalg.norm(mid*np.array([0,1,1]) - elbow*np.array([0,1,1]),axis=1)**2
+    folded_contact += (abs(mid[:,0])-elbow[0])**2
+    elbow_blend = 1-smoothstep((np.sqrt(folded_contact)-.45)/.45)
+    half -= .011*elbow_blend*near
     rim_share = 1 - smoothstep(bd/.16)
     half = half*(1-rim_share) + .039*rim_share
     def normals(p):
@@ -4849,7 +4896,6 @@ def v7_shell(obj, hide):
         for i in range(3):
             np.add.at(vn,tri[:,i],fn)
         return v7_unit(vn)
-    n = normals(mid)
     # The sculpt supplies the original grain. Reduce its broad bulges before setting the rest camber.
     adjacency = np.unique(np.sort(sides, axis=1), axis=0)
     a, b = np.concatenate([adjacency, adjacency[:,::-1]]).T
@@ -4889,10 +4935,33 @@ def v7_shell(obj, hide):
     for _ in range(8):
         avg = np.stack([np.bincount(a,weight*mid[b,i],minlength=len(mid))/total for i in range(3)],axis=1)
         mid = hold[:,None]*fixed + (1-hold[:,None])*(.35*mid+.65*avg)
+    v7_panel_camber(mid, tri, bd)
     reflect(mid)
     reflect(direction)
+    # Seat the outer edge of the rolled section on the original plan.
+    correction = original_outline - (mid[border,:2] + .039*direction[border,:2])
+    correction *= smoothstep(flank[border]/.30)[:,None]
+    edge_tree = KDTree(len(border))
+    for i,point in enumerate(mid[border]):
+        edge_tree.insert(point,i)
+    edge_tree.balance()
+    for i in np.flatnonzero(bd < .32):
+        hits = edge_tree.find_n(mid[i],4)
+        distances = np.array([item[2] for item in hits])
+        blend = 1/np.maximum(distances,.000001)**2
+        delta = np.average(correction[[item[1] for item in hits]],axis=0,weights=blend)
+        # The elbow sleeve covers this part of the edge. Keep its folded contact with the arm.
+        elbow_distance = np.linalg.norm(mid[i]*[np.sign(mid[i,0]),1,1]-elbow)
+        exposed = smoothstep((elbow_distance-.80)/.42)
+        mid[i,:2] += delta*(1-smoothstep(bd[i]/.32))*exposed
+    reflect(mid)
     n = normals(mid)
     reflect(n)
+    actual_distance = np.minimum(v7_supports(mid).min(1), nearest(mid[seam > .5], mid))
+    floor = .031 * (1-smoothstep((actual_distance-.15)/.08))
+    half = np.maximum(half, floor)
+    interior = smoothstep((actual_distance-.36)/.14) * smoothstep(bd/.20)
+    half += (.017-half)*interior
     count = len(mid)
     points = [mid+n*half[:,None],mid-n*half[:,None]]
     groups = [np.arange(count),np.arange(count)]
@@ -4967,12 +5036,269 @@ def v7_shell(obj, hide):
     log("v7 shell", len(triangles), "triangles;",len(border),"rounded boundary stations")
 
 
+def v7_grain_field():
+    """Draw folds and branching veins in metres on the wing plane."""
+    marks = w5_targets()
+    chains = (("shoulder","elbow","wrist","hub"), ("hub","f1a","f1b","f1c"),
+              ("hub","f2a","f2b"), ("hub","f3a","f3b"), ("elbow","spa","spb"))
+    joints = np.array([marks[k] for line in chains for k in line])
+    basis = np.linalg.svd(joints-joints.mean(0),full_matrices=False)[2][:2]
+    orig = (joints@basis.T).min(0)-2
+    step = .004
+    extent = np.ceil(((joints@basis.T).max(0)+2-orig)/step).astype(int)
+    x,y = np.meshgrid(np.arange(extent[0],dtype=np.float32)*step+orig[0],
+                      np.arange(extent[1],dtype=np.float32)*step+orig[1])
+    relief = np.zeros_like(x)
+    weights = np.zeros_like(x)
+    for i, name in enumerate(dict.fromkeys(k for line in chains for k in line[1:])):
+        a,b = marks[name]@basis.T
+        dx,dy = x-a,y-b
+        r = np.hypot(dx,dy)
+        theta = np.arctan2(dy,dx)
+        phase = theta + .025*np.sin(3*r+i) + .018*np.sin(5*dx+2*dy)
+        # Blend angular harmonics as the fan widens. Their wavelength spans 23 to 46 mm.
+        octaves = np.log2(np.maximum(8,2*np.pi*r/.046))
+        count = 2**np.floor(octaves)
+        mix = smoothstep(octaves-np.floor(octaves))
+        w = 1/(.23+r)**4
+        ridge = (1-mix)*np.cos(count*phase) + mix*np.cos(2*count*phase)
+        envelope = .65+.35*np.cos(4*theta+2*r+i)
+        relief += w*ridge*envelope
+        weights += w
+    folds = relief/weights
+    height = .0080*folds
+    vein = np.zeros_like(x)
+    rng = np.random.default_rng(73)
+    def stroke(start, end, bend, radius):
+        delta = end-start
+        sideways = v7_unit(np.array([-delta[1],delta[0]]))
+        points = [start+t*delta+sideways*bend*np.sin(t*np.pi) for t in np.linspace(0,1,9)]
+        for k,(a,b) in enumerate(zip(points,points[1:])):
+            rad = radius*(1-.72*k/8)
+            low = np.maximum(0, np.floor((np.minimum(a,b)-3*rad-orig)/step).astype(int))
+            high = np.minimum(extent,np.ceil((np.maximum(a,b)+3*rad-orig)/step).astype(int)+1)
+            sl = np.s_[low[1]:high[1],low[0]:high[0]]
+            dx,dy = x[sl]-a[0],y[sl]-a[1]
+            d = b-a
+            t = np.clip((dx*d[0]+dy*d[1])/(d@d),0,1)
+            dist2 = (dx-t*d[0])**2 + (dy-t*d[1])**2
+            ink = np.exp(-dist2/(2*rad**2))*(1-.45*(k+t)/8)
+            vein[sl] = np.maximum(vein[sl],ink)
+    for line in chains:
+        for ka,kb in zip(line,line[1:]):
+            a,b = marks[ka]@basis.T, marks[kb]@basis.T
+            axis = v7_unit(b-a)
+            normal = np.array([-axis[1],axis[0]])
+            for u in np.arange(.08,.99,.26/max(.26,np.linalg.norm(b-a))):
+                for side in (-1,1):
+                    start = a+(b-a)*u
+                    length = rng.uniform(.30,1.20)
+                    direction = v7_unit(axis*rng.uniform(.25,.9)+side*normal)
+                    end = start+length*direction
+                    bend = rng.uniform(-.10,.10)*length
+                    stroke(start,end,bend,rng.uniform(.007,.015))
+                    for t in (.40,.71):
+                        fork = start+t*(end-start)+np.array([-direction[1],direction[0]])*bend*np.sin(t*np.pi)
+                        branch = fork+length*(.16*direction+rng.uniform(-.26,.26)*axis)
+                        stroke(fork,branch,-.015,.0055)
+    height += .010*vein
+    gy,gx = np.gradient(height,step)
+    return basis,orig,step,np.stack([gx,gy,folds,vein],axis=-1)
+
+
+def v7_material(shell, data, reference_doc, reference_data):
+    """Rasterize paired shell distances and apply the measured field to the sculpt bake."""
+    mesh = shell["meshes"][0]["primitives"][0]
+    attr = {k:accessor(shell,data,i) for k,i in mesh["attributes"].items()}
+    tri = accessor(shell,data,mesh["indices"]).reshape(-1,3).astype(int)
+    p = to_build_frame(attr["POSITION"])
+    levels, ids = attr["_SHEET_LEVEL"],attr["_SHEET_ID"].astype(int)
+    def face_positions(level):
+        selected = np.flatnonzero(levels == level)
+        _,first = np.unique(ids[selected],return_index=True)
+        return p[selected[first]]
+    upper,lower = face_positions(1),face_positions(-1)
+    gaps = np.linalg.norm(upper-lower,axis=1)
+    mid = (upper+lower)*.5
+    support = v7_supports(mid).min(1)
+    flank = mid[np.unique(ids[attr["_SHEET_EDGE"]>.5])]
+    tree = KDTree(len(flank))
+    for i, point in enumerate(flank):
+        tree.insert(point,i)
+    tree.balance()
+    support = np.minimum(support,[tree.find(v)[2] for v in mid])
+    size = MAP_SIZE["membrane"]
+    uv = attr["TEXCOORD_0"].copy()
+    uv[:,1] = 1-uv[:,1]
+    uv = uv*size-.5
+    tangent = to_build_frame(attr["TANGENT"][:,:3])
+    normal = to_build_frame(attr["NORMAL"])
+    bitangent = np.cross(normal,tangent)*attr["TANGENT"][:,3,None]
+    # glTF's V axis points down. Its normal map uses the Blender tangent frame after V reversal.
+    basis, orig, step, field = v7_grain_field()
+    reflected = p.copy()
+    reflected[:,0] = abs(reflected[:,0])
+    projected = (reflected@basis.T-orig)/step
+    sg = np.sign(p[:,0])
+    tangent[:,0] *= sg
+    bitangent[:,0] *= sg
+    vertex = np.column_stack([projected, tangent@basis.T, bitangent@basis.T, gaps[ids],support[ids],levels])
+    raster = np.zeros((size,size,vertex.shape[1]),np.float32)
+    valid = np.zeros((size,size),bool)
+    for face in tri:
+        uvf = uv[face]
+        lo = np.maximum(np.ceil(uvf.min(0)).astype(int),0)
+        hi = np.minimum(np.floor(uvf.max(0)).astype(int)+1,size)
+        xx, yy = np.meshgrid(np.arange(lo[0],hi[0]),np.arange(lo[1],hi[1]))
+        a,b = uvf[1:]-uvf[0]
+        det = a[0]*b[1]-a[1]*b[0]
+        if abs(det)<1e-8 or not xx.size:
+            continue
+        dx,dy=xx-uvf[0,0],yy-uvf[0,1]
+        w1,w2=(dx*b[1]-dy*b[0])/det,(a[0]*dy-a[1]*dx)/det
+        use=(w1>=-1e-5)&(w2>=-1e-5)&(w1+w2<=1.00001)
+        w1,w2=w1[use,None],w2[use,None]
+        at=yy[use],xx[use]
+        v=vertex[face]
+        raster[at]=v[0]+w1*(v[1]-v[0])+w2*(v[2]-v[0])
+        valid[at]=True
+    v = raster[valid]
+    ix = np.clip(v[:,:2].astype(int),0,np.array(field.shape[1::-1])-2)
+    frac = np.clip(v[:,:2]-ix,0,1)
+    gain = np.zeros((len(v),4),np.float32)
+    for i,j in ((0,0),(1,0),(0,1),(1,1)):
+        w = (frac[:,0] if i else 1-frac[:,0])*(frac[:,1] if j else 1-frac[:,1])
+        gain += w[:,None]*field[ix[:,1]+j,ix[:,0]+i]
+    gx,gy,fold,vein=gain.T
+    gap,dist,level=v[:,-3:].T
+    thick=1-smoothstep((dist-.06)/.42)
+    hem=1-smoothstep(abs(level))
+    dark=np.maximum(thick,hem)
+    def source(label):
+        rec=next(x for x in reference_doc["images"] if x["name"]=="membrane_"+label)
+        buf=reference_doc["bufferViews"][rec["bufferView"]]
+        path=cache("v7-source-"+label+".jpg")
+        with open(path,"wb") as fh:
+            fh.write(reference_data[buf["byteOffset"]:buf["byteOffset"]+buf["byteLength"]])
+        img=bpy.data.images.load(path,check_existing=False)
+        img.colorspace_settings.name="Non-Color"
+        pixels=np_from_image(img)[...,:3]
+        bpy.data.images.remove(img)
+        return pixels
+    def save(label, values):
+        atlas=np.zeros((size,size,3),np.float32)
+        atlas[valid]=values
+        atlas,filled=dilate_fill(atlas,valid,8)
+        atlas[~filled]=np.mean(values,axis=0)
+        write_jpeg(cache("map_membrane_"+label+".jpg"),to_u8(atlas),96)
+    base=srgb_to_linear(source("base")[valid])
+    base=(1-.18*dark[:,None])*base+.18*dark[:,None]*(base@LUMA)[:,None]
+    value=(1-.69*dark)*(1-.39*vein)*(.95+.055*fold)*np.where(level>0,.66,.93)
+    base*=value[:,None]
+    save("base",linear_to_srgb(base))
+    tn=source("normal")[valid]*2-1
+    def tilt(n):
+        return np.degrees(np.arctan2(np.linalg.norm(n[:,:2],axis=1),n[:,2]))
+    panel=(abs(level)>.99)&(dist>.20)
+    before=float(tilt(tn[panel]).mean())
+    slope=tn[:,:2]/np.maximum(tn[:,2,None],.25)
+    slope=2.55*slope-np.stack([gx*v[:,2]+gy*v[:,3],gx*v[:,4]+gy*v[:,5]],axis=1)
+    tn=v7_unit(np.column_stack([slope,np.ones(len(slope))]))
+    save("normal",tn*.5+.5)
+    orm=source("orm")[valid]
+    orm[:,1]=.45+.35*np.maximum(dark,np.clip(.70*abs(fold)+.48*vein,0,1))
+    save("orm",orm)
+    atlas=np.zeros((size,size,1),np.float32)
+    atlas[valid,0]=gap/gaps.max()
+    atlas,filled=dilate_fill(atlas,valid,8)
+    write_png(OUT_THICK,to_u8(atlas[...,0]))
+    # Check the JPEG after encoding. The normal vector length can change during compression.
+    img=bpy.data.images.load(cache("map_membrane_normal.jpg"),check_existing=False)
+    img.colorspace_settings.name="Non-Color"
+    after=float(tilt(np_from_image(img)[...,:3][valid][panel]*2-1).mean())
+    bpy.data.images.remove(img)
+    log("v7 panel mean tilt",before,after,"degrees; roughness",orm[:,1].min(),orm[:,1].max())
+    log("v7 linear value, thick and thin",np.mean(base[(dist<.15)&(level>.99)]@LUMA),
+        np.mean(base[(dist>.48)&(level>.99)]@LUMA))
+
+
+def v7_spars(doc, binary, shell, data):
+    """Taper the sculpted fingers and blend the shaft normals into the surrounding skin."""
+    def streams(name):
+        prim = next(m for m in doc["meshes"] if m["name"] == name)["primitives"][0]
+        return {key:accessor(doc,binary,i) for key,i in prim["attributes"].items()}
+    hide = streams("hide")
+    co = hide["POSITION"]
+    marks = w5_targets()
+    fingers = (("hub","f1a","f1b","f1c"), ("hub","f2a","f2b"), ("hub","f3a","f3b"))
+    # Select the finger sleeve. The thumb and the original claw contact stay seated.
+    rows = np.flatnonzero((abs(co[:,0]) > 3.50) & (co[:,1] > 2.8))
+    p = to_build_frame(co[rows])
+    p[:,0] = abs(p[:,0])
+    def stretch(q):
+        distance = np.full(len(q),np.inf)
+        axis = np.zeros_like(q)
+        along = np.zeros(len(q))
+        for keys in fingers:
+            line = np.array([marks[k] for k in keys])
+            lengths = np.linalg.norm(np.diff(line,axis=0),axis=1)
+            cum = np.r_[0,np.cumsum(lengths)]
+            for i,(a,b) in enumerate(zip(line,line[1:])):
+                ab = b-a
+                t = np.clip((q-a)@ab/(ab@ab),0,1)
+                at = a+t[:,None]*ab
+                d = np.linalg.norm(q-at,axis=1)
+                keep = d < distance
+                distance[keep],axis[keep] = d[keep],at[keep]
+                along[keep] = (cum[i]+t[keep]*lengths[i])/cum[-1]
+        # A vertical displacement retains the plan outline and the span.
+        factor = 1.40-.92*smoothstep(along)
+        return (q[:,2]-axis[:,2])*(factor-1)*(1-smoothstep((distance-.16)/.12))
+    hp = streams("horn")["POSITION"]
+    hp = hp[(abs(hp[:,0])>3)&(hp[:,1]>2.5)]
+    tree = KDTree(len(hp))
+    for i,point in enumerate(hp):
+        tree.insert(point,i)
+    tree.balance()
+    grip = smoothstep((np.array([tree.find(v)[2] for v in co[rows]])-.008)/.055)
+    # Fade the sleeve onto the wrist without moving the thumb's seat.
+    influence = smoothstep((p[:,0]-3.50)/.16)*grip
+    delta = stretch(p)*influence
+    co[rows,1] += delta.astype(np.float32)
+    # Transform normals by the inverse transpose of the vertical displacement.
+    grad = np.stack([(stretch(p+v*.001)-stretch(p-v*.001))/.002 for v in np.eye(3)],axis=1)*influence[:,None]
+    norm = hide["NORMAL"][rows].astype(float)
+    sign = np.sign(co[rows,0])
+    derivative = np.column_stack([sign*grad[:,0],grad[:,2],-grad[:,1]])
+    norm -= derivative*(norm[:,1]/np.maximum(.25,1+derivative[:,1]))[:,None]
+    norm = v7_unit(norm)
+    web = shell["meshes"][0]["primitives"][0]
+    verts = accessor(shell,data,web["attributes"]["POSITION"])
+    indices = accessor(shell,data,web["indices"]).reshape(-1,3)
+    surface = BVHTree.FromPolygons(verts.tolist(),indices.tolist(),all_triangles=True)
+    for i,point in enumerate(co[rows]):
+        hit,face_normal,_,dist = surface.find_nearest(Vector(point),.09)
+        if hit is None:
+            continue
+        sn = np.array(face_normal)
+        dot = np.dot(norm[i],sn)
+        blend = .72*(1-smoothstep(dist/.09))*smoothstep((dot+.12)/.65)*influence[i]
+        norm[i] = v7_unit(norm[i]*(1-blend)+sn*blend)
+    hide["NORMAL"][rows] = norm.astype(np.float32)
+    tangent = hide["TANGENT"][rows,:3].astype(float)
+    tangent = v7_unit(tangent-norm*np.sum(tangent*norm,axis=1)[:,None])
+    hide["TANGENT"][rows,:3] = tangent.astype(np.float32)
+
+
 def v7_export():
-    """Replace the membrane primitive in the released 5c mesh. Preserve the other five primitives and their maps."""
-    doc, old_binary = read_glb(cache("v5c-reference.glb"))
+    """Replace the membrane and shape the finger sleeves on the released mesh."""
+    reference = cache("v5c-reference.glb")
+    if not os.path.isfile(reference):
+        raise HeroError("The version 5c reference was missing. Copy the released static GLB to build-hero-cache/v5c-reference.glb.")
+    doc, old_binary = read_glb(reference)
     binary = bytearray(old_binary)
     obj = bpy.data.objects["membrane"]
-    v7_shell(obj, bpy.data.objects["hide"])
+    v7_shell(obj)
     me = obj.data
     for name in ("sheet_id", "sheet_level", "sheet_s", "sheet_edge"):
         me.attributes[name].name = "_" + name.upper()
@@ -4994,6 +5320,16 @@ def v7_export():
     dest = next(m for m in doc["meshes"] if m["name"] == "membrane")["primitives"][0]
     dest["indices"] = prim["indices"] + acc_offset
     dest["attributes"] = {k:v+acc_offset for k,v in prim["attributes"].items()}
+    v7_spars(doc, binary, shell, data)
+    v7_material(shell, data, doc, old_binary)
+    for image in doc["images"]:
+        if image["name"].startswith("membrane_"):
+            with open(cache("map_" + image["name"] + ".jpg"), "rb") as file:
+                image_data = file.read()
+            binary.extend(b"\0" * (-len(binary)%4))
+            doc["bufferViews"][image["bufferView"]] = dict(buffer=0, byteOffset=len(binary), byteLength=len(image_data))
+            binary.extend(image_data)
+    binary.extend(b"\0" * (-len(binary)%4))
     doc["buffers"][0]["byteLength"] = len(binary)
     write_glb(OUT_GLB, doc, binary)
 
@@ -5428,10 +5764,51 @@ def w5_verify_repairs(geo, check):
         neighbor_normal=float(np.sqrt((normal[neighbor&face,:2]**2).mean()))
         check(.8<root_normal/neighbor_normal<1.2,f'root {name} normal XY RMS {root_normal:.4f}, neighbor {neighbor_normal:.4f}')
         report[name]=dict(root_rgb=a.tolist(),neighbor_rgb=b.tolist(),rgb_relative_error=delta.tolist(),root_thickness=ta,neighbor_thickness=tb,root_log_sd=sa.tolist(),neighbor_log_sd=sb.tolist(),root_normal_xy_rms=root_normal,neighbor_normal_xy_rms=neighbor_normal)
-    report_dir = os.environ.get("HERO_BUILD_ART", os.path.join(ROOT, "artifacts", "hero-claws"))
+    report_dir = ART if WING_V7 else os.environ.get("HERO_BUILD_ART", os.path.join(ROOT, "artifacts", "hero-claws"))
     os.makedirs(report_dir, exist_ok=True)
     with open(os.path.join(report_dir, "measurements.json" if WING_V7 else "measurements-v5c.json"), "w") as f:
         json.dump(report,f,indent=2)
+
+
+def verify_v7_shell(doc, data, check):
+    """Measure the paired faces, rolled edge and panel normals in the exported file."""
+    prim = next(m for m in doc["meshes"] if m["name"] == "membrane")["primitives"][0]
+    attrs = {k:accessor(doc,data,i) for k,i in prim["attributes"].items()}
+    points = to_build_frame(attrs["POSITION"])
+    normals = to_build_frame(attrs["NORMAL"])
+    tri = accessor(doc,data,prim["indices"]).reshape(-1,3)
+    ids = attrs["_SHEET_ID"].astype(int)
+    levels = attrs["_SHEET_LEVEL"]
+    def face(level):
+        rows = np.flatnonzero(levels == level)
+        return points[rows[np.unique(ids[rows],return_index=True)[1]]]
+    upper,lower = face(1),face(-1)
+    mid = (upper+lower)*.5
+    gap = np.linalg.norm(upper-lower,axis=1)*1000
+    def distance(rows):
+        tree = KDTree(len(rows))
+        for i,pt in enumerate(mid[rows]):
+            tree.insert(pt,i)
+        tree.balance()
+        return np.array([tree.find(pt)[2] for pt in mid])
+    hem = np.unique(ids[abs(levels)<.001])
+    flank = np.unique(ids[attrs["_SHEET_EDGE"]>.5])
+    structural = np.minimum(v7_supports(mid).min(1),distance(flank))
+    def thickness(name,rows,lo,hi):
+        g = gap[rows]
+        check(g.min()>=lo-.001 and g.max()<=hi+.001,
+              f"{name}: {len(g)} stations, {g.min():.2f} to {g.max():.2f} mm")
+    thickness("within 150 mm of a spar or flank",structural<=.15,60,90)
+    thickness("open panel interior",(structural>=.50)&(distance(hem)>=.25),30,40)
+    thickness("round hem",hem,60,80)
+    sections = np.unique(np.round(levels,5))
+    check(len(sections)>=7, f"hem section spans {len(sections)-1} segments")
+    panels = tri[np.all(levels[tri]==1,axis=1)|np.all(levels[tri]==-1,axis=1)]
+    q = points[panels]
+    fn = v7_unit(np.cross(q[:,1]-q[:,0],q[:,2]-q[:,0]))
+    angle = np.degrees(np.arccos(np.clip((fn[:,None,:]*normals[panels]).sum(2),-1,1))).max()
+    check(angle<=25, f"largest panel corner normal angle {angle:.3f} degrees")
+    check(len(tri)<=24000, f"membrane triangle count {len(tri)}, limit 24000")
 
 
 def verify():
@@ -5612,6 +5989,8 @@ def verify():
         w, h = struct.unpack(">II", head[16:24])
         check((w, h) == (MAP_SIZE["membrane"],) * 2 and head[25] == 0, f"thickness map {w}x{h}, one channel")
 
+    if WING_V7:
+        verify_v7_shell(doc,binary,check)
     if WING_V5:
         w5_verify_repairs(geo,check)
     # Preserve the complete gate report. Earlier runs only printed the mesh checks.

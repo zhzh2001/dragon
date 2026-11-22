@@ -3,9 +3,10 @@ import os
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-# Keep delegated builds in their configured cache. The old fixed path escaped the task's write scope.
-CACHE = Path(os.environ.get('HERO_RIG_CACHE', ROOT / 'build-hero-rig-cache'))
-CACHE.mkdir(exist_ok=True)
+V7 = os.environ.get('HERO_WING') == 'v7'
+default_cache = ROOT / ('build-hero-cache/rig7' if V7 else 'build-hero-rig-cache')
+CACHE = Path(os.environ.get('HERO_RIG_CACHE', default_cache))
+CACHE.mkdir(parents=True, exist_ok=True)
 sys.pycache_prefix = str(CACHE / 'pycache')
 sys.dont_write_bytecode = True
 os.environ['TMPDIR'] = str(CACHE)
@@ -26,8 +27,8 @@ bpy.context.preferences.filepaths.temporary_directory = str(CACHE)
 SOURCE = ROOT / 'assets/embercrest-hero-static.glb'
 OUTPUT = ROOT / 'assets/embercrest-hero.glb'
 SPEC = ROOT / 'tools/skeletons/embercrest-hero.json'
-# A caller can contain reports without overwriting unrelated inspection artifacts.
-ART = Path(os.environ.get('HERO_RIG_ART', ROOT / 'artifacts/hero-rig'))
+default_art = ROOT / ('artifacts/hero-rig/v7-final' if V7 else 'artifacts/hero-rig')
+ART = Path(os.environ.get('HERO_RIG_ART', default_art))
 SHEET_SPEC = json.loads(SPEC.read_text())
 DTYPES = {5126: '<f4', 5125: '<u4', 5123: '<u2', 5121: 'u1'}
 WIDTHS = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
@@ -1324,9 +1325,17 @@ def verify_v7_separation(mesh, names, check):
     for label, frames in zip(("beat", "dive fold", "ground fold"), poses):
         minimum = np.inf
         failures = 0
-        for matrices in frames:
+        intersection = None
+        faces = tri.tolist()
+        for frame, matrices in enumerate(frames, 1):
             posed = np.einsum('vkij,vkj->vi',matrices[joints,:,:],vw)
             upper, lower = np.split(posed,2)
+            if intersection is None:
+                upper_tree = BVHTree.FromPolygons(upper.tolist(), faces, all_triangles=True)
+                lower_tree = BVHTree.FromPolygons(lower.tolist(), faces, all_triangles=True)
+                pairs = upper_tree.overlap(lower_tree)
+                if pairs:
+                    intersection = (frame, len(pairs))
             q = lower[tri]
             fn = np.cross(q[:,1]-q[:,0],q[:,2]-q[:,0])
             vn = np.zeros_like(lower)
@@ -1336,8 +1345,11 @@ def verify_v7_separation(mesh, names, check):
             signed = np.sum((upper-lower)*vn,axis=1)
             minimum = min(minimum, float(signed.min()))
             failures = max(failures,int((signed<=0).sum()))
-        check(failures == 0, label + " shell separation",
-              f"{len(frames)} frames, {len(up)} upper vertices per frame, at most {failures} crossed, minimum signed gap {minimum*1000:.2f} mm")
+        contact = (f"first intersecting frame {intersection[0]}, {intersection[1]} opposing triangle pairs"
+                   if intersection else "no opposing triangles intersected")
+        check(failures == 0 and intersection is None, label + " shell separation",
+              f"{len(frames)} frames, {len(up)} upper vertices per frame, at most {failures} crossed, "
+              f"minimum signed gap {minimum*1000:.2f} mm, {contact}")
 
 
 def verify(doc, binary, geo, rig, objects, imported_armatures):
