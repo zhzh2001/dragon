@@ -592,7 +592,7 @@ float4 fs_main(VertexOut input) : SV_Target {
     // What a breath left here (game/breath_matter.h): rime, a wet patch, an
     // acid burn, rubble's dust, soot. A disc with a torn edge, strongest at
     // its middle.
-    for (int m = 0; m < 16; ++m) {
+    for (int m = 0; m < 16 && scene.mark_count.x > 0.5; ++m) {
         if (float(m) >= scene.mark_count.x) break;
         float4 mark = scene.marks[m];
         float3 off = input.world_position - mark.xyz;

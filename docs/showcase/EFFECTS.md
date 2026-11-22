@@ -716,6 +716,24 @@ scale's octaves stay the same ones as the jet widens.
 - No sound of its own for any of them yet.
 - The rivals' breaths and the retro tiers keep the puffs.
 
+### Cost
+
+Measured by paired ablation at 1920x1080 in the chase view, the breath
+held for 110 frames in level flight, with the breath volume, every
+particle and the pieces taken out of every other half second
+(`~/src/gpu-hist`, `research/dragon-m5/runs/
+20261122-1625-mac-m5-dragon-breath-pieces-cost`). Each breath cost 1.0
+to 4.4 ms, as style 1 and as style 2. The machine was shared, the whole
+frame moved by 3 ms between runs, and a second pass reversed the order
+of the styles for three elements of four. So the pieces are not shown
+to cost more or less than the cloud. No piece had reached the ground in
+that frame: spikes, rubble and marks are not in the number.
+
+The marks' loop in `terrain.hlsl` does not run while no mark is set.
+With it and without it the frame's median was 21.2 and 20.6 ms over
+three interleaved runs each, inside the noise; the loop is guarded by
+the count all the same.
+
 Sheets: `artifacts/breath-volume/pieces-chase-before-after.jpg` and
 `pieces-side-before-after.jpg` (style 1 on the left), and
 `pieces-grounded-studio.jpg` (all six from the standing studio dragon,
