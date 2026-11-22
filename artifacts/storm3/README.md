@@ -80,3 +80,103 @@ Three builds, colour correction and engine inspection took about 11 minutes.
 
 The glide stood 35 degrees up: the bind keeps the sheet's raised wings. `wing_rest_deg -20` in the rig profile lowers the wing in flight.
 The flight profile has no stroke keys, so the beat moved down with the rest. Renders: `artifacts/elemental-round3/`. The record: `docs/MODEL_GENERATION.md`, "The third round modelled".
+
+## Second pass: postures and wingbeat
+
+### 1. Glide
+
+The standing bind pose carried the shoulders and neck upright in flight. The hip-to-shoulder line rose 71.6° at glide frame 200.
+The rig has no flight-only trunk pitch control. I pitched the trunk forward 61° in Blender and carried the skin with the joints.
+The three neck segments use absolute pitch changes of −60°, −55° and −47°. The skull turns up 13° to level the muzzle.
+The tail straightens progressively toward the fluke. The new trunk rises 10.6° and the neck rises 14.0° from its base to the skull.
+The glide now meets the 15° trunk target.
+
+For a clean rebuild, complete the original rig, grade and material repair above first.
+Copy the standing raw and repaired GLBs into a separate directory before baking the flight bind.
+The script preserves the image data, UV coordinates, triangle indices and 55 joint names.
+
+```sh
+mkdir -p build-rig-cache/asset/standing
+cp assets/storm3-raw.glb assets/storm3.glb build-rig-cache/asset/standing/
+PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_flight_bind.py -- build-rig-cache/asset/standing assets
+PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_flapcheck.py
+```
+
+### 2. Flight legs
+
+One alternating tuck angle straightened the shin. The limb springs then let the feet swing through each reversal.
+I set `leg_flight_pose` to 1 and the hip, knee and hock to 9°, 27° and 47°. Hip splay is −12°.
+The foot now trails 2.33 m behind the hip and 0.35 m below it. The former glide put it 1.09 m below.
+The first tuck put the foot slightly above the hip. Lowering the hip angle by 10° brought the claws alongside the tail.
+Spring stiffness is 110, tip stiffness is 0.85, damping is 0.95 and angular range is 0.6°.
+Across a complete 54-frame beat, maximum foot displacement fell from 0.455 m to 0.041 m. Total travel fell from 0.775 m to 0.183 m.
+I measured the foot joint relative to the hip and removed the trunk rotation at each frame.
+
+### 3. Wingbeat height
+
+The leading tip already reached 37.8° above level and 31.2° below. The innermost hook stayed at least 5.7° below the shoulder.
+I measured each angle from the shoulder to the same skin point throughout the beat.
+The new leading tip reaches 41.8° above and 29.7° below. The innermost hook now reaches 19.6° above the shoulder.
+The climb reaches 41.6° above and 36.2° below. The wing clears the hanging-leg position at the bottom.
+The cruise still reaches 12.1° farther above level than below.
+
+I set the shared wing leveling to 0.45 and the wing rest to −28°.
+The upper stroke command is 51°. The lower commands are −49° in cruise and −64° in climb.
+The powered stroke takes 48% of the cycle in both profiles. Peak force fell to 7500 to preserve the impulse.
+The stroke plane tilts 12° forward.
+
+### 4. Membrane and recovery
+
+The inner web joined the moving wing to the fixed flank across a narrow strip.
+The first rebuild spread the wing weights across 1,155 points. Rotating the body still rolled the inner web into a tube.
+The second rebuild fitted both faces of the web between the arm and trailing edge. It moved 3,236 inner points.
+In the bind pose, the rolled edge rose 1.18 m above its endpoints before the repair. The repair removed that rise.
+At 45° of shoulder depression, the rise fell from 1.45 m to 0.34 m.
+
+I reduced recovery flex to 4° at the elbow, 10° at the wrist and 8° at the fingers.
+Recovery droop is 8°, upstroke fold is 15°, twist is 10° and phase delay is 0.035 cycles.
+The hand starts reopening at phase 0.79. The flank stays still as the hand narrows and opens.
+The wing-only check moved none of the 35,360 body vertices across 41 poses.
+
+The large fold is gone. A small notch remains beside the innermost rib, visible in rear frames 221 and 235. Side frame 228 shows a bright strip along the folded edge.
+The inner hook still travels 0.14 m across the centerline during cruise recovery. It previously crossed by 0.38 m.
+The shared finger flex controls all four ribs. A separate fourth-rib angle, such as `recovery_finger4_deg`, would let it clear the spine.
+
+### 5. Ground stance
+
+The old stance held the hand at 55° and fanned the ribs upright. Its floor height also matched the standing bind.
+I set the body pitch to 27°, hip to 14°, neck to 1° and tail to 48°. The floor offset is 3.09 m.
+The upper arm aims −18° in sweep and −21° in elevation. The forearm aims −60° and −65°.
+The hand sweeps back 118° and rises 25°. All four ribs share that direction.
+
+Each wrist now stands 3.20 m ahead of its hind foot and 1.48 m farther out. The former distances were 2.74 m and 1.16 m.
+On a level floor, the hind toes touch and the wrist pad sits 10 mm below them. The body clears the floor by 0.58 m.
+The neck rises 39° and the muzzle faces forward. The tips still flare outward and the inner membrane stays broad across the flank. The neck sits lower than the concept.
+The engine distributes ground neck pitch evenly. A separate `ground_head_pitch_deg` would allow a steeper neck with a level muzzle.
+A separate `ground_wing_tip_sweep_deg` would turn the last finger segment inward. The ground solver currently aims only segments with a child.
+
+### 6. Dive and turn
+
+The old speed sweep opened the extended wing forward during the dive release. The inner hook crossed the spine by 0.07 m at full tuck.
+I set the speed sweep to 14° aft, starting at 34 m/s. The turn uses −20° of forward sweep under load.
+A 52° dive sweep brought the web through the legs. A 44° sweep cleared the shins at full tuck but caught them during release.
+The final profile uses the original 40° sweep. The ribs converge 37° and droop 5°.
+The nearest inner tip stays 1.61 m from the centerline at full tuck and 1.10 m away during release.
+The leg intersection check found no wing vertices inside the shins at either frame. It still flagged contact at the chest attachment.
+
+At turn frame 260, the leading tip extends 5.32 m sideways from the shoulder. It previously reached 6.58 m.
+At dive frame 300, that distance fell from 5.50 m to 4.17 m. Both poses keep the tips on their own side.
+
+### Captures and checks
+
+The comparison pairs eight poses at one image pixel per captured pixel. [Before and after](pass2/before-after.jpg)
+The contact sheet includes all 47 requested views. The two sets share the same nine Embercrest reference frames. [All final views](pass2/views.jpg)
+The original front landing camera cuts off the near wrist. Some side cameras cut off the leading wingtip at stroke extremes.
+The full frames retain the requested camera positions. [Before frames](pass2/before/) and [after frames](pass2/after/)
+
+I checked the landing in flight and the switch from Embercrest to Storm3.
+Both final GLBs retain 80,000 triangles, 55 named joints, the triangle indices, UV coordinates, maps and graded materials.
+The glide, leg tuck, dive and turn met their targets. The cruise stroke, inner membrane and ground fold retain the differences described above.
+The pass took about 29 minutes, including two asset rebuilds and the engine captures.
