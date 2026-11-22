@@ -2160,7 +2160,7 @@ All three are wyverns: two legs, the wings the forelimbs. In their
 side views the wings are raised and not edge on, as the second
 round's were.
 
-frost2 and storm2 stay in the roster until a pick replaces them.
+frost2 and storm2 stayed in the roster until the pick below replaced them.
 
 ## The wingbeat of the five (2026-11-22, 15:30)
 
@@ -2225,3 +2225,131 @@ in them. With the new wingbeat, the marked haunches at the top and at
 the bottom of the stroke: `artifacts/elemental-round2/haunch-up-and-down-stroke.jpg`
 (blight2, then tide2). The outline of each haunch is the same in both.
 
+## The third round modelled: frost3 and storm3 (2026-11-22, 17:15)
+
+The user's pick: "frost 3 but replace mace tail with 1 style, also wings
+are disconnected/strange in side view. storm looks quite similar, just
+try to make the final model similar."
+
+### The sheets
+
+Frost was drawn again, twice, with `frost-3.png` as the subject: design
+3's ruff, design 1's tail (a spray of icicles), and the wings opened and
+raised 30 degrees in a shallow V, so the side views show the arm and the
+membrane joined to the body at the shoulder and along the flank. In the
+first three sheets the side views drew the wing as a sheet floating over
+the back. `docs/concept/elemental-options/round3/frost-3b.jpg` is the one
+sent on. It was not shown to the user before modelling: the pick came
+with two corrections and the sheet meets both.
+
+Storm is `storm-1.jpg`, the old wyvern kept and cleaned. The three storm
+sheets differ little, which is what the user said of them.
+
+### The models
+
+| File (`assets/`, not committed) | Job | Wingspan over length |
+|---|---|---|
+| `frost3-cand-oneshot.glb` | `fad95d32-f883-49a2-a227-7cb242cd08aa` | 1.06 |
+| `storm3-cand-oneshot.glb` | `7d6ee7ff-c15b-46d5-a52a-eea020f2dd34` | 1.08 |
+
+Both follow their sheets in shape: the ruff, the row of back spikes, the
+tail spray and four legs on frost3; two legs, wing forelimbs, the crest
+and the fluke on storm3. Previews, six views each, rendered in Blender
+by a Sonnet subagent: `artifacts/elemental-round3/<name>-preview.jpg`.
+The subagent counted four legs on storm3. It has two: the wing arms
+reach the ground in the front view.
+
+The generator's base colour came back darker than the sheet on frost
+(median 146,164,187 against 162,179,196 for the sheet's creature
+pixels) and close on storm (119,127,140 against 137,142,151).
+
+### The rig job
+
+One Codex job (gpt-6.2-astra, high, full access, the work profile) in a
+worktree, by `tools/showcase/elemental-round3-brief.md`: 24 minutes,
+433,103 tokens. Each creature has its own measured skeleton
+(`tools/skeletons/<name>.json`), a rig script, a grade script, a flap
+check, and a likeness sheet against its concept
+(`artifacts/<name>/likeness.jpg`).
+
+| | frost3 | storm3 |
+|---|---|---|
+| Load line | neck 3, tail 8, wing root 3/3, fingers 4/4, legs 3/3, front legs 3/3, feet 4 | neck 3, tail 11, wing root 3/3, fingers 4/4, legs 3/3, front legs 0/0, feet 2 |
+| Body length | 13.62 m, 95.7% of the hero | 13.55 m, 95.2% |
+| `model_span_m` | 14.45 | 14.65 |
+| Flap check, worst body vertex | 0 m | 0 m |
+| Sibling for the profiles | frost2 | stormsail |
+
+storm3 is the first wyvern with its own measured skeleton: stormsail and
+tidewrack share `winged-biped.json`. It keeps stormsail's bone names and
+its wingbeat.
+
+Known from the job's own report: at least three small spines on frost3's
+tail still bend across two bones (near Y -0.27, -0.34 and -0.41 in the
+skeleton's frame) after three builds. The generator made the icicles
+thicker and the tail spray narrower than the sheet, the ruff's blades
+fewer and rounder, the eyes smaller. storm3's wing hooks are heavier
+than the sheet's, and its inner membrane shows a small step in the
+recovery and a sharp pleat standing.
+
+### What the main session changed after it
+
+**The glide was a steep V.** Both sheets drew the wings raised 30
+degrees, the rig bound them as drawn ("in its original silhouette"; the
+second round levelled the wing at bind with `wing_bind_level_deg`), and
+the flight model's glide is 9 degrees over the bind. Seen from the front
+the wings stood 40 degrees up, where the hero's are at 20. The job's own
+front view shows it and its report does not mention it.
+
+`wing_rest_deg` is a new rig profile key (`anim/dragon_rig.h`): degrees
+added to the wing's elevation in flight, a posture term beside the load
+flex and the brake raise, so the flap ceiling does not eat it and it
+fades on the ground. frost3 has -22 and storm3 -20.
+`artifacts/elemental-round3/glide-rest-0-20-30.jpg` is each at 0, -20
+and -30 beside the hero and stormsail. The stroke angles of a flight
+profile are then measured from the rest: frost3's 24 up and -82 down
+became 46 and -60, the same top and bottom. storm3 has no stroke keys
+and its beat moved down with the rest, to about 30 up and -62 down from
+the bind. Six frames of each: `frost3-flap.jpg`, `storm3-flap.jpg`
+there.
+
+**Frost was grey-lilac with a beige belly.** The job's grade
+(`tools/frost3_grade.py`) lifted the base colour to a median of
+182,199,212 and took the blue with it: blue over red went from 1.28 to
+1.16, and the sheet's is 1.21 under a neutral light, where the game's
+sun is warm. `tools/frost3_cool.py` is a second pass on the built
+models: a warm pale pixel goes to white, and the pale hide is cooled,
+most in the mid-tones. The median is now 166,198,224, a ratio of 1.35.
+The mouth, the eyes and the green and violet at the wing's edge are
+kept. `artifacts/elemental-round3/frost3-cool-before-after.jpg`: the
+glide in a high sun, landed and the chase view in the default sun,
+before above and after below.
+
+**They are the second designs now.** `kDesignPairs` pairs frostvein
+with frost3 and stormsail with storm3. frost2 and storm2 are reached
+through `--models` alone.
+
+### What it looks like, and what is not right
+
+`artifacts/elemental-round3/sheet-bind-glide.jpg` puts each sheet beside
+the bind pose and the glide in a high sun. `new-and-old-in-sun.jpg` has
+each beside the design it is paired with. `<name>-nine-views.jpg` is the
+glide from four sides, the head in the air and on the ground, landed,
+the dive and the stand.
+
+- The shape follows the sheet on both. The colour follows it in the sun
+  and not out of it: a side view of the raised near wing shows its
+  underside, which the sun does not reach, and the membrane reads dark
+  slate where the sheet's flat light has it pale. That is every
+  creature's shading, not these two's.
+- In a mountain's shadow both go dark slate, darker than the grass
+  under them. The old frostvein and the hero do the same in the same
+  view; a pale dragon shows it most. The creature's ambient loses the
+  ground's bounce in shade (`ambient_light_at`) and the ground faces the
+  whole sky. Not changed.
+- The wings are short for this game, as the second round's are: 1.06
+  and 1.08 of the body's length where the hero's are 1.33 at its size.
+  The sheets drew them so.
+- frost3's ruff is a dense fan of thick blades. From the front, lit, it
+  reads pale blue; backlit it is a dark mass around the head.
+- Nothing was watched in motion at a player's frame rate.

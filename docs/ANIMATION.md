@@ -1499,3 +1499,29 @@ and [native integration evidence](../artifacts/silver-dragon-integration/README.
 record the probes, pose and motion captures, gameplay checks and remaining
 human playtest. These close reference studies remain excluded from the public
 mirror along with their specialized source and evidence.
+
+## A wing bound raised glides in a V: `wing_rest_deg` (2026-11-22)
+
+The flight model's glide holds the wing 9 degrees over the bind pose. A
+sculpt with level wings glides level. frost3 and storm3 were generated
+from sheets that drew the wings raised 30 degrees, so the side view
+showed them joined to the body, and their rig bound them as drawn. Both
+glided with the wings 40 degrees up, where the hero's are at 20.
+
+There are two ways out. The second round's rig scripts level the wing
+at bind (`wing_bind_level_deg` in the skeleton file), which changes the
+asset. `wing_rest_deg` in the rig profile changes the pose: degrees
+added to the wing's elevation in flight, negative to lower it. It is a
+posture term, added where the load flex and the brake raise are
+(`non_flap_base_common` in `dragon_rig.cpp`), so `wing_flap_limit_deg`
+does not eat it and it fades on the ground with the other flight terms.
+The standing fold is not touched.
+
+A flight profile's `flap_up_angle_deg` and `flap_down_angle_deg` are
+measured from the rest once it is set. Move both by the rest to keep a
+tuned stroke's top and bottom: frost3's 24 and -82 with a rest of -22
+are 46 and -60.
+
+Look from the front (`--studio 0 --inspect 180 16 6`) to set it. The
+side view does not show a dihedral.
+`artifacts/elemental-round3/glide-rest-0-20-30.jpg`.

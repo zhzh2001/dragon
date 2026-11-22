@@ -13,7 +13,7 @@ Each `assets/<name>-cand-oneshot.glb` is a Hunyuan one-shot: 1.5 million triangl
 | `frost3` | frost | four legs, two wings | `docs/concept/elemental-options/round3/frost-3b.jpg` | `frost2` |
 | `storm3` | storm | a wyvern: two hind legs, the wings are the forelimbs | `docs/concept/elemental-options/round3/storm-1.jpg` | `stormsail` |
 
-Previews of the raw meshes are `artifacts/elemental-round2/frost3-preview.jpg` and `storm3-preview.jpg`. Look at the sheets and the previews first.
+Previews of the raw meshes are `artifacts/elemental-round3/frost3-preview.jpg` and `storm3-preview.jpg` (in `artifacts/elemental-round2/` when the job ran). Look at the sheets and the previews first.
 
 `frost3` is white and pale blue with a ruff of ice spikes behind the head, a row of spikes down the back, and a tail that ends in a spray of icicles. Colour sits only on the wing edges. The spikes and icicles are ice, not horn, and they are rigid: each must ride one bone whole.
 

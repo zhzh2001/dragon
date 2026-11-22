@@ -75,3 +75,8 @@ A small step remains along the inner trailing edge during recovery, especially i
 The planted wrist draws the membrane into a broad, angular pleat. [Engine poses](views.jpg)
 
 Three builds, colour correction and engine inspection took about 11 minutes.
+
+## After the job (the main session, 2026-11-22)
+
+The glide stood 35 degrees up: the bind keeps the sheet's raised wings. `wing_rest_deg -20` in the rig profile lowers the wing in flight.
+The flight profile has no stroke keys, so the beat moved down with the rest. Renders: `artifacts/elemental-round3/`. The record: `docs/MODEL_GENERATION.md`, "The third round modelled".

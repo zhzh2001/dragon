@@ -69,3 +69,17 @@ The inner web forms a sharp pleat during the standing fold. The tail needles rem
 Grass covers the toe tips in the landing views. The additional standing view shows the feet. [Engine poses](views.jpg) · [Standing feet](feet.jpg)
 
 Three builds and the engine inspection took about 13 minutes.
+
+## After the job (the main session, 2026-11-22)
+
+The glide stood 40 degrees up: the bind keeps the sheet's raised wings. `wing_rest_deg -22` in the rig profile lowers the wing in flight.
+The flight profile's stroke is measured from that rest now: 46 up and -60 down, the same top and bottom as 24 and -82 from the bind.
+
+The first grade left the hide grey-lilac with a beige belly in the game's sun. `tools/frost3_cool.py` runs on the built models, raw and repaired:
+
+```sh
+build-rig-cache/venv/bin/python tools/frost3_cool.py assets/frost3-raw.glb assets/frost3-raw.glb
+build-rig-cache/venv/bin/python tools/frost3_cool.py assets/frost3.glb assets/frost3.glb
+```
+
+The base colour's median went from 182,199,212 to 166,198,224. Renders: `artifacts/elemental-round3/`. The record: `docs/MODEL_GENERATION.md`, "The third round modelled".

@@ -74,9 +74,11 @@ struct DesignPair {
     const char* first;
     const char* second;
 };
+// Frost and storm are their third designs (2026-11-22): the user turned
+// frost2 and storm2 down, and those are reached through --models alone.
 constexpr DesignPair kDesignPairs[] = {
-    {"embercrest", "embercrest-hero"}, {"frostvein", "frost2"}, {"ironroot", "stone2"},
-    {"stormsail", "storm2"},           {"tidewrack", "tide2"},  {"blightmaw", "blight2"},
+    {"embercrest", "embercrest-hero"}, {"frostvein", "frost3"}, {"ironroot", "stone2"},
+    {"stormsail", "storm3"},           {"tidewrack", "tide2"},  {"blightmaw", "blight2"},
 };
 
 std::vector<std::string> App::roster_paths(const Options& options) {

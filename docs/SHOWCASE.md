@@ -76,6 +76,15 @@ second proposal, a realm of valleys with people, followers, a hoard
 that is eaten and a long sleep, and nothing of it is built
 (`docs/WILDS.md`, "The wilds, second discussion").
 
+The eighth round (2026-11-22, 17:15). The user picked frost design 3
+with design 1's tail and the first storm sheet. Both are modelled,
+rigged by one Codex job on their own measured skeletons, and paired
+with frostvein and stormsail in place of frost2 and storm2
+(`docs/MODEL_GENERATION.md`, "The third round modelled"). A new rig
+key, `wing_rest_deg`, lowers a wing bound raised to a glide. The
+mechanics discussions and the wilds moved out of `DIRECTION.md` into
+`docs/MECHANICS.md` and `docs/WILDS.md`.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

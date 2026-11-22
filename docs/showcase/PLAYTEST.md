@@ -770,3 +770,48 @@ Seen and not fixed: six rivals breathing at 60 m fill the frame with
 the old puffs. The rivals' breaths are still the particles the player's
 had before the marched volume. It was so before this round.
 
+## The eighth round: frost3 and storm3 modelled, the docs split (2026-11-22, 17:15)
+
+The user, on the six sheets: "frost 3 but replace mace tail with 1
+style, also wings are disconnected/strange in side view. storm looks
+quite similar, just try to make the final model similar. please split
+docs/DIRECTION.md into like WILDS.md". No new feedback report: 0027 is
+the last.
+
+| Ask | Answer |
+|---|---|
+| Frost 3 with design 1's tail | A revised sheet, `docs/concept/elemental-options/round3/frost-3b.jpg`, modelled and rigged as `frost3`. `MODEL_GENERATION.md`, "The third round modelled" |
+| Wings disconnected in the side view | The sheet draws the wings raised 30 degrees and joined at the shoulder. The model's arm and membrane join the body, and the flap check moves no body vertex |
+| Storm, the final model similar | `storm-1.jpg` modelled and rigged as `storm3`, a wyvern on its own measured skeleton |
+| Split `DIRECTION.md` | `docs/MECHANICS.md` and `docs/WILDS.md`. `DIRECTION.md` keeps the plan, the silhouette study and the start screen |
+
+Both are the second designs of their species now: O swaps frostvein
+with frost3 and stormsail with storm3.
+
+Two things the rig job left and the main session changed. Both dragons
+glided with their wings 40 degrees up, because they were bound as their
+sheets drew them: a new profile key, `wing_rest_deg`, lowers the wing
+in flight to the hero's dihedral. And frost3 read grey-lilac with a
+beige belly: a second colour pass cools it to white with pale blue.
+Before and after of each are in `artifacts/elemental-round3/`.
+
+### What was checked and what was not
+
+Checked by render, on both: the glide from the side, the front, the
+rear and above, the head close in the air and on the ground, landed at
+ground level, the dive, the stand, six frames of the wingbeat from
+behind and from the side, and the sheet beside the bind pose.
+
+Checked by soak: a match of five rivals with the designs swapped every
+300 frames for 2,400 frames; the studio's flap with the player cycled
+through all fifteen models; the start screen. The 28 suites and the
+goldens pass.
+
+Not checked: anything in motion at a player's frame rate, or with a
+hand on the keys.
+
+Seen and not fixed: three small spines on frost3's tail bend across two
+bones. Both dragons go dark slate in a mountain's shadow, as every
+creature does, and a pale one shows it most. The wings are short beside
+the hero's, as the sheets drew them. storm3 stands in the same pleated
+crouch on its wrists as stormsail.

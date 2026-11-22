@@ -152,6 +152,16 @@ struct RigTuning {
     // untouched. This is an animation guard for rigs whose membranes cross at
     // the engine's full stroke.
     float wing_flap_limit_deg = 0.0f;
+    // Degrees added to the wing's elevation in flight: where the glide holds
+    // the wing against its bind pose. A sculpt bound with its wings raised
+    // (frost3 and storm3: their sheets drew the wing 30 degrees up, so the
+    // side view showed it joined to the body) glided in a steep V, because
+    // the flight model's glide is 9 degrees over whatever the bind is.
+    // Negative lowers. A posture term: the flap ceiling does not eat it, and
+    // it fades on the ground with the other flight terms. The profile's
+    // flap_up_angle_deg and flap_down_angle_deg are then measured from the
+    // rest, not from the bind.
+    float wing_rest_deg = 0.0f;
     // Extra compacting fold during the middle of the recovery stroke. It fades
     // back out before the next downstroke, so the fingers reopen smoothly.
     float wing_recovery_fold_deg = 0.0f;

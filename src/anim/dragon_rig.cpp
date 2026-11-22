@@ -345,6 +345,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(wing_finger_fold_scale),
     RIG_FLOAT_FIELD(wing_flap_fold_deg),
     RIG_FLOAT_FIELD(wing_flap_limit_deg),
+    RIG_FLOAT_FIELD(wing_rest_deg),
     RIG_FLOAT_FIELD(wing_recovery_fold_deg),
     RIG_FLOAT_FIELD(wing_recovery_extend_phase),
     RIG_FLOAT_FIELD(upstroke_fold_deg),
@@ -1039,7 +1040,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // does not eat it.
     const float non_flap_base_common =
         core::radians(tuning.wing_load_flex_deg) * load_smoothed_ - core::radians(droop_deg) +
-        core::radians(tuning.brake_raise_deg) * flare;
+        core::radians(tuning.brake_raise_deg) * flare + core::radians(tuning.wing_rest_deg);
     const float base = flap_angle + non_flap_base_common;
     // Membrane flutter: the outer wing buffets at speed and shudders in a
     // flare. Two incommensurate frequencies so it never reads as a metronome,
