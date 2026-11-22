@@ -545,3 +545,74 @@ Weak, and not done:
 - The arcs go where the breath points. They do not fork to the target or
   to the ground, and nothing flashes when one lands.
 - The rivals' breaths are still puffs in their element's colours.
+
+## A second style for each breath of matter (2026-11-22, 00:20)
+
+The playtester on the six materials: "elemental breaths still look
+strange in default view (not side view) ... they still look like clouds,
+e.g. frost doesn't seem like ice, tide unlike water. storm is pretty
+good."
+
+The default view is the chase camera, which looks down the jet's axis. A
+lit cloud seen end on is a ball of fog in front of the head, whatever its
+colour. Storm reads because it is made of separate bright pieces. So each
+of the other four now has a second style built from pieces, on by
+default. `--breath frost_style=0` (and `tide_style`, `blight_style`,
+`stone_style`) gives the cloud back, and the Playtest panel's "Breath"
+has the four dials under "What each breath is made of".
+
+| Element | Style 1 | How |
+|---|---|---|
+| Frost | a thin blue vapour full of snow grains and ice slivers | the volume at 0.22 of its opacity and 0.75 of its width; 520 opaque white grains a second that ride the jet and fall slowly; 520 slivers a second, short lines of light that lie any way, one in eight bright |
+| Tide | white water: a rope with an edge that breaks into foam | `BreathJet::liquid`; 520 small white drops a second |
+| Blight | a stream of acid | the same liquid, keeping its green; 90 drops a second; the gas cloud only where it lands |
+| Stone | gravel in thin dust | the volume at 0.4 of its opacity; 380 dark stones a second, 0.25 to 0.6 m across |
+
+A liquid in the marched volume (`breath_volume.hlsl`): the noise moves
+its edge a third as far, the density has an edge 0.16 radii wide, and the
+body breaks into drops from the first sixth of its length on. It is
+opaque in a hand's width, so the first sample inside it is its surface.
+That sample is shaded as water: dark and of its own colour looked into,
+the sky at a grazing angle, a sun glint, and foam where one more read of
+the noise, drawn out along the jet, is high. Foam grows with the
+distance flown. The more a liquid whitens, the less of the breath's hue
+its body keeps, so water is blue-grey and acid stays green.
+
+A sliver's length lies any way, not along its flight. Along the flight
+every sliver pointed away from the chase camera and drew as a dot.
+
+Cost at 1080p, paired, the breath and the particles together
+(`DRAGON_ABLATE_ALTERNATE=breath_volume,particles`, frozen at frame 110,
+on a busy machine): frost 2.6 ms (the cloud 2.2), tide 2.0 (0.6), blight
+2.0 (4.9), stone 2.1 (2.6).
+
+Sheets: `artifacts/breath-volume/styles-chase-before-after.jpg` (the
+chase camera, the cloud on the left) and `styles-side.jpg`.
+
+What is weak. These are first prototypes, made for the playtester to
+choose from:
+
+- Tide from the side is white with teal cells, not strands. From behind
+  it is a white clump over the head.
+- Frost's slivers are few on screen at any moment. The snow carries it.
+- Blight widens to a broad green sheet by its middle.
+- Stone's gravel is sparse and the dust still leads.
+- None of them marks what it hits. Ice is known by what it leaves.
+
+Options not built, in the order I would try them:
+
+1. Marks on what is hit: rime and ice spikes that grow where frost
+   lands, a wet dark patch and a splash for tide, a pitted smoking patch
+   for acid, rubble for stone. This needs a decal or a small instanced
+   mesh path, which the engine does not have. It is the largest gain
+   for frost.
+2. A bolt in place of a jet for frost and stone: one shard of ice or one
+   boulder a third of a second, a mesh that flies and shatters. The
+   fireball's path already exists.
+3. The tide as a mesh: a tube along the jet's spine with refraction of
+   the frame behind it, in place of the marched body. This is how water
+   reads as water; the marched liquid has no refraction.
+4. A cone of frozen air for frost: nothing in the air but a shimmer, and
+   everything inside the cone whitens with rime (a screen-space tint on
+   the terrain and the trees). Cheap, and unlike any other breath.
+5. Sound: none of the four has a voice of its own yet.

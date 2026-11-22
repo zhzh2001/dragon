@@ -1921,3 +1921,65 @@ was generated or converted for this. The queue, from the conversions of
 
 One Codex job of the size of 2026-11-20's (about 450,000 tokens, 7% of
 the work profile's week) covers the landmarks; the animals are a second.
+
+## New designs for the elemental dragons: fifteen options (2026-11-22, 00:20)
+
+The user's call, 2026-11-21: "plan to upgrade other elemental dragons. I
+want unique new designs, you can create more options for me to choose
+from, before starting modeling." Nothing is modelled until the user
+picks.
+
+`docs/concept/elemental-options/` has three options for each of five
+elements, one sheet each (a three-quarter view and a top-down flight
+silhouette), and a labelled row of three for each element
+(`options-<element>.jpg`). Each is a different animal, not a recolour of
+the hero:
+
+| Element | A | B | C |
+|---|---|---|---|
+| Frost | a long-legged stag with antlers of ice and a winter ruff | a heavy icebreaker: a wedge head, tusks, pressure ice along the back | a slender serpent with aurora fins and hoarfrost needles |
+| Blight | a gaunt carrion vulture with a throat sac and tattered wings | a fungal bog toad with glowing venom glands | a wasp: black and yellow plates, amber wings, a stinger |
+| Storm | a swift: scythe wings, a forked tail, a dorsal sail | a compact ram with copper horns and a mane that stands on end | a manta: cape wings joined to the body, a whip tail |
+| Tide | a leafy sea dragon with kelp frills and sailfish wings | a reef crocodile-turtle crusted with barnacles | an abyssal angler with a lure and lines of lights |
+| Stone | a granite rhinoceros with a geode tail club | obsidian plates with crystals growing from the back | a canyon monitor banded like sandstone |
+
+How they were made: GPT Image through the Codex backend on the work
+account (`image-use --backend codex`, two at a time, about 35 s and
+2,900 tokens each; `.claude/skills/concept-art/SKILL.md`). One prompt
+frame for all fifteen and one paragraph a design. Every prompt asks for
+four legs and two bat-like wings of an arm and three fingers, so each
+design fits the hero's bone contract. One of fifteen failed on a race
+between two runs creating the same symlink, and passed on a second try.
+The server ran quality "medium" whatever was asked.
+
+Open before modelling: the manta (storm C) and the icebreaker (frost B)
+have short or body-joined wings, which the rig's fold and the flight
+profile were not tuned for. Stormsail and Tidewrack are wyverns today
+(two legs); every option here has four.
+
+### Hunyuan or Tripo for them
+
+The user asked: "is hunyuan preferred over tripo?" For a creature, yes,
+on what this file records:
+
+- The hero was built from Hunyuan sculpts, generated as parts (body,
+  head, one wing) and joined by script. The parts route is what gave a
+  head with detail and a wing with a flat membrane.
+- Hunyuan's wings come out flat. Tripo 3.1's come out raised or pitched
+  in every one of 25 creature runs, so the membrane shows mostly its
+  edge from above, which is the worse bind pose for a flyer ("The
+  overnight Tripo run").
+- Tripo's scales are crisper and its colour more saturated. In the
+  engine the hero's Tripo hide showed no gain.
+- Hunyuan's free tier gives 5 generations a day. Tripo needs paid
+  credits (55 a generation), and the account of 2026-11-16 had one day
+  left then.
+
+Tripo is the better tool for rocks, ruins and props, where a bind pose
+does not matter: six of its rocks and two of its towers are in the game.
+
+So the plan for a picked design: view plates from its sheet, the body,
+the head and one wing from Hunyuan (three to four days of the free tier
+a creature, or one day on x99's local Hunyuan for the head), the staged
+build and the rig by a Codex job each. That is about 800,000 tokens a
+creature on the work profile, from the hero's own jobs.

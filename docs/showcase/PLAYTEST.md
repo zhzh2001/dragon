@@ -540,3 +540,64 @@ chase camera with the flap held, landed, the pull-out.
 Not done: one stroke serves cruise and climb. The sources want a
 shallower cruise beat (125 to 140 degrees in all) and the deep one for
 take-off and climbing.
+
+## The fourth round: report 0019, paper wings, the beat by effort (2026-11-22, 00:20)
+
+The playtester's words, 2026-11-21, 23:25: "sorry 'thin' I meant they are
+like paper, not broadness, please revert. wingbeat range is better now
+but a bit unnatural (on the old model). elemental breaths still look
+strange in default view (not side view) ... they still look like clouds,
+e.g. frost doesn't seem like ice, tide unlike water. storm is pretty
+good. please remember to check out new feedbacks each time."
+
+A session now reads the feedback folder at the start of every round,
+asked or not. Report 0019 had been saved three hours before the message
+and the message did not name it.
+
+### Report 0019: "weird shadows"
+
+The view was a slope past the playable extent (the dragon stood at
+z 2968; the extent ends at 2500), striped in pale bands hundreds of
+metres long. Four suspects were tried and cleared first: the terrain's
+shadow march, the gully colour, the scree colour and the mist. Leaving
+out `crown_shade` removed the bands. The terrain shader clamped its
+lookup of the crown shade map (the soft blot under each tree), so the
+map's edge texels ran on over all the ground outside it. The shade now
+fades to nothing at the map's edge. Pair:
+`artifacts/feedback-0019/crown-shade-edge-before-after.jpg`.
+
+### "Thin" meant paper
+
+Mesh version 6 answered the wrong fault and is withdrawn
+(`docs/showcase/HERO.md`, "Version 6 withdrawn, version 7 asked for").
+Version 5c is the hero again.
+
+### The beat, fourth pass: the stroke's depth follows the effort
+
+The third pass deepened the stroke to 125 degrees for every beat. From
+behind, the wings then hung under the body for a third of a level beat,
+and from the side they swung under the chest. Three changes:
+
+- The depth follows the effort (`FlightTuning::flap_cruise_down_angle_deg`,
+  `flap_effort_speed`, `flap_effort_climb`). Slow, or climbing at 8 m/s,
+  the downstroke ends at 125 as before. Level at 30 m/s and faster it
+  ends at 85. The effort eases over about a third of a second. A species
+  without the cruise key keeps one depth.
+- The hand's droop on the way up is 12 degrees (was 20).
+- The stroke plane's tilt is 14 degrees (the code's default is 22).
+
+On screen the cruise beat's tips stop about 25 degrees under the level
+and the climb beat's about 55. The studio's flap (`--studio 1`) is the
+cruise; `--flight flap_effort_bias=1` shows the climb. The Flight panel
+has "stroke up", "stroke down, climb", "stroke down, cruise" and "cruise
+from". Sheets, eight frames a beat, before on top:
+`artifacts/wingbeat/effort-before-after-rear.jpg` and `-side.jpg`.
+
+Not judged in motion: the sheets are stills. Whether the beat now reads
+as natural is the playtester's call. If it does not, the next suspects
+are the fold at the top of the stroke (the wing is still folded when the
+downstroke starts) and the even 50% split between the two half-strokes.
+
+### The breaths
+
+`docs/showcase/EFFECTS.md`, "A second style for each breath of matter".

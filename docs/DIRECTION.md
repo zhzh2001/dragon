@@ -605,3 +605,27 @@ candidate, "can't fly -> glide -> fly -> carry prey -> breathe fire"):
 
 The smallest of these to try first are 1 and 4: both use what the game
 already draws, and both make the elements matter outside a fight.
+
+## The user's direction on mechanics (2026-11-21, 23:25)
+
+The user read the twelve mechanics above and deferred them: "we'll
+discuss mechanics later, I'd like more fundamental shifts to the game
+loop, like casting magic, gathering followers, fighting other species,
+etc."
+
+So the twelve are tuning inside the present loop (fly, burn, land,
+collect), and the user wants the loop itself to change. Nothing is to be
+built from this section until that discussion. Three directions the user
+named, each with what it would lean on in the engine today:
+
+- Casting magic: abilities beyond the breath. The element system, the
+  status effects and the fury meter exist; a spell with a place and a
+  duration (a storm cell, a wall of ice, a summoned updraught) does not.
+- Gathering followers: creatures that fly with the player. The bot
+  dragons and the prey herds exist; an ally that follows, takes orders
+  and can be lost does not.
+- Fighting other species: enemies that are not dragons or towers. The
+  roster has six rigged prey kinds and a wolf, an eagle and a raven that
+  were never rigged (`docs/MODEL_GENERATION.md`, "Queued").
+
+Bring a short list of loop shapes to that discussion, not a build.
