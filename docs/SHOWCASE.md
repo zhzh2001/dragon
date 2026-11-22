@@ -19,7 +19,7 @@ are cut to about a third, and feedback 0017 and 0018 are answered
 (`docs/showcase/PLAYTEST.md`). Blight's frame-rate drop was the marched
 ground clouds, now smoke. Waiting on a playtest of all of it. Queued:
 the Tripo sources that failed (`docs/MODEL_GENERATION.md`), and the
-mechanics in `docs/DIRECTION.md`, "Mechanics to consider".
+mechanics in `docs/MECHANICS.md`, "Mechanics to consider".
 
 The fourth round (2026-11-22, 00:30). "Thin" had meant paper, so the
 broad wings of version 6 are withdrawn and version 7 has a thick shell,
@@ -31,7 +31,7 @@ second style for each breath of matter"). Report 0019 is fixed. Fifteen
 new designs for the elemental dragons wait for the user's pick
 (`docs/MODEL_GENERATION.md`, "New designs for the elemental dragons"),
 and mechanics wait for a discussion of the loop itself
-(`docs/DIRECTION.md`, "The user's direction on mechanics"). Still open
+(`docs/MECHANICS.md`, "The user's direction on mechanics"). Still open
 from before: the run's frame near the ground at 1080p.
 
 The fifth round (2026-11-22, 11:30). The cruise stroke is withdrawn: the
@@ -44,7 +44,7 @@ matter as pieces"). The studio's dragon can breathe. Reports 0020 to
 design an element, and five Hunyuan one-shots were made from them the
 same hour: static, wings raised, not rigged
 (`docs/MODEL_GENERATION.md`, "The second round of designs"). The loop
-discussion has its first half written (`docs/DIRECTION.md`, "Loop shapes
+discussion has its first half written (`docs/MECHANICS.md`, "Loop shapes
 for the mechanics discussion") and waits for the user's answers.
 
 The sixth round (2026-11-22, 13:00). The breaths of matter are aimed (the
@@ -58,7 +58,7 @@ second-round dragons: all stand, fold and fly, none is named or in the
 roster, and their wings are short (`docs/MODEL_GENERATION.md`, "The five
 rigged"). The wilds is a first version of a survival mode on the run's
 valleys: hunger, a day and a night, levels, places to find, sleep to
-save (`docs/DIRECTION.md`, "The wilds"). It is a frame with nothing
+save (`docs/WILDS.md`, "The wilds: a first version"). It is a frame with nothing
 hung on it yet, and what goes on it waits for the user's answers.
 
 The seventh round (2026-11-22, 15:30). The breaths of matter are
@@ -74,7 +74,7 @@ rejected frost2 and storm2: six new sheets wait for a pick
 (`docs/MODEL_GENERATION.md`, "The third round"). The wilds has a
 second proposal, a realm of valleys with people, followers, a hoard
 that is eaten and a long sleep, and nothing of it is built
-(`docs/DIRECTION.md`, "The wilds, second discussion").
+(`docs/WILDS.md`, "The wilds, second discussion").
 
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley

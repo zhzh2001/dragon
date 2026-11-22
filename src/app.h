@@ -802,7 +802,7 @@ private:
     void end_run();
     uint32_t fresh_seed() const;
     void update_run(float dt, const game::CombatEvents& events);
-    // ---- the wilds (game/wilds.h; docs/DIRECTION.md, "The wilds") ----
+    // ---- the wilds (game/wilds.h; docs/WILDS.md) ----
     // The run's valleys lived in: `continue_saved` reads the save (a window
     // only), else `seed` starts a new one.
     void start_wilds(uint32_t seed, bool continue_saved);

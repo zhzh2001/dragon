@@ -1,8 +1,8 @@
 #pragma once
 
-// The wilds: a second mode beside the hoard run (docs/DIRECTION.md, "The
-// wilds"). The run is a fifteen-minute descent with an end. The wilds has
-// none: one dragon lives in a valley, eats to stay alive, grows by what it
+// The wilds: a second mode beside the hoard run (docs/WILDS.md). The run is
+// a fifteen-minute descent with an end. The wilds has none: one dragon
+// lives in a valley, eats to stay alive, grows by what it
 // does, finds what is there, and sleeps at a nest that keeps its progress.
 // It is the frame the larger mechanics the user asked for (magic,
 // followers, other species) are meant to hang on, and this file is that

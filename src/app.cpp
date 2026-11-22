@@ -7491,7 +7491,7 @@ void App::draw_menu() {
     }
 }
 
-// ---- the wilds (game/wilds.h; docs/DIRECTION.md, "The wilds") ----
+// ---- the wilds (game/wilds.h; docs/WILDS.md) ----
 // The first version of the mode the larger mechanics are meant to hang on.
 // It is the hoard run's valleys with the end taken out: no last valley, no
 // results screen, hunters only by night. What it adds is in game::Wilds

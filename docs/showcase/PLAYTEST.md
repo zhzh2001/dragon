@@ -689,9 +689,9 @@ the last.
 | The sounds | A piece that lands is heard: ice shatters, rock cracks, water splashes, acid hisses, quieter with distance. The studio's breath has its voice. None of this was heard: every check was headless |
 | Plants and other objects | A mark on the ground reaches the plants that stand in it: fire strips and chars, frost rimes, blight strips and withers, tide darkens, stone fells them away from the hit. Rocks take the marks too. Towers, caches and landmarks do not. Far trees (the impostors) do not, and a plant's shadow does not follow it |
 | A scenario for testing | Studio 14, the breath range: the dragon stands and sweeps, four dummies on the left with the fight live, open ground and plants on the right, no fuel limit. `--studio 14 --breathe --element NAME` |
-| Status breaths | Not built. `docs/DIRECTION.md`, "Status breaths, not built" |
+| Status breaths | Not built. `docs/WILDS.md`, "Status breaths, not built" |
 | Codex for rigging | Two jobs rigged the five second-round dragons. `docs/MODEL_GENERATION.md`, "The five rigged" |
-| A survival, exploration, RPG mode | A first version, `--wilds`. `docs/DIRECTION.md`, "The wilds" |
+| A survival, exploration, RPG mode | A first version, `--wilds`. `docs/WILDS.md`, "The wilds: a first version" |
 
 The breaths' record is `docs/showcase/EFFECTS.md`, "The pieces mixed,
 aimed, heard, and what they do to plants". Its sheets are
@@ -750,7 +750,7 @@ Three reports came with it.
 | All in the roster, with a toggle | The default roster carries both designs of six species. O, the Playtest panel's "new designs" and the start screen swap the player and every rival |
 | A start screen | `--menu`, and a launch with no arguments. `DIRECTION.md`, "The start screen" |
 | ` for F1 | Done. F1 still works |
-| The wilds, more ambitious | A proposal, nothing built. `DIRECTION.md`, "The wilds, second discussion" |
+| The wilds, more ambitious | A proposal, nothing built. `docs/WILDS.md`, "The wilds, second discussion" |
 
 ### What was checked and what was not
 
