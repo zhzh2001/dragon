@@ -1,0 +1,56 @@
+{
+  "source": "blight2-cand-oneshot.glb",
+  "source_sha256": "b6561bc34bd509240b090cf3e502d935631fde8e3160e687e77acab287dbe2ad",
+  "source_triangles": 1500000,
+  "triangles": 79999,
+  "vertices": 40000,
+  "bones": 78,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; adjacent rib interpolation; separated fang tips and surface-weighted jaw; unfolded shoulder and leveled hand",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 47899536,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 3.210263267138858,
+  "repaired_zero_tangents": 2,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    1.6894752263851842e-10
+  ]
+}

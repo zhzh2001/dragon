@@ -1,0 +1,56 @@
+{
+  "source": "tide2-cand-oneshot.glb",
+  "source_sha256": "bb544001205b0847c3ba6beb583c513e50aff6e16ed136a08301afda4dfbed23",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 96,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; adjacent rib interpolation; measured jaw plane; 4 degree shoulder leveling",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 46108256,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 4.614766686890993,
+  "repaired_zero_tangents": 0,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    1.8559376258053817e-11
+  ]
+}
