@@ -444,6 +444,7 @@ flight controls.
   | a landmark kit of five with a failed hoard, gpt-6.2-astra high, 2026-11-20 | 477,367 |
   | rig five quadrupeds from static meshes, three clips each, gpt-6.2-astra high, 2026-11-20 | 418,469 |
   | rebuild the hero's wings broader, refit the rig, nine engine pairs, gpt-6.2-astra high, 2026-11-21 | 371,261 |
+  | give the hero's wings a thick shell, a hem, relief and value maps, refit the rig, ten engine pairs, gpt-6.2-astra high, 2026-11-22 | 550,683 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**

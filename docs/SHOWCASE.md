@@ -21,6 +21,19 @@ ground clouds, now smoke. Waiting on a playtest of all of it. Queued:
 the Tripo sources that failed (`docs/MODEL_GENERATION.md`), and the
 mechanics in `docs/DIRECTION.md`, "Mechanics to consider".
 
+The fourth round (2026-11-22, 00:30). "Thin" had meant paper, so the
+broad wings of version 6 are withdrawn and version 7 has a thick shell,
+a hem and relief on version 5c's outline (`docs/showcase/HERO.md`). The
+stroke's depth follows the effort: a shallow cruise beat, the deep one
+for a climb. Frost, tide, blight and stone each have a second style made
+of pieces, as prototypes to choose from (`docs/showcase/EFFECTS.md`, "A
+second style for each breath of matter"). Report 0019 is fixed. Fifteen
+new designs for the elemental dragons wait for the user's pick
+(`docs/MODEL_GENERATION.md`, "New designs for the elemental dragons"),
+and mechanics wait for a discussion of the loop itself
+(`docs/DIRECTION.md`, "The user's direction on mechanics"). Still open
+from before: the run's frame near the ground at 1080p.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

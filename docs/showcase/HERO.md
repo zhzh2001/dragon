@@ -736,3 +736,61 @@ Worse than version 5c, known:
   hind leg. The fold was tuned for a narrow wing.
 - The membrane's large panels are lit in flat facets from some angles.
 - In the close view the near wing hides most of the body.
+
+## Version 6 withdrawn, version 7 asked for: wings with thickness (2026-11-22, 00:30)
+
+Version 6 answered the wrong fault. The playtester, the next evening:
+"sorry 'thin' I meant they are like paper, not broadness, please revert."
+The merge of `hero-wide` is reverted (5c7737b): the build and rig
+scripts, the skeleton, the thickness map and the ground fold are version
+5c's. Version 6's scripts are on commit 1ba633f. Its one picture left in
+the tree is `artifacts/hero-build/v6-final-above.jpg`.
+
+What read as paper on version 5c (`artifacts/hero-build/v7-fault.jpg`):
+the membrane was a shell 19.8 mm thick on a wing 9 m long, its trailing
+edge a knife cut; each bone was a rod laid on a flat sheet; a panel was
+one smooth orange with no relief.
+
+A second Codex job (gpt-6.2-astra, high, 48 minutes, 550,683 tokens; the
+brief is `tools/showcase/hero-thick-wings-brief.md`, its record
+`tools/hero-build.md`, "Version 7", and `tools/hero-rig.md`, "Mesh
+version 7") kept version 5c's outline and rebuilt the shell and its maps:
+
+| In the bind pose | Version 5c | Version 7 |
+|---|---:|---:|
+| Shell thickness within 150 mm of a bone or the flank | 19.8 mm | 62 to 82 mm |
+| Shell thickness at the middle of a panel | 19.8 mm | 34 mm |
+| Trailing edge | a 19.8 mm wall | a rolled hem 78 mm across |
+| Mean tilt of the normal map over the panels | 6.2 degrees | 17.6 degrees |
+| Linear luminance, upper face, beside a bone and mid panel | one colour | 0.021 and 0.181 |
+| Membrane triangles | 7,912 | 22,640 |
+| Hide, membrane and horn triangles | 118,859 | 133,587 |
+| Wingspan | 18.99 m | 18.99 m |
+
+Both faces rise onto each bone over 175 mm. A finger tapers to about a
+third of its wrist thickness. A panel sags 3.3% to 3.8% of its width at
+rest. Tension folds 23 to 46 mm apart fan from the elbow, the wrist and
+the finger joints, with veins that fork. The mesh passes 118 checks and
+the rig 74. The bone contract holds (`fingers 3/3`), and no profile key
+changed.
+
+It is `assets/embercrest-hero.glb` on this machine. Version 5c stays as
+`assets/embercrest-hero-v5c.glb` for a comparison in play (`--models
+assets/embercrest-hero.glb,assets/embercrest-hero-v5c.glb` and `M`).
+Pairs, version 5c on the left: `artifacts/hero-build/v7-matched-chase.jpg`,
+`v7-final-close.jpg`, `v7-final-edge.jpg`, `v7-final-hem.jpg`,
+`v7-final-landed.jpg`. The main session rendered it landed, in the dive,
+at the bottom and the top of the beat, in the chase view and from above,
+and saw no tear and nothing through the body.
+
+Weak, known:
+
+- Three checks the brief added fail: the shell's two faces pass through
+  each other during the beat, the dive fold and the ground fold (up to
+  885 vertices, 79 mm). Codex showed the cause is the fold itself: a
+  shell 1 mm thick crossed as much. It did not show in the renders above.
+- Edge on from the front the hem is thin along some stretches.
+- The forearm keeps a seam under direct light, and the folded root has
+  angular corners.
+- In the chase view the gain is in tone and relief. The silhouette is
+  the same wing.
