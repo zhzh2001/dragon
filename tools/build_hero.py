@@ -51,8 +51,8 @@ WING2_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing-hunyuan.glb")
 # wing bones, through the `wing5` stage: one membrane sheet with an offset second face, and the
 # sculpt's bones over it (tools/hero-build.md, "Version 5").
 WING_SOURCE = os.environ.get("HERO_WING", "v2")
-if WING_SOURCE not in ("v2", "v3", "v5", "v6"):
-    raise SystemExit("HERO_WING must be v2, v3, v5 or v6")
+if WING_SOURCE not in ("v2", "v3", "v5"):
+    raise SystemExit("HERO_WING must be v2, v3 or v5")
 WING_V3 = WING_SOURCE == "v3"
 WING_V5 = WING_SOURCE == "v5"
 WING5_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing2-hunyuan.glb")
@@ -2105,8 +2105,7 @@ BODY_FIT = {
         scale=13.037, y_shift=0.0, z_scale=1.07, neck_pivot=(2.3, 3.1), neck_dir_deg=45.0, neck_band=1.4,
         neck_turn_deg=30.0, neck_shift=(0.2, 0.0), hind_widen=0.0, hind_narrow=0.35, tail_lift_y=-1.8, neck_box_y=0.8),
 }
-# The wide stage always uses the delivered version 5c torso.
-BODY_KEY = "embercrest-cand-hero-body2-hunyuan.glb" if WING_SOURCE == "v6" else os.path.basename(BODY2_IN)
+BODY_KEY = os.path.basename(BODY2_IN)
 if BODY_KEY not in BODY_FIT:
     raise SystemExit("no BODY_FIT entry for " + BODY_KEY + ": measure the body first (tools/hero-build.md)")
 FIT = BODY_FIT[BODY_KEY]
@@ -5112,33 +5111,17 @@ def w5_verify_repairs(geo, check):
     gap=max(w5_lateral_gap(tree,q) for q in samples);report['root_seam_gap_mm']=gap*1000
     check(gap<.001,f"root seam maximum lateral gap {gap*1000:.3f} mm across {len(samples)} samples")
     # Inspect the final JPEG and PNG. Raw bake means do not include grading or image compression.
-    if WING_SOURCE == 'v6':
-        width = MAP_SIZE['membrane']
-        m = geo['membrane']
-        tris = m['idx'][(m['pos'][m['idx'],0]>0).all(1)]
-        # Exclude the rim, which connects the two horizontal atlas bands.
-        tris = tris[np.ptp(m['uv'][tris,1],axis=1)<.25]
-        face, blend = v6_raster(m['uv'],tris,width,width)
-        pos = (m['pos'][tris[face]]*blend[:,:,:,None]).sum(2)[::-1]
-        wing = (face>=0)[::-1]
-        upper = np.broadcast_to(np.arange(width)[:,None] >= width//2,wing.shape)
-        map_dir = 'v6/'
-    else:
-        raw=np.load(cache('raw_membrane.npz'))
-        pos=raw['pos'].astype(np.float32)
-        wing,upper = raw['wing'],raw['plan'][...,2]>.25
-        map_dir = ''
-    x=np.abs(pos[...,0]);y=pos[...,1]
-    root=wing&(x>.8)&(x<2.15)&(y<.3)&(y>-.8)
-    neighbor=wing&(x>3.1)&(x<4)&(y<.3)&(y>-.8)
-    image=bpy.data.images.load(cache(map_dir+'map_membrane_base.jpg'),check_existing=False)
+    raw=np.load(cache('raw_membrane.npz'));pos=raw['pos'].astype(np.float32);x=np.abs(pos[...,0]);y=pos[...,1]
+    root=raw['wing']&(x>.8)&(x<2.15)&(y<.3)&(y>-.8)
+    neighbor=raw['wing']&(x>3.1)&(x<4)&(y<.3)&(y>-.8)
+    image=bpy.data.images.load(cache('map_membrane_base.jpg'),check_existing=False)
     base=srgb_to_linear(np_from_image(image)[...,:3]);bpy.data.images.remove(image)
     image=bpy.data.images.load(OUT_THICK,check_existing=False);image.colorspace_settings.name='Non-Color'
     thick=np_from_image(image)[...,0];bpy.data.images.remove(image)
-    image=bpy.data.images.load(cache(map_dir+'map_membrane_normal.jpg'),check_existing=False)
+    image=bpy.data.images.load(cache('map_membrane_normal.jpg'),check_existing=False)
     image.colorspace_settings.name='Non-Color'
     normal=np_from_image(image)[...,:3]*2-1;bpy.data.images.remove(image)
-    for name,face in (("upper",upper),("lower",~upper)):
+    for name,face in (("upper",raw['plan'][...,2]>.25),("lower",raw['plan'][...,2]<=.25)):
         a,b=base[root&face].mean(0),base[neighbor&face].mean(0)
         delta=np.abs(a/b-1)
         check(np.all(delta<.08),f"root {name} RGB mean {a.round(4).tolist()}, neighbor {b.round(4).tolist()}, error {delta.round(4).tolist()}")
@@ -5146,16 +5129,14 @@ def w5_verify_repairs(geo, check):
         check(abs(ta/tb-1)<.10,f"root {name} thickness {ta:.4f}, neighbor {tb:.4f}")
         sa=np.log(base[root&face].clip(1e-4)).std(0);sb=np.log(base[neighbor&face].clip(1e-4)).std(0)
         check(np.all(sa/sb>.65)&np.all(sa/sb<1.45),f"root {name} log contrast {sa.round(3).tolist()}, neighbor {sb.round(3).tolist()}")
-        near=wing&face&(x>.45)&(x<.9)&(y<.3)&(y>-.8)
-        far=wing&face&(x>1.6)&(x<2.15)&(y<.3)&(y>-.8)
+        near=raw['wing']&face&(x>.45)&(x<.9)&(y<.3)&(y>-.8)
+        far=raw['wing']&face&(x>1.6)&(x<2.15)&(y<.3)&(y>-.8)
         check(thick[near].mean()>thick[far].mean(),f"root {name} thickness toward flank {thick[near].mean():.4f}, away {thick[far].mean():.4f}")
         root_normal=float(np.sqrt((normal[root&face,:2]**2).mean()))
         neighbor_normal=float(np.sqrt((normal[neighbor&face,:2]**2).mean()))
         check(.8<root_normal/neighbor_normal<1.2,f'root {name} normal XY RMS {root_normal:.4f}, neighbor {neighbor_normal:.4f}')
         report[name]=dict(root_rgb=a.tolist(),neighbor_rgb=b.tolist(),rgb_relative_error=delta.tolist(),root_thickness=ta,neighbor_thickness=tb,root_log_sd=sa.tolist(),neighbor_log_sd=sb.tolist(),root_normal_xy_rms=root_normal,neighbor_normal_xy_rms=neighbor_normal)
-    report_path = (os.path.join(ART, 'v6-surface.json') if WING_SOURCE == 'v6' else
-                   os.path.join(ROOT,'artifacts','hero-claws','measurements-v5c.json'))
-    with open(report_path,'w') as f:
+    with open(os.path.join(ROOT,'artifacts','hero-claws','measurements-v5c.json'),'w') as f:
         json.dump(report,f,indent=2)
 
 
@@ -5213,7 +5194,6 @@ def verify():
               f"{mesh['name']}: tangents are unit vectors with a sign")
         jaw = accessor(doc, binary, attrs["_JAW"]) if "_JAW" in attrs else None
         geo[mesh["name"]] = dict(pos=pos, idx=idx, material=mats[prim["material"]], jaw=jaw,
-                                 uv=accessor(doc,binary,attrs['TEXCOORD_0']),
                                  sheet_s=accessor(doc,binary,attrs["_SHEET_S"]) if "_SHEET_S" in attrs else None,
                                  sheet_edge=accessor(doc,binary,attrs["_SHEET_EDGE"]) if "_SHEET_EDGE" in attrs else None)
     want = dict(EXPORT_OBJECTS)
@@ -5338,11 +5318,11 @@ def verify():
         w, h = struct.unpack(">II", head[16:24])
         check((w, h) == (MAP_SIZE["membrane"],) * 2 and head[25] == 0, f"thickness map {w}x{h}, one channel")
 
-    if WING_V5 or WING_SOURCE == "v6":
+    if WING_V5:
         w5_verify_repairs(geo,check)
     # Preserve the complete gate report. Earlier runs only printed the mesh checks.
     os.makedirs(ART,exist_ok=True)
-    with open(os.path.join(ART,'v6-verification.txt' if WING_SOURCE == 'v6' else 'verification.txt'),'w') as f:
+    with open(os.path.join(ART,'verification.txt'),'w') as f:
         f.write('\n'.join(notes+fails)+'\n')
     for line in notes + fails:
         print("[verify]", line)
@@ -5412,538 +5392,9 @@ def landmarks():
     print(text)
 
 
-# Version 6 uses glTF metres throughout. Y is up and Z increases toward the tail.
-def v6_unit(v):
-    return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-12)
-
-
-def v6_rails():
-    plan = np.load(cache("wing5_plan.npz"))
-    old = {k: plan["target_" + k][:, [0, 2, 1]] * [1, 1, -1] for k in W5_CHAINS}
-    with open(SKELETON) as f:
-        bones = {b[0]: b for b in json.load(f)["bones"]}
-    # The exported distal fit shortened the leading finger by 90 mm at its socket.
-    for key in ("f1","f2"):
-        x = old[key][:,0]
-        x -= .090*smoothstep((x-7.6)/1.75)
-    new = old.copy()
-    for key, name in (("f2", "finger_2"), ("f3", "finger_3"), ("spur", "spur_")):
-        a, mid = bones["wing_" + name + "a_r"][1:3]
-        end = bones["wing_" + name + "b_r"][2]
-        # Round the joint over a short interval so the bone stays inside the shaft.
-        curve = w5_curve([a,mid,end],np.linspace(0,1,65))
-        for _ in range(7):
-            curve[1:-1] = (curve[:-2]+2*curve[1:-1]+curve[2:])/4
-        new[key] = curve
-    leading = w5_curve(old["f1"],np.linspace(0,1,65))
-    for _ in range(5):
-        leading[1:-1] = (leading[:-2]+2*leading[1:-1]+leading[2:])/4
-    new["f1"] = leading
-    return old, new
-
-
-def v6_move_shafts(p, old, new):
-    q = p.copy()
-    q[:, 0] = abs(q[:, 0])
-    distance = np.full(len(p), np.inf)
-    out = q.copy()
-    for key, line in old.items():
-        lengths = np.linalg.norm(np.diff(line, axis=0), axis=1)
-        cum = np.r_[0, lengths.cumsum()]
-        for i, delta in enumerate(np.diff(line, axis=0)):
-            t = np.clip((q-line[i]) @ delta / lengths[i]**2, 0, 1)
-            foot = line[i] + t[:, None]*delta
-            d = np.linalg.norm(q-foot, axis=1)
-            use = d < distance
-            distance[use] = d[use]
-            if key in ("arm", "fore"):
-                out[use] = q[use]
-                continue
-            u = (cum[i] + t[use]*lengths[i])/cum[-1]
-            # Preserve the claw and its socket as a rigid unit beyond the sculpt tip.
-            radial = q[use]-foot[use]
-            axis = delta/lengths[i]
-            along = (radial@axis)[:,None]*axis
-            # Keep axial claw length while narrowing the socket and shaft together.
-            scale = 1 - .66*smoothstep((u-.08)/.9)
-            out[use] = w5_curve(new[key], u) + along + scale[:,None]*(radial-along)
-    out[:, 0] *= np.sign(p[:, 0])
-    return out
-
-
-def v6_surface(hide, indices, rails):
-    tree = BVHTree.FromPolygons(hide.tolist(), indices.tolist(), all_triangles=True)
-    nt, ns = 24, 10
-    t = np.r_[0, .009, .022, np.linspace(.055, 1, nt-2)]
-    z = -1 + 4.76*t
-    y = np.interp(z, [-1, .9, 1.5, 2.4, 3.76], [3.20, 3.20, 2.98, 2.55, 2.09])
-    flank = []
-    for yy, zz in zip(y, z):
-        hits = [tree.ray_cast(Vector((0, yy, zz+dz)), Vector((side, 0, 0)))[0]
-                for side in (-1, 1) for dz in (-.06, 0, .06)]
-        flank.append([max(.065, min(abs(hit.x) for hit in hits)-.10), yy, zz])
-    lines = [np.array(flank)] + [w5_curve(rails[k], t) for k in ("spur", "f3", "f2", "f1")]
-    # Match the existing arm at the two leading boundaries.
-    arm = np.vstack([lines[0][0], rails["arm"]])
-    leads = [arm, rails["fore"], None, None]
-    points, cells, shares, half_widths, ids = [], [], [], [], {}
-    for panel, (left, right) in enumerate(zip(lines, lines[1:])):
-        rows = []
-        tip_line = right[-1] - left[-1]
-        inward = .5*(left[0]+right[0]-left[-1]-right[-1])
-        inward -= v6_unit(tip_line)*np.dot(inward,v6_unit(tip_line))
-        inset = .125*np.linalg.norm(tip_line)*v6_unit(inward)
-        for j, u in enumerate(t):
-            row = []
-            width = np.linalg.norm(right[j]-left[j])
-            # Two samples near each shaft resolve the 90 mm fillet.
-            edge = min(.10, .09/max(width,.001))
-            stations = [0, .42*edge, edge, .18, .34, .5, .66, .82, 1-edge, 1-.42*edge, 1]
-            for i, s in enumerate(stations):
-                pt = (1-s)*left[j] + s*right[j]
-                if leads[panel] is not None:
-                    lead = w5_curve(leads[panel], s)
-                    pt += (1-u)**3 * (lead - (1-s)*left[0] - s*right[0])
-                arch = 4*s*(1-s)
-                pt += inset * (arch*u**3)
-                # Gravity pulls the panel down between its supports.
-                pt[1] -= .040*width*arch*(1-(1-u)**8)
-                k = tuple(np.round(pt, 6))
-                if k not in ids:
-                    ids[k] = len(points)
-                    points.append(pt)
-                    shares.append(s if panel == 0 else -1.)
-                    dist = width*min(s,1-s)
-                    if panel == 0:
-                        dist = width*(1-s)
-                    if leads[panel] is not None:
-                        dist = min(dist, np.linalg.norm(pt-w5_curve(leads[panel],s)))
-                    # Both skins rise into the shaft. Their spacing elsewhere remains 20 mm.
-                    fillet = (1-smoothstep(dist/.09))*(.043-.025*u)
-                    half_widths.append(.010 + fillet)
-                row.append(ids[k])
-            rows.append(row)
-        for row, following in zip(rows, rows[1:]):
-            for i in range(ns):
-                for tri in ((row[i], following[i], row[i+1]), (row[i+1], following[i], following[i+1])):
-                    if len(set(tri)) == 3:
-                        cells.append(tri)
-    p, tri, shares = np.array(points), np.array(cells), np.array(shares)
-    n = v6_normals(p, tri)
-    # Each border runs opposite the adjacent top and bottom triangle.
-    edges = np.concatenate([tri[:, [0,1]], tri[:, [1,2]], tri[:, [2,0]]])
-    _, first, counts = np.unique(np.sort(edges, axis=1), axis=0, return_index=True, return_counts=True)
-    border = edges[first[counts == 1]]
-    a, b = border.T
-    size = len(p)
-    offset = np.array(half_widths)[:,None]*n
-    shell = np.vstack([p+offset, p-offset])
-    faces = np.vstack([tri, tri[:, ::-1]+size, np.c_[b, a, a+size], np.c_[b, a+size, b+size]])
-    # Store the two face charts separately.
-    uv = v6_chart(p)
-    uv = np.vstack([uv, uv+[0,.5]])
-    right = dict(POSITION=shell, TEXCOORD_0=uv, _SHEET_S=np.tile(shares, 2),
-                 _SHEET_EDGE=np.tile(shares == 0, 2), _SHEET_ID=np.tile(np.arange(size), 2))
-    attrs = {k: np.concatenate([v, v]) for k, v in right.items()}
-    attrs["POSITION"][len(shell):, 0] *= -1
-    faces = np.vstack([faces, faces[:, ::-1]+len(shell)])
-    attrs["NORMAL"] = v6_normals(attrs["POSITION"], faces)
-    attrs["TANGENT"] = v6_tangents(attrs["POSITION"], attrs["NORMAL"], attrs["TEXCOORD_0"], faces)
-    return attrs, faces, lines
-
-
-def v6_rim(sheet, faces):
-    # Give rim vertices their own normals and a narrow strip beside the upper face.
-    side = len(sheet["POSITION"])//2
-    n = side//2
-    rim = np.ptp((faces%side)//n,axis=1)>0
-    faces = faces.copy()
-    ids, inverse = np.unique(faces[rim],return_inverse=True)
-    faces[rim] = len(sheet["POSITION"])+inverse.reshape(-1,3)
-    for key in sheet:
-        sheet[key] = np.concatenate([sheet[key],sheet[key][ids]])
-    # A two-pixel edge strip keeps both lips on the same patch of skin.
-    uv = sheet["TEXCOORD_0"]
-    lower = ids%side>=n
-    uv[-len(ids):,1] -= lower*(.5-2/2048)
-    sheet["NORMAL"] = v6_normals(sheet["POSITION"],faces)
-    tangent = v6_tangents(sheet["POSITION"],sheet["NORMAL"],uv,faces)
-    # A vertical edge projects to a line in the atlas. Use its longest edge as the tangent.
-    missing = np.linalg.norm(tangent[:,:3],axis=1)<.5
-    for i in np.flatnonzero(missing):
-        neighbors = np.unique(faces[(faces==i).any(1)])
-        edges = sheet["POSITION"][neighbors]-sheet["POSITION"][i]
-        edges -= (edges@sheet["NORMAL"][i])[:,None]*sheet["NORMAL"][i]
-        tangent[i,:3] = v6_unit(edges[np.linalg.norm(edges,axis=1).argmax()])
-    sheet["TANGENT"] = tangent
-    return faces
-
-
-def v6_normals(p, tri):
-    face = np.cross(p[tri[:, 1]]-p[tri[:, 0]], p[tri[:, 2]]-p[tri[:, 0]])
-    total = np.zeros_like(p)
-    for col in tri.T:
-        np.add.at(total, col, face)
-    return v6_unit(total)
-
-
-def v6_tangents(p, n, uv, tri):
-    u, v = uv[tri[:, 1]]-uv[tri[:, 0]], uv[tri[:, 2]]-uv[tri[:, 0]]
-    e, f = p[tri[:, 1]]-p[tri[:, 0]], p[tri[:, 2]]-p[tri[:, 0]]
-    det = u[:, 0]*v[:, 1]-u[:, 1]*v[:, 0]
-    sign = np.sign(det)[:, None]
-    tt, bb = np.zeros_like(p), np.zeros_like(p)
-    for col in tri.T:
-        np.add.at(tt, col, (v[:, 1,None]*e-u[:, 1,None]*f)*sign)
-        np.add.at(bb, col, (u[:, 0,None]*f-v[:, 0,None]*e)*sign)
-    tt = v6_unit(tt-n*(tt*n).sum(1)[:, None])
-    return np.c_[tt, np.where((np.cross(n, tt)*bb).sum(1)<0, -1, 1)]
-
-
-def v6_chart(p):
-    # The two faces occupy separate horizontal bands. Each metre gets the same pixel scale.
-    d = (p[:, 2]-.38*(p[:, 1]-4))/np.hypot(1,.38)
-    return np.c_[(p[:, 0]+.25)/13.8, (d+1.65)/13.8]
-
-
-def v6_store(doc, binary, view, data):
-    binary.extend(b'\0' * (-len(binary) % 4))
-    doc["bufferViews"][view].update(byteOffset=len(binary), byteLength=len(data))
-    binary.extend(data)
-
-
-def v6_measures(p, tri, seam, sheet_ids=None):
-    # Collapse both faces to their common middle, then count each triangle once.
-    right = np.flatnonzero(p[:,0]>0)
-    face = tri[(p[tri,0]>0).all(1)]
-    if sheet_ids is None:
-        unique, inv = np.unique(np.round(p[right],6),axis=0,return_inverse=True)
-        tree = KDTree(len(unique))
-        for i,pt in enumerate(unique):
-            tree.insert(pt,i)
-        tree.balance()
-        twins = np.array([tree.find_n(pt,2)[1][1] for pt in unique])
-        assert np.all(twins[twins]==np.arange(len(unique)))
-        _, local = np.unique(np.minimum(np.arange(len(unique)),twins),return_inverse=True)
-        ids = local[inv]
-    else:
-        ids = sheet_ids[right].astype(int)
-    # UV seams can repeat one position, so average each distinct position only once.
-    points, which = np.unique(np.c_[ids,p[right]],axis=0,return_index=True)
-    distinct = ids[which]
-    mid = np.zeros((ids.max()+1,3))
-    np.add.at(mid,distinct,points[:,1:])
-    mid /= np.bincount(distinct)[:,None]
-    remap = np.zeros(len(p),int)
-    remap[right] = ids
-    faces = np.unique(np.sort(remap[face],axis=1),axis=0)
-    faces = faces[(np.diff(faces,axis=1)>0).all(1)]
-    a,b,c = mid[faces].transpose(1,0,2)
-    cuts = []
-    for station in (1.15,3.43):
-        hits = []
-        for start,end in ((a,b),(b,c),(c,a)):
-            sel = (start[:,0]-station)*(end[:,0]-station)<0
-            t = (station-start[sel,0])/(end[sel,0]-start[sel,0])
-            hits.extend(start[sel]+t[:,None]*(end[sel]-start[sel]))
-        h = np.array(hits)
-        cuts.append(float(np.linalg.norm(h[h[:,2].argmax()]-h[h[:,2].argmin()])))
-    # Fit a plane to the entire sheet. Integrate over each triangle to avoid bias from mesh density.
-    cross = np.cross(b-a, c-a)
-    area = np.linalg.norm(cross, axis=1) / 2
-    vertices = mid[faces]
-    centre = np.average(vertices.mean(axis=1), axis=0, weights=area)
-    offsets = vertices - centre
-    centroids = offsets.mean(axis=1)
-    covariance = (np.einsum("n,nki,nkj->ij", area, offsets, offsets)
-                  + 9 * np.einsum("n,ni,nj->ij", area, centroids, centroids)) / (12 * area.sum())
-    normal = np.linalg.eigh(covariance)[1][:, 0]
-    aft = v6_unit(np.array([0., 0., 1.]) - normal[2] * normal)
-    lateral = np.cross(normal, aft)
-    chords = []
-    for anchor in ([1.15, 3.68, -.88], [3.43, 5.68, -.58]):
-        station = anchor @ lateral
-        hits = []
-        for start, end in ((a, b), (b, c), (c, a)):
-            first, last = start @ lateral - station, end @ lateral - station
-            keep = first * last < 0
-            t = first[keep] / (first[keep] - last[keep])
-            hits.extend((start[keep] + t[:, None] * (end[keep] - start[keep])) @ aft)
-        chords.append(float(np.ptp(hits)))
-    return dict(body_m=cuts[0], wrist_m=cuts[1], seam_m=float(np.ptp(mid[remap[right[seam[right]]], 2])),
-                area_m2=float(area.sum()), plan_body_m=chords[0], plan_wrist_m=chords[1],
-                plan_area_m2=float(np.abs(cross @ normal).sum() / 2))
-
-
-def stage_wide():
-    import hashlib
-    import shutil
-    os.makedirs(cache("v6"), exist_ok=True)
-    source = cache("v6/v5c-static.glb")
-    if not os.path.isfile(source):
-        if hashlib.sha256(open(OUT_GLB,"rb").read()).hexdigest() != "123f90e97e2c9ee9456b3c4e9d642cf552f5f716e712228af78875f2968f608e":
-            raise HeroError("Version 5c was missing. Supply its static GLB in build-hero-cache/v6/v5c-static.glb.")
-        shutil.copyfile(OUT_GLB, source)
-        shutil.copyfile(OUT_THICK, cache("v6/v5c-thickness.png"))
-    doc, original = read_glb(source)
-    binary = bytearray(original)
-    old, new = v6_rails()
-    metrics = {}
-    prims = {m["name"]: m["primitives"][0] for m in doc["meshes"]}
-    for name in ("hide", "horn", "membrane"):
-        prim = prims[name]
-        fields = prim["attributes"]
-        def read(key):
-            return accessor(doc, original, fields[key]).astype(float)
-        p = read("POSITION")
-        tri = accessor(doc, original, prim["indices"]).astype(int).reshape(-1,3)
-        if name == "membrane":
-            metrics["v5c"] = v6_measures(p, tri, read("_SHEET_EDGE")>.5)
-            fields_out, tri, rails = v6_surface(hide, hide_tri, new)
-            metrics["v6"] = v6_measures(fields_out["POSITION"], tri, fields_out["_SHEET_EDGE"]>.5, fields_out["_SHEET_ID"])
-            v6_material(doc, original, binary, prim, p, fields, fields_out, tri, rails)
-            tri = v6_rim(fields_out, tri)
-        else:
-            changed = abs(p[:,0]) > 2.2
-            out = p.copy()
-            out[changed] = v6_move_shafts(p[changed], old, new)
-            moved = np.linalg.norm(out-p,axis=1)>1e-8
-            n, tang = read("NORMAL"), read("TANGENT")
-            # Transport the sculpt's split normals through the local deformation.
-            if moved.any():
-                q = p[moved]
-                jac = np.stack([(v6_move_shafts(q+axis*.0001,old,new)-v6_move_shafts(q-axis*.0001,old,new))/.0002
-                                for axis in np.eye(3)], axis=2)
-                n[moved] = v6_unit(np.einsum("nij,nj->ni", np.linalg.pinv(jac).transpose(0,2,1), n[moved]))
-                tang[moved,:3] = v6_unit(np.einsum("nij,nj->ni", jac, tang[moved,:3]))
-            fields_out = dict(POSITION=out, NORMAL=n, TANGENT=tang)
-            if name == "hide":
-                hide, hide_tri = out, tri
-        for key, values in fields_out.items():
-            if key not in fields:
-                doc["bufferViews"].append(dict(buffer=0))
-                fields[key] = len(doc["accessors"])
-                doc["accessors"].append(dict(bufferView=len(doc["bufferViews"])-1, componentType=5126,type="SCALAR"))
-            acc = doc["accessors"][fields[key]]
-            values = np.asarray(values, dtype='<f4')
-            acc.update(count=len(values))
-            if "min" in acc or key == "POSITION":
-                acc.update(min=np.atleast_1d(values.min(0)).tolist(),max=np.atleast_1d(values.max(0)).tolist())
-            v6_store(doc,binary,acc["bufferView"],values.tobytes())
-        if name == "membrane":
-            acc = doc["accessors"][prim["indices"]]
-            data = tri.astype('<u2').ravel()
-            acc.update(count=len(data),min=[0],max=[int(data.max())],componentType=5123)
-            v6_store(doc,binary,acc["bufferView"],data.tobytes())
-    # Discard replaced buffer ranges. Keep the original bytes in every other view.
-    packed = bytearray()
-    for v in doc["bufferViews"]:
-        at = v.get("byteOffset",0)
-        packed.extend(b'\0'*(-len(packed)%4))
-        v["byteOffset"] = len(packed)
-        packed.extend(binary[at:at+v["byteLength"]])
-    doc["buffers"][0]["byteLength"] = len(packed)
-    doc["asset"]["generator"] = "tools/build_hero.py wide"
-    write_glb(OUT_GLB, doc, packed)
-    with open(os.path.join(ART,"v6-measurements.json"),"w") as f:
-        json.dump(metrics,f,indent=2)
-    log("bind measurements", metrics)
-
-
-def v6_raster(uv, tri, width, height):
-    """Return triangle indices and barycentric weights at covered pixel centres."""
-    face = np.full((height,width), -1, np.int32)
-    blend = np.zeros((height,width,3), np.float32)
-    pixel = uv*np.array([width,height])-.5
-    for i, ids in enumerate(tri):
-        a,b,c = pixel[ids]
-        lo = np.maximum(np.ceil(np.minimum.reduce([a,b,c])).astype(int),0)
-        hi = np.minimum(np.floor(np.maximum.reduce([a,b,c])).astype(int),[width-1,height-1])
-        if np.any(hi<lo):
-            continue
-        e,f = b-a,c-a
-        det = e[0]*f[1]-e[1]*f[0]
-        if abs(det)<1e-10:
-            continue
-        rows,cols = np.mgrid[lo[1]:hi[1]+1,lo[0]:hi[0]+1]
-        x,y = cols-a[0],rows-a[1]
-        s,t = (x*f[1]-y*f[0])/det,(e[0]*y-e[1]*x)/det
-        hit = (s>=-1e-7)&(t>=-1e-7)&(s+t<=1.0000001)
-        at = rows[hit],cols[hit]
-        face[at] = i
-        blend[at] = np.stack([1-s[hit]-t[hit],s[hit],t[hit]],axis=1)
-    return face, blend
-
-
-def v6_image(path):
-    img = bpy.data.images.load(path,check_existing=False)
-    img.colorspace_settings.name = "Non-Color"
-    a = np_from_image(img)[::-1,:,:3].copy()
-    bpy.data.images.remove(img)
-    return a
-
-
-def v6_sample(image, uv):
-    h,w = image.shape[:2]
-    at = np.clip(uv*[w,h]-.5, 0, [w-1.00001,h-1.00001])
-    x,y = at.astype(int).T
-    u,v = (at-np.stack([x,y],axis=1)).T[:,:,None]
-    return (1-v)*((1-u)*image[y,x]+u*image[y,x+1])+v*((1-u)*image[y+1,x]+u*image[y+1,x+1])
-
-
-def v6_veins(lines):
-    """Trace smaller vessels from the spars into the four membrane panels."""
-    rng = np.random.default_rng(61021)
-    out = np.zeros((1024,2048), np.float32)
-    def draw(path, radius, strength):
-        for j,(a,b) in enumerate(zip(path,path[1:])):
-            r = radius*(1-.80*j/(len(path)-1))
-            pad = max(1,3*r)
-            lo = np.maximum(np.floor(np.minimum(a,b)-pad).astype(int),[0,0])
-            hi = np.minimum(np.ceil(np.maximum(a,b)+pad).astype(int),[2047,1023])
-            if np.any(hi < lo):
-                continue
-            y,x = np.mgrid[lo[1]:hi[1]+1,lo[0]:hi[0]+1]
-            d = b-a
-            t = np.clip(((x-a[0])*d[0]+(y-a[1])*d[1])/max(d@d,1e-10),0,1)
-            e = ((x-a[0]-d[0]*t)**2+(y-a[1]-d[1]*t)**2)/max(.35,r)**2
-            window = out[lo[1]:hi[1]+1, lo[0]:hi[0]+1]
-            np.maximum(window, strength*(1-.65*j/(len(path)-1))*np.exp(-.5*e), out=window)
-    for left,right in zip(lines,lines[1:]):
-        def path(t0,t1,s0,s1):
-            u = np.linspace(0,1,25)
-            t = t0+(t1-t0)*u
-            s = s0+(s1-s0)*u**.83 + .012*np.sin(2*np.pi*u)*np.sin(np.pi*u)
-            p = (1-s[:,None])*w5_curve(left,t)+s[:,None]*w5_curve(right,t)
-            return v6_chart(p)*2048
-        for j,u in enumerate(np.linspace(.13,.85,10)):
-            s = float(j%2)
-            span = (1-2*s)*rng.uniform(.32,.65)
-            end = min(.99,u+rng.uniform(.12,.24))
-            draw(path(u,end,s,s+span),1.7,.75)
-            for where in (.35,.65):
-                draw(path(u+(end-u)*where,end+.015,s+span*where**.83,s+span*(where+.03)),.86,.48)
-    return out
-
-
-def v6_local_mean(tile, radius):
-    # Subtract lighting from the donor while keeping its small wrinkles and veins.
-    mean = tile
-    for axis in (0,1):
-        pad = [(0,0)]*3
-        pad[axis] = (radius,radius)
-        expanded = np.pad(mean,pad,mode='reflect')
-        integral = np.cumsum(expanded,axis=axis,dtype=np.float64)
-        integral = np.concatenate([np.take(integral,[0],axis=axis)*0,integral],axis=axis)
-        n = tile.shape[axis]
-        mean = (np.take(integral,np.arange(n)+2*radius+1,axis=axis)-
-                np.take(integral,np.arange(n),axis=axis))/(2*radius+1)
-    return mean
-
-
-def v6_material(doc, original, binary, prim, p, fields, sheet, faces, rails):
-    # Read the donor's colour, normals and roughness from the delivered version 5c.
-    maps = {}
-    images = {im["name"]:im for im in doc["images"]}
-    for key in ("base","normal","orm"):
-        view = doc["bufferViews"][images["membrane_"+key]["bufferView"]]
-        at = view["byteOffset"]
-        path = cache("v6/donor-"+key+".jpg")
-        with open(path,"wb") as f:
-            f.write(original[at:at+view["byteLength"]])
-        maps[key] = v6_image(path)
-    maps["thickness"] = v6_image(cache("v6/v5c-thickness.png"))
-    tri = accessor(doc,original,prim["indices"]).reshape(-1,3)
-    uv = accessor(doc,original,fields["TEXCOORD_0"])
-    normals = accessor(doc,original,fields["NORMAL"])
-    tangents = accessor(doc,original,fields["TANGENT"])
-    forward = v6_unit(np.array([0.,-.85,1.]))
-    # Take only skin inside the elbow-to-third-finger panel. Its borders carry baked bone shadows.
-    depth = (p-[0,4.12,0])@forward
-    donor = np.c_[(p[:,0]-3.09-.24*(depth+.32))/1.19, (depth+.32)/1.54]
-    geom = np.cross(p[tri[:,1]]-p[tri[:,0]],p[tri[:,2]]-p[tri[:,0]])
-    tiles = {k:[] for k in maps}
-    for upper in (True,False):
-        tris = tri[(p[tri,0]>0).all(1)&((geom @ [0,1,.85]>0)==upper)]
-        face,w = v6_raster(donor,tris,480,480)
-        if (face<0).any():
-            raise HeroError("The donor texture missed the wing. Move its corners inside the panel.")
-        ids = tris[face.ravel()]
-        weights = w.reshape(-1,3,1)
-        def interp(a):
-            return (weights*a[ids]).sum(1)
-        sample_uv = interp(uv)
-        for key,img in maps.items():
-            pixels = v6_sample(img,sample_uv)
-            if key == "normal":
-                n = v6_unit(interp(normals))
-                tangent = interp(tangents)
-                tt = v6_unit(tangent[:,:3])
-                bb = np.cross(n,tt)*np.sign(tangent[:,3:4])
-                uu = v6_unit(np.array([1,0,0])-n*n[:,0,None])
-                vv = v6_unit(np.cross(n,uu))
-                vv *= np.sign(vv @ forward)[:,None]
-                detail = pixels*2-1
-                world = detail[:,0,None]*tt+detail[:,1,None]*bb+detail[:,2,None]*n
-                pixels = .5+.5*v6_unit(np.stack([(world*uu).sum(1),(world*vv).sum(1),(world*n).sum(1)],axis=1))
-            tiles[key].append(pixels.reshape(480,480,3))
-    yy,xx = np.mgrid[:1024,:2048]
-    x = (xx+.5)*13.8/2048-.25
-    d = (yy+.5)*13.8/2048-1.65
-    # Reflect a physical chart at each edge to avoid a wrap seam.
-    flow = .16*np.sin(.88*x+.53*d) + .12*np.sin(1.34*d-.31*x)
-    q = np.stack([(x-.24*d+flow)/1.19, (d+.15*np.sin(x*.9)+.12*x)/1.54],axis=2)
-    reflected = 1-abs(np.mod(q,2)-1)
-    sign = np.where(np.mod(q,2)<1,1,-1)
-    veins = v6_veins(rails)
-    # Bake thickness from the distance between the two constructed faces.
-    n = len(sheet["POSITION"])//4
-    world = .5*(sheet["POSITION"][:n]+sheet["POSITION"][n:2*n])
-    gauge = np.linalg.norm(sheet["POSITION"][:n]-sheet["POSITION"][n:2*n],axis=1)
-    upper_tri = faces[(faces<n).all(1)]
-    face, weights = v6_raster(v6_chart(world)*[1,2],upper_tri,2048,1024)
-    gauge_map = (weights*gauge[upper_tri[face]]).sum(2)
-    gauge_map[face<0] = .02
-    for key, face_tiles in tiles.items():
-        halves = []
-        for i,tile in enumerate(face_tiles):
-            if key == "normal":
-                detail = tile*2-1
-                power = (detail[:,:,:2]**2).mean(2,keepdims=True)
-                amplitude = np.sqrt(v6_local_mean(power,65).clip(1e-7))
-                detail[:,:,:2] *= np.clip(.035/amplitude,.60,1.8)
-                tile = .5+.5*v6_unit(detail)
-            if key == "base":
-                log_color = np.log(np.maximum(srgb_to_linear(tile), .0001))
-                detail = log_color-v6_local_mean(log_color,60)
-                target = [.53,.094,.021] if i==0 else [.64,.154,.047]
-                tile = linear_to_srgb(target*np.exp(np.clip(detail,-1.2,1.2)))
-            pixels = v6_sample(tile,reflected.reshape(-1,2)).reshape(1024,2048,3)
-            if key == "normal":
-                detail = pixels*2-1
-                detail[:,:,:2] *= 2.8*sign
-                dy,dx = np.gradient(veins)
-                detail[:,:,:2] -= .22*np.stack([dx,dy],axis=2)
-                pixels = .5+.5*v6_unit(detail)
-            if key == "base":
-                pixels *= 1-veins[:,:,None]*[.10,.24,.24]
-            if key == "thickness":
-                pixels = .22 + .25*pixels
-                pixels += (.13*(1-smoothstep((x-.50)/.85)) + 1.3*(gauge_map-.02) + .055*veins)[:,:,None]
-            halves.append(to_u8(pixels))
-        atlas = np.vstack(halves)
-        if key == "thickness":
-            write_png(OUT_THICK, atlas[::-1,:,0])
-        else:
-            path = cache("v6/map_membrane_"+key+".jpg")
-            write_jpeg(path,atlas[::-1],95)
-            with open(path,"rb") as f:
-                v6_store(doc,binary,images["membrane_"+key]["bufferView"],f.read())
-
-
 STAGES = [("import", stage_import), ("wing", stage_wing), ("align", stage_align), ("low_parts", stage_low_parts),
           ("align2", stage_align2), ("wing5", stage_wing5), ("low2", stage_low2), ("join", stage_join), ("head", stage_head), ("parts", stage_parts), ("uv", stage_uv),
-          ("bake", stage_bake), ("maps", stage_maps), ("export", stage_export), ("wide", stage_wide)]
+          ("bake", stage_bake), ("maps", stage_maps), ("export", stage_export)]
 
 
 def main():
@@ -5965,13 +5416,7 @@ def main():
             log("stage", s)
             table[s]()
         return
-    if WING_SOURCE == "v6":
-        stage_wide()
-        verify()
-        return
     for name, fn in STAGES:
-        if name == "wide":
-            continue
         if name == "wing" and not WING_V3:
             continue
         if name == "wing5" and not WING_V5:
