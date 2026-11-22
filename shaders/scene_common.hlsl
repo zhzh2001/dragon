@@ -83,6 +83,13 @@ struct SceneUniforms {
     // floor (per metre; 0 for none), y the floor's height, z the height over
     // it in which it thins by e, w how patchy it is.
     float4 mist;
+    // What a breath left on the ground (terrain.hlsl, ground_marks): xyz
+    // where, w the radius (m). mark_looks rgb a colour; a 0..1 turns the
+    // ground to it by that share, 1..2 multiplies the ground toward it by
+    // the share over 1. mark_count.x how many.
+    float4 marks[16];
+    float4 mark_looks[16];
+    float4 mark_count;
 };
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The

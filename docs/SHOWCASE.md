@@ -34,6 +34,19 @@ and mechanics wait for a discussion of the loop itself
 (`docs/DIRECTION.md`, "The user's direction on mechanics"). Still open
 from before: the run's frame near the ground at 1080p.
 
+The fifth round (2026-11-22, 11:30). The cruise stroke is withdrawn: the
+deep stroke is every beat again. The four breaths of matter are solid
+pieces by default: ice lances, boulders, and a stream of water or acid
+as one tube, each leaving a mark on the ground; frost has a frozen-air
+style too, and fire leaves soot (`docs/showcase/EFFECTS.md`, "Breaths of
+matter as pieces"). The studio's dragon can breathe. Reports 0020 to
+0024 are answered (`docs/showcase/PLAYTEST.md`). The user picked a
+design an element, and five Hunyuan one-shots were made from them the
+same hour: static, wings raised, not rigged
+(`docs/MODEL_GENERATION.md`, "The second round of designs"). The loop
+discussion has its first half written (`docs/DIRECTION.md`, "Loop shapes
+for the mechanics discussion") and waits for the user's answers.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide
@@ -42,7 +55,7 @@ and stone are shaded as matter and not as flame
 frame at 1080p is 20 to 28 ms on a busy machine and its cause is not
 found (`docs/showcase/WORLD.md`, "The run's frame at 1080p"): measure it
 on a quiet machine against the build of 2026-11-14 first.
- The 26 suites pass and the
+ The 27 suites pass and the
 Metal goldens match on `main`. The session of 2026-11-20 put the Tripo
 models of 2026-11-16 into the game and changed the fire.
 

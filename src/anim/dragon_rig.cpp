@@ -1,5 +1,6 @@
 #include "anim/dragon_rig.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iomanip>

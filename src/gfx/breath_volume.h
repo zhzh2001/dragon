@@ -94,10 +94,14 @@ struct BreathVolumeSettings {
     // cloud of 2026-11-21, which from the chase camera, end on, was a ball
     // of fog whatever the element ("frost doesn't seem like ice, tide
     // unlike water").
-    float frost_style = 1.0f;    // 1: a thin vapour full of ice needles that glint
-    float tide_style = 1.0f;     // 1: a rope of water with an edge, a glint and foam (BreathJet::liquid)
-    float blight_style = 1.0f;   // 1: a stream of acid, liquid as the tide's, with fumes where it lands
-    float stone_style = 1.0f;    // 1: a blast of gravel in thin dust
+    // 2 (the default since 2026-11-22) is solid pieces
+    // (game/breath_matter.h): the styles of 1 "still look like clouds".
+    float frost_style = 2.0f;    // 1: a thin vapour full of ice needles that glint. 2: ice lances that leave
+                                 // spikes. 3: air too cold to see, and the ground it passes whitens
+    float tide_style = 2.0f;     // 1: a rope of water with an edge, a glint and foam (BreathJet::liquid).
+                                 // 2: a stream of slugs and drops that arcs down
+    float blight_style = 2.0f;   // 1: a stream of acid, liquid as the tide's. 2: slugs and drops of it
+    float stone_style = 2.0f;    // 1: a blast of gravel in thin dust. 2: boulders that break into rubble
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);

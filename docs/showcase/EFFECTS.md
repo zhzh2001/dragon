@@ -619,3 +619,109 @@ Options not built, in the order I would try them:
    everything inside the cone whitens with rime (a screen-space tint on
    the terrain and the trees). Cheap, and unlike any other breath.
 5. Sound: none of the four has a voice of its own yet.
+
+## Breaths of matter as pieces (2026-11-22)
+
+The playtester on the second styles, the same day they went in: "breaths
+just look bad in motion in general", and on reports 0021 to 0024, each a
+side view of one breath: "too white, still cloud like instead of
+acid/poison", "similarly cloud like, unlike water", "more like sand
+instead of stone", "cloud like". Then: "please implement the breath
+options, we can revert if bad".
+
+A marched body with a soft edge is a cloud whatever its colour and
+whatever rides in it. So the four breaths of matter have a third style,
+2, the default now, in which the breath is solid pieces. Each piece has a
+hard outline and a highlight, flies its own path and leaves something
+where it lands. Fire and storm do not change.
+
+| Element | Style 2 | What it leaves |
+|---|---|---|
+| Frost | 22 ice lances a second, 2 to 4.5 m long, tumbling end over end at 80 m/s over the dragon's own speed | Chips where a lance bursts. On the ground a patch of rime, and half the lances stand in it as a spike for 14 s |
+| Stone | 10 boulders a second, 0.4 to 0.9 m in radius, thrown 9 degrees above the aim, tumbling | Five pieces of rubble each, which bounce and lie for 10 s, and a patch of grit |
+| Tide | One stream: a tube 0.45 m in radius at the jaws that arcs down under gravity, clear at the jaws and white with air further out, with 320 drops a second off it | A wet, darker patch |
+| Blight | The same as acid: thinner, green, less air in it | A patch eaten black, and a wisp of fume from it |
+| Frost, style 3 | Frozen air: nothing in the jet but diamond dust | The ground under the cone turns white, and six spikes a second grow out of it |
+
+Fire leaves soot now where the ground burned, through the same marks.
+
+### How it is built
+
+- `game/breath_matter.h` is the motion and the bookkeeping, with no
+  renderer in it: the pieces, their flight, the ground, the water and the
+  targets they meet, the marks, and an impact list the app answers with
+  sparks and dust. `tests/test_breath_matter.cpp` covers it.
+- `shaders/breath_matter.hlsl` draws a piece: one mesh a piece through
+  `WorldRenderer::draw_matter`. `mesh.hlsl` lights a surface with the
+  sun's diffuse term and the sky's, and ice lit that way is chalk. This
+  shader adds a tight highlight, the sky mirrored at a grazing angle,
+  light through the body, and flat facets from the position's
+  derivatives. The crystal and the three boulders are built in
+  `gfx/primitives.cpp`.
+- `shaders/breath_stream.hlsl` draws a liquid as one tube. The mesh is a
+  unit cylinder; the vertex stage bends it along a Catmull-Rom curve
+  through up to 24 nodes, which are the stream's slugs in flight,
+  youngest first, with the mouth as the first node while the breath is
+  held. The fragment stage runs ridges down it at the water's own speed,
+  whitens it with distance, and tears its last half into strands.
+- The marks are sixteen discs in the scene block (`marks`, `mark_looks`,
+  `mark_count`). `terrain.hlsl` tints the ground's colour inside each,
+  with a torn edge. Rime is bright and cold, so the terrain's own snow
+  glint lights it. Marks near each other of one element are one mark.
+- `App::feed_player_breath` holds everything a held breath does for a
+  frame. The fight calls it, and the animation studio calls it too.
+
+### What was tried and dropped on the way
+
+- The lances flew point first. From the chase camera, which looks along
+  the breath, each was a dot. They tumble now, so a lance shows its
+  length for most of each turn.
+- The liquid was first a string of ellipsoids, one a slug. Blended, each
+  had its own rim and the stream was a row of lily pads. Solid, each had
+  its own highlight and the stream was a bag of pills. A stream is one
+  body: the tube replaced them.
+- With the pieces in, a ball of fog still sat over them in the chase
+  view. It was not the marched volume (its cover was already 0) but the
+  smoke puffs every breath sheds from its far third (`smoke_for`). A
+  breath of pieces sheds none. The playtester's "strange half transparent
+  lens like" shapes in the breath are these soft discs and the second
+  styles' chips, as far as could be told from stills: styles 2 and 3
+  draw neither.
+- Thrown level, a stream is below the aim all the way, and from the
+  chase camera it was behind the dragon's own head. What falls is thrown
+  9 degrees above the aim (`loft_deg`), as a hose is held: it rises into
+  view and comes down near the breath's reach.
+
+### The fire's square holes
+
+Report 0020, on a jet seen from the side after the breath was let go:
+"artifacts, unlike fire". The dark holes in the flame were squares. The
+four noise octaves were read on one lattice, so their cells lined up, and
+where the noise eats a thin jet the holes kept the lattice's shape. Every
+other octave is now read on a lattice turned off the first's
+(`breath_volume.hlsl`). The turn goes by the octave's own number, so a
+scale's octaves stay the same ones as the jet widens.
+`artifacts/breath-volume/fire-noise-before-after.jpg`, before on top.
+
+### What is weak
+
+- From behind, a liquid is still small: a stub over the head with drops
+  round it. Its width at the jaws, its loft and its drops are dials.
+- The breath's damage is still the combat cone's. A piece that reaches a
+  target bursts there for show, and a boulder that misses on screen can
+  still have hit.
+- Marks tint the ground only. Grass and trees inside a mark keep their
+  colour, and a spike can stand in a bush.
+- Sixteen marks is a strafing pass of about 60 m; the oldest goes first.
+- No sound of its own for any of them yet.
+- The rivals' breaths and the retro tiers keep the puffs.
+
+Sheets: `artifacts/breath-volume/pieces-chase-before-after.jpg` and
+`pieces-side-before-after.jpg` (style 1 on the left), and
+`pieces-grounded-studio.jpg` (all six from the standing studio dragon,
+with what each leaves).
+
+The Playtest panel's "Breath" has a dial an element (0 the cloud, 1 the
+cloud with bits, 2 pieces, and 3 for frost's frozen air), "marks on the
+ground", and under "the pieces" every rate, speed and size above.
+`--breath frost_style=1` and the like do the same on a capture.

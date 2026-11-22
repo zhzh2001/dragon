@@ -28,6 +28,7 @@
 #include "anim/model_pack.h"
 #include "game/chase_camera.h"
 #include "game/bot.h"
+#include "game/breath_matter.h"
 #include "game/combat.h"
 #include "game/match.h"
 #include "game/studio.h"
@@ -825,8 +826,28 @@ private:
         float chip_soft = 0.0f;
         float chip_gravity = -16.0f;
         core::Vec3 chip_colour{0.4f, 0.35f, 0.3f};
+        // The breath is thrown as solid pieces (game/breath_matter.h), and
+        // the volume is only the haze about them.
+        bool pieces = false;
+        // Frost as air too cold to see: no lance, the ground whitens and
+        // grows ice where the cone passes.
+        bool frozen_air = false;
     };
     BreathLook look_for(game::Element element) const;
+    void feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3 carry, float range, float dt);
+    // A breath of matter as pieces, and what every breath leaves on the
+    // ground (game/breath_matter.h).
+    game::BreathMatter breath_matter_;
+    gfx::Mesh crystal_mesh_;
+    gfx::Mesh boulder_meshes_[3];
+    gfx::Mesh drop_mesh_;
+    gfx::Mesh stream_mesh_;
+    float breath_marks_ = 1.0f;       // Playtest panel: how strongly a mark shows, 0 for none
+    float frozen_spike_owed_ = 0.0f;
+    bool studio_breathe_ = false;     // Playtest panel: the studio's dragon breathes
+    void update_breath_matter(float dt);
+    void draw_breath_matter(rhi::Pass* pass);
+    void set_ground_marks(gfx::SceneUniforms& scene) const;
     void emit_storm_arc(core::Vec3 from, core::Vec3 direction, float range);
     float storm_arc_owed_ = 0.0f;
     float ground_cloud_owed_ = 0.0f;

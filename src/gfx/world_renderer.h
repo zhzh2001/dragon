@@ -67,6 +67,18 @@ public:
     void draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
                    const ModelUniforms& model);
 
+    // A piece of a breath of matter (breath_matter.hlsl; the modern tier
+    // only): glossy, and with `blended` seen through, as water is. The
+    // model's material and recolour carry the surface (the shader says how).
+    // Blended pieces test the depth and do not write it: draw them after
+    // everything opaque, far ones first.
+    void draw_matter(Device& device, rhi::Pass* pass, const Mesh& mesh, const ModelUniforms& model, bool blended);
+    bool matter_available() const { return matter_ != INVALID_PIPELINE; }
+    // A breath of liquid as one tube bent along `stream`'s nodes
+    // (breath_stream.hlsl). `tube` is gfx::make_tube's. Blended: after
+    // everything opaque.
+    void draw_stream(Device& device, rhi::Pass* pass, const Mesh& tube, const StreamUniforms& stream);
+
     // Depth-only draw for the shadow pass. Applies the same deformation, so a
     // flapping wing casts a flapping shadow.
     void draw_mesh_depth(Device& device, rhi::Pass* pass, const Mesh& mesh,
@@ -117,6 +129,9 @@ private:
     PipelineHandle terrain_wireframe();
     PipelineHandle water_ = INVALID_PIPELINE;
     PipelineHandle mesh_ = INVALID_PIPELINE;
+    PipelineHandle matter_ = INVALID_PIPELINE;
+    PipelineHandle matter_blended_ = INVALID_PIPELINE;
+    PipelineHandle stream_ = INVALID_PIPELINE;
     PipelineHandle skinned_ = INVALID_PIPELINE;
     PipelineHandle skinned_depth_ = INVALID_PIPELINE;
     PipelineHandle skinned_velocity_ = INVALID_PIPELINE;

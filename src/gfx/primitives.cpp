@@ -129,4 +129,110 @@ MeshData make_sphere(float radius, Vec3 color, int segments, int rings) {
     return mesh;
 }
 
+namespace {
+
+// One flat triangle: its own three vertices, the face's normal on each.
+void add_face(MeshData& mesh, Vec3 a, Vec3 b, Vec3 c, Vec3 color) {
+    const Vec3 normal = core::normalize_or(core::cross(b - a, c - a), Vec3::up());
+    const uint32_t first = uint32_t(mesh.vertices.size());
+    for (const Vec3& p : {a, b, c}) {
+        MeshVertex vertex;
+        vertex.position = p;
+        vertex.normal = normal;
+        vertex.color = color;
+        mesh.vertices.push_back(vertex);
+    }
+    mesh.indices.push_back(first);
+    mesh.indices.push_back(first + 1);
+    mesh.indices.push_back(first + 2);
+}
+
+}  // namespace
+
+MeshData make_crystal(Vec3 color) {
+    MeshData mesh;
+    constexpr int kSides = 6;
+    const float front = -0.35f;  // where the long point begins
+    const float back = 0.72f;    // and the short one
+    const Vec3 tip_front{0.0f, 0.0f, -1.0f};
+    const Vec3 tip_back{0.0f, 0.0f, 1.0f};
+    for (int i = 0; i < kSides; ++i) {
+        const float a0 = core::TWO_PI * float(i) / float(kSides);
+        const float a1 = core::TWO_PI * float(i + 1) / float(kSides);
+        // Not a regular hexagon: a crystal's flats differ.
+        const float r0 = i % 2 == 0 ? 1.0f : 0.82f;
+        const float r1 = (i + 1) % 2 == 0 ? 1.0f : 0.82f;
+        const Vec3 f0{std::cos(a0) * r0, std::sin(a0) * r0, front};
+        const Vec3 f1{std::cos(a1) * r1, std::sin(a1) * r1, front};
+        const Vec3 b0{std::cos(a0) * r0 * 0.9f, std::sin(a0) * r0 * 0.9f, back};
+        const Vec3 b1{std::cos(a1) * r1 * 0.9f, std::sin(a1) * r1 * 0.9f, back};
+        add_face(mesh, tip_front, f1, f0, color);
+        add_face(mesh, f0, f1, b1, color);
+        add_face(mesh, f0, b1, b0, color);
+        add_face(mesh, tip_back, b0, b1, color);
+    }
+    return mesh;
+}
+
+MeshData make_tube(int along, int round) {
+    MeshData mesh;
+    if (along < 1) along = 1;
+    if (round < 3) round = 3;
+    for (int i = 0; i <= along; ++i) {
+        for (int j = 0; j <= round; ++j) {
+            const float angle = core::TWO_PI * float(j) / float(round);
+            MeshVertex vertex;
+            vertex.position = Vec3{std::cos(angle), std::sin(angle), float(i) / float(along)};
+            vertex.normal = Vec3{std::cos(angle), std::sin(angle), 0.0f};
+            vertex.color = Vec3::one();
+            mesh.vertices.push_back(vertex);
+        }
+    }
+    const int stride = round + 1;
+    for (int i = 0; i < along; ++i) {
+        for (int j = 0; j < round; ++j) {
+            const uint32_t a = uint32_t(i * stride + j);
+            const uint32_t b = a + uint32_t(stride);
+            mesh.indices.push_back(a);
+            mesh.indices.push_back(a + 1);
+            mesh.indices.push_back(b);
+            mesh.indices.push_back(a + 1);
+            mesh.indices.push_back(b + 1);
+            mesh.indices.push_back(b);
+        }
+    }
+    return mesh;
+}
+
+MeshData make_boulder(Vec3 color, unsigned seed) {
+    constexpr int kSegments = 9;
+    constexpr int kRings = 6;
+    // A hash of the grid place and the seed, 0..1.
+    auto bump = [seed](int s, int r) {
+        unsigned h = unsigned(s) * 374761393u + unsigned(r) * 668265263u + seed * 2246822519u;
+        h = (h ^ (h >> 13)) * 1274126177u;
+        return float((h ^ (h >> 16)) & 0xffffu) / 65535.0f;
+    };
+    auto point = [&](int s, int r) {
+        s %= kSegments;
+        const float v = core::PI * float(r) / float(kRings);
+        const float u = core::TWO_PI * float(s) / float(kSegments);
+        const Vec3 on{std::sin(v) * std::cos(u), std::cos(v), std::sin(v) * std::sin(u)};
+        // The poles are one point each, whatever the column.
+        const float radius = 0.72f + 0.42f * bump(r == 0 || r == kRings ? 0 : s, r);
+        return on * radius;
+    };
+    MeshData mesh;
+    for (int r = 0; r < kRings; ++r) {
+        for (int s = 0; s < kSegments; ++s) {
+            const Vec3 a = point(s, r), b = point(s, r + 1), c = point(s + 1, r), d = point(s + 1, r + 1);
+            // A shade a face: rock is not one grey.
+            const Vec3 shade = color * (0.8f + 0.4f * bump(s + 31, r + 17));
+            if (r > 0) add_face(mesh, a, c, b, shade);
+            if (r < kRings - 1) add_face(mesh, c, d, b, shade);
+        }
+    }
+    return mesh;
+}
+
 }  // namespace gfx

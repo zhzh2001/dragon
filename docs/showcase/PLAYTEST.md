@@ -601,3 +601,65 @@ downstroke starts) and the even 50% split between the two half-strokes.
 ### The breaths
 
 `docs/showcase/EFFECTS.md`, "A second style for each breath of matter".
+
+## The fifth round: reports 0020 to 0024, the deep stroke back, the breath in the studio (2026-11-22)
+
+The playtester, 2026-11-22 10:20: "please revert wingbeat change, deep
+stroke looks better. please make breath usable in animation studio.
+strange half transparent lens like is visible in flight but not
+paused/stopped. the gap in feedback might be a bug in F2. breaths just
+look bad in motion in general. please implement the breath options, we
+can revert if bad." And later: "lens artifacts are in the breath I mean".
+
+Five reports came with it, each one breath seen from the side in the
+feedback tool, on `embercrest-hero-v5c.glb`:
+
+| Report | Mark | Answer |
+|---|---|---|
+| 0020 | "gap is too large" (between the jaws and the flame) | Not a fault of the tool. See below |
+| 0020 | "artifacts, unlike fire" | The square holes: `EFFECTS.md`, "The fire's square holes" |
+| 0021 | blight: "too white, still cloud like instead of acid/poison" | Style 2, a stream of acid |
+| 0022 | tide: "similarly cloud like, unlike water" | Style 2, a stream of water |
+| 0023 | stone: "more like sand instead of stone, might be fine" | Style 2, boulders and rubble |
+| 0024 | frost: "cloud like" | Style 2, ice lances; style 3, frozen air |
+
+### The wingbeat
+
+The cruise stroke of the fourth round is withdrawn. In the hero's
+profiles `flap_cruise_down_angle_deg`, `flap_effort_speed` and
+`flap_effort_climb` are gone, so every beat is the full 125 degrees
+again, `recovery_droop_deg` is 20 again and the stroke plane's tilt is
+the code's 22. The effort term stays in the code, off at 0, and the
+Flight panel keeps its sliders.
+
+### The breath in the studio
+
+The animation studio skipped the whole fight, and the breath with it.
+The Playtest panel's studio section has a "breathe" box and an element
+list beside it. While the box is ticked the studio's dragon holds its
+breath from its animated head, in any scenario, grounded or flying, with
+no fuel to run out. `--studio N --breathe --element NAME` does the same
+on a capture. The breath's own code is one function now
+(`App::feed_player_breath`), called by the fight and by the studio.
+
+### The gap in the feedback tool
+
+The tool holds the world still by stepping it a millionth of a second a
+frame. With the breath held through F2 (`DRAGON_FEEDBACK_TEST=100
+--breathe`) the saved frame has the jet on the jaws, with no gap. The gap
+in the five reports is the time between letting the breath go and
+pressing F2: the jet flies on at about 100 m/s, so a sixth of a second is
+15 m. Holding the breath while pressing F2 keeps it on the jaws.
+
+### The lens shapes
+
+Not found for certain from stills: the playtester sees them in motion
+and not in a held frame. The only soft discs in a breath are the smoke
+puffs off its far third, the second styles' chips and the ground cloud's
+puffs, each a round blended sprite. Styles 2 and 3 draw none of the
+three. If the shapes are still there in style 2, the tool's 1/8 speed
+can hold them for a mark.
+
+### The breaths
+
+`docs/showcase/EFFECTS.md`, "Breaths of matter as pieces".

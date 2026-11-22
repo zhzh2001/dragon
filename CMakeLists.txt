@@ -92,6 +92,7 @@ target_sources(dragon PRIVATE
   src/gfx/ssao.cpp
   src/gfx/clouds.cpp
   src/gfx/breath_volume.cpp
+  src/game/breath_matter.cpp
   src/gfx/shadow_map.cpp
   src/core/noise.cpp
   src/game/debug_camera.cpp
@@ -546,6 +547,14 @@ target_include_directories(test_thermals PRIVATE src)
 target_link_libraries(test_thermals PRIVATE SDL3::SDL3)
 target_compile_options(test_thermals PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 add_test(NAME thermals COMMAND test_thermals)
+
+add_executable(test_breath_matter
+  tests/test_breath_matter.cpp
+  src/game/breath_matter.cpp
+)
+target_include_directories(test_breath_matter PRIVATE src)
+target_compile_options(test_breath_matter PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+add_test(NAME breath_matter COMMAND test_breath_matter)
 
 add_executable(test_time_of_day
   tests/test_time_of_day.cpp

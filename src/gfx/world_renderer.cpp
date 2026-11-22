@@ -89,6 +89,35 @@ PipelineDesc make_mesh_desc() {
     return desc;
 }
 
+PipelineDesc make_matter_desc(bool blended) {
+    PipelineDesc desc;
+    desc.name = blended ? "breath_matter_blended" : "breath_matter";
+    desc.shader = "breath_matter";
+    desc.vertex_buffers = Mesh::buffer_descriptions();
+    desc.vertex_attributes = Mesh::attributes();
+    // Seen from inside too: the camera can fly through a stream.
+    desc.cull = rhi::Cull::None;
+    if (blended) {
+        desc.alpha_blend = true;
+        desc.depth_write = false;
+    }
+    return desc;
+}
+
+PipelineDesc make_stream_desc() {
+    PipelineDesc desc;
+    desc.name = "breath_stream";
+    desc.shader = "breath_stream";
+    desc.vertex_buffers = Mesh::buffer_descriptions();
+    desc.vertex_attributes = Mesh::attributes();
+    // Both sides: its far wall shows through its near one where it is clear,
+    // and its end is torn open.
+    desc.cull = rhi::Cull::None;
+    desc.alpha_blend = true;
+    desc.depth_write = false;
+    return desc;
+}
+
 PipelineDesc make_skinned_desc() {
     PipelineDesc desc;
     desc.name = "skinned";
@@ -224,6 +253,11 @@ bool WorldRenderer::init(Device* device, PipelineCache* pipelines) {
     terrain_ = pipelines_->create(make_terrain_desc(false));
     water_ = pipelines_->create(make_water_desc());
     mesh_ = pipelines_->create(make_mesh_desc());
+    if (active_tier().tier == Tier::Modern) {
+        matter_ = pipelines_->create(make_matter_desc(false));
+        matter_blended_ = pipelines_->create(make_matter_desc(true));
+        stream_ = pipelines_->create(make_stream_desc());
+    }
     skinned_ = pipelines_->create(make_skinned_desc());
     return sky_ != INVALID_PIPELINE && terrain_ != INVALID_PIPELINE && mesh_ != INVALID_PIPELINE &&
            skinned_ != INVALID_PIPELINE;
@@ -464,6 +498,51 @@ void WorldRenderer::draw_mesh(Device& device, rhi::Pass* pass, const Mesh& mesh,
 
     mesh.bind(device.rhi(), pass);
     device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+}
+
+void WorldRenderer::draw_matter(Device& device, rhi::Pass* pass, const Mesh& mesh, const ModelUniforms& model,
+                                bool blended) {
+    rhi::Pipeline* pipeline = pipelines_->get(blended ? matter_blended_ : matter_);
+    if (!pipeline || !pass || !mesh.valid()) return;
+    if (!in_view(model, mesh.bound_centre(), mesh.bound_radius(), 1.0f)) return;
+
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &model, sizeof(ModelUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+
+    if (shadow_map_ && shadow_map_->texture()) {
+        rhi::TextureBinding binding = {};
+        binding.texture = shadow_map_->texture();
+        binding.sampler = shadow_map_->sampler();
+        device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
+    }
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 1);
+
+    mesh.bind(device.rhi(), pass);
+    device.rhi().draw_indexed(pass, mesh.index_count(), 1, 0, 0, 0);
+}
+
+void WorldRenderer::draw_stream(Device& device, rhi::Pass* pass, const Mesh& tube, const StreamUniforms& stream) {
+    rhi::Pipeline* pipeline = pipelines_->get(stream_);
+    if (!pipeline || !pass || !tube.valid() || stream.params.x < 2.0f) return;
+
+    device.rhi().bind_pipeline(pass, pipeline);
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 0, &scene_, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Vertex, 1, &stream, sizeof(StreamUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 0, &scene_, sizeof(SceneUniforms));
+    device.rhi().push_uniforms(rhi::Stage::Fragment, 1, &stream, sizeof(StreamUniforms));
+
+    if (shadow_map_ && shadow_map_->texture()) {
+        rhi::TextureBinding binding = {};
+        binding.texture = shadow_map_->texture();
+        binding.sampler = shadow_map_->sampler();
+        device.rhi().bind_fragment_textures(pass, 0, &binding, 1);
+    }
+    if (atmosphere_) atmosphere_->bind(device.rhi(), pass, 1);
+
+    tube.bind(device.rhi(), pass);
+    device.rhi().draw_indexed(pass, tube.index_count(), 1, 0, 0, 0);
 }
 
 // Whether a model's bounding sphere (in its own space, scaled by `pad`) is

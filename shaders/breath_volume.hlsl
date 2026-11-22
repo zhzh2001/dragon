@@ -262,10 +262,21 @@ float4 fs_main(BreathVertex input) : SV_Target {
         // to the other.
         // A cloud reads two octaves: its finest and its broadest are not
         // seen in a body with no tongues.
-        float o1 = breath_noise(base);
-        float o2 = breath_noise(base * 2.0);
-        float o0 = medium ? o1 : breath_noise(base * 0.5);
-        float o3 = medium ? o2 : breath_noise(base * 4.0);
+        // Every other octave is read on a lattice turned off the first's.
+        // On one lattice the octaves' cells lined up, and where the noise
+        // eats a dying jet its holes were squares (playtest report 0020:
+        // "artifacts, unlike fire"). The turn goes by the octave's own
+        // number, not its place among these four, so a scale's octaves are
+        // the same ones as the jet widens into the next scale.
+        float3 turned = float3(dot(base, float3(0.80, 0.60, 0.0)), dot(base, float3(-0.48, 0.64, 0.60)),
+                               dot(base, float3(0.36, -0.48, 0.80)));
+        bool odd = frac(floor(level) * 0.5) > 0.25;
+        float3 base_a = odd ? turned : base;
+        float3 base_b = odd ? base : turned;
+        float o1 = breath_noise(base_b);
+        float o2 = breath_noise(base_a * 2.0);
+        float o0 = medium ? o1 : breath_noise(base_a * 0.5);
+        float o3 = medium ? o2 : breath_noise(base_b * 4.0);
         float n = (0.5 * blend * o0 + (0.5 - 0.25 * blend) * o1 + (0.25 - 0.125 * blend) * o2 +
                    0.125 * (1.0 - blend) * o3) / 0.875;
         n = saturate((n - 0.5) * 1.9 + 0.5);

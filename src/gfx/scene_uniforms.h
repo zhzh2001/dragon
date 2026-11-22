@@ -76,6 +76,16 @@ struct SceneUniforms {
     // the floor (per metre; 0 for none), y the floor's height, z the height
     // over it in which it thins by e, w how patchy it is (0..1).
     core::Vec4 mist = core::Vec4{0.0f, 0.0f, 50.0f, 0.0f};
+    // What a breath left on the ground (game/breath_matter.h; terrain.hlsl,
+    // ground_marks): xyz where, w its radius in metres. mark_looks: rgb a
+    // colour, a how it is laid and how strongly: 0..1 the ground's colour
+    // turns to rgb by that share (rime, soot, rubble), 1..2 the ground's
+    // colour is multiplied toward rgb by the share over 1 (wet).
+    // mark_count.x how many are set.
+    static constexpr int MAX_MARKS = 16;
+    core::Vec4 marks[MAX_MARKS];
+    core::Vec4 mark_looks[MAX_MARKS];
+    core::Vec4 mark_count = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.
@@ -97,6 +107,21 @@ struct ModelUniforms {
     // tint cannot recolour a dark texture -- four bot tints were four
     // indistinguishable greys -- so this replaces the hue instead.
     core::Vec4 recolour = core::Vec4{1.0f, 1.0f, 1.0f, 0.0f};
+};
+
+// A breath of liquid as one stream (breath_stream.hlsl; game/breath_matter.h).
+//
+// Must match `StreamUniforms` in shaders/breath_stream.hlsl exactly.
+struct StreamUniforms {
+    static constexpr int MAX_NODES = 24;
+    // xyz a point on the stream's path, youngest first; w its radius there.
+    core::Vec4 nodes[MAX_NODES];
+    // x how many nodes, y time (s), z the flow's speed in nodes a second,
+    // w the cover at the jaws (0 clear to 1 solid).
+    core::Vec4 params = core::Vec4{0.0f, 0.0f, 0.0f, 0.4f};
+    core::Vec4 near_colour = core::Vec4{0.1f, 0.3f, 0.4f, 0.0f};  // a: an unlit share
+    core::Vec4 far_colour = core::Vec4{0.85f, 0.9f, 0.95f, 1.0f};  // a: how far its end tears into strands
+    core::Vec4 surface = core::Vec4{2.0f, 200.0f, 0.8f, 0.3f};     // glint, its exponent, sky mirrored, light through
 };
 
 // Sun and sky, as tunable values rather than shader constants. Sun angle is
