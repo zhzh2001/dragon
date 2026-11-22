@@ -51,10 +51,9 @@ WildsEvents Wilds::update(float dt, float effort, bool breathing) {
     return events;
 }
 
-float Wilds::health_rate() const {
-    if (starving()) return -tuning.starve_per_second;
-    if (state_.hunger >= tuning.fed_above) return tuning.mend_per_second;
-    return 0.0f;
+float Wilds::regen_share() const {
+    if (starving()) return 0.0f;
+    return state_.hunger >= tuning.fed_above ? 1.0f : core::saturate(tuning.hungry_regen);
 }
 
 WildsEvents Wilds::eat(float size) {

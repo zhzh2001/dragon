@@ -773,6 +773,8 @@ private:
     void wilds_fall(game::CombatEvents& events);
     void update_wilds(float dt);
     void wilds_sleep();
+    // The night's hunters go with the night: at dawn, and after a fall.
+    void wilds_dismiss_hunters();
     void wilds_note(const char* text, const char* under);
     void wilds_gained(const game::WildsEvents& events);
     void apply_wilds_sun();
@@ -793,6 +795,7 @@ private:
     bool wilds_grew_ = false;
     bool wilds_sleep_requested_ = false;
     bool wilds_night_hunters_ = true;
+    float wilds_hunters_after_ = 0.25f;  // of the night gone, before its hunter flies
     float wilds_find_range_ = 70.0f;    // metres past a landmark's own radius
     float wilds_sleep_clear_ = 250.0f;  // no enemy nearer than this, to sleep
     // A rival at its post in the layout, or (rival_index -1, hunter) a hunter

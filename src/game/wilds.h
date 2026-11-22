@@ -9,7 +9,9 @@
 // frame's first version: the rules only, no renderer and no app.
 //
 //   hunger   falls with time and faster with effort; prey fills it. Fed,
-//            the dragon mends; starving, it weakens.
+//            the dragon mends as it does in a fight (the regeneration
+//            after a lull); hungry, slowly; starving, not at all, and it
+//            weakens.
 //   growth   experience from eating, killing, finding and surviving. The
 //            levels run along the hoard run's growth (drake to ancient),
 //            so a level is size, health, reach and the stages' abilities.
@@ -36,8 +38,8 @@ struct WildsTuning {
     float hunger_seconds = 420.0f;    // from full to empty, gliding
     float effort_hunger = 1.6f;       // times that, more, at full effort (flapping, boosting)
     float breath_hunger = 0.5f;       // and more again while the breath is held
-    float fed_above = 0.5f;           // fed: mends
-    float mend_per_second = 0.02f;    // of full health, while fed
+    float fed_above = 0.5f;           // fed: the fight's regeneration runs whole
+    float hungry_regen = 0.25f;       // the share of it that runs below that
     float starve_per_second = 0.012f; // of full health, while empty
     float xp_first_level = 100.0f;    // experience for the second level
     float xp_growth = 1.35f;          // each level needs this many times the last
@@ -90,9 +92,12 @@ public:
     // `breathing` whether the breath is held. Returns what happened.
     WildsEvents update(float dt, float effort, bool breathing);
 
-    // The share of full health to add this step (negative while starving):
-    // the app applies it to the fight's health.
-    float health_rate() const;
+    // The share of full health lost a second: zero unless starving. The
+    // app takes it from the fight's health, down to the floor.
+    float starve_rate() const { return starving() ? tuning.starve_per_second : 0.0f; }
+    // The share of the fight's own regeneration that runs: whole when fed,
+    // a part when hungry, none when starving.
+    float regen_share() const;
 
     // A meal of `size` (a grazer is 1, a rabbit less, a great beast more).
     WildsEvents eat(float size);

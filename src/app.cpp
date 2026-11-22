@@ -6022,6 +6022,7 @@ void App::start_run(uint32_t seed) {
     }
     wilds_mode_ = wilds_starting_;
     wilds_starting_ = false;
+    combat_.regen_scale = 1.0f;
     combat_enabled_ = true;
     match_.abandon();
     last_kill_element_ = game::Element::None;
@@ -6764,6 +6765,7 @@ void App::emit_fury(core::Vec3 centre) {
 
 void App::end_run() {
     run_mode_ = false;
+    combat_.regen_scale = 1.0f;
     if (wilds_mode_) {
         save_wilds();
         wilds_mode_ = false;
@@ -7099,6 +7101,22 @@ void App::start_wilds(uint32_t seed, bool continue_saved) {
              hoard_run_.valley() + 1, wilds_.state().day, wilds_.state().level);
 }
 
+// A hunter belongs to the night. One that stayed past dawn met the dragon
+// at the valley head each time it woke from a fall, and the first soak
+// with a night in it fell three times in a row there.
+void App::wilds_dismiss_hunters() {
+    auto& sentinels = combat_.sentinels();
+    for (const auto& bot : bots_) {
+        if (!bot->hunter || bot->slot < 0 || size_t(bot->slot) >= sentinels.size()) continue;
+        game::Sentinel& s = sentinels[size_t(bot->slot)];
+        if (!s.alive) continue;
+        s.alive = false;
+        s.respawn_timer = 1e9f;
+        // Gone, not slain: the run's kill loop pays for a body it saw alive.
+        if (size_t(bot->slot) < run_alive_.size()) run_alive_[size_t(bot->slot)] = 0;
+    }
+}
+
 // A fall is not the end of the wilds: the dragon wakes at the valley head
 // at the next dawn, without the progress toward its next level. Before the
 // run's update, which would end the run on the same event.
@@ -7107,6 +7125,7 @@ void App::wilds_fall(game::CombatEvents& events) {
     if (!events.player_died && combat_.alive()) return;
     events.player_died = false;
     wilds_.fall();
+    wilds_dismiss_hunters();
     respawn_dragon();
     audio_.play(audio::Clip::KnockOut, 1.0f);
     char text[48];
@@ -7153,6 +7172,7 @@ void App::wilds_sleep() {
         return;
     }
     combat_.heal(0.5f * combat_.tuning.max_health);
+    wilds_dismiss_hunters();
     save_wilds();
     char text[48];
     std::snprintf(text, sizeof(text), "DAY %d", wilds_.state().day);
@@ -7167,11 +7187,12 @@ void App::update_wilds(float dt) {
     const game::FlightState& s = flight_.state();
     const game::WildsEvents events = wilds_.update(dt, s.grounded ? 0.0f : s.flap_amplitude, combat_.breathing());
 
-    // The belly: fed, the dragon mends; empty, it weakens, to a floor.
+    // The belly: fed, the dragon mends; hungry, slowly; empty, it weakens, to a floor.
+    // The fight's regeneration after a lull was mending a starving dragon
+    // faster than hunger hurt it, so it runs by the belly here.
     const float full = combat_.tuning.max_health;
-    const float rate = wilds_.health_rate();
-    if (rate > 0.0f) combat_.heal(rate * full * dt);
-    if (rate < 0.0f) combat_.starve(-rate * full * dt, wilds_.tuning.starve_floor * full);
+    combat_.regen_scale = wilds_.regen_share();
+    combat_.starve(wilds_.starve_rate() * full * dt, wilds_.tuning.starve_floor * full);
 
     // Places: a landmark flown close to counts once, and so does a hoard taken.
     static const char* const kLandmarkNames[5] = {"A RUINED TOWER", "A BROKEN ARCH", "A STONE CIRCLE", "A STANDING STONE",
@@ -7202,13 +7223,17 @@ void App::update_wilds(float dt) {
     }
 
     // The night's danger: the run's hunters, loosed only while it is dark.
-    hoard_run_.settings.max_hunters = wilds_night_hunters_ && wilds_.night() ? std::max(run_dials_.max_hunters, 1) : 0;
+    // Not at dusk: the run's hunter comes at once, behind the dragon, and
+    // an enemy that near forbids sleep. The night's first part is the time to land.
+    const bool hunting = wilds_night_hunters_ && wilds_.night() && wilds_.arc() >= wilds_hunters_after_;
+    hoard_run_.settings.max_hunters = hunting ? std::max(run_dials_.max_hunters, 1) : 0;
 
     if (events.night_began) {
-        wilds_note("NIGHT FALLS", wilds_night_hunters_ ? "hunters fly by night. land and sleep (N), or fight"
+        wilds_note("NIGHT FALLS", wilds_night_hunters_ ? "hunters fly in the deep of the night. land and sleep (N), or fight"
                                                        : "land and sleep (N)");
     }
     if (events.day_began) {
+        wilds_dismiss_hunters();
         char text[48];
         std::snprintf(text, sizeof(text), "DAY %d", wilds_.state().day);
         wilds_note(text, events.night_survived ? "a night lived through" : "");
@@ -7300,9 +7325,10 @@ void App::wilds_controls() {
     ImGui::SliderFloat("effort's hunger", &t.effort_hunger, 0.0f, 4.0f);
     ImGui::SliderFloat("the breath's hunger", &t.breath_hunger, 0.0f, 4.0f);
     ImGui::Checkbox("hunters fly by night", &wilds_night_hunters_);
+    ImGui::SliderFloat("after this share of the night", &wilds_hunters_after_, 0.0f, 0.9f);
     if (ImGui::TreeNode("health, experience, places")) {
-        ImGui::SliderFloat("mends when fed above", &t.fed_above, 0.0f, 1.0f);
-        ImGui::SliderFloat("mend a second", &t.mend_per_second, 0.0f, 0.1f, "%.3f");
+        ImGui::SliderFloat("mends whole when fed above", &t.fed_above, 0.0f, 1.0f);
+        ImGui::SliderFloat("mends this share when hungry", &t.hungry_regen, 0.0f, 1.0f);
         ImGui::SliderFloat("starve a second", &t.starve_per_second, 0.0f, 0.1f, "%.3f");
         ImGui::SliderFloat("starving stops at", &t.starve_floor, 0.0f, 0.5f);
         ImGui::SliderFloat("experience for level 2", &t.xp_first_level, 20.0f, 400.0f);

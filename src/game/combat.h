@@ -502,6 +502,9 @@ public:
     // Health back, capped at the maximum (a kill's reward in a run, and the
     // top-up when growth raises the maximum).
     void heal(float amount);
+    // The share of the player's regeneration that runs: 1 everywhere but
+    // the wilds, where a dragon mends by its belly (game/wilds.h).
+    float regen_scale = 1.0f;
     // Hunger's damage (game/wilds.h): no element, no flash, no knock, and
     // never below `floor`.
     void starve(float amount, float floor);

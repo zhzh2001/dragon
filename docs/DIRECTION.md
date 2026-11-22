@@ -762,8 +762,8 @@ valleys with the end taken out, and four things added. The rules are
 
 | Part | Rule | Where it meets the game |
 |---|---|---|
-| Hunger | The belly empties in 7 minutes of gliding, faster flapping (x2.6) and breathing (+0.5). A grazer is two fifths of a belly. Above half, health mends 2% a second. Empty, health falls to a floor of 10% and stays there | The herds, which the run already had. The valley has two more of them |
-| The day | A day and a night are 12 minutes. The sun follows the clock. The night is a moon on the same arc: dim, blue | The hunters fly only by night, and a valley has the run's count of them. A night lived through awake is 80 experience, slept through 40 |
+| Hunger | The belly empties in 7 minutes of gliding, faster flapping (x2.6) and breathing (+0.5). A grazer is two fifths of a belly. Above half, the fight's regeneration after a lull runs whole; below half, a quarter of it; empty, none, and health falls 1.2% a second to a floor of 10% | The herds, which the run already had. The valley has two more of them |
+| The day | A day and a night are 12 minutes. The sun follows the clock. The night is a moon on the same arc: dim, blue | The hunters fly only by night, from a quarter of the way into it, and leave at dawn. A valley has the run's count of them. A night lived through awake is 80 experience, slept through 40 |
 | Growth | Experience from a meal (12), a kill (40), a place found (60), a night. Twenty levels, each needing 1.35 times the last | The level drives the run's growth table. Size, health, reach and the stages' abilities (the charged shot, the second breath, the ram, the fury) follow the level and not the hoard |
 | Places | A landmark flown within 70 m counts once. So does a hoard taken, and a pass crossed | The kit's ruins, arches, circles, stones and cairns, which stood in every valley and meant nothing |
 | Sleep | N, landed, from the evening on, with no enemy within 250 m. The clock goes to dawn, half the health comes back, the state is saved | `wilds.txt` in the user directory. R returns to it |
@@ -792,6 +792,31 @@ Each of these is a decision the user has not made, so none is built.
   atmosphere renders wrong (orange clouds, ground lit from under), which
   is why the night is a moon.
 - Balance. No number in it has been played.
+
+### What the demo pilot found
+
+`--wilds 7 --autopilot`, with the day at 4 minutes and the belly at 200
+seconds so that five minutes of play hold a night. Each soak found one
+fault, and each is fixed:
+
+1. The pilot fell every 40 seconds. It read the wilds' hunter clock as a
+   deadline already past and flew for the pass through the rivals. It
+   ignores that clock in the wilds.
+2. A hunter that outlived the night met the dragon at the valley head
+   each time it woke from a fall: three falls in a row. Hunters now
+   leave at dawn, after a fall and after a sleep.
+3. A starving dragon stayed at full health. The fight's regeneration
+   (6 a second after 6 seconds unhurt) mended it faster than hunger hurt
+   it. Regeneration now runs by the belly.
+4. The run's hunter comes at once, behind the dragon, and an enemy that
+   near forbids sleep: at dusk there was no time to land. The hunter now
+   flies from a quarter of the way into the night.
+
+The last soak, 200 seconds: five meals and level 2 before midnight, the
+night lived through with its hunter killed, level 3 at dawn, two
+landmarks found, then the belly empty through the morning (the pilot
+does not hunt because it is hungry), health down to the floor, and a
+fall. The pilot does not know how to sleep.
 
 ### Status breaths, not built
 

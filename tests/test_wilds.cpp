@@ -34,21 +34,22 @@ void test_hunger() {
     std::printf("  after a minute: %.2f gliding, %.2f working\n", double(glide.state().hunger), double(work.state().hunger));
     CHECK(near(glide.state().hunger, 1.0f - 60.0f / glide.tuning.hunger_seconds, 0.01f));
     CHECK(work.state().hunger < glide.state().hunger - 0.2f);
-    CHECK(glide.health_rate() > 0.0f);
+    CHECK(glide.regen_share() == 1.0f && glide.starve_rate() == 0.0f);
 
     // To empty: the event fires once, and health then falls.
     int began = 0;
     for (int i = 0; i < 60 * 600; ++i) began += work.update(1.0f / 60.0f, 1.0f, false).starving_began ? 1 : 0;
     CHECK(work.starving());
     CHECK(began == 1);
-    CHECK(work.health_rate() < 0.0f);
+    CHECK(work.starve_rate() > 0.0f && work.regen_share() == 0.0f);
     // A meal ends it.
     work.eat(1.0f);
     CHECK(!work.starving());
     CHECK(near(work.state().hunger, 0.4f, 0.001f));
-    CHECK(work.health_rate() == 0.0f);  // not starving, not yet fed enough to mend
+    CHECK(work.starve_rate() == 0.0f);  // not starving, not yet fed enough to mend whole
+    CHECK(work.regen_share() > 0.0f && work.regen_share() < 1.0f);
     work.eat(1.0f);
-    CHECK(work.health_rate() > 0.0f);
+    CHECK(work.regen_share() == 1.0f);
     CHECK(work.state().meals == 2);
 }
 

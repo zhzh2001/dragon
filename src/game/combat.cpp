@@ -1293,7 +1293,7 @@ CombatEvents Combat::update(float dt, const FlightState& player, const CombatInp
     // Delayed rather than continuous: it rewards disengaging, which is the
     // manoeuvre this flight model is best at.
     if (health_ > 0.0f && time_since_damage_ >= tuning.regen_delay) {
-        health_ = core::minf(health_ + tuning.health_regen * dt, tuning.max_health);
+        health_ = core::minf(health_ + tuning.health_regen * regen_scale * dt, tuning.max_health);
     }
 
     return events;
