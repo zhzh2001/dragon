@@ -28,6 +28,10 @@ enum class StudioScenario : int {
     Claw,
     Tail,
     Walk,  // on the ground at a walking pace: the stride, on a treadmill
+    // Standing, turning slowly from side to side, with the fight running
+    // against dummies ahead (the app lays them): what a breath does to a
+    // target, to the ground and to the plants.
+    BreathRange,
     Count,
 };
 

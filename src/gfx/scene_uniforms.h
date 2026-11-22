@@ -76,13 +76,15 @@ struct SceneUniforms {
     // the floor (per metre; 0 for none), y the floor's height, z the height
     // over it in which it thins by e, w how patchy it is (0..1).
     core::Vec4 mist = core::Vec4{0.0f, 0.0f, 50.0f, 0.0f};
-    // What a breath left on the ground (game/breath_matter.h; terrain.hlsl,
-    // ground_marks): xyz where, w its radius in metres. mark_looks: rgb a
-    // colour, a how it is laid and how strongly: 0..1 the ground's colour
-    // turns to rgb by that share (rime, soot, rubble), 1..2 the ground's
-    // colour is multiplied toward rgb by the share over 1 (wet).
+    // What a breath left on the ground (game/breath_matter.h;
+    // scene_common.hlsl, marked_albedo): xyz where, w its radius in metres.
+    // mark_looks: rgb a colour; a is four times the element's number (the
+    // plants answer each element differently, foliage.hlsl) plus how the
+    // colour is laid and how strongly: 0..1 the ground's colour turns to
+    // rgb by that share (rime, soot, rubble), 1..2 the ground's colour is
+    // multiplied toward rgb by the share over 1 (wet).
     // mark_count.x how many are set.
-    static constexpr int MAX_MARKS = 16;
+    static constexpr int MAX_MARKS = 24;
     core::Vec4 marks[MAX_MARKS];
     core::Vec4 mark_looks[MAX_MARKS];
     core::Vec4 mark_count = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
@@ -122,6 +124,9 @@ struct StreamUniforms {
     core::Vec4 near_colour = core::Vec4{0.1f, 0.3f, 0.4f, 0.0f};  // a: an unlit share
     core::Vec4 far_colour = core::Vec4{0.85f, 0.9f, 0.95f, 1.0f};  // a: how far its end tears into strands
     core::Vec4 surface = core::Vec4{2.0f, 200.0f, 0.8f, 0.3f};     // glint, its exponent, sky mirrored, light through
+    // x how far it is drawn into beads on a thread (a thick liquid), y beads
+    // a node, z how far it whitens with air.
+    core::Vec4 body = core::Vec4{0.0f, 1.0f, 1.0f, 0.0f};
 };
 
 // Sun and sky, as tunable values rather than shader constants. Sun angle is

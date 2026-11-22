@@ -557,6 +557,22 @@ public:
     // straight flight passes one after another inside bite or strike reach.
     // They never fire, hold still, take a beating and come back in seconds.
     void spawn_training(core::Vec3 origin, core::Vec3 forward, core::Vec3 right);
+    // The breath range (the studio's scenario of that name): four passive
+    // dummies low over the ground ahead and to the left of `origin`, at 28,
+    // 48, 72 and 100 m, for a breath held from a standing dragon. The right
+    // is left open.
+    void spawn_range(core::Vec3 origin, core::Vec3 forward, core::Vec3 right);
+
+    // A breath thrown as pieces (game/breath_matter.h) lands its damage
+    // piece by piece: while this is set the cone below does none, and the
+    // caller reports each piece that met a target. `seconds` is the share
+    // of held breath the piece carried; it does what the cone did to a
+    // target inside it for that long. Resolved in the next update().
+    bool breath_as_pieces = false;
+    void breath_piece_hit(int sentinel_index, float seconds);
+    // The breath's fuel back to full: the studio's range holds a breath for
+    // as long as it is watched.
+    void refill_breath() { breath_ = 1.0f; }
     // A ground defence at `position` (already on the terrain), added to
     // whatever targets exist.
     // `position` is the tower's middle, where it is hit; `radius` its body
@@ -712,6 +728,11 @@ private:
     bool has_muzzle_override_ = false;
 
     core::Vec3 breath_origin_ = core::Vec3::zero();
+    struct PieceHit {
+        int index = -1;
+        float seconds = 0.0f;
+    };
+    std::vector<PieceHit> piece_hits_;
     core::Vec3 breath_direction_ = core::Vec3::forward();
 
     uint32_t rng_ = 1u;

@@ -826,6 +826,8 @@ private:
         float chip_soft = 0.0f;
         float chip_gravity = -16.0f;
         core::Vec3 chip_colour{0.4f, 0.35f, 0.3f};
+        float shard_width = 0.1f;  // metres
+        float smoke = 1.0f;        // over the element's smoke off its far third (smoke_for)
         // The breath is thrown as solid pieces (game/breath_matter.h), and
         // the volume is only the haze about them.
         bool pieces = false;
@@ -834,7 +836,22 @@ private:
         bool frozen_air = false;
     };
     BreathLook look_for(game::Element element) const;
-    void feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3 carry, float range, float dt);
+    void feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3 carry, float range, float dt,
+                            const game::MatterAim* aim = nullptr);
+    // The one place the player's element is picked from a list: it also
+    // drops U's second breath, which otherwise kept the list's choice from
+    // showing.
+    void choose_player_element(int element);
+    // The studio's breath range (StudioScenario::BreathRange): the fight
+    // runs on the studio's pose, against dummies low over the ground.
+    bool studio_range() const {
+        return studio_active_ && studio_scenario_ == int(game::StudioScenario::BreathRange);
+    }
+    bool studio_range_laid_ = false;
+    // Where a breath of pieces thrown now would land, for the HUD.
+    core::Vec3 breath_landing_;
+    bool breath_landing_valid_ = false;
+    float matter_sound_cooldown_[4] = {};
     // A breath of matter as pieces, and what every breath leaves on the
     // ground (game/breath_matter.h).
     game::BreathMatter breath_matter_;

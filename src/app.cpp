@@ -2697,7 +2697,7 @@ void App::update(float dt) {
         // --breathe with --studio): the same breath the fight feeds, from
         // the animated head, so a breath can be judged on a dragon that
         // holds still or flies a set path.
-        if (studio_breathe_ || options_.breathe) {
+        if ((studio_breathe_ || options_.breathe) && !studio_range()) {
             rig_action_.breath = 1.0f;
             const core::Vec3 head_model = dragon_rig_.head_position();
             const core::Vec3 origin = core::length_sq(head_model) > 1e-6f
@@ -2749,12 +2749,31 @@ void App::update(float dt) {
         free_camera_ = true;
     }
 
-    if (combat_enabled_ && !studio_active_) {
+    // The studio's breath range: dummies laid out ahead of the standing
+    // dragon the first frame the scenario runs, and again when it moves.
+    if (studio_range() && !studio_range_laid_) {
+        combat_enabled_ = true;
+        combat_.spawn_range(studio_state_.position, studio_state_.forward(), studio_state_.right());
+        studio_range_laid_ = true;
+        LOG_INFO("breath range: four dummies at 28, 48, 72 and 100 m; tick \"breathe\" or hold F");
+    }
+    if (!studio_range()) studio_range_laid_ = false;
+
+    breath_landing_valid_ = false;
+    if (combat_enabled_ && (!studio_active_ || studio_range())) {
+        // The fighter is the flying dragon, or on the range the studio's.
+        const game::FlightState& fighter = dragon_state();
+        if (studio_range()) combat_.refill_breath();
+        // A breath of pieces lands its damage piece by piece
+        // (update_breath_matter); the cone is for the rest.
+        const bool volume_breath = breath_volume_.available() && breath_volume_settings_.enabled &&
+                                   !ablated("breath_volume");
+        combat_.breath_as_pieces = volume_breath && look_for(player_breath_.element).pieces;
         // Fire leaves the MOUTH the rig animates, not a fixed body offset. The
         // rig runs later this frame, so this is last frame's head -- one frame
         // of lag on a body-attached point is invisible.
         {
-            const game::FlightState& s = flight_.state();
+            const game::FlightState& s = fighter;
             const core::Mat4 to_world =
                 player_to_world(s);
             const core::Vec3 head_model = dragon_rig_.head_position();
@@ -2801,7 +2820,7 @@ void App::update(float dt) {
         game::CombatEvents events;
         {
             CORE_PROFILE("update: combat");
-            events = combat_.update(dt, flight_.state(), read_combat_input());
+            events = combat_.update(dt, fighter, read_combat_input());
         }
         match_.update(dt, events);
         if (run_mode_) {
@@ -2816,9 +2835,37 @@ void App::update(float dt) {
             const float d = core::distance(active_camera().position, impact.position);
             audio_.play(audio::Clip::Explosion, 1.2f / (1.0f + d * d / (170.0f * 170.0f)));
         }
-        if (combat_.breathing()) {
-            feed_player_breath(combat_.breath_origin(), combat_.breath_direction(), flight_.state().velocity,
-                               combat_.tuning.breath_range * combat_.player_breath.range, dt);
+        {
+            // What the breath is held on: the locked target when the aim
+            // assist has brought the breath onto it, else a point along
+            // the aim. The pieces are thrown to land there.
+            const float range = combat_.tuning.breath_range * combat_.player_breath.range;
+            game::MatterAim aim;
+            bool aimed = false;
+            if (combat_.has_lock() && size_t(combat_.locked_index()) < combat_.sentinels().size()) {
+                const game::Sentinel& mark = combat_.sentinels()[size_t(combat_.locked_index())];
+                const core::Vec3 to = mark.position - combat_.breath_origin();
+                const float far = core::length(to);
+                if (mark.alive && far < range * 1.15f && far > 1.0f &&
+                    core::dot(to * (1.0f / far), combat_.breath_direction()) > 0.9976f) {  // four degrees
+                    aim.point = mark.position;
+                    aim.velocity = mark.velocity;
+                    aimed = true;
+                }
+            }
+            if (combat_.breathing()) {
+                feed_player_breath(combat_.breath_origin(), combat_.breath_direction(), fighter.velocity, range, dt,
+                                   aimed ? &aim : nullptr);
+            }
+            // And where it would land, for the HUD's mark.
+            if (combat_.breath_as_pieces) {
+                breath_landing_valid_ = breath_matter_.predict(
+                    player_breath_.element,
+                    combat_.breath_origin() + combat_.breath_direction() * breath_volume_settings_.mouth_forward,
+                    combat_.breath_direction(), fighter.velocity, range, aimed ? &aim : nullptr,
+                    [this](float x, float z) { return terrain_.height_at(x, z); }, terrain_settings_.water_level,
+                    breath_landing_);
+            }
         }
         for (const game::BreathCone& flame : combat_.hostile_breaths()) {
             // A bot tagged its cone with its model index; an untagged cone
@@ -3238,12 +3285,13 @@ void App::update(float dt) {
 
         // The flame you hear is any flame near you: yours at full strength, a
         // bot's by how close its cone is.
-        float flame = combat_.breathing() ? 1.0f : 0.0f;
+        const bool studio_breath = studio_active_ && !studio_range() && (studio_breathe_ || options_.breathe);
+        float flame = combat_.breathing() || studio_breath ? 1.0f : 0.0f;
         for (const game::BreathCone& cone : combat_.hostile_breaths()) {
             const float d = core::distance(cone.origin, s.position);
             flame = core::maxf(flame, 1.0f - core::saturate(d / 220.0f));
         }
-        audio_.set_flame(flame * (combat_enabled_ ? 1.0f : 0.0f));
+        audio_.set_flame(flame * (combat_enabled_ || studio_breath ? 1.0f : 0.0f));
         {
             // The breath you hear is voiced by its element.
             game::Element voiced = combat_.player_element;
@@ -4370,14 +4418,14 @@ void App::studio_controls() {
         ImGui::Checkbox("breathe", &studio_breathe_);
         ImGui::SameLine();
         {
-            const char* current = player_element_choice_ < 0 ? game::element_name(player_model().breath.element)
-                                                             : game::element_name(game::Element(player_element_choice_));
+            // What is breathed now, which U may have changed since the
+            // list was last used.
+            const char* current = game::element_name(player_breath_.element);
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::BeginCombo("element", current)) {
                 for (int e = 0; e < game::ELEMENT_COUNT; ++e) {
-                    if (ImGui::Selectable(game::element_name(game::Element(e)), player_element_choice_ == e)) {
-                        player_element_choice_ = e;
-                        refresh_player_element();
+                    if (ImGui::Selectable(game::element_name(game::Element(e)), int(player_breath_.element) == e)) {
+                        choose_player_element(e);
                     }
                 }
                 ImGui::EndCombo();
@@ -4678,6 +4726,7 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("tide", &b.tide_style, 0.0f, 2.0f, "%.0f");
         ImGui::SliderFloat("blight", &b.blight_style, 0.0f, 2.0f, "%.0f");
         ImGui::SliderFloat("stone", &b.stone_style, 0.0f, 2.0f, "%.0f");
+        ImGui::SliderFloat("cloud with the pieces", &b.mix, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("marks on the ground", &breath_marks_, 0.0f, 1.0f, "%.2f");
         if (ImGui::TreeNode("the pieces")) {
             game::MatterTuning& m = breath_matter_.tuning;
@@ -4698,7 +4747,7 @@ void App::build_playtest_ui() {
             ImGui::SliderFloat("acid speed", &m.acid_speed, 30.0f, 140.0f, "%.0f m/s");
             ImGui::SliderFloat("acid width", &m.acid_width, 0.05f, 0.6f, "%.2f m");
             ImGui::SliderFloat("acid drops", &m.acid_drops, 0.0f, 200.0f, "%.0f /s");
-            ImGui::SliderFloat("loft of what falls", &m.loft_deg, 0.0f, 20.0f, "%.1f deg");
+            ImGui::SliderFloat("aimed at this share of the reach", &m.aim_share, 0.1f, 1.0f, "%.2f");
             ImGui::SliderFloat("a mark stays for", &m.mark_life, 2.0f, 60.0f, "%.0f s");
             ImGui::SliderFloat("mark size", &m.mark_size, 0.3f, 3.0f, "x%.2f");
             ImGui::TreePop();
@@ -6227,6 +6276,13 @@ void App::advance_valley() {
 }
 
 // ---- elements ----
+
+void App::choose_player_element(int element) {
+    player_element_choice_ = element;
+    using_second_ = false;
+    arena_breath_index_ = 0;
+    refresh_player_element();
+}
 
 void App::refresh_player_element() {
     const LoadedModel& model = player_model();
@@ -8301,7 +8357,8 @@ void App::set_local_light(gfx::SceneUniforms& scene) const {
 // the puffs where there is none, and everything the breath throws and
 // leaves. `origin` is the head joint, `direction` the aim, `carry` the
 // breather's own velocity. The fight calls it and so does the studio.
-void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3 carry, float range, float dt) {
+void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3 carry, float range, float dt,
+                             const game::MatterAim* aim) {
     // The player's flame is a marched volume where the tier has one
     // (gfx/breath_volume.h), soot and all; the puffs are for the rest.
     const bool volume = breath_volume_.available() && breath_volume_settings_.enabled &&
@@ -8350,7 +8407,7 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
         // boulders, a stream. The volume above is then only their haze.
         if (look.pieces) {
             breath_matter_.emit(player_breath_.element, origin + direction * breath_volume_settings_.mouth_forward,
-                                direction, carry, range, dt);
+                                direction, carry, range, dt, aim);
         }
         // Where the jet meets the ground, the ground burns
         // (BreathVolume::ignite): twelve points along the jet, each
@@ -8393,7 +8450,9 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
                         breath_matter_.mark(game::Element::Frost, here, core::clampf(radius * 0.8f, 2.5f, 6.0f),
                                             breath_matter_.tuning.mark_life);
                     }
-                    frozen_spike_owed_ += dt * 6.0f / 14.0f;
+                    // Beside lances, which leave their own, the share the
+                    // mix gives.
+                    frozen_spike_owed_ += dt * 6.0f / 14.0f * (look.pieces ? core::saturate(breath_volume_settings_.mix) : 1.0f);
                     if (frozen_spike_owed_ >= 1.0f) {
                         frozen_spike_owed_ -= 1.0f;
                         const float lean_x = particle_unit();
@@ -8498,8 +8557,8 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
             const float turn_z = particle_unit();
             shard.stretch = core::normalize_or(core::Vec3{turn_x, turn_y, turn_z}, core::Vec3::up()) *
                             (look.shard_length * (0.3f + 0.7f * pace));
-            shard.size_start = 0.16f;
-            shard.size_end = 0.05f;
+            shard.size_start = look.shard_width;
+            shard.size_end = look.shard_width * 0.3f;
             shard.color_start = look.shard_colour;
             shard.color_end = look.shard_colour * 0.7f;
             // One in eight is a face turned to the sun.
@@ -8546,11 +8605,12 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
         // end on, and smoke nearer than that was a grey veil over
         // the view ahead (the playtest of 2026-10-21: "the fog is
         // too much").
-        // Not behind pieces or in frozen air: from the chase camera the
-        // puffs were a ball of fog over the pieces, the very cloud the
-        // pieces replace.
+        // Behind pieces and in frozen air only the share the mix gives
+        // (look.smoke): at full strength the puffs were, from the chase
+        // camera, a ball of fog over the pieces, the very cloud the pieces
+        // replace.
         const BreathSmoke smoke = smoke_for(player_breath_.element);
-        breath_smoke_owed_ += dt * smoke.rate * 50.0f * (look.pieces || look.frozen_air ? 0.0f : 1.0f);
+        breath_smoke_owed_ += dt * smoke.rate * 50.0f * look.smoke;
         while (breath_smoke_owed_ >= 1.0f) {
             breath_smoke_owed_ -= 1.0f;
             const float pick = 0.62f + 0.38f * std::fabs(particle_unit());
@@ -8588,12 +8648,14 @@ void App::feed_player_breath(core::Vec3 origin, core::Vec3 direction, core::Vec3
 // here with what the piece itself cannot be: a few sparks of light, a puff.
 void App::update_breath_matter(float dt) {
     std::vector<game::BreathMatter::Target> targets;
-    if (combat_enabled_ && !studio_active_) {
-        for (const game::Sentinel& sentinel : combat_.sentinels()) {
+    if (combat_enabled_ && (!studio_active_ || studio_range())) {
+        for (size_t i = 0; i < combat_.sentinels().size(); ++i) {
+            const game::Sentinel& sentinel = combat_.sentinels()[i];
             if (!sentinel.alive) continue;
             game::BreathMatter::Target target;
             target.position = sentinel.position;
             target.radius = combat_.tuning.sentinel_radius;
+            target.id = int(i);
             targets.push_back(target);
         }
     }
@@ -8623,8 +8685,30 @@ void App::update_breath_matter(float dt) {
             particles_.spawn(g);
         }
     };
+    // Each landing has a voice: ice breaking, rock breaking, a splash, a
+    // hiss. One of a kind every tenth of a second at most, quieter with
+    // distance from the ear, its pitch by the piece's size.
+    for (float& cooldown : matter_sound_cooldown_) cooldown = core::maxf(cooldown - dt, 0.0f);
+    auto voice = [&](int slot, audio::Clip clip, float gain, const game::MatterImpact& impact) {
+        if (matter_sound_cooldown_[slot] > 0.0f) return;
+        const float d = core::distance(active_camera().position, impact.position);
+        const float heard = gain / (1.0f + d * d / (90.0f * 90.0f));
+        if (heard < 0.02f) return;
+        const float pitch = 0.85f + 0.3f * std::fabs(particle_unit());
+        audio_.play(clip, heard, pitch * core::clampf(1.3f - 0.4f * impact.size, 0.7f, 1.4f));
+        matter_sound_cooldown_[slot] = 0.1f;
+    };
     int acid_landings = 0;
     for (const game::MatterImpact& impact : breath_matter_.impacts()) {
+        // A piece that met a target is that much of the breath landed.
+        if (impact.on_target && impact.target >= 0) combat_.breath_piece_hit(impact.target, impact.share);
+        switch (impact.kind) {
+            case game::MatterKind::IceLance: voice(0, audio::Clip::Shatter, 0.45f, impact); break;
+            case game::MatterKind::Boulder: voice(1, impact.on_water ? audio::Clip::Splash : audio::Clip::Crack, 0.6f, impact); break;
+            case game::MatterKind::WaterSlug: voice(2, audio::Clip::Splash, 0.35f, impact); break;
+            case game::MatterKind::AcidSlug: voice(3, audio::Clip::Hiss, 0.3f, impact); break;
+            default: break;
+        }
         switch (impact.kind) {
             case game::MatterKind::IceLance:
                 glints(impact, 8, core::Vec3{0.75f, 0.92f, 1.3f}, 3.0f, 11.0f, 0.6f);
@@ -8780,7 +8864,19 @@ void App::draw_breath_matter(rhi::Pass* pass) {
             float radius = slug->scale.x * (1.0f + 1.6f * t) * (1.0f - core::smoothstep(0.8f, 1.0f, t));
             // The breath was let go and held again: no water joins the two
             // strands, so the tube closes to nothing on both sides of the gap.
-            if (slug->age - before > gap * 2.6f) {
+            bool broken = slug->age - before > gap * 2.6f;
+            // Or the aim jumped (a lock taken or lost): what was already in
+            // the air flies on where it was thrown, and a tube through both
+            // would be a hairpin. More than 35 degrees between one stretch
+            // and the next is two strands.
+            if (count >= 2) {
+                const core::Vec3 a = stream.nodes[count - 2].xyz();
+                const core::Vec3 b = stream.nodes[count - 1].xyz();
+                const core::Vec3 first = core::normalize_or(b - a, core::Vec3::forward());
+                const core::Vec3 next = core::normalize_or(slug->position - b, first);
+                if (core::dot(first, next) < 0.82f) broken = true;
+            }
+            if (broken) {
                 radius = 0.0f;
                 if (count > 0) stream.nodes[count - 1].w = 0.0f;
             }
@@ -8799,6 +8895,10 @@ void App::draw_breath_matter(rhi::Pass* pass) {
             stream.near_colour = core::Vec4{0.07f, 0.14f, 0.015f, 0.05f};
             stream.far_colour = core::Vec4{0.3f, 0.4f, 0.05f, 0.7f};
             stream.surface = core::Vec4{2.0f, 160.0f, 0.5f, 0.25f};
+            // Thick: gobs on a thread, four to a node's gap, and no white
+            // water in it. With the green gas about it (look_for), this is
+            // what tells it from the tide's hose.
+            stream.body = core::Vec4{0.85f, 0.55f, 0.25f, 0.0f};
         }
         world_.draw_stream(device_, pass, stream_mesh_, stream);
     }
@@ -8820,6 +8920,10 @@ void App::set_ground_marks(gfx::SceneUniforms& scene) const {
                 case game::Element::Stone: look = core::Vec4{0.3f, 0.27f, 0.23f, 0.7f * k}; break;         // grit
                 default: look = core::Vec4{0.03f, 0.028f, 0.025f, 0.8f * k}; break;                        // soot
             }
+            // The element rides in the alpha, four to a step, for the
+            // plants (foliage.hlsl).
+            const game::Element kind = mark.element == game::Element::None ? game::Element::Fire : mark.element;
+            look.w += 4.0f * float(int(kind));
             scene.marks[count] = core::Vec4{mark.position.x, mark.position.y, mark.position.z, mark.radius};
             scene.mark_looks[count] = look;
             ++count;
@@ -8833,6 +8937,7 @@ void App::set_ground_marks(gfx::SceneUniforms& scene) const {
 App::BreathLook App::look_for(game::Element element) const {
     BreathLook l;
     const gfx::BreathVolumeSettings& styles = breath_volume_settings_;
+    const float mix = core::saturate(styles.mix);
     switch (element) {
         case game::Element::Frost:  // a heavy white fog that falls and lies on the ground; ice glints
             l.medium = 1.0f, l.whiten = 0.7f, l.glow = 0.1f;
@@ -8846,27 +8951,32 @@ App::BreathLook App::look_for(game::Element element) const {
                 // And snow: white grains, which are what a blast of cold
                 // air carries and what shows against a pale sky.
                 l.cover = 0.22f, l.width = 0.75f, l.whiten = 0.4f, l.glow = 0.4f;
-                l.shards = 520.0f, l.shard_length = 0.7f, l.shard_glow = 4.0f;
+                l.shards = 520.0f, l.shard_length = 0.45f, l.shard_glow = 4.0f, l.shard_width = 0.06f;
                 l.shard_colour = core::Vec3{0.72f, 0.92f, 1.3f};
-                l.chips = 520.0f, l.chip_size = 0.15f, l.chip_soft = 0.15f, l.chip_gravity = -4.0f;
+                // Grains, not flakes the size of a hand (the playtester:
+                // "make particles smaller").
+                l.chips = 700.0f, l.chip_size = 0.07f, l.chip_soft = 0.15f, l.chip_gravity = -4.0f;
                 l.chip_colour = core::Vec3{0.96f, 0.98f, 1.0f};
                 l.cloud_opacity = 0.4f;
             }
             if (styles.frost_style > 2.5f) {
                 // Frozen air: nothing in the jet but diamond dust, a few
-                // hundred specks that catch the sun. What shows is what it
-                // does to the ground (feed_player_breath).
+                // hundred specks that catch the sun, and of style 1's
+                // vapour and snow the share `mix` gives. What shows is what
+                // it does to the ground (feed_player_breath).
                 l.frozen_air = true;
-                l.cover = 0.05f, l.width = 1.0f, l.whiten = 0.5f, l.glow = 0.5f;
-                l.shards = 700.0f, l.shard_length = 0.12f, l.shard_glow = 5.0f;
-                l.chips = 0.0f, l.bits = 0.0f, l.cloud_life = 0.0f;
+                l.cover = 0.05f + l.cover * mix, l.width = 1.0f, l.whiten = 0.5f, l.glow = 0.5f;
+                l.shards = 700.0f, l.shard_length = 0.12f, l.shard_glow = 5.0f, l.shard_width = 0.05f;
+                l.chips *= mix, l.bits *= mix, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             } else if (styles.frost_style > 1.5f) {
-                // Ice lances (game/breath_matter.h). The vapour is a thin
-                // wake behind them, and nothing soft rides it.
+                // Ice lances (game/breath_matter.h). Behind them a thin
+                // wake of style 1's vapour and snow, and a little of the
+                // frozen air: the ground under the jet rimes.
                 l.pieces = true;
-                l.cover = 0.0f, l.width = 0.6f, l.whiten = 0.4f, l.glow = 0.5f;
-                l.shards = 140.0f, l.shard_length = 0.35f, l.shard_glow = 4.0f;
-                l.chips = 0.0f, l.bits = 0.3f, l.cloud_life = 0.0f;
+                l.frozen_air = mix > 0.01f;
+                l.cover *= mix, l.width = 0.6f, l.whiten = 0.4f, l.glow = 0.5f;
+                l.shards = 140.0f + l.shards * mix * 0.5f, l.shard_length = 0.35f, l.shard_glow = 4.0f;
+                l.chips *= mix, l.bits = 0.3f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
         case game::Element::Blight:  // a slow gas that sinks and lingers longest; drips
@@ -8883,14 +8993,13 @@ App::BreathLook App::look_for(game::Element element) const {
                 l.chip_colour = core::Vec3{0.55f, 0.8f, 0.1f};
             }
             if (styles.blight_style > 1.5f) {
-                // A stream of acid as slugs and drops; thin fumes about it,
-                // and a longer cloud of them where it lands.
+                // A stream of acid in gobs; about it the green gas of
+                // style 0 by the share `mix`, which is what tells it from
+                // water at a glance. No lit cloud where it lands: that was
+                // a ball of lime light on the grass.
                 l.pieces = true;
-                l.liquid = 0.0f, l.cover = 0.0f, l.width = 0.35f, l.whiten = 0.1f, l.glow = 0.2f, l.buoyancy = -9.0f;
-                // No cloud where it lands: lit, the gas was a ball of lime
-                // light on the grass. The ground is eaten black there, and
-                // a wisp rises from it (update_breath_matter).
-                l.chips = 0.0f, l.bits = 0.0f, l.cloud_life = 0.0f;
+                l.liquid = 0.0f, l.cover = 0.3f * mix, l.width = 0.32f, l.whiten = 0.05f, l.glow = 0.25f, l.buoyancy = 2.0f;
+                l.chips *= mix, l.bits = 0.0f, l.cloud_life = 0.0f, l.smoke = mix;
             }
             break;
         case game::Element::Storm:  // arcs (emit_storm_arc); the volume is their glow
@@ -8911,11 +9020,11 @@ App::BreathLook App::look_for(game::Element element) const {
                 l.chip_colour = core::Vec3{0.92f, 0.96f, 0.98f};
             }
             if (styles.tide_style > 1.5f) {
-                // A stream of water as slugs and drops; the volume is the
-                // fine spray about it, thin.
+                // A stream of water as one tube and its drops; about it a
+                // fine white spray and style 1's foam flecks by `mix`.
                 l.pieces = true;
-                l.liquid = 0.0f, l.cover = 0.0f, l.width = 0.4f, l.whiten = 0.9f, l.glow = 0.0f, l.buoyancy = -24.0f;
-                l.chips = 0.0f, l.bits = 0.0f, l.cloud_life = 0.0f;
+                l.liquid = 0.0f, l.cover = 0.3f * mix, l.width = 0.4f, l.whiten = 0.9f, l.glow = 0.0f, l.buoyancy = -24.0f;
+                l.chips *= mix, l.bits = 0.0f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
         case game::Element::Stone:  // matte grit, glowing only at the jaws; dust on the ground, flying chips
@@ -8927,18 +9036,23 @@ App::BreathLook App::look_for(game::Element element) const {
             if (styles.stone_style > 0.5f) {
                 // Gravel: the dust thin, and stones in it that fall.
                 l.cover = 0.4f, l.width = 0.8f;
-                l.chips = 380.0f, l.chip_size = 0.42f, l.chip_soft = 0.0f;
+                l.chips = 520.0f, l.chip_size = 0.2f, l.chip_soft = 0.0f;
                 l.chip_colour = core::Vec3{0.2f, 0.17f, 0.14f};
             }
             if (styles.stone_style > 1.5f) {
-                // Boulders; a thin dust behind them.
+                // Boulders; behind them style 1's dust and gravel by `mix`.
                 l.pieces = true;
-                l.cover = 0.012f, l.width = 0.6f;
-                l.chips = 0.0f, l.bits = 0.3f, l.cloud_life = 0.0f;
+                l.cover *= mix, l.width = 0.6f;
+                l.chips *= mix, l.bits = 0.3f, l.cloud_life = 0.0f, l.smoke = mix * 0.5f;
             }
             break;
         default: break;  // fire: the flame, its sparks, the ground alight
     }
+    // Ice, rock and water throw no light. What the cloud styles threw was
+    // faint in the air and plain on the ground: a tinted wedge ahead of the
+    // dragon that came and went with the breath, which was most likely the
+    // playtester's "strange half transparent lens".
+    if (l.pieces || l.frozen_air) l.light = 0.0f;
     return l;
 }
 
@@ -9083,7 +9197,7 @@ game::CombatInput App::read_combat_input() const {
     // --breathe: the breath alone, held. --attack's boost outruns the chase
     // camera and its bite and fireballs cover the flame, so the breath
     // itself never got onto a capture.
-    if (options_.breathe) {
+    if (options_.breathe || (studio_range() && studio_breathe_)) {
         in.breath = true;
         return in;
     }
@@ -9577,8 +9691,19 @@ void App::draw_combat_hud() {
     // Where a shot leaves and where it goes: a small cross at the mouth's aim
     // direction. The head is hard to read from behind, and fire that leaves
     // somewhere you cannot see feels random.
+    // Where a breath of pieces comes down: a small ring on the ground or the
+    // target. The arc leaves the jaws above the aim, and without this the
+    // only way to place a stream was to walk it on.
+    if (breath_landing_valid_) {
+        ImVec2 at;
+        if (project_to_screen(view_proj, breath_landing_, width, height, at)) {
+            const ImU32 colour = combat_.breathing() ? tk.breath_hot : tk.text_dim;
+            draw->AddCircle(at, hud_.px(9.0f), colour, 20, hud_.px(1.8f));
+            draw->AddCircleFilled(at, hud_.px(1.8f), colour, 8);
+        }
+    }
     {
-        const game::FlightState& player = flight_.state();
+        const game::FlightState& player = dragon_state();
         const core::Vec3 aim_at =
             combat_.muzzle(player) + combat_.fireball_direction(player) * 260.0f;
         ImVec2 screen;
@@ -9884,14 +10009,10 @@ void App::build_combat_ui() {
         std::snprintf(species, sizeof(species), "the species' (%s)", game::element_name(model.breath.element));
         const char* current = player_element_choice_ < 0 ? species : game::element_name(game::Element(player_element_choice_));
         if (ImGui::BeginCombo("you breathe", current)) {
-            if (ImGui::Selectable(species, player_element_choice_ < 0)) {
-                player_element_choice_ = -1;
-                refresh_player_element();
-            }
+            if (ImGui::Selectable(species, player_element_choice_ < 0)) choose_player_element(-1);
             for (int e = 0; e < game::ELEMENT_COUNT; ++e) {
                 if (ImGui::Selectable(game::element_name(game::Element(e)), player_element_choice_ == e)) {
-                    player_element_choice_ = e;
-                    refresh_player_element();
+                    choose_player_element(e);
                 }
             }
             ImGui::EndCombo();

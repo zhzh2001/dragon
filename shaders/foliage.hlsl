@@ -211,8 +211,58 @@ VertexOut vs_main(VertexIn input) {
     // card_crown draws per card.
     o.material.w = frac(o.material.w + input.color.y * 913.7);
 #endif
+#ifdef ATMOSPHERE
+    // What a breath did to the plant (scene.marks, game/breath_matter.h).
+    // Judged at the plant's base, so a plant answers whole: fire takes the
+    // leaves and chars the rest, frost rimes it, acid withers it, water
+    // darkens it, and a boulder lays it flat away from where it struck.
+    bool stripped = false;
+    for (int m = 0; m < 24 && scene.mark_count.x > 0.5; ++m) {
+        if (float(m) >= scene.mark_count.x) break;
+        float4 mark = scene.marks[m];
+        float3 base_at = input.position_scale.xyz;
+        float2 off = base_at.xz - mark.xz;
+        float reach = length(off) / max(mark.w * 1.25, 0.1);
+        if (reach > 1.0 || abs(base_at.y - mark.y) > mark.w * 2.0 + 4.0) continue;
+        float4 look = scene.mark_looks[m];
+        float kind = mark_kind(look);
+        float value = mark_value(look);
+        float k = saturate((value > 1.0 ? value - 1.0 : value) * 1.3) * (1.0 - smoothstep(0.8, 1.0, reach));
+        const bool card = material == FOLIAGE_MAT_LEAF || material == FOLIAGE_MAT_NEEDLE;
+        const bool blade = material == FOLIAGE_MAT_PLAIN;
+        float3 from_base = world - base_at;
+        if (kind < 0.5) {
+            o.albedo = lerp(o.albedo, float3(0.02, 0.018, 0.015), k);
+            stripped = stripped || (card && k > 0.5);
+            if (blade) from_base.y *= 1.0 - 0.75 * k;
+        } else if (kind < 1.5) {
+            o.albedo = lerp(o.albedo, float3(0.8, 0.88, 1.0), 0.85 * k);
+        } else if (kind < 2.5) {
+            o.albedo = lerp(o.albedo, float3(0.1, 0.08, 0.03), 0.9 * k);
+            stripped = stripped || (card && k > 0.5);
+            if (blade) from_base.y *= 1.0 - 0.5 * k;
+        } else if (kind > 3.5 && kind < 4.5) {
+            o.albedo *= 1.0 - 0.3 * k;
+            if (blade) from_base.y *= 1.0 - 0.3 * k;
+        } else if (kind > 4.5) {
+            // Felled: turned about the base, away from the mark's middle.
+            float2 fall = off / max(length(off), 0.05);
+            float angle = 1.35 * k;
+            float along = dot(from_base.xz, fall);
+            float ca = cos(angle), sa = sin(angle);
+            float2 across = from_base.xz - fall * along;
+            float new_along = along * ca + from_base.y * sa;
+            from_base.y = -along * sa + from_base.y * ca;
+            from_base.xz = across + fall * new_along;
+            o.albedo = lerp(o.albedo, float3(0.3, 0.27, 0.23), 0.35 * k);
+        }
+        world = base_at + from_base;
+    }
+    o.world_position = world;
+#endif
     o.clip_position = mul(scene.view_proj, float4(world, 1.0));
 #ifdef ATMOSPHERE
+    if (stripped) o.clip_position = float4(2.0, 2.0, 2.0, 1.0);
     // Past its own handover distance, by its hash, a tree is its impostor
     // (foliage_impostor.hlsl, which draws the complementary share): its
     // crown collapses off the screen.

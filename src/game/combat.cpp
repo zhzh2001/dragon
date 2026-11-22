@@ -968,7 +968,30 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
     // The cone follows the assist, so the flame the player sees is the flame
     // that does the damage -- there is no hidden bend and no invisible widening.
     breath_direction_ = breath_direction_for(player);
-    if (!breathing_) return;
+
+    // What one target takes for `seconds` inside the breath.
+    auto land = [&](Sentinel& sentinel, float seconds) {
+        const float resist = sentinel.ground ? core::saturate(tuning.defence_breath_resist) : 1.0f;
+        hit_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * seconds * resist,
+                     player_element, tuning.elements.breath_weight * seconds, events);
+        // A stream of water shoves steadily: half a fireball's push a second.
+        if (player_element == Element::Tide && !sentinel.ground && sentinel.element != Element::Tide) {
+            const Vec3 shove = breath_direction_ * (tuning.elements.drench_push * 0.5f * seconds);
+            if (sentinel.external) {
+                sentinel.knockback = sentinel.knockback + shove;
+            } else {
+                sentinel.centre = sentinel.centre + shove;
+            }
+        }
+    };
+    // Pieces in the air land after the breath is let go, so these are
+    // resolved whether or not it is held.
+    for (const PieceHit& hit : piece_hits_) {
+        if (hit.index < 0 || size_t(hit.index) >= sentinels_.size() || !sentinels_[size_t(hit.index)].alive) continue;
+        land(sentinels_[size_t(hit.index)], hit.seconds);
+    }
+    piece_hits_.clear();
+    if (!breathing_ || breath_as_pieces) return;
 
     // Species scales multiply the master dials, so raising breath_range in the
     // panel still moves every species together.
@@ -987,18 +1010,44 @@ void Combat::apply_breath(float dt, const FlightState& player, CombatEvents& eve
                            reach)) {
             continue;
         }
-        const float resist = sentinel.ground ? core::saturate(tuning.defence_breath_resist) : 1.0f;
-        hit_sentinel(sentinel, tuning.breath_damage_per_second * player_breath.damage * dt * resist,
-                     player_element, tuning.elements.breath_weight * dt, events);
-        // A stream of water shoves steadily: half a fireball's push a second.
-        if (player_element == Element::Tide && !sentinel.ground && sentinel.element != Element::Tide) {
-            const Vec3 shove = breath_direction_ * (tuning.elements.drench_push * 0.5f * dt);
-            if (sentinel.external) {
-                sentinel.knockback = sentinel.knockback + shove;
-            } else {
-                sentinel.centre = sentinel.centre + shove;
-            }
+        land(sentinel, dt);
+    }
+}
+
+void Combat::breath_piece_hit(int sentinel_index, float seconds) {
+    if (sentinel_index < 0 || seconds <= 0.0f) return;
+    PieceHit hit;
+    hit.index = sentinel_index;
+    hit.seconds = seconds;
+    piece_hits_.push_back(hit);
+}
+
+void Combat::spawn_range(Vec3 origin, Vec3 forward, Vec3 right) {
+    sentinels_.clear();
+    locked_ = -1;
+    const Vec3 ahead = core::normalize_or(Vec3{forward.x, 0.0f, forward.z}, Vec3::forward());
+    const Vec3 side = core::normalize_or(Vec3{right.x, 0.0f, right.z}, Vec3::right());
+    const float distances[4] = {28.0f, 48.0f, 72.0f, 100.0f};
+    // All to the left: the right half of the range is open ground and
+    // whatever grows there, for what a breath does to those.
+    const float offsets[4] = {-8.0f, -26.0f, -22.0f, -52.0f};
+    for (int i = 0; i < 4; ++i) {
+        Sentinel dummy;
+        dummy.passive = true;
+        dummy.centre = origin + ahead * distances[i] + side * offsets[i];
+        // Its foot a metre over the ground, wherever the ground is.
+        if (terrain_) {
+            dummy.centre.y = terrain_->height_at(dummy.centre.x, dummy.centre.z) + tuning.sentinel_radius + 1.0f;
         }
+        dummy.orbit_radius = 0.0f;
+        dummy.orbit_speed = 0.0f;
+        dummy.bob = 0.0f;
+        dummy.health = tuning.sentinel_health * 6.0f;
+        dummy.max_health = dummy.health;
+        dummy.alive = true;
+        dummy.fire_timer = 1e9f;
+        dummy.position = orbit_position(dummy);
+        sentinels_.push_back(dummy);
     }
 }
 

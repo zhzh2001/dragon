@@ -83,14 +83,16 @@ struct SceneUniforms {
     // floor (per metre; 0 for none), y the floor's height, z the height over
     // it in which it thins by e, w how patchy it is.
     float4 mist;
-    // What a breath left on the ground (terrain.hlsl, ground_marks): xyz
-    // where, w the radius (m). mark_looks rgb a colour; a 0..1 turns the
-    // ground to it by that share, 1..2 multiplies the ground toward it by
-    // the share over 1. mark_count.x how many.
-    float4 marks[16];
-    float4 mark_looks[16];
+    // What a breath left on the ground (marked_albedo, below): xyz where,
+    // w the radius (m). mark_looks rgb a colour; a is four times the
+    // element's number, plus 0..1 to turn the ground to the colour by that
+    // share or 1..2 to multiply the ground toward it by the share over 1.
+    // mark_count.x how many.
+    float4 marks[24];
+    float4 mark_looks[24];
     float4 mark_count;
 };
+
 
 // What a world shader writes: LINEAR light, into the 16-bit scene target. The
 // tonemap and the gamma live in post_composite.hlsl, after the bloom, so
@@ -107,6 +109,32 @@ float3 scene_out(float3 color) { return max(color, 0.0); }
 
 #ifndef NO_SCENE
 ConstantBuffer<SceneUniforms> scene : UNIFORM_SLOT(0);
+
+// A mark's element (game::Element's number) and its value without it.
+float mark_kind(float4 look) { return floor(look.a * 0.25 + 0.001); }
+float mark_value(float4 look) { return look.a - 4.0 * floor(look.a * 0.25 + 0.001); }
+
+// A surface's colour with what a breath left on it: rime, a wet patch, an
+// acid burn, grit, soot. A disc with a torn edge, strongest at its middle.
+// `torn` is the caller's noise at the point, 0..1 (this file has none).
+float3 marked_albedo(float3 albedo, float3 world_position, float torn) {
+    for (int m = 0; m < 24 && scene.mark_count.x > 0.5; ++m) {
+        if (float(m) >= scene.mark_count.x) break;
+        float4 mark = scene.marks[m];
+        float3 off = world_position - mark.xyz;
+        float reach = length(off.xz) / max(mark.w, 0.1);
+        if (reach > 1.3 || abs(off.y) > mark.w * 1.5 + 2.0) continue;
+        float share = 1.0 - smoothstep(0.35, 1.0, reach + (torn - 0.35) * 0.7);
+        float4 look = scene.mark_looks[m];
+        float value = mark_value(look);
+        if (value > 1.0) {
+            albedo *= lerp((float3)1.0, look.rgb, share * (value - 1.0));
+        } else {
+            albedo = lerp(albedo, look.rgb * (0.8 + 0.4 * torn), share * value);
+        }
+    }
+    return albedo;
+}
 
 // The modern tier's world maps (docs/FIDELITY.md), in the slots each world
 // shader reserves after its own textures and defines before including this

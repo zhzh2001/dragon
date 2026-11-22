@@ -589,24 +589,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     // 150 m. A forest read as trees standing on a lawn.
     float canopy = canopy_cover * smoothstep(150.0, 500.0, camera_distance) * (1.0 - rocky);
     albedo = lerp(albedo, albedo * float3(0.62, 0.58, 0.48), canopy * 0.8);
-    // What a breath left here (game/breath_matter.h): rime, a wet patch, an
-    // acid burn, rubble's dust, soot. A disc with a torn edge, strongest at
-    // its middle.
-    for (int m = 0; m < 16 && scene.mark_count.x > 0.5; ++m) {
-        if (float(m) >= scene.mark_count.x) break;
-        float4 mark = scene.marks[m];
-        float3 off = input.world_position - mark.xyz;
-        float reach = length(off.xz) / max(mark.w, 0.1);
-        if (reach > 1.3 || abs(off.y) > mark.w * 1.5 + 2.0) continue;
-        float torn = value_noise(input.world_position.xz * 0.9 + mark.xz) * 0.5 +
-                     value_noise(input.world_position.xz * 3.1) * 0.25;
-        float share = 1.0 - smoothstep(0.35, 1.0, reach + (torn - 0.35) * 0.7);
-        float4 look = scene.mark_looks[m];
-        if (look.a > 1.0) {
-            albedo *= lerp((float3)1.0, look.rgb, share * (look.a - 1.0));
-        } else {
-            albedo = lerp(albedo, look.rgb * (0.8 + 0.4 * torn), share * look.a);
-        }
+    // What a breath left here (game/breath_matter.h; scene_common.hlsl).
+    if (scene.mark_count.x > 0.5) {
+        albedo = marked_albedo(albedo, input.world_position,
+                               value_noise(input.world_position.xz * 0.9) * 0.5 +
+                                   value_noise(input.world_position.xz * 3.1) * 0.25);
     }
 #endif
 

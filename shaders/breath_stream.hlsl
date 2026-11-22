@@ -26,6 +26,10 @@ struct StreamUniforms {
     float4 near_colour;  // rgb at the jaws; a the unlit share
     float4 far_colour;   // rgb where it has whitened; a how far it tears into strands
     float4 surface;      // x the glint's strength, y its exponent, z the sky mirrored, w light through
+    // x how far the stream is drawn into beads on a thread (0 a hose's
+    // stream, 1 gobs joined by strings: a thick liquid), y beads a node,
+    // z how far it whitens with air (1 water, 0 none).
+    float4 body;
 };
 
 struct VertexIn {
@@ -68,6 +72,10 @@ VertexOut vs_main(VertexIn input) {
     float3 along = 0.5 * (k1 + 2.0 * k2 * u + 3.0 * k3 * u * u);
     along = normalize(along + float3(0.0, 0.0, 1e-5));
     float radius = lerp(p1.w, p2.w, u * u * (3.0 - 2.0 * u));
+    // A thick liquid comes in gobs: the radius swells and thins along the
+    // stream, and the gobs travel down it.
+    float bead = 0.5 + 0.5 * sin((f * stream.body.y - stream.params.y * stream.params.z * stream.body.y) * 6.2831853);
+    radius *= lerp(1.0, 0.3 + 1.25 * bead * bead, stream.body.x);
 
     float3 side = normalize(cross(along, float3(0.0, 1.0, 0.0)) + float3(1e-5, 0.0, 0.0));
     float3 lift = cross(side, along);
@@ -117,7 +125,7 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     // Air in the water: none at the jaws, most of it white by mid-stream,
     // and first along the ridges' crests.
-    float air = saturate(smoothstep(0.02, 0.55, along) * 0.75 + (ridges - 0.45) * 1.6 * smoothstep(0.0, 0.3, along));
+    float air = saturate(smoothstep(0.02, 0.55, along) * 0.75 + (ridges - 0.45) * 1.6 * smoothstep(0.0, 0.3, along)) * stream.body.z;
     float3 albedo = lerp(stream.near_colour.rgb, stream.far_colour.rgb, air);
 
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);

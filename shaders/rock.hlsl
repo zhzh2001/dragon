@@ -136,6 +136,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     // The scan's colour, its mean pulled to the terrain's rock (the scale
     // per piece, gfx::RockKit::colour_match): the contrast is the scan's.
     float3 albedo = base_colour.Sample(base_colour_sampler, input.uv).rgb * rock.albedo_scale.rgb * input.params.x * detail_tone;
+    // A rock in a breath's mark is rimed, wet, eaten or sooted as the ground
+    // about it is.
+    if (scene.mark_count.x > 0.5) {
+        albedo = marked_albedo(albedo, input.world_position, value_noise(input.world_position.xz * 0.9 + input.world_position.y) * 0.6);
+    }
     float2 q = input.world_position.xz;
     // The terrain's broken-rock tint (terrain.hlsl): the same warm and cool
     // drift over the world, so a boulder takes the colour of the face it

@@ -743,3 +743,114 @@ The Playtest panel's "Breath" has a dial an element (0 the cloud, 1 the
 cloud with bits, 2 pieces, and 3 for frost's frozen air), "marks on the
 ground", and under "the pieces" every rate, speed and size above.
 `--breath frost_style=1` and the like do the same on a capture.
+
+## The pieces mixed, aimed, heard, and what they do to plants (2026-11-22, later)
+
+The playtester on the pieces, the same day: "all elements can combine
+with style 1 a bit, make particles smaller (frost and stone), frost style
+3 can also mix. blight looks too similar to water, the arc makes it
+harder to aim, looks good though. for interaction consider plants and
+other objects destruction too, and create a studio/scenario for testing.
+please update damage cone and sfx."
+
+### The mix
+
+`--breath mix=N` (0.35 by default; "cloud with the pieces" in the
+Playtest panel) is the share of style 1 that rides with style 2 and with
+frost's frozen air: its vapour, its bits and its smoke puffs. At 0 the
+pieces fly alone. Frost's lances also rime the ground under the jet and
+grow spikes there at that share, as style 3 does. Style 1's bits are
+smaller: frost's snow is 0.07 m (was 0.15) and its slivers 0.06 m wide
+(was 0.16); stone's gravel is 0.2 m (was 0.42).
+
+A breath of pieces throws no light. The cloud styles threw a little, and
+on the ground it was a tinted wedge ahead of the dragon that came and
+went with the breath: most likely the "strange half transparent lens"
+of the fifth round.
+
+### Acid is not water
+
+The acid's stream is drawn into gobs on a thread, four to a node's gap,
+which travel down it (`StreamUniforms::body`). It does not whiten with
+air, and a thin green gas rises about it. The tide's stream stays a
+smooth hose that whitens toward its end.
+
+### The arc lands where the breath is aimed
+
+Every piece was thrown 9 degrees above the aim, so an arc crossed the aim
+at one distance. Now each throw is solved (`BreathMatter::solve_throw`):
+the direction that makes a piece, falling as it does and carried by the
+dragon's own speed, meet the aimed point. The aimed point is the locked
+target when the aim assist has brought the breath within 4 degrees of
+it, moving as the target moves; with no such target it is half the
+breath's reach along the aim (`aim_share`). The HUD draws a small ring
+where the breath will come down (`BreathMatter::predict`).
+
+A stream is one tube through its slugs, so when the aim jumps (a lock
+taken or lost) what is in the air and what is being thrown are two
+strands: the tube closes between them where the path turns by more than
+35 degrees.
+
+### Damage by the piece
+
+The cone did damage to everything inside it whatever was drawn. For a
+breath of pieces the cone now does none (`Combat::breath_as_pieces`).
+Each piece carries the seconds of breath it stands for, one over the
+rate it was thrown at, and when it meets a target the target takes what
+the cone would have dealt in that time, with its status and the tide's
+shove (`Combat::breath_piece_hit`). A lance that scatters wide misses.
+Ten pieces of a twentieth of a second each dealt 30.1 against the cone's
+33.5 for the same half second in the suite: the difference is the
+element's status building in fewer, larger steps. Fire, storm and
+frost's style 3 keep the cone.
+
+### Sound
+
+Each landing has a voice from the clips there were: ice breaking for a
+lance, rock breaking for a boulder (a splash on water), a splash for
+water, a hiss for acid. One of a kind every tenth of a second, quieter
+with distance from the camera, lower for a larger piece. The held
+breath's own voice was already an element's; in the studio it was silent
+and now sounds.
+
+### Plants and rocks
+
+A mark's element rides in its look's alpha, four to a step. The plants
+read the marks in their vertex stage (`foliage.hlsl`, the modern tier),
+judged at the plant's base so a plant answers whole:
+
+| Mark | Trees and bushes | Grass |
+|---|---|---|
+| Fire | leaves gone, trunk and limbs charred | burnt down to a quarter, black |
+| Frost | rimed white | rimed |
+| Acid | leaves gone, withered dark | half height, withered |
+| Water | darker | bent down a little |
+| Stone | laid flat, away from where the boulder struck | laid flat |
+
+Rocks of the rock kit take the ground's tint inside a mark. There are 24
+marks now, and one lasts 40 s.
+
+### The breath range
+
+`--studio 14` ("breath range" in the studio's list): the dragon stands,
+its body sweeping 40 degrees each way, with the fight running on the
+studio's pose. Four dummies stand to the left at 28, 48, 72 and 100 m
+and take the damage and the statuses; the right is open ground and
+whatever grows there. The breath's fuel does not run out. Tick "breathe"
+or hold F; U and the element list change the element.
+`--studio 14 --breathe --element frost --inspect 0 60 42 --frames 700`
+is a capture of it.
+
+### What is weak
+
+- A plant's shadow does not follow it: a felled or stripped tree still
+  casts its standing shadow, and comes back when the mark fades.
+- Far trees (impostors past 500 m) do not react.
+- The felled trees pivot whole. Nothing breaks.
+- Towers, caches and the landmark props take no mark.
+- Judged from stills again. The sound was not heard: a headless run has
+  no ears.
+
+Sheets: `artifacts/breath-volume/mixed-chase-and-side.jpg`,
+`range-six-breaths.jpg` and `range-plants.jpg` (untouched, then fire,
+frost, stone, acid).

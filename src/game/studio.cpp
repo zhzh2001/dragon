@@ -108,6 +108,7 @@ float speed_at(StudioScenario scenario, float t) {
         case StudioScenario::Claw:
         case StudioScenario::Tail: return 34.0f;
         case StudioScenario::Grounded: return 0.0f;
+        case StudioScenario::BreathRange: return 0.0f;
         case StudioScenario::Walk: return 5.5f;
         default: return 26.0f;
     }
@@ -131,6 +132,7 @@ const char* studio_scenario_name(StudioScenario scenario) {
         case StudioScenario::Claw: return "claw";
         case StudioScenario::Tail: return "tail";
         case StudioScenario::Walk: return "walk";
+        case StudioScenario::BreathRange: return "breath range";
         default: return "?";
     }
 }
@@ -158,6 +160,9 @@ const char* studio_scenario_notes(StudioScenario scenario) {
             return "wings stowed, legs planted, idle clip at full strength";
         case StudioScenario::Walk:
             return "walking pace on the spot: diagonal pairs step, feet lift clear and plant, wings stay folded";
+        case StudioScenario::BreathRange:
+            return "tick breathe: four dummies on the left at 28 to 100 m take the damage; the ground, the grass and the trees "
+                   "on the right take the marks; the body sweeps 40 degrees each way";
         case StudioScenario::Melee:
             return "bite, claw, tail in turn every 1.6 s at a mark close ahead; sides alternate";
         case StudioScenario::Claw:
@@ -342,9 +347,15 @@ FlightState studio_state(StudioScenario scenario, float t, Vec3 centre, float gr
             break;
         }
         case StudioScenario::Walk:
+        case StudioScenario::BreathRange:
         case StudioScenario::Grounded:
             state.position.y = ground_y + ground_offset;  // body centre above the surface
-            if (scenario == StudioScenario::Grounded) {
+            if (scenario == StudioScenario::BreathRange) {
+                // A slow sweep, so a held breath is walked across the range.
+                state.orientation = Quat::from_axis_angle(Vec3::up(), core::radians(40.0f) * std::sin(t * 0.45f)) *
+                                    state.orientation;
+            }
+            if (scenario != StudioScenario::Walk) {
                 state.velocity = Vec3::zero();
                 state.airspeed = 0.0f;
             }

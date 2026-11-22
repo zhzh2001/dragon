@@ -34,7 +34,7 @@ void BreathVolumeSettings::parse(const std::string& list) {
                                 {"light", &light},               {"ground_fire", &ground_fire},
                                 {"ground_height", &ground_height}, {"frost_style", &frost_style},
                                 {"tide_style", &tide_style},     {"blight_style", &blight_style},
-                                {"stone_style", &stone_style}};
+                                {"stone_style", &stone_style}, {"mix", &mix}};
         bool found = false;
         if (key == "on") {
             enabled = value != 0.0f;

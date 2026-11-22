@@ -59,6 +59,9 @@ struct MatterPiece {
     float life = 1.0f;
     float seed = 0.0f;     // 0..1: which mesh, which shade
     bool resting = false;  // on the ground, still
+    // The seconds of held breath this piece carries: one over the rate it
+    // was thrown at. What it is worth when it meets a target.
+    float share = 0.0f;
 };
 
 // What a breath left on the ground: a disc the terrain shader tints.
@@ -81,6 +84,16 @@ struct MatterImpact {
     bool on_water = false;
     bool on_target = false;
     bool in_air = false;   // it ran out of reach and burst where it was
+    int target = -1;       // the id of the target it met (BreathMatter::Target::id)
+    float share = 0.0f;    // the piece's (MatterPiece::share)
+};
+
+// What a breath is thrown at: a point and how that point moves. The pieces
+// are thrown above the line to it by as much as they fall on the way, so
+// an arc lands where the breath is aimed.
+struct MatterAim {
+    core::Vec3 point;
+    core::Vec3 velocity;
 };
 
 struct MatterTuning {
@@ -106,11 +119,15 @@ struct MatterTuning {
     float acid_speed = 52.0f;
     float acid_width = 0.3f;
     float acid_drops = 130.0f;
-    // What falls is thrown above the aim, as a hose is held: it rises over
-    // the line of sight and comes back down onto it near the breath's reach.
-    // Thrown level, a stream was below the aim all the way, and from the
-    // chase camera it was behind the dragon's own head.
-    float loft_deg = 9.0f;
+    // What falls is thrown above the aim, as a hose is held, by as much as
+    // it falls on the way to the aimed point: it rises over the line of
+    // sight and comes back down onto it there. With nothing aimed at, the
+    // point is this share of the breath's reach along the aim. Thrown
+    // level, a stream was below the aim all the way, and from the chase
+    // camera it was behind the dragon's own head; thrown at one fixed
+    // angle, it crossed the aim at one distance only ("the arc makes it
+    // harder to aim").
+    float aim_share = 0.5f;
     // All.
     float mark_life = 22.0f;       // seconds a mark stays on the ground
     float mark_size = 1.0f;        // over each element's own radius
@@ -126,13 +143,22 @@ public:
     // The breath is held this frame: pieces of `element` leave the mouth.
     // `carry` is the breather's velocity, `reach` the breath's range in
     // metres: a lance that has flown it bursts in the air.
-    void emit(Element element, core::Vec3 mouth, core::Vec3 direction, core::Vec3 carry, float reach, float dt);
+    // `aim` is what the breath is held on, or null for a point along
+    // `direction` (MatterTuning::aim_share).
+    void emit(Element element, core::Vec3 mouth, core::Vec3 direction, core::Vec3 carry, float reach, float dt,
+              const MatterAim* aim = nullptr);
 
-    // One body a piece can burst against.
+    // One body a piece can burst against. `id` comes back on the impact.
     struct Target {
         core::Vec3 position;
         float radius = 1.0f;
+        int id = -1;
     };
+    // Where a primary piece of `element` thrown now would land, by flying
+    // one: for a mark on the HUD. False when it meets nothing in 5 s.
+    bool predict(Element element, core::Vec3 mouth, core::Vec3 direction, core::Vec3 carry, float reach,
+                 const MatterAim* aim, const std::function<float(float, float)>& ground, float water_level,
+                 core::Vec3& landing) const;
     // Once a frame: the pieces move, meet the ground (`ground(x, z)` is its
     // height), the water and the targets, and the marks age. The impacts of
     // this step are impacts() until the next.
@@ -165,7 +191,12 @@ private:
     float unit();   // -1..1
     float unit01(); // 0..1
     void add(const MatterPiece& piece);
-    void land(const MatterPiece& piece, core::Vec3 at, float ground, bool on_water, bool on_target, bool in_air);
+    void land(const MatterPiece& piece, core::Vec3 at, float ground, bool on_water, bool on_target, bool in_air,
+              int target = -1);
+    // The direction to throw at `speed` so a piece that falls at `gravity`
+    // meets the aimed point.
+    core::Vec3 solve_throw(core::Vec3 mouth, core::Vec3 direction, core::Vec3 carry, float reach, float speed,
+                           float gravity, const MatterAim* aim) const;
 
     std::vector<MatterPiece> pieces_;
     std::vector<MatterMark> marks_;

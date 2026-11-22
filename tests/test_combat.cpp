@@ -960,6 +960,48 @@ void test_hostile_breath_and_mouth_muzzle() {
     CHECK(near(combat.breath_origin().z, -9.0f, 1e-3f));
 }
 
+void test_breath_as_pieces() {
+    std::printf("a breath of pieces does no damage as a cone; each piece that lands does its share\n");
+    Combat combat;
+    combat.reset(nullptr, Vec3::zero(), 71u);
+    const FlightState player = player_at(Vec3::zero());
+    // The range's dummies; turn to face the nearest so it is inside the cone.
+    combat.spawn_range(Vec3::zero(), Vec3::forward(), Vec3::right());
+    CHECK(combat.sentinels().size() == 4);
+    const Vec3 mark = combat.sentinels()[0].position;
+    CHECK(mark.x < 0.0f);  // the dummies stand to the left
+    const FlightState facing = player_at(Vec3{0.0f, mark.y, 0.0f}, core::normalize(Vec3{mark.x, 0.0f, mark.z}));
+    CombatInput breathe;
+    breathe.breath = true;
+    const float full = combat.sentinels()[0].health;
+
+    combat.breath_as_pieces = true;
+    for (int i = 0; i < 60; ++i) combat.update(1.0f / 60.0f, facing, breathe);
+    CHECK(combat.sentinels()[0].health == full);  // a second in the cone, nothing landed
+
+    // Half a second's worth of pieces reported: half a second of the cone's damage.
+    for (int i = 0; i < 10; ++i) combat.breath_piece_hit(0, 0.05f);
+    combat.update(1.0f / 60.0f, facing, CombatInput{});  // lands with the breath let go
+    const float after_pieces = combat.sentinels()[0].health;
+    CHECK(after_pieces < full);
+
+    combat.breath_as_pieces = false;
+    combat.refill_breath();
+    Combat cone;
+    cone.reset(nullptr, Vec3::zero(), 71u);
+    cone.spawn_range(Vec3::zero(), Vec3::forward(), Vec3::right());
+    for (int i = 0; i < 30; ++i) cone.update(1.0f / 60.0f, facing, breathe);
+    const float after_cone = cone.sentinels()[0].health;
+    std::printf("  pieces took %.1f, the cone %.1f in the same half second\n", double(full - after_pieces),
+                double(full - after_cone));
+    CHECK(near(full - after_pieces, full - after_cone, (full - after_cone) * 0.12f + 0.5f));
+    // A stale or wild index is ignored.
+    combat.breath_piece_hit(99, 1.0f);
+    combat.breath_piece_hit(-3, 1.0f);
+    combat.update(1.0f / 60.0f, facing, CombatInput{});
+    (void)player;
+}
+
 void test_abilities() {
     std::printf("abilities: the charged shot, the ram, the fury\n");
     const FlightState player = player_at(Vec3::zero());
@@ -1160,6 +1202,7 @@ int main() {
     test_is_deterministic();
     test_no_nans_under_abuse();
     test_abilities();
+    test_breath_as_pieces();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

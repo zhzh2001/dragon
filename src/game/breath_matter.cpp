@@ -28,12 +28,14 @@ float gravity_of(MatterKind kind) {
 
 float drag_of(MatterKind kind) {
     switch (kind) {
-        case MatterKind::IceLance: return 0.05f;
+        // The primaries hardly slow: the throw is solved without drag
+        // (solve_throw), and what drag there is is the shortfall.
+        case MatterKind::IceLance: return 0.04f;
         case MatterKind::IceChip: return 1.2f;
-        case MatterKind::Boulder: return 0.1f;
+        case MatterKind::Boulder: return 0.05f;
         case MatterKind::Rubble: return 0.4f;
         case MatterKind::WaterSlug:
-        case MatterKind::AcidSlug: return 0.35f;
+        case MatterKind::AcidSlug: return 0.1f;
         default: return 1.0f;
     }
 }
@@ -81,17 +83,77 @@ void BreathMatter::add(const MatterPiece& piece) {
     pieces_.push_back(piece);
 }
 
-void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry, float reach, float dt) {
+Vec3 BreathMatter::solve_throw(Vec3 mouth, Vec3 direction, Vec3 carry, float reach, float speed, float gravity,
+                               const MatterAim* aim) const {
+    const Vec3 dir = core::normalize_or(direction, Vec3::forward());
+    // Nothing aimed at: a point part of the way along the aim, moving with
+    // the breather, so the arc crosses the aim there in the breather's own
+    // frame.
+    const Vec3 point = aim ? aim->point : mouth + dir * (core::maxf(reach, 10.0f) * core::saturate(tuning.aim_share));
+    const Vec3 drift = aim ? aim->velocity : carry;
+    speed = core::maxf(speed, 1.0f);
+    float t = core::distance(point, mouth) / speed;
+    Vec3 launch = dir * speed;
+    for (int i = 0; i < 4; ++i) {
+        t = core::clampf(t, 0.05f, 4.0f);
+        // p(t) = mouth + (launch + carry) t + g t^2 / 2, and it must be the
+        // point where the point will be.
+        launch = (point + drift * t - mouth) * (1.0f / t) - carry - Vec3{0.0f, 0.5f * gravity * t, 0.0f};
+        t *= core::length(launch) / speed;
+    }
+    const Vec3 thrown = core::normalize_or(launch, dir);
+    // Out of reach, or behind: no throw meets it. Along the aim, then.
+    return core::dot(thrown, dir) > 0.75f ? thrown : dir;
+}
+
+bool BreathMatter::predict(Element element, Vec3 mouth, Vec3 direction, Vec3 carry, float reach, const MatterAim* aim,
+                           const std::function<float(float, float)>& ground, float water_level, Vec3& landing) const {
+    MatterKind kind = MatterKind::IceLance;
+    float speed = tuning.lance_speed;
+    switch (element) {
+        case Element::Frost: break;
+        case Element::Stone: kind = MatterKind::Boulder, speed = tuning.boulder_speed; break;
+        case Element::Tide: kind = MatterKind::WaterSlug, speed = tuning.water_speed; break;
+        case Element::Blight: kind = MatterKind::AcidSlug, speed = tuning.acid_speed; break;
+        default: return false;
+    }
+    const float gravity = gravity_of(kind);
+    Vec3 velocity = solve_throw(mouth, direction, carry, reach, speed, gravity, aim) * speed + carry;
+    Vec3 at = mouth;
+    const float step = 1.0f / 30.0f;
+    // A lance bursts in the air at the breath's reach.
+    const float life = kind == MatterKind::IceLance ? core::maxf(reach, 10.0f) / speed * 1.1f : 5.0f;
+    for (float t = 0.0f; t < life; t += step) {
+        velocity.y += gravity * step;
+        velocity = velocity * std::exp(-drag_of(kind) * step);
+        at = at + velocity * step;
+        const float floor = ground(at.x, at.z);
+        if (at.y <= core::maxf(floor, water_level)) {
+            landing = Vec3{at.x, core::maxf(floor, water_level), at.z};
+            return true;
+        }
+    }
+    landing = at;
+    return kind == MatterKind::IceLance;
+}
+
+void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry, float reach, float dt,
+                        const MatterAim* aim) {
     if (element != Element::Frost && element != Element::Stone && element != Element::Tide &&
         element != Element::Blight) {
         return;
     }
     const MatterTuning& t = tuning;
-    Vec3 dir = core::normalize_or(direction, Vec3::forward());
+    const MatterKind primary = element == Element::Frost   ? MatterKind::IceLance
+                               : element == Element::Stone ? MatterKind::Boulder
+                               : element == Element::Tide  ? MatterKind::WaterSlug
+                                                           : MatterKind::AcidSlug;
+    const float throw_speed = element == Element::Frost   ? t.lance_speed
+                              : element == Element::Stone ? t.boulder_speed
+                              : element == Element::Tide  ? t.water_speed
+                                                          : t.acid_speed;
+    const Vec3 dir = solve_throw(mouth, direction, carry, reach, throw_speed, gravity_of(primary), aim);
     const Vec3 side = core::normalize_or(core::cross(dir, Vec3::up()), Vec3::right());
-    if (element != Element::Frost) {
-        dir = core::normalize(dir + core::cross(side, dir) * std::tan(core::radians(t.loft_deg)));
-    }
     const Vec3 lift = core::cross(side, dir);
     float rate = 0.0f, speed = 1.0f, spread = 0.0f;
     switch (element) {
@@ -119,14 +181,15 @@ void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry,
         const float girth = unit01();
         const float turn = unit();
         const float lead = unit01();
-        const Vec3 aim = core::normalize(dir + (side * off_side + lift * off_lift) * spread);
+        const Vec3 thrown = core::normalize(dir + (side * off_side + lift * off_lift) * spread);
         MatterPiece p;
         p.seed = seed;
-        p.orientation = core::look_rotation(aim, lift);
+        p.share = 1.0f / core::maxf(rate, 1.0f);
+        p.orientation = core::look_rotation(thrown, lift);
         switch (element) {
             case Element::Frost: {
                 p.kind = MatterKind::IceLance;
-                p.velocity = aim * (speed * (0.9f + 0.2f * pace)) + carry;
+                p.velocity = thrown * (speed * (0.9f + 0.2f * pace)) + carry;
                 const float half = t.lance_length * (0.6f + 0.8f * seed);
                 const float wide = half * 0.15f * (0.8f + 0.5f * girth);
                 p.scale = Vec3{wide, wide, half};
@@ -140,7 +203,7 @@ void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry,
             }
             case Element::Stone: {
                 p.kind = MatterKind::Boulder;
-                p.velocity = aim * (speed * (0.85f + 0.3f * pace)) + carry;
+                p.velocity = thrown * (speed * (0.85f + 0.3f * pace)) + carry;
                 const float r = t.boulder_size * (0.55f + 0.9f * seed);
                 p.scale = Vec3{r * (0.85f + 0.3f * girth), r, r * (1.15f - 0.3f * girth)};
                 p.spin_axis = core::normalize_or(side * turn + lift * (pace - 0.5f) + dir * 0.3f, side);
@@ -152,7 +215,7 @@ void BreathMatter::emit(Element element, Vec3 mouth, Vec3 direction, Vec3 carry,
                 const bool water = element == Element::Tide;
                 p.kind = water ? MatterKind::WaterSlug : MatterKind::AcidSlug;
                 // All at one speed: they stay in the order they left in.
-                p.velocity = aim * speed + carry;
+                p.velocity = thrown * speed + carry;
                 const float wide = water ? t.water_width : t.acid_width;
                 p.scale = Vec3{wide, wide, wide};
                 p.life = water ? 1.7f : 1.9f;
@@ -209,7 +272,7 @@ void BreathMatter::spike(Vec3 ground, Vec3 lean, float size) {
 }
 
 void BreathMatter::land(const MatterPiece& piece, Vec3 at, float ground, bool on_water, bool on_target,
-                        bool in_air) {
+                        bool in_air, int target) {
     const bool on_ground = !on_water && !on_target && !in_air;
     const Vec3 down_range = core::normalize_or(piece.velocity, Vec3::forward());
     const float size = core::maxf(piece.scale.x, core::maxf(piece.scale.y, piece.scale.z));
@@ -221,6 +284,8 @@ void BreathMatter::land(const MatterPiece& piece, Vec3 at, float ground, bool on
     impact.on_water = on_water;
     impact.on_target = on_target;
     impact.in_air = in_air;
+    impact.target = target;
+    impact.share = piece.share;
     impacts_.push_back(impact);
 
     // Off the ground a piece's speed turns upward and most of it is lost.
@@ -432,7 +497,7 @@ void BreathMatter::update(float dt, const std::function<float(float, float)>& gr
         } else if (primary) {
             for (const Target& target : targets) {
                 if (core::distance(target.position, p.position) > target.radius + reach) continue;
-                land(p, p.position, floor, false, true, false);
+                land(p, p.position, floor, false, true, false, target.id);
                 gone = true;
                 break;
             }

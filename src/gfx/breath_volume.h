@@ -102,6 +102,11 @@ struct BreathVolumeSettings {
                                  // 2: a stream of slugs and drops that arcs down
     float blight_style = 2.0f;   // 1: a stream of acid, liquid as the tide's. 2: slugs and drops of it
     float stone_style = 2.0f;    // 1: a blast of gravel in thin dust. 2: boulders that break into rubble
+    // How much of style 1 rides with the pieces of style 2 and with frost's
+    // frozen air: its vapour, its bits and its smoke, as a share. The
+    // playtester on bare pieces: "all elements can combine with style 1 a
+    // bit". 0 is the pieces alone.
+    float mix = 0.35f;
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);
