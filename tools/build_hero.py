@@ -38,7 +38,7 @@ from mathutils.kdtree import KDTree
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "build-hero-cache")
-ART = os.path.join(ROOT, "artifacts", "hero-build")
+ART = os.environ.get("HERO_BUILD_ART", os.path.join(ROOT, "artifacts", "hero-build"))
 BODY_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-hunyuan.glb")
 HEAD_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-head-hunyuan.glb")
 # The wingless body sculpt. HERO_BODY names another one; see "Swapping the body" in tools/hero-build.md.
@@ -51,10 +51,11 @@ WING2_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing-hunyuan.glb")
 # wing bones, through the `wing5` stage: one membrane sheet with an offset second face, and the
 # sculpt's bones over it (tools/hero-build.md, "Version 5").
 WING_SOURCE = os.environ.get("HERO_WING", "v2")
-if WING_SOURCE not in ("v2", "v3", "v5"):
-    raise SystemExit("HERO_WING must be v2, v3 or v5")
+if WING_SOURCE not in ("v2", "v3", "v5", "v7"):
+    raise SystemExit("HERO_WING must be v2, v3, v5 or v7")
 WING_V3 = WING_SOURCE == "v3"
-WING_V5 = WING_SOURCE == "v5"
+WING_V7 = WING_SOURCE == "v7"
+WING_V5 = WING_SOURCE in ("v5", "v7")
 WING5_IN = os.path.join(ROOT, "assets", "embercrest-cand-hero-wing2-hunyuan.glb")
 SKELETON = os.path.join(ROOT, "tools", "skeletons", "embercrest-hero.json")
 OUT_GLB = os.path.join(ROOT, "assets", "embercrest-hero-static.glb")
@@ -4709,9 +4710,300 @@ EXPORT_OBJECTS = (("hide", "hide"), ("membrane", "membrane"), ("horn", "horn"),
                   ("eye_l", "eye"), ("eye_r", "eye"), ("mouth", "mouth"))
 
 
+def v7_unit(v):
+    return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-12)
+
+
+def v7_supports(points):
+    """Measure each point against the five structural lines and the flank."""
+    marks = w5_targets()
+    paths = (('start', 'shoulder', 'elbow', 'wrist', 'hub'), ('hub', 'f1a', 'f1b', 'f1c'),
+             ('hub', 'f2a', 'f2b'), ('hub', 'f3a', 'f3b'), ('elbow', 'spa', 'spb'))
+    q = points.copy()
+    q[:, 0] = abs(q[:, 0])
+    distances = []
+    for path in paths:
+        distance = np.full(len(q), np.inf)
+        for start, end in zip(path, path[1:]):
+            a, b = marks[start], marks[end]
+            ab = b - a
+            u = np.clip(((q - a) @ ab) / (ab @ ab), 0, 1)
+            distance = np.minimum(distance, np.linalg.norm(q - a - u[:, None] * ab, axis=1))
+        distances.append(distance)
+    return np.array(distances).T
+
+
+def v7_shell(obj, hide):
+    """Retain both UV charts and roll the boundary inward around a six-segment half circle."""
+    old = obj.data
+    pos = coords(obj)
+    faces = np.array([f.vertices[:] for f in old.polygons])
+    uv = np.array([loop.uv[:] for loop in old.uv_layers.active.data]).reshape(-1, 3, 2)
+    def attribute(name):
+        a = old.attributes[name]
+        values = np.empty(len(a.data), np.float32)
+        a.data.foreach_get("value", values)
+        return values
+    layer = attribute("wing_upper")
+    upper, lower = layer > .75, layer < .25
+    top = np.unique(faces[upper])
+    bottom = np.unique(faces[lower])
+    tree = KDTree(len(bottom))
+    for i in bottom:
+        tree.insert(pos[i], int(i))
+    tree.balance()
+    twins = np.array([tree.find(p)[1] for p in pos[top]])
+    if sorted(twins) != sorted(bottom):
+        raise HeroError("The original sheet lost a face partner. Check the input mesh.")
+    to_mid = np.full(len(pos), -1)
+    to_mid[top] = to_mid[twins] = np.arange(len(top))
+    tri = to_mid[faces[upper]]
+    old_lower = {tuple(sorted(t)): (t, chart) for t, chart in zip(to_mid[faces[lower]], uv[lower])}
+    charts = []
+    for ids, chart in zip(tri, uv[upper]):
+        lt, lc = old_lower[tuple(sorted(ids))]
+        charts.append([chart, lc[[list(lt).index(i) for i in ids]]])
+    charts = np.array(charts)
+    # Preserve the old rim islands. Each wall spans two stations and two faces.
+    original_rim = {}
+    is_top = np.zeros(len(pos), dtype=bool)
+    is_top[top] = True
+    for corners, chart in zip(faces[~(upper | lower)], uv[~(upper | lower)]):
+        stations = to_mid[corners]
+        key = tuple(sorted(set(stations)))
+        quad = original_rim.setdefault(key, {})
+        for vertex, coord in zip(corners, chart):
+            quad[(to_mid[vertex],is_top[vertex])] = coord
+    mid = (pos[top] + pos[twins]) * .5
+    root = attribute("sheet_s")[top]
+    seam = attribute("sheet_edge")[top]
+    edges, use = np.unique(np.sort(tri[:, [[0, 1], [1, 2], [2, 0]]].reshape(-1, 2), axis=1),
+                           axis=0, return_counts=True)
+    rim = edges[use == 1]
+    border = np.unique(rim)
+    def nearest(samples, queries):
+        tree = KDTree(len(samples))
+        for i, p in enumerate(samples):
+            tree.insert(p, i)
+        tree.balance()
+        return np.array([tree.find(p)[2] for p in queries])
+    halfpoints = mid[edges].mean(1)
+    refine = (v7_supports(halfpoints).min(1) < .35) | (nearest(mid[border], halfpoints) < .21)
+    refine |= nearest(mid[seam > .5], halfpoints) < .35
+    refine &= use == 2
+    split = edges[refine]
+    ids = {tuple(e): i + len(mid) for i, e in enumerate(split)}
+    mid = np.vstack([mid, halfpoints[refine]])
+    right = np.flatnonzero(mid[:,0] > 0)
+    left = np.flatnonzero(mid[:,0] < 0)
+    lookup = {tuple(mid[i]): i for i in right}
+    mirror = np.array([lookup[tuple(mid[i]*[-1,1,1])] for i in left])
+    def reflect(values):
+        values[left] = values[mirror] * [-1,1,1]
+    root = np.r_[root, np.where(np.min(root[split], axis=1) >= 0, root[split].mean(1), -1)]
+    seam = np.r_[seam, seam[split].min(1)]
+    new_tri, new_charts = [], []
+    for f, chart in zip(tri, charts):
+        local = [*f, *(ids.get(tuple(sorted((f[i], f[(i + 1) % 3]))), -1) for i in range(3))]
+        corners = np.concatenate([chart, (chart + np.roll(chart, -1, axis=1)) * .5], axis=1)
+        cut = [i for i in range(3) if local[i + 3] >= 0]
+        if len(cut) == 3:
+            pieces = [(0,3,5), (3,1,4), (5,4,2), (3,4,5)]
+        elif len(cut) == 2:
+            i = next(i for i in range(3) if i not in cut)
+            j, k = (i+1)%3, (i+2)%3
+            # Choose the same diagonal on both mirrored wings.
+            if tuple(abs(mid[f[i]])) < tuple(abs(mid[f[j]])):
+                pieces = [(k,k+3,j+3), (i,j,j+3), (i,j+3,k+3)]
+            else:
+                pieces = [(k,k+3,j+3), (i,j,k+3), (j,j+3,k+3)]
+        elif cut:
+            i = cut[0]
+            j,k = (i+1)%3, (i+2)%3
+            pieces = [(i,i+3,k), (i+3,j,k)]
+        else:
+            pieces = [(0,1,2)]
+        for face in pieces:
+            new_tri.append([local[i] for i in face])
+            new_charts.append(corners[:,face,:])
+    tri = np.array(new_tri)
+    charts = np.array(new_charts)
+    sides = tri[:, [[0,1], [1,2], [2,0]]].reshape(-1,2)
+    _, inv, count = np.unique(np.sort(sides, axis=1), axis=0, return_inverse=True, return_counts=True)
+    boundary_indices = np.flatnonzero(count[inv] == 1)
+    bedges = sides[boundary_indices]
+    border = np.unique(bedges)
+    bd = nearest(mid[border], mid)
+    bone = v7_supports(mid)
+    flank = nearest(mid[seam > .5], mid)
+    d1, d2 = np.sort(np.column_stack([bone,flank]),axis=1)[:,:2].T
+    width = 4*d1*d2 / np.maximum(d1+d2, 1e-8)
+    near = 1 - smoothstep((d1-.12)/.36)
+    half = (.036 + .052*near) * .5
+    rim_share = 1 - smoothstep(bd/.16)
+    half = half*(1-rim_share) + .039*rim_share
+    def normals(p):
+        q = p[tri]
+        fn = np.cross(q[:,1]-q[:,0],q[:,2]-q[:,0])
+        vn = np.zeros_like(p)
+        for i in range(3):
+            np.add.at(vn,tri[:,i],fn)
+        return v7_unit(vn)
+    n = normals(mid)
+    # The sculpt supplies the original grain. Reduce its broad bulges before setting the rest camber.
+    adjacency = np.unique(np.sort(sides, axis=1), axis=0)
+    a, b = np.concatenate([adjacency, adjacency[:,::-1]]).T
+    length = np.linalg.norm(mid[b]-mid[a],axis=1)
+    weight = 1 / np.maximum(length, .018)
+    total = np.bincount(a,weight,minlength=len(mid))
+    # Relax in the local surface plane as well as in height. The root rises steeply from the flank.
+    fixed = mid.copy()
+    hold = np.where(bd < .001, 1., .06 + .40*(1-smoothstep(d1/.20)))
+    for _ in range(35):
+        avg = np.stack([np.bincount(a,weight*mid[b,i],minlength=len(mid))/total for i in range(3)],axis=1)
+        mid = hold[:,None]*fixed + (1-hold[:,None])*(.35*mid+.65*avg)
+    mid[:,2] -= .038*width
+    lift = .050*(1 - smoothstep(d1/.175)) * smoothstep(flank/.18)
+    mid += normals(mid)*lift[:,None]
+    n = normals(mid)
+    direction = np.zeros_like(mid)
+    tangent = v7_unit(mid[bedges[:,1]]-mid[bedges[:,0]])
+    for i in (0,1):
+        np.add.at(direction,bedges[:,i],np.cross(tangent,n[bedges[:,i]]))
+    direction = v7_unit(direction)
+    # Move adjacent rows with the rim. Moving the boundary alone can reverse a narrow triangle.
+    tree = KDTree(len(border))
+    for i in border:
+        tree.insert(mid[i],int(i))
+    tree.balance()
+    shift = np.zeros_like(mid)
+    for i in np.flatnonzero(bd < .35):
+        near = tree.find_n(mid[i], 4)
+        coeff = np.array([1/max(item[2],.00001)**2 for item in near])
+        shift[i] = np.average(direction[[item[1] for item in near]],axis=0,weights=coeff)
+    mid -= shift*(.039*(1-smoothstep(bd/.35)))[:,None]
+    mid[:,0] -= np.sign(mid[:,0])*.105*(1-smoothstep(flank/.36))
+    # Fair the fillet and keep its border on the original outline.
+    fixed = mid.copy()
+    hold = np.where(bd < .001, 1., .27)
+    for _ in range(8):
+        avg = np.stack([np.bincount(a,weight*mid[b,i],minlength=len(mid))/total for i in range(3)],axis=1)
+        mid = hold[:,None]*fixed + (1-hold[:,None])*(.35*mid+.65*avg)
+    reflect(mid)
+    reflect(direction)
+    n = normals(mid)
+    reflect(n)
+    count = len(mid)
+    points = [mid+n*half[:,None],mid-n*half[:,None]]
+    groups = [np.arange(count),np.arange(count)]
+    levels = [np.ones(count),-np.ones(count)]
+    faces_out = [tri, tri[:,::-1]+count]
+    uv_out = [charts[:,0],charts[:,1,::-1,:]]
+    previous = border
+    bslot = np.full(count,-1)
+    bslot[border] = np.arange(len(border))
+    edge = bslot[bedges]
+    edge_chart = []
+    original_count = len(top)
+    for a,b in bedges:
+        key = tuple(sorted((a,b))) if max(a,b) < original_count else tuple(split[max(a,b)-original_count])
+        quad = original_rim[key]
+        def end_uv(vertex, upper_side):
+            if vertex < original_count:
+                return quad[vertex,upper_side]
+            return (quad[key[0],upper_side] + quad[key[1],upper_side])*.5
+        edge_chart.append([[end_uv(a,face),end_uv(b,face)] for face in (True,False)])
+    edge_chart = np.array(edge_chart)
+    edge_uv, across_uv = edge_chart[:,0], edge_chart[:,1]-edge_chart[:,0]
+    for step in range(1,7):
+        angle = np.pi*step/6
+        if step == 6:
+            current = border + count
+        else:
+            current = 2*count+(step-1)*len(border)+np.arange(len(border))
+            points.append(mid[border]+half[border,None]*(np.cos(angle)*n[border]+np.sin(angle)*direction[border]))
+            groups.append(border)
+            levels.append(np.full(len(border),np.cos(angle)))
+        a,b = previous[edge].T
+        c,d = current[edge].T
+        faces_out.extend([np.stack([b,a,c],axis=1), np.stack([b,c,d],axis=1)])
+        u = edge_uv + across_uv*((step-1)/6)
+        v = edge_uv + across_uv*(step/6)
+        uv_out.extend([np.stack([u[:,1],u[:,0],v[:,0]],axis=1),np.stack([u[:,1],v[:,0],v[:,1]],axis=1)])
+        previous = current
+    points, triangles = np.vstack(points), np.vstack(faces_out)
+    mesh = bpy.data.meshes.new("membrane_v7")
+    mesh.from_pydata(points.tolist(),[],triangles.tolist())
+    mesh.update()
+    obj.data = mesh
+    bpy.data.meshes.remove(old)
+    mesh.name = "membrane"
+    layer = mesh.uv_layers.new(name="UVMap")
+    layer.data.foreach_set("uv",np.concatenate(uv_out).astype(np.float32).ravel())
+    group = np.concatenate(groups)
+    for name, values in (("sheet_id",group), ("sheet_level",np.concatenate(levels)),
+                         ("sheet_s",root[group]), ("sheet_edge",seam[group])):
+        attr = mesh.attributes.new(name,"FLOAT","POINT")
+        attr.data.foreach_set("value",values.astype(np.float32))
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    shading = np.array([v.normal[:] for v in mesh.vertices])
+    surface = triangles[:2*len(tri)]
+    q = points[surface]
+    fn = v7_unit(np.cross(q[:,1]-q[:,0],q[:,2]-q[:,0]))
+    # Constrain panel normals at the rounded edge while retaining smooth lighting around the hem.
+    limit = np.radians(24.5)
+    for _ in range(20):
+        errors = np.einsum("fij,fj->fi",shading[surface],fn)
+        f,k = np.nonzero(errors < np.cos(limit))
+        if not len(f):
+            break
+        for face, corner in zip(f,k):
+            v = surface[face,corner]
+            axis = fn[face]
+            tangent = v7_unit(shading[v] - axis*(shading[v]@axis))
+            shading[v] = np.cos(limit)*axis + np.sin(limit)*tangent
+    mesh.normals_split_custom_set_from_vertices(shading.tolist())
+    log("v7 shell", len(triangles), "triangles;",len(border),"rounded boundary stations")
+
+
+def v7_export():
+    """Replace the membrane primitive in the released 5c mesh. Preserve the other five primitives and their maps."""
+    doc, old_binary = read_glb(cache("v5c-reference.glb"))
+    binary = bytearray(old_binary)
+    obj = bpy.data.objects["membrane"]
+    v7_shell(obj, bpy.data.objects["hide"])
+    me = obj.data
+    for name in ("sheet_id", "sheet_level", "sheet_s", "sheet_edge"):
+        me.attributes[name].name = "_" + name.upper()
+    activate(obj)
+    path = cache("v7-membrane.glb")
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True,
+                              export_yup=True, export_tangents=True, export_attributes=True,
+                              export_materials="NONE", export_animations=False)
+    shell, data = read_glb(path)
+    assert len(shell["meshes"]) == 1
+    prim = shell["meshes"][0]["primitives"][0]
+    view_offset = len(doc["bufferViews"])
+    acc_offset = len(doc["accessors"])
+    for view in shell["bufferViews"]:
+        doc["bufferViews"].append(dict(view, byteOffset=len(binary)+view.get("byteOffset",0)))
+    binary.extend(data)
+    for acc in shell["accessors"]:
+        doc["accessors"].append(dict(acc, bufferView=view_offset+acc["bufferView"]))
+    dest = next(m for m in doc["meshes"] if m["name"] == "membrane")["primitives"][0]
+    dest["indices"] = prim["indices"] + acc_offset
+    dest["attributes"] = {k:v+acc_offset for k,v in prim["attributes"].items()}
+    doc["buffers"][0]["byteLength"] = len(binary)
+    write_glb(OUT_GLB, doc, binary)
+
+
 def stage_export():
     """Paint the eye and the mouth, then write the file."""
     open_blend("uv.blend")
+    if WING_V7:
+        v7_export()
+        return
     sc = bpy.context.scene
     eye_maps()
     mouth_maps(sc, bpy.data.objects["mouth"])
@@ -4959,7 +5251,7 @@ def render_all(only=None):
 
 # ------------------------------------------------------------------ the verifier
 
-TRI_BUDGET = (80000, 120000)
+TRI_BUDGET = (80000, 136000 if WING_V7 else 120000)
 # Where the soles' centres must be, fore and hind, build frame. Body A: the first body sculpt's.
 # Body B: its own, measured on the placed sculpt; its paws stand 0.49 m further forward and its
 # hind feet 0.34 m further back, because its legs are bent.
@@ -5136,7 +5428,9 @@ def w5_verify_repairs(geo, check):
         neighbor_normal=float(np.sqrt((normal[neighbor&face,:2]**2).mean()))
         check(.8<root_normal/neighbor_normal<1.2,f'root {name} normal XY RMS {root_normal:.4f}, neighbor {neighbor_normal:.4f}')
         report[name]=dict(root_rgb=a.tolist(),neighbor_rgb=b.tolist(),rgb_relative_error=delta.tolist(),root_thickness=ta,neighbor_thickness=tb,root_log_sd=sa.tolist(),neighbor_log_sd=sb.tolist(),root_normal_xy_rms=root_normal,neighbor_normal_xy_rms=neighbor_normal)
-    with open(os.path.join(ROOT,'artifacts','hero-claws','measurements-v5c.json'),'w') as f:
+    report_dir = os.environ.get("HERO_BUILD_ART", os.path.join(ROOT, "artifacts", "hero-claws"))
+    os.makedirs(report_dir, exist_ok=True)
+    with open(os.path.join(report_dir, "measurements.json" if WING_V7 else "measurements-v5c.json"), "w") as f:
         json.dump(report,f,indent=2)
 
 

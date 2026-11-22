@@ -471,12 +471,31 @@ class Wing:
         self.solved = four(copy)
         self.solved[self.pinned] = self.pin_target
         # Mesh version 5: a membrane whose vertices nearly all have an offset twin is one sheet.
-        local = sheet_twins(u[shell])
-        has = local >= 0
-        self.sheet = has.mean() > .8
+        self.stations = None
+        if '_SHEET_ID' in membrane:
+            ids = np.full(n, -1, dtype=int)
+            level = np.zeros(n)
+            ids[inverse[len(hid):]] = membrane['_SHEET_ID'][mid].astype(int)
+            level[inverse[len(hid):]] = membrane['_SHEET_LEVEL'][mid]
+            _, group = np.unique(ids[shell], return_inverse=True)
+            group = group.ravel()
+            top = np.flatnonzero(level[shell] == 1)
+            bottom = np.flatnonzero(level[shell] == -1)
+            top = top[np.argsort(group[top])]
+            bottom = bottom[np.argsort(group[bottom])]
+            assert np.array_equal(group[top], np.arange(group.max()+1))
+            assert np.array_equal(group[top], group[bottom])
+            self.stations = shell, group, np.bincount(group)
+            mid_point = ((u[shell[top]] + u[shell[bottom]]) * .5)[group]
+            self.sheet = True
+        else:
+            local = sheet_twins(u[shell])
+            has = local >= 0
+            self.sheet = has.mean() > .8
+            mid_point = (u[shell] + u[shell[np.maximum(local, 0)]]) * .5
+            mid_point[~has] = u[shell[~has]]
         if self.sheet:
             # Both twins take the weights at their middle, so their rows are identical.
-            mid_point = np.where(has[:, None], (u[shell] + u[shell[np.maximum(local, 0)]]) / 2, u[shell])
             from_body = smooth_field(mid_point, SHEET_SPEC, parts=True)[3]
             self.sheet_rows = shell
             self.sheet_w = sheet_weights(mid_point, bones, names, side, from_body)
@@ -516,8 +535,11 @@ class Wing:
                     print('WING', side, 'root patch:', int(root.sum()), 'vertices from the flank to the arm and rib', flush=True)
             self.solved[shell] = self.sheet_w
             # Twins by surface row: the fold relaxing below moves a pair together.
-            self.pairs = np.unique(np.sort(np.c_[shell[has], shell[local[has]]], axis=1), axis=0)
-            print('WING', side, 'sheet membrane:', int(has.sum()), 'of', len(shell), 'vertices have a twin', flush=True)
+            if self.stations is None:
+                self.pairs = np.unique(np.sort(np.c_[shell[has], shell[local[has]]], axis=1), axis=0)
+                print('WING', side, 'sheet membrane:', int(has.sum()), 'of', len(shell), 'vertices have a twin', flush=True)
+            else:
+                print('WING', side, len(top), 'paired shell stations including the rolled hem', flush=True)
         web = np.unique(np.sort(np.concatenate([self.web_tri[:, [0, 1]], self.web_tri[:, [1, 2]], self.web_tri[:, [2, 0]]]), axis=1), axis=0)
         self.web = web[np.linalg.norm(u[web[:, 0]] - u[web[:, 1]], axis=1) > 1e-3]
         self.loose = self.web_tri[~is_hide[self.web_tri].any(1)]
@@ -584,7 +606,12 @@ class Wing:
 
     def tie_twins(self):
         """A sheet's two faces carry one row: each pair takes the mean of its two rows."""
-        if self.sheet:
+        if self.stations is not None:
+            rows, group, counts = self.stations
+            sums = np.zeros((len(counts), len(self.names)))
+            np.add.at(sums, group, self.solved[rows])
+            self.solved[rows] = four(sums / counts[:, None])[group]
+        elif self.sheet:
             a, b = self.pairs[:, 0], self.pairs[:, 1]
             mean = four((self.solved[a] + self.solved[b]) / 2)
             self.solved[a] = mean
@@ -1269,6 +1296,50 @@ def verify_wing_repairs(geo, rest, posed, names, check, label):
         check(gap<.001,'wrist_'+side+' seated '+label,f'maximum base gap {gap*1000:.3f} mm')
 
 
+def verify_v7_separation(mesh, names, check):
+    """Test the exported shell against joint matrices sampled from the engine rig."""
+    fixture = ROOT / "artifacts/hero-rig/v7-studio-palettes.npz"
+    with np.load(fixture) as sample:
+        order = [list(sample["names"]).index(name) for name in names]
+        poses = sample["skin"][:, :, order]
+        for suffix in ("rig", "flight"):
+            config = Path(str(OUTPUT) + "." + suffix + ".cfg")
+            if hashlib.sha256(config.read_bytes()).hexdigest() != str(sample[suffix]):
+                raise ValueError(f"The {suffix} profile changed. Capture the studio poses again.")
+    station = mesh['_SHEET_ID'].astype(int)
+    level = mesh['_SHEET_LEVEL']
+    def stations_at(value):
+        indices = np.flatnonzero(level == value)
+        keys, first = np.unique(station[indices], return_index=True)
+        assert np.array_equal(keys, np.arange(station.max()+1))
+        return indices[first]
+    up, down = stations_at(1), stations_at(-1)
+    panels = mesh['tri'][np.all(level[mesh['tri']] == 1, axis=1)]
+    tri = station[panels]
+    keep = np.r_[up,down]
+    points = mesh['POSITION'][keep]
+    influences = mesh['WEIGHTS_0'][keep]
+    joints = mesh['JOINTS_0'][keep]
+    vw = np.c_[points,np.ones(len(points))][:,None,:] * influences[:,:,None]
+    for label, frames in zip(("beat", "dive fold", "ground fold"), poses):
+        minimum = np.inf
+        failures = 0
+        for matrices in frames:
+            posed = np.einsum('vkij,vkj->vi',matrices[joints,:,:],vw)
+            upper, lower = np.split(posed,2)
+            q = lower[tri]
+            fn = np.cross(q[:,1]-q[:,0],q[:,2]-q[:,0])
+            vn = np.zeros_like(lower)
+            for i in range(3):
+                np.add.at(vn,tri[:,i],fn)
+            vn /= np.maximum(np.linalg.norm(vn,axis=1,keepdims=True),1e-12)
+            signed = np.sum((upper-lower)*vn,axis=1)
+            minimum = min(minimum, float(signed.min()))
+            failures = max(failures,int((signed<=0).sum()))
+        check(failures == 0, label + " shell separation",
+              f"{len(frames)} frames, {len(up)} upper vertices per frame, at most {failures} crossed, minimum signed gap {minimum*1000:.2f} mm")
+
+
 def verify(doc, binary, geo, rig, objects, imported_armatures):
     checks = []
     def check(ok, name, detail):
@@ -1614,6 +1685,8 @@ def verify(doc, binary, geo, rig, objects, imported_armatures):
     delta = abs(l1[keep] / l0[keep] - 1).max()
     check(worst < .01 and delta < .01 and moved > 0, 'frill spike lengths',
           f'neck_02 bent 30 degrees; {len(frill)} spikes, {moved} of them moved; base-to-tip length change at most {worst*100:.4f}%; longest spike {longest:.3f} m; {int(keep.sum())} edges inside spikes change at most {delta*100:.4f}%; owners {owners}')
+    if '_SHEET_ID' in geo['membrane']:
+        verify_v7_separation(geo['membrane'], names, check)
     reset_pose(rig)
     ART.mkdir(exist_ok=True, parents=True)
     report = dict(source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
