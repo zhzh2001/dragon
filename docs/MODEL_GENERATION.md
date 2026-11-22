@@ -2124,3 +2124,104 @@ changes what is drawn, not how it flies.
 - They are not in the default roster. `--model assets/frost2.glb`, or
   `--models` with several, loads them. The models are local and not
   committed, like every generated mesh (`ATTRIBUTION.md`).
+
+## The third round: frost and storm again (2026-11-22, 15:00)
+
+The user on the second round's frost2 and storm2: "I don't like frost
+and storm new designs. for frost the color is too into aurora, keep
+white-blue, aurora only on edges like previous concepts, and spikes wof
+icewing style. for storm the old wyvern design is good, just improve on
+it. let me check before modeling."
+
+Six turnaround sheets, three each, by the route of the second round
+(`image-use --backend codex` on the work account, 1536x1024, a 2 by 2
+grid of orthographic views). Nothing is modelled: the user picks first.
+`docs/concept/elemental-options/round3/`, with `frost-three.jpg` and
+`storm-three.jpg` as the sheets to look at.
+
+| Sheet | Design |
+|---|---|
+| `frost-1` | White and pale blue. A mane of long icicle spines from the head down the neck, tall spines along the back, a tail ending in a cluster of spikes |
+| `frost-2` | A crown fan of five blade spines behind the skull, one row of dagger spines, spurs at elbow and heel, a whip tail with a few spikes |
+| `frost-3` | A dense ruff of raked spines on head, cheeks and neck, a double row along the back, a tail tip like a mace of needles |
+| `storm-1` | The old wyvern kept: slate grey, a swept crest, a horizontal tail fluke, with larger cleaner wings veined pale and a paler belly |
+| `storm-2` | Swifter: long narrow wings, two streamer horns, a forked fluke |
+| `storm-3` | Heavier: broad deep wings, a low sail ridge, a double fluke, pale horns |
+
+All three frost sheets keep the aurora to a thin band on the wings'
+trailing edges, which is what the prompt asked for. The spikes are
+described in the prompt by shape (icicles, a ruff, a spiked tail) and
+not by the name of the book the user cited: the designs must stay our
+own to ship (`ATTRIBUTION.md`).
+
+The storm sheets were given the old model's turnaround
+(`artifacts/dragon-options/stormsail-turnaround.png`) as the subject.
+All three are wyverns: two legs, the wings the forelimbs. In their
+side views the wings are raised and not edge on, as the second
+round's were.
+
+frost2 and storm2 stay in the roster until a pick replaces them.
+
+## The wingbeat of the five (2026-11-22, 15:30)
+
+The playtester: "new models flapping is very mechanic, need more
+animation work."
+
+As rigged, each of the five flapped as a flat board through 35
+degrees: `wing_flap_limit_deg 34`, the code's 50 up and 42 down, and
+none of the hero's wingbeat block. Their profiles were copied from
+Frostvein's, which never had one.
+
+Each profile now ends with the hero's wingbeat and life: the phase lag
+down the wing, the fold at the wrist on the upstroke, the recovery,
+the fingers' curl under load, the tail's answer to the beat, the gust
+and the breath of the glide (`assets/<name>.glb.rig.cfg`, the last
+block), and the hero's beat in the flight profile, shallower:
+
+| | Up | Down | Fold on the upstroke |
+|---|---|---|---|
+| The hero | 72 | -125 | 30 |
+| blight2 | 68 | -88 | 30 |
+| frost2, stone2, storm2 | 56 | -88 | 22 |
+| tide2 | 52 | -62 | 20 |
+
+At the hero's -125 these shorter wings closed under the belly and were
+lost from behind. At its 72 with its recovery fold, the narrow wings of
+four of them crossed over the back at the top of the stroke, so those
+four have less of both. tide2's wings are fins as wide as its body is
+long and wrapped it like a cloak at -88.
+
+`artifacts/elemental-round2/flap-before-after-blight2.jpg`: six frames
+of one beat from behind and from the side, before over after.
+`flap-five-after.jpg`: the same twelve frames for all five.
+
+Not done: any keyframed motion. This is the procedural beat with the
+hero's dials. The bodies of four of them also hang tail down in
+flight, as their sculpts stand, and that is in the mesh's bind pose.
+
+## The wings' weight on the body (2026-11-22, 15:15)
+
+Reports 0025 and 0026: skin on blight2's haunch and on tide2's thigh
+fin and neck fin "moves while flapping". One Codex job
+(gpt-6.2-astra, high, 369,268 tokens, 43 minutes;
+`tools/showcase/elemental-weights-brief.md`) measured it on tide2,
+blight2 and stone2 and repaired it. frost2 and storm2 were left: the
+user has rejected both designs.
+
+Each creature has a check, `tools/<name>_flapcheck.py`: it poses only
+the wing bones through 41 poses of a deep stroke and reports how far
+any vertex that is not wing travels.
+
+| Creature | Cause | Worst travel of body skin, before | After | Still weak |
+|---|---|---|---|---|
+| tide2 | The wing weights reached the cheek fins and the haunches | 1.82 m | 0 | A broad fold at the wrist on the upstroke |
+| blight2 | Wing bones held 88% of the weight at the marked haunch | 2.04 m | 0 | Nothing seen |
+| stone2 | The automatic rig gave 83% wing-root weight to a shoulder crystal and pulled the forelegs | 1.58 m | 0 | A crease under each shoulder crystal on the downstroke, after three rebuilds |
+
+Two metres on a body of thirteen is what the playtester saw. The
+job's own renders are `artifacts/<name>/flap-weights/before-after.jpg`.
+They were made with the old shallow beat, so the difference is small
+in them. With the new wingbeat, the marked haunches at the top and at
+the bottom of the stroke: `artifacts/elemental-round2/haunch-up-and-down-stroke.jpg`
+(blight2, then tide2). The outline of each haunch is the same in both.
+

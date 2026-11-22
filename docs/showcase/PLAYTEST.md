@@ -716,3 +716,57 @@ Checked by the demo pilot: the wilds for five minutes of play.
 Not checked: any sound, any of it in motion at a player's frame rate,
 the wilds with a hand on the controls, a night with its hunter fought,
 the save read back in a window (a headless run does not write it).
+
+## The seventh round: reports 0025 to 0027, the breath straight, a start screen (2026-11-22, 15:30)
+
+The playtester, 2026-11-22 14:16: "I don't like arc and second aim at
+all, try to remove arc and mix into cloud style. the frost/stone
+particles are still too large, no need to deal damage for each piece.
+some trees (imposters?) don't react to breaths. I don't like frost and
+storm new designs. for frost the color is too into aurora, keep
+white-blue, aurora only on edges like previous concepts, and spikes wof
+icewing style. for storm the old wyvern design is good, just improve on
+it. let me check before modeling. also new models flapping is very
+mechanic, need more animation work. please just add all to rosters and
+add a toggle to compare old/new designs. please add a more friendly
+start screen to choose mode (practice/arena/hoard/wild) and other
+end-user related settings. please use ` instead of f1. for wilds I'm
+more ambitious ... discussion only for now".
+
+Three reports came with it.
+
+| Report | Model | Mark | Answer |
+|---|---|---|---|
+| 0025 | blight2, flapping, from behind | "moves while flapping", on the haunch | Wing bones held 88% of that skin's weight, and it travelled 2 m a beat. A Codex job measured and removed it: `MODEL_GENERATION.md`, "The wings' weight on the body" |
+| 0026 | tide2, the same view | "moves while flapping" on the thigh's fin, "moves too" on a neck fin | The same |
+| 0027 | the hero, storm breath, from behind | "breath range hard to see" | Each arc ends in a flash. `EFFECTS.md`, "The storm's reach" |
+
+| Ask | Answer |
+|---|---|
+| No arc, no second aim, into the cloud, smaller, no damage by the piece | Done. `EFFECTS.md`, "The pieces straight, in the cloud" |
+| Trees that do not react | They were not impostors. A breath through the crowns left no mark. Fixed. `EFFECTS.md`, "Trees in the breath" |
+| Frost and storm designs | Six new sheets, three each, for the user's pick. Nothing modelled. `MODEL_GENERATION.md`, "The third round" |
+| The new models flap mechanically | The hero's wingbeat and life on all five profiles. `MODEL_GENERATION.md`, "The wingbeat of the five" |
+| All in the roster, with a toggle | The default roster carries both designs of six species. O, the Playtest panel's "new designs" and the start screen swap the player and every rival |
+| A start screen | `--menu`, and a launch with no arguments. `DIRECTION.md`, "The start screen" |
+| ` for F1 | Done. F1 still works |
+| The wilds, more ambitious | A proposal, nothing built. `DIRECTION.md`, "The wilds, second discussion" |
+
+### What was checked and what was not
+
+Checked by render: the four breaths of matter from the chase and the
+side, the range with four elements, the start screen, each of the four
+modes started from it, six frames of the wingbeat from behind and from
+the side on each of the five models.
+
+Checked by soak: a match of six rivals with the designs swapped every
+150 frames for 1,300 frames.
+
+Not checked: anything in motion at a player's frame rate, the start
+screen with a hand on the keys or a mouse, the settings file read back
+in a window, a sound.
+
+Seen and not fixed: six rivals breathing at 60 m fill the frame with
+the old puffs. The rivals' breaths are still the particles the player's
+had before the marched volume. It was so before this round.
+

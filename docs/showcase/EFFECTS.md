@@ -854,3 +854,66 @@ is a capture of it.
 Sheets: `artifacts/breath-volume/mixed-chase-and-side.jpg`,
 `range-six-breaths.jpg` and `range-plants.jpg` (untouched, then fire,
 frost, stone, acid).
+
+## The pieces straight, in the cloud (2026-11-22, 15:00)
+
+The playtester, 14:16: "I don't like arc and second aim at all, try to
+remove arc and mix into cloud style. the frost/stone particles are
+still too large, no need to deal damage for each piece. some trees
+(imposters?) don't react to breaths." And report 0027, on the storm
+breath from behind: "breath range hard to see".
+
+My reading of "mix into cloud style": the cloud of style 1 is the
+breath's body again, and the pieces are things in it. Not the pieces
+dropped. If that is wrong, each style dial at 1 is the cloud alone.
+
+| Was | Is |
+|---|---|
+| Pieces thrown above the aim and falling onto an aimed point | They fly straight along the aim for the breath's reach and fall only past it (`MatterTuning::arc`, 0) |
+| A ring on the HUD where they would land | No ring. A straight breath goes where the aim marker is. The ring is drawn only for a thrown breath |
+| The jet sinking under a liquid's stream | The jet is as straight as its pieces |
+| Damage by the piece | The cone's, as for fire. Pieces still break on a target |
+| The cloud at 0.35 of style 1 (`mix`) | Whole (`mix` 1) |
+| Ice lances 1.6 m, 22 a second | Slivers 0.5 m, 40 a second |
+| Boulders 0.65 m, 10 a second | Cobbles 0.2 m, 30 a second |
+| Snow grains 0.07 m, grit 0.2 m | 0.04 m and 0.09 m |
+
+What a piece leaves on the ground took the piece's size, so with small
+pieces a spike was 0.4 m and rubble a pebble. A spike and a rubble
+stone have their own sizes now (`spike_size` 1 m, `rubble_size` 0.4 m).
+The Playtest panel's "the pieces" has "thrown in an arc" and "damage by
+the piece" to bring the thrown breath back whole.
+
+`artifacts/breath-volume/straight-chase-and-side.jpg`: frost, stone,
+tide and blight from the chase camera over the side view.
+
+### Trees in the breath
+
+Not the impostors: those stand past 500 m and a breath reaches 150. A
+mark was made only where the breath met the ground, and the plants'
+shader judges a plant by the mark at its foot. A breath held level
+through the crowns, which is most breaths from the air, made no mark,
+so the trees it passed through did nothing. Six times a second each
+tree whose trunk or crown is inside the jet now gets a mark at its
+foot (`App::mark_trees_in_breath`), four trees a time, every element.
+Lightning had no mark of its own and has one: scorched, the leaves
+thinned.
+
+Seen on the breath range with frost and storm: the trees behind the
+dummies rime and scorch (`artifacts/breath-volume/trees-in-the-breath.jpg`).
+Not seen: a pass through a forest from the air, in motion. The 24
+marks are still the limit: a long sweep through a wood drops its
+oldest marks, and those trees turn green again. A map of marks in a
+texture would end that and is not built.
+
+The first version drew its starting tree from the particles' random
+stream, which moved every spark after it and failed the fire golden.
+It counts on its own now.
+
+### The storm's reach
+
+An arc from behind is foreshortened to a scribble, and nothing said
+how far it went. Each arc now ends in a flash 2.6 m across with two
+sparks off it. A flash has a size on the screen, and so a distance.
+Not judged in motion.
+

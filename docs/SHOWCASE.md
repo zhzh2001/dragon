@@ -61,6 +61,21 @@ valleys: hunger, a day and a night, levels, places to find, sleep to
 save (`docs/DIRECTION.md`, "The wilds"). It is a frame with nothing
 hung on it yet, and what goes on it waits for the user's answers.
 
+The seventh round (2026-11-22, 15:30). The breaths of matter are
+straight again: the pieces fly in the cloud for the breath's reach, the
+landing ring is gone, the damage is the cone's, and the bits are a
+third the size. Trees a breath passes through answer it. A launch with
+no arguments opens a start screen (mode, dragon, designs, settings)
+and the backquote hides the panels. The roster carries two designs of
+six species and O swaps them; the player flies the hero by default.
+The five new dragons have the hero's wingbeat, and a Codex job took
+the wings' weight off their bodies (reports 0025, 0026). The user
+rejected frost2 and storm2: six new sheets wait for a pick
+(`docs/MODEL_GENERATION.md`, "The third round"). The wilds has a
+second proposal, a realm of valleys with people, followers, a hoard
+that is eaten and a long sleep, and nothing of it is built
+(`docs/DIRECTION.md`, "The wilds, second discussion").
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

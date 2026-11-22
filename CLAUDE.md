@@ -453,6 +453,7 @@ flight controls.
   | give the hero's wings a thick shell, a hem, relief and value maps, refit the rig, ten engine pairs, gpt-6.2-astra high, 2026-11-22 | 550,683 |
   | rig three one-shot dragons by their own measured skeletons, thirteen engine views each, gpt-6.2-astra high, 2026-11-22 | 459,647 |
   | rig two more the same way, in a second job beside it, 2026-11-22 | 458,984 |
+  | take wing weight off the bodies of three of them, with a check script each, gpt-6.2-astra high, 2026-11-22 | 369,268 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**
