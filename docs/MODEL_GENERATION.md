@@ -1983,3 +1983,84 @@ the head and one wing from Hunyuan (three to four days of the free tier
 a creature, or one day on x99's local Hunyuan for the head), the staged
 build and the rig by a Codex job each. That is about 800,000 tokens a
 creature on the work profile, from the hero's own jobs.
+
+## The second round of designs, and five one-shots (2026-11-22)
+
+The user's picks from the fifteen options, 2026-11-22 10:20: "I prefer a
+similar build to embercrest, not too slender or bulky. blight: wasp is
+fine, can add other poison/acid animals like snake; frost: aurora is
+good, add more spikes; stone: obsidian/crystal looks nice, can change
+color; storm: like old design better; tide: kelp is fine but too plant
+like, keep fin and webbed foot." And ten minutes later: "please make
+designs elegant and likable, not too strange." The same message said the
+day's Hunyuan credits would lapse within the hour, so the round went
+straight from sheets to models.
+
+### The sheets
+
+Fourteen turnaround sheets, each four panels in a 2 by 2 grid (front,
+back, left, right) at 1536x1024, from GPT Image through the Codex
+backend on the work account, eight and then six in parallel. All
+fourteen passed. One frame for all of them: the prompt of
+`artifacts/dragon-options/frostvein-prompt.md` with the build written in
+("a medium, athletic quadruped dragon, neither slender nor bulky: a deep
+chest, a strong neck of moderate length, exactly four distinct sturdy
+legs, a tail as long as the body"), and one paragraph a design. The
+second six carry one more sentence: "The dragon is elegant, graceful and
+noble, with a handsome, likable face and clean flowing lines; nothing
+grotesque."
+
+| Element | The design | Sheets | Submitted |
+|---|---|---|---|
+| Frost | Navy scales to a white belly, a crown of ice horns, tall ice spikes down the neck, back and tail, aurora bands of green and violet on the wings | 3 | the second |
+| Stone | Black volcanic glass in faceted plates, with amethyst and smoky quartz crystals on the shoulders, back and tail. Also in mahogany obsidian with pale quartz, and in black with sapphire | 3 | the amethyst |
+| Tide | Teal hide with pale spots, a tall sail fin with ray spines, fin frills at the cheeks and elbows, an eel's finned tail, webbed feet. "An animal, not a plant: no leaves, no seaweed" | 3 | the third (elegant) |
+| Blight | A wasp and a viper: black scales with yellow bands, amber wings veined as an insect's, a tail stinger. The first two have a cobra's hood and long fangs; the third only a slight flare behind the jaw | 3 | the third (elegant) |
+| Storm | The old Stormsail's look on Embercrest's four-legged build: slate blue-grey, a cream belly, a fan of swept horns, pale wings, a tail fluke | 2 | the second |
+
+The five submitted are `docs/concept/elemental-options/round2/
+<element>-turnaround.jpg`; the other nine are in `alternates.jpg` there.
+
+### The models
+
+Each sheet was cut into its four quadrants (768x512, no further crop)
+and sent to the Hunyuan one-shot with `tools/hunyuan_oneshot.py submit`,
+four views, the top slot empty. All five came back in four to five
+minutes each: 1.5 million triangles, textured.
+
+| File (`assets/`, not committed) | Job | Wingspan over length |
+|---|---|---|
+| `frost2-cand-oneshot.glb` | `17b51beb-872f-4901-85bc-780aa3002619` | 1.15 |
+| `stone2-cand-oneshot.glb` | `70928f75-6e2c-44dd-a6a0-ef078fffc63f` | 1.01 |
+| `tide2-cand-oneshot.glb` | `578a2fe8-dca1-4841-9e16-4cc905ac0e86` | 0.92 |
+| `blight2-cand-oneshot.glb` | `9d6977ed-b71a-466b-84b7-5c6959f1f0f4` | 1.21 |
+| `storm2-cand-oneshot.glb` | `b823f048-7c94-4117-a4e5-c7a9390d504a` | 1.03 |
+
+Previews, four views each, rendered in Blender by a Sonnet subagent:
+`artifacts/elemental-round2/<name>-preview.jpg`.
+
+What they show:
+
+- Every one follows its plates: the build, the spikes, the crystals, the
+  sail fin, the bands and the fluke are all there, with four legs and no
+  fused limb.
+- The wings are not flat. On four of the five they are swept back and
+  held up, so from above each wing is a narrow blade; only the tide's
+  lie open. The plates draw the wings spread level in the front view and
+  edge on in the side views, and the generator settled between them. So
+  "Hunyuan's wings come out flat" above holds for the hero's wing, which
+  was generated as a part on its own, and not for a whole creature. The
+  hero's route applies: build the wing as its own part.
+- The spans are 0.9 to 1.2 of the length. The hero's is 19 m on a body
+  of about 10: these wings are half of that until they are rebuilt.
+
+Two traps met on the way, now in `tools/hunyuan_oneshot.md`:
+
+- The free tier runs two jobs at a time. A third submission is refused
+  with no message: the script's "no creationsId appeared". Submit, then
+  try again every minute until a slot frees.
+- The pool was 5 that day (the badge read 3 after two jobs), not 20.
+
+Not done: nothing is decimated, rigged or in the roster. The next step
+for each is the hero's: a wing part from Hunyuan, a staged build and a
+rig by a Codex job each, about 800,000 tokens a creature.

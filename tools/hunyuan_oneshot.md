@@ -131,6 +131,13 @@ the page and submitting the next creature does not disturb the one in flight;
 three were run this way and polled together afterwards. The badge decrements
 once per submission, which is the only confirmation that a job was accepted.
 
+**Two at a time, since 2026-11-22.** With two jobs in flight a third
+submission is refused with no message on the page: the script ends with "no
+creationsId appeared; the job was not accepted" and the badge does not move.
+Five of nine submissions in a row failed this way. Submit again every minute
+until a job finishes. The pool was 5 that day, not 20: read the badge before
+planning a batch.
+
 ## 5. Take the right URL
 
 `result[0].urlResult` holds several, and the difference matters:

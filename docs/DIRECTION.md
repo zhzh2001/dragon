@@ -629,3 +629,120 @@ named, each with what it would lean on in the engine today:
   were never rigged (`docs/MODEL_GENERATION.md`, "Queued").
 
 Bring a short list of loop shapes to that discussion, not a build.
+
+## Loop shapes for the mechanics discussion (2026-11-22)
+
+The user, 2026-11-22: "please discuss my more radical mechanics as
+well". This section is that discussion's first half: three shapes the
+loop could take, one for each thing the user named as its centre, what
+each costs, and a recommendation. Nothing here is built.
+
+What the loop is today: fly a valley from its head to its pass, burn
+what guards it, land on three caches, grow through three stages, and do
+it in three valleys. The player's verbs are fly, breathe, bite and land.
+Every enemy is a dragon or a tower.
+
+### Shape A: the brood (followers at the centre)
+
+The player leads a flight. Lesser dragons join it: spared after a fight,
+freed from a tower's chains, or hatched from an egg bought with hoard.
+Each follower is a species with its element, so the flight is the
+player's build, and a follower that dies is gone for the run. The
+player's new verbs are few and broad: mark a target, call the dive,
+call them back. The pass is held by a rival lord with a flight of their
+own, and the valley's end is two flights meeting.
+
+- It leans on what exists most: the bot dragons and their doctrine, the
+  demo pilot, the roster of species, the six elements and their
+  statuses. The five new elemental dragons get a job at once, as the
+  followers and the rival lords.
+- It needs: formation flying, three or four orders and a way to give
+  them on a pad, followers that read as allies at a glance, and a frame
+  budget for six to ten dragons close to the camera.
+- The risk: followers that fight for the player make the player a
+  spectator. The answer in games that do this well is that the
+  followers set up and the player finishes, or the reverse.
+
+### Shape B: the storm-caller (magic at the centre)
+
+The player stays one dragon, and the world becomes the weapon. A spell
+is a thing with a place and a duration, put there from the air: a wall
+of ice across a gorge, an updraught to climb out on, a storm cell that
+strikes what flies through it, a fog bank to cross a guarded ford in, a
+rockfall from a cliff. Mana comes from shrines, from prey, or from the
+hoard itself, so casting is a choice against growing.
+
+- It leans on: the thermals (a summoned updraught is nearly free), the
+  volumetric clouds and the mist (weather is already dials), the
+  elements and statuses, and today's pieces and ground marks (ice that
+  stands in the ground, rubble that lies there).
+- It needs: aiming a spell at ground from a moving dragon, each spell's
+  own look and sound, and enemies that react to a wall or a fog bank.
+  The last is the cost: a spell that changes the space is only as good
+  as the enemies' reading of the space.
+- The risk: six spells, each a small effect, read as six more breaths.
+  A spell must change where things can go, not only what gets hurt.
+
+### Shape C: the hunt (other species at the centre)
+
+Each valley is the ground of one great beast that is not a dragon, with
+its lesser kin about it: a stone giant that throws boulders, a roc and
+its flock, a serpent in the lake, a herd-lord on the meadows. The loop
+is a hunt: find it by its signs, wear it down through its phases, land
+on it and tear at a weak point, feed, grow, and take its element as a
+second breath. Each beast asks for a different verb: a flock wants a
+wide breath, a giant wants a strafe and a dodge, a serpent wants bait.
+
+- It leans on: the prey herds and their flocking, the five rigged
+  quadrupeds, the melee and the landing, the growth stages and the
+  second breath.
+- It needs: one bespoke creature a valley, each a model, a rig and
+  clips (a Codex job of 400,000 to 800,000 tokens each, from this
+  repository's own table), and a climbing or perching rule for landing
+  on a moving body.
+- It is the one that shows best. A dragon against something three times
+  its size is the picture the showcase work has been building toward.
+- The risk: the cost is in art, a beast at a time, and a hunt with one
+  beast is a boss fight, not a loop.
+
+### How they combine
+
+They are not rivals. The strongest loop uses one as the spine and the
+other two as its parts:
+
+| Spine | What the others become |
+|---|---|
+| The brood | A hunt is each valley's end. A spell is what a follower's element gives the flight (a frost follower lets the player raise the ice wall) |
+| The hunt | Followers are small scavengers that mark the trail. Spells are what the beasts' elements teach |
+| The storm-caller | Followers hold what a spell has shaped. The beasts are the things worth spending mana on |
+
+### Recommendation
+
+The brood as the spine, built in this order, each step a playtest:
+
+1. Two wingmates with two orders (attack my target, come back), on the
+   bot dragons as they are. A week of AI work and no new art. It answers
+   the first question: is leading a flight fun from a chase camera.
+2. Three placed spells on what today's breath work left: the ice wall,
+   the updraught, the storm cell. Given by a follower's element.
+3. One beast that is not a dragon as a valley's end, the cheapest first:
+   a flock (the herds' code, one small model) before a giant.
+
+The reason for this order is cost against how much each changes a
+minute of play. Step 1 changes every minute and costs the least. Step 3
+shows best and costs the most, so it should come when the loop it ends
+is already worth playing.
+
+### Questions for the user
+
+1. Is the player always the one dragon, or can the player fly a
+   follower too?
+2. A few named followers whose loss hurts (three to five), or a swarm
+   (twenty and more)?
+3. Does the run stay a fifteen-minute descent through three valleys, or
+   does the player keep a valley: a nest, a territory, things that are
+   still there next session?
+4. Is magic only the elements made larger, or anything (summons,
+   illusions, time)?
+5. Which beasts would the user most want to fight? The list above is a
+   guess.
