@@ -1,0 +1,56 @@
+{
+  "source": "frost2-cand-oneshot.glb",
+  "source_sha256": "7f26814bc60f1f34cc68d6e96b5f4cec9f74c337c8a85f0cc422f6dc10a1e30a",
+  "source_triangles": 1500000,
+  "triangles": 80000,
+  "vertices": 40002,
+  "bones": 68,
+  "max_influences": 4,
+  "max_weight_sum_error": 5.21540641784668e-08,
+  "unweighted_vertices": 0,
+  "binding": "Bone heat body; continuous top-four wing field; plane jaw mask with hinge blend, 5-point line, snout reclaimed; level wing bind 46 deg",
+  "material": "Preserved source UVs and PBR textures",
+  "glb_bytes": 44241320,
+  "reference_span": {
+    "axis": "x",
+    "metres": 19
+  },
+  "ground_offset": 3.114332731316227,
+  "repaired_zero_tangents": 1,
+  "source_images": [
+    {
+      "name": "texture_pbr_20250901",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "texture_pbr_20250901_normal",
+      "size": [
+        4096,
+        4096
+      ],
+      "colorspace": "Non-Color"
+    }
+  ],
+  "bone_fit_scale": [
+    1.0,
+    1.0000001192092896,
+    1.0000001192092896
+  ],
+  "bone_fit_bias": [
+    0.0,
+    0.0,
+    -2.824881661922518e-08
+  ]
+}
