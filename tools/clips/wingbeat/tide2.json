@@ -12,7 +12,7 @@
     "wrist_lag": 3,
     "tip_lag": 5,
     "tip_top": 30,
-    "tip_bottom": -17
+    "tip_bottom": -8
   },
   "climb": {
     "top": 50,
@@ -25,7 +25,7 @@
     "wrist_lag": 4,
     "tip_lag": 7,
     "tip_top": 37,
-    "tip_bottom": -23
+    "tip_bottom": -13
   },
   "level_xyzw": [
     -0.0004950332222506404,

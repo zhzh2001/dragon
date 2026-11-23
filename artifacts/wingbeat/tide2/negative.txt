@@ -6,7 +6,7 @@ PASS body, exit 1, FAIL 2 flap paired wing rotation channels only
 PASS seam, exit 1, FAIL 3 flap loop seam 24.70190 deg
 PASS mirror, exit 1, FAIL 4 flap mirror error in model axes 180.00000 deg
 PASS phase, exit 1, FAIL 5 flap arm relative to neutral +40.00 at 45/60, -22.30 deg at 15/60
-PASS lag, exit 1, FAIL 6 flap rib 1 height lags 59/60 and 59/60
+PASS lag, exit 1, FAIL 6 flap rib 1 height lags 0/60 and 0/60
 PASS fold, exit 1, FAIL 7 flap wrist fold 28.70 deg at 25/60, 0.54 at 57/60
 PASS step, exit 1, FAIL 8 flap largest step 179.84 deg on wing_arm_r
 PASS amplitude, exit 1, FAIL 9 flap_climb arm stroke +40.00 to -22.30 deg

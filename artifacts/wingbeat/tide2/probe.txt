@@ -40,41 +40,41 @@ under the belly: nearest the centre plane +1.03 m at phase 0.53
 
 clip cruise ./build/rib_probe-r11 assets/tide2.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/tide2.flight.glb
 beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/tide2.flight.glb
-side 0 rib 0: nearest the centre plane +1.407 m at phase 0.02
-side 0 rib 1: nearest the centre plane +2.489 m at phase 0.04
-side 0 rib 2: nearest the centre plane +3.111 m at phase 0.06
-side 0 rib 3: nearest the centre plane +3.242 m at phase 0.06
-side 0 rib 4: nearest the centre plane +3.361 m at phase 0.06
-side 0 rib 5: nearest the centre plane +3.217 m at phase 0.06
-side 0 rib 6: nearest the centre plane +3.549 m at phase 0.04
-side 1 rib 0: nearest the centre plane +1.438 m at phase 0.02
-side 1 rib 1: nearest the centre plane +2.570 m at phase 0.04
-side 1 rib 2: nearest the centre plane +3.194 m at phase 0.04
-side 1 rib 3: nearest the centre plane +3.388 m at phase 0.04
-side 1 rib 4: nearest the centre plane +3.594 m at phase 0.04
-side 1 rib 5: nearest the centre plane +3.278 m at phase 0.04
-side 1 rib 6: nearest the centre plane +3.595 m at phase 0.04
-wing's highest skin: +1.49 m above the back at phase 0.08
-wing's lowest skin: -0.92 m from the belly at phase 0.57 (negative is below it)
-under the belly: nearest the centre plane +4.35 m at phase 0.65
+side 0 rib 0: nearest the centre plane +1.408 m at phase 0.02
+side 0 rib 1: nearest the centre plane +2.484 m at phase 0.04
+side 0 rib 2: nearest the centre plane +3.106 m at phase 0.06
+side 0 rib 3: nearest the centre plane +3.234 m at phase 0.04
+side 0 rib 4: nearest the centre plane +3.353 m at phase 0.04
+side 0 rib 5: nearest the centre plane +3.210 m at phase 0.04
+side 0 rib 6: nearest the centre plane +3.544 m at phase 0.04
+side 1 rib 0: nearest the centre plane +1.439 m at phase 0.02
+side 1 rib 1: nearest the centre plane +2.565 m at phase 0.04
+side 1 rib 2: nearest the centre plane +3.187 m at phase 0.04
+side 1 rib 3: nearest the centre plane +3.379 m at phase 0.04
+side 1 rib 4: nearest the centre plane +3.585 m at phase 0.04
+side 1 rib 5: nearest the centre plane +3.270 m at phase 0.04
+side 1 rib 6: nearest the centre plane +3.591 m at phase 0.04
+wing's highest skin: +1.50 m above the back at phase 0.08
+wing's lowest skin: -0.32 m from the belly at phase 0.57 (negative is below it)
+under the belly: no wing skin more than 0.5 m below it
 
 clip climb ./build/rib_probe-r11 assets/tide2.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/tide2.flight.glb --climb
 beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/tide2.flight.glb
-side 0 rib 0: nearest the centre plane +1.212 m at phase 0.04
-side 0 rib 1: nearest the centre plane +2.217 m at phase 0.06
-side 0 rib 2: nearest the centre plane +2.802 m at phase 0.08
-side 0 rib 3: nearest the centre plane +2.921 m at phase 0.08
-side 0 rib 4: nearest the centre plane +3.023 m at phase 0.08
-side 0 rib 5: nearest the centre plane +2.872 m at phase 0.08
-side 0 rib 6: nearest the centre plane +3.219 m at phase 0.08
-side 1 rib 0: nearest the centre plane +1.246 m at phase 0.04
-side 1 rib 1: nearest the centre plane +2.314 m at phase 0.04
-side 1 rib 2: nearest the centre plane +2.919 m at phase 0.04
-side 1 rib 3: nearest the centre plane +3.095 m at phase 0.04
-side 1 rib 4: nearest the centre plane +3.292 m at phase 0.04
-side 1 rib 5: nearest the centre plane +2.971 m at phase 0.04
-side 1 rib 6: nearest the centre plane +3.304 m at phase 0.04
-wing's highest skin: +1.93 m above the back at phase 0.10
-wing's lowest skin: -1.26 m from the belly at phase 0.59 (negative is below it)
-under the belly: nearest the centre plane +3.64 m at phase 0.63
+side 0 rib 0: nearest the centre plane +1.213 m at phase 0.04
+side 0 rib 1: nearest the centre plane +2.208 m at phase 0.06
+side 0 rib 2: nearest the centre plane +2.794 m at phase 0.08
+side 0 rib 3: nearest the centre plane +2.912 m at phase 0.08
+side 0 rib 4: nearest the centre plane +3.013 m at phase 0.08
+side 0 rib 5: nearest the centre plane +2.863 m at phase 0.08
+side 0 rib 6: nearest the centre plane +3.213 m at phase 0.08
+side 1 rib 0: nearest the centre plane +1.248 m at phase 0.04
+side 1 rib 1: nearest the centre plane +2.302 m at phase 0.04
+side 1 rib 2: nearest the centre plane +2.903 m at phase 0.04
+side 1 rib 3: nearest the centre plane +3.077 m at phase 0.04
+side 1 rib 4: nearest the centre plane +3.272 m at phase 0.04
+side 1 rib 5: nearest the centre plane +2.953 m at phase 0.04
+side 1 rib 6: nearest the centre plane +3.292 m at phase 0.04
+wing's highest skin: +1.95 m above the back at phase 0.10
+wing's lowest skin: -0.63 m from the belly at phase 0.59 (negative is below it)
+under the belly: nearest the centre plane +4.41 m at phase 0.63
 
