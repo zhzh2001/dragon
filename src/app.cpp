@@ -2273,6 +2273,9 @@ void App::pump_events() {
         return;
     }
 
+    // The click that closed the start screen is not a breath: it counts
+    // again once the button has come up.
+    if (!input_.mouse_down(SDL_BUTTON_LEFT)) menu_click_held_ = false;
     // The start screen has the keys while it is open.
     if (menu_open_) {
         update_menu();
@@ -7470,6 +7473,7 @@ void App::open_menu(bool in_play) {
 }
 
 void App::close_menu() {
+    menu_click_held_ = input_.mouse_down(SDL_BUTTON_LEFT);
     menu_open_ = false;
     menu_in_play_ = false;
     if (menu_camera_) free_camera_ = false;
@@ -10538,6 +10542,10 @@ game::CombatInput App::read_combat_input() const {
     if (!combat_enabled_) return in;
     // Weapons are cold during the countdown and on the results screen.
     if (!match_.weapons_live()) return in;
+    // The start screen holds the world, and a click on it is a click on a
+    // row: until 2026-11-22 the same click also breathed, and a click on
+    // Resume went on breathing while the button was down.
+    if (menu_open_) return in;
 
     if (options_.attack) {
         in.breath = true;
@@ -10587,7 +10595,8 @@ game::CombatInput App::read_combat_input() const {
     // Left mouse only doubles as breath while mouse steering is off, which it is
     // by default; with it on the button is already the steering capture.
     in.breath = input_.down(SDL_SCANCODE_F) ||
-                (!controls_.mouse_stick && !ui_has_mouse && input_.mouse_down(SDL_BUTTON_LEFT)) ||
+                (!controls_.mouse_stick && !ui_has_mouse && !menu_click_held_ &&
+                 input_.mouse_down(SDL_BUTTON_LEFT)) ||
                 input_.gamepad_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
     in.fire = input_.pressed(SDL_SCANCODE_G) ||
               input_.gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);

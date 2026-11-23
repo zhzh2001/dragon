@@ -312,6 +312,7 @@ public:
     void save_player_settings() const;
     bool menu_open_ = false;
     bool menu_in_play_ = false;  // opened over a game with Esc: the world holds, and Resume is offered
+    bool menu_click_held_ = false;  // the left button is still down from the click that closed the screen
     int menu_row_ = 0;
     int menu_mode_ = kHoard;
     int menu_page_ = 0;          // the main page, graphics, or sound and controls
