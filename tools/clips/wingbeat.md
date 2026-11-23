@@ -353,10 +353,303 @@ under the belly: nearest the centre plane +4.41 m at phase 0.63
 
 </details>
 
+## Storm3
+
+Storm3 uses its wings as forelegs. The four ribs now stay spread as the shoulder starts its recovery.
+One beat takes 0.90 seconds. The shoulder changes direction 48% of the way through it.
+The rig levels the wing and keeps its −28° rest adjustment under the clip.
+I added 6° to the shoulder reference after measuring the frame-200 studio glide at +25.69° above horizontal.
+The finished shoulder moves +45.50° to −22.88° from that glide in cruise and +55.41° to −33.16° in climb.
+
+In report 0037, the procedural hand hangs below the head at frame 240 and still points down at 247.
+The first clip opened the hand and lifted it clear of the belly in both loops.
+At frame 220, the far inner rib bent into an S. Two dark triangles showed against its pale membrane.
+At 247, the slope changed sharply between the wrist and the spread hand.
+I spread the turn into the leveled hand across the forearm and wrist, using 13° and 24° respectively.
+The wrist follows 80% of the difference between its original roll and the outer hand’s roll.
+At 220, the lowest rib runs in a shallower curve. The two triangles shrink to small flecks.
+
+The chord is a line between the membrane’s front and rear edges at the same distance outboard.
+I measured 999 cuts per hand across 120 settled poses per loop, from 0.1% to 99.9% of the outer hand’s width.
+Its steepest angle was 28.37° in cruise and 29.11° in climb. Both stay under the 35° limit.
+At peak flexion, the posed wings retain 87.9% of their widest span in cruise and 86.7% in climb.
+The greatest finger closure fell from 5.63° to 1.41° in cruise and from 7.19° to 1.50° in climb.
+Across both loops, the surface check found zero intersections among the eight outer rib patches. It checked 8,918 triangles per pose. All 16 reconstructed rib minima matched the engine probe to the printed millimetre.
+
+[Cruise comparison](../../artifacts/wingbeat/storm3/cruise-before-after.jpg) · [Climb comparison](../../artifacts/wingbeat/storm3/climb-before-after.jpg) · [Report view](../../artifacts/wingbeat/storm3/report-views-before-after.jpg) · [All after views](../../artifacts/wingbeat/storm3/views.jpg)
+
+At 247, the near fan reaches the right edge of the report view and keeps its curved outline.
+The far panel still shows a pale patch against its dark underside. A patch with similar contrast appears in the procedural side view at 227.
+At 220, a thin bright line remains under the fourth rib. A pale edge also shows above the hip.
+All eight rear cruise views show both feet clear of the wings. The tail stays between the spread panels.
+The near hook crosses the snout in side projection at 234 and 240. The shallower downstroke gives less impression of a hard push.
+In climb at 247, the near fan hides much of the torso and legs in side view. Its leading hook reaches the toes’ height.
+The rear view separates the hand from both feet. The close side camera clips the highest hook at climb frame 220.
+From the front, both hands stay outside the horns. At 240 and 247, their hooked tips still curve up above the snout.
+The dark patches on the inner panels stand out more from this angle.
+From above, all four ribs keep their order at both reversals. The inner trailing edges stay outside the feet.
+The long outer hooks briefly reach the overhead camera’s frame edge.
+All six takeoff views show the tips above both feet. At frame 76, the trailing edges look thin against the landscape.
+All four chase frames show a gap between the hands and the feet.
+At 300 and 339, the rear camera sees the hands nearly edge-on. The procedural beat showed more membrane from this angle.
+The frame-200 glide showed the same dragon pixels. All 187 changed pixels lay in the meadow to the right of the tail.
+The head-glide images matched byte for byte. In the close flap view, the arm passes behind the horns and leaves the jaw visible.
+Switching from the hero to Storm3 showed the spread wings above both feet.
+The existing engine played both clips without a rig or flight override.
+All four banked turns showed separate wings, feet and tail. The two engine passes, checks and 74 matched camera pairs took about 31 minutes.
+
+### Clearance in the engine
+
+The probe sampled the posed skin at 60 Hz after four seconds of settling. All distances are in game metres.
+The last column measures distance from the centre plane for wing skin more than 0.5 m below the belly.
+
+| Motion | Nearest rib to centre | Highest skin above back | Lowest skin from belly | Nearest under belly |
+|---|---:|---:|---:|---:|
+| Procedural cruise | +0.272 | +4.89 | -2.55 | +2.66 |
+| Procedural climb | +0.253 | +4.87 | -3.19 | +2.23 |
+| Clip cruise | +1.151 | +4.06 | +0.85 | No skin |
+| Clip climb | +0.876 | +4.44 | +0.48 | No skin |
+
+[Full probe output](../../artifacts/wingbeat/storm3/probe.txt)
+
+### Measurements from the exported clip
+
+The checker places each joint from its stored rotations and source offsets. The arm angles use the model’s neutral reference.
+The clearance table above includes the engine’s complete flight pose.
+
+| Measurement | Cruise | Climb |
+|---|---:|---:|
+| Arm high and frame | +45.06° at 0/60 | +55.06° at 0/60 |
+| Arm low and frame | -22.32° at 29/60 | -32.37° at 29/60 |
+| Wrist reversal delay (top, bottom) | 3/60, 3/60 | 4/60, 4/60 |
+| Fingertip reversal delay (top, bottom) | 5/60, 5/60 | 7/60, 7/60 |
+| Peak elbow flexion | 11.99° at 40/60 | 15.98° at 40/60 |
+| Peak wrist flexion | 16.98° at 40/60 | 20.98° at 40/60 |
+| Span at peak wrist flexion | 87.0% | 85.7% |
+| Smallest adjacent fingertip angle | 16.07° | 15.75° |
+| Largest single key interval | 4.54° | 5.96° |
+
+The wrist and each fingertip peak on the same delayed frames on both sides. Span uses the widest horizontal joint span of that loop.
+
+### Measured joint axes
+
+Blender turned each joint +5° about model X, Y and Z. Each cell gives the resulting X/Y/Z displacement in thousandths of a source unit.
+The point is the first child’s tail, or the joint’s own tail for a leaf. The JSON also records each axis in parent coordinates.
+
+| Wing joint | Probe point | +X | +Y | +Z |
+|---|---|---:|---:|---:|
+| `wing_root_l` | `wing_arm_l.tail` | 0.00 / -0.06 / 18.64 | -0.12 / 0.00 / 14.59 | -17.97 / -15.37 / -0.00 |
+| `wing_arm_l` | `wing_wrist_l.tail` | 0.00 / 2.99 / 15.06 | -3.30 / 0.00 / 8.00 | -14.56 / -8.49 / 0.00 |
+| `wing_wrist_l` | `wing_finger_1a_l.tail` | 0.00 / -6.86 / 1.01 | 7.45 / 0.00 / 14.61 | -0.66 / -14.96 / 0.00 |
+| `wing_finger_1a_l` | `wing_finger_1b_l.tail` | 0.00 / -25.14 / -6.25 | 26.58 / 0.00 / 26.78 | 6.36 / -27.67 / 0.00 |
+| `wing_finger_1b_l` | `wing_finger_1b_l.tail` | 0.00 / -18.17 / -5.77 | 18.99 / -0.00 / 13.05 | 5.57 / -13.64 / 0.00 |
+| `wing_finger_2a_l` | `wing_finger_2b_l.tail` | 0.00 / -27.67 / -20.24 | 29.65 / 0.00 / 25.16 | 20.15 / -25.58 / -0.00 |
+| `wing_finger_2b_l` | `wing_finger_2b_l.tail` | 0.00 / -13.13 / -11.31 | 14.09 / -0.00 / 10.82 | 11.22 / -10.95 / -0.00 |
+| `wing_finger_3a_l` | `wing_finger_3b_l.tail` | -0.00 / -26.26 / -28.48 | 28.02 / 0.00 / 11.87 | 27.85 / -11.88 / 0.00 |
+| `wing_finger_3b_l` | `wing_finger_3b_l.tail` | 0.00 / -12.74 / -14.18 | 13.62 / 0.00 / 5.87 | 13.88 / -5.86 / -0.00 |
+| `wing_finger_4a_l` | `wing_finger_4b_l.tail` | -0.00 / -17.84 / -29.42 | 18.97 / 0.00 / -3.45 | 28.47 / 3.86 / 0.00 |
+| `wing_finger_4b_l` | `wing_finger_4b_l.tail` | -0.00 / -8.98 / -14.36 | 9.53 / 0.00 / -1.81 | 13.88 / 2.00 / 0.00 |
+| `wing_root_r` | `wing_arm_r.tail` | -0.00 / -0.06 / 18.64 | -1.39 / 0.00 / -14.52 | -19.25 / 13.74 / 0.00 |
+| `wing_arm_r` | `wing_wrist_r.tail` | 0.00 / 2.99 / 15.06 | -3.99 / 0.00 / -7.68 | -15.24 / 7.19 / -0.00 |
+| `wing_wrist_r` | `wing_finger_1a_r.tail` | -0.00 / -6.86 / 1.01 | 6.15 / -0.00 / -15.20 | -1.96 / 14.85 / -0.00 |
+| `wing_finger_1a_r` | `wing_finger_1b_r.tail` | 0.00 / -25.14 / -6.25 | 24.14 / 0.00 / -29.00 | 3.92 / 28.11 / 0.00 |
+| `wing_finger_1b_r` | `wing_finger_1b_r.tail` | 0.00 / -18.17 / -5.77 | 17.78 / 0.00 / -14.66 | 4.36 / 14.07 / -0.00 |
+| `wing_finger_2a_r` | `wing_finger_2b_r.tail` | 0.00 / -27.67 / -20.24 | 27.35 / 0.00 / -27.65 | 17.85 / 27.24 / -0.00 |
+| `wing_finger_2b_r` | `wing_finger_2b_r.tail` | 0.00 / -13.13 / -11.31 | 13.10 / 0.00 / -12.01 | 10.22 / 11.89 / 0.00 |
+| `wing_finger_3a_r` | `wing_finger_3b_r.tail` | 0.00 / -26.26 / -28.48 | 26.88 / 0.00 / -14.27 | 26.71 / 14.26 / 0.00 |
+| `wing_finger_3b_r` | `wing_finger_3b_r.tail` | -0.00 / -12.74 / -14.18 | 13.05 / 0.00 / -7.03 | 13.31 / 7.04 / 0.00 |
+| `wing_finger_4a_r` | `wing_finger_4b_r.tail` | 0.00 / -17.84 / -29.42 | 19.20 / 0.00 / 1.78 | 28.70 / -1.37 / 0.00 |
+| `wing_finger_4b_r` | `wing_finger_4b_r.tail` | 0.00 / -8.98 / -14.36 | 9.65 / 0.00 / 0.98 | 14.01 / -0.79 / -0.00 |
+
+[Poses and parent axes](wingbeat/storm3.json)
+
+<details>
+<summary>Posed wing measurements</summary>
+
+```text
+Cruise studio frames 240 to 359
+right rib minima in metres 4.600 4.183 2.300 1.151
+left rib minima in metres 4.695 4.364 2.360 1.230
+span at nearest sampled peak fold / widest 0.879
+right shoulder elevation in frame 200 glide +25.69 deg
+right shoulder elevation against horizontal +71.19 to +2.81 deg
+right shoulder excursion from frame 200 glide +45.50 to -22.88 deg
+right shoulder high and low phases 0.000 0.481
+wing_wrist_r high and low phases 0.037 0.519
+wing_finger_1tip_r high and low phases 0.074 0.556
+wing_finger_2tip_r high and low phases 0.074 0.556
+wing_finger_3tip_r high and low phases 0.074 0.556
+wing_finger_4tip_r high and low phases 0.074 0.556
+right steepest skin chord 28.37 deg at phase 0.444, 99.9% of outer hand width across 999 cuts
+left steepest skin chord 28.29 deg at phase 0.537, 99.9% of outer hand width across 999 cuts
+Climb studio frames 240 to 359
+right rib minima in metres 4.239 3.827 1.980 0.876
+left rib minima in metres 4.348 4.015 2.045 0.946
+span at nearest sampled peak fold / widest 0.867
+right shoulder elevation in frame 200 glide +25.69 deg
+right shoulder elevation against horizontal +81.10 to -7.47 deg
+right shoulder excursion from frame 200 glide +55.41 to -33.16 deg
+right shoulder high and low phases 0.000 0.481
+wing_wrist_r high and low phases 0.056 0.537
+wing_finger_1tip_r high and low phases 0.111 0.593
+wing_finger_2tip_r high and low phases 0.111 0.593
+wing_finger_3tip_r high and low phases 0.111 0.574
+wing_finger_4tip_r high and low phases 0.093 0.574
+right steepest skin chord 29.11 deg at phase 0.204, 91.3% of outer hand width across 999 cuts
+left steepest skin chord 28.61 deg at phase 0.241, 91.2% of outer hand width across 999 cuts
+```
+
+</details>
+
+<details>
+<summary>Outer rib surface test</summary>
+
+```text
+PASS flap 120 frames, 8 outer rib patches, 8918 triangles, zero intersecting pairs
+PASS flap_climb 120 frames, 8 outer rib patches, 8918 triangles, zero intersecting pairs
+Blender 5.3.0 (hash 02f0899d78e3 built 2026-11-10 01:31:21)
+
+Blender quit
+```
+
+</details>
+
+<details>
+<summary>Checker output</summary>
+
+```text
+PASS 1 55 joint nodes, source hierarchy and two named loops
+PASS 2 source rest translations, rotations and scales
+PASS 1 flap 61 unit rotations from 0 to 1 second
+PASS 2 flap paired wing rotation channels only
+PASS 1 flap_climb 61 unit rotations from 0 to 1 second
+PASS 2 flap_climb paired wing rotation channels only
+PASS 3 flap loop seam 0.00000 deg
+PASS 4 flap mirror error in model axes 0.00002 deg
+PASS 5 flap arm relative to neutral +45.06 at 0/60, -22.32 deg at 29/60
+PASS 6 flap wrist height lags 3/60 and 3/60
+PASS 6 flap rib 1 height lags 5/60 and 5/60
+PASS 6 flap rib 2 height lags 5/60 and 5/60
+PASS 6 flap rib 3 height lags 5/60 and 5/60
+PASS 6 flap rib 4 height lags 5/60 and 5/60
+PASS 7 flap elbow fold 11.99 deg at 40/60, 0.22 at 57/60
+PASS 7 flap wrist fold 16.98 deg at 40/60, 0.31 at 57/60
+PASS 8 flap largest step 4.54 deg on wing_root_r
+PASS 9 flap arm stroke +45.06 to -22.32 deg
+PASS 9 flap peak elbow fold 11.99 deg
+PASS 9 flap peak wrist fold 16.98 deg
+PASS 9 flap span at peak wrist fold 0.870 of widest
+PASS 9 flap smallest adjacent tip separation 16.07 deg, largest closure 1.41 deg
+PASS 9 flap largest side-view chord between ribs 8.72 deg
+PASS 3 flap_climb loop seam 0.00000 deg
+PASS 4 flap_climb mirror error in model axes 0.00003 deg
+PASS 5 flap_climb arm relative to neutral +55.06 at 0/60, -32.37 deg at 29/60
+PASS 6 flap_climb wrist height lags 4/60 and 4/60
+PASS 6 flap_climb rib 1 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 2 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 3 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 4 height lags 7/60 and 7/60
+PASS 7 flap_climb elbow fold 15.98 deg at 40/60, 0.29 at 57/60
+PASS 7 flap_climb wrist fold 20.98 deg at 40/60, 0.38 at 57/60
+PASS 8 flap_climb largest step 5.96 deg on wing_arm_l
+PASS 9 flap_climb arm stroke +55.06 to -32.37 deg
+PASS 9 flap_climb peak elbow fold 15.98 deg
+PASS 9 flap_climb peak wrist fold 20.98 deg
+PASS 9 flap_climb span at peak wrist fold 0.857 of widest
+PASS 9 flap_climb smallest adjacent tip separation 15.75 deg, largest closure 1.50 deg
+PASS 9 flap_climb largest side-view chord between ribs 9.54 deg
+PASS 9 climb exceeds cruise at both reversals
+```
+
+</details>
+
+<details>
+<summary>Damaged export results</summary>
+
+```text
+PASS name, exit 1, FAIL 1 55 joint nodes, source hierarchy and two named loops
+PASS samples, exit 1, FAIL 1 flap 61 unit rotations from 0 to 1 second
+PASS rest, exit 1, FAIL 2 source rest translations, rotations and scales
+PASS channel, exit 1, FAIL 2 flap paired wing rotation channels only
+PASS body, exit 1, FAIL 2 flap paired wing rotation channels only
+PASS seam, exit 1, FAIL 3 flap loop seam 34.70191 deg
+PASS mirror, exit 1, FAIL 4 flap mirror error in model axes 179.99999 deg
+PASS phase, exit 1, FAIL 5 flap arm relative to neutral +45.06 at 45/60, -22.32 deg at 14/60
+PASS lag, exit 1, FAIL 6 flap rib 3 height lags 7/60 and 5/60
+PASS fold, exit 1, FAIL 7 flap wrist fold 16.85 deg at 25/60, 0.31 at 57/60
+PASS step, exit 1, FAIL 8 flap largest step 179.62 deg on wing_arm_r
+PASS amplitude, exit 1, FAIL 9 flap_climb arm stroke +45.06 to -22.32 deg
+```
+
+</details>
+
+<details>
+<summary>Raw probe output</summary>
+
+```text
+procedural cruise ./build/rib_probe-r11 assets/storm3.glb --no-clip
+beat: procedural
+side 0 rib 0: nearest the centre plane +3.307 m at phase 0.91
+side 0 rib 1: nearest the centre plane +2.136 m at phase 0.70
+side 0 rib 2: nearest the centre plane +0.581 m at phase 0.70
+side 0 rib 3: nearest the centre plane +0.272 m at phase 0.69
+side 1 rib 0: nearest the centre plane +3.415 m at phase 0.89
+side 1 rib 1: nearest the centre plane +2.126 m at phase 0.70
+side 1 rib 2: nearest the centre plane +0.581 m at phase 0.70
+side 1 rib 3: nearest the centre plane +0.281 m at phase 0.69
+wing's highest skin: +4.89 m above the back at phase 0.04
+wing's lowest skin: -2.55 m from the belly at phase 0.48 (negative is below it)
+under the belly: nearest the centre plane +2.66 m at phase 0.61
+
+procedural climb ./build/rib_probe-r11 assets/storm3.glb --no-clip --climb
+beat: procedural
+side 0 rib 0: nearest the centre plane +3.363 m at phase 0.00
+side 0 rib 1: nearest the centre plane +2.007 m at phase 0.69
+side 0 rib 2: nearest the centre plane +0.482 m at phase 0.70
+side 0 rib 3: nearest the centre plane +0.253 m at phase 0.72
+side 1 rib 0: nearest the centre plane +3.458 m at phase 0.54
+side 1 rib 1: nearest the centre plane +1.998 m at phase 0.69
+side 1 rib 2: nearest the centre plane +0.485 m at phase 0.70
+side 1 rib 3: nearest the centre plane +0.261 m at phase 0.72
+wing's highest skin: +4.87 m above the back at phase 0.04
+wing's lowest skin: -3.19 m from the belly at phase 0.46 (negative is below it)
+under the belly: nearest the centre plane +2.23 m at phase 0.61
+
+clip cruise ./build/rib_probe-r11 assets/storm3.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+side 0 rib 0: nearest the centre plane +4.600 m at phase 0.02
+side 0 rib 1: nearest the centre plane +4.183 m at phase 0.02
+side 0 rib 2: nearest the centre plane +2.300 m at phase 0.02
+side 0 rib 3: nearest the centre plane +1.151 m at phase 0.02
+side 1 rib 0: nearest the centre plane +4.695 m at phase 0.02
+side 1 rib 1: nearest the centre plane +4.364 m at phase 0.02
+side 1 rib 2: nearest the centre plane +2.360 m at phase 0.02
+side 1 rib 3: nearest the centre plane +1.230 m at phase 0.02
+wing's highest skin: +4.06 m above the back at phase 0.06
+wing's lowest skin: +0.85 m from the belly at phase 0.54 (negative is below it)
+under the belly: no wing skin more than 0.5 m below it
+
+clip climb ./build/rib_probe-r11 assets/storm3.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb --climb
+beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+side 0 rib 0: nearest the centre plane +4.239 m at phase 0.02
+side 0 rib 1: nearest the centre plane +3.827 m at phase 0.02
+side 0 rib 2: nearest the centre plane +1.980 m at phase 0.02
+side 0 rib 3: nearest the centre plane +0.876 m at phase 0.02
+side 1 rib 0: nearest the centre plane +4.348 m at phase 0.02
+side 1 rib 1: nearest the centre plane +4.015 m at phase 0.02
+side 1 rib 2: nearest the centre plane +2.045 m at phase 0.02
+side 1 rib 3: nearest the centre plane +0.946 m at phase 0.02
+wing's highest skin: +4.44 m above the back at phase 0.09
+wing's lowest skin: +0.48 m from the belly at phase 0.57 (negative is below it)
+under the belly: no wing skin more than 0.5 m below it
+```
+
+</details>
+
 ## Reproduce the checks
 
 Run these commands from this worktree. Replace `tide2` with `storm3` for the wyvern.
-The generator uses Blender. The sheet tools use Python with Pillow and NumPy.
+A fresh Blender export matched each delivered GLB byte for byte. The sheet tools use Python with Pillow and NumPy.
 
 ```sh
 /opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 --python tools/clips/make_wingbeat.py -- tide2 --measure

@@ -284,18 +284,33 @@ def section_edges(studio, wing):
 def chord_sections(sample, wing, edges):
     """Measure side-view chords between the front and rear skin at a common X."""
     a, b = sample.positions[edges[:, 0]], sample.positions[edges[:, 1]]
-    low, high = np.minimum(a[:, 0], b[:, 0]), np.maximum(a[:, 0], b[:, 0])
     start = sample.heads[wing.ribs[0][0], 0]
-    end = high.max() if wing.sign > 0 else low.min()
-    for station in range(1, 40):
-        fraction = station / 40
-        x = start + (end-start)*fraction
-        mask = (low < x) & (x <= high)
-        p, q = a[mask], b[mask]
-        u = (x-p[:, 0])/(q[:, 0]-p[:, 0])
-        cuts = p + u[:, None]*(q-p)
-        chord = cuts[cuts[:, 2].argmax()] - cuts[cuts[:, 2].argmin()]
-        yield abs(math.degrees(math.atan2(chord[1], chord[2]))), fraction
+    end = (max(a[:, 0].max(), b[:, 0].max()) if wing.sign > 0
+           else min(a[:, 0].min(), b[:, 0].min()))
+    station_count = 1000
+    # Each edge contributes to the stations between its two endpoints.
+    step = (end-start)/station_count
+    station_a = np.floor((a[:, 0]-start)/step).astype(int).clip(0, station_count-1)
+    station_b = np.floor((b[:, 0]-start)/step).astype(int).clip(0, station_count-1)
+    counts = np.abs(station_a-station_b)
+    edge = np.repeat(np.arange(len(a)), counts)
+    first = np.minimum(station_a, station_b)+1
+    offsets = np.cumsum(counts)-counts
+    stations = np.arange(len(edge)) + np.repeat(first-offsets, counts)
+    p, q = a[edge], b[edge]
+    u = (start+step*stations-p[:, 0])/(q[:, 0]-p[:, 0])
+    y = p[:, 1]+u*(q[:, 1]-p[:, 1])
+    z = p[:, 2]+u*(q[:, 2]-p[:, 2])
+    front, rear = np.full(station_count, -np.inf), np.full(station_count, np.inf)
+    np.maximum.at(front, stations, z)
+    np.minimum.at(rear, stations, z)
+    front_y, rear_y = np.zeros(station_count), np.zeros(station_count)
+    at_front, at_rear = z == front[stations], z == rear[stations]
+    front_y[stations[at_front]] = y[at_front]
+    rear_y[stations[at_rear]] = y[at_rear]
+    angles = np.abs(np.rad2deg(np.arctan2(front_y[1:]-rear_y[1:], front[1:]-rear[1:])))
+    index = int(angles.argmax())
+    return angles[index], (index+1)/station_count
 
 
 def metrics(studio, climb):
@@ -342,11 +357,11 @@ def metrics(studio, climb):
     if studio.model == 'storm3':
         for wing in studio.wings:
             edges = section_edges(studio, wing)
-            worst = max((angle, s.phase, fraction) for s in samples
-                        for angle, fraction in chord_sections(s, wing, edges))
+            sections = [(chord_sections(s, wing, edges), s.phase) for s in samples]
+            (angle, fraction), phase = max(sections)
             side = 'right' if wing.sign > 0 else 'left'
-            print(f'{side} steepest skin chord {worst[0]:.2f} deg at phase {worst[1]:.3f}, '
-                  f'{worst[2]:.1%} of outer hand width')
+            print(f'{side} steepest skin chord {angle:.2f} deg at phase {phase:.3f}, '
+                  f'{fraction:.1%} of outer hand width across 999 cuts')
 
 
 if __name__ == '__main__':

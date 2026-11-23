@@ -11,8 +11,8 @@ wing_finger_1tip_r high and low phases 0.074 0.556
 wing_finger_2tip_r high and low phases 0.074 0.556
 wing_finger_3tip_r high and low phases 0.074 0.556
 wing_finger_4tip_r high and low phases 0.074 0.556
-right steepest skin chord 24.11 deg at phase 0.222, 95.0% of outer hand width
-left steepest skin chord 23.65 deg at phase 0.204, 95.0% of outer hand width
+right steepest skin chord 28.37 deg at phase 0.444, 99.9% of outer hand width across 999 cuts
+left steepest skin chord 28.29 deg at phase 0.537, 99.9% of outer hand width across 999 cuts
 Climb studio frames 240 to 359
 right rib minima in metres 4.239 3.827 1.980 0.876
 left rib minima in metres 4.348 4.015 2.045 0.946
@@ -26,5 +26,5 @@ wing_finger_1tip_r high and low phases 0.111 0.593
 wing_finger_2tip_r high and low phases 0.111 0.593
 wing_finger_3tip_r high and low phases 0.111 0.574
 wing_finger_4tip_r high and low phases 0.093 0.574
-right steepest skin chord 27.01 deg at phase 0.185, 92.5% of outer hand width
-left steepest skin chord 26.76 deg at phase 0.204, 95.0% of outer hand width
+right steepest skin chord 29.11 deg at phase 0.204, 91.3% of outer hand width across 999 cuts
+left steepest skin chord 28.61 deg at phase 0.241, 91.2% of outer hand width across 999 cuts
