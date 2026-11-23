@@ -341,13 +341,23 @@ Options parse_options(int argc, char** argv) {
             options.bind_pose = true;
         } else if (arg == "--inspect") {
             options.inspect = true;
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
+            // A number, and not the next flag: "-25" is an elevation from
+            // below. Until 2026-11-22 anything with a leading minus was
+            // taken for a flag, so a negative elevation was dropped and
+            // the view came from the default 14.5 degrees above: every
+            // "from below" capture, and the feedback tool's own command
+            // for a camera under the dragon.
+            const auto number = [](const char* text) {
+                const char* digits = text[0] == '-' ? text + 1 : text;
+                return (digits[0] >= '0' && digits[0] <= '9') || digits[0] == '.';
+            };
+            if (i + 1 < argc && number(argv[i + 1])) {
                 options.inspect_angle_deg = float(SDL_atof(argv[++i]));
             }
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
+            if (i + 1 < argc && number(argv[i + 1])) {
                 options.inspect_distance = float(SDL_atof(argv[++i]));
             }
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
+            if (i + 1 < argc && number(argv[i + 1])) {
                 options.inspect_elevation_deg = float(SDL_atof(argv[++i]));
             }
         } else if (arg == "--inspect-head") {

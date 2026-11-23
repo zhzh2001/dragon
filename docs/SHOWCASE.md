@@ -101,6 +101,18 @@ Playtest panel's "keyframed wingbeat" compares the two. The rig has the
 three keys storm3 lacked, and a probe keeps every new wing off the
 spine. The start screen has the rivals' skill and the aim assist.
 
+The eleventh round (2026-11-22, 23:55). Keyframes went further: five
+body loops on the hero (the neck, tail and legs in the beat, the glide,
+the walk and standing) and wingbeats for tide2 and storm3, authored
+inside limits a probe measures (`docs/ANIMATION.md`, the last two
+sections). Storm3's inner wing panels were repaired. The gold and
+silver studies got the tucked legs, folded wings and shallow beat the
+others have (`docs/MODEL_GENERATION.md`, the last two sections). A
+liquid breath's stream is no longer drawn, only its drops and spray
+(`docs/showcase/EFFECTS.md`, "The liquids without a body").
+`docs/showcase/PLAYTEST.md`, "The eleventh round", has what to
+playtest.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

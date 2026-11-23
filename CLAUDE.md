@@ -100,7 +100,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--telemetry [N]` | Log one line of flight state every N frames (default 60), plus a combat line (health, kills, bites swung/landed/taken) when combat is on. A screenshot shows a pose; this shows the state machine behind it. |
 | `--cam x,y,z,tx,ty,tz` | Place the camera at a position looking at a target. |
 | `--cam-mode chase\|action\|cinematic\|fp` | Pick a camera preset. |
-| `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon. Elevation 88 looks straight down -- the only view that shows a lateral tail wave. |
+| `--inspect [angle] [dist] [elev]` | Orbit camera locked to the dragon. Elevation 88 looks straight down -- the only view that shows a lateral tail wave. A negative elevation looks from below (dropped until 2026-11-22: a capture "from below" made before then is from 14.5 degrees above). |
 | `--inspect-head` | With `--inspect`, orbit the ANIMATED head instead of the body (jaw, aim). |
 | `--skeleton` | Draw the posed joints as lines, to tell a rig problem from a skinning one. |
 | `--bind-pose` | Freeze the rig, to check an imported asset against its own bind pose. |
@@ -461,6 +461,8 @@ flight controls.
   | author a keyframed wingbeat (a cruise and a climb loop) for the hero, with a checker and 63 engine views, gpt-6.2-astra high, 2026-11-22 | 400,665 |
   | keyframed wingbeats for two more dragons inside probe-measured limits, a shared generator and checker, 312 engine views, gpt-6.2-astra high, 2026-11-22 | 411,644 |
   | five keyframed body loops for the hero (beat, climb, glide, walk, stand), a checker, probe charts, 267 engine views, gpt-6.2-astra high, 2026-11-22 | 387,772 |
+  | a profile pass on two old dragons (legs, standing fold, beat) and a weight repair on one, gpt-6.2-astra high, 2026-11-22 | 613,739 |
+  | find and repair crossing skins and wrong normals in one wing panel, four rounds, gpt-6.2-astra high, 2026-11-22 | 514,324 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**

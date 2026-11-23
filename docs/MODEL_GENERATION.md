@@ -2491,3 +2491,84 @@ round missed it. The strokes I had raised crossed at the top:
 | the hero, procedural | clear | none | 0.11 m |
 
 `beat-clear-of-the-spine.jpg` there has the three changed beats.
+
+### Storm3's inner wing panels (2026-11-22, 23:40)
+
+With the keyframed beat the wing stays open, and the panel between the
+innermost rib and the flank showed as a pale sheet with ragged dark
+patches and a straight trailing edge. Codex (gpt-6.2-astra, high,
+514,324 tokens, 34 minutes, `tools/showcase/storm3-inner-panel-brief.md`)
+measured the cause before it changed anything:
+
+- The upper and lower skins of the panel crossed during the beat: no
+  crossing in the bind pose, up to 244 crossing pairs of triangles in a
+  cruise frame.
+- Some shading normals pointed away from the face they belonged to. The
+  shader turns a normal that faces away from the viewer, which put a
+  dark triangle beside a pale one.
+- The paint was not the cause: both faces have the same colour within
+  three levels.
+
+It reshaped the panel, changed its weights and fitted its normals
+(`tools/storm3_panel_*.py`, `artifacts/storm3/pass3/README.md`). Peak
+crossings fell from 248 to 8 in the keyframed beat and from 581 to 46
+in the procedural one. The flap check still reports no body vertex
+moving with the wings, and the wing probe's numbers under the clip are
+unchanged.
+
+`artifacts/storm3/pass3/six-views-before-over-after.jpg` is mine: the
+playtester's report view at two phases, the panel from above, standing
+from the side and behind, and the glide from behind. The torn patch is
+gone from the report view and the trailing edge curves. Standing looks
+the same.
+
+Left: a small dark sliver from a low camera, crossings in the
+procedural recovery, and a dark crease standing that Codex judged
+wider and I could not tell apart at 14 m.
+
+The job also found an engine fault. `--inspect A D E` dropped a
+negative elevation, because any argument with a leading minus was taken
+for the next flag. Every "from below" capture, and the feedback tool's
+own command for a camera under the dragon, rendered from 14.5 degrees
+above. A number with a minus is read as a number now.
+
+### Gold and silver, a third pass (2026-11-22, 23:50)
+
+The playtester: "gold/silver also needs new iteration of fixes." Both
+ran on the profiles of 2026-10-03: legs hanging, standing wings open,
+a beat that covered the chest. Codex (gpt-6.2-astra, high, 613,739
+tokens, 56 minutes, `tools/showcase/gold-silver-pass3-brief.md`) tuned
+both profiles in `assets/species/` and repaired silver's weights.
+
+| | Silver | Gold |
+|---|---|---|
+| Legs in flight | `leg_flight_pose`: hind 42, 12, 28 degrees, fore 31, 48, 23, on the hero's springs | Hind 36, 10, 26, fore 42, 64, 26 |
+| Standing wings | `ground_wing_aim`: arm 81, forearm -73, hand 90, fan 8. They lie along the flanks | The same kind of fold with a fan of 8. The sails close against the sides |
+| The beat | Up 36, cruise down -15, climb -24. Highest skin 4.83 to 2.65 m above the back. Lowest skin 1.0 m above the belly | Lowest skin from 1.53 m below the belly to 0.57 m above it |
+| Nearest rib to the centre plane | 0.68 to 1.02 m | 0.78 to 0.82 m |
+| Trunk in the glide | 16.5 to 5.4 degrees nose up, by the neck's and the tail's rest pose | Unchanged |
+
+Silver's two rods were two faults. Standing, the chest held vertices
+of each innermost sail tip, and the fold stretched one edge by 1.87 m.
+In flight, the trunk held parts of both inner hind toes, and the tuck
+pulled a strip of skin off them. `tools/silver_dragon_pass3_weights.py`
+moves both to the bones they belong to. Gold's models did not change.
+
+`artifacts/silver-dragon-integration/pass3/` and
+`artifacts/gold-dragon-integration/pass3/` have Codex's sheets and
+mine (`main-session-air-before-over-after.jpg`,
+`main-session-ground-before-over-after.jpg`: the glide and the bottom
+of the beat from the side, the beat from behind, standing from the
+side and the front, the walk). Both directories stay out of the public
+mirror, as the models do.
+
+Left: silver's folded wing tips reach past the hips to the middle of
+the tail, so from behind the wings and the tail read as one long slab.
+Silver still flies 5 degrees nose up: the engine has no key for the
+trunk's pitch in flight alone. Gold's tail rides low behind the hips,
+and its cheek has colour seams. Neither has a keyframed wingbeat.
+
+The models these two repairs replaced are kept outside the repository,
+in `~/src/game-claude-wt/r11-originals/` (storm3 and silver-dragon,
+repaired and raw). Silver's rebuild steps start from its October files,
+which are the two there.

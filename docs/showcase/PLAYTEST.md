@@ -890,3 +890,63 @@ not run it); the menu by hand.
 
 Seen and not fixed: a crease near the hero's wrist under the clip; the
 other dragons have no clip.
+
+## The eleventh round: keyframes on the body and on two more dragons, gold and silver, the liquids (2026-11-22, 23:55)
+
+The user: "keyframe looks a bit better, try on legs/tails/neck/etc. and
+on another problematic dragon (likely tide). gold/silver also needs new
+iteration of fixes. please remember to summarize what to playtest each
+time. bug: paused in menu still triggers attack on left click. check
+feedbacks, storm might also benefit from codex fix".
+
+Five reports, 0033 to 0037:
+
+| Report | Note | Answer |
+|---|---|---|
+| 0033, the blight's stream | "liquids look strange, either fix or remove" | Removed. The stream's body is not drawn; its drops and spray are the breath (`EFFECTS.md`, "The liquids without a body") |
+| 0034, the tide's stream | "similar, bad when turning due to inertia?" | The same |
+| 0035, tide2 at the bottom of the beat | "low reach still too low and overlapping" | A keyframed wingbeat. The wing's lowest skin went from 3.3 m under the belly to 0.3 m |
+| 0036, tide2 at the top | "high reach also clipping" | The same clip. The nearest rib to the centre plane went from 0.18 m to 1.41 m |
+| 0037, storm3 at the bottom | "also a bit too low and folding wings in air is weird" | A keyframed wingbeat. The hand stays spread, and the wing stays above the belly. Then the inner wing panel, repaired |
+
+| Ask | Answer |
+|---|---|
+| Keyframes on legs, tails, neck | Five loops on the hero: the beat, the climb beat, the glide, the walk, standing (`ANIMATION.md`, "Keyframed body loops"). "keyframed body" in the Playtest panel |
+| Another problematic dragon | tide2 and storm3 (`ANIMATION.md`, "Keyframed wingbeats for tide2 and storm3") |
+| Gold and silver | Tucked legs, folded standing wings, a shallower beat, silver's two rods and its nose-up glide (`MODEL_GENERATION.md`, "Gold and silver, a third pass") |
+| Summarize what to playtest | Every report ends with the list now |
+| A click in the paused menu attacks | Fixed (`DIRECTION.md`, "A click on the screen breathed") |
+
+Four Codex jobs ran, two at a time, on the work account: 411,644,
+387,772, 613,739 and 514,324 tokens.
+
+### What was checked and what was not
+
+Checked by render, mine, on the merged build: tide2 and storm3 from
+the playtester's own three cameras with and without the clips; the
+hero's body with and without the loops in six views; storm3's panel in
+six; gold and silver in twelve views each before and after; all three
+landed in the game. Checked by number: the wing probe on every clip,
+cruise and climb. The 28 suites and the eight goldens pass. A course
+soak switched between five models every four seconds.
+
+Not checked: anything in motion, which is what keyframes are for. The
+menu click by hand. The XP and Windows builds were built and not run.
+
+### What to playtest
+
+1. The hero in practice: "keyframed body" at the top of the Playtest
+   panel, between 0 and 1, while flapping. The tail's wave and the hind
+   legs' kick. In a climb, whether the tail's curl is too much.
+2. The hero landed: stand for ten seconds (the head turns, the
+   shoulders breathe), then walk (the neck dips, the tail swings).
+   Whether the loops read as alive or as a habit that repeats.
+3. Deepwake and Squallfin in the studio's flap: "keyframed wingbeat"
+   between 0 and 1. The bottom of the beat from the side and the top
+   from above. Whether the beat is now too shallow.
+4. Squallfin's inner wing, beside the body, through the beat.
+5. The tide and the blight breath (U in the arena), held through a
+   turn: whether drops and spray without a stream will do.
+6. The silver and the gold dragon (M in practice): legs in flight,
+   the bottom of the beat, the wings landed.
+7. Esc over a game, click rows and Resume: no breath.
