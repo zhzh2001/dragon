@@ -617,6 +617,16 @@ and the wilds at frame 150.
 Not checked: a hand on the keys or the mouse. The seed's typing, the
 page links by click and the gamepad are untested code.
 
+### A click on the screen breathed (2026-11-22, 21:45)
+
+The user: "bug: paused in menu still triggers attack on left click."
+The screen over a game holds the world, but the combat input was still
+read each frame, and the left button is the breath. A click on a row
+also breathed, and a click on Resume went on breathing while the button
+was down. The screen now returns no combat input, and the click that
+closes it counts again only once the button has come up
+(`menu_click_held_`). Read from the code and built. Not clicked by hand.
+
 ## Where the later discussions went (2026-11-22)
 
 This file grew three discussions on its end. They have their own files

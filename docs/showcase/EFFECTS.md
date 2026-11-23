@@ -917,3 +917,33 @@ how far it went. Each arc now ends in a flash 2.6 m across with two
 sparks off it. A flash has a size on the screen, and so a distance.
 Not judged in motion.
 
+## The liquids without a body (2026-11-22, 22:20)
+
+Feedback 0033, on the blight: "liquids look strange, either fix or
+remove". 0034, on the tide: "similar, bad when turning due to inertia?"
+
+Both frames show the stream: one tube through the slugs
+(`breath_stream.hlsl`). From the side the tide's was a flat blue plank.
+The blight's, in a turn, was a wavy green ribbon. Each node of the tube
+is a slug that flies on where it was thrown. In a turn the nodes fan
+out, and a tube through them all bends as no water does.
+
+Two things were tried.
+
+| Trial | Result |
+|---|---|
+| Each slug as a gob of its own, long in its flight | A string of pale beads, evenly spaced. No better |
+| No body: the drops the slugs shed, and the spray | Kept. A pale spray with white drops for the tide, green gas with drops for the blight |
+
+So the liquid is removed and its drops stay. The slugs still fly: they
+carry the damage, shed the drops and make the marks. They are not
+drawn. `--breath stream_tube=1` and the Playtest panel's "a liquid as
+one tube" bring the tube back.
+
+`artifacts/breath/liquids-tube-above-drops-below.jpg`: the tide and the
+blight from the side, the tube above and the drops below.
+
+What is weak: from the side the tide now reads as spray more than as
+water. A stream that reads as water needs a body that breaks up
+(sheets, strings and drops, by its own speed), which is its own piece
+of work. Not judged in motion.
