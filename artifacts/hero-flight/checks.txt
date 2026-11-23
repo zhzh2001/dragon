@@ -34,15 +34,15 @@ PASS 6 flap_climb tip 2 height reversal lags 7/60 and 7/60
 PASS 6 flap_climb tip 3 height reversal lags 7/60 and 7/60
 PASS 7 flap_climb elbow fold 44.57 deg at 41/60, 0.86 at 57/60
 PASS 7 flap_climb wrist fold 64.46 deg at 41/60, 1.22 at 57/60
-PASS 8 flap_climb largest step 8.49 deg on wing_arm_r
+PASS 8 flap_climb largest step 8.62 deg on wing_finger_3a_r
 PASS 9 flap_climb arm high 64.79 deg
 PASS 9 flap_climb arm depth 60.09 deg
 PASS 9 flap_climb elbow fold 44.57 deg
 PASS 9 flap_climb wrist fold 64.46 deg
 PASS 9 flap_climb forward sweep 25.00 deg
 PASS 9 flap_climb pitch down 12.93 deg
-PASS 9 flap_climb finger closure 17.30 deg
-PASS 9 flap_climb loaded outer wing 23.59 deg above arm at 15/60
-PASS 9 flap_climb recovery pitch 11.99, hand-to-tip elevation -67.54 deg
+PASS 9 flap_climb finger closure 16.08 deg
+PASS 9 flap_climb loaded outer wing 18.85 deg above arm at 15/60
+PASS 9 flap_climb recovery pitch 11.99, hand-to-tip elevation -73.97 deg
 PASS 9 flap_climb wrist moves 1.223 m toward nose during downstroke
 PASS 9 climb exceeds cruise at both reversals and both hinges

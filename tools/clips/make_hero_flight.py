@@ -104,7 +104,7 @@ def height_keys(t, climb, wrist, ray=0):
                          (.67, -.16), (.80, 1.23), (.95, 2.38)])
     top = (7/60 if climb else 5/60)
     bottom = .5 + top
-    heights = ([(7.20, -5.45), (5.86, -4.62), (3.53, -2.85)] if climb else
+    heights = ([(7.20, -6.45), (5.86, -5.42), (3.53, -3.46)] if climb else
                [(6.80, -6.02), (5.45, -5.10), (3.28, -3.35)])
     high, low = heights[ray-1]
     weight = curve(t, [(0, .946), (top, 1), (.19, .78), (.25, .55),
