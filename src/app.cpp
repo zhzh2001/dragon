@@ -4912,6 +4912,13 @@ void App::build_playtest_ui() {
         ImGui::SetItemTooltip(dragon_rig_.has_flight_clips()
                                   ? "1: the authored wingbeat clip. 0: the procedural beat. Watch it in the studio's flap."
                                   : "This dragon has no wingbeat clip (assets/clips/<model>.flight.glb).");
+        ImGui::BeginDisabled(!dragon_rig_.has_body_clips());
+        ImGui::SliderFloat("keyframed body", &rig.body_clip, 0.0f, 1.0f, "%.2f");
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip(dragon_rig_.has_body_clips()
+                                  ? "1: the authored loops on the neck, the tail and the legs (in the beat, the glide, "
+                                    "the walk, standing). 0: the procedural body alone."
+                                  : "This dragon has no body clips (assets/clips/<model>.body.glb).");
     }
     if (ImGui::CollapsingHeader("The wilds", wilds_mode_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
         wilds_controls();
@@ -5450,6 +5457,12 @@ void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const 
         return i >= 0 && size_t(i) < model.flight_clips.size() ? &model.flight_clips[size_t(i)] : nullptr;
     };
     rig.set_flight_clips(flight(0), flight(1));
+    const anim::AnimationClip* body[anim::DragonRig::BODY_CLIP_COUNT] = {};
+    for (int k = 0; k < anim::DragonRig::BODY_CLIP_COUNT; ++k) {
+        const int i = model.body_clip[k];
+        if (i >= 0 && size_t(i) < model.body_clips.size()) body[k] = &model.body_clips[size_t(i)];
+    }
+    rig.set_body_clips(body);
 }
 
 void App::find_wingtips(LoadedModel& model) {
@@ -5681,6 +5694,26 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
             }
             LOG_INFO("flight clips: %zu in %s (flap %s, flap_climb %s)", out.flight_clips.size(), flight_path.c_str(),
                      out.flight_clip[0] >= 0 ? "yes" : "no", out.flight_clip[1] >= 0 ? "yes" : "no");
+        }
+        // The keyframed body loops (DragonRig::set_body_clips), the same
+        // way: clips/<model>.body.glb, or DRAGON_BODY_CLIPS=path.
+        const char* body_override = SDL_getenv("DRAGON_BODY_CLIPS");
+        const std::string body_path =
+            body_override && *body_override ? std::string(body_override) : core::paths::asset("clips/" + stem + ".body.glb");
+        if (out.joints.valid() && std::filesystem::exists(body_path)) {
+            static const char* const kBodyClipNames[anim::DragonRig::BODY_CLIP_COUNT] = {
+                "flap_body", "flap_climb_body", "glide", "walk", "stand"};
+            out.body_clips = anim::load_clip_file(body_path.c_str(), out.skeleton);
+            std::string found;
+            for (size_t i = 0; i < out.body_clips.size(); ++i) {
+                for (int k = 0; k < anim::DragonRig::BODY_CLIP_COUNT; ++k) {
+                    if (out.body_clips[i].name != kBodyClipNames[k]) continue;
+                    out.body_clip[k] = int(i);
+                    found += found.empty() ? "" : ", ";
+                    found += kBodyClipNames[k];
+                }
+            }
+            LOG_INFO("body clips: %zu in %s (%s)", out.body_clips.size(), body_path.c_str(), found.c_str());
         }
     }
 

@@ -305,6 +305,13 @@ struct RigTuning {
     // sees and the thrust it makes still cannot disagree.
     float flap_clip = 1.0f;
     float flap_clip_under = 0.0f;
+    // The keyframed body loops' weight (set_body_clip): what the neck, the
+    // tail and the legs do in the beat, in the glide, in the walk and
+    // standing. They are added onto the finished pose, so the springs, the
+    // head's aim and the planted feet stay under them. The one procedural
+    // term that yields is the tail's wave in the beat (tail_beat_deg), which
+    // a keyed tail replaces.
+    float body_clip = 1.0f;
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -1029,6 +1036,26 @@ public:
         flight_clip_[1] = climb;
     }
     bool has_flight_clips() const { return flight_clip_[0] || flight_clip_[1]; }
+    // Keyframed loops for the rest of the body (RigTuning::body_clip), each
+    // optional, none owned:
+    //   BODY_FLAP, BODY_FLAP_CLIMB  one wingbeat, sampled at the flap phase
+    //                               as the wing clips are, by the effort
+    //   BODY_GLIDE                  played on the clock while gliding
+    //   BODY_WALK                   one stride cycle, sampled at the walk's
+    //                               own phase: 0 as the right hind and left
+    //                               fore feet lift, 0.5 as the other pair do
+    //   BODY_STAND                  played on the clock while standing
+    // The two on the ground must not key a joint the feet hang from (the
+    // root, the spine, the legs): the feet are planted before a clip is
+    // added, and such a key would slide them.
+    enum BodyClip { BODY_FLAP, BODY_FLAP_CLIMB, BODY_GLIDE, BODY_WALK, BODY_STAND, BODY_CLIP_COUNT };
+    void set_body_clips(const AnimationClip* const clips[BODY_CLIP_COUNT]) {
+        for (int i = 0; i < BODY_CLIP_COUNT; ++i) body_clip_[i] = clips ? clips[i] : nullptr;
+    }
+    bool has_body_clips() const {
+        for (const AnimationClip* clip : body_clip_) if (clip) return true;
+        return false;
+    }
     void update(const game::FlightState& state, float dt);
 
     // A chain simulated as point masses in the dragon's own frame.
@@ -1223,6 +1250,9 @@ private:
     const AnimationClip* attack_clip_[ATTACK_CLIP_COUNT] = {};
     const AnimationClip* flight_clip_[2] = {};  // cruise, climb
     float flight_clip_share_ = 0.0f;            // this frame's weight of the keyframed beat, 0..1
+    const AnimationClip* body_clip_[BODY_CLIP_COUNT] = {};
+    float body_beat_share_ = 0.0f;  // this frame's weight of the body's keyframed beat
+    float body_clock_ = 0.0f;       // seconds, for the loops that play on the clock
     float joints_under_clip() const;
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();

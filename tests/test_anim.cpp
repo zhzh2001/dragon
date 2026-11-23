@@ -2413,6 +2413,71 @@ void test_flight_clip_replaces_the_beat() {
     travel(nullptr, 1.0f, 1.0f, 1.0f, &b);
     CHECK(length(a - b) < 0.05f);
 }
+void test_body_clips_play_in_their_states() {
+    std::printf("keyframed body loops: the beat's in the beat, the glide's in the glide, none at weight 0\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    const int base = joints.tail.front();
+    const int tip = joints.tail.back();
+
+    // The tail's base turned 20 degrees at the half beat, and a glide loop
+    // that holds it turned the other way throughout.
+    anim::AnimationClip beat, glide;
+    beat.name = "flap_body";
+    beat.duration = 1.0f;
+    glide.name = "glide";
+    glide.duration = 4.0f;
+    anim::RotationTrack track;
+    track.joint = base;
+    track.times = {0.0f, 0.5f, 1.0f};
+    track.rotations = {Quat::identity(), Quat::from_axis_angle(Vec3::unit_x(), radians(20.0f)), Quat::identity()};
+    beat.tracks.push_back(track);
+    track.times = {0.0f, 2.0f, 4.0f};
+    const Quat held = Quat::from_axis_angle(Vec3::unit_y(), radians(15.0f));
+    track.rotations = {held, held, held};
+    glide.tracks.push_back(track);
+
+    auto tip_at = [&](bool with_clips, float weight, float phase, float amplitude) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.tail_beat_deg = 0.0f;  // the procedural wave has its own test
+        rig.tuning.body_clip = weight;
+        const anim::AnimationClip* clips[anim::DragonRig::BODY_CLIP_COUNT] = {};
+        if (with_clips) {
+            clips[anim::DragonRig::BODY_FLAP] = &beat;
+            clips[anim::DragonRig::BODY_GLIDE] = &glide;
+        }
+        rig.set_body_clips(clips);
+        game::FlightState state;
+        state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        state.airspeed = 30.0f;
+        state.ground_clearance = 300.0f;
+        state.flap_phase = phase;
+        state.flap_amplitude = amplitude;
+        for (int k = 0; k < 240; ++k) rig.update(state, 1.0f / 60.0f);
+        return rig.world_matrices()[size_t(tip)].col[3].xyz();
+    };
+    const Vec3 plain_beat = tip_at(false, 1.0f, 0.5f, 1.0f);
+    const Vec3 keyed_beat = tip_at(true, 1.0f, 0.5f, 1.0f);
+    const Vec3 keyed_top = tip_at(true, 1.0f, 0.0f, 1.0f);
+    const Vec3 plain_top = tip_at(false, 1.0f, 0.0f, 1.0f);
+    const Vec3 off_beat = tip_at(true, 0.0f, 0.5f, 1.0f);
+    const Vec3 plain_glide = tip_at(false, 1.0f, 0.5f, 0.0f);
+    const Vec3 keyed_glide = tip_at(true, 1.0f, 0.5f, 0.0f);
+    std::printf("  tail tip moved by the beat's clip %.2f, by the glide's %.2f\n",
+                double(length(keyed_beat - plain_beat)), double(length(keyed_glide - plain_glide)));
+    CHECK(length(keyed_beat - plain_beat) > 0.3f);   // the beat's key at its phase
+    CHECK(length(keyed_top - plain_top) < 0.02f);    // and none of it where the clip is at rest
+    CHECK(near(off_beat, plain_beat, 1e-4f));        // weight 0: the procedural body, untouched
+    CHECK(length(keyed_glide - plain_glide) > 0.3f); // the glide's loop in a glide
+    // The two do not play at once: the glide's turn is sideways, the beat's
+    // is up and down, and a full beat has none of the sideways one.
+    CHECK(std::fabs(keyed_beat.x - plain_beat.x) < 0.02f);
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -3500,6 +3565,7 @@ int main() {
     test_body_and_wings_work_in_a_held_brake();
     test_brake_bank_overlay();
     test_flight_clip_replaces_the_beat();
+    test_body_clips_play_in_their_states();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

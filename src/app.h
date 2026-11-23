@@ -1128,6 +1128,9 @@ private:
         // wingbeat, `flap` and `flap_climb` (-1 when absent).
         std::vector<anim::AnimationClip> flight_clips;
         int flight_clip[2] = {-1, -1};
+        // The keyframed body loops (DragonRig::set_body_clips), by BodyClip.
+        std::vector<anim::AnimationClip> body_clips;
+        int body_clip[anim::DragonRig::BODY_CLIP_COUNT] = {-1, -1, -1, -1, -1};
         // Which clip serves as the ground idle, and whether it is held at one time.
         int idle_clip = -1;
         float idle_clip_hold = -1.0f;

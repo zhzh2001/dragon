@@ -8,9 +8,15 @@
 // (arcs and spacing): even dots are linear, bunched dots are an ease, a jump
 // between two dots is a pop, and parts that peak on the same frame move in
 // lockstep where they should overlap.
+// The model's keyframed clips play as they do in the app: the wingbeat from
+// <dir>/clips/<stem>.flight.glb and the body loops from <stem>.body.glb, or
+// the files DRAGON_FLIGHT_CLIPS and DRAGON_BODY_CLIPS name. Set either to
+// "none" for the procedural motion. The beat is the model's own
+// (<model>.flight.cfg).
 // usage: trace_probe <model.glb> <scenario> <from_s> <to_s> [cfg [metres_per_unit]] > out.csv
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include "anim/dragon_rig.h"
@@ -33,6 +39,32 @@ int main(int argc, char** argv) {
     rig.set_model_scale(scale);
     anim::load_rig_tuning(rig.tuning, (std::string(argv[1]) + ".rig.cfg").c_str());
     if (argc > 5 && argv[5][0] != '-') anim::load_rig_tuning(rig.tuning, argv[5]);
+    const std::string model = argv[1];
+    const size_t slash = model.find_last_of('/');
+    const std::string dir = slash == std::string::npos ? std::string(".") : model.substr(0, slash);
+    std::string stem = slash == std::string::npos ? model : model.substr(slash + 1);
+    if (stem.size() > 4) stem.resize(stem.size() - 4);
+    auto clip_file = [&](const char* variable, const char* suffix) {
+        const char* named = std::getenv(variable);
+        const std::string path = named && *named ? std::string(named) : dir + "/clips/" + stem + suffix;
+        std::vector<anim::AnimationClip> clips;
+        if (path != "none") clips = anim::load_clip_file(path.c_str(), s);
+        std::fprintf(stderr, "%s: %zu clips from %s\n", variable, clips.size(), path.c_str());
+        return clips;
+    };
+    const std::vector<anim::AnimationClip> flight_clips = clip_file("DRAGON_FLIGHT_CLIPS", ".flight.glb");
+    const std::vector<anim::AnimationClip> body_clips = clip_file("DRAGON_BODY_CLIPS", ".body.glb");
+    auto named = [](const std::vector<anim::AnimationClip>& clips, const char* name) -> const anim::AnimationClip* {
+        for (const anim::AnimationClip& c : clips) if (c.name == name) return &c;
+        return nullptr;
+    };
+    rig.set_flight_clips(named(flight_clips, "flap"), named(flight_clips, "flap_climb"));
+    const anim::AnimationClip* body[anim::DragonRig::BODY_CLIP_COUNT] = {
+        named(body_clips, "flap_body"), named(body_clips, "flap_climb_body"), named(body_clips, "glide"),
+        named(body_clips, "walk"), named(body_clips, "stand")};
+    rig.set_body_clips(body);
+    game::FlightTuning flight;
+    game::load_tuning(flight, (model + ".flight.cfg").c_str());
     const auto scenario = game::StudioScenario(std::atoi(argv[2]));
     const float from = float(std::atof(argv[3])), to = float(std::atof(argv[4]));
 
@@ -46,6 +78,9 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < j.leg[0].size(); ++i) track.push_back({"leg" + std::to_string(i), j.leg[0][i]});
     for (size_t i = 0; i < j.front_leg[0].size(); ++i)
         track.push_back({"arm" + std::to_string(i), j.front_leg[0][i]});
+    // The left pair too: a loop on the clock need not be a mirror.
+    if (!j.leg[1].empty()) track.push_back({"left_foot", j.leg[1].back()});
+    if (!j.front_leg[1].empty()) track.push_back({"left_hand", j.front_leg[1].back()});
     int wing_tip = j.wing_root[0].back();
     size_t longest = 0;
     for (const auto& f : j.wing_fingers[0])
@@ -60,7 +95,7 @@ int main(int argc, char** argv) {
     float previous = 0.0f;
     for (int i = 0; float(i) * dt <= to; ++i) {
         const float t = float(i) * dt;
-        const game::FlightState st = game::studio_state(scenario, t, centre, 0.0f, 4.0f);
+        const game::FlightState st = game::studio_state(scenario, t, centre, 0.0f, 4.0f, &flight);
         if (scenario == game::StudioScenario::Attack) {
             rig.set_aim_target(game::studio_attack_target(t, centre));
         } else if (scenario == game::StudioScenario::Melee || scenario == game::StudioScenario::Claw ||

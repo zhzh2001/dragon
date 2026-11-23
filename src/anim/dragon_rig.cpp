@@ -515,6 +515,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(attack_clip_under),
     RIG_FLOAT_FIELD(flap_clip),
     RIG_FLOAT_FIELD(flap_clip_under),
+    RIG_FLOAT_FIELD(body_clip),
     RIG_FLOAT_FIELD(clip_overlay_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
@@ -1044,6 +1045,10 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                                    (1.0f - core::saturate(state.wing_tuck)) * (1.0f - stow);
     const float beat_keep = 1.0f - flap_clip_weight * (1.0f - core::saturate(tuning.flap_clip_under));
     flight_clip_share_ = flap_clip_weight * core::saturate(state.flap_amplitude);
+    // The body's keyframed beat has the same gate, and its own weight.
+    body_beat_share_ = (body_clip_[BODY_FLAP] || body_clip_[BODY_FLAP_CLIMB] ? core::saturate(tuning.body_clip) : 0.0f) *
+                       (1.0f - core::saturate(state.wing_tuck)) * (1.0f - stow) *
+                       core::saturate(state.flap_amplitude);
     // The wing angle is the glide's dihedral blended to the beat by the
     // amplitude, so taking the clip's share out by the amplitude leaves the
     // glide whole.
@@ -3475,7 +3480,11 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         if (tail_beat_amount_ > 1e-4f) {
             const float count = float(joints_.tail.size());
             const float phase = wrapped_phase(state.flap_phase) - tuning.tail_beat_lag;
-            const float per_joint = core::radians(tuning.tail_beat_deg) * tail_beat_amount_ / count;
+            // A keyed tail replaces this wave (RigTuning::body_clip).
+            const float keyed =
+                body_clip_[BODY_FLAP] || body_clip_[BODY_FLAP_CLIMB] ? core::saturate(tuning.body_clip) : 0.0f;
+            const float per_joint =
+                core::radians(tuning.tail_beat_deg) * tail_beat_amount_ * (1.0f - keyed) / count;
             for (size_t i = 0; i < joints_.tail.size(); ++i) {
                 const float u = (float(i) + 0.5f) / count;
                 const float wave = std::sin(core::TWO_PI * (phase - tuning.tail_beat_cycles * u));
@@ -3606,6 +3615,29 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         if (climb && climb->valid() && effort > 0.0f) {
             climb->sample_additive(phase * climb->duration, pose_, flight_clip_share_ * effort);
         }
+    }
+    // The keyframed body loops, the same way (set_body_clips).
+    body_clock_ += dt;
+    if (has_body_clips() && tuning.body_clip > 1e-4f) {
+        const float weight = core::saturate(tuning.body_clip);
+        const float phase = wrapped_phase(state.flap_phase);
+        auto play = [&](int index, float unit, float share) {
+            const AnimationClip* clip = body_clip_[index];
+            if (clip && clip->valid() && share > 1e-4f) clip->sample_additive(unit * clip->duration, pose_, share);
+        };
+        auto loop = [&](int index, float share) {
+            const AnimationClip* clip = body_clip_[index];
+            if (clip && clip->valid()) play(index, std::fmod(body_clock_, clip->duration) / clip->duration, share);
+        };
+        const bool both = body_clip_[BODY_FLAP] && body_clip_[BODY_FLAP_CLIMB];
+        const float effort = both ? core::saturate(state.flap_effort) : body_clip_[BODY_FLAP] ? 0.0f : 1.0f;
+        play(BODY_FLAP, phase, body_beat_share_ * (1.0f - effort));
+        play(BODY_FLAP_CLIMB, phase, body_beat_share_ * effort);
+        const float air = 1.0f - core::saturate(ground_contact_);
+        loop(BODY_GLIDE, weight * air * (1.0f - core::saturate(state.flap_amplitude)) *
+                             (1.0f - core::saturate(state.wing_tuck)));
+        play(BODY_WALK, walk_phase_ / core::TWO_PI, weight * core::saturate(ground_contact_) * walk_amount_);
+        loop(BODY_STAND, weight * core::saturate(ground_contact_) * (1.0f - walk_amount_));
     }
     // The keyframed strikes, last: whole, on the finished pose. Each runs
     // once from its action's edge; the gesture timers are the clocks.
