@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from hero_flight_render import ART, CACHE, VIEWS, BEAT
+from hero_flight_render import ART, CACHE, VIEWS, BEAT, DETAILS
 
 FONT = ImageFont.truetype('/System/Library/Fonts/Menlo.ttc', 21)
 BG = (24, 27, 31)
@@ -79,7 +79,7 @@ def comparison(mode):
 
 def overview():
     w,h,label = 352,198,34
-    sheet = Image.new('RGB',(8*w,len(VIEWS)*(h+label)),BG)
+    sheet = Image.new('RGB',(8*w,(len(VIEWS)+1)*(h+label)),BG)
     draw = ImageDraw.Draw(sheet)
     for row,(group,(_,frames)) in enumerate(VIEWS.items()):
         for i,frame in enumerate(frames):
@@ -88,6 +88,12 @@ def overview():
             x,y = i*w,row*(h+label)
             draw.text((x+5,y+3),f'{group}  {frame}',font=FONT)
             sheet.paste(im.resize((w,h),Image.Resampling.LANCZOS),(x,y+label))
+    y = len(VIEWS)*(h+label)
+    for i,(name,(_,frame)) in enumerate(DETAILS.items()):
+        x = i*w
+        draw.text((x+5,y+3),f'{name}  {frame}',font=FONT)
+        im = load('details', name)
+        sheet.paste(im.resize((w,h),Image.Resampling.LANCZOS),(x,y+label))
     sheet.save(ART/'views.jpg',quality=94)
 
 

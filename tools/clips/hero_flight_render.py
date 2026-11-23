@@ -27,6 +27,14 @@ VIEWS.update({
     'chase': ('--autopilot --course 1', (300, 313, 326, 339)),
     'takeoff': ('--input 0.2,0,0,1,0,0', (40, 52, 64, 76, 88, 100)),
 })
+DETAILS = {
+    'head-flap': ('--studio 1 --inspect 90 3.5 0 --inspect-head', 226),
+    'head-glide': ('--studio 0 --inspect 90 3.5 0 --inspect-head', 200),
+    'climb-front': ('--studio 1 --flight flap_effort_bias=1 --inspect 180 20 10', 232),
+    'climb-above': ('--studio 1 --flight flap_effort_bias=1 --inspect 90 23 85', 238),
+    'wide-side': ('--studio 1 --flight flap_effort_bias=1 --inspect 269 23 6', 207),
+    'switch': ('--models assets/rimefang.glb,assets/embercrest-hero.glb --cycle-models 180 --studio 1 --inspect 0 16 14', 238),
+}
 
 
 def capture(task):
@@ -57,12 +65,15 @@ def capture(task):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('version', choices=['before', 'after'])
+    parser.add_argument('version', choices=['before', 'after', 'details'])
     parser.add_argument('groups', nargs='*')
     args = parser.parse_args()
     tasks = [(args.version, group if group == 'glide' else f'{group}-{i}', view, frame)
              for group, (view, frames) in VIEWS.items() if not args.groups or group in args.groups
              for i, frame in enumerate(frames)]
+    if args.version == 'details':
+        tasks = [('details', name, view, frame) for name, (view, frame) in DETAILS.items()
+                 if not args.groups or name in args.groups]
     CACHE.mkdir(exist_ok=True)
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(capture, tasks))
