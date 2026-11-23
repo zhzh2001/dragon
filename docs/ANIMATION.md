@@ -1609,6 +1609,8 @@ What is not right, from Codex's record and the renders:
   changes with the flight's load, and fixed keys can only allow for one
   load.
 - Only the hero has a clip. Every other dragon beats procedurally.
+  (Tide2 and storm3 got one three hours later: "Keyframed wingbeats
+  for tide2 and storm3", below.)
 - Stills show poses and not timing. Whether it reads as alive in
   motion is the playtester's call, and the slider is there for it.
 

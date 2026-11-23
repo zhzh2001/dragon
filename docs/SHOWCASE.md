@@ -111,7 +111,9 @@ others have (`docs/MODEL_GENERATION.md`, the last two sections). A
 liquid breath's stream is no longer drawn, only its drops and spray
 (`docs/showcase/EFFECTS.md`, "The liquids without a body").
 `docs/showcase/PLAYTEST.md`, "The eleventh round", has what to
-playtest.
+playtest. Waiting on that playtest. Next, if the keyframes hold up in
+motion: wingbeats for the other three new designs
+(`tools/clips/README.md`).
 
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley

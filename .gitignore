@@ -94,3 +94,16 @@ build-landmarks-cache/
 assets/embercrest-hero-tripo*.cfg
 
 build-prey-cache/
+
+# Single engine frames the clip and rig jobs capture on the way to a
+# contact sheet (tools/clips/README.md). The sheets are committed.
+artifacts/hero-flight/before/
+artifacts/hero-flight/after/
+artifacts/hero-body/before/
+artifacts/hero-body/after/
+artifacts/wingbeat/*/before/
+artifacts/wingbeat/*/after/
+artifacts/silver-dragon-integration/pass3/before/
+artifacts/silver-dragon-integration/pass3/after/
+artifacts/gold-dragon-integration/pass3/before/
+artifacts/gold-dragon-integration/pass3/after/

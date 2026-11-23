@@ -2572,3 +2572,11 @@ The models these two repairs replaced are kept outside the repository,
 in `~/src/game-claude-wt/r11-originals/` (storm3 and silver-dragon,
 repaired and raw). Silver's rebuild steps start from its October files,
 which are the two there.
+
+Looked at again on 2026-11-23, 00:20, with the plants hidden
+(`--hide-vegetation`): silver's folded wings are tidy from above, two
+blades along the flanks, and their reach is the length of the wing and
+not a fault of the fold. Gold's tail rests on the ground behind the
+hips and arches up from there. Neither was changed. Silver's 5 degrees
+nose up does not show in the glide's side view, and no key was added
+for it.

@@ -1,4 +1,32 @@
-# Embercrest brake-bank clip trial
+# Keyframed clips
+
+Every clip the engine plays over the procedural rig is built here by
+script in Blender and checked by script. A clip file holds the armature
+alone, with the model's joint names and rest pose, and rotation keys.
+The engine reads keys as deltas from the rest pose
+(`docs/ANIMATION.md`: "A keyframed wingbeat", "Keyframed body loops").
+
+| Clip file in `assets/clips/` | What it is | Generator | Checker | Record |
+|---|---|---|---|---|
+| `embercrest.brake_bank.glb` | The first trial, 2026-11-04: a small overlay on the air brake. It did not read | `make_brake_bank.py` | `check_clip.py` | Below |
+| `embercrest-hero.attacks.glb` | The hero's bite, claw and tail strikes | `make_hero_attacks.py` | `check_hero_attacks.py` | `hero-attacks.md` |
+| `embercrest-hero.flight.glb` | The hero's wingbeat: `flap`, `flap_climb` | `make_hero_flight.py` | `check_hero_flight.py` | `hero-flight.md` |
+| `tide2.flight.glb`, `storm3.flight.glb` | Wingbeats for two more dragons | `make_wingbeat.py <model>`, poses in `wingbeat/<model>.json` | `check_wingbeat.py <model>` | `wingbeat.md` |
+| `embercrest-hero.body.glb` | The hero's neck, tail and legs: `flap_body`, `flap_climb_body`, `glide`, `walk`, `stand` | `make_hero_body.py` | `check_hero_body.py` | `hero-body.md` |
+
+The `*-brief.md` files are the briefs the Codex jobs were given. The
+`*_render.py` and `*_sheets.py` helpers capture engine frames and build
+the contact sheets in `artifacts/`. They write single frames into
+`before/` and `after/` folders, which are ignored by git: commit the
+sheets, not the frames.
+
+A wingbeat for another dragon: copy `wingbeat/tide2.json`, measure the
+model's wing axes (`wingbeat.md` says how), and set its limits with
+`tools/rig_probes/rib_centre_probe`, which plays a clip and prints how
+near the wing comes to the back and the belly.
+
+## Embercrest brake-bank clip trial
+
 
 This clip adds small, overlapping adjustments to a held procedural air-brake pose.
 It contains one authored loop and its mirrored version.

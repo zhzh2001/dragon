@@ -950,3 +950,28 @@ menu click by hand. The XP and Windows builds were built and not run.
 6. The silver and the gold dragon (M in practice): legs in flight,
    the bottom of the beat, the wings landed.
 7. Esc over a game, click rows and Resume: no breath.
+
+### After the round: leftovers, cleanup (2026-11-23, 00:30)
+
+The user: "I cannot playtest right now, please finish straightforward
+leftovers, remove unused files/worktrees, and update docs."
+
+| Leftover | What was done |
+|---|---|
+| Silver's folded wing tips, gold's low tail, the hero's tail in a climb | Rendered again, with the plants hidden. None is a fault at that look, and none was changed. The climb's tail stays for the playtester |
+| `--inspect` with a negative elevation | Fixed during the round. A capture "from below" made before 2026-11-22 was from above |
+| Squallfin's and silver's replaced models | Kept in `~/src/game-claude-wt/r11-originals/` |
+| The menu click fix | Still read from the code only. A headless run has no mouse |
+
+Removed: the four Codex worktrees and their branches, the frozen engine
+and probe binaries in `build/`, 869 single-frame captures the jobs had
+committed beside their sheets (682 MB; `docs/RELEASE.md`), silver's
+stale retro-tier pack, and 13 Blender backup files in
+`build-hero-cache/` (1.9 GB). Kept, because a record names them:
+`build-hero-cache/` itself, `assets/embercrest-hero-v4.*`, the
+`hide-codex` branch, storm3's `pass3` frames.
+
+Not started, because each is a job and not a leftover: keyframed
+wingbeats for Shardmane, Geodeback and Ambersting, the crease at the
+hero's wrist under its clip, a stream of water that reads as water.
+`tools/clips/README.md` says how to add a wingbeat.
