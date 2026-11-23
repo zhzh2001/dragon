@@ -3,10 +3,11 @@
 import argparse
 import math
 from pathlib import Path
+import struct
 import sys
 
 sys.dont_write_bytecode = True
-from check_clip import accessor, angle, inverse, multiply, parent_names, read_glb, rotation_vector
+from check_clip import accessor, angle, inverse, multiply, normalize, parent_names, read_glb, rotation_vector
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / 'assets/embercrest-hero.glb'
@@ -68,7 +69,7 @@ class Motion:
             for name in (*NECK, 'head'):
                 if name in self.tracks:
                     q = multiply(q, self.tracks[name][i])
-            result.append(multiply(multiply(q, FRONT), inverse(q))[:3])
+            result.append(normalize(multiply(multiply(q, FRONT), inverse(q))[:3]))
         return result
 
     def line(self, ok, label, group=7):
@@ -243,7 +244,7 @@ def main():
     args = parser.parse_args()
     try:
         results = check(args.clip,args.through)
-    except (OSError, ValueError, IndexError, KeyError, TypeError, ArithmeticError) as error:
+    except (OSError, ValueError, IndexError, KeyError, TypeError, ArithmeticError, struct.error) as error:
         results = [(1, False, f'Could not read the clip: {error}')]
     for n, ok, detail in results:
         print('PASS' if ok else 'FAIL', n, detail)
@@ -304,6 +305,8 @@ def check_other(m):
         neck = m.chain(NECK,1)
         m.amplitude('summed neck sway',max(map(abs,neck)),3,4)
         m.cycles('neck sway',neck,1)
+        m.line(neck[m.count//4] < 0 < neck[3*m.count//4],
+               f'neck yaw over planted right/left forefoot {neck[m.count//4]:.2f}/{neck[3*m.count//4]:.2f} deg')
         m.amplitude('summed tail sway',max(map(abs,tail)),20)
         m.cycles('base tail sway',base,1)
         m.phase('tail tip lag',(peak_phase(tip)-peak_phase(base))%1,.15,.05)

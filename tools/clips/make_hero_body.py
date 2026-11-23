@@ -45,11 +45,11 @@ def flap(t):
         for digit in range(1, 4):
             pose[f'toe_hind_{digit}_{side}'] = pitch(-12*(1-load)/2)
             pose[f'toe_fore_{digit}_{side}'] = pitch(-8*(1-fore)/2)
-    arch = curve(t, [(0, 0), (.22, .38), (.50, 1), (.69, .46), (.85, -.12)])
+    arch = curve(t, [(0, 0), (.18, .24), (.42, .96), (.50, 1), (.69, .42), (.84, -.08)])
     pose['chest'] = pitch(2.4*arch)
     reach = curve(t, [(0, -.18), (.18, .28), (.42, 1), (.55, .87),
                       (.72, .03), (.84, -.28)])
-    neck = [-4.3*reach, -4.5*reach, -4.6*reach]
+    neck = [-2.4-1.9*reach, -1.9-2.6*reach, -1.5-3.1*reach]
     for j, bend in enumerate(neck, 1):
         pose[f'neck_{j:02}'] = pitch(bend)
     pose['head'] = pitch(-sum(neck))
