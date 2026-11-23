@@ -32,6 +32,7 @@ def views():
         ('glide-below', 0, '90 14 -60', 200), ('turn', 2, '0 16 14', 260),
         ('dive', 5, '270 16 6', 300), ('stand-side', 9, '270 14 6', 200),
         ('stand-front', 9, '180 14 6', 200), ('stand-rear', 9, '0 14 6', 200),
+        ('procedural-hem-above', 1, '200 8 35', 252), ('procedural-hem-below', 1, '320 8 -35', 252),
     ]
 
 

@@ -1,10 +1,15 @@
 # Storm3 inner wing panels
 
+[Wing panels at capture resolution](panel-before-after.jpg) · [All final views](views.jpg) · [Before frames](before/) · [Final frames](after/)
+
+The four repair rounds took about 34 minutes. I reviewed 58 engine captures before and after, plus the intermediate views.
+
 ## Diagnosis before repair
 
 The upper and lower skins crossed during the wingbeat. I checked 9,506 triangles across both inner panels and their borders.
 The bind pose had zero intersections between triangles that shared no vertex.
-In a reconstruction of cruise frames 240, 247, 254, 261, 268, 275, 282 and 289, the counts were 43, 84, 123, 233, 244, 199, 73 and 61.
+I reconstructed cruise frames 240, 247, 254, 261, 268, 275, 282 and 289.
+The counts were 43, 84, 123, 233, 244, 199, 73 and 61 intersecting pairs.
 At frame 268, 244 intersecting pairs involved 228 triangles.
 
 The two inner faces had median sRGB values of (209, 221, 237) and (206, 218, 232) between absolute X coordinates 0.14 and 0.18.
@@ -27,7 +32,8 @@ These pixel locations use projected rig geometry before the shader bows the memb
 
 The 0.9-second cruise beat lasts 54 frames at 60 frames per second.
 The eight sample frames are 200, 207, 214, 220, 227, 234, 240 and 247.
-The procedural views use frames 200, 214, 227 and 240.
+The four procedural report views use frames 200, 214, 227 and 240.
+Two additional views show the procedural hem from above and below at frame 252.
 
 The engine skips an inspect argument that starts with a minus sign.
 The playtester's command therefore renders at the default elevation of +14.5°.
@@ -66,15 +72,79 @@ The squared black stripe disappeared beside the arm in the report and above view
 The wider fit added shallow triangular shadows near the flank at frames 220 and 247.
 I kept the geometry and compared a narrower normal correction for the final round.
 
-## Original models
+## Round 4
 
-The scratch directory `build-rig-cache/before/` contains both original flight-bind models.
-Their SHA-256 digests identify the inputs to the panel repair.
+I kept the round 3 correction along the arm and fourth rib. Across the middle, I blended back to the round 2 normals.
+A sample of 914 central vertices matched round 2. A sample of 296 border vertices matched round 3.
+I measured the curved hem at 57 points between absolute X coordinates 0.086 and 0.198 on each wing.
+In the bind pose, the right hem bowed 45.6 cm from the line between its endpoints. The original hem bowed 6.5 cm.
+The left hem increased from 6.5 to 45.4 cm.
+At frame 240, the midpoint offset increased from 32.8 to 41.9 cm on the right and 32.3 to 41.7 cm on the left.
 
-| Model | SHA-256 before repair |
-| --- | --- |
-| storm3-raw.glb | `ce20be39d3d076751d8a4b74aaca05835a89a484778532b777695ce6599f7275` |
-| storm3.glb | `a31f7beb11afdb2738e337f4efbe1ebf051ef5f2b378c5ac50cb155cca3a7e23` |
+The final geometry moved 3,270 distinct wing points. The greatest displacement was 0.040915 model units across a 1.125801-unit wingspan.
+Both models retain 80,000 triangles and 55 joints.
+The indices, joint names, rest transforms, UV coordinates, materials and image data matched their original values.
+Only vertex positions, bone weights and joint assignments, shading normals and their corresponding tangents changed.
+All changes fell inside the two panels and their borders.
+
+## Remaining contacts and shading
+
+The table counts pairs of intersecting triangles across both inner panels and their borders.
+It excludes triangles that share a vertex. The two beat rows cover all 54 frames before the shader bows the membrane.
+
+| Pose | Original pairs | Final pairs |
+| --- | ---: | ---: |
+| Keyframed beat | 43–248 | 0–8 |
+| Procedural beat | 49–581 | 0–46 |
+| Glide at 200 | 93 | 1 |
+| Turn at 260 | 351 | 1 |
+| Dive at 300 | 254 | 4 |
+| Standing at 200 | 733 | 717 |
+
+At keyframed frame 213, all eight contacts occurred beside the shoulder pivot, between absolute X coordinates 0.050 and 0.063.
+At procedural frame 252, 46 pairs involved 48 triangles along the trailing hem.
+Their centres lay between 92.76% and 99.98% of the distance from arm to hem.
+
+At frame 240, I measured the same 7,686 pixels across the original dark patch in the report view.
+Originally, 3,212 pixels fell below 90 on an 8-bit brightness scale. The final frame had zero.
+The brightness weights for red, green and blue were 0.2126, 0.7152 and 0.0722.
+The measurement polygon in image pixels was `[(611,481),(639,463),(729,432),(742,431),(727,480),(724,519),(699,538),(653,515)]`.
+
+At the pictured report angle, the broad dark island and squared mark beside the arm disappeared.
+At the true −1° angle, a small dark sliver remains across the far panel during recovery. It shows most clearly at frame 240. [Low report view](after/report-low-6.jpg)
+At procedural frame 240, the lowered far wing still shows a dark fold above the shoulder. [Procedural report view](after/procedural-report-3.jpg)
+At procedural frame 252, the former pale underside patch shrank to a light edge. [Above](after/procedural-hem-above.jpg) · [Below](after/procedural-hem-below.jpg)
+
+The fourth rib retains a fine dark line at some angles. Its outer ridge has dark paint and faces the camera nearly edge-on.
+The underside has a thin light rim along the curved edge.
+From behind, the hems still form a corner near the flanks at the top of the stroke.
+In the glide and turn, the deeper curve creates a sharper indentation near the body.
+The standing views show a tradeoff. The rear view lost the original protruding pale folds.
+From the side, the folded wing still covers the flank, and the dark crease under the back spines grew wider.
+In the rectangle from (712, 552) through (770, 590), 527 pixels fell below brightness 45. The original had 88.
+The side view falls short of the standing requirement. [Original stance](before/stand-side.jpg) · [Final stance](after/stand-side.jpg)
+
+## Wing-only flap check
+
+The check rotates 22 wing bones. It measures body travel in metres.
+
+```
+storm3: 35360 body vertices, 30854 wing vertices, 22 posed bones, 13.01295 m/unit
+body: 0.00000000 m, vertex 0, XYZ (-0.0001, 0.388972, 0.276458), weights {'neck_03': 0.991308, 'head': 0.008692}, 0 over 2 cm
+crest and horns: 0.00000000 m, vertex 0, XYZ (-0.0001, 0.388972, 0.276458), weights {'neck_03': 0.991308, 'head': 0.008692}, 0 over 2 cm
+hind legs: 0.00000000 m, vertex 14283, XYZ (-0.049255, 0.104074, 0.130426), weights {'thigh_l': 0.911044, 'shin_l': 0.088956}, 0 over 2 cm
+flank at the web: 0.00000000 m, vertex 13701, XYZ (-0.04683, 0.169011, 0.237857), weights {'chest': 0.719665, 'root': 0.213425, 'thigh_l': 0.06691}, 0 over 2 cm
+tail and rudder: 0.00000000 m, vertex 1, XYZ (-3.9e-05, -0.582762, 0.237756), weights {'tail_11': 1.0}, 0 over 2 cm
+```
+
+## Model hashes
+
+The original flight-bind models are in `build-rig-cache/before/`. The installed outputs are in `assets/`.
+
+| Model | SHA-256 before repair | SHA-256 after repair |
+| --- | --- | --- |
+| storm3-raw.glb | `ce20be39d3d076751d8a4b74aaca05835a89a484778532b777695ce6599f7275` | `5b34a2209140d6e26ee7bb47501128ace2a59c77369a51290e7b41a828d58f0c` |
+| storm3.glb | `a31f7beb11afdb2738e337f4efbe1ebf051ef5f2b378c5ac50cb155cca3a7e23` | `34b3cb45a6c2ea5b17f5908335b10ce2a1870439e330b888258f24a13efb9f8a` |
 
 ## Rebuild
 

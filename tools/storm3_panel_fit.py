@@ -245,50 +245,77 @@ def shading_domain(mesh, names, mask):
     return influence[inv] * (moving > 0)
 
 
-def fit_normals(mesh, coords, joints, weights, mask, poses):
-    # Fit the skin normals to the posed surface where each camera sees its front.
-    rows = np.flatnonzero(mask > 0)
+def fit_normals(mesh, coords, joints, weights, domain, border_mask, poses):
+    # Fit each normal to the posed triangles that meet its vertex.
+    span, fraction, across, mask = domain
+    rows = np.flatnonzero(border_mask > 0)
     faces = mesh['indices']
-    faces = faces[(mask[faces] > 0).any(1)]
+    faces = faces[(border_mask[faces] > 0).any(1)]
     ids, local = np.unique(faces, return_inverse=True)
     faces = local.reshape(-1, 3)
-    _, inv = np.unique(mesh['POSITION'][ids], axis=0, return_inverse=True)
-    inv = inv.ravel()
+    _, inverse = np.unique(mesh['POSITION'][ids], axis=0, return_inverse=True)
+    inverse = inverse.ravel()
     p, j, w = coords[ids], joints[ids], weights[ids]
-    count = inv.max() + 1
-    normals = mesh_normals(p, faces, inv, count)
-    rays, limits, priorities = [], [], []
+    count = inverse.max() + 1
+    rest = mesh_normals(p, faces, inverse, count)
     center = (coords.max(0) + coords.min(0)) / 2
     scale = 14.65 / np.ptp(coords[:, 0])
+    smooth = rest * 3
+    border = rest.copy()
+    smooth_rays, smooth_limits = [], []
+    rays, limits, priorities = [], [], []
+    views = [(223, 12.6, 14.5, 3), (223, 12.6, -1, 2), (200, 8, 35, 3),
+             (320, 8, -35, 2), (0, 16, 14, 1)]
     for sample, pose in enumerate(poses):
         blend = np.einsum('vj,vjmn->vmn', w, pose[j])
         rot = blend[:, :3, :3]
         q = np.einsum('vij,vj->vi', rot, p) + blend[:, :3, 3]
-        geom = mesh_normals(q, faces, inv, count)
-        normals += (2.5 if sample < 14 else 1.)*unit(np.linalg.solve(rot, geom[:, :, None])[:, :, 0])
-        for angle, distance, elevation, priority in [
-                (223, 12.6, 14.5, 3), (223, 12.6, -1, 2),
-                (200, 8, 35, 3), (320, 8, -35, 2), (0, 16, 14, 1)]:
+        geom = mesh_normals(q, faces, inverse, count)
+        back = unit(np.linalg.solve(rot, geom[:, :, None])[:, :, 0])
+        smooth += back
+        border += (2.5 if sample < 14 else 1.) * back
+        for angle, distance, elevation, priority in views:
             a, e = np.radians([angle, elevation])
             camera = np.array([np.sin(a) * np.cos(e), np.sin(e), np.cos(a) * np.cos(e)])
             toward = unit(distance * camera - (q - center) * scale)
             dot = (toward * geom).sum(1)
-            rays.append(np.einsum('vji,vj->vi', rot, toward) * np.sign(dot)[:, None])
+            ray = np.einsum('vji,vj->vi', rot, toward) * np.sign(dot)[:, None]
+            if elevation != 14.5:
+                smooth_rays.append(ray)
+                smooth_limits.append(np.clip(abs(dot) - .08, -.05, .18))
+            rays.append(ray)
             limits.append(np.where(dot > .09, np.clip(dot - .06, .02, .35), -2.0))
             priorities.append(priority * (2.2 if sample < 14 else .8 if sample < 28 else .15))
-    rays = np.asarray(rays)
-    limits = np.asarray(limits)
-    priorities = np.asarray(priorities)
-    normal = unit(normals)
-    start = normal.copy()
-    vertices = np.arange(len(normal))
+
+    # Use the average correction across the web to keep the broad surface smooth.
+    smooth_rays, smooth_limits = np.asarray(smooth_rays), np.asarray(smooth_limits)
+    smooth = unit(smooth)
+    start = smooth.copy()
+    for _ in range(15):
+        gap = np.maximum(0, smooth_limits - np.einsum('nvi,vi->nv', smooth_rays, smooth))
+        gradient = np.einsum('nv,nvi->vi', gap, smooth_rays)
+        smooth = unit(smooth + .7 * gradient / (1 + (gap > 0).sum(0)[:, None]) + .025 * (start - smooth))
+
+    # Fit the arm and rib borders to the most exposed face at grazing angles.
+    rays, limits, priorities = np.asarray(rays), np.asarray(limits), np.asarray(priorities)
+    border = unit(border)
+    start = border.copy()
+    vertices = np.arange(len(border))
     for _ in range(60):
-        gap = np.maximum(0, limits - np.einsum('nvi,vi->nv', rays, normal))
-        criteria = (gap * priorities[:, None]).argmax(0)
-        normal = unit(normal + .30 * gap[criteria, vertices, None] * rays[criteria, vertices] + .0008 * (start - normal))
+        gap = np.maximum(0, limits - np.einsum('nvi,vi->nv', rays, border))
+        worst = (gap * priorities[:, None]).argmax(0)
+        correction = gap[worst, vertices, None] * rays[worst, vertices]
+        border = unit(border + .30 * correction + .0008 * (start - border))
+
+    local_rows = np.searchsorted(ids, rows)
+    original = mesh['NORMAL'][rows]
+    inner = unit(original + mask[rows, None] * (smooth[local_rows] - original))
+    edge = unit(original + border_mask[rows, None] * (border[local_rows] - original))
+    arm_band = fade((.34 - fraction[rows]) / .13)
+    finger_band = fade((across[rows] - .75) / .14)
+    strength = np.maximum(arm_band, finger_band) * fade((span[rows] - .074) / .048)
     new = mesh['NORMAL'].copy()
-    factor = mask[rows, None]
-    new[rows] = unit(new[rows] * (1 - factor) + normal[np.searchsorted(ids, rows)] * factor)
+    new[rows] = unit(inner + strength[:, None] * (edge - inner))
     tangents = mesh['TANGENT'].copy()
     old = tangents[rows, :3]
     tangents[rows, :3] = unit(old - new[rows] * (old * new[rows]).sum(1, keepdims=True))
@@ -306,7 +333,7 @@ def build(source, target):
     fit_thickness(mesh, coords, joints, weights, (span, t, u, mask), poses)
     smooth_contacts(mesh, coords, joints, weights, mask, poses[:28:2])
     shade_mask = shading_domain(mesh, joint_names(doc), mask)
-    normals, tangents = fit_normals(mesh, coords, joints, weights, shade_mask, poses)
+    normals, tangents = fit_normals(mesh, coords, joints, weights, (span, t, u, mask), shade_mask, poses)
     updates = dict(POSITION=coords, JOINTS_0=joints, WEIGHTS_0=weights, NORMAL=normals, TANGENT=tangents)
     for filename in ('storm3-raw.glb', 'storm3.glb'):
         doc, original = read_glb(source / filename)
