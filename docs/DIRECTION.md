@@ -591,11 +591,11 @@ The screen is three pages (`App::menu_items` lists a page's rows;
 | Page | Rows |
 |---|---|
 | Main | Mode, then the mode's own rows, Dragon, Designs, the two page links, Resume over a game, Start, Quit |
-| Arena's rows | Rivals (1 to 7), First to (1 to 15 kills), Time limit (none, or 1 to 10 minutes) |
-| Hoard run's rows | Valley seed (Random, the valley last flown, or a number typed with the digits), Start in (the first, second or last valley) |
+| Arena's rows | Rivals (1 to 7), Their skill (rookie, veteran, ace), First to (1 to 15 kills), Time limit (none, or 1 to 10 minutes) |
+| Hoard run's rows | Valley seed (Random, the valley last flown, or a number typed with the digits), Start in (the first, second or last valley), Rivals' skill |
 | The wilds' row | Save: Continue, or Start over on a new valley |
 | Graphics | Preset; resolution, model detail, terrain, trees, grass, rocks, textures, shadows, bloom, clouds, ambient occlusion; anti-aliasing, dynamic resolution, vsync, fullscreen, the frame-rate readout |
-| Sound and controls | Volume, pitch (W lowers or raises the nose), the look stick's inversion, mouse steering |
+| Sound and controls | Volume, aim assist (off to 100%), pitch (W lowers or raises the nose), the look stick's inversion, mouse steering |
 
 A graphics row steps to the next level the tier and device offer and
 applies it at once; a value that waits for a restart says so. Over a run

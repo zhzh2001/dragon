@@ -1040,15 +1040,17 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     // by the beat's amplitude, so a glide has none of it and the first
     // beat fades in; none in a tuck or on the ground. `beat_keep` is what is
     // left of the procedural beat under it.
-    const float flap_clip_weight = has_flight_clips() ? core::saturate(tuning.flap_clip) : 0.0f;
+    const float flap_clip_weight = (has_flight_clips() ? core::saturate(tuning.flap_clip) : 0.0f) *
+                                   (1.0f - core::saturate(state.wing_tuck)) * (1.0f - stow);
     const float beat_keep = 1.0f - flap_clip_weight * (1.0f - core::saturate(tuning.flap_clip_under));
-    flight_clip_share_ = flap_clip_weight * core::saturate(state.flap_amplitude) *
-                         (1.0f - core::saturate(state.wing_tuck)) * (1.0f - stow);
+    flight_clip_share_ = flap_clip_weight * core::saturate(state.flap_amplitude);
     // The wing angle is the glide's dihedral blended to the beat by the
     // amplitude, so taking the clip's share out by the amplitude leaves the
     // glide whole.
+    // And by the clip's own share, so where the clip is not played (a tuck,
+    // the ground) nothing is taken out either.
     float flap_angle = state.wing_angle *
-                       (1.0f - (1.0f - beat_keep) * core::saturate(state.flap_amplitude));
+                       (1.0f - flight_clip_share_ * (1.0f - core::saturate(tuning.flap_clip_under)));
     if (tuning.wing_flap_limit_deg > 0.0f) {
         const float limit = core::radians(tuning.wing_flap_limit_deg);
         flap_angle = core::clampf(flap_angle, -limit, limit);

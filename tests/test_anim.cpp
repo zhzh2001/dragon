@@ -2332,6 +2332,87 @@ void test_brake_bank_overlay() {
         }
     }
 }
+// A keyframed wingbeat (DragonRig::set_flight_clips) is the beat: with a
+// clip that keys nothing, the wings hold still through a full-amplitude
+// beat, where the procedural beat alone swings them; a clip that raises the
+// shoulder raises the wing by that much at that phase and no other; and a
+// glide, a tuck and the ground see none of it.
+void test_flight_clip_replaces_the_beat() {
+    std::printf("a keyframed wingbeat replaces the procedural beat, at the flight model's phase\n");
+    anim::DragonShape shape;
+    Skeleton skeleton;
+    anim::DragonJoints joints;
+    anim::SkinnedMeshData mesh;
+    anim::build_dragon(shape, skeleton, joints, mesh);
+    const int shoulder = joints.wing_root[0].front();
+    const int tip = joints.wing_fingers[0].back().back();
+
+    // One beat, a second long: the shoulder turned 30 degrees at the half
+    // beat, at rest at both ends. And one that keys nothing.
+    anim::AnimationClip still, raise;
+    still.name = "flap";
+    still.duration = 1.0f;
+    raise.name = "flap";
+    raise.duration = 1.0f;
+    anim::RotationTrack track;
+    track.joint = shoulder;
+    track.times = {0.0f, 0.5f, 1.0f};
+    track.rotations = {Quat::identity(), Quat::identity(), Quat::identity()};
+    still.tracks.push_back(track);
+    track.rotations[1] = Quat::from_axis_angle(Vec3::unit_z(), radians(30.0f));
+    raise.tracks.push_back(track);
+
+    auto state_at = [](float phase, float amplitude, float tuck) {
+        game::FlightState state;
+        state.velocity = Vec3{0.0f, 0.0f, -30.0f};
+        state.airspeed = 30.0f;
+        state.ground_clearance = 300.0f;
+        state.flap_phase = phase;
+        state.flap_amplitude = amplitude;
+        state.wing_tuck = tuck;
+        const float curve = phase < 0.5f ? std::cos(core::PI * phase / 0.5f) : -std::cos(core::PI * (phase - 0.5f) / 0.5f);
+        state.wing_angle = radians(4.0f + 36.0f * curve) * amplitude;
+        return state;
+    };
+    // The tip's travel over a beat, with the rig settled at each phase.
+    auto travel = [&](const anim::AnimationClip* clip, float weight, float amplitude, float tuck, Vec3* at_half) {
+        anim::DragonRig rig;
+        rig.init(skeleton, joints);
+        still_air(rig.tuning);
+        rig.tuning.flap_clip = weight;
+        rig.set_flight_clips(clip, nullptr);
+        Vec3 lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+        for (int i = 0; i <= 20; ++i) {
+            const float phase = float(i) / 20.0f * 0.999f;
+            for (int k = 0; k < 4; ++k) rig.update(state_at(phase, amplitude, tuck), 1.0f / 60.0f);
+            const Vec3 p = rig.world_matrices()[size_t(tip)].col[3].xyz();
+            lo = Vec3{std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
+            hi = Vec3{std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+            if (i == 10 && at_half) *at_half = p;
+        }
+        return length(hi - lo);
+    };
+    const float procedural = travel(nullptr, 1.0f, 1.0f, 0.0f, nullptr);
+    Vec3 still_half, raise_half;
+    const float held = travel(&still, 1.0f, 1.0f, 0.0f, &still_half);
+    const float keyed = travel(&raise, 1.0f, 1.0f, 0.0f, &raise_half);
+    const float off = travel(&raise, 0.0f, 1.0f, 0.0f, nullptr);
+    std::printf("  tip travel over a beat: procedural %.2f, under an empty clip %.2f, a keyed clip %.2f\n",
+                double(procedural), double(held), double(keyed));
+    CHECK(procedural > 1.0f);
+    CHECK(held < 0.15f * procedural);        // the procedural beat is out from under the clip
+    CHECK(keyed > 3.0f * held + 0.2f);       // and the clip's own motion is there
+    CHECK(length(raise_half - still_half) > 0.2f);
+    CHECK(near(off, procedural, 1e-3f));     // weight 0: the procedural beat, untouched
+    // No beat, no clip: a glide and a full tuck are the same with and without.
+    Vec3 a, b;
+    travel(&raise, 1.0f, 0.0f, 0.0f, &a);
+    travel(nullptr, 1.0f, 0.0f, 0.0f, &b);
+    CHECK(near(a, b, 1e-4f));
+    travel(&raise, 1.0f, 1.0f, 1.0f, &a);
+    travel(nullptr, 1.0f, 1.0f, 1.0f, &b);
+    CHECK(length(a - b) < 0.05f);
+}
 void test_legs_brace_during_active_postures() {
     namespace fs = std::filesystem;
     const fs::path root = test_source_root();
@@ -3418,6 +3499,7 @@ int main() {
     test_dive_wings_clear_the_body();
     test_body_and_wings_work_in_a_held_brake();
     test_brake_bank_overlay();
+    test_flight_clip_replaces_the_beat();
     test_tail_flow_is_continuous_and_releases_on_landing();
     test_static_gltf_loads_a_prop();
     test_melee_load_recovery_and_switch();

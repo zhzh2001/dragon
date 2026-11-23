@@ -2459,3 +2459,35 @@ change.
 
 The start screen and the Playtest panel's list show them, the panel
 with the file's name beside it. `player.cfg` keeps the file's name.
+
+### Three keys for storm3, and every new wing off the spine (2026-11-22, 20:30)
+
+The three keys storm3's pass wanted exist now (`anim/dragon_rig.h`), and
+its profile uses them.
+
+| Key | Value on storm3 | What it did |
+|---|---|---|
+| `recovery_inner_finger_deg` | -25 | The innermost rib's skin crossed the centre plane by 8 cm in the recovery. It clears by 0.27 m |
+| `ground_wing_tip_sweep_deg` | 50 | The folded tips flared out beside the head. They lie against the body |
+| `ground_neck_pitch_deg` with `ground_head_pitch_deg` | 26 and -22 | The neck was at 1 degree because raising it raised the muzzle. It stands up with the head level |
+
+`artifacts/elemental-round3/storm3-stance-three-keys.jpg`: landed from
+the front, the side and behind, the feet, the walk, and the recovery
+from behind.
+
+`tools/rig_probes/rib_centre_probe.cpp` is new: it runs the studio's
+flap with the model's own flight profile and prints how near each rib's
+skin comes to the body's centre plane through a beat. A crossing shows
+on one frame of a render from behind, and my eight sampled frames last
+round missed it. The strokes I had raised crossed at the top:
+
+| | Was | Change | Clears by |
+|---|---|---|---|
+| blight2 | 0.49 m across | upstroke 74 to 62 | 0.15 m |
+| frost3 | 0.29 m across | `recovery_droop_deg` 20 to 4; the upstroke's angle made no difference | 0.12 m |
+| stone2 | 0.26 m across | upstroke 70 to 66 | 0.14 m |
+| tide2 | clear | none | 0.18 m |
+| storm3 | 0.08 m across | the key above | 0.27 m |
+| the hero, procedural | clear | none | 0.11 m |
+
+`beat-clear-of-the-spine.jpg` there has the three changed beats.

@@ -94,6 +94,13 @@ build, has pages for graphics and for sound and controls, each mode's
 own rows, and hides the panels outside practice (`docs/DIRECTION.md`,
 "Pages, a mode's own rows").
 
+The tenth round (2026-11-22, 20:40). The hero has a keyframed wingbeat,
+authored by Codex and played in place of the procedural beat at the
+flight model's phase (`docs/ANIMATION.md`, "A keyframed wingbeat"); the
+Playtest panel's "keyframed wingbeat" compares the two. The rig has the
+three keys storm3 lacked, and a probe keeps every new wing off the
+spine. The start screen has the rivals' skill and the aim assist.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

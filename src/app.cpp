@@ -4899,6 +4899,17 @@ void App::build_playtest_ui() {
         if (ImGui::Checkbox("new designs (O)", &designs)) set_new_designs(designs);
         ImGui::SetItemTooltip("The hero and the second-round elementals, or the first designs: the player and every rival change together.");
     }
+    {
+        // The keyframed wingbeat against the procedural one, at the top
+        // where it can be found: this is the dial the trial is judged by.
+        anim::RigTuning& rig = dragon_rig_.tuning;
+        ImGui::BeginDisabled(!dragon_rig_.has_flight_clips());
+        ImGui::SliderFloat("keyframed wingbeat", &rig.flap_clip, 0.0f, 1.0f, "%.2f");
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip(dragon_rig_.has_flight_clips()
+                                  ? "1: the authored wingbeat clip. 0: the procedural beat. Watch it in the studio's flap."
+                                  : "This dragon has no wingbeat clip (assets/clips/<model>.flight.glb).");
+    }
     if (ImGui::CollapsingHeader("The wilds", wilds_mode_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
         wilds_controls();
     }

@@ -856,3 +856,37 @@ in the recovery, its folded wing tips flare out on the ground, and a
 notch stays in the membrane beside the innermost rib. From the side a
 wing at the bottom of the beat still covers the legs on every model,
 the hero included.
+
+## The tenth round: a keyframed wingbeat, the menu's marker, the rivals' skill (2026-11-22, 20:40)
+
+The user: "small bug: on main menu, is still shows the debug bounds for
+dragon. main menu should also have settings like arena difficulty. you
+can proceed with remaining tasks. are the current animations keyframed?
+try it with codex if not." No new feedback report: 0032 is the last.
+
+| Ask | Answer |
+|---|---|
+| The debug bounds on the menu | The free camera's locator, a wire ball at the flight position. The menu's view is a free camera. Off while the menu is open |
+| Arena difficulty | "Their skill" on the arena and "Rivals' skill" on the hoard run: rookie, veteran, ace (`apply_bot_skill`). Aim assist on the controls page |
+| Are the animations keyframed | No: procedural, but for the hero's three strikes. `ANIMATION.md`, "A keyframed wingbeat" |
+| Try it with Codex | The hero has a keyframed wingbeat, a cruise beat and a climb beat, played in place of the procedural one. On by default; "keyframed wingbeat" at the top of the Playtest panel sets its weight |
+| Remaining tasks | The three rig keys storm3's pass lacked, and storm3 tuned with them. A probe for wings crossing over the back, which found three of my raised strokes crossing; fixed. The XP build links again and passes its import gate |
+
+### What was checked and what was not
+
+Checked by render: the hero's beat from the side, from behind and from
+the chase camera, procedural against the clip; storm3 landed from four
+sides, walking, and in the recovery; the three changed beats; the menu
+without the marker and with the new rows.
+
+Checked by number: every new dragon's ribs against the centre plane
+through a beat (the rib probe); the keyframed wingbeat's contract in
+`test_anim`. The 28 suites and the eight goldens pass. A course soak of
+3,000 frames ran with the clip.
+
+Not checked: anything in motion, which matters most for the wingbeat;
+the XP executable on the G41 (the gate reads its import table, it does
+not run it); the menu by hand.
+
+Seen and not fixed: a crease near the hero's wrist under the clip; the
+other dragons have no clip.

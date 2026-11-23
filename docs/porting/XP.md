@@ -78,6 +78,18 @@ under Wine the frame is identical either way and the suites pass. The file
 is compiled with `-fno-threadsafe-statics`, since libc++abi's static guard
 would call back into the locks it defines.
 
+Four more were found on 2026-11-22. The XP build had not been linked
+since `std::filesystem` went into the shared code (the clip files beside
+a model, the feedback folders), and libc++'s filesystem imports
+`GetFileInformationByHandleEx`,
+`GetFinalPathNameByHandleW`, `SetFileInformationByHandle` and
+`CreateSymbolicLinkW`, all Vista's. The thunks call the system's function
+when it exists. On XP the first answers the one class libc++ asks for
+(the reparse tag that `stat` reads) from `GetFileInformationByHandle`, and the
+other three fail with `ERROR_NOT_SUPPORTED`: the game makes no link and
+renames no open file. The gate passes with 255 imports. The executable
+with these four has not run on the G41.
+
 **The gate** is `tools/xp/check_imports.py`: the executable's import table
 against what XP SP3's own DLLs export. The lists come from the real files:
 `--dlls DIR` reads kernel32, user32, gdi32, msvcrt, shell32 and DirectX

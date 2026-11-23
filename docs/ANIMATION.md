@@ -1525,3 +1525,89 @@ are 46 and -60.
 Look from the front (`--studio 0 --inspect 180 16 6`) to set it. The
 side view does not show a dihedral.
 `artifacts/elemental-round3/glide-rest-0-20-30.jpg`.
+
+## A keyframed wingbeat: the hero's trial (2026-11-22, 20:40)
+
+The playtester: "are the current animations keyframed? try it with codex
+if not."
+
+They are not. Every pose is computed each frame from the flight state by
+`DragonRig`. Three things were keyframed before this: the hero's strikes
+(bite, claw, tail), which play at 0.6 over the procedural gesture; one
+brake overlay on the first Embercrest, which did not read; and the
+herds' walk cycles. The wingbeat, the glide, the legs, the neck and the
+tail were all procedural.
+
+### What the engine does
+
+`DragonRig::set_flight_clips` takes a clip that is one wingbeat as a
+loop (`assets/clips/<model>.flight.glb`: `flap`, and `flap_climb` for
+the deeper beat). The rig samples it at the flight model's own flap
+phase, 0 at the top of the downstroke, so the wing on screen and the
+thrust it makes still cannot disagree, and a bot or a replay gets the
+same wing. The two clips blend by the flight model's effort.
+
+The earlier overlay was a layer under the procedural pose and was
+smoothed away. This one replaces. Under the clip the procedural beat is
+taken out: the stroke angle, the delayed joints, the recovery fold, the
+twist and the stroke plane all drop to `flap_clip_under` (0). The clip's
+share follows the beat's amplitude, so a glide has none of it and the
+first beat fades in, and it is zero in a tuck and on the ground. What
+is not the beat stays procedural: the glide's dihedral, the wing's
+levelling twist, the load flex, the body's heave, the neck, the tail,
+the legs. The clip keys the wing joints only.
+
+`flap_clip` in a rig profile is its weight (1 by default, so a model
+with a clip file plays it). The Playtest panel has "keyframed wingbeat"
+at its top, and `--rig flap_clip=0` is the procedural beat on a capture.
+`DRAGON_FLIGHT_CLIPS=path` loads a candidate file from outside
+`assets/`. `test_flight_clip_replaces_the_beat` holds the contract: an
+empty clip stills the wings, a keyed one moves them at its phase, and a
+glide and a tuck are untouched.
+
+### The clip
+
+Codex (gpt-6.2-astra, high, the work account, 400,665 tokens, 25
+minutes) authored it by `tools/clips/hero-flight-brief.md`:
+`tools/clips/make_hero_flight.py`, a checker with 48 passing checks and
+12 damaged files it rejects, and `tools/clips/hero-flight.md` with the
+measured axes of the 22 wing joints. 61 keys a beat, cubic curves
+through authored poses.
+
+| | Cruise (`flap`) | Climb (`flap_climb`) |
+|---|---|---|
+| Arm at the top and the bottom | +55, -40 degrees | +65, -60 |
+| Wrist and finger tips turn after the shoulder by | 0.05 and 0.08 of a beat | 0.07 and 0.12 |
+| Elbow and wrist fold on the recovery | 34 and 47 degrees, at phase 0.68 | 45 and 64 |
+| Span at the peak fold | 0.56 of full | |
+| Open again by | phase 0.95 | phase 0.95 |
+| Wrist's travel toward the nose on the downstroke | 0.80 m | 1.22 m |
+
+### What it looks like
+
+`artifacts/hero-flight/studio-procedural-over-clip.jpg`: eight frames
+of the beat from the side and from behind, the procedural beat in the
+upper two rows and the clip in the lower two.
+`chase-procedural-over-clip.jpg`: four frames from the chase camera on
+a course, procedural above. Codex's own sheets are
+`cruise-before-after.jpg`, `climb-before-after.jpg` and `views.jpg`
+there.
+
+The difference is plain at that size. The procedural wing spends half
+the beat folded: narrow over the back at the top, and folded beside the
+body through the bottom. The clip's wing is open through the whole
+downstroke, the arm starts up while the tips are still going down, and
+the fold is a short event in the upstroke. From the chase camera the
+dragon shows a broad wing on most frames where it showed a narrow one.
+
+What is not right, from Codex's record and the renders:
+
+- A bright crease stays near the wrist in the side view, and the outer
+  ribs make a sharp corner at some angles.
+- The procedural beat has more fore-and-aft sweep than the clip.
+- The rig's load-dependent finger curl still acts under the clip. It
+  changes with the flight's load, and fixed keys can only allow for one
+  load.
+- Only the hero has a clip. Every other dragon beats procedurally.
+- Stills show poses and not timing. Whether it reads as alive in
+  motion is the playtester's call, and the slider is there for it.
