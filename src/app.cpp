@@ -3693,7 +3693,10 @@ void App::draw_flight_debug() {
 
     // In free-camera mode the dragon needs a marker, or it is easy to lose. Not
     // while inspecting it, where the marker is the only thing in the way.
-    if (free_camera_ && !options_.inspect) {
+    // Nor on the start screen: its view is a free camera, and the marker
+    // stood on the ground under the stand's dragon as a wire ball (the
+    // playtester, 2026-11-22: "the debug bounds for dragon").
+    if (free_camera_ && !options_.inspect && !menu_open_) {
         debug_.sphere(s.position, 6.0f, Vec3{0.9f, 0.75f, 0.35f}, 20, true);
     }
 
@@ -7252,6 +7255,9 @@ void App::spawn_rival(int rival_index, bool hunter) {
 
 namespace {
 const char* const kModeNames[] = {"PRACTICE", "ARENA", "HOARD RUN", "THE WILDS"};
+// The rivals' skill (App::apply_bot_skill): how stale their picture of the
+// player is, how scattered their aim, how often they shoot, how tough.
+const char* const kSkillNames[] = {"Rookie", "Veteran", "Ace"};
 const char* const kModeText[] = {
     "Six still targets and no return fire. Learn the breath, the bite and the dodge.",
     "A deathmatch against rival dragons, each of its own element.",
@@ -7262,12 +7268,12 @@ enum MenuPage : int { kPageMain = 0, kPageGraphics, kPageOptions };
 // Every row there is. A page lists the ones it shows (App::menu_items), so
 // a row is known by what it is and not by where it stands.
 enum MenuId : int {
-    kIdMode = 0, kIdRivals, kIdKills, kIdMinutes, kIdSeed, kIdValley, kIdWildsSave,
+    kIdMode = 0, kIdRivals, kIdSkill, kIdKills, kIdMinutes, kIdSeed, kIdValley, kIdWildsSave,
     kIdDragon, kIdDesigns, kIdGraphicsPage, kIdOptionsPage,
     kIdPreset, kIdSettingFirst,
     kIdSettingLast = kIdSettingFirst + gfx::SETTING_COUNT - 1,
     kIdAa, kIdDynRes, kIdVsync, kIdFullscreen, kIdFps,
-    kIdVolume, kIdInvertPitch, kIdInvertLook, kIdMouse,
+    kIdVolume, kIdAimAssist, kIdInvertPitch, kIdInvertLook, kIdMouse,
     kIdBack, kIdResume, kIdStart, kIdQuit,
 };
 // The content settings a player is offered, in the page's order. The rest
@@ -7350,6 +7356,8 @@ std::vector<App::MenuItem> App::menu_items() const {
     if (menu_page_ == kPageOptions) {
         std::snprintf(text, sizeof(text), "%d", int(std::lround(audio_.master() * 10.0f)));
         row(kIdVolume, "volume", text);
+        std::snprintf(text, sizeof(text), "%d%%", int(std::lround(combat_.tuning.aim_assist * 100.0f)));
+        row(kIdAimAssist, "aim assist", combat_.tuning.aim_assist > 0.005f ? text : "Off");
         row(kIdInvertPitch, "pitch", controls_.invert_pitch ? "W lowers the nose" : "W raises the nose");
         row(kIdInvertLook, "look stick", controls_.invert_free_look_y ? "Inverted" : "Direct");
         row(kIdMouse, "mouse steering", controls_.mouse_stick ? "On" : "Off");
@@ -7361,6 +7369,7 @@ std::vector<App::MenuItem> App::menu_items() const {
     if (menu_mode_ == kArena) {
         std::snprintf(text, sizeof(text), "%d", bot_count_);
         row(kIdRivals, "RIVALS", text);
+        row(kIdSkill, "THEIR SKILL", kSkillNames[std::clamp(bot_skill_, 0, 2)]);
         std::snprintf(text, sizeof(text), "%d kills", match_.settings.target_kills);
         row(kIdKills, "FIRST TO", text);
         const int minutes = int(std::lround(match_.settings.time_limit / 60.0f));
@@ -7371,6 +7380,7 @@ std::vector<App::MenuItem> App::menu_items() const {
         row(kIdSeed, "VALLEY SEED", menu_seed_ != 0 ? text : "Random");
         const char* const valleys[] = {"The first valley", "The second valley", "The last valley"};
         row(kIdValley, "START IN", valleys[std::clamp(menu_valley_, 0, 2)]);
+        row(kIdSkill, "RIVALS' SKILL", kSkillNames[std::clamp(bot_skill_, 0, 2)]);
     } else if (menu_mode_ == kWilds) {
         row(kIdWildsSave, "SAVE", menu_wilds_new_ ? "Start over" : "Continue");
     }
@@ -7480,6 +7490,8 @@ void App::load_player_settings() {
         if (key == "designs" && options_.designs == "new") set_new_designs(value != "old");
         if (key == "rivals" && options_.bots <= 0) bot_count_ = std::clamp(number, 1, kMaxRivals);
         if (key == "kills") match_.settings.target_kills = std::clamp(number, 1, 15);
+        if (key == "skill") apply_bot_skill(std::clamp(number, 0, 2));
+        if (key == "aim_assist") combat_.tuning.aim_assist = core::saturate(float(SDL_atof(value.c_str())));
         if (key == "minutes") match_.settings.time_limit = 60.0f * float(std::clamp(number, 0, 10));
         if (key == "aa" && options_.aa < 0 && tier_.tier == gfx::Tier::Modern) {
             aa_mode_ = std::clamp(number, 0, 2);
@@ -7511,6 +7523,8 @@ void App::save_player_settings() const {
     file << "volume " << audio_.master() << "\n";
     file << "rivals " << bot_count_ << "\n";
     file << "kills " << match_.settings.target_kills << "\n";
+    file << "skill " << bot_skill_ << "\n";
+    file << "aim_assist " << combat_.tuning.aim_assist << "\n";
     file << "minutes " << int(std::lround(match_.settings.time_limit / 60.0f)) << "\n";
     file << "aa " << aa_mode_ << "\n";
     file << "invert_pitch " << (controls_.invert_pitch ? 1 : 0) << "\n";
@@ -7538,6 +7552,10 @@ void App::menu_change(int id, int step) {
     switch (id) {
         case kIdMode: menu_mode_ = (menu_mode_ + step + int(kPlayModes)) % int(kPlayModes); break;
         case kIdRivals: bot_count_ = std::clamp(bot_count_ + step, 1, kMaxRivals); break;
+        case kIdSkill: apply_bot_skill(std::clamp(bot_skill_ + step, 0, 2)); break;
+        case kIdAimAssist:
+            combat_.tuning.aim_assist = core::saturate(std::round(combat_.tuning.aim_assist * 10.0f + float(step)) / 10.0f);
+            break;
         case kIdKills: match_.settings.target_kills = std::clamp(match_.settings.target_kills + step, 1, 15); break;
         case kIdMinutes: {
             const int minutes = std::clamp(int(std::lround(match_.settings.time_limit / 60.0f)) + step, 0, 10);
