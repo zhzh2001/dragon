@@ -282,6 +282,50 @@ int __cdecl xp_wcrtomb_s(size_t* written, char* out, size_t size, wchar_t c, mbs
     return 0;
 }
 
+// ---- std::filesystem. The shared code asks libc++ whether a clip file is
+// beside a model and walks the feedback folder, and libc++'s filesystem for
+// Windows imports four functions Vista added, whether or not the calls that
+// need them are ever made. Without these the executable did not load on XP
+// at all (found 2026-11-22: the XP build had not been linked since the
+// filesystem calls went in). What the game uses (exists, a directory walk,
+// create_directories) goes through stat, which asks for a file's reparse
+// tag: on XP that is the handle's attributes and no tag. The rest (a final
+// path, a rename or a truncate by handle, a symbolic link) fail as
+// unsupported, which is the truth there.
+
+BOOL WINAPI xp_GetFileInformationByHandleEx(HANDLE file, int info_class, void* out, DWORD size) {
+    REAL(GetFileInformationByHandleEx, "kernel32.dll");
+    if (real) return real(file, info_class, out, size);
+    const int kFileAttributeTagInfo = 9;  // FILE_ATTRIBUTE_TAG_INFO: attributes, then the reparse tag
+    BY_HANDLE_FILE_INFORMATION info;
+    if (info_class == kFileAttributeTagInfo && out && size >= 2 * sizeof(DWORD) && GetFileInformationByHandle(file, &info)) {
+        DWORD* fields = static_cast<DWORD*>(out);
+        fields[0] = info.dwFileAttributes;
+        fields[1] = 0;
+        return TRUE;
+    }
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
+}
+DWORD WINAPI xp_GetFinalPathNameByHandleW(HANDLE file, wchar_t* path, DWORD size, DWORD flags) {
+    REAL(GetFinalPathNameByHandleW, "kernel32.dll");
+    if (real) return real(file, path, size, flags);
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return 0;
+}
+BOOL WINAPI xp_SetFileInformationByHandle(HANDLE file, int info_class, void* in, DWORD size) {
+    REAL(SetFileInformationByHandle, "kernel32.dll");
+    if (real) return real(file, info_class, in, size);
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
+}
+BOOLEAN WINAPI xp_CreateSymbolicLinkW(const wchar_t* link, const wchar_t* target, DWORD flags) {
+    REAL(CreateSymbolicLinkW, "kernel32.dll");
+    if (real) return real(link, target, flags);
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
+}
+
 // ---- dwmapi.dll, which XP does not have: no composition there, so Dear
 // ImGui's alpha-compositing path finds it off and does nothing.
 
@@ -349,3 +393,11 @@ XP_CRT(wint_t, towupper_l, (wint_t c, void* l), (c, l))
 XP_CRT(int, wcscoll_l, (const wchar_t* a, const wchar_t* b, void* l), (a, b, l))
 XP_CRT(size_t, wcsxfrm_l, (wchar_t* o, const wchar_t* i, size_t n, void* l), (o, i, n, l))
 XP_IMPORT(int, __cdecl, wcrtomb_s, "_wcrtomb_s", (size_t* w, char* o, size_t s, wchar_t c, mbstate_t* m), (w, o, s, c, m))
+XP_IMPORT(BOOL, WINAPI, GetFileInformationByHandleEx, "_GetFileInformationByHandleEx@16",
+          (HANDLE f, int c, void* o, DWORD n), (f, c, o, n))
+XP_IMPORT(DWORD, WINAPI, GetFinalPathNameByHandleW, "_GetFinalPathNameByHandleW@16",
+          (HANDLE f, wchar_t* p, DWORD n, DWORD g), (f, p, n, g))
+XP_IMPORT(BOOL, WINAPI, SetFileInformationByHandle, "_SetFileInformationByHandle@16",
+          (HANDLE f, int c, void* i, DWORD n), (f, c, i, n))
+XP_IMPORT(BOOLEAN, WINAPI, CreateSymbolicLinkW, "_CreateSymbolicLinkW@12",
+          (const wchar_t* l, const wchar_t* t, DWORD g), (l, t, g))
