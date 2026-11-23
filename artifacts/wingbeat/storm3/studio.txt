@@ -1,0 +1,30 @@
+Cruise studio frames 240 to 359
+right rib minima in metres 4.600 4.183 2.300 1.151
+left rib minima in metres 4.695 4.364 2.360 1.230
+span at nearest sampled peak fold / widest 0.879
+right shoulder elevation in frame 200 glide +25.69 deg
+right shoulder elevation against horizontal +71.19 to +2.81 deg
+right shoulder excursion from frame 200 glide +45.50 to -22.88 deg
+right shoulder high and low phases 0.000 0.481
+wing_wrist_r high and low phases 0.037 0.519
+wing_finger_1tip_r high and low phases 0.074 0.556
+wing_finger_2tip_r high and low phases 0.074 0.556
+wing_finger_3tip_r high and low phases 0.074 0.556
+wing_finger_4tip_r high and low phases 0.074 0.556
+right steepest skin chord 28.37 deg at phase 0.444, 99.9% of outer hand width across 999 cuts
+left steepest skin chord 28.29 deg at phase 0.537, 99.9% of outer hand width across 999 cuts
+Climb studio frames 240 to 359
+right rib minima in metres 4.239 3.827 1.980 0.876
+left rib minima in metres 4.348 4.015 2.045 0.946
+span at nearest sampled peak fold / widest 0.867
+right shoulder elevation in frame 200 glide +25.69 deg
+right shoulder elevation against horizontal +81.10 to -7.47 deg
+right shoulder excursion from frame 200 glide +55.41 to -33.16 deg
+right shoulder high and low phases 0.000 0.481
+wing_wrist_r high and low phases 0.056 0.537
+wing_finger_1tip_r high and low phases 0.111 0.593
+wing_finger_2tip_r high and low phases 0.111 0.593
+wing_finger_3tip_r high and low phases 0.111 0.574
+wing_finger_4tip_r high and low phases 0.093 0.574
+right steepest skin chord 29.11 deg at phase 0.204, 91.3% of outer hand width across 999 cuts
+left steepest skin chord 28.61 deg at phase 0.241, 91.2% of outer hand width across 999 cuts

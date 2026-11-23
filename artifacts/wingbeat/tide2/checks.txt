@@ -1,0 +1,47 @@
+PASS 1 96 joint nodes, source hierarchy and two named loops
+PASS 2 source rest translations, rotations and scales
+PASS 1 flap 61 unit rotations from 0 to 1 second
+PASS 2 flap paired wing rotation channels only
+PASS 1 flap_climb 61 unit rotations from 0 to 1 second
+PASS 2 flap_climb paired wing rotation channels only
+PASS 3 flap loop seam 0.00000 deg
+PASS 4 flap mirror error in model axes 0.00000 deg
+PASS 5 flap arm relative to neutral +40.00 at 0/60, -22.30 deg at 30/60
+PASS 6 flap wrist height lags 3/60 and 3/60
+PASS 6 flap rib 1 height lags 5/60 and 5/60
+PASS 6 flap rib 2 height lags 5/60 and 5/60
+PASS 6 flap rib 3 height lags 5/60 and 5/60
+PASS 6 flap rib 4 height lags 5/60 and 5/60
+PASS 6 flap rib 5 height lags 5/60 and 5/60
+PASS 6 flap rib 6 height lags 5/60 and 5/60
+PASS 6 flap rib 7 height lags 5/60 and 5/60
+PASS 7 flap elbow fold 22.97 deg at 40/60, 0.41 at 57/60
+PASS 7 flap wrist fold 28.97 deg at 40/60, 0.52 at 57/60
+PASS 8 flap largest step 4.84 deg on wing_arm_r
+PASS 9 flap arm stroke +40.00 to -22.30 deg
+PASS 9 flap peak elbow fold 22.97 deg
+PASS 9 flap peak wrist fold 28.97 deg
+PASS 9 flap span at peak wrist fold 0.915 of widest
+PASS 9 flap smallest adjacent tip separation 6.75 deg, largest closure 1.33 deg
+PASS 9 flap fan narrows 7.23 deg at peak wrist fold
+PASS 3 flap_climb loop seam 0.00000 deg
+PASS 4 flap_climb mirror error in model axes 0.00000 deg
+PASS 5 flap_climb arm relative to neutral +50.00 at 0/60, -32.36 deg at 30/60
+PASS 6 flap_climb wrist height lags 4/60 and 4/60
+PASS 6 flap_climb rib 1 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 2 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 3 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 4 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 5 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 6 height lags 7/60 and 7/60
+PASS 6 flap_climb rib 7 height lags 7/60 and 7/60
+PASS 7 flap_climb elbow fold 27.97 deg at 40/60, 0.50 at 57/60
+PASS 7 flap_climb wrist fold 35.96 deg at 40/60, 0.65 at 57/60
+PASS 8 flap_climb largest step 7.69 deg on wing_arm_r
+PASS 9 flap_climb arm stroke +50.00 to -32.36 deg
+PASS 9 flap_climb peak elbow fold 27.97 deg
+PASS 9 flap_climb peak wrist fold 35.96 deg
+PASS 9 flap_climb span at peak wrist fold 0.894 of widest
+PASS 9 flap_climb smallest adjacent tip separation 6.57 deg, largest closure 2.38 deg
+PASS 9 flap_climb fan narrows 8.97 deg at peak wrist fold
+PASS 9 climb exceeds cruise at both reversals and both hinges

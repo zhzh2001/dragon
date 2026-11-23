@@ -1,0 +1,55 @@
+procedural cruise ./build/rib_probe-r11 assets/storm3.glb --no-clip
+beat: procedural
+side 0 rib 0: nearest the centre plane +3.307 m at phase 0.91
+side 0 rib 1: nearest the centre plane +2.136 m at phase 0.70
+side 0 rib 2: nearest the centre plane +0.581 m at phase 0.70
+side 0 rib 3: nearest the centre plane +0.272 m at phase 0.69
+side 1 rib 0: nearest the centre plane +3.415 m at phase 0.89
+side 1 rib 1: nearest the centre plane +2.126 m at phase 0.70
+side 1 rib 2: nearest the centre plane +0.581 m at phase 0.70
+side 1 rib 3: nearest the centre plane +0.281 m at phase 0.69
+wing's highest skin: +4.89 m above the back at phase 0.04
+wing's lowest skin: -2.55 m from the belly at phase 0.48 (negative is below it)
+under the belly: nearest the centre plane +2.66 m at phase 0.61
+
+procedural climb ./build/rib_probe-r11 assets/storm3.glb --no-clip --climb
+beat: procedural
+side 0 rib 0: nearest the centre plane +3.363 m at phase 0.00
+side 0 rib 1: nearest the centre plane +2.007 m at phase 0.69
+side 0 rib 2: nearest the centre plane +0.482 m at phase 0.70
+side 0 rib 3: nearest the centre plane +0.253 m at phase 0.72
+side 1 rib 0: nearest the centre plane +3.458 m at phase 0.54
+side 1 rib 1: nearest the centre plane +1.998 m at phase 0.69
+side 1 rib 2: nearest the centre plane +0.485 m at phase 0.70
+side 1 rib 3: nearest the centre plane +0.261 m at phase 0.72
+wing's highest skin: +4.87 m above the back at phase 0.04
+wing's lowest skin: -3.19 m from the belly at phase 0.46 (negative is below it)
+under the belly: nearest the centre plane +2.23 m at phase 0.61
+
+clip cruise ./build/rib_probe-r11 assets/storm3.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+side 0 rib 0: nearest the centre plane +4.600 m at phase 0.02
+side 0 rib 1: nearest the centre plane +4.183 m at phase 0.02
+side 0 rib 2: nearest the centre plane +2.300 m at phase 0.02
+side 0 rib 3: nearest the centre plane +1.151 m at phase 0.02
+side 1 rib 0: nearest the centre plane +4.695 m at phase 0.02
+side 1 rib 1: nearest the centre plane +4.364 m at phase 0.02
+side 1 rib 2: nearest the centre plane +2.360 m at phase 0.02
+side 1 rib 3: nearest the centre plane +1.230 m at phase 0.02
+wing's highest skin: +4.06 m above the back at phase 0.06
+wing's lowest skin: +0.85 m from the belly at phase 0.54 (negative is below it)
+under the belly: no wing skin more than 0.5 m below it
+
+clip climb ./build/rib_probe-r11 assets/storm3.glb --clip ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb --climb
+beat: keyframed, ~/src/game-claude-wt/r11-wingbeat/assets/clips/storm3.flight.glb
+side 0 rib 0: nearest the centre plane +4.239 m at phase 0.02
+side 0 rib 1: nearest the centre plane +3.827 m at phase 0.02
+side 0 rib 2: nearest the centre plane +1.980 m at phase 0.02
+side 0 rib 3: nearest the centre plane +0.876 m at phase 0.02
+side 1 rib 0: nearest the centre plane +4.348 m at phase 0.02
+side 1 rib 1: nearest the centre plane +4.015 m at phase 0.02
+side 1 rib 2: nearest the centre plane +2.045 m at phase 0.02
+side 1 rib 3: nearest the centre plane +0.946 m at phase 0.02
+wing's highest skin: +4.44 m above the back at phase 0.09
+wing's lowest skin: +0.48 m from the belly at phase 0.57 (negative is below it)
+under the belly: no wing skin more than 0.5 m below it

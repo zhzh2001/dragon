@@ -1,0 +1,32 @@
+Cruise studio frames 240 to 359
+right rib minima in metres 1.408 2.484 3.106 3.234 3.353 3.210 3.544
+left rib minima in metres 1.439 2.565 3.187 3.379 3.585 3.270 3.591
+span at nearest sampled peak fold / widest 0.915
+right shoulder elevation in frame 200 glide +15.32 deg
+right shoulder elevation against horizontal +48.74 to -14.63 deg
+right shoulder excursion from frame 200 glide +33.42 to -29.94 deg
+right shoulder high and low phases 0.000 0.490
+wing_wrist_r high and low phases 0.039 0.549
+wing_finger_1tip_r high and low phases 0.078 0.588
+wing_finger_2tip_r high and low phases 0.078 0.588
+wing_finger_3tip_r high and low phases 0.078 0.588
+wing_finger_4tip_r high and low phases 0.078 0.588
+wing_finger_5tip_r high and low phases 0.078 0.569
+wing_finger_6tip_r high and low phases 0.078 0.569
+wing_finger_7tip_r high and low phases 0.078 0.569
+Climb studio frames 240 to 359
+right rib minima in metres 1.213 2.208 2.794 2.912 3.013 2.863 3.213
+left rib minima in metres 1.248 2.302 2.903 3.077 3.272 2.953 3.292
+span at nearest sampled peak fold / widest 0.897
+right shoulder elevation in frame 200 glide +15.32 deg
+right shoulder elevation against horizontal +58.64 to -24.61 deg
+right shoulder excursion from frame 200 glide +43.32 to -39.92 deg
+right shoulder high and low phases 0.000 0.490
+wing_wrist_r high and low phases 0.059 0.569
+wing_finger_1tip_r high and low phases 0.118 0.608
+wing_finger_2tip_r high and low phases 0.118 0.608
+wing_finger_3tip_r high and low phases 0.118 0.608
+wing_finger_4tip_r high and low phases 0.118 0.608
+wing_finger_5tip_r high and low phases 0.118 0.608
+wing_finger_6tip_r high and low phases 0.118 0.608
+wing_finger_7tip_r high and low phases 0.118 0.608
