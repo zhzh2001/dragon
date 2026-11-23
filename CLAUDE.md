@@ -460,6 +460,7 @@ flight controls.
   | re-pose one wyvern's bind for flight, tune its postures and wingbeat over six faults, 47 engine views, gpt-6.2-astra high, 2026-11-22 | 431,846 |
   | author a keyframed wingbeat (a cruise and a climb loop) for the hero, with a checker and 63 engine views, gpt-6.2-astra high, 2026-11-22 | 400,665 |
   | keyframed wingbeats for two more dragons inside probe-measured limits, a shared generator and checker, 312 engine views, gpt-6.2-astra high, 2026-11-22 | 411,644 |
+  | five keyframed body loops for the hero (beat, climb, glide, walk, stand), a checker, probe charts, 267 engine views, gpt-6.2-astra high, 2026-11-22 | 387,772 |
   | a `codex exec` that replies "OK" | 7,292 |
 
   Two tasks plus one aborted launch left the 5-hour window at **8% remaining**

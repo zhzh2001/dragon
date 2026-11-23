@@ -1670,3 +1670,76 @@ What is weaker, from Codex's record and the renders:
   model's, and has a brief of its own
   (`tools/showcase/storm3-inner-panel-brief.md`).
 - Not judged in motion.
+
+## Keyframed body loops: the hero's neck, tail and legs (2026-11-22, 23:20)
+
+The playtester on the keyframed wingbeat: "looks a bit better, try on
+legs/tails/neck/etc."
+
+### What the engine does
+
+`DragonRig::set_body_clips` takes five more loops, each optional, from
+`assets/clips/<model>.body.glb`:
+
+| Animation | Sampled at | Plays when |
+|---|---|---|
+| `flap_body`, `flap_climb_body` | the flap phase, as the wing clips | beating, by the amplitude, blended by the effort |
+| `glide` | the clock | in the air, not beating, not tucked |
+| `walk` | the stride's own phase: 0 as the right hind and left fore feet lift | on the ground, by the walking speed |
+| `stand` | the clock | on the ground, not walking |
+
+They are added onto the finished pose, with their own weight
+(`body_clip`, 1 by default; the Playtest panel's "keyframed body";
+`--rig body_clip=0` on a capture; `DRAGON_BODY_CLIPS=path` for a
+candidate file). Unlike the wing clip, nothing is replaced under them
+but one term: the tail's sine wave in the beat (`tail_beat_deg`) yields
+to a keyed tail. The springs, the body's heave, the head hold and the
+tucked legs stay, and the keys ride on them.
+
+Two rules came from where the clips are added, which is after the feet
+are planted and after the head's aim:
+
+- `walk` and `stand` key the neck, the head, the tail and the folded
+  wings only. A key on the spine or a leg would slide a planted foot.
+- `glide` and `stand` turn the head. With a target locked, the breath
+  held or a strike playing, both fade out in a third of a second
+  (`body_idle_`), so the head looks at what it aims at.
+
+`test_body_clips_play_in_their_states` holds the contract.
+`trace_probe` plays a model's clips, so a loop's travel can be measured
+with and without.
+
+### The hero's loops
+
+Codex (gpt-6.2-astra, high, 387,772 tokens) authored them by
+`tools/clips/hero-body-brief.md`: `tools/clips/make_hero_body.py`, a
+checker with 168 passing checks and 15 damaged files it rejects, and
+`tools/clips/hero-body.md`.
+
+| Loop | What it adds | Travel over a cycle, procedural to clip |
+|---|---|---|
+| `flap_body` | A wave down the tail with a late flick at the tip. The hind legs kick back and apart on the downstroke and gather on the upstroke. The neck reaches and draws back while the head holds | Tail tip 7.2 to 11.8 m. Hind ankle 0.68 to 2.15 m. Head 0.94 to 0.99 m |
+| `flap_climb_body` | The same, deeper and later | Tail tip 17.6 m. Hind ankle 3.22 m |
+| `glide`, 8 s | Two glances of the head, a slow sway of the tail, the legs drifting out of step | Head 4.4% of the body's length |
+| `walk` | The neck dips as each pair of feet lands. The tail swings against the hips | Tail tip from nothing to 46% of the body's length. The feet do not move |
+| `stand`, 10 s | Three breaths lift the folded shoulders. The head turns, holds, and later tilts. The tail sways and curls | Tail tip 28% of the body's length. Head 4.2% |
+
+`artifacts/hero-body/six-views-procedural-over-clips.jpg` is mine, on
+the merged build: the beat from the side at two phases and from below,
+the glide from above, standing from the front, and the walk, the
+procedural body above each time. The tail in the beat and the turned
+head standing are plain. The glide and the walk differ less in a
+still. Codex's eight-frame sheets and its path charts are beside it
+(`beat-`, `glide-`, `walk-`, `stand-before-after.jpg`, `traces.jpg`).
+
+What is not right, from Codex's record and the renders:
+
+- In the climb the tail's curl rises nearly to the horns. It may read
+  as too much.
+- From behind the tail hides one foot for part of the beat.
+- The glances show from above and hardly from the side.
+- The folded wrist is blocky in a close view of the stand.
+- The procedural stance puts some claw tips under the ground. The clips
+  did not cause it and cannot fix it.
+- Not judged in motion. Loops on a clock repeat: whether 8 and 10
+  seconds read as a habit is for the playtester.

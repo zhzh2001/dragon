@@ -1253,6 +1253,7 @@ private:
     const AnimationClip* body_clip_[BODY_CLIP_COUNT] = {};
     float body_beat_share_ = 0.0f;  // this frame's weight of the body's keyframed beat
     float body_clock_ = 0.0f;       // seconds, for the loops that play on the clock
+    float body_idle_ = 1.0f;        // 1 with nothing to look at or do: the idle loops' share
     float joints_under_clip() const;
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();

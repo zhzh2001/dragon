@@ -3633,11 +3633,18 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
         const float effort = both ? core::saturate(state.flap_effort) : body_clip_[BODY_FLAP] ? 0.0f : 1.0f;
         play(BODY_FLAP, phase, body_beat_share_ * (1.0f - effort));
         play(BODY_FLAP_CLIMB, phase, body_beat_share_ * effort);
+        // The two idle loops turn the head, and they are added after the
+        // aim. A dragon with a target locked, breathing or striking looks
+        // at its target: the idle fades out in a third of a second and
+        // comes back in one.
+        const bool busy = aim_active_ || breath_smoothed_ > 0.02f || bite_time_ < tuning.bite_duration ||
+                          claw_time_ < tuning.claw_duration || tail_time_ < tuning.tail_duration;
+        body_idle_ = core::damp(body_idle_, busy ? 0.0f : 1.0f, busy ? 0.1f : 0.35f, dt);
         const float air = 1.0f - core::saturate(ground_contact_);
-        loop(BODY_GLIDE, weight * air * (1.0f - core::saturate(state.flap_amplitude)) *
+        loop(BODY_GLIDE, weight * body_idle_ * air * (1.0f - core::saturate(state.flap_amplitude)) *
                              (1.0f - core::saturate(state.wing_tuck)));
         play(BODY_WALK, walk_phase_ / core::TWO_PI, weight * core::saturate(ground_contact_) * walk_amount_);
-        loop(BODY_STAND, weight * core::saturate(ground_contact_) * (1.0f - walk_amount_));
+        loop(BODY_STAND, weight * body_idle_ * core::saturate(ground_contact_) * (1.0f - walk_amount_));
     }
     // The keyframed strikes, last: whole, on the finished pose. Each runs
     // once from its action's edge; the gesture timers are the clocks.
