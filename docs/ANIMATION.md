@@ -1721,7 +1721,7 @@ checker with 168 passing checks and 15 damaged files it rejects, and
 | `flap_body` | A wave down the tail with a late flick at the tip. The hind legs kick back and apart on the downstroke and gather on the upstroke. The neck reaches and draws back while the head holds | Tail tip 7.2 to 11.8 m. Hind ankle 0.68 to 2.15 m. Head 0.94 to 0.99 m |
 | `flap_climb_body` | The same, deeper and later | Tail tip 17.6 m. Hind ankle 3.22 m |
 | `glide`, 8 s | Two glances of the head, a slow sway of the tail, the legs drifting out of step | Head 4.4% of the body's length |
-| `walk` | The neck dips as each pair of feet lands. The tail swings against the hips | Tail tip from nothing to 46% of the body's length. The feet do not move |
+| `walk` | The neck dips as each pair of feet lands. The tail swings against the hips | Tail tip from nothing to 44% of the body's length. The feet do not move |
 | `stand`, 10 s | Three breaths lift the folded shoulders. The head turns, holds, and later tilts. The tail sways and curls | Tail tip 28% of the body's length. Head 4.2% |
 
 `artifacts/hero-body/six-views-procedural-over-clips.jpg` is mine, on
