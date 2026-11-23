@@ -98,10 +98,30 @@ def glide(t):
     return pose
 
 
+def walk(t):
+    # The right forefoot bears weight during the first half of the stride.
+    side = curve(t, [(0, -.05), (.12, -.66), (.24, -1), (.38, -.72),
+                     (.50, .05), (.63, .73), (.74, 1), (.88, .68)])
+    land = curve(2*t, [(0, 1), (.17, .72), (.44, .06), (.57, -.18), (.79, .16)])
+    pose = {}
+    for j, share in enumerate((.55, .27, .18), 1):
+        pose[f'neck_{j:02}'] = Quaternion(Y, math.radians(3.8*share*side)) @ pitch(-4.2*share*land)
+    pose['head'] = pitch(4.2*land)
+    for j in range(8):
+        sway = curve(t-.15*j/7, [(0, .08), (.22, 1), (.40, .62),
+                                  (.51, -.08), (.72, -1), (.88, -.70)])
+        pose[f'tail_{j+1:02}'] = Quaternion(Y, math.radians((2.26+.11*j)*sway))
+    bounce = curve(2*t-.055, [(0, -1), (.19, -.54), (.44, .77), (.62, .49), (.83, -.56)])
+    for side, sign in [('r', 1), ('l', -1)]:
+        pose['wing_wrist_'+side] = Quaternion(Z, math.radians(sign*2.5*bounce))
+    return pose
+
+
 LOOPS = {
     'flap_body': (flap, 60, 1),
     'flap_climb_body': (lambda t: flap(t, climb=True), 60, 1),
     'glide': (glide, 30, 8),
+    'walk': (walk, 60, 1),
 }
 
 

@@ -48,8 +48,14 @@ def capture(task):
     bmp = dest / (stem + '.bmp')
     jpeg = dest / (stem + '.jpg')
     env = dict(os.environ, DRAGON_BODY_CLIPS=str(CLIP) if CLIP.exists() else 'none')
+    flags = view.split()
+    if '--inspect' in flags:
+        elevation = flags.index('--inspect') + 3
+        if flags[elevation].startswith('-'):
+            # The option parser accepts a negative elevation after leading whitespace.
+            flags[elevation] = ' ' + flags[elevation]
     args = [MAIN / 'build/dragon-r11b', '--headless', '--hide-ui', '--size', '1920x1080',
-            '--sun', '55,60', '--model', 'assets/embercrest-hero.glb', *view.split()]
+            '--sun', '55,60', '--model', 'assets/embercrest-hero.glb', *flags]
     if version == 'before':
         args += ['--rig', 'body_clip=0']
     log = CACHE / f'{version}-{stem}.log'
