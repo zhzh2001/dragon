@@ -117,11 +117,36 @@ def walk(t):
     return pose
 
 
+def stand(t):
+    breath = curve(3*t, [(0, -.24), (.18, .16), (.37, .91), (.45, 1),
+                         (.63, .45), (.83, -.20), (.93, -.26)])
+    look = [(0, 0), (.12, 0), (.19, 2.2), (.28, 12), (.41, 12),
+            (.49, 6.8), (.57, 0), (.88, 0)]
+    tilt = curve(t, [(0, 0), (.57, 0), (.65, 2.1), (.70, 5), (.75, 4.2),
+                     (.82, .8), (.88, 0)])
+    pose = {}
+    for j, (joint, share) in enumerate(zip(('neck_01', 'neck_02', 'neck_03', 'head'),
+                                           (.35, .24, .16, .25))):
+        yaw = curve(t-.004*j, look)*share
+        pose[joint] = Quaternion(Y, math.radians(yaw))
+    pose['neck_01'] = pose['neck_01'] @ pitch(1.45*breath)
+    pose['head'] = pose['head'] @ Quaternion(Z, math.radians(tilt))
+    for side, sign in [('r', 1), ('l', -1)]:
+        pose['wing_root_'+side] = Quaternion(Z, math.radians(sign*1.8*breath))
+    for j in range(8):
+        sway = curve(t-.12*j/7, [(0, -.42), (.24, 1), (.39, .86), (.71, -1), (.86, -.88)])
+        curl = curve(t-.01*j, [(0, 0), (.34, 0), (.44, .78), (.50, 1), (.63, .27), (.72, 0)])
+        yaw = Quaternion(Y, math.radians((1.25+.09*j)*sway))
+        pose[f'tail_{j+1:02}'] = yaw @ pitch(-max(0, j-3)*2.1*curl)
+    return pose
+
+
 LOOPS = {
     'flap_body': (flap, 60, 1),
     'flap_climb_body': (lambda t: flap(t, climb=True), 60, 1),
     'glide': (glide, 30, 8),
     'walk': (walk, 60, 1),
+    'stand': (stand, 30, 10),
 }
 
 
