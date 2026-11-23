@@ -565,9 +565,57 @@ choices are saved in `player.cfg`. A mode started from it has no
 time-trial rings: they stood in the practice room and the arena as if
 they were the game.
 
-Not on it yet: key bindings, the stick's inversion, difficulty, a
-window size, and anything about what a mode's controls are. The four
-modes all start in the air with no word on the keys.
+Not on it yet: key bindings, difficulty, a window size, and anything
+about what a mode's controls are. The four modes all start in the air
+with no word on the keys.
+
+### Pages, a mode's own rows, and the launch that did not show it (2026-11-22, 19:00)
+
+The user: "the main menu should show on startup, and hide panels in all
+except practice. it should also include more settings like bot count for
+arena, seed for hoard, more graphics settings (maybe paged), etc."
+
+It did not show on startup because the test for a bare launch sat inside
+the block a package build alone compiles (`#ifndef ASSET_ROOT`). A
+development build, which is what the playtester runs, went to the rally
+course as before. The headless check passed `--menu`, so it never took
+that path. The rule now, in every build: a launch whose flags only say
+how to draw (`--preset`, `--graphics`, `--size`, `--fullscreen`,
+`--windowed`, `--show-fps`, `--no-vsync`, `--gpu-driver`, `--tier`,
+`--aa`, `--designs`, `--color`) opens the start screen. Any other flag
+names a scene or a tool and goes straight to it.
+
+The screen is three pages (`App::menu_items` lists a page's rows;
+`artifacts/start-screen/pages.jpg`).
+
+| Page | Rows |
+|---|---|
+| Main | Mode, then the mode's own rows, Dragon, Designs, the two page links, Resume over a game, Start, Quit |
+| Arena's rows | Rivals (1 to 7), First to (1 to 15 kills), Time limit (none, or 1 to 10 minutes) |
+| Hoard run's rows | Valley seed (Random, the valley last flown, or a number typed with the digits), Start in (the first, second or last valley) |
+| The wilds' row | Save: Continue, or Start over on a new valley |
+| Graphics | Preset; resolution, model detail, terrain, trees, grass, rocks, textures, shadows, bloom, clouds, ambient occlusion; anti-aliasing, dynamic resolution, vsync, fullscreen, the frame-rate readout |
+| Sound and controls | Volume, pitch (W lowers or raises the nose), the look stick's inversion, mouse steering |
+
+A graphics row steps to the next level the tier and device offer and
+applies it at once; a value that waits for a restart says so. Over a run
+in progress the preset, the terrain, the trees and the rocks are not
+offered: each rebuilds the ground the run stands on. Anti-aliasing and
+the three control rows are saved in `player.cfg` with the arena's
+numbers; the rest of the graphics page is `graphics.cfg`'s, as the
+Graphics panel's is.
+
+The panels are a developer's. A mode started from the screen hides them,
+except practice (`App::start_mode`); the backquote still brings them
+back. A launch with a scene's flag keeps them.
+`artifacts/start-screen/panels-by-mode.jpg`: practice, arena, hoard run
+and the wilds at frame 150.
+
+`--menu-page N` opens the screen on a page for a capture: 1 graphics,
+2 sound and controls, 10 to 13 the main page with that mode's rows.
+
+Not checked: a hand on the keys or the mouse. The seed's typing, the
+page links by click and the gamepad are untested code.
 
 ## Where the later discussions went (2026-11-22)
 

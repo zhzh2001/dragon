@@ -73,13 +73,54 @@ const char* const kPropFiles[] = {"props/watchtower.glb", "props/hoard_pile.glb"
 struct DesignPair {
     const char* first;
     const char* second;
+    // What a player reads for the second design. The first is named by its
+    // file. The hero is Embercrest's second design and keeps the name.
+    const char* name;
 };
 // Frost and storm are their third designs (2026-11-22): the user turned
 // frost2 and storm2 down, and those are reached through --models alone.
+// The names are the main session's, at the user's "please name the new
+// designs" (2026-11-22): compound words in the first roster's manner, each
+// after what the design has that its first did not.
 constexpr DesignPair kDesignPairs[] = {
-    {"embercrest", "embercrest-hero"}, {"frostvein", "frost3"}, {"ironroot", "stone2"},
-    {"stormsail", "storm3"},           {"tidewrack", "tide2"},  {"blightmaw", "blight2"},
+    {"embercrest", "embercrest-hero", "Embercrest"},  //
+    {"frostvein", "frost3", "Shardmane"},             // the ruff of ice blades
+    {"ironroot", "stone2", "Geodeback"},              // amethyst crystals out of obsidian plates
+    {"stormsail", "storm3", "Squallfin"},             // the wyvern, by its tail fluke
+    {"tidewrack", "tide2", "Deepwake"},               // the sail fin and the finned tail
+    {"blightmaw", "blight2", "Ambersting"},           // amber wings, a stinger
 };
+
+// "assets/frost3.glb" -> "frost3".
+std::string model_stem(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    const size_t from = slash == std::string::npos ? 0 : slash + 1;
+    const size_t dot = path.rfind(".glb");
+    return path.substr(from, dot == std::string::npos || dot < from ? std::string::npos : dot - from);
+}
+
+// Whether a model has a name that is not its file's: a second design.
+bool has_own_name(const std::string& path) {
+    const std::string stem = model_stem(path);
+    for (const DesignPair& pair : kDesignPairs) {
+        if (stem == pair.second) return true;
+    }
+    return false;
+}
+
+// What a player reads for a model: a second design's own name, or else the
+// file's ("frostvein" -> "Frostvein", "gold-dragon" -> "Gold dragon").
+std::string dragon_name(const std::string& path) {
+    std::string name = model_stem(path);
+    for (const DesignPair& pair : kDesignPairs) {
+        if (name == pair.second) return pair.name;
+    }
+    for (char& c : name) {
+        if (c == '-' || c == '_') c = ' ';
+    }
+    if (!name.empty()) name[0] = char(std::toupper(static_cast<unsigned char>(name[0])));
+    return name;
+}
 
 std::vector<std::string> App::roster_paths(const Options& options) {
     std::vector<std::string> roster;
@@ -166,11 +207,26 @@ Options parse_options(int argc, char** argv) {
     // on its command line was double-clicked: open on the game itself, a hoard
     // run on a fresh valley, not on the rally course a development build
     // starts in for its headless recipes.
-    // A launch with nothing asked for opens the start screen. It was the
-    // hoard run until 2026-11-22: a first-time player met a HUD and three
-    // rivals with no word on what the game was.
-    if (argc <= 1) options.menu = true;
 #endif
+    // A launch that asks for nothing but how to draw opens the start screen
+    // (the hoard run until 2026-11-22: a first-time player met a HUD and
+    // three rivals with no word on what the game was). This test sat inside
+    // the package-only block above at first, so a development build, which
+    // is what the playtester runs, never showed it. Any flag not listed
+    // here names a scene or a tool, and goes straight to it.
+    {
+        static const char* const kDisplayFlags[] = {"--menu",   "--preset",     "--graphics", "--size",    "--fullscreen",
+                                                    "--windowed", "--show-fps", "--no-vsync", "--gpu-driver", "--tier",
+                                                    "--aa",     "--no-taa",     "--designs",  "--color"};
+        bool plain = true;
+        for (int i = 1; i < argc; ++i) {
+            if (argv[i][0] != '-' || argv[i][1] != '-') continue;  // a flag's value
+            bool display = false;
+            for (const char* flag : kDisplayFlags) display = display || SDL_strcmp(argv[i], flag) == 0;
+            plain = plain && display;
+        }
+        if (plain) options.menu = true;
+    }
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--headless") {
@@ -330,6 +386,12 @@ Options parse_options(int argc, char** argv) {
         } else if (arg == "--menu-start" && i + 1 < argc) {
             options.menu = true;
             options.menu_start = SDL_atoi(argv[++i]);
+        } else if (arg == "--menu-page" && i + 1 < argc) {
+            // For a capture: the start screen on a page (1 graphics, 2 sound
+            // and controls), or on the main page with a mode's own rows
+            // (10 practice, 11 arena, 12 hoard run, 13 the wilds).
+            options.menu = true;
+            options.menu_page = SDL_atoi(argv[++i]);
         } else if (arg == "--designs" && i + 1 < argc) {
             options.designs = argv[++i];  // new (the default), old, or old-only (the second designs not loaded)
         } else if (arg == "--wilds") {
@@ -733,12 +795,7 @@ bool App::init(const Options& options) {
         // Pair the designs, by file name, in the default roster only: a
         // roster given on the command line is flown as given.
         if (options_.models.empty() && options_.model.empty()) {
-            auto stem = [](const std::string& path) {
-                const size_t slash = path.find_last_of("/\\");
-                const size_t from = slash == std::string::npos ? 0 : slash + 1;
-                const size_t dot = path.rfind(".glb");
-                return path.substr(from, dot == std::string::npos ? std::string::npos : dot - from);
-            };
+            auto stem = [](const std::string& path) { return model_stem(path); };
             for (const DesignPair& pair : kDesignPairs) {
                 int first = -1, second = -1;
                 for (size_t i = 0; i < models_.size(); ++i) {
@@ -938,7 +995,17 @@ bool App::init(const Options& options) {
     if (options.menu && !options.hide_ui) {
         load_player_settings();
         open_menu(false);
+        if (options.menu_page >= 10) {
+            menu_mode_ = std::clamp(options.menu_page - 10, 0, int(kPlayModes) - 1);
+            menu_row_ = 1;
+        } else if (options.menu_page > 0) {
+            menu_page_ = std::min(options.menu_page, 2);
+            menu_row_ = 0;
+        }
     }
+    // A scene asked for on the command line keeps the panels: that is a
+    // developer's launch. From the start screen only practice has them
+    // (start_mode).
 
     if (options.has_camera) {
         camera_.set_position(options.camera_position, options.camera_target);
@@ -4513,9 +4580,11 @@ void App::studio_controls() {
             if (i % 2) ImGui::SameLine();
             // Just the stem: the full asset path does not fit and every entry
             // shares the prefix anyway.
-            const std::string& path = models_[i]->path;
-            const size_t slash = path.find_last_of('/');
-            const std::string stem = slash == std::string::npos ? path : path.substr(slash + 1);
+            // A second design by its name, with the file's beside it.
+            const std::string file = model_stem(models_[i]->path);
+            std::string stem = dragon_name(models_[i]->path);
+            if (has_own_name(models_[i]->path)) stem += " (" + file + ")";
+            stem += "##model" + std::to_string(i);
             if (ImGui::RadioButton(stem.c_str(), player_model_ == int(i))) {
                 set_player_model(int(i));
             }
@@ -7189,30 +7258,157 @@ const char* const kModeText[] = {
     "Three valleys, head to pass. Take the hoards, grow, and leave before the hunters come.",
     "No end. Eat to live, grow by what you do, find what is there, sleep to save. A first version.",
 };
-enum MenuRow : int { kRowMode = 0, kRowDragon, kRowDesigns, kRowGraphics, kRowFullscreen, kRowFps, kRowVolume, kRowSettings };
-
-// "frost2" -> "Frost2", "gold-dragon" -> "Gold dragon".
-std::string dragon_name(const std::string& path) {
-    const size_t slash = path.find_last_of("/\\");
-    const size_t from = slash == std::string::npos ? 0 : slash + 1;
-    const size_t dot = path.rfind(".glb");
-    std::string name = path.substr(from, dot == std::string::npos || dot < from ? std::string::npos : dot - from);
-    if (name == "embercrest-hero") name = "embercrest";  // one species, its second design
-    for (char& c : name) {
-        if (c == '-' || c == '_') c = ' ';
-    }
-    if (!name.empty()) name[0] = char(std::toupper(static_cast<unsigned char>(name[0])));
-    return name;
+enum MenuPage : int { kPageMain = 0, kPageGraphics, kPageOptions };
+// Every row there is. A page lists the ones it shows (App::menu_items), so
+// a row is known by what it is and not by where it stands.
+enum MenuId : int {
+    kIdMode = 0, kIdRivals, kIdKills, kIdMinutes, kIdSeed, kIdValley, kIdWildsSave,
+    kIdDragon, kIdDesigns, kIdGraphicsPage, kIdOptionsPage,
+    kIdPreset, kIdSettingFirst,
+    kIdSettingLast = kIdSettingFirst + gfx::SETTING_COUNT - 1,
+    kIdAa, kIdDynRes, kIdVsync, kIdFullscreen, kIdFps,
+    kIdVolume, kIdInvertPitch, kIdInvertLook, kIdMouse,
+    kIdBack, kIdResume, kIdStart, kIdQuit,
+};
+// The content settings a player is offered, in the page's order. The rest
+// (view distance, the plain HUD, particles, the frame's height) are a retro
+// tier's, and stay in the Graphics panel.
+const gfx::Setting kMenuSettings[] = {
+    gfx::Setting::Resolution, gfx::Setting::Models,   gfx::Setting::Terrain, gfx::Setting::Trees,
+    gfx::Setting::Grass,      gfx::Setting::Rocks,    gfx::Setting::Textures, gfx::Setting::Shadows,
+    gfx::Setting::Bloom,      gfx::Setting::Clouds,   gfx::Setting::Ambient,
+};
+// What changing one rebuilds: the ground, and so everything standing on it.
+bool rebuilds_world(gfx::Setting s) {
+    return s == gfx::Setting::Terrain || s == gfx::Setting::Trees || s == gfx::Setting::Rocks;
+}
+std::string upper(std::string text) {
+    for (char& c : text) c = char(std::toupper(static_cast<unsigned char>(c)));
+    return text;
+}
+std::string capital(std::string text) {
+    if (!text.empty()) text[0] = char(std::toupper(static_cast<unsigned char>(text[0])));
+    return text;
 }
 }  // namespace
 
-// The rows past the settings: Resume (over a game only), Start, Quit.
-int App::menu_rows() const { return kRowSettings + (menu_in_play_ ? 3 : 2); }
+std::vector<App::MenuItem> App::menu_items() const {
+    std::vector<MenuItem> items;
+    char text[160];
+    auto row = [&items](int id, const char* name, const std::string& value) {
+        MenuItem item;
+        item.id = id;
+        item.name = name;
+        item.value = value;
+        items.push_back(item);
+    };
+    auto action = [&items](int id, const std::string& name, bool primary) {
+        MenuItem item;
+        item.id = id;
+        item.name = name;
+        item.action = true;
+        item.primary = primary;
+        items.push_back(item);
+    };
+    const bool modern = tier_.tier == gfx::Tier::Modern;
+    // In a run the valley is the run's: a setting that rebuilds the ground
+    // waits for the next game.
+    const bool world_locked = menu_in_play_ && run_mode_;
+
+    if (menu_page_ == kPageGraphics) {
+        if (!world_locked) {
+            const int preset = graphics_.preset_level(tier_.tier, device_limits_);
+            row(kIdPreset, "PRESET", preset >= 0 ? capital(gfx::preset_name(preset)) : "Custom");
+        }
+        for (const gfx::Setting s : kMenuSettings) {
+            if (world_locked && rebuilds_world(s)) continue;
+            const gfx::SettingInfo& info = gfx::setting_info(s);
+            int offered = 0;
+            for (int l = 0; l < gfx::QUALITY_LEVELS; ++l) {
+                offered += info.options[l] && gfx::allowed(s, l, tier_.tier, device_limits_) ? 1 : 0;
+            }
+            if (offered < 2) continue;  // nothing to choose on this tier
+            const char* now = info.options[graphics_[s]] ? info.options[graphics_[s]] : "";
+            std::string value = capital(now);
+            if (info.applies == gfx::Applies::Restart && graphics_[s] != loaded_graphics_[s]) value += ", after a restart";
+            row(kIdSettingFirst + int(s), info.label, value);
+        }
+        if (modern) {
+            const char* const aa[] = {"Off", "FXAA", "TAA"};
+            row(kIdAa, "anti-aliasing", aa[std::clamp(aa_mode_, 0, 2)]);
+            row(kIdDynRes, "dynamic resolution", dynamic_resolution_settings_.enabled ? "On" : "Off");
+        }
+        row(kIdVsync, "vsync",
+            vsync_pending_ == vsync_ ? (vsync_ ? "On" : "Off") : (vsync_pending_ ? "On, after a restart" : "Off, after a restart"));
+        row(kIdFullscreen, "fullscreen",
+            fullscreen_pending_ == fullscreen_ ? (fullscreen_ ? "On" : "Off")
+                                               : (fullscreen_pending_ ? "On, after a restart" : "Off, after a restart"));
+        row(kIdFps, "frame rate", show_fps_ ? "Shown" : "Hidden");
+        action(kIdBack, "BACK", true);
+        return items;
+    }
+    if (menu_page_ == kPageOptions) {
+        std::snprintf(text, sizeof(text), "%d", int(std::lround(audio_.master() * 10.0f)));
+        row(kIdVolume, "volume", text);
+        row(kIdInvertPitch, "pitch", controls_.invert_pitch ? "W lowers the nose" : "W raises the nose");
+        row(kIdInvertLook, "look stick", controls_.invert_free_look_y ? "Inverted" : "Direct");
+        row(kIdMouse, "mouse steering", controls_.mouse_stick ? "On" : "Off");
+        action(kIdBack, "BACK", true);
+        return items;
+    }
+
+    row(kIdMode, "MODE", kModeNames[menu_mode_]);
+    if (menu_mode_ == kArena) {
+        std::snprintf(text, sizeof(text), "%d", bot_count_);
+        row(kIdRivals, "RIVALS", text);
+        std::snprintf(text, sizeof(text), "%d kills", match_.settings.target_kills);
+        row(kIdKills, "FIRST TO", text);
+        const int minutes = int(std::lround(match_.settings.time_limit / 60.0f));
+        std::snprintf(text, sizeof(text), "%d minutes", minutes);
+        row(kIdMinutes, "TIME LIMIT", minutes > 0 ? text : "None");
+    } else if (menu_mode_ == kHoard) {
+        std::snprintf(text, sizeof(text), "%u", menu_seed_);
+        row(kIdSeed, "VALLEY SEED", menu_seed_ != 0 ? text : "Random");
+        const char* const valleys[] = {"The first valley", "The second valley", "The last valley"};
+        row(kIdValley, "START IN", valleys[std::clamp(menu_valley_, 0, 2)]);
+    } else if (menu_mode_ == kWilds) {
+        row(kIdWildsSave, "SAVE", menu_wilds_new_ ? "Start over" : "Continue");
+    }
+    {
+        const LoadedModel& model = player_model();
+        if (model.breath_file) {
+            std::snprintf(text, sizeof(text), "%s  ·  %s", dragon_name(model.path).c_str(), game::element_name(model.breath.element));
+        } else {
+            std::snprintf(text, sizeof(text), "%s", dragon_name(model.path).c_str());
+        }
+        row(kIdDragon, "DRAGON", text);
+    }
+    row(kIdDesigns, "DESIGNS", new_designs_ ? "New" : "First");
+    {
+        const int preset = graphics_.preset_level(tier_.tier, device_limits_);
+        action(kIdGraphicsPage, std::string("GRAPHICS  ·  ") + (preset >= 0 ? capital(gfx::preset_name(preset)) : "Custom"), false);
+    }
+    action(kIdOptionsPage, "SOUND AND CONTROLS", false);
+    if (menu_in_play_) action(kIdResume, "RESUME", true);
+    action(kIdStart, std::string(play_mode_ == menu_mode_ && menu_in_play_ ? "RESTART " : "START ") + kModeNames[menu_mode_], !menu_in_play_);
+    action(kIdQuit, "QUIT", false);
+    return items;
+}
+
+// The row to stand on when a page opens.
+void App::menu_select(int id) {
+    const std::vector<MenuItem> items = menu_items();
+    menu_row_ = 0;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (items[i].id == id) menu_row_ = int(i);
+    }
+}
 
 void App::open_menu(bool in_play) {
     menu_open_ = true;
     menu_in_play_ = in_play;
-    menu_row_ = in_play ? kRowSettings : kRowSettings;  // on Resume, or on Start
+    menu_page_ = kPageMain;
+    menu_select(in_play ? kIdResume : kIdStart);
     set_mouse_captured(false);
     if (mouse_look_) {
         mouse_look_ = false;
@@ -7249,10 +7445,23 @@ void App::start_mode(int mode) {
     switch (mode) {
         case kPractice: spawn_training_room(); break;
         case kArena: start_match(); break;
-        case kHoard: start_run(fresh_seed()); break;
-        default: start_wilds(0, true); break;
+        case kHoard:
+            start_run(menu_seed_ != 0 ? menu_seed_ : fresh_seed());
+            for (int v = 0; v < menu_valley_; ++v) {
+                if (hoard_run_.skip_valley()) advance_valley();
+            }
+            break;
+        default:
+            if (menu_wilds_new_) start_wilds(fresh_seed(), false);
+            else start_wilds(0, true);
+            menu_wilds_new_ = false;  // started over once: the next Start continues it
+            break;
     }
     apply_camera_preset(0);
+    // The panels are a developer's: practice is where a player tunes and
+    // looks, and every other mode is the game alone (the playtester,
+    // 2026-11-22). The backquote still brings them back.
+    show_panels_ = mode == kPractice;
     play_mode_ = mode;
     menu_mode_ = mode;
     save_player_settings();
@@ -7265,16 +7474,28 @@ void App::load_player_settings() {
     std::ifstream file(core::paths::user("player.cfg"));
     std::string key, value;
     while (file >> key >> value) {
-        if (key == "mode") menu_mode_ = std::clamp(SDL_atoi(value.c_str()), 0, int(kPlayModes) - 1);
+        const int number = SDL_atoi(value.c_str());
+        if (key == "mode") menu_mode_ = std::clamp(number, 0, int(kPlayModes) - 1);
         if (key == "volume") audio_.set_master(core::saturate(float(SDL_atof(value.c_str()))));
         if (key == "designs" && options_.designs == "new") set_new_designs(value != "old");
+        if (key == "rivals" && options_.bots <= 0) bot_count_ = std::clamp(number, 1, kMaxRivals);
+        if (key == "kills") match_.settings.target_kills = std::clamp(number, 1, 15);
+        if (key == "minutes") match_.settings.time_limit = 60.0f * float(std::clamp(number, 0, 10));
+        if (key == "aa" && options_.aa < 0 && tier_.tier == gfx::Tier::Modern) {
+            aa_mode_ = std::clamp(number, 0, 2);
+            taa_.enabled = aa_mode_ == 2;
+        }
+        if (key == "invert_pitch") controls_.invert_pitch = number != 0;
+        if (key == "invert_look") controls_.invert_free_look_y = number != 0;
+        if (key == "mouse") controls_.mouse_stick = number != 0;
         if (key == "dragon" && options_.models.empty() && options_.model.empty()) {
+            // The file's stem; a save from before the names has the name.
             for (size_t i = 0; i < models_.size(); ++i) {
                 std::string name = dragon_name(models_[i]->path);
                 for (char& c : name) {
                     if (c == ' ') c = '-';
                 }
-                if (name == value && model_listed(int(i))) set_player_model(int(i));
+                if ((model_stem(models_[i]->path) == value || name == value) && model_listed(int(i))) set_player_model(int(i));
             }
         }
     }
@@ -7284,21 +7505,52 @@ void App::save_player_settings() const {
     if (options_.headless) return;
     std::ofstream file(core::paths::user("player.cfg"));
     if (!file) return;
-    std::string name = dragon_name(models_[size_t(player_model_)]->path);
-    for (char& c : name) {
-        if (c == ' ') c = '-';
-    }
     file << "mode " << menu_mode_ << "\n";
     file << "designs " << (new_designs_ ? "new" : "old") << "\n";
-    file << "dragon " << name << "\n";
+    file << "dragon " << model_stem(models_[size_t(player_model_)]->path) << "\n";
     file << "volume " << audio_.master() << "\n";
+    file << "rivals " << bot_count_ << "\n";
+    file << "kills " << match_.settings.target_kills << "\n";
+    file << "minutes " << int(std::lround(match_.settings.time_limit / 60.0f)) << "\n";
+    file << "aa " << aa_mode_ << "\n";
+    file << "invert_pitch " << (controls_.invert_pitch ? 1 : 0) << "\n";
+    file << "invert_look " << (controls_.invert_free_look_y ? 1 : 0) << "\n";
+    file << "mouse " << (controls_.mouse_stick ? 1 : 0) << "\n";
 }
 
 // A row's value, one step left or right.
-void App::menu_change(int row, int step) {
-    switch (row) {
-        case kRowMode: menu_mode_ = (menu_mode_ + step + int(kPlayModes)) % int(kPlayModes); break;
-        case kRowDragon: {
+void App::menu_change(int id, int step) {
+    if (id >= kIdSettingFirst && id <= kIdSettingLast) {
+        // The next level this tier and device offer, that way. No wrap: the
+        // ends are the best and the cheapest.
+        const gfx::Setting s = gfx::Setting(id - kIdSettingFirst);
+        const gfx::SettingInfo& info = gfx::setting_info(s);
+        for (int l = int(graphics_[s]) + step; l >= 0 && l < gfx::QUALITY_LEVELS; l += step) {
+            if (!info.options[l] || !gfx::allowed(s, l, tier_.tier, device_limits_)) continue;
+            gfx::GraphicsSettings next = graphics_;
+            next[s] = uint8_t(l);
+            graphics_pending_ = next;
+            apply_graphics(next);
+            break;
+        }
+        return;
+    }
+    switch (id) {
+        case kIdMode: menu_mode_ = (menu_mode_ + step + int(kPlayModes)) % int(kPlayModes); break;
+        case kIdRivals: bot_count_ = std::clamp(bot_count_ + step, 1, kMaxRivals); break;
+        case kIdKills: match_.settings.target_kills = std::clamp(match_.settings.target_kills + step, 1, 15); break;
+        case kIdMinutes: {
+            const int minutes = std::clamp(int(std::lround(match_.settings.time_limit / 60.0f)) + step, 0, 10);
+            match_.settings.time_limit = 60.0f * float(minutes);
+            break;
+        }
+        case kIdSeed:
+            // Random, or the valley last flown; a number is typed.
+            menu_seed_ = menu_seed_ != 0 ? 0u : run_seed_;
+            break;
+        case kIdValley: menu_valley_ = std::clamp(menu_valley_ + step, 0, 2); break;
+        case kIdWildsSave: menu_wilds_new_ = !menu_wilds_new_; break;
+        case kIdDragon: {
             if (models_.size() < 2) break;
             int next = player_model_;
             const int count = int(models_.size());
@@ -7309,8 +7561,8 @@ void App::menu_change(int row, int step) {
             set_player_model(next);
             break;
         }
-        case kRowDesigns: set_new_designs(!new_designs_); break;
-        case kRowGraphics: {
+        case kIdDesigns: set_new_designs(!new_designs_); break;
+        case kIdPreset: {
             // The presets a player picks from: ultra to very-low, clamped to what the tier and device allow.
             const int now = graphics_.preset_level(tier_.tier, device_limits_);
             for (int n = 1; n <= 5; ++n) {
@@ -7324,33 +7576,61 @@ void App::menu_change(int row, int step) {
             }
             break;
         }
-        case kRowFullscreen:
+        case kIdAa:
+            aa_mode_ = (aa_mode_ + step + 3) % 3;
+            taa_.enabled = aa_mode_ == 2;
+            break;
+        case kIdDynRes:
+            dynamic_resolution_settings_.enabled = !dynamic_resolution_settings_.enabled;
+            save_graphics_key("dynres", dynamic_resolution_settings_.enabled ? "1" : "0");
+            break;
+        case kIdVsync:
+            vsync_pending_ = !vsync_pending_;
+            save_graphics();
+            break;
+        case kIdFullscreen:
             fullscreen_pending_ = !fullscreen_pending_;
             save_graphics();
             break;
-        case kRowFps:
+        case kIdFps:
             show_fps_ = !show_fps_;
             save_graphics_key("fps", show_fps_ ? "1" : "0");
             break;
-        case kRowVolume: audio_.set_master(core::saturate(std::round(audio_.master() * 10.0f + float(step)) / 10.0f)); break;
+        case kIdVolume: audio_.set_master(core::saturate(std::round(audio_.master() * 10.0f + float(step)) / 10.0f)); break;
+        case kIdInvertPitch: controls_.invert_pitch = !controls_.invert_pitch; break;
+        case kIdInvertLook: controls_.invert_free_look_y = !controls_.invert_free_look_y; break;
+        case kIdMouse: controls_.mouse_stick = !controls_.mouse_stick; break;
         default: break;
     }
 }
 
-void App::menu_activate(int row) {
-    if (row < kRowSettings) {
-        menu_change(row, 1);
-        return;
-    }
-    const int action = row - kRowSettings + (menu_in_play_ ? 0 : 1);  // 0 resume, 1 start, 2 quit
-    if (action == 0) {
-        save_player_settings();
-        close_menu();
-    } else if (action == 1) {
-        start_mode(menu_mode_);
-    } else {
-        save_player_settings();
-        running_ = false;
+void App::menu_activate(int id) {
+    switch (id) {
+        case kIdGraphicsPage:
+            menu_page_ = kPageGraphics;
+            menu_row_ = 0;
+            break;
+        case kIdOptionsPage:
+            menu_page_ = kPageOptions;
+            menu_row_ = 0;
+            break;
+        case kIdBack: {
+            const int from = menu_page_;
+            menu_page_ = kPageMain;
+            menu_select(from == kPageGraphics ? kIdGraphicsPage : kIdOptionsPage);
+            save_player_settings();
+            break;
+        }
+        case kIdResume:
+            save_player_settings();
+            close_menu();
+            break;
+        case kIdStart: start_mode(menu_mode_); break;
+        case kIdQuit:
+            save_player_settings();
+            running_ = false;
+            break;
+        default: menu_change(id, 1); break;  // a setting: one step on
     }
 }
 
@@ -7365,19 +7645,37 @@ void App::update_menu() {
         tapped[b] = down && !menu_pad_was_[b];
         menu_pad_was_[b] = down;
     }
-    const int rows = menu_rows();
+    const std::vector<MenuItem> items = menu_items();
+    const int rows = int(items.size());
+    menu_row_ = std::clamp(menu_row_, 0, rows - 1);
     if (input_.pressed(SDL_SCANCODE_UP) || input_.pressed(SDL_SCANCODE_W) || tapped[0]) menu_row_ = (menu_row_ + rows - 1) % rows;
     if (input_.pressed(SDL_SCANCODE_DOWN) || input_.pressed(SDL_SCANCODE_S) || tapped[1]) menu_row_ = (menu_row_ + 1) % rows;
-    if (input_.pressed(SDL_SCANCODE_LEFT) || input_.pressed(SDL_SCANCODE_A) || tapped[2]) menu_change(menu_row_, -1);
-    if (input_.pressed(SDL_SCANCODE_RIGHT) || input_.pressed(SDL_SCANCODE_D) || tapped[3]) menu_change(menu_row_, 1);
+    const MenuItem& item = items[size_t(menu_row_)];
+    if (!item.action) {
+        if (input_.pressed(SDL_SCANCODE_LEFT) || input_.pressed(SDL_SCANCODE_A) || tapped[2]) menu_change(item.id, -1);
+        if (input_.pressed(SDL_SCANCODE_RIGHT) || input_.pressed(SDL_SCANCODE_D) || tapped[3]) menu_change(item.id, 1);
+    }
+    if (item.id == kIdSeed) {
+        // A seed is typed: the digits, and Backspace takes one back. Nine
+        // digits fit a seed and leave no way to overflow it.
+        const SDL_Scancode digits[10] = {SDL_SCANCODE_0, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+                                         SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9};
+        const SDL_Scancode keypad[10] = {SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3,
+                                         SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7,
+                                         SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9};
+        for (uint32_t d = 0; d < 10; ++d) {
+            if ((input_.pressed(digits[d]) || input_.pressed(keypad[d])) && menu_seed_ < 100000000u) menu_seed_ = menu_seed_ * 10u + d;
+        }
+        if (input_.pressed(SDL_SCANCODE_BACKSPACE)) menu_seed_ /= 10u;
+    }
     if (input_.pressed(SDL_SCANCODE_RETURN) || input_.pressed(SDL_SCANCODE_SPACE) || tapped[4]) {
-        // Enter on a setting starts the game: the settings change with left and right.
-        if (menu_row_ < kRowSettings) menu_activate(kRowSettings + (menu_in_play_ ? 1 : 0));
-        else menu_activate(menu_row_);
+        menu_activate(item.id);
         return;
     }
     if (input_.pressed(SDL_SCANCODE_ESCAPE) || tapped[5]) {
-        if (menu_in_play_) {
+        if (menu_page_ != kPageMain) {
+            menu_activate(kIdBack);
+        } else if (menu_in_play_) {
             save_player_settings();
             close_menu();
         } else {
@@ -7399,34 +7697,56 @@ void App::draw_menu() {
                                   IM_COL32(8, 9, 12, 0), IM_COL32(8, 9, 12, 0), IM_COL32(8, 9, 12, 225));
     if (menu_in_play_) draw->AddRectFilled(ImVec2(0.0f, 0.0f), ImVec2(width, height), IM_COL32(8, 9, 12, 90));
 
+    const bool main_page = menu_page_ == kPageMain;
     const float x = px(64.0f);
-    const float value_x = x + px(170.0f);
-    const float row_w = px(470.0f);
-    hud_.numeral(ImVec2(x, px(54.0f)), "DRAGON", tk.accent, 84.0f);
-    hud_.label(ImVec2(x + px(3.0f), px(142.0f)), menu_in_play_ ? "paused" : "fly, breathe, grow", tk.text_dim, 15.0f);
+    const float value_x = x + px(main_page ? 170.0f : 230.0f);
+    const float row_w = px(main_page ? 470.0f : 560.0f);
+    float y = 0.0f;
+    if (main_page) {
+        hud_.numeral(ImVec2(x, px(40.0f)), "DRAGON", tk.accent, 84.0f);
+        hud_.label(ImVec2(x + px(3.0f), px(128.0f)), menu_in_play_ ? "paused" : "fly, breathe, grow", tk.text_dim, 15.0f);
+        y = px(166.0f);
+    } else {
+        hud_.numeral(ImVec2(x, px(40.0f)), menu_page_ == kPageGraphics ? "GRAPHICS" : "SOUND AND CONTROLS", tk.accent, 48.0f);
+        const char* note = "";
+        if (menu_page_ == kPageGraphics) {
+            note = menu_in_play_ && run_mode_ ? "The preset, the terrain, the trees and the rocks change between games."
+                                              : "A change takes hold at once, unless its value says otherwise.";
+        }
+        hud_.label(ImVec2(x + px(2.0f), px(96.0f)), note, tk.text_dim, 12.0f);
+        y = px(126.0f);
+    }
 
     const ImVec2 mouse = ImGui::GetIO().MousePos;
     const bool clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
     const bool moved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;
-    char text[160];
-    float y = px(196.0f);
+    const std::vector<MenuItem> items = menu_items();
+    menu_row_ = std::clamp(menu_row_, 0, int(items.size()) - 1);
     int hit_row = -1, hit_step = 0;
 
-    auto setting = [&](int row, const char* name, const char* value, bool arrows) {
-        const float row_h = px(40.0f);
+    // A setting: its name, and its value between two arrows.
+    auto setting = [&](int row, const MenuItem& item) {
+        const float row_h = px(main_page ? 36.0f : 28.0f);
+        const float name_size = main_page ? 13.0f : 12.0f;
+        const float value_size = main_page ? 19.0f : 16.0f;
+        const float pad = (row_h - px(value_size)) * 0.5f;
         const bool selected = menu_row_ == row;
         const bool hover = mouse.x >= x - px(12.0f) && mouse.x <= x + row_w && mouse.y >= y && mouse.y < y + row_h;
         if (hover && moved) menu_row_ = row;
         if (selected) {
-            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(3.0f)), ImVec2(x + row_w, y + row_h - px(3.0f)),
+            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(2.0f)), ImVec2(x + row_w, y + row_h - px(2.0f)),
                                 IM_COL32(255, 235, 200, 18), px(4.0f));
-            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(3.0f)), ImVec2(x - px(10.0f), y + row_h - px(3.0f)), tk.accent);
+            draw->AddRectFilled(ImVec2(x - px(14.0f), y + px(2.0f)), ImVec2(x - px(10.0f), y + row_h - px(2.0f)), tk.accent);
         }
-        hud_.label(ImVec2(x, y + px(13.0f)), name, selected ? tk.text : tk.text_dim, 13.0f);
-        const float value_w = hud_.label_width(value, 19.0f);
-        if (arrows) hud_.label(ImVec2(value_x, y + px(9.0f)), "<", selected ? tk.accent : tk.text_dim, 19.0f);
-        hud_.label(ImVec2(value_x + px(24.0f), y + px(9.0f)), value, selected ? tk.accent : tk.text, 19.0f);
-        if (arrows) hud_.label(ImVec2(value_x + px(36.0f) + value_w, y + px(9.0f)), ">", selected ? tk.accent : tk.text_dim, 19.0f);
+        const std::string name = main_page ? std::string(item.name) : upper(item.name);
+        hud_.label(ImVec2(x, y + pad + px(value_size - name_size) * 0.6f), name.c_str(), selected ? tk.text : tk.text_dim, name_size);
+        const float value_w = hud_.label_width(item.value.c_str(), value_size);
+        hud_.label(ImVec2(value_x, y + pad), "<", selected ? tk.accent : tk.text_dim, value_size);
+        hud_.label(ImVec2(value_x + px(24.0f), y + pad), item.value.c_str(), selected ? tk.accent : tk.text, value_size);
+        hud_.label(ImVec2(value_x + px(36.0f) + value_w, y + pad), ">", selected ? tk.accent : tk.text_dim, value_size);
+        if (item.id == kIdSeed && selected) {
+            hud_.label(ImVec2(value_x + px(64.0f) + value_w, y + pad + px(5.0f)), "type a number, Backspace to clear", tk.text_dim, 11.0f);
+        }
         if (hover && clicked) {
             hit_row = row;
             // The left arrow steps back; anywhere else on the row steps on.
@@ -7434,62 +7754,61 @@ void App::draw_menu() {
         }
         y += row_h;
     };
-
-    setting(kRowMode, "MODE", kModeNames[menu_mode_], true);
-    hud_.label(ImVec2(value_x + px(24.0f), y - px(4.0f)), kModeText[menu_mode_], tk.text_dim, 12.0f);
-    y += px(26.0f);
-    {
-        const LoadedModel& model = player_model();
-        if (model.breath_file) {
-            std::snprintf(text, sizeof(text), "%s  ·  %s", dragon_name(model.path).c_str(), game::element_name(model.breath.element));
-        } else {
-            std::snprintf(text, sizeof(text), "%s", dragon_name(model.path).c_str());
-        }
-        setting(kRowDragon, "DRAGON", text, models_.size() > 1);
-    }
-    setting(kRowDesigns, "DESIGNS", new_designs_ ? "New" : "First", true);
-    {
-        const int preset = graphics_.preset_level(tier_.tier, device_limits_);
-        setting(kRowGraphics, "GRAPHICS", preset >= 0 ? gfx::preset_name(preset) : "custom", true);
-    }
-    setting(kRowFullscreen, "FULLSCREEN",
-            fullscreen_pending_ == fullscreen_ ? (fullscreen_ ? "On" : "Off") : (fullscreen_pending_ ? "On, after a restart" : "Off, after a restart"),
-            true);
-    setting(kRowFps, "FRAME RATE", show_fps_ ? "Shown" : "Hidden", true);
-    std::snprintf(text, sizeof(text), "%d", int(std::lround(audio_.master() * 10.0f)));
-    setting(kRowVolume, "VOLUME", text, true);
-
-    // The actions.
-    y += px(18.0f);
-    auto action = [&](int row, const char* name, bool primary) {
-        const float row_h = px(46.0f);
+    // An action: a button. The page links are slimmer than Start and Quit.
+    auto button = [&](int row, const MenuItem& item) {
+        const bool link = item.id == kIdGraphicsPage || item.id == kIdOptionsPage;
+        const float row_h = px(link ? 36.0f : 42.0f);
+        const float size = link ? 18.0f : 26.0f;
         const bool selected = menu_row_ == row;
-        const float w = px(260.0f);
+        const float w = link ? row_w : px(280.0f);
         const bool hover = mouse.x >= x - px(12.0f) && mouse.x <= x + w && mouse.y >= y && mouse.y < y + row_h;
         if (hover && moved) menu_row_ = row;
         const ImVec2 a(x - px(14.0f), y + px(3.0f)), b(x + w, y + row_h - px(3.0f));
         if (selected) {
-            draw->AddRectFilled(a, b, primary ? tk.accent : IM_COL32(255, 235, 200, 40), px(4.0f));
-        } else {
+            draw->AddRectFilled(a, b, item.primary ? tk.accent : IM_COL32(255, 235, 200, 40), px(4.0f));
+        } else if (!link) {
             draw->AddRect(a, b, tk.plate_edge, px(4.0f), 0, px(1.0f));
         }
-        hud_.numeral(ImVec2(x, y + px(8.0f)), name, selected ? (primary ? IM_COL32(18, 20, 24, 255) : tk.text) : tk.text, 26.0f);
+        const ImU32 colour = selected && item.primary ? IM_COL32(18, 20, 24, 255) : (link && !selected ? tk.text_dim : tk.text);
+        hud_.numeral(ImVec2(x, y + (row_h - px(size)) * 0.5f - px(1.0f)), item.name.c_str(), colour, size);
+        if (link) hud_.label(ImVec2(x + w - px(22.0f), y + (row_h - px(16.0f)) * 0.5f), ">", selected ? tk.accent : tk.text_dim, 16.0f);
         if (hover && clicked) hit_row = row, hit_step = 0;
         y += row_h;
     };
-    int row = kRowSettings;
-    if (menu_in_play_) action(row++, "RESUME", true);
-    std::snprintf(text, sizeof(text), "%s %s", play_mode_ == menu_mode_ && menu_in_play_ ? "RESTART" : "START", kModeNames[menu_mode_]);
-    action(row++, text, !menu_in_play_);
-    action(row++, "QUIT", false);
 
-    hud_.label(ImVec2(x, height - px(58.0f)),
-               "W S or arrows: move    A D: change    Enter: start    Esc: back    ` panels    F2 feedback", tk.text_dim, 11.0f);
+    bool gap_before_actions = true;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const MenuItem& item = items[i];
+        if (item.action) {
+            const bool link = item.id == kIdGraphicsPage || item.id == kIdOptionsPage;
+            if (!link && gap_before_actions) {
+                y += px(12.0f);
+                gap_before_actions = false;
+            }
+            button(int(i), item);
+            continue;
+        }
+        setting(int(i), item);
+        if (item.id == kIdMode) {
+            hud_.label(ImVec2(value_x + px(24.0f), y - px(5.0f)), kModeText[menu_mode_], tk.text_dim, 12.0f);
+            y += px(22.0f);
+        }
+        if (item.id == kIdWildsSave && menu_wilds_new_) {
+            hud_.label(ImVec2(value_x + px(24.0f), y - px(5.0f)), "A new valley. The first sleep replaces the old save.", tk.text_dim, 12.0f);
+            y += px(18.0f);
+        }
+    }
+
+    hud_.label(ImVec2(x, height - px(50.0f)),
+               main_page ? "W S or arrows: move    A D: change    Enter: choose    Esc: back    ` panels    F2 feedback"
+                         : "W S or arrows: move    A D: change    Esc: back",
+               tk.text_dim, 11.0f);
 
     if (hit_row >= 0) {
         menu_row_ = hit_row;
-        if (hit_row < kRowSettings) menu_change(hit_row, hit_step);
-        else menu_activate(hit_row);
+        const MenuItem& item = items[size_t(hit_row)];
+        if (item.action) menu_activate(item.id);
+        else menu_change(item.id, hit_step);
     }
 }
 

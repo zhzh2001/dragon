@@ -225,6 +225,7 @@ struct Options {
     // mode N (0 practice, 1 arena, 2 hoard run, 3 the wilds): the headless
     // check that each mode starts from it.
     int menu_start = -1;
+    int menu_page = 0;    // --menu-page N: the start screen on a page, for a capture
     // --designs new|old|old-only: which of a species' two designs the
     // default roster shows (O swaps them in play). old-only does not load
     // the second designs at all, for a quick start.
@@ -293,15 +294,30 @@ public:
     void start_mode(int mode);
     void update_menu();
     void draw_menu();
-    void menu_change(int row, int step);
-    void menu_activate(int row);
-    int menu_rows() const;
+    // A row of the screen: a setting with a value, or an action. The id is
+    // a MenuId (app.cpp); a page lists the rows it shows.
+    struct MenuItem {
+        int id = 0;
+        std::string name;
+        std::string value;
+        bool action = false;
+        bool primary = false;  // the action the page is for: Start, Resume, Back
+    };
+    std::vector<MenuItem> menu_items() const;
+    void menu_select(int id);
+    void menu_change(int id, int step);
+    void menu_activate(int id);
+    static constexpr int kMaxRivals = 7;
     void load_player_settings();
     void save_player_settings() const;
     bool menu_open_ = false;
     bool menu_in_play_ = false;  // opened over a game with Esc: the world holds, and Resume is offered
     int menu_row_ = 0;
     int menu_mode_ = kHoard;
+    int menu_page_ = 0;          // the main page, graphics, or sound and controls
+    uint32_t menu_seed_ = 0;     // the hoard run's valley, 0 for a random one
+    int menu_valley_ = 0;        // and the valley of the three it starts in
+    bool menu_wilds_new_ = false;  // the wilds: start over, where Start otherwise continues the save
     int play_mode_ = -1;         // what was started from the menu, -1 nothing yet
     bool menu_pad_was_[6] = {};
     bool menu_camera_ = false;   // the launch screen has the free camera, and gives it back

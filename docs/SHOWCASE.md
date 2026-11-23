@@ -85,6 +85,15 @@ key, `wing_rest_deg`, lowers a wing bound raised to a glide. The
 mechanics discussions and the wilds moved out of `DIRECTION.md` into
 `docs/MECHANICS.md` and `docs/WILDS.md`.
 
+The ninth round (2026-11-22, 19:00), on reports 0028 to 0032. The four
+new quadrupeds have the hero's tucked legs and a raised stroke, and
+storm3 had a second Codex pass that re-posed its bind for flight
+(`docs/MODEL_GENERATION.md`, "The new designs in flight"). The second
+designs have names. The start screen shows on a bare launch in every
+build, has pages for graphics and for sound and controls, each mode's
+own rows, and hides the panels outside practice (`docs/DIRECTION.md`,
+"Pages, a mode's own rows").
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

@@ -2353,3 +2353,109 @@ the dive and the stand.
 - frost3's ruff is a dense fan of thick blades. From the front, lit, it
   reads pale blue; backlit it is a dark mass around the head.
 - Nothing was watched in motion at a player's frame rate.
+
+## The new designs in flight: the stroke, the legs, the names (2026-11-22, 19:00)
+
+The playtester flew all five in the studio's flap and left five reports,
+0028 to 0032, with: "wingbeat is too low on new designs, and leg tucking
+is not implemented like embercrest. please name the new designs. ...
+storm wyvern also seems a bit unnatural in postures, maybe a codex
+pass".
+
+| Report | Model | Note |
+|---|---|---|
+| 0028 | blight2 | "leg not tucked; wriggle weirdly", "wing too low" |
+| 0029 | frost3 | "leg issue" |
+| 0030 | frost3 | "neck motion unnatural, maybe should stay stiff?" |
+| 0031 | tide2 | "too low and clipping" |
+| 0032 | storm3 | "folding is bad" |
+
+### The four quadrupeds (the main session)
+
+Each profile came from an older sibling (frostvein, ironroot,
+tidewrack, blightmaw) with the hero's wingbeat block added. Three
+things were the sibling's and wrong.
+
+**The legs.** The siblings' legs hang and swing on the sway spring. The
+hero's are an authored tuck (`leg_flight_pose 1` with the hip, knee,
+hock, shoulder, elbow and wrist angles) held by the limb springs with
+14 degrees of give. The four profiles carry the hero's block now,
+unchanged: the angles suit all four builds, which is the point of the
+user's "medium four-legged build".
+
+**The stroke.** I had cut the upstroke on each to stop the wings
+crossing over the back, and left the downstroke deep. From behind the
+wing rose 35 to 40 degrees and fell to vertical.
+
+| | Was, up and down | Is | Recovery fold |
+|---|---|---|---|
+| blight2 | 68, -88 | 74, -64 | the hero's |
+| stone2 | 56, -88 | 70, -52 | as it was |
+| tide2 | 52, -62 | 46, -52 | small |
+| frost3 | 46, -60 (from a rest of -22) | 56, -58 | small |
+
+On frost3 and tide2 the raised wings' folded hands met and crossed at
+the top, so their recovery fold is a third of the hero's
+(`upstroke_fold_deg 10`, `recovery_wrist_deg 6`,
+`wing_recovery_fold_deg 3`). From behind each now travels about 55
+degrees above the level and 25 to 40 below.
+
+**frost3's neck.** The head is held still against the body's heave
+(`beat_head_hold`, 0.75 by default), so a short thick neck with a ruff
+bent at its base on every beat. It is 0.25 on frost3, with a stiffer
+chain (`neck_stiffness_scale 14`, `neck_inertia_scale 0.05`,
+`neck_range_deg 14`). I could not judge this one from stills: eight
+frames with a fixed grid show the head moving with the body where it
+held before, and whether it reads right in motion is the playtester's
+call.
+
+`artifacts/elemental-round3/beat-before-after-four.jpg`: four frames of
+the beat from the playtester's side view, the old profiles on the left
+and the new on the right. `five-glide-dive-brake-landed-turn.jpg`: each
+of the five in the glide from the side and behind, the dive, the brake,
+landed, and the turn.
+
+### storm3, a second Codex pass
+
+By `tools/showcase/storm3-posture-brief.md`: 29 minutes, 431,846
+tokens, both of its two allowed asset rebuilds. The record is
+`artifacts/storm3/README.md`, "Second pass", with
+`artifacts/storm3/pass2/before-after.jpg`.
+
+| Fault | Result |
+|---|---|
+| The glide: body 72 degrees nose up, neck vertical | Closed. The bind is re-posed for flight (`tools/storm3_flight_bind.py`: the trunk pitched 61 degrees forward, the neck laid out, the skin carried with the joints). The trunk is 10.6 degrees nose up |
+| Legs hanging | Closed. `leg_flight_pose` with its own angles; the foot's travel through a beat fell from 45.5 cm to 4.1 cm |
+| The beat too low | Partly. The leading tip reaches 42 degrees above the level and 30 below in a cruise, with a deeper climb beat (`flap_cruise_down_angle_deg`). The innermost rib now rises above the shoulder |
+| The membrane's fold | Partly. The inner web was rebuilt so it no longer rolls into a tube at the flank. A small notch remains beside the innermost rib, and that rib still crosses the centreline by 14 cm in the recovery |
+| The stance | Partly. The wrists plant 3.2 m ahead of the feet and wide, the chest clears the ground by 0.58 m. The folded tips still flare out |
+| The dive and the turn | Closed. The wings sweep back and stay on their own sides |
+
+The job named three keys the engine does not have and it wanted: a
+recovery angle for the fourth rib alone, a ground pitch for the head
+apart from the neck, and a sweep for the last finger segment on the
+ground. None is built.
+
+The bright strip the job reports along the folded edge in side frame
+228 is the membrane's pale underside in the sun beside the shaded rest
+of the wing. Under the default sun it is not there.
+
+### The names
+
+The second designs had their files' names in the UI ("Frost3"). They
+have their own now, in `kDesignPairs` (`app.cpp`): compound words in
+the first roster's manner, each after what the design has that its
+first did not. They are the main session's choice and one line each to
+change.
+
+| File | Name | After |
+|---|---|---|
+| `embercrest-hero` | Embercrest | the same species |
+| `frost3` | Shardmane | the ruff of ice blades |
+| `storm3` | Squallfin | the tail fluke |
+| `stone2` | Geodeback | amethyst crystals out of obsidian plates |
+| `tide2` | Deepwake | the sail fin and the finned tail |
+| `blight2` | Ambersting | amber wings and a stinger |
+
+The start screen and the Playtest panel's list show them, the panel
+with the file's name beside it. `player.cfg` keeps the file's name.

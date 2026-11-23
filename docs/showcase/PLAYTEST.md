@@ -815,3 +815,44 @@ bones. Both dragons go dark slate in a mountain's shadow, as every
 creature does, and a pale one shows it most. The wings are short beside
 the hero's, as the sheets drew them. storm3 stands in the same pleated
 crouch on its wrists as stormsail.
+
+## The ninth round: reports 0028 to 0032, legs and stroke, names, the start screen in pages (2026-11-22, 19:00)
+
+The user: "wingbeat is too low on new designs, and leg tucking is not
+implemented like embercrest. please name the new designs. the main menu
+should show on startup, and hide panels in all except practice. it
+should also include more settings like bot count for arena, seed for
+hoard, more graphics settings (maybe paged), etc. storm wyvern also
+seems a bit unnatural in postures, maybe a codex pass". Five reports
+came with it, all of the studio's flap from the side.
+
+| Ask or report | Answer |
+|---|---|
+| Wingbeat too low (0028, 0031) | The stroke raised on blight2, stone2, tide2 and frost3. `MODEL_GENERATION.md`, "The new designs in flight" |
+| Legs not tucked, wriggling (0028, 0029) | The hero's authored tuck and limb springs on all four |
+| frost3's neck (0030) | The head rides the body, the chain is stiffer. Not judged in motion |
+| storm3's postures, its folding (0032) | A Codex pass: the bind re-posed for flight, legs tucked, the beat raised, the inner membrane rebuilt, the stance lowered. Three of six faults closed, three partly |
+| Names | Shardmane, Squallfin, Geodeback, Deepwake, Ambersting; the hero stays Embercrest |
+| The menu on startup | It never showed in a development build: the test was inside a package-only block. Fixed. `DIRECTION.md`, "Pages, a mode's own rows" |
+| Panels hidden except in practice | Done, for a mode started from the screen |
+| More settings, paged | A graphics page, a sound and controls page, and each mode's own rows (rivals, kills, time limit; seed, starting valley; continue or start over) |
+
+### What was checked and what was not
+
+Checked by render: eight frames of the beat from the side and from
+behind on each of the five, before and after; the glide from the side
+and behind, the dive, the brake, the turn and landed on each; the six
+states of the start screen; each mode started from it, with and without
+its panels.
+
+The 28 suites and the eight goldens pass.
+
+Not checked: anything in motion; the start screen with keys, a mouse or
+a gamepad; the seed typed; a bare launch in a window (the fix is read
+from the code, and the headless run cannot take that path).
+
+Seen and not fixed: storm3's innermost rib crosses the spine by 14 cm
+in the recovery, its folded wing tips flare out on the ground, and a
+notch stays in the membrane beside the innermost rib. From the side a
+wing at the bottom of the beat still covers the legs on every model,
+the hero included.
