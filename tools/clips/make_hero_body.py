@@ -25,38 +25,47 @@ def pitch(degrees):
     return Quaternion(X, math.radians(degrees))
 
 
-def flap(t):
+def flap(t, climb=False):
     pose = {}
+    gain = 1.5 if climb else 1
+    def bend(degrees):
+        return pitch(gain*degrees)
+
     # The loaded tail drops quickly and uncoils through a longer recovery.
     for j in range(8):
         delay = .15 + .042*j
         flick = curve(t-delay, [(0, -.82), (.14, -.98), (.23, -.74),
                                 (.40, .90), (.48, 1), (.69, .43), (.88, -.39)])
-        pose[f'tail_{j+1:02}'] = pitch((4.4 + .93*j)*flick)
-    load = curve(t, [(0, -.62), (.13, -.22), (.28, .80), (.35, 1),
-                     (.48, .76), (.64, -.12), (.77, -.85), (.88, -1)])
-    fore = curve(t-.15, [(0, -.62), (.13, -.22), (.28, .80), (.35, 1),
-                         (.48, .76), (.64, -.12), (.77, -.85), (.88, -1)])
+        pose[f'tail_{j+1:02}'] = bend((4.4 + .93*j)*flick)
+    kick_phase = t - (.03 if climb else 0)
+    stroke = [(0, -.62), (.13, -.22), (.28, .80), (.35, 1),
+              (.48, .76), (.64, -.12), (.77, -.85), (.88, -1)]
+    load = curve(kick_phase, stroke)
+    fore = curve(kick_phase-.15, stroke)
     for side in ('r', 'l'):
-        pose['thigh_'+side] = pitch(-10*load)
-        pose['shin_'+side] = pitch(6.8*load)
-        pose['forearm_'+side] = pitch(-5*fore)
-        pose['wrist_'+side] = pitch(-7*fore)
+        pose['thigh_'+side] = bend(-10*load)
+        pose['shin_'+side] = bend(6.8*load)
+        pose['forearm_'+side] = bend(-5*fore)
+        pose['wrist_'+side] = bend(-7*fore)
         for digit in range(1, 4):
-            pose[f'toe_hind_{digit}_{side}'] = pitch(-12*(1-load)/2)
-            pose[f'toe_fore_{digit}_{side}'] = pitch(-8*(1-fore)/2)
+            pose[f'toe_hind_{digit}_{side}'] = bend(-12*(1-load)/2)
+            pose[f'toe_fore_{digit}_{side}'] = bend(-8*(1-fore)/2)
     arch = curve(t, [(0, 0), (.18, .24), (.42, .96), (.50, 1), (.69, .42), (.84, -.08)])
-    pose['chest'] = pitch(2.4*arch)
+    if climb:
+        arch = .25 + .75*arch
+    pose['chest'] = bend(2.4*arch)
     reach = curve(t, [(0, -.18), (.18, .28), (.42, 1), (.55, .87),
                       (.72, .03), (.84, -.28)])
+    if climb:
+        reach = .25 + .75*reach
     neck = [-2.4-1.9*reach, -1.9-2.6*reach, -1.5-3.1*reach]
-    for j, bend in enumerate(neck, 1):
-        pose[f'neck_{j:02}'] = pitch(bend)
-    pose['head'] = pitch(-sum(neck))
+    for j, angle in enumerate(neck, 1):
+        pose[f'neck_{j:02}'] = bend(angle)
+    pose['head'] = bend(-sum(neck))
     return pose
 
 
-LOOPS = {'flap_body': flap}
+LOOPS = {'flap_body': flap, 'flap_climb_body': lambda t: flap(t, climb=True)}
 
 
 def bake(rig, nodes, parents, rotations, name):
