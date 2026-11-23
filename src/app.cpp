@@ -4957,6 +4957,8 @@ void App::build_playtest_ui() {
         ImGui::SliderFloat("blight", &b.blight_style, 0.0f, 2.0f, "%.0f");
         ImGui::SliderFloat("stone", &b.stone_style, 0.0f, 2.0f, "%.0f");
         ImGui::SliderFloat("cloud with the pieces", &b.mix, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("a liquid as one tube", &b.stream_tube, 0.0f, 1.0f, "%.0f");
+        ImGui::SetItemTooltip("0: drops and spray alone. 1: one tube of water or acid through them.");
         ImGui::SliderFloat("marks on the ground", &breath_marks_, 0.0f, 1.0f, "%.2f");
         if (ImGui::TreeNode("the pieces")) {
             game::MatterTuning& m = breath_matter_.tuning;
@@ -10144,9 +10146,16 @@ void App::draw_breath_matter(rhi::Pass* pass) {
         world_.draw_matter(device_, pass, drop_mesh_, m, false);
     }
 
+    // The stream's body is not drawn by default (since 2026-11-22): the
+    // drops the slugs shed and the spray about them are the breath. One
+    // tube through the slugs was a flat plank from the side and a wavy
+    // ribbon in a turn, and each slug as a gob of its own was a string of
+    // beads ("liquids look strange, either fix or remove", feedback 0033
+    // and 0034).
+    const bool tube = breath_volume_settings_.stream_tube > 0.5f;
     // The stream: one tube through the slugs, youngest first, from the mouth
     // while the breath is held (breath_stream.hlsl).
-    if (slugs.size() >= 2) {
+    if (tube && slugs.size() >= 2) {
         std::sort(slugs.begin(), slugs.end(),
                   [](const game::MatterPiece* a, const game::MatterPiece* b) { return a->age < b->age; });
         gfx::StreamUniforms stream;

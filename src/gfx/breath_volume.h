@@ -107,6 +107,13 @@ struct BreathVolumeSettings {
     // playtester on bare pieces: "all elements can combine with style 1 a
     // bit". 0 is the pieces alone.
     float mix = 1.0f;
+    // A liquid's stream drawn as one tube through its slugs (1), or not
+    // drawn (0, the default since 2026-11-22): the drops and the spray are
+    // the breath. The tube was a flat blue plank from the side and a wavy
+    // ribbon in a turn: every node flies on where it was thrown, and a tube
+    // through them all bends as no water does ("liquids look strange,
+    // either fix or remove", feedback 0033 and 0034).
+    float stream_tube = 0.0f;
 
     // "key=value,..." over the fields above, by these names; `on` is enabled.
     void parse(const std::string& list);

@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
     for (const auto& v : m.vertices) { lox = std::fmin(lox, v.position.x); hix = std::fmax(hix, v.position.x); }
     anim::DragonRig rig;
     rig.init(s, j);
-    anim::load_rig_tuning(rig.tuning, (std::string(argv[1]) + ".rig.cfg").c_str());
+    anim::load_rig_tuning(rig.tuning, anim::profile_path(argv[1], ".rig.cfg").c_str());
     const std::string model = argv[1];
     const size_t slash = model.find_last_of('/');
     const std::string dir = slash == std::string::npos ? std::string(".") : model.substr(0, slash);
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
     // The model's own stroke: the studio builds its beat from the flight
     // tuning, and a profile's angles decide how far the wings rise.
     game::FlightTuning flight;
-    game::load_tuning(flight, (std::string(argv[1]) + ".flight.cfg").c_str());
+    game::load_tuning(flight, anim::profile_path(argv[1], ".flight.cfg").c_str());
     if (climb) flight.flap_effort_bias = 1.0f;
     const core::Vec3 centre{0.0f, 200.0f, 0.0f};
     const float dt = 1.0f / 60.0f;

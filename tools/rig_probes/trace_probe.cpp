@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     anim::DragonRig rig;
     rig.init(s, j);
     rig.set_model_scale(scale);
-    anim::load_rig_tuning(rig.tuning, (std::string(argv[1]) + ".rig.cfg").c_str());
+    anim::load_rig_tuning(rig.tuning, anim::profile_path(argv[1], ".rig.cfg").c_str());
     if (argc > 5 && argv[5][0] != '-') anim::load_rig_tuning(rig.tuning, argv[5]);
     const std::string model = argv[1];
     const size_t slash = model.find_last_of('/');
@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
         named(body_clips, "walk"), named(body_clips, "stand")};
     rig.set_body_clips(body);
     game::FlightTuning flight;
-    game::load_tuning(flight, (model + ".flight.cfg").c_str());
+    game::load_tuning(flight, anim::profile_path(argv[1], ".flight.cfg").c_str());
     const auto scenario = game::StudioScenario(std::atoi(argv[2]));
     const float from = float(std::atof(argv[3])), to = float(std::atof(argv[4]));
 
