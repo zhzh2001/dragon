@@ -12,7 +12,7 @@ from check_clip import read_glb
 from hero_flight_glb import pack
 
 CASES = (
-    (1,'name','animations'), (1,'samples','malformed tracks'),
+    (1,'header','Could not read the clip'), (1,'name','animations'), (1,'samples','malformed tracks'),
     (2,'rest','rest differences'), (2,'scale','nonrotation paths'),
     (3,'air-wing','forbidden joints'), (4,'position','seam value'),
     (4,'velocity','seam velocity'), (5,'mirror','mirror'), (6,'step','largest key step'),
@@ -22,6 +22,8 @@ CASES = (
 
 
 def corrupt(source, label):
+    if label == 'header':
+        return source.read_bytes()[:8]
     doc, binary = read_glb(source)
     data = bytearray(binary)
     name = 'walk' if label in ('ground-leg','sway','dip') else 'flap_body'
