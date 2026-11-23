@@ -39,6 +39,14 @@ are the project's record of why things are the way they are, and they carry
 the `Co-Authored-By` trailers that `AI_DISCLOSURE.md` points to. A render that
 no doc cites does not belong in `artifacts/`: cite it or delete it.
 
+A Codex job that judges its work by render commits every frame it
+looked at unless its brief says not to. Four such jobs on 2026-11-22
+left 869 full-size captures (682 MB) beside their contact sheets. They
+were deleted from `main` the same night, and since they had never been
+exported their paths went into `public_excludes.txt`, which keeps them
+out of the mirror's history too. A brief must say: commit the sheets
+and the comparisons, keep single frames in the scratch directory.
+
 The superseded renders are stripped by a **frozen** list,
 `tools/release/stripped_images.txt` (167 ids, fixed at the P1 publish). The
 first version recomputed the list from each export's tree. That rewrote old

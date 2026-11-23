@@ -77,3 +77,21 @@ tools/silver_dragon_material_inspect.py
 # (ATTRIBUTION.md, "3DMark2001 SE").
 tools/skeletons/dragothic.json
 artifacts/dragothic-rig/
+
+# Silver's third pass (2026-11-22): the same finding as its other tools.
+tools/silver_dragon_pass3_flight.py
+tools/silver_dragon_pass3_weights.py
+
+# Not a licence matter: per-frame engine captures that four Codex jobs
+# committed beside their contact sheets on 2026-11-22 (682 MB, 869 files)
+# and that were deleted from main the same night, before any export. No doc
+# cited them (docs/RELEASE.md: "cite it or delete it"). They were never
+# published, so dropping them here keeps them out of the mirror's history.
+artifacts/hero-flight/before/
+artifacts/hero-flight/after/
+artifacts/hero-body/before/
+artifacts/hero-body/after/
+artifacts/wingbeat/tide2/before/
+artifacts/wingbeat/tide2/after/
+artifacts/wingbeat/storm3/before/
+artifacts/wingbeat/storm3/after/
