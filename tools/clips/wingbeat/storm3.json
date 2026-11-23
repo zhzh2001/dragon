@@ -14,7 +14,10 @@
     "tip_top": 21,
     "tip_bottom": -10,
     "wrist_top": 27,
-    "wrist_bottom": -17
+    "wrist_bottom": -17,
+    "forearm_pitch": -13,
+    "palm_pitch": -24,
+    "palm_follow": 0.8
   },
   "climb": {
     "top": 55,
@@ -29,7 +32,10 @@
     "tip_top": 25,
     "tip_bottom": -13,
     "wrist_top": 31,
-    "wrist_bottom": -20
+    "wrist_bottom": -20,
+    "forearm_pitch": -13,
+    "palm_pitch": -24,
+    "palm_follow": 0.8
   },
   "level_xyzw": [
     -0.17293336987495422,

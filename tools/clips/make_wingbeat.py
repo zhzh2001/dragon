@@ -130,7 +130,7 @@ def right_pose(phase, cfg, down, points, level, glide_offset=0):
         return (frame(high, 0, 0) @ v).y * value + (frame(low, 0, 0) @ v).y * (1-value)
     root = frame(low + (high-low)*w, sweep, 0)
     elbow_height = (root @ (at('arm') - at('root'))).y
-    arm = frame(0, sweep + cfg['elbow']*fold, 0)
+    arm = frame(0, sweep + cfg['elbow']*fold, cfg.get('forearm_pitch', 0))
     segment = arm @ (at('wrist') - at('arm'))
     wrist_height = end_height(at('wrist')-at('root'), wrist_time, cfg.get('wrist_top', high-4), cfg.get('wrist_bottom', low+2))
     relative = (wrist_height-elbow_height)/math.hypot(segment.x, segment.y)
@@ -140,7 +140,11 @@ def right_pose(phase, cfg, down, points, level, glide_offset=0):
     arm = turn(Z, roll) @ arm
     palm_yaw = sweep + (cfg['elbow']-cfg['wrist'])*fold
     hand_roll = low+(high-low)*stroke(wrist_time, down)
-    palm = frame(hand_roll, palm_yaw, pitch)
+    # The wyvern shares the turn into its level palm across both hinges.
+    if 'palm_follow' in cfg:
+        tip_roll = cfg['tip_bottom'] + (cfg['tip_top']-cfg['tip_bottom'])*stroke(tip_time, down)
+        hand_roll += cfg['palm_follow']*(tip_roll-hand_roll)
+    palm = frame(hand_roll, palm_yaw, pitch + cfg.get('palm_pitch', 0))
     pose = {'root': root, 'arm': arm, 'wrist': palm}
     knuckle_y = wrist_height + (palm @ (at('finger_1a')-at('wrist'))).y
     rays = sorted(int(n.split('_')[2][:-1]) for n in points if n.startswith('wing_finger_') and n.endswith('a_r'))
