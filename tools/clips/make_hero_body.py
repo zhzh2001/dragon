@@ -44,8 +44,13 @@ def flap(t, climb=False):
               (.48, .76), (.64, -.12), (.77, -.85), (.88, -1)]
     load = curve(kick_phase, stroke)
     fore = curve(kick_phase-.15, stroke)
-    for side in ('r', 'l'):
-        pose['thigh_'+side] = bend(-10*load)
+    # The hips spread after the kick, then gather forward on recovery.
+    hip = -10*load + 7*max(0, -load)**2
+    spread = 14*(.45 + curve(kick_phase-.24, stroke))
+    spread_axis = (Z + .7*Y).normalized()
+    for side, sign in [('r', 1), ('l', -1)]:
+        lateral = Quaternion(spread_axis, math.radians(sign*gain*spread))
+        pose['thigh_'+side] = lateral @ bend(hip)
         pose['shin_'+side] = bend(6.8*load)
         pose['forearm_'+side] = bend(-5*fore)
         pose['wrist_'+side] = bend(-7*fore)

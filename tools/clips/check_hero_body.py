@@ -96,7 +96,7 @@ class Motion:
 
     def cycles(self, label, v, count):
         p = peaks(v)
-        self.line(len(p) == count, f'{label} has {len(p)} peaks at phases {[round(x, 3) for x in p]}')
+        self.line(len(p) == count, f'{label} peak count {len(p)} at phases {[round(x, 3) for x in p]}')
         return p
 
 
@@ -328,8 +328,8 @@ def check_other(m):
                f'tail yaw opposite planted left/right hind foot {tail[m.count//4]:.2f}/{tail[3*m.count//4]:.2f} deg')
         m.cycles('base tail sway',base,1)
         m.phase('tail tip lag',(peak_phase(tip)-peak_phase(base))%1,.15,.05)
-        for side in 'lr':
-            v = m.axis('wing_wrist_'+side,2)
+        for side,sign in [('r',1),('l',-1)]:
+            v = [sign*x for x in m.axis('wing_wrist_'+side,2)]
             m.amplitude(side+' wrist bounce',max(map(abs,v)),2,3)
             m.cycles(side+' wrist bounce',v,2)
     else:
@@ -356,6 +356,8 @@ def check_other(m):
         v = max((m.axis(TAIL[-1],i) for i in (0,2)),key=span)
         m.line(span(v) > .5 or len(peaks(tip)) > 1,
                f'tip curl, off-axis excursion {span(v):.2f} deg, yaw peaks {len(peaks(tip))}')
+        if span(v) > .5:
+            m.cycles('tip curl',v if max(v) >= -min(v) else [-x for x in v],1)
 
 
 if __name__ == '__main__':

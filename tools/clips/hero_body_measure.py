@@ -18,7 +18,7 @@ WINDOWS = {'beat': (1, 204, 51), 'climb': (1, 204, 51), 'glide': (0, 480, 480),
 POINTS = ('tail_tip', 'tail_mid', 'head', 'leg2', 'arm2')
 
 
-def probe(motion, version):
+def probe(motion, version, scale=None):
     scene, first, frames = WINDOWS[motion]
     model = Path('assets/embercrest-hero.glb')
     if motion == 'climb':
@@ -33,18 +33,23 @@ def probe(motion, version):
         Path(str(model)+'.flight.cfg').write_text(flight + '\nflap_effort_bias 1\n')
     env = dict(os.environ, DRAGON_BODY_CLIPS='none' if version == 'before' else str(CLIP),
                DRAGON_FLIGHT_CLIPS=str(MAIN / 'assets/clips/embercrest-hero.flight.glb'))
-    with (CACHE/f'{motion}-{version}.csv').open('w') as output, (CACHE/f'{motion}-{version}-probe.log').open('w') as log:
-        subprocess.run([MAIN/'build/trace_probe-r11b', model, str(scene), str((first-.25)/60),
-                        str((first+frames+.25)/60)], env=env, cwd=MAIN, stdout=output,
-                       stderr=log, stdin=subprocess.DEVNULL, check=True)
+    stem = f'{motion}-{version}' if scale is None else f'{motion}-{version}-scale-{scale}'
+    args = [MAIN/'build/trace_probe-r11b', model, str(scene), str((first-.25)/60),
+            str((first+frames+.25)/60)]
+    if scale is not None:
+        args += ['-', str(scale)]
+    with (CACHE/(stem+'.csv')).open('w') as output, (CACHE/(stem+'-probe.log')).open('w') as log:
+        subprocess.run(args, env=env, cwd=MAIN, stdout=output, stderr=log,
+                       stdin=subprocess.DEVNULL, check=True)
 
 
 def distance(row, joint):
     return tuple(float(row[f'{joint}_{axis}']) for axis in 'xyz')
 
 
-def metrics(motion, version):
-    with (CACHE/f'{motion}-{version}.csv').open() as stream:
+def metrics(motion, version, scale=None):
+    stem = f'{motion}-{version}' if scale is None else f'{motion}-{version}-scale-{scale}'
+    with (CACHE/(stem+'.csv')).open() as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == WINDOWS[motion][2]+1, (motion, len(rows))
     length = statistics.mean(math.dist(distance(r,'head'), distance(r,'tail_tip')) for r in rows)
@@ -78,6 +83,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('mode', choices=['before','after','report','charts'])
     ap.add_argument('motions',nargs='*')
+    ap.add_argument('--scale', type=float, help='Use the alignment scale from the engine log.')
     args = ap.parse_args()
     if args.mode == 'charts':
         chart()
@@ -85,6 +91,6 @@ if __name__ == '__main__':
         for motion in args.motions or WINDOWS:
             for version in (('before','after') if args.mode == 'report' else [args.mode]):
                 if args.mode != 'report':
-                    probe(motion,version)
-                length, paths = metrics(motion,version)
+                    probe(motion,version,args.scale)
+                length, paths = metrics(motion,version,args.scale)
                 print(motion, version, 'length', round(length,3), 'paths', *(round(n,3) for n in paths),flush=True)
