@@ -1,0 +1,12 @@
+PASS name: exit 1, FAIL 1 77 joint nodes, hierarchy, scene roots and two named animations
+PASS samples: exit 1, FAIL 1 flap 61 unit rotations from 0 to 1 second
+PASS rest: exit 1, FAIL 2 model rest translation, rotation and scale
+PASS channel: exit 1, FAIL 2 flap paired wing rotation channels only
+PASS body: exit 1, FAIL 2 flap paired wing rotation channels only
+PASS seam: exit 1, FAIL 3 flap seam 33.42500 deg
+PASS mirror: exit 1, FAIL 4 flap mirror 3.15207 deg
+PASS phase: exit 1, FAIL 5 flap arm high 54.79 at 48/60, low -40.09 at 18/60
+PASS lag: exit 1, FAIL 6 flap tip 1 height reversal lags 7/60 and 2/60
+PASS fold: exit 1, FAIL 7 flap wrist fold 47.85 deg at 29/60, -4.46 at 57/60
+PASS step: exit 1, FAIL 8 flap largest step 51.86 deg on wing_arm_r
+PASS amplitude: exit 1, FAIL 9 flap_climb arm depth 40.09 deg
