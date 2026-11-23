@@ -1611,3 +1611,62 @@ What is not right, from Codex's record and the renders:
 - Only the hero has a clip. Every other dragon beats procedurally.
 - Stills show poses and not timing. Whether it reads as alive in
   motion is the playtester's call, and the slider is there for it.
+
+## Keyframed wingbeats for tide2 and storm3 (2026-11-22, 23:10)
+
+The playtester on the hero's clip: "keyframe looks a bit better, try
+on ... another problematic dragon (likely tide)", and "storm might also
+benefit from codex fix". Three reports the same evening, all on the
+studio's flap:
+
+| Report | Model | Note |
+|---|---|---|
+| 0035 | tide2, from the side at the bottom | "low reach still too low and overlapping" |
+| 0036 | tide2, from above at the top | "high reach also clipping" |
+| 0037 | storm3, front quarter at the bottom | "also a bit too low and folding wings in air is weird" |
+
+So the fault was the extent of the stroke and the fold, more than the
+timing. The brief (`tools/clips/wingbeat-tide2-storm3-brief.md`) set
+limits and had them measured: `rib_centre_probe` now plays a clip and
+prints the wing's highest skin above the back, its lowest from the
+belly, and how near the centre plane it comes while under the belly.
+
+Codex (gpt-6.2-astra, high, 411,644 tokens, 61 minutes) wrote a
+generator and a checker that take the model's name
+(`tools/clips/make_wingbeat.py`, `check_wingbeat.py`, a module for each
+model in `tools/clips/wingbeat/`), and the record
+`tools/clips/wingbeat.md`. Both clips passed the nine checks and the
+limits with no engine change and no profile override.
+
+| | tide2 procedural | tide2 clip | storm3 procedural | storm3 clip |
+|---|---|---|---|---|
+| Nearest rib to the centre plane | 0.18 m | 1.41 m | 0.27 m | 1.15 m |
+| Wing's highest skin above the back | 2.59 m | 1.50 m | 4.89 m | 4.06 m |
+| Wing's lowest skin from the belly | 3.27 m below | 0.32 m below | 2.55 m below | 0.85 m above |
+| Under the belly, nearest the centre | 1.03 m | none there | 2.66 m | none there |
+| Shoulder against the glide, top and bottom | | +33, -30 degrees | | +46, -23 |
+| Span at the peak fold | | 0.92 of widest | | 0.88 |
+
+The climb beats are deeper by about 10 degrees each way and stay inside
+the same limits (tide2 0.63 m below the belly, storm3 0.48 m above).
+
+`artifacts/wingbeat/tide2-report-view-procedural-over-clip.jpg` and
+`storm3-report-view-procedural-over-clip.jpg`: three frames each from
+the playtester's own camera, the procedural beat above, mine, on the
+merged build. Tide2's fan no longer hangs under the body and wraps
+toward the other: at the bottom it lies level, edge on from the side,
+and both feet show. Storm3's hand stays spread where it hung folded.
+Codex's sheets are in `artifacts/wingbeat/tide2/` and `storm3/`.
+
+What is weaker, from Codex's record and the renders:
+
+- The shallower downstroke gives less impression of a push. From the
+  chase camera a hand near level is seen edge on, and the procedural
+  beat showed more membrane.
+- Tide2's near wing hides most of its head from the side near the top.
+- Storm3's inner wing panel, between the innermost rib and the flank,
+  is a pale sheet with ragged dark patches. It was there under the
+  procedural beat and shows more now that the wing is open. It is the
+  model's, and has a brief of its own
+  (`tools/showcase/storm3-inner-panel-brief.md`).
+- Not judged in motion.
