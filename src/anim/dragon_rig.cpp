@@ -353,6 +353,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(recovery_elbow_deg),
     RIG_FLOAT_FIELD(recovery_wrist_deg),
     RIG_FLOAT_FIELD(recovery_finger_deg),
+    RIG_FLOAT_FIELD(recovery_inner_finger_deg),
     RIG_FLOAT_FIELD(recovery_droop_deg),
     RIG_FLOAT_FIELD(stroke_twist_deg),
     RIG_FLOAT_FIELD(beat_heave_m),
@@ -382,6 +383,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_wing_hand_sweep_deg),
     RIG_FLOAT_FIELD(ground_wing_hand_elev_deg),
     RIG_FLOAT_FIELD(ground_wing_fan_deg),
+    RIG_FLOAT_FIELD(ground_wing_tip_sweep_deg),
     RIG_FLOAT_FIELD(ground_stance),
     RIG_FLOAT_FIELD(ground_body_pitch_deg),
     RIG_FLOAT_FIELD(ground_hip_deg),
@@ -395,6 +397,7 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(ground_feet_level),
     RIG_FLOAT_FIELD(ground_wing_plant),
     RIG_FLOAT_FIELD(ground_neck_pitch_deg),
+    RIG_FLOAT_FIELD(ground_head_pitch_deg),
     RIG_FLOAT_FIELD(ground_tail_pitch_deg),
     RIG_FLOAT_FIELD(ground_lift_m),
     RIG_FLOAT_FIELD(ground_ik),
@@ -1383,6 +1386,9 @@ void DragonRig::drive_wings(const game::FlightState& state) {
             if (is_elbow_hinge) recovery_hinge = core::radians(tuning.recovery_elbow_deg);
             if (is_wrist_hinge) recovery_hinge = core::radians(tuning.recovery_wrist_deg);
             if (is_finger_rib) recovery_hinge = core::radians(tuning.recovery_finger_deg) / rib_count;
+            if (is_finger_rib && finger_index == int(joints_.wing_fingers[side].size()) - 1) {
+                recovery_hinge += core::radians(tuning.recovery_inner_finger_deg) / rib_count;
+            }
             recovery_hinge *= recovery;
             // The hand droops below the arm on the recovery: an elevation
             // AGAINST the flap at the wrist, carried on down the ribs. The
@@ -2798,6 +2804,10 @@ void DragonRig::drive_stance(float stow) {
             for (const int joint : chain) rotate_joint(joint, Vec3::unit_x(), per_joint, true);
         };
         curve_chain(joints_.neck, tuning.ground_neck_pitch_deg, -model_forward_z_);
+        if (joints_.head != NO_PARENT && std::fabs(tuning.ground_head_pitch_deg) > 1e-3f) {
+            rotate_joint(joints_.head, Vec3::unit_x(),
+                         core::radians(tuning.ground_head_pitch_deg) * stance * -model_forward_z_, true);
+        }
         curve_chain(joints_.tail, tuning.ground_tail_pitch_deg, model_forward_z_);
     }
 
@@ -2849,6 +2859,11 @@ void DragonRig::drive_stance(float stow) {
                     tuning.ground_wing_hand_elev_deg - tuning.ground_wing_fan_deg * float(rib));
                 for (size_t i = 0; i + 1 < finger.size(); ++i) {
                     aim_bone(finger[i], finger[i + 1], hand, aim);
+                }
+                // The last bone has no child to aim by: turn it about up.
+                if (!finger.empty() && std::fabs(tuning.ground_wing_tip_sweep_deg) > 1e-3f) {
+                    rotate_joint_about(finger.back(), Vec3::unit_y(),
+                                       -core::radians(tuning.ground_wing_tip_sweep_deg) * out * aft_z * aim);
                 }
                 ++rib;
             }

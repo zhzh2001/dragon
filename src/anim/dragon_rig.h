@@ -208,6 +208,14 @@ struct RigTuning {
     float recovery_elbow_deg = 11.0f;
     float recovery_wrist_deg = 17.0f;
     float recovery_finger_deg = 13.0f;
+    // More recovery flex on the innermost rib alone (the last of the fan,
+    // nearest the body), or less with a negative angle. The four ribs share
+    // recovery_finger_deg, and on a wing whose innermost rib lies along the
+    // flank (storm3) the flex that narrows the hand carries that rib's tip
+    // across the spine: 14 cm on storm3, with no value that folded the hand
+    // and kept it clear. Asked for by the Codex pass that tuned storm3
+    // (artifacts/storm3/README.md, "Second pass").
+    float recovery_inner_finger_deg = 0.0f;
     //    The hand also DROOPS on the upstroke: the elbow leads upward and the
     //    hand trails below the wrist, which is the M-shaped front silhouette
     //    of every large flyer mid-upstroke and the clearest difference from a
@@ -399,6 +407,11 @@ struct RigTuning {
     // Each successive finger rib hangs this much lower than the one before,
     // so the closed fan reads as pleats rather than a single blade.
     float ground_wing_fan_deg = 8.0f;
+    // The last segment of each rib on the ground, turned about the body's
+    // up, positive toward the body. The aim above turns a bone onto a
+    // direction by where its child is, so a rib's last bone, which has no
+    // child, kept its bind bend and the folded tips flared outward.
+    float ground_wing_tip_sweep_deg = 0.0f;
 
     // ---- the standing body and legs ----
     //
@@ -449,6 +462,10 @@ struct RigTuning {
     // rather than kinks. Applied after the chain simulation, so the springs
     // still move the chain about the posed shape.
     float ground_neck_pitch_deg = 0.0f;
+    // The head alone, nose up positive, after the neck's share: a neck
+    // raised steeply by ground_neck_pitch_deg carries the muzzle up with it,
+    // and this levels the muzzle without lowering the neck.
+    float ground_head_pitch_deg = 0.0f;
     float ground_tail_pitch_deg = 0.0f;
     // Extra lift of the whole skeleton on the ground, metres. The floor above
     // is where the lowest foot JOINT stood in bind, and the mesh below that
