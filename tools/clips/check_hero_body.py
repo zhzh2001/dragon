@@ -27,6 +27,14 @@ def peak_phase(v, choose=max):
     return choose(range(len(v)), key=v.__getitem__) / len(v)
 
 
+def sway_phase(v):
+    """Measure the once-per-cycle motion separately from faster tip motion."""
+    angles = [math.tau*i/len(v) for i in range(len(v))]
+    x = sum(a*math.cos(t) for a,t in zip(v,angles))
+    y = sum(a*math.sin(t) for a,t in zip(v,angles))
+    return (math.atan2(y,x)/math.tau) % 1
+
+
 def distance(a, b):
     return abs((a - b + .5) % 1 - .5)
 
@@ -99,6 +107,9 @@ def check_beat(m):
     base, distal = span(total(tail[:4])), span(total(tail[4:]))
     m.amplitude('base half tail pitch excursion', base, 40*scale)
     m.line(distal > base, f'distal half tail pitch excursion {distal:.2f} deg vs base {base:.2f}')
+    ranges = [span(v) for v in tail]
+    m.line(all(a <= b + .05 for a,b in zip(ranges,ranges[1:])) and ranges[-1] > ranges[0],
+           f'tail pitch excursions base to tip {[round(x,2) for x in ranges]} deg')
     phases = [peak_phase(v) for v in tail]
     m.phase('base tail dip', phases[0], .5 + .15, .07)
     lag = [(b-a) % 1 for a, b in zip(phases, phases[1:])]
@@ -117,6 +128,7 @@ def check_beat(m):
         m.phase(f'{n} stroke', peak, timing + (.03 if climb else 0), .09)
         result[n] = max(v)
         result[n+' phase'] = peak
+    m.phase('foreleg delay after hind leg', (result['forearm_r phase']-result['thigh_r phase'])%1,.15,.05)
     for region in ('hind','fore'):
         for i in range(1,4):
             n = f'toe_{region}_{i}_r'
@@ -133,8 +145,8 @@ def check_beat(m):
         m.line(.05 < peak_phase(v,min) < .6, f'{n} dip phase {peak_phase(v,min):.3f}')
         result[n] = span(v)
     v = m.axis('chest',0)
-    m.amplitude('chest arch', max(map(abs,v)), 2*scale, 3*scale)
-    m.phase('chest arch', peak_phase(list(map(abs,v))), .5, .1)
+    m.amplitude('chest arch', max(v), 2*scale, 3*scale)
+    m.phase('chest arch', peak_phase(v), .5, .1)
     if not climb:
         directions = m.direction()
         smallest = min(sum(a*b for a,b in zip(u,v)) for u in directions for v in directions)
@@ -207,7 +219,7 @@ def check(path, through=None):
             err = math.dist(incoming,outgoing)
             # Ignore differences below a millionth of a degree per sample.
             rates.append((err/speed if err > 1e-6 else 0,j,speed*fps,err*fps))
-        ratio,j,speed,err = max(rates)
+        ratio,j,speed,err = max(rates,key=lambda r:(r[0],r[2]))
         results.append((4,ratio <= .20,f'{name} seam velocity {j} difference {err:.6f} of {speed:.6f} deg/s ({ratio:.1%}, limit 20%)'))
         if name in NAMES[:2]:
             mirrors = []
@@ -267,6 +279,7 @@ def check_other(m):
         m.amplitude('second look',-min(turn),6)
         m.phase('first look',peak_phase(turn),.25,.09)
         m.phase('second look',peak_phase(turn,min),.75,.09)
+        m.line(abs(turn[m.count//2]) < 2,f'head yaw between looks {turn[m.count//2]:.2f} deg')
         m.line(pitch[round(peak_phase(turn,min)*m.count)] < -.25,
                f'pitch at second look {pitch[round(peak_phase(turn,min)*m.count)]:.2f} deg')
         neck = [[sign*x for x in m.axis(j,1)] for j in NECK]
@@ -285,12 +298,15 @@ def check_other(m):
         m.line(toes[other][0] < 1,f'{other} hind toe curl {toes[other][0]:.2f} deg')
         m.cycles('active toe curl',[-x for x in m.axis(f'toe_hind_{i}_{active}',0)],1)
         for side in 'lr':
-            shift = max((span(m.axis(j+'_'+side,axis)),j,axis) for j in ('upper_arm','forearm','wrist','hand') for axis in range(3))
+            shift = max((span(m.axis(j+'_'+side,axis)),j+'_'+side,axis)
+                        for j in ('upper_arm','forearm','wrist','hand') for axis in range(3))
             excursion,j,axis = shift
             m.line(excursion > .5,f'{side} foreleg shift {excursion:.2f} deg on {j}')
-            m.cycles(side+' foreleg shift',m.axis(j+'_'+side,axis),1)
+            v = m.axis(j,axis)
+            # Count the flexed peak in either direction.
+            m.cycles(side+' foreleg shift',v if max(v) >= -min(v) else [-x for x in v],1)
         m.amplitude('summed tail sway',max(map(abs,tail)),14)
-        m.phase('tail tip lag', (peak_phase(tip)-peak_phase(base))%1,.25,.08)
+        m.phase('slow tail tip lag', (sway_phase(tip)-sway_phase(base))%1,.25,.075)
         m.cycles('base tail sway',base,1)
         # The twitch can cross the slow sway or bend in another plane.
         extra = max(span(m.axis(TAIL[-1],i)) for i in (0,2))
@@ -308,6 +324,8 @@ def check_other(m):
         m.line(neck[m.count//4] < 0 < neck[3*m.count//4],
                f'neck yaw over planted right/left forefoot {neck[m.count//4]:.2f}/{neck[3*m.count//4]:.2f} deg')
         m.amplitude('summed tail sway',max(map(abs,tail)),20)
+        m.line(tail[m.count//4] > 0 > tail[3*m.count//4],
+               f'tail yaw opposite planted left/right hind foot {tail[m.count//4]:.2f}/{tail[3*m.count//4]:.2f} deg')
         m.cycles('base tail sway',base,1)
         m.phase('tail tip lag',(peak_phase(tip)-peak_phase(base))%1,.15,.05)
         for side in 'lr':
@@ -316,17 +334,20 @@ def check_other(m):
             m.cycles(side+' wrist bounce',v,2)
     else:
         breath = m.axis(NECK[0],0)
-        m.amplitude('base neck breath',max(map(abs,breath)),1,1.5)
-        m.cycles('neck breath',breath,3)
+        m.amplitude('base neck breath',max(breath),1,1.5)
+        breaths = m.cycles('neck breath',breath,3)
         for side,sign in [('r',1),('l',-1)]:
             v = [sign*x for x in m.axis('wing_root_'+side,2)]
             m.amplitude(side+' shoulder lift',max(v),1.5,2)
-            m.cycles(side+' shoulder lift',v,3)
+            lifts = m.cycles(side+' shoulder lift',v,3)
+            aligned = all(any(distance(p,b) <= .06 for b in breaths) for p in lifts)
+            m.line(aligned, f'{side} shoulder lift follows each neck breath within 0.06 cycle')
         sign = 1 if yaw[round(.3*m.count)] >= 0 else -1
         turn = [y*sign for y in yaw]
         m.amplitude('head look',max(turn),12)
         hold = [turn[round(i*m.count/100)] for i in range(30,41)]
         m.line(min(hold) >= .85*max(turn),f'look held at 3-4 s, minimum {min(hold):.2f} of {max(turn):.2f} deg')
+        m.line(abs(turn[round(.7*m.count)]) < .3*max(turn),f'head yaw after look {turn[round(.7*m.count)]:.2f} deg')
         roll = m.chain((*NECK,'head'),2)
         m.amplitude('head tilt',max(map(abs,roll)),5)
         m.phase('head tilt',peak_phase(list(map(abs,roll))),.7,.10)

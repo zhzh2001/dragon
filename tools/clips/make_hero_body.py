@@ -12,13 +12,15 @@ import make_brake_bank as base
 import make_hero_attacks as attacks
 from check_clip import read_glb
 from make_hero_flight import curve
-from hero_flight_glb import write
+from hero_body_glb import write
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / 'assets/embercrest-hero.glb'
 OUTPUT = ROOT / 'assets/clips/embercrest-hero.body.glb'
 CACHE = ROOT / 'build-clip-cache'
 X = Vector((1, 0, 0))
+Y = Vector((0, 1, 0))
+Z = Vector((0, 0, 1))
 
 
 def pitch(degrees):
@@ -65,12 +67,48 @@ def flap(t, climb=False):
     return pose
 
 
-LOOPS = {'flap_body': flap, 'flap_climb_body': lambda t: flap(t, climb=True)}
+def glide(t):
+    pose = {}
+    breath = curve(2*t, [(0, -.30), (.26, .68), (.43, 1), (.74, -.16), (.88, -.36)])
+    pose['chest'] = pitch(1.5*breath)
+    glance = [(0, 0), (.09, .06), (.23, 8), (.30, 7.3), (.46, .1),
+              (.56, 0), (.73, -6), (.80, -5.6), (.95, 0)]
+    dip = curve(t, [(0, 0), (.50, 0), (.74, -2.4), (.83, -1.2), (.96, 0)])
+    for j, (joint, share) in enumerate(zip(('neck_01', 'neck_02', 'neck_03', 'head'),
+                                           (.24, .21, .19, .36))):
+        yaw = curve(t-.009*j, glance)*share
+        pose[joint] = Quaternion(Y, math.radians(yaw)) @ pitch(dip*share)
+    for j in range(8):
+        sway = curve(t-.25*j/7, [(0, -.28), (.23, 1), (.40, .76), (.69, -1), (.84, -.87)])
+        twitch = curve(t-.013*j, [(0, 0), (.41, 0), (.46, .35), (.50, -1), (.56, .13), (.62, 0)])
+        yaw = (1.65+.12*j)*sway + max(0, j-4)*.75*twitch
+        pose[f'tail_{j+1:02}'] = Quaternion(Y, math.radians(yaw))
+    drift = [(0, -.25), (.16, -1), (.44, -.18), (.58, .92), (.74, .78), (.92, -.04)]
+    for side, delay in [('l', 0), ('r', .32)]:
+        pose['thigh_'+side] = pitch(3.8*curve(t-delay, drift))
+    flex = curve(t, [(0, 0), (.32, 0), (.43, 1), (.49, .88), (.60, 0)])
+    for digit in range(1, 4):
+        pose[f'toe_hind_{digit}_r'] = pitch(-10*flex)
+    shift = curve(t, [(0, 0), (.57, 0), (.70, 1), (.76, .82), (.91, 0)])
+    settle = curve(t, [(0, 0), (.09, 0), (.22, 1), (.29, .72), (.44, 0)])
+    pose['forearm_r'] = pitch(2.6*settle)
+    pose['wrist_r'] = pitch(-1.8*settle)
+    pose['forearm_l'] = pitch(-3.2*shift)
+    pose['wrist_l'] = pitch(2.6*shift)
+    return pose
+
+
+LOOPS = {
+    'flap_body': (flap, 60, 1),
+    'flap_climb_body': (lambda t: flap(t, climb=True), 60, 1),
+    'glide': (glide, 30, 8),
+}
 
 
 def bake(rig, nodes, parents, rotations, name):
-    frames = 60
-    samples = [LOOPS[name](f / frames) for f in range(frames)]
+    pose_at, fps, duration = LOOPS[name]
+    frames = fps*duration
+    samples = [pose_at(f / frames) for f in range(frames)]
     # Center the wrap sample between its neighbors to match both sampled velocities.
     samples[0] = {n: q.slerp(samples[1][n], .5) for n, q in samples[-1].items()}
     samples.append(samples[0])
@@ -92,7 +130,7 @@ def bake(rig, nodes, parents, rotations, name):
             pb.keyframe_insert('rotation_quaternion', frame=f, group=joint)
             track.append(base.xyzw((delta @ rest).normalized()))
         tracks[joint] = track
-    return tracks
+    return fps, tracks
 
 
 def main():

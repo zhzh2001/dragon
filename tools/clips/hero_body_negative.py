@@ -17,14 +17,14 @@ CASES = (
     (3,'air-wing','forbidden joints'), (4,'position','seam value'),
     (4,'velocity','seam velocity'), (5,'mirror','mirror'), (6,'step','largest key step'),
     (7,'amplitude','stroke pitch'), (8,'aim','head aim diameter'),
-    (3,'ground-leg','forbidden joints'), (9,'dip','neck dip peaks'),
+    (3,'ground-leg','forbidden joints'), (7,'sway','neck yaw over planted'), (9,'dip','neck dip peaks'),
 )
 
 
 def corrupt(source, label):
     doc, binary = read_glb(source)
     data = bytearray(binary)
-    name = 'walk' if label in ('ground-leg','dip') else 'flap_body'
+    name = 'walk' if label in ('ground-leg','sway','dip') else 'flap_body'
     anim = next(a for a in doc['animations'] if a['name'] == name)
     indices = {n['name']:i for i,n in enumerate(doc['nodes'])}
 
@@ -73,6 +73,13 @@ def corrupt(source, label):
         for joint in joints:
             for i in range(keys(joint)[0]):
                 set_key(joint,i,REST)
+    elif label == 'sway':
+        for joint in ('neck_01','neck_02','neck_03'):
+            if any(c['target']['node'] == indices[joint] for c in anim['channels']):
+                count, start, stride = keys(joint)
+                for i in range(count):
+                    x,y,z,w = struct.unpack_from('<4f',binary,start+i*stride)
+                    set_key(joint,i,(x,-y,-z,w))
     elif label == 'dip':
         for joint in ('neck_01','neck_02','neck_03'):
             if any(c['target']['node'] == indices[joint] for c in anim['channels']):
@@ -86,7 +93,7 @@ def run(source, through):
     checker = Path(__file__).with_name('check_hero_body.py')
     options = ['--through',through] if through else []
     for group, label, phrase in CASES:
-        if label in ('ground-leg','dip') and through and NAMES.index(through) < NAMES.index('walk'):
+        if label in ('ground-leg','sway','dip') and through and NAMES.index(through) < NAMES.index('walk'):
             continue
         path = cache / f'hero-body-bad-{label}.glb'
         path.write_bytes(corrupt(source,label))
