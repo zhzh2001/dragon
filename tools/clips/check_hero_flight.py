@@ -172,6 +172,17 @@ def check(path):
                   ('pitch down',-m['pitch'][15],13),('finger closure',max(m['fan closure']),15)]
         for label,value,target in ranges:
             record(9, .8*target <= value <= 1.2*target, f'{name} {label} {value:.2f} deg')
+        mid_bend = m['finger 1 elevation'][15] - arm[15]
+        record(9, 8 <= mid_bend <= 24, f'{name} loaded outer wing {mid_bend:.2f} deg above arm at 15/60')
+        recovery = peak(m['wrist fold'])
+        span_ratio = m['span'][recovery] / max(m['span'])
+        if not climb:
+            record(9, .8*2/3 <= span_ratio <= 1.2*2/3,
+                   f'{name} span at peak wrist fold {span_ratio:.3f} of maximum')
+        record(9, m['pitch'][recovery] > 0 and m['finger 1 elevation'][recovery] < 0,
+               f'{name} recovery pitch {m["pitch"][recovery]:.2f}, hand-to-tip elevation {m["finger 1 elevation"][recovery]:.2f} deg')
+        record(9, m['wrist forward'][30] > m['wrist forward'][0],
+               f'{name} wrist moves {m["wrist forward"][30]-m["wrist forward"][0]:.3f} m toward nose during downstroke')
     if len(metrics) == 2:
         a,b = metrics['flap'],metrics['flap_climb']
         larger = (max(b['arm angle']) > max(a['arm angle']) and min(b['arm angle']) < min(a['arm angle'])

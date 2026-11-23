@@ -18,7 +18,11 @@ PASS 9 flap elbow fold 34.47 deg
 PASS 9 flap wrist fold 47.40 deg
 PASS 9 flap forward sweep 15.00 deg
 PASS 9 flap pitch down 12.93 deg
-PASS 9 flap finger closure 16.66 deg
+PASS 9 flap finger closure 15.63 deg
+PASS 9 flap loaded outer wing 9.63 deg above arm at 15/60
+PASS 9 flap span at peak wrist fold 0.564 of maximum
+PASS 9 flap recovery pitch 11.86, hand-to-tip elevation -61.91 deg
+PASS 9 flap wrist moves 0.797 m toward nose during downstroke
 PASS 1 flap_climb 61 unit rotations from 0 to 1 second
 PASS 2 flap_climb paired wing rotation channels only
 PASS 3 flap_climb seam 0.00000 deg
@@ -38,4 +42,7 @@ PASS 9 flap_climb wrist fold 64.46 deg
 PASS 9 flap_climb forward sweep 25.00 deg
 PASS 9 flap_climb pitch down 12.93 deg
 PASS 9 flap_climb finger closure 17.30 deg
+PASS 9 flap_climb loaded outer wing 23.59 deg above arm at 15/60
+PASS 9 flap_climb recovery pitch 11.99, hand-to-tip elevation -67.54 deg
+PASS 9 flap_climb wrist moves 1.223 m toward nose during downstroke
 PASS 9 climb exceeds cruise at both reversals and both hinges

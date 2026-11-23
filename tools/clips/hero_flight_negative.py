@@ -1,6 +1,4 @@
 """Damage scratch copies and require the checker to reject each specific defect."""
-from pathlib import Path
-import struct
 import subprocess
 import sys
 

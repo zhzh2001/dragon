@@ -105,7 +105,7 @@ def height_keys(t, climb, wrist, ray=0):
     top = (7/60 if climb else 5/60)
     bottom = .5 + top
     heights = ([(7.20, -5.45), (5.86, -4.62), (3.53, -2.85)] if climb else
-               [(6.80, -4.85), (5.45, -4.24), (3.28, -2.79)])
+               [(6.80, -6.02), (5.45, -5.10), (3.28, -3.35)])
     high, low = heights[ray-1]
     weight = curve(t, [(0, .946), (top, 1), (.19, .78), (.25, .55),
                        (.40, .19), (.50, .045), (bottom, 0),
@@ -114,7 +114,7 @@ def height_keys(t, climb, wrist, ray=0):
 
 
 def match_height(pose, bones, offsets, origin_y, target):
-    # Rotate the whole ray about body Z. This preserves its fan and camber.
+    # Tilt the ray toward its keyed height. Keep its internal curvature.
     v = sum((pose[n] @ offsets[n] for n in bones), Vector())
     sine = (target-origin_y) / v.length
     if abs(sine) >= 1:

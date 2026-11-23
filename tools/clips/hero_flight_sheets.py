@@ -1,6 +1,4 @@
 """Crop paired studio frames at native resolution and assemble the review sheets."""
-from collections import Counter
-from pathlib import Path
 import sys
 
 import numpy as np
@@ -60,16 +58,16 @@ def comparison(mode):
     rows = []
     for view in ('side','rear'):
         pairs = [[load(v,f'{mode}-{view}-{i}') for v in ('before','after')] for i in range(8)]
-        # One camera crop covers both versions at every phase in this view.
-        box = union([bounds(im) for pair in pairs for im in pair])
+        boxes = [union([bounds(im) for im in pair]) for pair in pairs]
         for v,label in enumerate(('Procedural','Keyframed')):
-            cells = [pair[v].crop(box) for pair in pairs]
-            w,h = cells[0].size
-            row = Image.new('RGB',(8*w,h+42),BG)
+            cells = [pair[v].crop(box) for pair,box in zip(pairs,boxes)]
+            row = Image.new('RGB',(sum(im.width for im in cells),max(im.height for im in cells)+42),BG)
             draw = ImageDraw.Draw(row)
+            x = 0
             for i,im in enumerate(cells):
-                draw.text((i*w+10,7),f'{label}   {mode} / {view}   {BEAT[i]}',font=FONT)
-                row.paste(im,(i*w,42))
+                draw.text((x+10,7),f'{label}   {mode} / {view}   {BEAT[i]}',font=FONT)
+                row.paste(im,(x,42))
+                x += im.width
             rows.append(row)
     sheet = Image.new('RGB',(max(r.width for r in rows),sum(r.height for r in rows)),BG)
     y=0
