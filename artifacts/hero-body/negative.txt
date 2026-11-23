@@ -1,0 +1,15 @@
+PASS header rejected, exit 1, FAIL 1 Could not read the clip: unpack_from requires a buffer of at least 12 bytes for unpacking 12 bytes at offset 0 (actual buffer size is 8)
+PASS name rejected, exit 1, FAIL 1 77 joint names and hierarchy, armature alone, animations damaged, flap_climb_body, glide, walk, stand
+PASS samples rejected, exit 1, FAIL 1 flap_body 61 unit quaternion keys at 60 Hz, malformed tracks ['chest', 'neck_01', 'neck_02', 'neck_03', 'head', 'tail_01', 'tail_02', 'tail_03', 'tail_04', 'tail_05', 'tail_06', 'tail_07', 'tail_08', 'forearm_l', 'wrist_l', 'thigh_l', 'shin_l', 'toe_fore_1_l', 'toe_fore_2_l', 'toe_fore_3_l', 'toe_hind_1_l', 'toe_hind_2_l', 'toe_hind_3_l', 'forearm_r', 'wrist_r', 'thigh_r', 'shin_r', 'toe_fore_1_r', 'toe_fore_2_r', 'toe_fore_3_r', 'toe_hind_1_r', 'toe_hind_2_r', 'toe_hind_3_r']
+PASS rest rejected, exit 1, FAIL 2 rest differences 0.000000 deg, 1.000000 mm, scale matches True
+PASS scale rejected, exit 1, FAIL 2 flap_body nonrotation paths ['tail_01/scale']
+PASS air-wing rejected, exit 1, FAIL 3 flap_body forbidden joints ['wing_root_l']
+PASS position rejected, exit 1, FAIL 4 flap_body seam value tail_01 31.159252 deg (limit 0.05)
+PASS velocity rejected, exit 1, FAIL 4 flap_body seam velocity tail_01 difference 38.409160 of 19.204580 deg/s (200.0%, limit 20%)
+PASS mirror rejected, exit 1, FAIL 5 flap_body mirror thigh_r 11.12005 deg (limit 0.5)
+PASS step rejected, exit 1, FAIL 6 flap_body largest key step tail_08 70.1867 deg (limit 10)
+PASS amplitude rejected, exit 1, FAIL 7 flap_body thigh_r stroke pitch -0.000 deg (range 5.600 to 13.000)
+PASS aim rejected, exit 1, FAIL 8 flap_body head aim diameter 9.7218 deg (limit 2)
+PASS ground-leg rejected, exit 1, FAIL 3 walk forbidden joints ['thigh_l']
+PASS sway rejected, exit 1, FAIL 7 walk neck yaw over planted right/left forefoot 3.79/-3.79 deg
+PASS dip rejected, exit 1, FAIL 9 walk neck dip peaks at phases [0.3, 0.817] (targets 0, 0.5 +/- 0.05)

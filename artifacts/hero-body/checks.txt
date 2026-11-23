@@ -1,0 +1,168 @@
+PASS 1 77 joint names and hierarchy, armature alone, animations flap_body, flap_climb_body, glide, walk, stand
+PASS 2 rest differences 0.000000 deg, 0.000000 mm, scale matches True
+PASS 1 flap_body 61 unit quaternion keys at 60 Hz, malformed tracks []
+PASS 2 flap_body nonrotation paths []
+PASS 3 flap_body forbidden joints []
+PASS 4 flap_body seam value tail_05 0.000000 deg (limit 0.05)
+PASS 4 flap_body seam velocity tail_08 difference 0.000082 of 28.856494 deg/s (0.0%, limit 20%)
+PASS 5 flap_body mirror thigh_r 0.00000 deg (limit 0.5)
+PASS 6 flap_body largest key step tail_08 2.3363 deg (limit 10)
+PASS 7 flap_body base half tail pitch excursion 44.091 deg (range 28.000 to 52.000)
+PASS 7 flap_body distal half tail pitch excursion 72.36 deg vs base 44.09
+PASS 7 flap_body tail pitch excursions base to tip [8.71, 10.55, 12.39, 14.23, 16.07, 17.91, 19.75, 21.59] deg
+PASS 7 flap_body base tail dip phase 0.633 (target 0.650 +/- 0.070)
+PASS 7 flap_body tail dip phases from base to tip [0.633, 0.667, 0.717, 0.75, 0.8, 0.833, 0.883, 0.917]
+PASS 7 flap_body tip down/up speed 2.336/0.851 deg/frame
+PASS 7 flap_body thigh_r stroke pitch 9.999 deg (range 5.600 to 13.000)
+PASS 7 flap_body thigh_r stroke phase 0.350 (target 0.350 +/- 0.090)
+PASS 7 flap_body shin_r stroke pitch 6.800 deg (range 4.200 to 10.400)
+PASS 7 flap_body shin_r stroke phase 0.350 (target 0.350 +/- 0.090)
+PASS 7 flap_body forearm_r stroke pitch 5.000 deg (range 3.500 to 6.500)
+PASS 7 flap_body forearm_r stroke phase 0.500 (target 0.500 +/- 0.090)
+PASS 7 flap_body wrist_r stroke pitch 7.000 deg (range 4.200 to 10.400)
+PASS 7 flap_body wrist_r stroke phase 0.500 (target 0.500 +/- 0.090)
+PASS 7 flap_body foreleg delay after hind leg phase 0.150 (target 0.150 +/- 0.050)
+PASS 7 flap_body toe_hind_1_r curl 11.997 deg (range 7.000 to 19.500)
+PASS 7 flap_body toe_hind_1_r gather phase 0.883
+PASS 7 flap_body toe_hind_2_r curl 11.997 deg (range 7.000 to 19.500)
+PASS 7 flap_body toe_hind_2_r gather phase 0.883
+PASS 7 flap_body toe_hind_3_r curl 11.997 deg (range 7.000 to 19.500)
+PASS 7 flap_body toe_hind_3_r gather phase 0.883
+PASS 7 flap_body toe_fore_1_r curls 8.00 deg
+PASS 7 flap_body toe_fore_1_r gather phase 0.033
+PASS 7 flap_body toe_fore_2_r curls 8.00 deg
+PASS 7 flap_body toe_fore_2_r gather phase 0.033
+PASS 7 flap_body toe_fore_3_r curls 8.00 deg
+PASS 7 flap_body toe_fore_3_r gather phase 0.033
+PASS 7 flap_body neck_01 downstroke pitch 4.299 deg (range 2.800 to 7.800)
+PASS 7 flap_body neck_01 dip phase 0.417
+PASS 7 flap_body neck_02 downstroke pitch 4.499 deg (range 2.800 to 7.800)
+PASS 7 flap_body neck_02 dip phase 0.417
+PASS 7 flap_body neck_03 downstroke pitch 4.599 deg (range 2.800 to 7.800)
+PASS 7 flap_body neck_03 dip phase 0.417
+PASS 7 flap_body chest arch 2.400 deg (range 1.400 to 3.900)
+PASS 7 flap_body chest arch phase 0.500 (target 0.500 +/- 0.100)
+PASS 8 flap_body head aim diameter 0.0000 deg (limit 2)
+PASS 1 flap_climb_body 61 unit quaternion keys at 60 Hz, malformed tracks []
+PASS 2 flap_climb_body nonrotation paths []
+PASS 3 flap_climb_body forbidden joints []
+PASS 4 flap_climb_body seam value thigh_r 0.000000 deg (limit 0.05)
+PASS 4 flap_climb_body seam velocity toe_fore_1_l difference 0.000104 of 9.486383 deg/s (0.0%, limit 20%)
+PASS 5 flap_climb_body mirror thigh_r 0.00000 deg (limit 0.5)
+PASS 6 flap_climb_body largest key step tail_08 3.5045 deg (limit 10)
+PASS 7 flap_climb_body base half tail pitch excursion 66.136 deg (range 42.000 to 78.000)
+PASS 7 flap_climb_body distal half tail pitch excursion 108.54 deg vs base 66.14
+PASS 7 flap_climb_body tail pitch excursions base to tip [13.06, 15.83, 18.58, 21.35, 24.11, 26.87, 29.63, 32.39] deg
+PASS 7 flap_climb_body base tail dip phase 0.633 (target 0.650 +/- 0.070)
+PASS 7 flap_climb_body tail dip phases from base to tip [0.633, 0.667, 0.717, 0.75, 0.8, 0.833, 0.883, 0.917]
+PASS 7 flap_climb_body tip down/up speed 3.505/1.276 deg/frame
+PASS 7 flap_climb_body thigh_r stroke pitch 14.992 deg (range 8.400 to 19.500)
+PASS 7 flap_climb_body thigh_r stroke phase 0.383 (target 0.380 +/- 0.090)
+PASS 7 flap_climb_body shin_r stroke pitch 10.198 deg (range 6.300 to 15.600)
+PASS 7 flap_climb_body shin_r stroke phase 0.383 (target 0.380 +/- 0.090)
+PASS 7 flap_climb_body forearm_r stroke pitch 7.498 deg (range 5.250 to 9.750)
+PASS 7 flap_climb_body forearm_r stroke phase 0.533 (target 0.530 +/- 0.090)
+PASS 7 flap_climb_body wrist_r stroke pitch 10.498 deg (range 6.300 to 15.600)
+PASS 7 flap_climb_body wrist_r stroke phase 0.533 (target 0.530 +/- 0.090)
+PASS 7 flap_climb_body foreleg delay after hind leg phase 0.150 (target 0.150 +/- 0.050)
+PASS 7 flap_climb_body toe_hind_1_r curl 17.985 deg (range 10.500 to 29.250)
+PASS 7 flap_climb_body toe_hind_1_r gather phase 0.900
+PASS 7 flap_climb_body toe_hind_2_r curl 17.985 deg (range 10.500 to 29.250)
+PASS 7 flap_climb_body toe_hind_2_r gather phase 0.900
+PASS 7 flap_climb_body toe_hind_3_r curl 17.985 deg (range 10.500 to 29.250)
+PASS 7 flap_climb_body toe_hind_3_r gather phase 0.900
+PASS 7 flap_climb_body toe_fore_1_r curls 11.99 deg
+PASS 7 flap_climb_body toe_fore_1_r gather phase 0.050
+PASS 7 flap_climb_body toe_fore_2_r curls 11.99 deg
+PASS 7 flap_climb_body toe_fore_2_r gather phase 0.050
+PASS 7 flap_climb_body toe_fore_3_r curls 11.99 deg
+PASS 7 flap_climb_body toe_fore_3_r gather phase 0.050
+PASS 7 flap_climb_body neck_01 downstroke pitch 6.449 deg (range 4.200 to 11.700)
+PASS 7 flap_climb_body neck_01 dip phase 0.417
+PASS 7 flap_climb_body neck_02 downstroke pitch 6.749 deg (range 4.200 to 11.700)
+PASS 7 flap_climb_body neck_02 dip phase 0.417
+PASS 7 flap_climb_body neck_03 downstroke pitch 6.899 deg (range 4.200 to 11.700)
+PASS 7 flap_climb_body neck_03 dip phase 0.417
+PASS 7 flap_climb_body chest arch 3.600 deg (range 2.100 to 5.850)
+PASS 7 flap_climb_body chest arch phase 0.500 (target 0.500 +/- 0.100)
+PASS 1 glide 241 unit quaternion keys at 30 Hz, malformed tracks []
+PASS 2 glide nonrotation paths []
+PASS 3 glide forbidden joints []
+PASS 4 glide seam value wrist_r 0.000000 deg (limit 0.05)
+PASS 4 glide seam velocity thigh_l difference 0.000002 of 1.616707 deg/s (0.0%, limit 20%)
+PASS 6 glide largest key step toe_hind_3_r 0.5671 deg (limit 10)
+PASS 7 glide chest breath 1.500 deg (range 1.050 to 1.950)
+PASS 7 glide chest breath peak count 2 at phases [0.217, 0.717]
+PASS 7 glide first look 7.962 deg (range 5.600 to 10.400)
+PASS 7 glide second look 5.982 deg (range 4.200 to 7.800)
+PASS 7 glide first look phase 0.254 (target 0.250 +/- 0.090)
+PASS 7 glide second look phase 0.754 (target 0.750 +/- 0.090)
+PASS 7 glide head yaw between looks 0.07 deg
+PASS 7 glide pitch at second look -2.34 deg
+PASS 7 glide neck look phases from base to head [0.229, 0.242, 0.25]
+PASS 7 glide l hip drift 3.800 deg (range 2.100 to 5.200)
+PASS 7 glide r hip drift 3.800 deg (range 2.100 to 5.200)
+PASS 7 glide hip drift phase difference 0.317
+PASS 7 glide r hind toe curl 9.998 deg (range 7.000 to 13.000)
+PASS 7 glide l hind toe curl -0.00 deg
+PASS 7 glide active toe curl peak count 1 at phases [0.429]
+PASS 7 glide l foreleg shift 3.20 deg on forearm_l
+PASS 7 glide l foreleg shift peak count 1 at phases [0.7]
+PASS 7 glide r foreleg shift 2.60 deg on forearm_r
+PASS 7 glide r foreleg shift peak count 1 at phases [0.221]
+PASS 7 glide summed tail sway 15.177 deg (range 9.800 to 18.200)
+PASS 7 glide slow tail tip lag phase 0.246 (target 0.250 +/- 0.075)
+PASS 7 glide base tail sway peak count 1 at phases [0.229]
+PASS 7 glide tip twitch, off-axis excursion 0.00 deg, yaw peaks 3
+PASS 1 walk 61 unit quaternion keys at 60 Hz, malformed tracks []
+PASS 2 walk nonrotation paths []
+PASS 3 walk forbidden joints []
+PASS 4 walk seam value tail_03 0.000000 deg (limit 0.05)
+PASS 4 walk seam velocity tail_04 difference 0.000002 of 19.571772 deg/s (0.0%, limit 20%)
+PASS 6 walk largest key step head 0.7667 deg (limit 10)
+PASS 7 walk summed neck dip 4.200 deg (range 2.800 to 5.200)
+PASS 9 walk neck dip peaks at phases [0.017, 0.5] (targets 0, 0.5 +/- 0.05)
+PASS 7 walk head pitch excursion 0.000 deg
+PASS 7 walk summed neck sway 3.794 deg (range 2.100 to 5.200)
+PASS 7 walk neck sway peak count 1 at phases [0.733]
+PASS 7 walk neck yaw over planted right/left forefoot -3.79/3.79 deg
+PASS 7 walk summed tail sway 20.123 deg (range 14.000 to 26.000)
+PASS 7 walk tail yaw opposite planted left/right hind foot 18.38/-18.12 deg
+PASS 7 walk base tail sway peak count 1 at phases [0.217]
+PASS 7 walk tail tip lag phase 0.150 (target 0.150 +/- 0.050)
+PASS 7 walk r wrist bounce 2.493 deg (range 1.400 to 3.900)
+PASS 7 walk r wrist bounce peak count 2 at phases [0.25, 0.75]
+PASS 7 walk l wrist bounce 2.493 deg (range 1.400 to 3.900)
+PASS 7 walk l wrist bounce peak count 2 at phases [0.25, 0.75]
+PASS 1 stand 301 unit quaternion keys at 30 Hz, malformed tracks []
+PASS 2 stand nonrotation paths []
+PASS 3 stand forbidden joints []
+PASS 4 stand seam value tail_05 0.000000 deg (limit 0.05)
+PASS 4 stand seam velocity tail_04 difference 0.000003 of 0.590335 deg/s (0.0%, limit 20%)
+PASS 6 stand largest key step tail_08 0.2982 deg (limit 10)
+PASS 7 stand base neck breath 1.450 deg (range 0.700 to 1.950)
+PASS 7 stand neck breath peak count 3 at phases [0.15, 0.483, 0.817]
+PASS 7 stand r shoulder lift 1.800 deg (range 1.050 to 2.600)
+PASS 7 stand r shoulder lift peak count 3 at phases [0.15, 0.483, 0.817]
+PASS 7 stand r shoulder lift follows each neck breath within 0.06 cycle
+PASS 7 stand l shoulder lift 1.800 deg (range 1.050 to 2.600)
+PASS 7 stand l shoulder lift peak count 3 at phases [0.15, 0.483, 0.817]
+PASS 7 stand l shoulder lift follows each neck breath within 0.06 cycle
+PASS 7 stand head look 12.000 deg (range 8.400 to 15.600)
+PASS 7 stand look held at 3-4 s, minimum 12.00 of 12.00 deg
+PASS 7 stand head yaw after look -0.00 deg
+PASS 7 stand head tilt 5.000 deg (range 3.500 to 6.500)
+PASS 7 stand head tilt phase 0.700 (target 0.700 +/- 0.100)
+PASS 7 stand summed tail sway 12.276 deg (range 8.400 to 15.600)
+PASS 7 stand base tail sway peak count 1 at phases [0.24]
+PASS 7 stand tip curl, off-axis excursion 8.40 deg, yaw peaks 1
+PASS 7 stand tip curl peak count 1 at phases [0.57]
+PASS 7 climb/cruise tail excursion ratio 1.500 (range 1.05 to 1.95)
+PASS 7 climb/cruise thigh_r excursion ratio 1.499 (range 1.05 to 1.95)
+PASS 7 climb/cruise neck_01 excursion ratio 1.125 (range 1.05 to 1.95)
+PASS 7 climb/cruise neck_02 excursion ratio 1.125 (range 1.05 to 1.95)
+PASS 7 climb/cruise neck_03 excursion ratio 1.125 (range 1.05 to 1.95)
+PASS 7 climb thigh_r follows cruise by 0.033 cycle
+PASS 7 climb shin_r follows cruise by 0.033 cycle
+PASS 7 climb forearm_r follows cruise by 0.033 cycle
+PASS 7 climb wrist_r follows cruise by 0.033 cycle
