@@ -347,7 +347,10 @@ Options parse_options(int argc, char** argv) {
             // the view came from the default 14.5 degrees above: every
             // "from below" capture, and the feedback tool's own command
             // for a camera under the dragon.
+            // Leading spaces too: the capture scripts written before the
+            // fix pass " -30" to get past the old test.
             const auto number = [](const char* text) {
+                while (*text == ' ') ++text;
                 const char* digits = text[0] == '-' ? text + 1 : text;
                 return (digits[0] >= '0' && digits[0] <= '9') || digits[0] == '.';
             };
