@@ -286,6 +286,17 @@ struct RigTuning {
     float attack_clip = 1.0f;
     float attack_clip_rate = 1.0f;
     float attack_clip_under = 0.15f;  // the procedural neck, limb, wing and tail gesture left under a clip
+    // The keyframed wingbeat's weight (set_flight_clips): 0 is the procedural
+    // beat alone, 1 the clip as authored. Under the clip the procedural
+    // beat -- the stroke angle, the delayed joints, the recovery fold, the
+    // twist, the stroke plane -- drops to `flap_clip_under`, because a
+    // wingbeat is the whole motion of the wing and two of them add to
+    // nonsense. What is not the beat stays procedural: the glide's dihedral,
+    // the tuck, the load flex, the body's heave, the tail's answer. The clip
+    // is sampled at the flight model's own flap phase, so the wing a player
+    // sees and the thrust it makes still cannot disagree.
+    float flap_clip = 1.0f;
+    float flap_clip_under = 0.0f;
 
     // Standing stance. A tuck alone is a folded wing held out from the body --
     // the shape a diving animal makes, not a standing one. A wyvern at rest
@@ -989,6 +1000,18 @@ public:
         for (const AnimationClip* clip : attack_clip_) if (clip) return true;
         return false;
     }
+    // A keyframed wingbeat (assets/clips/<model>.flight.glb): `cruise` is
+    // one beat as a loop, its time 0 the top of the downstroke and its
+    // length one whole beat whatever its seconds; `climb` is the deeper
+    // beat of a take-off or a climb. Either may be null: one alone serves
+    // both. Blended by the flight model's effort, and added onto the
+    // finished pose with the procedural beat taken out from under it
+    // (RigTuning::flap_clip). Not owned.
+    void set_flight_clips(const AnimationClip* cruise, const AnimationClip* climb) {
+        flight_clip_[0] = cruise;
+        flight_clip_[1] = climb;
+    }
+    bool has_flight_clips() const { return flight_clip_[0] || flight_clip_[1]; }
     void update(const game::FlightState& state, float dt);
 
     // A chain simulated as point masses in the dragon's own frame.
@@ -1181,6 +1204,8 @@ private:
     const AnimationClip* brake_bank_clip_[2] = {nullptr, nullptr};
     float overlay_time_ = 0.0f;
     const AnimationClip* attack_clip_[ATTACK_CLIP_COUNT] = {};
+    const AnimationClip* flight_clip_[2] = {};  // cruise, climb
+    float flight_clip_share_ = 0.0f;            // this frame's weight of the keyframed beat, 0..1
     float joints_under_clip() const;
     float limb_turn_ = 0.0f;  // smoothed lateral pull of the turn, -1..1 toward +X
     void setup_limbs();

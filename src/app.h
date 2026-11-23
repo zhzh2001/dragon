@@ -1123,6 +1123,10 @@ private:
         int brake_bank_clip[2] = {-1, -1};
         std::vector<anim::AnimationClip> attack_clips;
         int attack_clip[5] = {-1, -1, -1, -1, -1};
+        // assets/clips/<stem>.flight.glb, when present: the keyframed
+        // wingbeat, `flap` and `flap_climb` (-1 when absent).
+        std::vector<anim::AnimationClip> flight_clips;
+        int flight_clip[2] = {-1, -1};
         // Which clip serves as the ground idle, and whether it is held at one time.
         int idle_clip = -1;
         float idle_clip_hold = -1.0f;

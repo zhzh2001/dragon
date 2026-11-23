@@ -4882,6 +4882,10 @@ void App::life_controls(bool playtest) {
     ImGui::SliderFloat("strike clips", &rig.attack_clip, 0.0f, 2.0f);
     ImGui::SliderFloat("strike clip rate", &rig.attack_clip_rate, 0.25f, 2.0f);
     ImGui::SliderFloat("procedural gesture under a clip", &rig.attack_clip_under, 0.0f, 1.0f);
+    ImGui::SeparatorText("keyframed wingbeat");
+    if (!dragon_rig_.has_flight_clips()) ImGui::TextDisabled("this species has no wingbeat clip");
+    ImGui::SliderFloat("wingbeat clip", &rig.flap_clip, 0.0f, 1.0f);
+    ImGui::SliderFloat("procedural beat under the clip", &rig.flap_clip_under, 0.0f, 1.0f);
 }
 
 void App::build_playtest_ui() {
@@ -5427,6 +5431,11 @@ void App::apply_idle_clip(const LoadedModel& model, anim::DragonRig& rig) const 
         if (i >= 0 && size_t(i) < model.attack_clips.size()) attacks[k] = &model.attack_clips[size_t(i)];
     }
     rig.set_attack_clips(attacks);
+    auto flight = [&](int k) {
+        const int i = model.flight_clip[k];
+        return i >= 0 && size_t(i) < model.flight_clips.size() ? &model.flight_clips[size_t(i)] : nullptr;
+    };
+    rig.set_flight_clips(flight(0), flight(1));
 }
 
 void App::find_wingtips(LoadedModel& model) {
@@ -5643,6 +5652,21 @@ bool App::load_model(const std::string& path, LoadedModel& out) {
                 }
             }
             LOG_INFO("attack clips: %zu in %s", out.attack_clips.size(), attack_path.c_str());
+        }
+        // The keyframed wingbeat (DragonRig::set_flight_clips).
+        // DRAGON_FLIGHT_CLIPS=path loads another file onto every model, for
+        // a candidate that is not in assets/ yet.
+        const char* flight_override = SDL_getenv("DRAGON_FLIGHT_CLIPS");
+        const std::string flight_path =
+            flight_override && *flight_override ? std::string(flight_override) : core::paths::asset("clips/" + stem + ".flight.glb");
+        if (out.joints.valid() && std::filesystem::exists(flight_path)) {
+            out.flight_clips = anim::load_clip_file(flight_path.c_str(), out.skeleton);
+            for (size_t i = 0; i < out.flight_clips.size(); ++i) {
+                if (out.flight_clips[i].name == "flap") out.flight_clip[0] = int(i);
+                if (out.flight_clips[i].name == "flap_climb") out.flight_clip[1] = int(i);
+            }
+            LOG_INFO("flight clips: %zu in %s (flap %s, flap_climb %s)", out.flight_clips.size(), flight_path.c_str(),
+                     out.flight_clip[0] >= 0 ? "yes" : "no", out.flight_clip[1] >= 0 ? "yes" : "no");
         }
     }
 

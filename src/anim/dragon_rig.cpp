@@ -510,6 +510,8 @@ const RigField RIG_FIELDS[] = {
     RIG_FLOAT_FIELD(attack_clip),
     RIG_FLOAT_FIELD(attack_clip_rate),
     RIG_FLOAT_FIELD(attack_clip_under),
+    RIG_FLOAT_FIELD(flap_clip),
+    RIG_FLOAT_FIELD(flap_clip_under),
     RIG_FLOAT_FIELD(clip_overlay_rate),
     RIG_FLOAT_FIELD(limb_stiffness),
     RIG_FLOAT_FIELD(limb_tip_stiffness),
@@ -1031,7 +1033,19 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const float droop_deg =
         tuning.tuck_droop_deg * (tuck + speed_share * tuning.speed_sweep_deg /
                                             core::maxf(tuning.tuck_sweep_deg, 1.0f));
-    float flap_angle = state.wing_angle;
+    // The keyframed wingbeat's share of this frame (RigTuning::flap_clip):
+    // by the beat's amplitude, so a glide has none of it and the first
+    // beat fades in; none in a tuck or on the ground. `beat_keep` is what is
+    // left of the procedural beat under it.
+    const float flap_clip_weight = has_flight_clips() ? core::saturate(tuning.flap_clip) : 0.0f;
+    const float beat_keep = 1.0f - flap_clip_weight * (1.0f - core::saturate(tuning.flap_clip_under));
+    flight_clip_share_ = flap_clip_weight * core::saturate(state.flap_amplitude) *
+                         (1.0f - core::saturate(state.wing_tuck)) * (1.0f - stow);
+    // The wing angle is the glide's dihedral blended to the beat by the
+    // amplitude, so taking the clip's share out by the amplitude leaves the
+    // glide whole.
+    float flap_angle = state.wing_angle *
+                       (1.0f - (1.0f - beat_keep) * core::saturate(state.flap_amplitude));
     if (tuning.wing_flap_limit_deg > 0.0f) {
         const float limit = core::radians(tuning.wing_flap_limit_deg);
         flap_angle = core::clampf(flap_angle, -limit, limit);
@@ -1072,7 +1086,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
     const bool phase_articulation = tuning.wing_phase_delay > 1e-5f &&
                                     state.flap_amplitude > 1e-4f;
     const float beat_strength = core::saturate(state.flap_amplitude) *
-                                (1.0f - core::saturate(state.wing_tuck));
+                                (1.0f - core::saturate(state.wing_tuck)) * beat_keep;
     // Everything keyed to the beat's phase or velocity -- the recovery flex,
     // the feathering twist, the stroke plane -- is gated on there being a beat
     // at all, so a glide, a tuck and the ground stow see none of it. It used
@@ -1259,7 +1273,7 @@ void DragonRig::drive_wings(const game::FlightState& state) {
                 phase_articulation ? wingbeat_curve(local_phase, downstroke_fraction) : 0.0f;
             const float delayed_flap =
                 phase_articulation
-                    ? core::radians(tuning.flap_shoulder_deg) *
+                    ? core::radians(tuning.flap_shoulder_deg) * beat_keep *
                           core::saturate(state.flap_amplitude) * (delayed_beat - current_beat)
                     : 0.0f;
             // The gesture layer's brace is a posture term like the load flex.
@@ -3561,6 +3575,21 @@ void DragonRig::update(const game::FlightState& engine_state, float dt) {
     // Jaw and tremor after the aim: the aim measures the head and would
     // correct the tremor straight back out.
     drive_attack(airborne);
+    // The keyframed wingbeat, on the finished pose, at the flight model's
+    // phase: time 0 of the clip is the top of the downstroke and its length
+    // is one beat. The cruise beat and the climb beat by the effort.
+    if (flight_clip_share_ > 1e-4f) {
+        const AnimationClip* cruise = flight_clip_[0] ? flight_clip_[0] : flight_clip_[1];
+        const AnimationClip* climb = flight_clip_[1] ? flight_clip_[1] : flight_clip_[0];
+        const float phase = wrapped_phase(state.flap_phase);
+        const float effort = cruise == climb ? 0.0f : core::saturate(state.flap_effort);
+        if (cruise && cruise->valid()) {
+            cruise->sample_additive(phase * cruise->duration, pose_, flight_clip_share_ * (1.0f - effort));
+        }
+        if (climb && climb->valid() && effort > 0.0f) {
+            climb->sample_additive(phase * climb->duration, pose_, flight_clip_share_ * effort);
+        }
+    }
     // The keyframed strikes, last: whole, on the finished pose. Each runs
     // once from its action's edge; the gesture timers are the clocks.
     if (tuning.attack_clip > 1e-4f && has_attack_clips()) {
