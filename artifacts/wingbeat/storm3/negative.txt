@@ -1,0 +1,12 @@
+PASS name, exit 1, FAIL 1 55 joint nodes, source hierarchy and two named loops
+PASS samples, exit 1, FAIL 1 flap 61 unit rotations from 0 to 1 second
+PASS rest, exit 1, FAIL 2 source rest translations, rotations and scales
+PASS channel, exit 1, FAIL 2 flap paired wing rotation channels only
+PASS body, exit 1, FAIL 2 flap paired wing rotation channels only
+PASS seam, exit 1, FAIL 3 flap loop seam 35.65378 deg
+PASS mirror, exit 1, FAIL 4 flap mirror error in model axes 180.00000 deg
+PASS phase, exit 1, FAIL 5 flap arm relative to neutral +45.06 at 45/60, -22.32 deg at 14/60
+PASS lag, exit 1, FAIL 6 flap rib 1 height lags 6/60 and 4/60
+PASS fold, exit 1, FAIL 7 flap wrist fold 16.53 deg at 25/60, 0.19 at 57/60
+PASS step, exit 1, FAIL 8 flap largest step 179.58 deg on wing_arm_r
+PASS amplitude, exit 1, FAIL 9 flap_climb arm stroke +45.06 to -22.32 deg

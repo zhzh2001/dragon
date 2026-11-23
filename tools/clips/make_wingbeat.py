@@ -108,7 +108,7 @@ def stroke(phase, down):
                          (down+.80*(1-down), .96)])
 
 
-def right_pose(phase, cfg, down, points, level):
+def right_pose(phase, cfg, down, points, level, glide_offset=0):
     """Place wrist and tip heights independently so the hand follows the arm."""
     t = phase
     w = stroke(t, down)
@@ -120,7 +120,7 @@ def right_pose(phase, cfg, down, points, level):
                                     (.65, -.05), (.74, -.45), (.90, -.08)])
     pitch = cfg['pitch'] * curve(t, [(0, 0), (.16, -.65), (.25, -1), (.45, -.35),
                                      (.53, .15), (.68, .9), (.82, .45), (.95, .07)])
-    high, low = cfg['top'], cfg['bottom']
+    high, low = cfg['top'] + glide_offset, cfg['bottom'] + glide_offset
     def frame(roll, yaw, twist):
         return turn(Z, roll) @ turn(Y, yaw) @ turn(X, twist) @ level
     def at(stem):
@@ -132,7 +132,7 @@ def right_pose(phase, cfg, down, points, level):
     elbow_height = (root @ (at('arm') - at('root'))).y
     arm = frame(0, sweep + cfg['elbow']*fold, 0)
     segment = arm @ (at('wrist') - at('arm'))
-    wrist_height = end_height(at('wrist')-at('root'), wrist_time, high-4, low+2)
+    wrist_height = end_height(at('wrist')-at('root'), wrist_time, cfg.get('wrist_top', high-4), cfg.get('wrist_bottom', low+2))
     relative = (wrist_height-elbow_height)/math.hypot(segment.x, segment.y)
     if abs(relative) > 1:
         raise ValueError(f'Unreachable wrist at phase {t:.4f}: {relative:.4f}')
@@ -163,7 +163,53 @@ def right_pose(phase, cfg, down, points, level):
     return {'wing_'+k: v for k, v in pose.items()}
 
 
-def bake(rig, nodes, parents, rotations, points, params, level, name):
+def storm_foundation(points, rotations, nodes, bones, level, params):
+    """Set an open palm over the retained shoulder and elbow rest rotations."""
+    import numpy as np
+
+    chain = ['wing_root', 'wing_arm', 'wing_wrist', 'wing_finger_1a', 'wing_finger_1b']
+    chain_points = [points[n+'_r'] for n in chain]
+    end = 2*chain_points[-1] - chain_points[-2]
+    arms = [math.hypot(p.x-end.x, p.y-end.y) for p in chain_points]
+    weights = [params['outboard_decay']**i * (1-min(.8, i*params['phase_lag'])) for i in range(5)]
+    norm = sum(w*l/arms[0] for w,l in zip(weights,arms))
+    angles = [params['wing_rest_deg']*w/norm for w in weights]
+    joints = {n['name']: i for i,n in enumerate(nodes)}
+    local, neutral, virtual, rolls = {}, {}, {}, {}
+    for j, (name, parent) in enumerate(zip(chain[:3], [None]+chain[:2])):
+        local[name] = turn(Z, angles[j]) @ (level if j == 0 else Quaternion())
+        rolls[name] = angles[j]
+        neutral[name] = (neutral[parent] if parent else Quaternion()) @ local[name]
+        virtual[name+'_r'] = (virtual[parent+'_r'] + neutral[parent] @ (points[name+'_r'] - points[parent+'_r'])
+                              if parent else points[name+'_r'])
+    palm_origin = points['wing_finger_1a_r']
+    vector = []
+    rays = [n[:-3] for n in points if n.startswith('wing_finger_') and n.endswith('a_r')]
+    for ray in rays:
+        leaf = ray+'b_r'
+        head, tail = bones[leaf]
+        tip = points[leaf] + rotations[joints[leaf]] @ (Y*(tail-head).length)
+        points[ray+'tip_r'] = tip
+        vector.extend((points[leaf]-palm_origin, tip-palm_origin))
+    # Use a single plane for the four spokes. This preserves the membrane between ribs.
+    normal = Vector(np.linalg.eigh(np.array(vector).T @ np.array(vector))[1][:,0])
+    if normal.y < 0:
+        normal.negate()
+    hand = normal.rotation_difference(Y)
+    for ray in rays:
+        for i, (suffix, parent) in enumerate([('a','wing_wrist'),('b',ray+'a'),('tip',ray+'b')]):
+            name = ray+suffix
+            neutral[name] = hand
+            virtual[name+'_r'] = virtual[parent+'_r'] + neutral[parent] @ (points[name+'_r']-points[parent+'_r'])
+            if i < 2:
+                local[name] = turn(Z,angles[3+i])
+                rolls[name] = angles[3+i]
+    params['foundation_rolls_deg'] = rolls
+    params['hand_xyzw'] = base.xyzw(hand)
+    return virtual, local, neutral
+
+
+def bake(rig, nodes, parents, rotations, points, params, level, name, foundation=None):
     cfg = params['climb' if name == 'flap_climb' else 'cruise']
     action = bpy.data.actions.new(name)
     rig.animation_data_create()
@@ -171,15 +217,24 @@ def bake(rig, nodes, parents, rotations, points, params, level, name):
     base.reset_pose(rig)
     tracks = {}
     for frame in range(61):
-        pose = right_pose(frame%60 / 60, cfg, params['downstroke'], points, level)
+        if foundation:
+            virtual, local, neutral = foundation
+            # Pose keys use whole degrees relative to the measured frame-200 glide.
+            pose = right_pose(frame%60 / 60, cfg, params['downstroke'], virtual,
+                              Quaternion(), round(params['glide_offset_deg']))
+            pose = {n: q @ neutral[n] for n, q in pose.items()}
+        else:
+            pose = right_pose(frame%60 / 60, cfg, params['downstroke'], points, level)
         for i, node in enumerate(nodes):
             joint = node['name']
             stem = joint[:-2]
             if stem not in pose:
                 continue
             parent = parents[i]
-            parent_pose = pose.get(nodes[parent]['name'][:-2], level)
+            parent_pose = pose.get(nodes[parent]['name'][:-2], Quaternion() if foundation else level)
             delta = parent_pose.inverted() @ pose[stem]
+            if foundation:
+                delta = local[stem].inverted() @ delta
             if joint.endswith('_l'):
                 delta.y, delta.z = -delta.y, -delta.z
             rest = base.quat(node.get('rotation', (0,0,0,1)))
@@ -211,15 +266,20 @@ def main():
     points = {node['name']: worlds[i].translation for i,node in enumerate(nodes)}
     rig, _ = base.import_mesh()
     level = level_rotation(points, params['level_share'])
-    if args.axes_only or args.measure or 'axes' not in params:
-        skeleton = json.loads((ROOT/'tools/skeletons'/(model+'.json')).read_text())
-        bones = {name: (Vector(head), Vector(tail)) for name, head, tail, _ in skeleton['bones']}
+    skeleton = json.loads((ROOT/'tools/skeletons'/(model+'.json')).read_text())
+    bones = {name: (Vector(head), Vector(tail)) for name, head, tail, _ in skeleton['bones']}
+    foundation = None
+    if model == 'storm3':
+        foundation = storm_foundation(points, rotations, nodes, bones, level, params)
+    measure = args.axes_only or args.measure or 'axes' not in params
+    if measure:
         params['level_xyzw'] = base.xyzw(level)
         params['axes'] = measure_axes(rig, nodes, parents, rotations, worlds, bones)
+    if measure or foundation:
         path.write_text(json.dumps(params, indent=2)+'\n')
     if args.axes_only:
         return
-    clips = {name: bake(rig, nodes, parents, rotations, points, params, level, name)
+    clips = {name: bake(rig, nodes, parents, rotations, points, params, level, name, foundation)
              for name in ('flap','flap_climb')}
     output = ROOT/'assets/clips'/(model+'.flight.glb')
     write(output, nodes, parents, clips)

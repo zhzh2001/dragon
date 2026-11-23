@@ -27,7 +27,7 @@ def difference(a, b):
     return tuple(x - y for x, y in zip(a, b))
 
 
-def rotations_and_heads(nodes, parents, keys, level=IDENTITY):
+def rotations_and_heads(nodes, parents, keys, level=IDENTITY, before=None):
     """Place each joint using its exported local rotation and the source offsets."""
     posed = {}
 
@@ -41,6 +41,8 @@ def rotations_and_heads(nodes, parents, keys, level=IDENTITY):
         if name == 'wing_root_r':
             basis = multiply(level, basis)
         local = keys.get(name, node.get('rotation', IDENTITY))
+        if before and name in before:
+            local = multiply(before[name], local)
         posed[name] = origin, normalize(multiply(basis, local))
         return posed[name]
 
@@ -83,17 +85,37 @@ def peak(values, extreme=max):
     return extreme(range(60), key=values.__getitem__)
 
 
-def measure(nodes, parents, tracks, level):
+def measure(nodes, parents, tracks, level, config, model):
+    nodes = dict(nodes)
+    parents = dict(parents)
+    if model == 'storm3':
+        source = json.loads((ROOT/'tools/skeletons/storm3.json').read_text())
+        for name, head, tail, _ in source['bones']:
+            if name.startswith('wing_finger_') and name.endswith('b_r'):
+                tip = name.replace('b_r', 'tip_r')
+                nodes[tip] = {'name': tip, 'translation': (0, math.dist(head, tail), 0)}
+                parents[tip] = name
     rest = rotations_and_heads(nodes, parents, {})
-    neutral = rotations_and_heads(nodes, parents, {}, level)
+    before = {}
+    for stem, degrees in config.get('foundation_rolls_deg', {}).items():
+        name = stem + '_r'
+        half = math.radians(degrees)/2
+        body = (0, 0, math.sin(half), math.cos(half))
+        if stem == 'wing_root':
+            body = multiply(body, level)
+        parent = rest[parents[name]][1]
+        before[name] = multiply(inverse(parent), multiply(body, parent))
+    root_level = IDENTITY if before else level
+    neutral = rotations_and_heads(nodes, parents, {}, root_level, before)
     root = 'wing_root_r'
     bases = sorted((n for n in nodes if n.startswith('wing_finger_') and n.endswith('a_r')),
                    key=lambda n: int(n.split('_')[2][:-1]))
     tips = [n.replace('a_r', 'tip_r') for n in bases]
     arm = 'wing_arm_r'
     wrist = 'wing_wrist_r'
-    neutral_angle = roll(difference(neutral[arm][0], neutral[root][0]))
-    reference = [bearing(difference(rest[t][0], rest[b][0])) for b, t in zip(bases, tips)]
+    neutral_angle = roll(difference(neutral[arm][0], neutral[root][0])) + config.get('glide_offset_deg', 0)
+    reference_pose = neutral if before else rest
+    reference = [bearing(difference(reference_pose[t][0], reference_pose[b][0])) for b, t in zip(bases, tips)]
     gaps = [bounded_angle(b - a) for a, b in zip(reference, reference[1:])]
     metrics = {}
 
@@ -101,13 +123,10 @@ def measure(nodes, parents, tracks, level):
         metrics.setdefault(key, []).append(value)
 
     for frame in range(61):
-        pose = rotations_and_heads(nodes, parents, {n: v[frame] for n, v in tracks.items()}, level)
-
-        def deformation(name):
-            return multiply(pose[name][1], inverse(rest[name][1]))
+        pose = rotations_and_heads(nodes, parents, {n: v[frame] for n, v in tracks.items()}, root_level, before)
 
         def yaw(name):
-            q = multiply(deformation(name), inverse(level))
+            q = multiply(pose[name][1], inverse(neutral[name][1]))
             return -math.degrees(math.asin(max(-1, min(1, rotation(q, (1, 0, 0))[2]))))
 
         put('arm', roll(difference(pose[arm][0], pose[root][0])) - neutral_angle)
@@ -115,7 +134,11 @@ def measure(nodes, parents, tracks, level):
         put('elbow fold', yaw(arm) - yaw(root))
         put('wrist fold', yaw(arm) - yaw(wrist))
         put('span', 2 * max(p[0] for n, (p, _) in pose.items() if n.startswith('wing_') and n.endswith('_r')))
-        palm_inv = inverse(deformation(wrist))
+        palm_inv = multiply(reference_pose[wrist][1], inverse(pose[wrist][1]))
+        if model == 'storm3':
+            chains = [[pose[n][0] for n in (base, base.replace('a_r', 'b_r'), tip)]
+                      for base, tip in zip(bases, tips)]
+            put('chord', chord_inclination(chains))
         rays = []
         for index, (base, tip) in enumerate(zip(bases, tips), 1):
             put(f'rib {index} height', pose[tip][0][1] - pose[root][0][1])
@@ -128,7 +151,27 @@ def measure(nodes, parents, tracks, level):
     return metrics
 
 
-def measure_checks(model, animations, nodes, parents, original, level, results):
+def chord_inclination(chains):
+    """Cut the posed rib segments at common spans and measure their fore-aft chords."""
+    start = chains[0][0][0]
+    end = max(p[0] for chain in chains for p in chain)
+    peak_angle = 0.
+    for i in range(1, 40):
+        x = start + (end-start)*i/40
+        points = []
+        for chain in chains:
+            for a, b in zip(chain, chain[1:]):
+                if min(a[0], b[0]) < x <= max(a[0], b[0]):
+                    t = (x-a[0])/(b[0]-a[0])
+                    points.append(tuple(av+t*(bv-av) for av, bv in zip(a, b)))
+        if len(points) >= 2:
+            points.sort(key=lambda p: p[2])
+            chord = difference(points[-1], points[0])
+            peak_angle = max(peak_angle, math.degrees(math.atan2(abs(chord[1]), chord[2])))
+    return peak_angle
+
+
+def measure_checks(model, animations, nodes, parents, original, config, results):
     def record(group, ok, text):
         results.append((group, bool(ok), text))
 
@@ -141,10 +184,10 @@ def measure_checks(model, animations, nodes, parents, original, level, results):
         record(3, seam <= .05, f'{name} loop seam {seam:.5f} deg')
         mirror = mirrored_error(tracks, rest)
         record(4, mirror <= .005, f'{name} mirror error in model axes {mirror:.5f} deg')
-        m = all_metrics[name] = measure(nodes, parents, tracks, level)
+        m = all_metrics[name] = measure(nodes, parents, tracks, config['level_xyzw'], config, model)
         arm = m['arm']
         top, low = peak(arm), peak(arm, min)
-        down = .5
+        down = .48 if model == 'storm3' else .5
         record(5, min(top, 60-top) <= 1 and abs(low/60 - down) <= .03,
                f'{name} arm relative to neutral {arm[top]:+.2f} at {top}/60, {arm[low]:+.2f} deg at {low}/60')
         for station in (s for s in m if s.endswith('height')):
@@ -162,26 +205,39 @@ def measure_checks(model, animations, nodes, parents, original, level, results):
         step, joint = max((max(angle(a, b) for a, b in zip(v, v[1:])), n) for n, v in tracks.items())
         record(8, step <= 12, f'{name} largest step {step:.2f} deg on {joint}')
         top_target, depth_target = (50, 32) if climb else (40, 22)
+        if model == 'storm3':
+            top_target += 5
         record(9, .8*top_target <= arm[top] <= 1.2*top_target and .8*depth_target <= -arm[low] <= 1.2*depth_target,
                f'{name} arm stroke {arm[top]:+.2f} to {arm[low]:+.2f} deg')
         scale = 1.25 if climb else 1
-        for key, lo, hi in [('elbow fold', 20, 28), ('wrist fold', 25, 35)]:
+        limits = [('elbow fold', 20, 28), ('wrist fold', 25, 35)]
+        if model == 'storm3':
+            scale = 1
+            limits = [('elbow fold', 0, 20), ('wrist fold', 0, 25)]
+        for key, lo, hi in limits:
             value = max(m[key])
             record(9, lo * scale <= value <= hi * scale, f'{name} peak {key} {value:.2f} deg')
         recovery = peak(m['wrist fold'])
         span = m['span'][recovery] / max(m['span'])
-        record(9, span > .70, f'{name} span at peak wrist fold {span:.3f} of widest')
+        record(9, span > (.80 if model == 'storm3' else .70), f'{name} span at peak wrist fold {span:.3f} of widest')
         gap = min(m['min gap'])
         closure = max(m['max closure'])
         record(9, gap > 0 and closure <= 8,
                f'{name} smallest adjacent tip separation {gap:.2f} deg, largest closure {closure:.2f} deg')
-        narrowing = m['fan width'][0] - m['fan width'][recovery]
-        record(9, narrowing > 0, f'{name} fan narrows {narrowing:.2f} deg at peak wrist fold')
+        if model == 'tide2':
+            narrowing = m['fan width'][0] - m['fan width'][recovery]
+            record(9, narrowing > 0, f'{name} fan narrows {narrowing:.2f} deg at peak wrist fold')
+        else:
+            inclination = max(m['chord'])
+            record(9, inclination <= 35, f'{name} largest side-view chord between ribs {inclination:.2f} deg')
     if len(all_metrics) == 2:
         a, b = all_metrics['flap'], all_metrics['flap_climb']
         larger = max(b['arm']) > max(a['arm']) and min(b['arm']) < min(a['arm'])
-        larger &= all(max(b[k]) > max(a[k]) for k in ('elbow fold', 'wrist fold'))
-        record(9, larger, 'climb exceeds cruise at both reversals and both hinges')
+        detail = 'climb exceeds cruise at both reversals'
+        if model == 'tide2':
+            larger &= all(max(b[k]) > max(a[k]) for k in ('elbow fold', 'wrist fold'))
+            detail += ' and both hinges'
+        record(9, larger, detail)
 
 
 def check(model, path):
@@ -226,13 +282,13 @@ def check(model, path):
         if dense and valid:
             animations[name] = tracks
     config = json.loads((Path(__file__).parent / 'wingbeat' / f'{model}.json').read_text())
-    measure_checks(model, animations, nodes, parents, original, config['level_xyzw'], results)
+    measure_checks(model, animations, nodes, parents, original, config, results)
     return results
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2',))
+    parser.add_argument('model', choices=('tide2', 'storm3'))
     parser.add_argument('clip', nargs='?', type=Path)
     args = parser.parse_args()
     try:

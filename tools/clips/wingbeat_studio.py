@@ -107,6 +107,7 @@ class Sample:
     phase: float
     heads: np.ndarray
     positions: np.ndarray
+    fingertips: list
 
 
 class Studio:
@@ -114,6 +115,7 @@ class Studio:
 
     def __init__(self, model):
         src, data = read_glb(ROOT/f'assets/{model}.glb')
+        self.model = model
         self.params = tunings(model)
         skin = src['skins'][0]
         nodes = [src['nodes'][i] for i in skin['joints']]
@@ -144,6 +146,13 @@ class Studio:
         right_level = matrices(config['level_xyzw'])
         reflect = np.diag([-1., 1., 1.])
         self.wings = [self.wing('r', 1, right_level), self.wing('l', -1, reflect @ right_level @ reflect)]
+        self.leaf_offsets = np.zeros_like(self.bind)
+        if model == 'storm3':
+            fitted = json.loads((ROOT/'tools/skeletons/storm3.json').read_text())
+            for name, head, tail, _ in fitted['bones']:
+                if name.startswith('wing_finger_') and 'b_' in name:
+                    i = self.names.index(name)
+                    self.leaf_offsets[i] = basis[i, :, 1]*math.dist(head, tail)
 
         primitive, = src['meshes'][0]['primitives']
         attributes = primitive['attributes']
@@ -167,7 +176,8 @@ class Studio:
 
         arm = [joint(stem) for stem in ('root', 'arm', 'wrist')]
         count = sum(n.startswith('wing_finger_') and n.endswith('a_'+side) for n in self.names)
-        ribs = [[joint(f'finger_{i}{s}') for s in ('a', 'b', 'tip')] for i in range(1, count+1)]
+        segments = ('a', 'b', 'tip') if f'wing_finger_1tip_{side}' in self.names else ('a', 'b')
+        ribs = [[joint(f'finger_{i}{s}') for s in segments] for i in range(1, count+1)]
         path = arm + ribs[0]
         end = 2*self.bind[path[-1]] - self.bind[path[-2]]
         lever = np.linalg.norm((self.bind[path] - end)[:, :2], axis=1)
@@ -253,7 +263,39 @@ class Studio:
             if frame >= 240:
                 points = (np.einsum('vnij,vnj->vni', transforms[self.joints], self.offsets)
                           + heads[self.joints]*self.weights[:, :, None]).sum(axis=1)
-                yield Sample(frame, phase, heads*self.scale, points*self.scale)
+                ends = []
+                for wing in self.wings:
+                    leaf = [chain[-1] for chain in wing.ribs]
+                    tips = heads[leaf] + np.einsum('nij,nj->ni', transforms[leaf], self.leaf_offsets[leaf])
+                    ends.append(tips*self.scale)
+                yield Sample(frame, phase, heads*self.scale, points*self.scale, ends)
+
+
+def section_edges(studio, wing):
+    """Keep the edges of triangles whose three vertices belong to this wing."""
+    local = np.full(len(studio.owner), -1, dtype=int)
+    local[studio.ids] = np.arange(len(studio.ids))
+    mask = np.isin(studio.owner[studio.triangles], list(wing.stations)).all(axis=1)
+    triangles = local[studio.triangles[mask]]
+    edges = np.concatenate([triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]])
+    return np.unique(np.sort(edges, axis=1), axis=0)
+
+
+def chord_sections(sample, wing, edges):
+    """Measure side-view chords between the front and rear skin at a common X."""
+    a, b = sample.positions[edges[:, 0]], sample.positions[edges[:, 1]]
+    low, high = np.minimum(a[:, 0], b[:, 0]), np.maximum(a[:, 0], b[:, 0])
+    start = sample.heads[wing.ribs[0][0], 0]
+    end = high.max() if wing.sign > 0 else low.min()
+    for station in range(1, 40):
+        fraction = station / 40
+        x = start + (end-start)*fraction
+        mask = (low < x) & (x <= high)
+        p, q = a[mask], b[mask]
+        u = (x-p[:, 0])/(q[:, 0]-p[:, 0])
+        cuts = p + u[:, None]*(q-p)
+        chord = cuts[cuts[:, 2].argmax()] - cuts[cuts[:, 2].argmin()]
+        yield abs(math.degrees(math.atan2(chord[1], chord[2]))), fraction
 
 
 def metrics(studio, climb):
@@ -289,15 +331,27 @@ def metrics(studio, climb):
           f'{angles.max()-glide:+.2f} to {angles.min()-glide:+.2f} deg')
     print('right shoulder high and low phases',
           f'{cycle[angles.argmax()].phase:.3f} {cycle[angles.argmin()].phase:.3f}')
-    for joint in [wing.arm[-1], *(rib[-1] for rib in wing.ribs)]:
-        heights = np.array([s.heads[joint, 1] for s in cycle]) - origin[:, 1]
+    landmarks = [(studio.names[wing.arm[-1]], [s.heads[wing.arm[-1], 1] for s in cycle])]
+    for index, rib in enumerate(wing.ribs, 1):
+        name = f'wing_finger_{index}tip_r'
+        landmarks.append((name, [s.fingertips[0][index-1, 1] for s in cycle]))
+    for name, values in landmarks:
+        heights = np.array(values) - origin[:, 1]
         top, low = cycle[heights.argmax()].phase, cycle[heights.argmin()].phase
-        print(f'{studio.names[joint]} high and low phases {top:.3f} {low:.3f}')
+        print(f'{name} high and low phases {top:.3f} {low:.3f}')
+    if studio.model == 'storm3':
+        for wing in studio.wings:
+            edges = section_edges(studio, wing)
+            worst = max((angle, s.phase, fraction) for s in samples
+                        for angle, fraction in chord_sections(s, wing, edges))
+            side = 'right' if wing.sign > 0 else 'left'
+            print(f'{side} steepest skin chord {worst[0]:.2f} deg at phase {worst[1]:.3f}, '
+                  f'{worst[2]:.1%} of outer hand width')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2',))
+    parser.add_argument('model', choices=('tide2', 'storm3'))
     args = parser.parse_args()
     rig = Studio(args.model)
     for effort in (False, True):

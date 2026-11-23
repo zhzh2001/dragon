@@ -18,7 +18,7 @@ def rib_patches(studio):
     for wing in studio.wings:
         for chain in wing.ribs:
             origin = studio.bind[chain[0]]
-            direction = studio.bind[chain[-1]] - origin
+            direction = studio.bind[chain[-1]] + studio.leaf_offsets[chain[-1]] - origin
             distance = ((positions - origin) @ direction) / (direction @ direction)
             weight = (studio.weights * np.isin(studio.joints, chain)).sum(axis=1)
             owner[(weight > .85) & (distance > .25)] = len(names)

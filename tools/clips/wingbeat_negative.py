@@ -64,7 +64,7 @@ def corrupt(model, label):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2',))
+    parser.add_argument('model', choices=('tide2', 'storm3'))
     model = parser.parse_args().model
     directory = ROOT / 'build-clip-cache' / model / 'damaged'
     directory.mkdir(parents=True, exist_ok=True)
