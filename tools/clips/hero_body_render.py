@@ -38,10 +38,35 @@ VIEWS.update({
     'landed': ('--input -0.25,0,0,0,0,0 --telemetry 60', (900, 960, 1020, 1080)),
 })
 
+# The field grass covers the soles in the required contact views.
+CONTACT = {
+    'contact-walk-212': ('--studio 13 --inspect 60 11 3 --hide-vegetation', (212,)),
+    'contact-walk-236': ('--studio 13 --inspect 60 11 3 --hide-vegetation', (236,)),
+    'contact-stand-225': ('--studio 9 --inspect 60 11 3 --hide-vegetation', (225,)),
+}
+
+# Additional single frames cover the project's standard pose review.
+EXTRA = {
+    **CONTACT,
+    'beat-front': ('--studio 1 --inspect 180 14 6', (226,)),
+    'beat-above': ('--studio 1 --inspect 90 14 85', (232,)),
+    'climb-front': ('--studio 1 --flight flap_effort_bias=1 --inspect 180 14 6', (226,)),
+    'climb-rear': ('--studio 1 --flight flap_effort_bias=1 --inspect 0 16 14', (226,)),
+    'climb-above': ('--studio 1 --flight flap_effort_bias=1 --inspect 90 14 85', (232,)),
+    'glide-front': ('--studio 0 --inspect 180 14 6', (360,)),
+    'head-glide': ('--studio 0 --inspect 90 3.5 0 --inspect-head', (360,)),
+    'head-climb': ('--studio 1 --flight flap_effort_bias=1 --inspect 90 3.5 0 --inspect-head', (226,)),
+    'walk-rear': ('--studio 13 --inspect 0 16 14', (212,)),
+    'head-walk': ('--studio 13 --inspect 90 3.5 0 --inspect-head', (212,)),
+    'stand-rear': ('--studio 9 --inspect 0 16 14', (225,)),
+    'feet-stand': ('--studio 9 --inspect 60 11 3', (225,)),
+    'switch': ('--models assets/rimefang.glb,assets/embercrest-hero.glb --cycle-models 180 --studio 1 --inspect 0 16 14', (226,)),
+}
+
 
 def capture(task):
     version, group, index = task
-    view, frames = VIEWS[group]
+    view, frames = (VIEWS | EXTRA)[group]
     stem = f'{group}-{index}'
     dest = ART / version
     dest.mkdir(exist_ok=True, parents=True)
@@ -80,8 +105,9 @@ if __name__ == '__main__':
     parser.add_argument('--replace', action='store_true')
     args = parser.parse_args()
     CACHE.mkdir(exist_ok=True)
-    tasks = [(args.version, group, i) for group in args.groups or VIEWS
-             for i in (args.indices if args.indices is not None else range(len(VIEWS[group][1])))
+    views = VIEWS | (EXTRA if args.version == 'after' else CONTACT)
+    tasks = [(args.version, group, i) for group in args.groups or views
+             for i in (args.indices if args.indices is not None else range(len(views[group][1])))
              if args.replace or not (ART / args.version / f'{group}-{i}.jpg').exists()]
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         list(pool.map(capture, tasks))
