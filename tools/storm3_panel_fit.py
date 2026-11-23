@@ -228,9 +228,25 @@ def mesh_normals(coords, triangles, inverse, count):
     return unit(accum)[inverse]
 
 
+def shading_domain(mesh, names, mask):
+    # Extend the correction across the narrow arm and fourth-rib borders.
+    # The brush fades along connected edges and stops at the fixed torso.
+    _, inv = np.unique(mesh['POSITION'], axis=0, return_inverse=True)
+    inv = inv.ravel()
+    faces = inv[mesh['indices']]
+    influence = np.zeros(inv.max() + 1)
+    np.maximum.at(influence, inv, np.minimum(mask * 4, 1))
+    for _ in range(3):
+        neighbor = influence[faces].max(1)
+        for corner in range(3):
+            np.maximum.at(influence, faces[:, corner], neighbor * .76)
+    wing = np.array([name.startswith('wing_') for name in names])
+    moving = (wing[mesh['JOINTS_0']] * mesh['WEIGHTS_0']).sum(1)
+    return influence[inv] * (moving > 0)
+
+
 def fit_normals(mesh, coords, joints, weights, mask, poses):
-    # Fit the rest normal to the adjoining triangles across the two beats.
-    # A camera at a grazing angle can otherwise see the opposite face's lighting.
+    # Fit the skin normals to the posed surface where each camera sees its front.
     rows = np.flatnonzero(mask > 0)
     faces = mesh['indices']
     faces = faces[(mask[faces] > 0).any(1)]
@@ -240,32 +256,36 @@ def fit_normals(mesh, coords, joints, weights, mask, poses):
     inv = inv.ravel()
     p, j, w = coords[ids], joints[ids], weights[ids]
     count = inv.max() + 1
-    rest = mesh_normals(p, faces, inv, count)
-    normals = rest.copy() * 3
-    rays, limits = [], []
+    normals = mesh_normals(p, faces, inv, count)
+    rays, limits, priorities = [], [], []
     center = (coords.max(0) + coords.min(0)) / 2
     scale = 14.65 / np.ptp(coords[:, 0])
-    for pose in poses:
+    for sample, pose in enumerate(poses):
         blend = np.einsum('vj,vjmn->vmn', w, pose[j])
         rot = blend[:, :3, :3]
         q = np.einsum('vij,vj->vi', rot, p) + blend[:, :3, 3]
         geom = mesh_normals(q, faces, inv, count)
-        normals += unit(np.linalg.solve(rot, geom[:, :, None])[:, :, 0])
-        for angle, distance, elevation in [(223, 12.6, -1), (200, 8, 35), (320, 8, -35), (0, 16, 14)]:
+        normals += (2.5 if sample < 14 else 1.)*unit(np.linalg.solve(rot, geom[:, :, None])[:, :, 0])
+        for angle, distance, elevation, priority in [
+                (223, 12.6, 14.5, 3), (223, 12.6, -1, 2),
+                (200, 8, 35, 3), (320, 8, -35, 2), (0, 16, 14, 1)]:
             a, e = np.radians([angle, elevation])
             camera = np.array([np.sin(a) * np.cos(e), np.sin(e), np.cos(a) * np.cos(e)])
             toward = unit(distance * camera - (q - center) * scale)
             dot = (toward * geom).sum(1)
             rays.append(np.einsum('vji,vj->vi', rot, toward) * np.sign(dot)[:, None])
-            limits.append(np.clip(abs(dot) - .08, -.05, .18))
+            limits.append(np.where(dot > .09, np.clip(dot - .06, .02, .35), -2.0))
+            priorities.append(priority * (2.2 if sample < 14 else .8 if sample < 28 else .15))
     rays = np.asarray(rays)
     limits = np.asarray(limits)
+    priorities = np.asarray(priorities)
     normal = unit(normals)
     start = normal.copy()
-    for _ in range(15):
+    vertices = np.arange(len(normal))
+    for _ in range(60):
         gap = np.maximum(0, limits - np.einsum('nvi,vi->nv', rays, normal))
-        gradient = np.einsum('nv,nvi->vi', gap, rays)
-        normal = unit(normal + .7 * gradient / (1 + (gap > 0).sum(0)[:,None]) + .025 * (start - normal))
+        criteria = (gap * priorities[:, None]).argmax(0)
+        normal = unit(normal + .30 * gap[criteria, vertices, None] * rays[criteria, vertices] + .0008 * (start - normal))
     new = mesh['NORMAL'].copy()
     factor = mask[rows, None]
     new[rows] = unit(new[rows] * (1 - factor) + normal[np.searchsorted(ids, rows)] * factor)
@@ -285,7 +305,8 @@ def build(source, target):
     poses = fitting_poses(Path('build-rig-cache'), joint_names(doc))
     fit_thickness(mesh, coords, joints, weights, (span, t, u, mask), poses)
     smooth_contacts(mesh, coords, joints, weights, mask, poses[:28:2])
-    normals, tangents = fit_normals(mesh, coords, joints, weights, mask, poses)
+    shade_mask = shading_domain(mesh, joint_names(doc), mask)
+    normals, tangents = fit_normals(mesh, coords, joints, weights, shade_mask, poses)
     updates = dict(POSITION=coords, JOINTS_0=joints, WEIGHTS_0=weights, NORMAL=normals, TANGENT=tangents)
     for filename in ('storm3-raw.glb', 'storm3.glb'):
         doc, original = read_glb(source / filename)

@@ -58,6 +58,14 @@ Near pixel (591, 510), triangle 11387 faced the viewer at +0.33.
 Its three shading normals pointed away at −0.14 to −0.22.
 The thin line also showed above the wing at frame 247. The underside showed a narrow bright rim along the curved hem.
 
+## Round 3
+
+I extended the normal fit up to three mesh edges beyond the panel and included the pictured report angle.
+At frame 240, the three normals on triangle 11387 now faced the viewer at +0.23 to +0.29.
+The squared black stripe disappeared beside the arm in the report and above views.
+The wider fit added shallow triangular shadows near the flank at frames 220 and 247.
+I kept the geometry and compared a narrower normal correction for the final round.
+
 ## Original models
 
 The scratch directory `build-rig-cache/before/` contains both original flight-bind models.
@@ -67,3 +75,33 @@ Their SHA-256 digests identify the inputs to the panel repair.
 | --- | --- |
 | storm3-raw.glb | `ce20be39d3d076751d8a4b74aaca05835a89a484778532b777695ce6599f7275` |
 | storm3.glb | `a31f7beb11afdb2738e337f4efbe1ebf051ef5f2b378c5ac50cb155cca3a7e23` |
+
+## Rebuild
+
+Run these commands from this worktree. Use Blender 5.3 and Python 3 with NumPy and Pillow.
+The original pipeline builds the rig, web, grade and materials, then applies the flight bind. [Original build record](../README.md)
+For this repair, use the two original flight-bind files in `build-rig-cache/before/`. Check their hashes against the table.
+
+The pose sampler compiles a measurement tool with Clang, SDL3 and headers from the main checkout's build.
+It writes the joint transforms for both beats and four other poses under `build-rig-cache/`.
+
+```sh
+python3 -B tools/storm3_panel_poses.py
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_panel_fit.py -- build-rig-cache/before build-rig-cache/rebuilt
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_panel_check.py -- build-rig-cache/before build-rig-cache/rebuilt/storm3.glb
+/opt/homebrew/bin/blender -b --factory-startup --python-exit-code 1 \
+  --python tools/storm3_flapcheck.py -- build-rig-cache/rebuilt/storm3.glb
+shasum -a 256 build-rig-cache/rebuilt/storm3*.glb
+```
+
+The capture script uses the model currently in `assets/storm3.glb`.
+With the original model installed, run the first command.
+With the rebuilt model installed, run the last two commands.
+
+```sh
+python3 -B tools/storm3_panel_captures.py before
+python3 -B tools/storm3_panel_captures.py after
+python3 -B tools/storm3_panel_sheets.py
+```
