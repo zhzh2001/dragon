@@ -82,6 +82,14 @@ artifacts/dragothic-rig/
 tools/silver_dragon_pass3_flight.py
 tools/silver_dragon_pass3_weights.py
 
+# The gold and silver studies' keyframed wingbeats (2026-11-24). Each clip
+# and each measurement file carries that dragon's skeleton, as
+# tools/skeletons/gold-dragon.json and silver-dragon.json do.
+assets/clips/gold-dragon.flight.glb
+assets/clips/silver-dragon.flight.glb
+tools/clips/wingbeat/gold-dragon.json
+tools/clips/wingbeat/silver-dragon.json
+
 # Not a licence matter: per-frame engine captures that four Codex jobs
 # committed beside their contact sheets on 2026-11-22 (682 MB, 869 files)
 # and that were deleted from main the same night, before any export. No doc

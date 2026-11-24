@@ -58,7 +58,7 @@ def check(studio, climb):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2', 'storm3'))
+    parser.add_argument('model', choices=('tide2', 'storm3', 'gold-dragon', 'silver-dragon'))
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     studio = Studio(args.model)
     if not all(check(studio, climb) for climb in (False, True)):

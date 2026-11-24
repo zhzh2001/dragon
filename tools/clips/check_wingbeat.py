@@ -8,11 +8,13 @@ import struct
 import sys
 
 sys.dont_write_bytecode = True
+from wingbeat.profiles import flight_value
 from check_clip import accessor, angle, inverse, multiply, normalize, parent_names, read_glb
 
 ROOT = Path(__file__).resolve().parents[2]
 IDENTITY = (0, 0, 0, 1)
 ZERO = (0, 0, 0)
+STUDIES = ('gold-dragon', 'silver-dragon')
 
 
 def rotation(q, v):
@@ -108,9 +110,13 @@ def measure(nodes, parents, tracks, level, config, model):
     root_level = IDENTITY if before else level
     neutral = rotations_and_heads(nodes, parents, {}, root_level, before)
     root = 'wing_root_r'
-    bases = sorted((n for n in nodes if n.startswith('wing_finger_') and n.endswith('a_r')),
-                   key=lambda n: int(n.split('_')[2][:-1]))
-    tips = [n.replace('a_r', 'tip_r') for n in bases]
+    if model in STUDIES:
+        bases = sorted(n for n in nodes if n.startswith('wing_finger_') and n.endswith('_01_r'))
+        tips = [n.removesuffix('_01_r') + '_03_r' for n in bases]
+    else:
+        bases = sorted((n for n in nodes if n.startswith('wing_finger_') and n.endswith('a_r')),
+                       key=lambda n: int(n.split('_')[2][:-1]))
+        tips = [n.replace('a_r', 'tip_r') for n in bases]
     arm = 'wing_arm_r'
     wrist = 'wing_wrist_r'
     neutral_angle = roll(difference(neutral[arm][0], neutral[root][0])) + config.get('glide_offset_deg', 0)
@@ -139,6 +145,10 @@ def measure(nodes, parents, tracks, level, config, model):
             chains = [[pose[n][0] for n in (base, base.replace('a_r', 'b_r'), tip)]
                       for base, tip in zip(bases, tips)]
             put('chord', chord_inclination(chains))
+        if model in STUDIES:
+            outer = bases[0].removesuffix('_01_r') + '_02_r'
+            put('outer elevation', roll(difference(pose[tips[0]][0], pose[outer][0])))
+            put('arm elevation', roll(difference(pose[arm][0], pose[root][0])))
         rays = []
         for index, (base, tip) in enumerate(zip(bases, tips), 1):
             put(f'rib {index} height', pose[tip][0][1] - pose[root][0][1])
@@ -171,6 +181,19 @@ def chord_inclination(chains):
     return peak_angle
 
 
+def longest_slow_run(keys):
+    """Count consecutive slow intervals across the seam, in sixtieths of a beat."""
+    steps = [angle(a, b) for a, b in zip(keys, keys[1:])]
+    peak_step = max(steps)
+    if peak_step < 1e-5:
+        return len(steps)
+    longest = current = 0
+    for step in steps + steps:
+        current = current + 1 if step < .15 * peak_step else 0
+        longest = max(longest, current)
+    return min(longest, len(steps))
+
+
 def measure_checks(model, animations, nodes, parents, original, config, results):
     def record(group, ok, text):
         results.append((group, bool(ok), text))
@@ -178,6 +201,7 @@ def measure_checks(model, animations, nodes, parents, original, config, results)
     rest_pose = rotations_and_heads(nodes, parents, {})
     rest = {n: (original[n].get('rotation', IDENTITY), rest_pose[n][1]) for n in nodes}
     all_metrics = {}
+    down = flight_value(ROOT, model, 'flap_downstroke_fraction')
     for name, tracks in animations.items():
         climb = name == 'flap_climb'
         seam = max(angle(v[0], v[-1]) for v in tracks.values())
@@ -187,7 +211,6 @@ def measure_checks(model, animations, nodes, parents, original, config, results)
         m = all_metrics[name] = measure(nodes, parents, tracks, config['level_xyzw'], config, model)
         arm = m['arm']
         top, low = peak(arm), peak(arm, min)
-        down = .48 if model == 'storm3' else .5
         record(5, min(top, 60-top) <= 1 and abs(low/60 - down) <= .03,
                f'{name} arm relative to neutral {arm[top]:+.2f} at {top}/60, {arm[low]:+.2f} deg at {low}/60')
         for station in (s for s in m if s.endswith('height')):
@@ -196,6 +219,14 @@ def measure_checks(model, animations, nodes, parents, original, config, results)
             a, b = ((.04, .06) if station.startswith('wrist') else (.08, .10))
             if climb:
                 a, b = a*4/3, b*4/3
+            if model in STUDIES:
+                if station.startswith('wrist'):
+                    a, b = 4/60, 6/60
+                elif station == 'rib 1 height':
+                    a, b = 7/60, 10/60
+                else:
+                    # The inner rays attach near the torso. The leading tip defines stroke timing.
+                    continue
             record(6, all(a-1e-6 <= d/60 <= b+1e-6 for d in delays),
                    f'{name} {station} lags {delays[0]}/60 and {delays[1]}/60')
         for key in ('elbow fold', 'wrist fold'):
@@ -207,6 +238,11 @@ def measure_checks(model, animations, nodes, parents, original, config, results)
         top_target, depth_target = (50, 32) if climb else (40, 22)
         if model == 'storm3':
             top_target += 5
+        if model in STUDIES:
+            top_target, depth_target = (55, 40) if climb else (45, 30)
+            run, held = max((longest_slow_run(v), n) for n, v in tracks.items())
+            record(10, run/60 <= .08, f'{name} longest run below 15% of joint peak speed '
+                   f'{run}/60 on {held} (limit 8% of the beat)')
         record(9, .8*top_target <= arm[top] <= 1.2*top_target and .8*depth_target <= -arm[low] <= 1.2*depth_target,
                f'{name} arm stroke {arm[top]:+.2f} to {arm[low]:+.2f} deg')
         scale = 1.25 if climb else 1
@@ -214,27 +250,39 @@ def measure_checks(model, animations, nodes, parents, original, config, results)
         if model == 'storm3':
             scale = 1
             limits = [('elbow fold', 0, 20), ('wrist fold', 0, 25)]
+        if model in STUDIES:
+            limits = [('elbow fold', 20, 30), ('wrist fold', 25, 40)]
         for key, lo, hi in limits:
             value = max(m[key])
             record(9, lo * scale <= value <= hi * scale, f'{name} peak {key} {value:.2f} deg')
         recovery = peak(m['wrist fold'])
         span = m['span'][recovery] / max(m['span'])
-        record(9, span > (.80 if model == 'storm3' else .70), f'{name} span at peak wrist fold {span:.3f} of widest')
+        span_ok = .70 <= span <= .85 if model in STUDIES else span > (.80 if model == 'storm3' else .70)
+        record(9, span_ok, f'{name} span at peak wrist fold {span:.3f} of widest')
         gap = min(m['min gap'])
         closure = max(m['max closure'])
         record(9, gap > 0 and closure <= 8,
                f'{name} smallest adjacent tip separation {gap:.2f} deg, largest closure {closure:.2f} deg')
-        if model == 'tide2':
+        if model != 'storm3':
             narrowing = m['fan width'][0] - m['fan width'][recovery]
             record(9, narrowing > 0, f'{name} fan narrows {narrowing:.2f} deg at peak wrist fold')
         else:
             inclination = max(m['chord'])
             record(9, inclination <= 35, f'{name} largest side-view chord between ribs {inclination:.2f} deg')
+        if model == 'silver-dragon':
+            mid_down = round(60 * down / 2)
+            mid_up = round(60 * (down + (1-down)/2))
+            arm_down, arm_up = (m['arm elevation'][i] for i in (mid_down, mid_up))
+            tip_down, tip_up = (m['outer elevation'][i] for i in (mid_down, mid_up))
+            wave = tip_down > max(0, arm_down) and tip_up < min(0, arm_up)
+            record(9, wave,
+                   f'{name} midstroke arm / outer elevation, down {arm_down:+.1f} / {tip_down:+.1f}, '
+                   f'up {arm_up:+.1f} / {tip_up:+.1f} deg')
     if len(all_metrics) == 2:
         a, b = all_metrics['flap'], all_metrics['flap_climb']
         larger = max(b['arm']) > max(a['arm']) and min(b['arm']) < min(a['arm'])
         detail = 'climb exceeds cruise at both reversals'
-        if model == 'tide2':
+        if model != 'storm3':
             larger &= all(max(b[k]) > max(a[k]) for k in ('elbow fold', 'wrist fold'))
             detail += ' and both hinges'
         record(9, larger, detail)
@@ -288,7 +336,7 @@ def check(model, path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2', 'storm3'))
+    parser.add_argument('model', choices=('tide2', 'storm3', *STUDIES))
     parser.add_argument('clip', nargs='?', type=Path)
     args = parser.parse_args()
     try:

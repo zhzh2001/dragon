@@ -8,7 +8,7 @@ import sys
 
 sys.dont_write_bytecode = True
 from check_clip import read_glb
-from check_wingbeat import ROOT
+from check_wingbeat import ROOT, STUDIES
 from wingbeat.glb import pack
 
 
@@ -48,6 +48,12 @@ def corrupt(model, label):
         i = key_offset(arm, 20)
         x, y, z, w = struct.unpack_from('<4f', binary, i)
         struct.pack_into('<4f', data, i, w, -z, y, -x)
+    elif label == 'hold':
+        # Pause both wrists across the seam. Each half alone is shorter than the limit.
+        for c in cruise['channels']:
+            if name(c).startswith('wing_wrist_'):
+                for key in (57, 58, 59, 60, 0, 1, 2, 3):
+                    shift(c, key, 0)
     elif label == 'amplitude':
         climb['channels'] = cruise['channels']
         climb['samplers'] = cruise['samplers']
@@ -64,13 +70,16 @@ def corrupt(model, label):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2', 'storm3'))
+    parser.add_argument('model', choices=('tide2', 'storm3', *STUDIES))
     model = parser.parse_args().model
     directory = ROOT / 'build-clip-cache' / model / 'damaged'
     directory.mkdir(parents=True, exist_ok=True)
-    for group, label in [(1, 'name'), (1, 'samples'), (2, 'rest'), (2, 'channel'),
+    cases = [(1, 'name'), (1, 'samples'), (2, 'rest'), (2, 'channel'),
                          (2, 'body'), (3, 'seam'), (4, 'mirror'), (5, 'phase'),
-                         (6, 'lag'), (7, 'fold'), (8, 'step'), (9, 'amplitude')]:
+                         (6, 'lag'), (7, 'fold'), (8, 'step'), (9, 'amplitude')]
+    if model in STUDIES:
+        cases = [(10, 'hold')]
+    for group, label in cases:
         path = directory / f'{label}.glb'
         path.write_bytes(corrupt(model, label))
         result = subprocess.run([sys.executable, '-B', str(Path(__file__).with_name('check_wingbeat.py')),

@@ -251,6 +251,15 @@ The old sidecar paths (`assets/gold-dragon.glb.*.cfg`, and the silver ones)
 stay in `public_excludes.txt`: un-excluding them would rewrite commits the
 mirror has already published.
 
+Their keyframed wingbeats (2026-11-24) are on the other side of that
+line. `assets/clips/gold-dragon.flight.glb` and
+`silver-dragon.flight.glb` each hold the dragon's whole skeleton at its
+rest pose, and `tools/clips/wingbeat/gold-dragon.json` and
+`silver-dragon.json` hold its measured joints. They are excluded as the
+skeleton files are, and the packagers delete the two clips from the
+`assets/clips/` they copy. The generator and the checker are shared
+with tide2 and storm3 and stay public.
+
 ## Embercrest-scripted (experiment, not tracked)
 
 An original model built for this project by `tools/build_embercrest.py`. The
