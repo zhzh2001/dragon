@@ -736,7 +736,8 @@ snaps to whole texels, so a texel's value does not change from frame to
 frame.
 
 On the K30: 62.6 to 44.4 ms. The clouds cost 3.4 ms, as they did before
-the caps. On the Mac the map and the function differ by a mean of 0.02
+the caps. On the M5 at Ultra the GPU's median went from 18.1 to 15.0 ms
+over three interleaved rounds of run 7. On the Mac the map and the function differ by a mean of 0.02
 to 0.05 of 255, and the eight reference frames pass without a
 recapture. `--atmosphere cloud_map=0` is the function everywhere.
 
