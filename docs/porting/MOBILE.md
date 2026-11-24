@@ -650,6 +650,58 @@ change of terrain); the HUD's 2 ms; Mesa's per-draw cost (36 draws a
 frame; the trees are one draw per kind, which only a per-instance height
 in the foliage shader would merge).
 
+## The 0.4.0 package on the K30 (2026-11-24)
+
+The release APK (`docs/RELEASE.md`, "The small packages of 0.4.0,
+checked") ran the demo pilot in a window for 7,200 frames at **11.2
+fps**: median 75.5 ms, GPU median 76.3 ms from fences, battery 30.7 to
+32.7 C. The shipped default measured 33.8 fps in October (above). The
+picture is right: the eight reference frames pass loosely against the
+Mac at `--preset phone` (mean 0.5 to 2.3 of 255).
+
+Eleven headless runs, 240 frames of run 7 each, one thing changed in
+each (a 1280x720 target, so fewer pixels than the window's):
+
+| Variant | fps | GPU median |
+|---|---|---|
+| as shipped | 13.9 | 61.4 ms |
+| `--atmosphere on=0` (the analytic sky) | 29.8 | 26.5 ms |
+| `--atmosphere clouds=0` (no cloud layer) | 19.4 | 41.6 ms |
+| `--atmosphere mist=0` | 14.7 | 58.2 ms |
+| `--atmosphere aerial=0` | 14.2 | 60.3 ms |
+| `--graphics clouds=0` (the volumetric clouds) | 14.7 | 56.8 ms |
+| `--no-post` | 14.3 | 59.9 ms |
+| `--aa off` | 14.0 | 61.2 ms |
+| `--graphics shadows=5` | 14.0 | 61.3 ms |
+| `--breath on=0` | 13.9 | 61.8 ms |
+| `--graphics ao=0` (occlusion on) | 13.5 | 63.7 ms |
+
+So the atmosphere is 35 of the 61 ms, and the cloud layer is 20 of
+those. The painted slab now costs more than the volumetric clouds it
+was chosen over. What the layer costs is `cloud_coverage`
+(`scene_common.hlsl`): four octaves of hashed noise and a loop over up
+to twelve thermals. Every lit pixel of the world calls it once for its
+cloud shadow, and the sky's slab calls it sixteen times a pixel. The
+thermals' caps came on 2026-10-21 and the mist on 2026-10-24, both
+after the 33.8 fps. Which commit cost what was not bisected: the phone
+takes arguments and not `DRAGON_ABLATE`.
+
+`artifacts/release-0.4.0/phone-atmosphere-on-off.jpg` has the three
+pictures: as shipped, without the cloud layer, with the analytic sky.
+
+Not fixed. Two ways, for the user to pick between:
+
+1. Read the coverage from a map. The volumetric clouds already bake one
+   (`clouds_weather.hlsl`, 156 m texels). With the cloud shadow and the
+   slab sampling it, the 20 ms falls to a texture read on every tier.
+   It needs a texture slot in each world shader, and the K30's Vulkan
+   refused a pipeline over nine.
+2. Give the phone preset the analytic sky: 29.8 fps headless today with
+   no shader work, and the sky and the far walls of the sm3 tier.
+
+The first keeps the look and helps the desktop too. It is a renderer
+change with new reference frames, a session of its own.
+
 ## What every mobile target needs
 
 These are shared, and most of the M0 work is here, not in a renderer.

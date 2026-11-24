@@ -711,3 +711,30 @@ Path `cpu` stays the Matrox default. With the card fed three times faster,
 Minimal is now playable and Lowest is at the refresh most of the time. A
 PCI card behind such a bridge is worth this check before its triangle
 budget is cut: the bridge's prefetch, not the chip, set the G550's.
+
+## Which cards to run 0.4.0 on (2026-11-24)
+
+No XP hardware has run the game since 2026-10-13. Since then the XP
+build gained the start screen, four Vista thunks (2026-11-22) and six
+weeks of shared engine. `Dragon-0.4.0-xp.zip` passed the import gate
+and renders under Wine on the sm3 tier, which proves none of that on a
+card. The suggested order, cheapest first, one card a tier:
+
+| Order | Card and board | Tier | Why | Swap |
+|---|---|---|---|---|
+| 1 | Matrox G550 PCIe, in the G41 now | ff | The first XP run of the start screen and the new thunks. Minimal and Lowest have October's numbers to compare with | none |
+| 2 | GeForce 6200 TC (PCIe), on the G41 | sm3 | sm3 has never run on real XP hardware. This card is the tier's floor | one |
+| 3 | Radeon X550, on the G41 | sm2 | sm2 with hardware vertex shaders has never run under XP: the X550 ran it under Windows 10 only. Medium and below, because an Ultra run froze x99 | one |
+| 4 | GMA 3150, the Atom D525 | sm2, ff | No swap, and the only sm2 with software vertices. It also runs the 16-bit index narrowing | none |
+| 5 | GeForce4 MX PCI (NV18) | ff | A second fixed-function vendor behind a PCI bridge, beside the G550. It is in x99 for qemu-gpu, so later | shared |
+
+Rows 1 to 3 are the least that covers the three retro tiers, at two
+swaps. Not for this release: the AGP cards (Radeon 9200 LE, TNT2 Vanta,
+Radeon 7000), whose benches are not driven remotely; the GeForce 7600
+GT, which shows artifacts; the four FX 5200, which add a slow sm2 the
+X550 covers; the Quadro FX 3500 and the X1300, which add a second sm3
+vendor and can wait for the 6200's result.
+
+On each card: the exports check, `dragon.exe` with no flags (the start
+screen), a run from it, then the tier's presets with
+`DRAGON_FRAMETIMES`, and a run record in `~/src/gpu-hist`.

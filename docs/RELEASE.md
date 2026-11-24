@@ -250,6 +250,67 @@ The script names its roster. The default roster also loads the gold and
 silver studies when they are on the machine, and no picture of those may
 be published (`ATTRIBUTION.md`).
 
+## The release workflow (2026-11-24)
+
+0.4.0 was released by hand, and three of its faults were found by a
+packager or a check that ran late. The steps are now written down and
+scripted:
+
+- `.claude/skills/release/SKILL.md` is the procedure: seven steps, each
+  with a gate, and the three rules (nothing leaves without the user's
+  word, the mirror only grows, the test machines are the user's).
+- `tools/release/preflight.sh [--export]` is the gate before any
+  packager: a clean tree, the build, the suites, the reference frames,
+  every shader variant a package bakes, the Windows and XP cross-builds,
+  and a trial export that must fast-forward from the mirror. It ran on
+  `b6670c9` with every step PASS in 301 s.
+- `tools/release/check_package.sh PLATFORM VERSION` checks one package
+  on the machine it runs on, from the unpacked package alone. It prints
+  PASS or FAIL a step and leaves the frames in
+  `dist/check-VERSION-PLATFORM/`. Its remote halves are
+  `check_package_posix.sh` (Linux), `check_package.ps1` (Windows),
+  `check_package_pi.sh` and `check_package_android.sh`.
+
+The `macos`, `pi` and `android` paths have run. The `linux` and
+`windows` paths are the commands 0.4.0 was checked with by hand, put in
+a script, and have not run as scripts: x99 was in use.
+
+## The small packages of 0.4.0, checked (2026-11-24)
+
+The XP, Pi and Android packages were built after the release was
+drafted, to test them. They are not in the draft.
+
+| Package | Size | Built from | Result |
+|---|---|---|---|
+| `Dragon-0.4.0-pi.tar.gz` | 58 MB | `ea9c33d` | PASS on the Pi 1B. Five runs headless at 640x480, the ff tier, preset pi: the demo pilot on run 7 at 38.8 and 38.7 fps over 900 frames (median 24.6 ms, 1% low 28.8 ms), the arena with three bots at 49 fps, the start screen, a run from it. Peak 78 MB, 49.8 C, not throttled |
+| `Dragon-0.4.0-android.apk` | 177 MB | `b6670c9` | FAIL on the Redmi K30 5G: it runs right and too slowly. Installed, unpacked 201 MB at first start, rendered. The eight reference frames match the Mac at the phone preset. The demo pilot ran 7,200 frames at 11.2 fps (median 75.5 ms). October's build ran the same preset at 33.8 |
+| `Dragon-0.4.0-xp.zip` | 240 MB | `b6670c9` | The import gate passed. Under Wine the valley, the start screen and a run from it render on the sm3 tier. Not run on a card: `docs/porting/CARDS.md`, "Which cards to run 0.4.0 on" |
+
+SHA-256: `e25571b6…fcebed` (Pi), `9ae594be…cf417` (Android),
+`a46d91b7…da107b` (XP). The frames are in
+`artifacts/release-0.4.0/`, and the two device runs have records in
+`~/src/gpu-hist/research/dragon-devices/`.
+
+What the builds turned up:
+
+- The GLES bake stopped at `rock.hlsl`. The five modern-only shaders
+  were skipped in the MSL and D3D11 bakes and not in
+  `tools/gles/bake_gles.py`.
+- The Android packager did not copy `assets/clips`, so the phone had no
+  keyframed strikes.
+- The APK did not install over the phone's copy:
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package com.paleshell.dragon
+  signatures do not match previously installed version`. The copy was a
+  debug-signed development build of 2026-10-15. Uninstalling deletes
+  the records on the phone, so the check script never does it. The user
+  approved it this once.
+- The phone's frame rate. `docs/porting/MOBILE.md`, "The 0.4.0 package
+  on the K30", has the eleven variants that take the frame apart: the
+  atmosphere is 35 of its 61 ms. The check now fails a phone under 30
+  fps and a Pi under 30, so the next release sees this at step 5.
+- The APK carries one dragon, no rock kit and no landmarks. The Pi's
+  start screen shows a "designs" row that does nothing there.
+
 ## Checklist before a public push or package
 
 - [ ] `tools/release/export_public.sh` passed its own checks.
