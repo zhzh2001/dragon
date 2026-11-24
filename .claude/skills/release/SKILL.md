@@ -40,6 +40,11 @@ It checks a clean tree, the build, the 28 suites, the reference frames,
 every shader variant a package bakes, the Windows and XP cross-builds, and
 a trial export. Fix every FAIL before a packager runs.
 
+Set `WINE`, `WINEPREFIX` and `DYLD_FALLBACK_LIBRARY_PATH` first, as for
+the XP packager, and it also bakes the D3D9 shaders. Without them it
+prints SKIP, and a shader the XP build cannot compile shows only at
+`package_xp.sh`.
+
 Read what the trial export prints. If the push would add more than about
 500 MB, show the user the heaviest new directories and ask whether to trim
 review renders first (`public_excludes.txt` takes paths and `glob:` lines).

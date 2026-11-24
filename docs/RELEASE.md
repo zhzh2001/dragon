@@ -308,6 +308,9 @@ What the builds turned up:
   on the K30", has the eleven variants that take the frame apart: the
   atmosphere is 35 of its 61 ms. The check now fails a phone under 30
   fps and a Pi under 30, so the next release sees this at step 5.
+  Since then the cloud cover is read from a map and the terrain's light
+  path is lighter: 17.5 fps live, which still fails (`MOBILE.md`, "The
+  phone's frame, taken apart").
 - The APK carries one dragon, no rock kit and no landmarks. The Pi's
   start screen shows a "designs" row that does nothing there.
 

@@ -15,6 +15,7 @@
 #      packager and not before (docs/RELEASE.md).
 #   5. The Windows and XP builds link, and the XP build imports nothing XP
 #      lacks.
+#      With WINE set, the D3D9 shaders bake for the three retro tiers.
 #   6. With --export: a trial export of main into a scratch directory. It
 #      must fast-forward from the published mirror, and it prints what the
 #      push would add. Nothing is pushed.
@@ -43,6 +44,17 @@ step "every shader bakes to MSL, every variant" tools/release/bake_shaders.sh "$
 for tier in sm2 sm2-noshadows ff; do
   step "the GLES bake, tier $tier" "$python" tools/gles/bake_gles.py "$scratch/gles" --tier $tier
 done
+
+# The D3D9 bake compiles under Wine, so it runs only where WINE names one
+# (tools/release/package_xp.sh has the same need). A shader shared with the
+# XP build that fxc refuses otherwise shows at the XP packager.
+if [ -n "${WINE:-}" ]; then
+  for tier in sm3 sm2 ff; do
+    step "the D3D9 bake, tier $tier" "$python" tools/d3d9/bake_d3d9.py "$scratch/d3d9" --tier $tier
+  done
+else
+  echo "SKIP the D3D9 bake: set WINE (and WINEPREFIX) to run it"
+fi
 
 if [ -d build-win ]; then step "the Windows cross-build" cmake --build build-win; else say FAIL "no build-win directory: configure it (CLAUDE.md, Build & run)"; fi
 if [ -d build-xp ]; then

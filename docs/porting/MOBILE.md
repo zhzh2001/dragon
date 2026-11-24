@@ -689,18 +689,130 @@ takes arguments and not `DRAGON_ABLATE`.
 `artifacts/release-0.4.0/phone-atmosphere-on-off.jpg` has the three
 pictures: as shipped, without the cloud layer, with the analytic sky.
 
-Not fixed. Two ways, for the user to pick between:
+The user's call was the first of two ways out: read the coverage from a
+map. The next section is that, and what else it found.
 
-1. Read the coverage from a map. The volumetric clouds already bake one
-   (`clouds_weather.hlsl`, 156 m texels). With the cloud shadow and the
-   slab sampling it, the 20 ms falls to a texture read on every tier.
-   It needs a texture slot in each world shader, and the K30's Vulkan
-   refused a pipeline over nine.
-2. Give the phone preset the analytic sky: 29.8 fps headless today with
-   no shader work, and the sky and the far walls of the sm3 tier.
+## The phone's frame, taken apart (2026-11-24)
 
-The first keeps the look and helps the desktop too. It is a renderer
-change with new reference frames, a session of its own.
+The question was whether the cloud cover was the whole of the loss. It
+was half. October's build was rebuilt (`b9725f5`, in a worktree, signed
+with the release key so it installs over the copy on the phone) and
+eighteen more commits after it, each measured on the K30 the same way:
+240 frames of `--run 7 --autopilot`, headless, the GPU's median from
+fences.
+
+| Commit | Date | Whole frame | Atmosphere off | Clouds off |
+|---|---|---|---|---|
+| `482eb9b` | 10-21 | 26.1 ms | 13.4 | 22.8 |
+| `a7bd866`, the thermals' caps | 10-21 | 33.8 | 16.2 | 24.6 |
+| `dee68da`, the mist, heavier caps | 10-25 | 45.0 | 17.1 | 37.2 |
+| `356b195` | 11-02 | 45.2 | 17.0 | 37.2 |
+| `e48ea61` | 11-13 | 44.9 | 15.7 | 32.8 |
+| `adb6125` | 11-15 11:49 | 45.1 | 15.7 | |
+| `fc79adc`, valley walls, the shadowed bounce | 11-15 13:22 | 51.4 | 19.6 | |
+| `cd5b286`, crown shade, cliff bands | 11-15 15:33 | 58.7 | 24.1 | |
+| `17aec7e` | 11-16 | 59.8 | 24.9 | |
+| `cd48582` | 11-22 | 62.0 | 26.8 | |
+| `b6670c9`, 0.4.0 | 11-24 | 61.4 | 26.5 | 41.6 |
+
+October's builds have no fence timing before `482eb9b`: `b9725f5` and
+`12073b5` ran a 33.6 and 32.5 ms frame, 30 fps. So the frame went from
+26 to 62 ms in four steps: the caps (8 ms), the last week of October
+(11), and two on 2026-11-15 (6 and 7). No commit after 10-15 was
+measured on the phone until the release check.
+
+### The cloud cover as a map
+
+`cloud_coverage` was four octaves of noise and a loop over twelve
+thermals. Every lit pixel called it for its cloud shadow, twice since
+the shadowed bounce, and the sky's slab sixteen times a pixel. The
+atmosphere's atlas is now 256 x 488: rows 232 to 487 hold the field and
+the caps over 32 km about the view, filled by the pass that fills the
+rest. A world shader reads it through the atlas it already binds, so no
+shader gained a slot. Past the map the function runs as before. The
+threshold is applied after the read, so a cloud's edge is as sharp as
+before at 125 m a texel. The grid moves with the clouds' drift and
+snaps to whole texels, so a texel's value does not change from frame to
+frame.
+
+On the K30: 62.6 to 44.4 ms. The clouds cost 3.4 ms, as they did before
+the caps. On the Mac the map and the function differ by a mean of 0.02
+to 0.05 of 255, and the eight reference frames pass without a
+recapture. `--atmosphere cloud_map=0` is the function everywhere.
+
+### What draws the rest
+
+The launcher passes arguments and no environment, so `--env KEY=VALUE`
+was added, and `DRAGON_ABLATE` reached the phone. With everything left
+out the frame is 7.5 ms, 3.6 of it the atlas pass. Each part drawn
+alone, over that:
+
+| Part alone | GPU over the empty frame |
+|---|---|
+| The near terrain | 22.5 ms |
+| The sky, over the whole frame | 8.9 (1.3 of it shows in the real frame) |
+| The river, over the whole ground | 24.8 (4.0 of it shows) |
+| The dragon | 4.6 |
+| Trees and their depth pass | 1.1 alone, 4.5 when left out of the whole |
+| Lens, shadows, HUD, rivals | under 1.5 each |
+
+The ground's shader is half the frame, on its light path
+(`TERRAIN_LITE`, which October's notes put at 6 ms). `--graphics
+terrain=0`, the full shader, is 154 ms.
+
+### The light path, lightened
+
+Shaders are data on the phone, so a change to one is a bake and a push,
+90 seconds a trial (`tools/android/push_assets.sh`, then a run).
+
+| Trial | Whole frame |
+|---|---|
+| With the cloud map | 44.1 ms |
+| Without the breath's marks and light, the crown shade, the shadowed bounce | 38.7 |
+| ... the marks back | no change |
+| ... the breath's light back | +1.3 |
+| The sky looked up only at the map's edge, not at every pixel | -0.4 |
+| The patch noise from the mesh, which carried it for the older tiers | -1.1 |
+| An even mist (`mist_patches=0`) | -1.8 |
+| The rock scan left out | -0.7, not taken: a slope reads as clay |
+| The detail tile's two upright projections left out | -1.6, not taken |
+| ... or only on steep ground | -0.2, not taken |
+
+Taken: the light path leaves out the crown shade and the shadowed
+bounce, reads its patches from the mesh, and looks the sky up at the
+edge alone. Where the terrain shades light the mist is even. The marks
+and the breath's light stay. `artifacts/release-0.4.0/
+phone-preset-light-path-before-after.jpg` is three views at the phone
+preset before and after: a mean of 0.9 to 2.6 of 255 apart.
+
+### Where it stands
+
+| Build | Headless, 240 frames | Live, the demo pilot |
+|---|---|---|
+| October (`b9725f5`), measured today | 30.3 fps, 33.6 ms | 33.8 fps over 3,600 frames, in October |
+| 0.4.0 | 13.9 fps, GPU 62.6 ms | 11.2 fps over 7,200 |
+| With the cloud map (`3bc0c1d`) | 18.6 fps, GPU 44.4 ms | |
+| With the light path (`030d4c9`) | 22.4 fps, GPU 36.3 ms | 17.5 fps over 3,600, median 48.9 ms |
+
+Still half of October's. What is left over October is content, and it
+shows: cliff bands and valley walls put more rock on screen, the mist,
+the caps, a heavier dragon. Two switches reach 30 fps and both cost
+picture, so neither is the preset's yet. Live, 1,500 frames each:
+
+| Phone preset with | Live |
+|---|---|
+| as it is now | 18.5 fps, median 49.3 ms |
+| the world at 50% of the frame (`--graphics resolution=4`; 70% now) | 26.8 fps, median 33.7 ms |
+| the analytic sky (`--atmosphere on=0`) | 32.2 fps, median 28.8 ms |
+
+Not tried: the dragon's shader (4.6 ms for a tenth of the screen), the
+atlas at half rate (3.6 ms), dynamic resolution, which does not run on
+the phone. The run records are in
+`~/src/gpu-hist/research/dragon-devices/`.
+
+The phone now holds a development build signed with the release key,
+version code 681. The 0.4.0 APK's code is 679 and does not install over
+it. An APK built from a later commit does.
 
 ## What every mobile target needs
 
