@@ -432,11 +432,20 @@ public:
         // Windowed frames are throttled by swapchain acquisition. Headless
         // frames are not, so without this the loop submits work as fast as the
         // CPU can build it and lets GPU resources pile up unboundedly.
-        if (headless_) SDL_WaitForGPUIdle(gpu_);
+        if (headless_) wait_idle();
     }
 
     void wait_idle() override {
-        if (gpu_) SDL_WaitForGPUIdle(gpu_);
+        if (!gpu_) return;
+        // The timer thread first: it waits on each frame's fence, and two
+        // threads waiting inside SDL's GPU API at once is a race. With
+        // another process on the GPU, the Metal backend's idle wait then
+        // spun for ever on a command buffer the fence wait had recycled:
+        // the packaged build hung in 6 of 8 headless runs beside a second
+        // render, 0.3.0's as well (2026-11-24). Once the timer has seen
+        // every submitted frame finish, this wait has little left to do.
+        drain_gpu_timer();
+        SDL_WaitForGPUIdle(gpu_);
     }
 
     float gpu_frame_ms() const override { return gpu_ms_.load(std::memory_order_relaxed); }
@@ -894,10 +903,16 @@ private:
                 if (timed_.empty()) return;  // stopping, nothing left
                 frame = timed_.front();
                 timed_.pop_front();
+                timer_busy_ = true;
             }
             SDL_WaitForGPUFences(gpu_, true, &frame.fence, 1);
             const uint64_t done = SDL_GetTicksNS();
             SDL_ReleaseGPUFence(gpu_, frame.fence);
+            {
+                std::lock_guard<std::mutex> lock(timer_mutex_);
+                timer_busy_ = false;
+            }
+            timer_idle_.notify_all();
             const uint64_t began = std::max(frame.submitted, last_done);
             last_done = done;
             const float ms = float(double(done - began) * 1e-6);
@@ -905,6 +920,14 @@ private:
             smoothed = smoothed <= 0.0f ? ms : smoothed + (ms - smoothed) * 0.08f;
             gpu_ms_.store(smoothed, std::memory_order_relaxed);
         }
+    }
+    // Blocks until the timer thread holds no fence and has none queued:
+    // every frame submitted so far has finished on the GPU. The main
+    // thread calls it before a wait of its own inside SDL (wait_idle).
+    void drain_gpu_timer() {
+        if (!timer_.joinable()) return;
+        std::unique_lock<std::mutex> lock(timer_mutex_);
+        timer_idle_.wait(lock, [this] { return timed_.empty() && !timer_busy_; });
     }
     void stop_gpu_timer() {
         if (!timer_.joinable()) return;
@@ -918,8 +941,10 @@ private:
     std::thread timer_;
     std::mutex timer_mutex_;
     std::condition_variable timer_wake_;
+    std::condition_variable timer_idle_;
     std::deque<TimedFrame> timed_;
     bool timer_stop_ = false;
+    bool timer_busy_ = false;  // the timer thread is inside its fence wait
     std::atomic<float> gpu_ms_{0.0f};
     // Each texture's format, for the bytes a texel an upload carries.
     std::unordered_map<SDL_GPUTexture*, Format> formats_;
@@ -932,6 +957,7 @@ private:
     void submit_and_wait(SDL_GPUCommandBuffer* cmd) {
         SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
         if (fence) {
+            drain_gpu_timer();  // one thread at a time inside SDL's waits (wait_idle)
             SDL_WaitForGPUFences(gpu_, true, &fence, 1);
             SDL_ReleaseGPUFence(gpu_, fence);
         }
@@ -1017,6 +1043,7 @@ private:
     void pass_sync(const std::string& label) {
         SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_);
         if (fence) {
+            drain_gpu_timer();
             SDL_WaitForGPUFences(gpu_, true, &fence, 1);
             SDL_ReleaseGPUFence(gpu_, fence);
         }
