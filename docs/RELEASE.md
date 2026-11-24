@@ -197,9 +197,14 @@ turned up".
 
 | Package | Size | Checked on | How |
 |---|---|---|---|
-| `Dragon-0.4.0-macos.zip` | CHECK | the M5 Mac, Metal | CHECK |
-| `Dragon-0.4.0-windows.zip` | CHECK | x99, Windows 10, the RTX 5060 Ti | CHECK |
-| `Dragon-0.4.0-linux.tar.gz` | CHECK | x99, CachyOS, the RTX 5060 Ti | CHECK |
+| `Dragon-0.4.0-macos.zip` | 525 MB | the M5 Mac, Metal | The eight reference frames with the package's baked shaders, against the `metal` set: all within tolerance, the largest difference 16 of 255 in one frame. A flap on the hero with its clips, a run from the start screen, and 8 of 8 runs beside a second render |
+| `Dragon-0.4.0-windows.zip` | 587 MB | x99, Windows 10, the RTX 5060 Ti | The eight frames on Direct3D 12 and on Vulkan, loose against the `metal` set: all pass. The same flap and run. 6 of 6 runs beside a second render on each backend |
+| `Dragon-0.4.0-linux.tar.gz` | 513 MB | x99, CachyOS, the RTX 5060 Ti | The eight frames on Vulkan, loose against the `metal` set: all pass. The same flap and run. 8 of 8 runs beside a second render. Newest symbol GLIBC_2.30 |
+
+All three were built from commit `2fb8264`. The commits after it change
+docs and the export tools, nothing a package carries. SHA-256:
+`552c25e0…c950f9` (macOS), `a8d4f540…03317d` (Windows),
+`df6f9503…ec7526` (Linux).
 
 The sizes are about 330 MB over 0.3.0's: six more dragons at 20 MB
 each, and the rock kit and landmarks at 240 MB. The XP, Android and Pi
@@ -211,9 +216,15 @@ Metal set with `--loose`. The `d3d12` and `vulkan` sets in
 Recapture them on x99 when the picture settles.
 
 A trial export of `main` fast-forwards from the published mirror
-(`59978b5`). It adds 1.8 GB to the mirror's 1.1 GB: 1.29 GB of
-`artifacts/`, 263 MB of `assets/` (the rock kit, the landmarks), and
-236 MB of reference frames. One push must stay under GitHub's 2 GB.
+(`59978b5`). It would have added 1.8 GB to the mirror's 1.1 GB: 1.29 GB
+of `artifacts/`, 263 MB of `assets/` (the rock kit, the landmarks), and
+236 MB of reference frames. At the user's call, 507 MB of review
+renders were first added to `public_excludes.txt`: the PNGs of the rock
+kit's and the run props' reviews, the five prey folders, and storm3's
+single frames. None had been published, so no public commit changed.
+The export script takes `glob:` lines for this, so the JSON and text
+records beside the PNGs still go out. One push must stay under GitHub's
+2 GB.
 
 ## The README's pictures and clips
 
