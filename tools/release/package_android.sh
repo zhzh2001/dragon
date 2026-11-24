@@ -49,7 +49,9 @@ stage=$root/build-android/release-data
 rm -rf "$stage"
 mkdir -p "$stage/assets/props"
 tools/release/bake_shaders.sh "$stage/shaders" spv >/dev/null
-cp -R assets/textures assets/fonts assets/species "$stage/assets/"
+cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
+# Not the clips of models that do not ship (package_macos.sh).
+rm -f "$stage/assets/clips/"gold-dragon.* "$stage/assets/clips/"silver-dragon.* "$stage/assets/clips/"embercrest-hero-v4.*
 cp assets/props/*.glb "$stage/assets/props/"
 for s in $species; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$stage/assets/$s.glb" --max 2048 >/dev/null
