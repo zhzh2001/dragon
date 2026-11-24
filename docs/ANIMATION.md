@@ -1673,6 +1673,34 @@ What is weaker, from Codex's record and the renders:
   (`tools/showcase/storm3-inner-panel-brief.md`).
 - Not judged in motion.
 
+### Half the clip over half the old beat (2026-11-24)
+
+Judged in motion, the first weakness was the verdict. Reports 0039 and
+0040, on storm3 and tide2 in the studio's flap: "wingbeat too
+conservative now, need wider range", and "a 0.5 mix for wingbeat seems
+to be good balance for deepwake and squallfin". Both profiles now carry
+`flap_clip 0.5`: the clip at half weight, with half of the procedural
+beat kept under it (`beat_keep` in `DragonRig::update`). The Playtest
+panel's "keyframed wingbeat" starts there on these two.
+
+| At the mix | tide2 at 0 | tide2 at 0.5 | tide2 at 1 | storm3 at 0 | storm3 at 0.5 | storm3 at 1 |
+|---|---|---|---|---|---|---|
+| Nearest rib to the centre plane | 0.18 m | 1.29 m | 1.41 m | 0.27 m | 0.99 m | 1.19 m |
+| Wing's highest skin above the back | 2.59 m | 2.02 m | 1.50 m | 4.89 m | 4.52 m | 3.43 m |
+| Wing's lowest skin from the belly | 3.27 m below | 1.79 m below | 0.32 m below | 2.55 m below | 1.17 m below | 0.85 m above |
+| Under the belly, nearest the centre | 1.03 m | 3.06 m | none there | 2.66 m | 4.99 m | none there |
+
+The ribs keep nearly all of the clearance the clip bought, and the
+wing reaches about halfway back down to where the procedural beat put
+it. `artifacts/wingbeat/tide2-mix-0-half-1.jpg` and
+`storm3-mix-0-half-1.jpg` show four frames of the beat at each weight,
+from the reports' camera. (Storm3's numbers at 1 differ from the table
+above: its inner wing panels were repaired after that table was made.)
+
+The lesson for the next brief: a limit measured by a probe is a wall
+to stay inside and not a target. The first brief put the required
+values near the safest end, and the clips went there.
+
 ## Keyframed body loops: the hero's neck, tail and legs (2026-11-22, 23:20)
 
 The playtester on the keyframed wingbeat: "looks a bit better, try on

@@ -48,8 +48,12 @@ for src in "$root"/shaders/*.hlsl; do
   grep -q '#pragma once' "$src" && continue
   stem=$(basename "$src" .hlsl)
   for variant in $variants; do
-    # The atmosphere's tables and the temporal resolve are the modern tier's alone.
-    case $stem in atmosphere_*|clouds_*|foliage_impostor*|terrain_sun|post_taa|post_ssao|post_ssao_blur|velocity_skinned|foliage_prepass|foliage_shaded) [ "$variant" = ATMOSPHERE ] || continue ;; esac
+    # The atmosphere's tables and the temporal resolve are the modern tier's
+    # alone, and so are the rock kit and the breath's volume, pieces and
+    # stream (gfx/rock_kit.cpp, gfx/breath_volume.cpp, world_renderer.cpp).
+    # `rock` and `breath_stream` do not compile for a retro variant, and the
+    # first package after them stopped here (0.4.0, 2026-11-24).
+    case $stem in atmosphere_*|clouds_*|foliage_impostor*|terrain_sun|post_taa|post_ssao|post_ssao_blur|velocity_skinned|foliage_prepass|foliage_shaded|rock|rock_depth|breath_volume|breath_matter|breath_stream) [ "$variant" = ATMOSPHERE ] || continue ;; esac
     # The terrain's light shading is a modern variant alone (gfx/pipeline.cpp).
     case $variant in *TERRAIN_LITE*) [ "$stem" = terrain ] || continue ;; esac
     flags=""; suffix=""

@@ -627,6 +627,29 @@ was down. The screen now returns no combat input, and the click that
 closes it counts again only once the button has come up
 (`menu_click_held_`). Read from the code and built. Not clicked by hand.
 
+### A held world still moved and sounded (2026-11-24)
+
+The user: "paused screen still plays sound and some animations", and
+report 0041, a ball of fire over the dragon: "fire growing in paused
+menu". The screen over a game steps the world by a millionth of a
+second (`App::feedback_dt`), and three things did not hold with it:
+
+| What | Why | Now |
+|---|---|---|
+| Particles | Several emitters spawn by the frame and not by the second. Their particles piled up where they were born | `ParticleSystem::set_held`: nothing is born while the step is the held one |
+| Sound | The wind and the breath are loops at a level set each frame. They kept the held frame's level | `Audio::set_held`: the mix fades out in about ten milliseconds, and no clip starts |
+| The rigs | The chains settle a little on every call, whatever the step. The tail and the wing tips crept | The player's, the ghost's and the bots' rigs are not updated on a held step |
+
+The same holds in the feedback tool (F2) and under `DRAGON_FREEZE_AT`,
+which is how it was reproduced: a fight frozen at frame 300, and frames
+305 and 700 compared. Before, 53,151 pixels differed and the breath was
+a ball (`artifacts/playtest-r12/paused-fight-before-after.jpg`). After,
+what differs is the speckle of 0.4 ms of flight on the forest. A frozen
+studio flap went from 4,859 differing pixels to 100. Not heard by ear:
+a headless run has no sound device to listen to. The emitters that
+spawn by the frame are still frame-rate dependent in play, which is a
+separate fault and is not fixed here.
+
 ## Where the later discussions went (2026-11-22)
 
 This file grew three discussions on its end. They have their own files
