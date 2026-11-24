@@ -64,6 +64,12 @@ struct Options {
     int frames = 0;  // 0 = run until quit
     bool headless = false;
     std::string screenshot;  // empty = none
+    // --record DIR[,from[,every]]: every `every`th frame from `from` on,
+    // saved as DIR/f000123.bmp: the frames of a clip for the README
+    // (tools/release/make_demo_clips.sh).
+    std::string record;
+    int record_from = 0;
+    int record_every = 2;
     // --gpu-driver vulkan|direct3d12|metal: pick SDL's GPU backend instead of
     // the platform default (D3D12 and Vulkan can both be checked on Windows).
     std::string gpu_driver;

@@ -235,6 +235,15 @@ Options parse_options(int argc, char** argv) {
             options.frames = SDL_atoi(argv[++i]);
         } else if (arg == "--screenshot" && i + 1 < argc) {
             options.screenshot = argv[++i];
+        } else if (arg == "--record" && i + 1 < argc) {
+            const std::string spec = argv[++i];
+            const size_t first = spec.find(',');
+            options.record = spec.substr(0, first);
+            if (first != std::string::npos) {
+                options.record_from = SDL_atoi(spec.c_str() + first + 1);
+                const size_t second = spec.find(',', first + 1);
+                if (second != std::string::npos) options.record_every = std::max(1, SDL_atoi(spec.c_str() + second + 1));
+            }
         } else if (arg == "--cam-mode" && i + 1 < argc) {
             const std::string mode = argv[++i];
             if (mode == "chase") options.camera_mode = 0;
@@ -12751,6 +12760,12 @@ void App::run() {
         if (!options_.screenshot.empty() && options_.frames > 0 &&
             frame_index_ == options_.frames - 1) {
             device_.request_screenshot(options_.screenshot);
+        }
+        if (!options_.record.empty() && frame_index_ >= options_.record_from &&
+            (frame_index_ - options_.record_from) % options_.record_every == 0) {
+            char name[32];
+            std::snprintf(name, sizeof(name), "/f%06d.bmp", frame_index_);
+            device_.request_screenshot(options_.record + name);
         }
 
         // Dynamic resolution (gfx/dynamic_resolution.h), between frames since

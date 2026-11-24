@@ -109,6 +109,11 @@ There are six packages, one script each, all run on the Mac:
 | `package_android.sh` | `Dragon-V-android.apk` | `tools/android/build_apk.sh`, the data inside the APK | the K30 over adb: a first start unpacks the data, then a run |
 | `package_pi.sh` | `Dragon-V-pi.tar.gz` | `tools/pi/build.sh`, one species | the Pi 1B from its console |
 
+The macOS, Windows and Linux packages carry thirteen dragons since
+0.4.0: the seven first designs and the six second designs the modern
+tier shows by default (`kDesignPairs` in `src/app.cpp`), each at 2048².
+The clips of models that do not ship are left out of `assets/clips/`.
+
 Each refuses to package uncommitted changes. The Windows and XP packages
 carry model packs for the D3D9 tiers; the XP package is also how a
 Direct3D 9 card on Windows 10 runs the game.
@@ -156,6 +161,23 @@ release tag points at the public mirror's `main`, not this repository.
 (`kDefaultRoster` in `src/app.cpp`); a package that lacks some of them
 simply loads the rest. The two Sketchfab dragons are not shipped
 (`ATTRIBUTION.md`).
+
+## The README's pictures and clips
+
+`tools/release/make_demo_clips.sh` renders `docs/media/`: the hero still,
+the roster of six, and four clips (a hoard run's flight and first fight
+from the demo pilot, the hero's wingbeat, the fire breath). Every scene
+is a headless run recorded with `--record`, so a commit renders the same
+frames again. Run it again when the picture changes enough to show.
+
+The clips are animated WebP at 640x360 and 20 frames a second, 0.7 to
+2.1 MB each. The same frames as GIF were 7 to 10 MB each. The mirror's
+history is append-only, so every replaced clip stays in it: do not
+re-render for a small change.
+
+The script names its roster. The default roster also loads the gold and
+silver studies when they are on the machine, and no picture of those may
+be published (`ATTRIBUTION.md`).
 
 ## Checklist before a public push or package
 

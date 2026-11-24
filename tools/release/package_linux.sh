@@ -29,7 +29,10 @@ if [ -n "$dirty" ]; then
   exit 1
 fi
 species="embercrest rimefang frostvein blightmaw ironroot stormsail tidewrack"
-for s in $species; do
+# The second designs (kDesignPairs in src/app.cpp), which the modern tier
+# shows by default: the hero and five elementals. No retro-tier packs.
+designs="embercrest-hero frost3 storm3 stone2 tide2 blight2"
+for s in $species $designs; do
   [ -f "assets/$s.glb" ] || { echo "missing assets/$s.glb" >&2; exit 1; }
 done
 
@@ -50,9 +53,12 @@ scp -q "$host:$remote/build/dragon-stripped" "$stage/dragon"
 chmod +x "$stage/dragon"
 tools/release/bake_shaders.sh "$stage/shaders" spv
 cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
+# Not the clips of models that do not ship: the gold and silver studies'
+# carry those dragons' skeletons, and the v4 hero is a superseded mesh.
+rm -f "$stage/assets/clips/"gold-dragon.* "$stage/assets/clips/"silver-dragon.* "$stage/assets/clips/"embercrest-hero-v4.*
 mkdir -p "$stage/assets/props"
 cp assets/props/*.glb "$stage/assets/props/"
-for s in $species; do
+for s in $species $designs; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$stage/assets/$s.glb" --max 2048
   for kind in rig flight breath; do
     [ -f "assets/$s.glb.$kind.cfg" ] && cp "assets/$s.glb.$kind.cfg" "$stage/assets/"

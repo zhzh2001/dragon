@@ -93,6 +93,7 @@ sips -s format png /tmp/shot.bmp --out /tmp/shot.png   # macOS: BMP -> viewable 
 | `--headless` | No visible window; still renders offscreen. Frame time is pinned to 1/60 s. |
 | `--frames N` | Run exactly N frames then exit. |
 | `--screenshot PATH` | Save the last frame as a BMP (requires `--frames`). |
+| `--record DIR[,from[,every]]` | Save every `every`th frame (2 by default) from frame `from` on as `DIR/f000123.bmp`: the frames of a clip. `tools/release/make_demo_clips.sh` builds the README's clips and pictures in `docs/media/` with it. |
 | `--hide-ui` | Hide the ImGui panels AND the HUD, for world-only captures. |
 | `--hide-panels` | Hide the panels but keep the HUD: a capture of what the player sees. |
 | `--hide-vegetation` | Hide trees, grass, and tree shadows for unobstructed asset inspection. Terrain and gameplay remain active. |

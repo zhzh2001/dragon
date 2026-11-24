@@ -23,7 +23,7 @@ The app is not notarised, so macOS stops it on first launch.
 Or, in Terminal:   xattr -dr com.apple.quarantine Dragon.app
 
 Records and saved tuning go to ~/Library/Application Support/Paleshell/Dragon.
-Double-clicking starts a hoard run on a fresh valley. From Terminal:
+Double-clicking opens the start screen: pick a mode and a dragon there. From Terminal:
 
   Dragon.app/Contents/MacOS/dragon --run        a hoard run
   Dragon.app/Contents/MacOS/dragon --demo       the game playing itself
@@ -48,7 +48,8 @@ CONTROLS (gamepad recommended)
   P                         let the demo pilot fly, and take it back
   R / Enter                 restart the valley / next valley
   F1                        hide the tuning panels
-  Esc                       quit
+  O                         the other designs of the dragons, old or new
+  Esc                       the start screen (Resume, Start, Quit)
 
 
 LICENCES

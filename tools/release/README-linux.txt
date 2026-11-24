@@ -46,7 +46,8 @@ CONTROLS (gamepad recommended)
   P                         let the demo pilot fly, and take it back
   R / Enter                 restart the valley / next valley
   F1                        hide the tuning panels
-  Esc                       quit
+  O                         the other designs of the dragons, old or new
+  Esc                       the start screen (Resume, Start, Quit)
 
 
 LICENCES

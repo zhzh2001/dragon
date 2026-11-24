@@ -28,8 +28,8 @@ A gamepad needs the DirectX End-User Runtime (June 2010) for XInput; the
 keyboard and mouse need nothing.
 
 Records and saved tuning go to Application Data\Paleshell\Dragon in your
-profile. Double-clicking starts a hoard run on a fresh valley. From a
-command prompt:
+profile. Double-clicking opens the start screen: pick a mode and a dragon
+there. From a command prompt:
 
   dragon.exe --run              a hoard run
   dragon.exe --demo             the game playing itself
@@ -62,7 +62,7 @@ CONTROLS (gamepad recommended)
   P                         let the demo pilot fly, and take it back
   R / Enter                 restart the valley / next valley
   F1                        hide the tuning panels
-  Esc                       quit
+  Esc                       the start screen (Resume, Start, Quit)
 
 
 LICENCES

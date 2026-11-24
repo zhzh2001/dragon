@@ -22,7 +22,7 @@ The program is not signed, so SmartScreen may stop the first launch: click
 "More info", then "Run anyway".
 
 Records and saved tuning go to %APPDATA%\Paleshell\Dragon.
-Double-clicking starts a hoard run on a fresh valley. From a terminal:
+Double-clicking opens the start screen: pick a mode and a dragon there. From a terminal:
 
   dragon.exe --run        a hoard run
   dragon.exe --demo       the game playing itself
@@ -47,7 +47,8 @@ CONTROLS (gamepad recommended)
   P                         let the demo pilot fly, and take it back
   R / Enter                 restart the valley / next valley
   F1                        hide the tuning panels
-  Esc                       quit
+  O                         the other designs of the dragons, old or new
+  Esc                       the start screen (Resume, Start, Quit)
 
 
 LICENCES

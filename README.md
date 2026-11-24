@@ -1,13 +1,20 @@
 # Dragon
 
-A single-player 3D dragon game on a custom C++20 engine, rendering through
-SDL3's GPU API (Metal on macOS). You fly a dragon whose flight is a real
-energy model: diving buys speed, climbing spends it, and banking curves the
-flight path because the lift vector tilts. The main mode is a **hoard run**
-down a generated valley. You fight rival dragons and guard towers, land on
-hoard caches, grow from drake to adult, and fly out through the pass. There
-is also an arena deathmatch against bot dragons that fly the same flight
-model you do.
+![The hero dragon, Embercrest, banking over the valley](docs/media/hero.jpg)
+
+A single-player 3D dragon game on a custom C++20 engine. You fly a dragon
+whose flight is an energy model: a dive buys speed, a climb spends it, and
+a bank curves the path because the lift vector tilts. A start screen
+offers four modes:
+
+- Practice: an empty valley and the tuning panels.
+- The arena: a deathmatch against bot dragons that fly the same flight
+  model you do.
+- The hoard run: a roguelite descent through three generated valleys.
+  You fight rival dragons and guard towers, land on hoard caches, grow
+  from drake to adult, and fly out through the pass.
+- The wilds: the same valleys with no end. Herds feed a hunger, a day
+  and a night pass, and hunters come out after dark.
 
 > **Made with AI.** Most of the code and the docs were written by AI coding
 > agents (Claude through Claude Code, and OpenAI Codex). Every dragon model
@@ -17,53 +24,69 @@ model you do.
 > [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md). The sound is synthesized in
 > code; no AI audio model was used.
 
+| | |
+|---|---|
+| ![A hoard run: the flight down the valley](docs/media/flight.webp) | ![A hoard run: a rival falls to a fireball](docs/media/fight.webp) |
+| The demo pilot flies a hoard run. | The same run, at its first rival. |
+| ![The hero's wingbeat through a turn](docs/media/wingbeat.webp) | ![The fire breath, held](docs/media/breath.webp) |
+| The wingbeat, keyframed over the procedural rig. | The fire breath, a ray-marched volume. |
+
+Every frame above is the engine's own, rendered headless by
+`tools/release/make_demo_clips.sh`.
+
+![Six dragons: Embercrest, Shardmane, Squallfin, Geodeback, Deepwake, Ambersting](docs/media/roster.jpg)
+
 Everything above the vendored foundations (SDL3, Dear ImGui, cgltf, stb_image,
 meshoptimizer, miniaudio) is written for this project: the renderer, animation, flight
 model, camera, AI, gameplay and audio synthesis.
 
 ## Highlights
 
-- **Energy flight.** Thrust, lift, drag and gravity are integrated
-  honestly. Landing, walking and taking off are real states. The assists
-  (auto-flap, bank limit, stall recovery) make it approachable without
-  faking the physics. Aerobatics include a dodge roll and a reversing
-  flip.
-- **The hoard run.** A roguelite valley: rivals at posts, towers on the
-  slopes, hunters loosed when you linger, three caches to land on, and
-  growth that moves the same tuning dials the panels expose. A run is three
-  valleys, each harder than the last, and the seed is printed so a good
-  valley can be flown again.
-- **Combat.**
+- Energy flight. Thrust, lift, drag and gravity are integrated honestly.
+  Landing, walking and taking off are real states. The assists (auto-flap,
+  bank limit, stall recovery) make it approachable without faking the
+  physics. Aerobatics include a dodge roll and a reversing flip.
+- The hoard run. Rivals hold posts, towers stand on the slopes, hunters
+  come when you linger, and three caches wait to be landed on. Growth
+  moves the same tuning dials the panels expose. The seed is printed, so a
+  good valley can be flown again.
+- Combat.
   - Breath and fireballs with sticky lock-on and honest aim assist.
   - Melee bites, claws and tail strikes.
   - Six elements (fire, frost, blight, storm, tide, stone), each with its
-    own status effect.
+    own status effect and its own look: flame and lightning are lit
+    volumes, and ice, water, acid and stone fly as solid pieces.
   - Bot dragons with an attack / extend / evade doctrine. Their
     difficulty is imperfect perception, never a different flight model.
-- **Seven playable dragon species**, with two more as candidates, and each
-  one a species rather than just a mesh: how it
-  moves (`.rig.cfg`), handles (`.flight.cfg`) and breathes (`.breath.cfg`).
-  All of them are driven by one procedural rig: inertial neck and tail
-  chains, wings that bow, sweep and fold, legs that trail in flight and
-  plant on the terrain, and a jaw that gapes on the flame. There are no
-  animation clips.
-- **A valley you can trust.** The gameplay queries read the exact rendered
-  terrain triangle. A river is carved through the floor, the ground goes on
-  past the map edge, and mixed forests are placed by slope, altitude and
-  water.
-- **A modern renderer.**
-  - HLSL shaders, hot-reloaded and translated to Metal through
-    SDL_shadercross; reversed-Z depth.
+- Six dragons, one for each element, each a species and not only a mesh:
+  how it moves (`.rig.cfg`), handles (`.flight.cfg`) and breathes
+  (`.breath.cfg`). An earlier design of each is one key away (O).
+- One procedural rig drives them all: inertial neck and tail chains, wings
+  that bow, sweep and fold, legs that tuck in flight and plant on the
+  terrain, and a jaw that gapes on the flame. Keyframed clips play over
+  it where a hand does better: the strikes, the wingbeat, and the hero's
+  body in the beat, the glide, the walk and the stand.
+- A valley you can trust. The gameplay queries read the exact rendered
+  terrain triangle. Erosion carves the mountains, a river runs through the
+  floor, the ground goes on past the map edge, and mixed forests are
+  placed by slope, altitude and water.
+- A modern renderer.
+  - HLSL shaders, hot-reloaded and translated through SDL_shadercross;
+    reversed-Z depth.
   - One lighting path for the terrain, plants and creatures.
-  - Directional shadows and PBR creatures.
+  - A physically based sky, cascaded shadows, volumetric clouds, ambient
+    occlusion and valley mist.
   - An HDR target with bloom and a hue-preserving tonemap.
-  - Additive particle breath.
-- **Synthesized audio.** Wind, flame, wingbeats, cries and impacts are all
+- Many machines. The same game runs on Metal, Direct3D 12, Vulkan and
+  Direct3D 11, and with simpler content on Direct3D 9 down to a
+  fixed-function card on Windows XP, an Android phone and a Raspberry
+  Pi 1. [`docs/PORTING.md`](docs/PORTING.md) is the record.
+- Synthesized audio. Wind, flame, wingbeats, cries and impacts are all
   generated at start-up from noise and sines. The game ships no sound
   files.
-- **Verifiable without a human.** `--headless --frames N --screenshot` plus
-  scripted cameras, a self-playing demo pilot, and twenty renderer-free
-  test suites.
+- Verifiable without a human. `--headless --frames N --screenshot` plus
+  scripted cameras, a self-playing demo pilot, an in-game feedback tool
+  (F2), and twenty-eight renderer-free test suites.
 
 ## Building
 
@@ -71,31 +94,35 @@ On macOS this requires Metal, CMake 3.24 or later, Ninja, SDL3
 (`brew install sdl3`), and SDL_shadercross with DXC, which the development
 build uses to compile its HLSL shaders at runtime. Build it once with
 `tools/build_shadercross.sh`: it takes about half an hour, since it
-compiles DXC. Everything else is fetched by CMake. Windows and Linux
-are planned: see [`docs/PORTING.md`](docs/PORTING.md).
+compiles DXC. Everything else is fetched by CMake. Windows is cross-built
+on the Mac and Linux builds from source: see
+[`docs/PORTING.md`](docs/PORTING.md).
 
 ```sh
 tools/build_shadercross.sh     # once: ~/.local/opt/shadercross
 cmake -S . -B build -G Ninja
 cmake --build build
+./build/dragon                # the start screen
 ./build/dragon --run          # a hoard run
 ./build/dragon --demo         # the game playing itself
-ctest --test-dir build        # twenty suites, plain executables
+ctest --test-dir build        # twenty-eight suites, plain executables
 ```
 
-**The models are not in the repository.** They are large, so they are
+The models are not in the repository. They are large, so they are
 gitignored. The game loads whichever species are present, Embercrest
 first, and falls back to a greybox dragon when there are none. The roster
 comes with the release packages. Any rigged glTF can be tried with
 `--model PATH`; [`ATTRIBUTION.md`](ATTRIBUTION.md) lists the two Sketchfab
 dragons the engine was first built around.
 
-**Packages.** `tools/release/package_macos.sh` builds a universal macOS 11+
+Packages. `tools/release/package_macos.sh` builds a universal macOS 11+
 app with the roster inside, and `tools/release/package_windows.sh` a
 Windows 10+ build (D3D12, or Vulkan with `--gpu-driver vulkan`),
-cross-compiled on the Mac. Linux builds and runs on Vulkan from source. The ready-made one is on the
-[releases page](https://github.com/zhzh2001/dragon/releases), and its
-`README.txt` explains how to open an unsigned app. Records and saved tuning go to
+cross-compiled on the Mac. There are scripts for Linux, Windows XP,
+Android and the Raspberry Pi beside them
+([`docs/RELEASE.md`](docs/RELEASE.md)). The ready-made packages are on the
+[releases page](https://github.com/zhzh2001/dragon/releases), and each
+`README.txt` explains how to start it. Records and saved tuning go to
 `~/Library/Application Support/Paleshell/Dragon`.
 
 ## Playing
@@ -118,17 +145,20 @@ cross-compiled on the Mac. Linux builds and runs on Vulkan from source. The read
 | 1, 2, 3 / V | Camera presets / first person |
 | P | Hand the controls to the demo pilot, and take them back |
 | R / Enter | Restart the valley / next valley after the results |
-| F1 | Hide the tuning panels |
+| O | The other designs of the dragons, old or new |
+| Esc | The start screen, over the held game |
+| ` | Show or hide the tuning panels |
+| F2 | The feedback tool: hold the frame, mark it, save a report |
 
 Every gameplay constant sits behind an ImGui slider; the panels are the
 game's editor. `CLAUDE.md` has the full flag and control reference.
 
-**Graphics.** The Graphics panel, first in the stack (F1 shows the
-panels), has the renderer, a tier and a preset from Ultra to Very low, and
-each setting alone: model detail, terrain grid, trees, grass, rocks,
-textures, shadows and bloom. A setting the machine cannot do is not
-offered. The choices are saved, and `--preset low` picks one for a single
-run.
+Graphics. The start screen's graphics page has a preset from Ultra to
+Lowest and each setting alone: model detail, terrain grid, trees, grass,
+rocks, textures, shadows, bloom, clouds and resolution. A setting the
+machine cannot do is not offered. The choices are saved, and
+`--preset low` picks one for a single run. The Graphics panel has the
+same.
 
 ## Documentation
 
@@ -138,12 +168,14 @@ the project are directed. The detail lives in `docs/`:
 
 | Doc | What is in it |
 |---|---|
-| `docs/ANIMATION.md` | The procedural rig, glTF import, the roster, and the frame/scale traps |
+| `docs/ANIMATION.md` | The procedural rig, the keyframed clips over it, glTF import, the roster, and the frame/scale traps |
 | `docs/COMBAT.md` | Fire, targeting, melee, elements, bot doctrine, the match loop, the hoard run |
 | `docs/WORLD.md` | Terrain, the river, the skirt, vegetation |
 | `docs/EFFECTS.md` | Particles, breath profiles, synthesized audio |
 | `docs/MODEL_GENERATION.md` | How a creature is generated, rigged and repaired |
 | `docs/DIRECTION.md` | Where the modern build goes: genre, art direction, HUD, assets |
+| `docs/SHOWCASE.md` | The showcase work: the hero dragon, the playtest rounds, the breath, the world |
+| `docs/WILDS.md` | The survival mode, and the realm it may become |
 | `docs/PORTING.md` | Windows, Linux, Direct3D 9 (SM3, SM2, fixed function), and mobile; the index of `docs/porting/` |
 | `docs/FIDELITY.md` | The modern build's fidelity plan: sky, terrain, light, clouds, forest, water, ray tracing |
 | `docs/RELEASE.md` | How the public repository and the release packages are made |
