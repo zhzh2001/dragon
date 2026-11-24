@@ -43,7 +43,7 @@ const SettingInfo INFO[SETTING_COUNT] = {
     // Phone's three (docs/porting/MOBILE.md): on the K30's Adreno 620 the
     // cloud march was 15 ms and the SSAO 4 at 2400x1080, and the post stack
     // and the HUD cost by the frame's pixels whatever the world's scale.
-    {"clouds", "Clouds", {"Volumetric", nullptr, nullptr, nullptr, "Painted", nullptr, nullptr}, Applies::Live},
+    {"clouds", "Clouds", {"Volumetric", nullptr, nullptr, nullptr, "Painted, no mist", nullptr, nullptr}, Applies::Live},
     {"ao", "Ambient occlusion", {"On", nullptr, nullptr, nullptr, "Off", nullptr, nullptr}, Applies::Live},
     {"frame", "Frame height", {"Native", nullptr, "1080", "900", "720", "540", nullptr}, Applies::Live},
 };
@@ -103,9 +103,11 @@ int preset_to_level(Setting setting, int preset) {
     if (setting == Setting::Clouds || setting == Setting::Ambient || setting == Setting::Frame) {
         return preset == PHONE_PRESET ? 4 : 0;  // painted; off; 720 lines
     }
-    // The world at 70% of the 720-line frame: live on the K30, 85% was 24
-    // fps and 70% 36 (docs/porting/MOBILE.md).
-    if (preset == PHONE_PRESET && setting == Setting::Resolution) return 3;
+    // The world at 50% of the 720-line frame. At 70% the K30 ran 36 fps in
+    // October and 18.5 by 0.4.0's content: 30 is the least that plays, and
+    // 50% with no mist and no lens glare is 32 (docs/porting/MOBILE.md,
+    // "The phone preset at 30 fps").
+    if (preset == PHONE_PRESET && setting == Setting::Resolution) return 4;
     if (preset == PHONE_PRESET) return preset_to_level(setting, 3);  // Low's content
     if (setting == Setting::Bloom) return preset <= 2 ? 0 : 4;                              // off from Low
     if (setting == Setting::Shadows) return preset <= 2 ? preset : 4;                       // off from Low
@@ -243,6 +245,7 @@ ContentBudget budget_for(const GraphicsSettings& g) {
     b.plain_hud = g[Setting::Hud] == 6;
     b.particle_density = g[Setting::Particles] == 6 ? 0.5f : 1.0f;
     b.volumetric_clouds = g[Setting::Clouds] == 0;
+    b.valley_mist = g[Setting::Clouds] == 0;
     b.ambient_occlusion = g[Setting::Ambient] == 0;
     b.frame_height = FRAME_HEIGHT[g[Setting::Frame]];
     return b;

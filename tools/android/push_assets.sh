@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stages the game's data and pushes it to the phone (docs/porting/MOBILE.md):
 #
-#   tools/android/push_assets.sh [SPECIES...]   # default: the seven release species
+#   tools/android/push_assets.sh [SPECIES...]   # default: the seven the APK carries
 #
 # The APK carries no data. This stages what the Windows package carries
 # (tools/release/package_windows.sh): the shaders baked to SPIR-V, the
@@ -16,11 +16,13 @@ cd "$root"
 pkg=com.paleshell.dragon
 dest=/sdcard/Android/data/$pkg/files
 stage=build-android/stage
-species=${*:-embercrest rimefang frostvein blightmaw ironroot stormsail tidewrack}
+species=${*:-embercrest-hero rimefang frost3 blight2 stone2 storm3 tide2}
 
 mkdir -p "$stage/assets/props"
 tools/release/bake_shaders.sh "$stage/shaders" spv >/dev/null
 rsync -a assets/textures assets/fonts assets/species "$stage/assets/"
+# The keyframed clips, as the APK carries them (package_android.sh).
+rsync -a --exclude='gold-dragon.*' --exclude='silver-dragon.*' --exclude='embercrest-hero-v4.*' assets/clips "$stage/assets/"
 rsync -a --include='*.glb' --exclude='*' assets/props/ "$stage/assets/props/"
 for s in $species; do
   [ -f "assets/$s.glb" ] || { echo "missing assets/$s.glb" >&2; exit 1; }

@@ -83,7 +83,7 @@ int main() {
     const GraphicsSettings phone = GraphicsSettings::preset(PHONE_PRESET, Tier::Modern, big);
     const ContentBudget pb = budget_for(phone);
     CHECK(phone.preset_level(Tier::Modern, big) == PHONE_PRESET);
-    CHECK(!pb.volumetric_clouds && !pb.ambient_occlusion && pb.frame_height == 720);
+    CHECK(!pb.volumetric_clouds && !pb.valley_mist && !pb.ambient_occlusion && pb.frame_height == 720);
     const GraphicsSettings low_modern = GraphicsSettings::preset(3, Tier::Modern, big);
     for (int s = 0; s < SETTING_COUNT; ++s) {
         const Setting setting = Setting(s);
@@ -91,10 +91,10 @@ int main() {
             setting != Setting::Resolution)
             CHECK(phone[setting] == low_modern[setting]);  // Low's content, every setting of it
     }
-    CHECK(pb.terrain_lite && pb.world_scale == 0.7f);
+    CHECK(pb.terrain_lite && pb.world_scale == 0.5f);
     for (int p = 0; p < QUALITY_LEVELS; ++p) {
         const ContentBudget b = budget_for(GraphicsSettings::preset(p, Tier::Modern, big));
-        CHECK(b.volumetric_clouds && b.ambient_occlusion && b.frame_height == 0);
+        CHECK(b.volumetric_clouds && b.valley_mist && b.ambient_occlusion && b.frame_height == 0);
     }
     CHECK(parse_preset("phone", &level) && level == PHONE_PRESET);
     // Pi: Minimal's content, the frame at 540 lines with the world whole in it.

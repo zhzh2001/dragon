@@ -10,8 +10,10 @@
 
 #include "core/log.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <vector>
 
 namespace core::paths {
 namespace {
@@ -77,12 +79,14 @@ void unpack_apk_data(const std::string& external) {
     int files = 0;
     uint64_t bytes = 0;
     size_t at = first == std::string::npos ? text.size() : first + 1;
+    std::vector<std::string> listed;
     while (at < text.size()) {
         size_t end = text.find('\n', at);
         if (end == std::string::npos) end = text.size();
         const std::string rel = text.substr(at, end - at);
         at = end + 1;
         if (rel.empty()) continue;
+        listed.push_back(rel);
         const std::string out_path = join(external, rel);
         const size_t slash = out_path.find_last_of('/');
         if (slash != std::string::npos) SDL_CreateDirectory(out_path.substr(0, slash).c_str());
@@ -104,6 +108,26 @@ void unpack_apk_data(const std::string& external) {
         }
         ++files;
     }
+    // What an earlier version left and this one does not carry goes. The
+    // roster is whatever models are on the device: with 0.3.0's seven first
+    // designs still there beside this version's seven, a phone loaded
+    // fourteen dragons. Only under assets/ and shaders/, which are the
+    // APK's own; the player's records are not in this directory at all.
+    int removed = 0;
+    for (const char* root : {"assets", "shaders"}) {
+        const std::string dir = join(external, root);
+        int count = 0;
+        char** found = SDL_GlobDirectory(dir.c_str(), nullptr, 0, &count);
+        for (int i = 0; found && i < count; ++i) {
+            const std::string rel = std::string(root) + "/" + found[i];
+            if (std::find(listed.begin(), listed.end(), rel) != listed.end()) continue;
+            const std::string path = join(external, rel);
+            SDL_PathInfo info;
+            if (SDL_GetPathInfo(path.c_str(), &info) && info.type == SDL_PATHTYPE_FILE && SDL_RemovePath(path.c_str())) ++removed;
+        }
+        SDL_free(found);
+    }
+    if (removed > 0) LOG_INFO("removed %d files an earlier version left", removed);
     if (SDL_IOStream* out = SDL_IOFromFile(stamp.c_str(), "wb")) {
         SDL_WriteIO(out, version.data(), version.size());
         SDL_CloseIO(out);

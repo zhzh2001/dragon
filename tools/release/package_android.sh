@@ -29,7 +29,10 @@ if [ -n "$dirty" ]; then
   echo "$dirty" >&2
   exit 1
 fi
-species="embercrest rimefang frostvein blightmaw ironroot stormsail tidewrack"
+# One design a species: the hero and the five later elementals in place of
+# their first designs (kDesignPairs in src/app.cpp), and Rimefang, which has
+# one. The game flies a second design where its first is not in the package.
+species="embercrest-hero rimefang frost3 blight2 stone2 storm3 tide2"
 for s in $species; do
   [ -f "assets/$s.glb" ] || { echo "missing assets/$s.glb" >&2; exit 1; }
 done

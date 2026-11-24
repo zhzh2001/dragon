@@ -129,6 +129,9 @@ struct ContentBudget {
     // The modern tier's volumetric clouds (gfx/clouds.h), or its painted
     // slab; and its screen-space ambient occlusion (gfx/ssao.h).
     bool volumetric_clouds = true;
+    // The valley mist (scene_common.hlsl, valley_mist). It goes with the
+    // painted clouds, the phone's: 2.4 ms of the K30's frame at 50%.
+    bool valley_mist = true;
     bool ambient_occlusion = true;
     // The frame's height at most, the HUD's included (0: the window's): a
     // taller window gets the frame stretched to it (gfx::Device).

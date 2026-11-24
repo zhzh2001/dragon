@@ -130,17 +130,37 @@ std::vector<std::string> App::roster_paths(const Options& options) {
         static const char* const kDefaultRoster[] = {
             "embercrest", "rimefang", "frostvein", "blightmaw",
             "ironroot",   "stormsail", "tidewrack", "gold-dragon", "silver-dragon"};
+        // A second design (kDesignPairs) stands in its first's place in two
+        // cases. One is a package that carries the second alone: the phone,
+        // the Pi and XP ship one design a species. The other is a retro
+        // tier asked for the new designs: it loads one design a species,
+        // never both, because its machines have the memory for seven
+        // dragons and not thirteen. Until 2026-11-24 a retro tier flew the
+        // first designs only, and those packages carried no second.
+        const bool modern = options.tier == gfx::Tier::Modern;
+        const bool wants_new = options.designs != "old" && options.designs != "old-only";
+        std::vector<std::string> placed;
         for (const char* name : kDefaultRoster) {
             const std::string path = core::paths::asset(std::string(name) + ".glb");
-            if (std::ifstream(path).good()) roster.push_back(path);
+            const bool has_first = std::ifstream(path).good();
+            std::string second;
+            for (const DesignPair& pair : kDesignPairs) {
+                if (std::string(name) == pair.first) second = core::paths::asset(std::string(pair.second) + ".glb");
+            }
+            const bool has_second = !second.empty() && std::ifstream(second).good();
+            if (has_second && (!has_first || (!modern && wants_new))) {
+                roster.push_back(second);
+                placed.push_back(second);
+            } else if (has_first) {
+                roster.push_back(path);
+            }
         }
-        // The second designs (kDesignPairs), after the first: the hero and
-        // the five second-round elementals, where they are on the machine.
-        // The modern tier's only: each is 80,000 triangles with 4K maps and
-        // none has a retro-tier pack.
-        if (options.tier == gfx::Tier::Modern && options.designs != "old-only") {
+        // On the modern tier both designs load, the second after the first:
+        // O swaps them in play.
+        if (modern && options.designs != "old-only") {
             for (const DesignPair& pair : kDesignPairs) {
                 const std::string path = core::paths::asset(std::string(pair.second) + ".glb");
+                if (std::find(placed.begin(), placed.end(), path) != placed.end()) continue;
                 if (std::ifstream(path).good()) roster.push_back(path);
             }
         }
@@ -7512,7 +7532,13 @@ std::vector<App::MenuItem> App::menu_items() const {
         }
         row(kIdDragon, "DRAGON", text);
     }
-    row(kIdDesigns, "DESIGNS", new_designs_ ? "New" : "First");
+    // Only where a species has both designs loaded: on the Pi the row did
+    // nothing, and said "New" over a dragon that was the first.
+    {
+        bool paired = false;
+        for (const auto& model : models_) paired = paired || model->partner >= 0;
+        if (paired) row(kIdDesigns, "DESIGNS", new_designs_ ? "New" : "First");
+    }
     {
         const int preset = graphics_.preset_level(tier_.tier, device_limits_);
         action(kIdGraphicsPage, std::string("GRAPHICS  ·  ") + (preset >= 0 ? capital(gfx::preset_name(preset)) : "Custom"), false);
@@ -12118,7 +12144,7 @@ void App::render() {
     set_ground_marks(scene);
     // The valley mist (scene_common.hlsl, valley_mist), the modern tier's:
     // pooled on the floor, as thick as the valley's hour makes it.
-    if (atmosphere_.available() && atmosphere_settings_.enabled && !ablated("mist")) {
+    if (atmosphere_.available() && atmosphere_settings_.enabled && tier_.budget.valley_mist && !ablated("mist")) {
         const gfx::AtmosphereSettings& a = atmosphere_settings_;
         // An even mist where the terrain shades light (Terrain at Low and
         // below, the phone's preset): the patches are three noises a pixel
@@ -12579,7 +12605,9 @@ void App::render() {
     if (device_.hdr()) {
         // The Bloom setting (gfx/graphics_settings.h) over the panel's dial.
         gfx::PostSettings post = post_settings_;
-        if (!tier_.budget.bloom) post.bloom_strength = 0.0f;
+        // With the bloom go the sun's glare and the lens flare: the same
+        // family, and 1.4 ms of the K30's frame.
+        if (!tier_.budget.bloom) post.bloom_strength = 0.0f, post.sun_glare = 0.0f, post.lens_flare = 0.0f;
         rhi::Texture* occlusion = ablated("ssao") || !tier_.budget.ambient_occlusion
                                       ? nullptr
                                       : ssao_.run(device_, active_camera(), aspect, ssao_settings_);

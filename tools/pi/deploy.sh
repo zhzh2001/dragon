@@ -12,7 +12,7 @@ set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
 stage=build-pi/stage
-species=${*:-embercrest}
+species=${*:-embercrest-hero}
 mkdir -p "$stage/assets/props" "$stage/shaders"
 "$(ls /opt/homebrew/share/android-ndk/toolchains/llvm/prebuilt/*/bin/llvm-strip | head -1)" \
   -o "$stage/dragon" build-pi/dragon
@@ -33,6 +33,9 @@ for s in $species; do
   for kind in rig flight breath; do
     [ -f "assets/$s.glb.$kind.cfg" ] && cp "assets/$s.glb.$kind.cfg" "$stage/assets/"
   done
+  # Its keyframed clips (tools/clips/README.md), where it has any.
+  mkdir -p "$stage/assets/clips"
+  for clip in assets/clips/"$s".*; do [ -f "$clip" ] && cp "$clip" "$stage/assets/clips/"; done
 done
 # The model packs (anim/model_pack.h): the LODs baked here, which the Pi
 # spent 34 s of its start-up simplifying. Their DXT textures are decoded at

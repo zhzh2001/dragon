@@ -25,7 +25,7 @@ fi
 
 tools/pi/build.sh
 rm -rf build-pi/stage
-PI_STAGE_ONLY=1 tools/pi/deploy.sh embercrest
+PI_STAGE_ONLY=1 tools/pi/deploy.sh embercrest-hero
 
 out=$root/dist/stage-pi
 rm -rf "$out"
