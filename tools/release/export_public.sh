@@ -46,10 +46,16 @@ if [ -n "$ref" ]; then
   git remote remove origin
 fi
 
-paths=""
+# A line is a path, or `glob:PATTERN` for git-filter-repo's --path-glob,
+# whose `*` also crosses a `/`: `glob:artifacts/x/*.png` is every PNG
+# under artifacts/x/, and the text records beside them stay.
+paths=""; globs=""
 while IFS= read -r p; do
-  case $p in ''|'#'*) continue ;; esac
-  paths="$paths --path $p"
+  case $p in
+    ''|'#'*) continue ;;
+    glob:*) paths="$paths --path-glob ${p#glob:}"; globs="$globs ${p#glob:}" ;;
+    *) paths="$paths --path $p" ;;
+  esac
 done < "$src/tools/release/public_excludes.txt"
 
 replace=$(mktemp)
@@ -84,8 +90,12 @@ stale=$(mktemp)
 grep -v -E '^(#|$)' "$src/tools/release/stripped_images.txt" > "$stale"
 echo "stripping $(wc -l < "$stale" | tr -d ' ') superseded image versions"
 
+# set -f: a glob exclude is a pattern for filter-repo, and the shell would
+# expand it against the clone's own files.
+set -f
 # shellcheck disable=SC2086
 git filter-repo --force --invert-paths $paths --strip-blobs-with-ids "$stale"
+set +f
 rm -f "$stale"
 git filter-repo --force \
   --blob-callback "$(cat "$callback")" --replace-message "$replace"
@@ -112,12 +122,19 @@ The full development history is private; this is its tree at release."
 fi
 git gc --quiet --prune=now
 
+set -f  # the globs are patterns for git, not for the shell
 for p in $paths; do
-  [ "$p" = --path ] && continue
-  if git log --all --format=%H -- "$p" | grep -q .; then
+  case $p in --path|--path-glob) continue ;; esac
+  case " $globs " in
+    # In a git pathspec `*` stops at a `/`, so any depth is spelled out.
+    *" $p "*) spec=":(glob)${p%/*}/**/${p##*/}" ;;
+    *) spec=$p ;;
+  esac
+  if git log --all --format=%H -- "$spec" | grep -q .; then
     echo "FAILED: $p is still in history" >&2; exit 1
   fi
 done
+set +f
 if git grep -q -a "$HOME" HEAD; then
   echo "FAILED: $HOME still appears in the tree" >&2; exit 1
 fi

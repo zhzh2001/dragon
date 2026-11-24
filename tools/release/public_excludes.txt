@@ -103,3 +103,23 @@ artifacts/wingbeat/tide2/before/
 artifacts/wingbeat/tide2/after/
 artifacts/wingbeat/storm3/before/
 artifacts/wingbeat/storm3/after/
+
+# Not a licence matter: size (2026-11-24, the user's call before the 0.4.0
+# export, which would have added 1.8 GB to a 1.1 GB mirror). Review renders
+# of the rock kit, the run props and the prey, and storm3's single frames:
+# 507 MB. None was ever published. They stay in the working repository, and
+# the links to them in tools/rockkit.md, tools/prey.md, tools/props.md and
+# artifacts/storm3/pass3/README.md are dead in the mirror. The JSON and text
+# records beside the PNGs stay.
+artifacts/storm3/pass2/before/
+artifacts/storm3/pass2/after/
+artifacts/storm3/pass3/before/
+artifacts/storm3/pass3/after/
+glob:artifacts/rockkit/tripo/*.png
+glob:artifacts/rockkit/tripo2/*.png
+glob:artifacts/props/v3/*.png
+artifacts/prey/bighorn/
+artifacts/prey/boar/
+artifacts/prey/elk/
+artifacts/prey/goat/
+artifacts/prey/chamois/
