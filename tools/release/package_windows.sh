@@ -64,6 +64,9 @@ for s in $species $designs; do
   for kind in rig flight breath; do
     [ -f "assets/$s.glb.$kind.cfg" ] && cp "assets/$s.glb.$kind.cfg" "$stage/assets/"
   done
+done
+# Packs for the first designs alone: a retro tier does not load the second.
+for s in $species; do
   staged_models="$staged_models${staged_models:+,}$stage/assets/$s.glb"
 done
 # The packs: the Mac's own build bakes them, from the staged files, so the
