@@ -107,3 +107,7 @@ artifacts/silver-dragon-integration/pass3/before/
 artifacts/silver-dragon-integration/pass3/after/
 artifacts/gold-dragon-integration/pass3/before/
 artifacts/gold-dragon-integration/pass3/after/
+
+# Scratch directories of the asset jobs: single frames, intermediate models.
+build-clip-cache/
+build-rig-cache/
