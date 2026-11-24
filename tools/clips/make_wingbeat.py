@@ -217,6 +217,10 @@ def sail_pose(phase, cfg, params, points, level):
     root = turn(Z, math.degrees(arm_angle - math.atan2(upper_swept.y, upper_swept.x))) @ root
     forearm = frame(sweep + cfg['elbow']*fold, cfg.get('forearm_twist', 0)*math.sin(cycle))
     wrist_y = height(upper+lower, cfg['wrist_lag'], cfg['wrist_top'], cfg['wrist_bottom'])
+    if 'wrist_recovery_lift' in cfg and .52 < phase < .85:
+        # Lift the wrist through recovery to ease the crease at the inner panel.
+        recovery = math.sin(math.pi*(phase-.52)/.33)**2
+        wrist_y += (upper+lower).length * cfg['wrist_recovery_lift'] * recovery
     forearm = turn(Z, lift_to(forearm @ lower, wrist_y - (root @ upper).y)) @ forearm
 
     palm_yaw = sweep + (cfg['elbow']-cfg['wrist'])*fold

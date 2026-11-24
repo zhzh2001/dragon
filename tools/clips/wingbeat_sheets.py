@@ -60,16 +60,15 @@ def comparison(model, groups, output):
             name = frame_name(group, frames, i)
             box = union(bounds(load(model, v, name), plate) for v in ('before', 'after'))
             cells.append((frame, name, box))
-        width = sum(b[2] - b[0] for _, _, b in cells)
         height = max(b[3] - b[1] for _, _, b in cells)
-        layout.append((group, cells, width, height))
+        layout.append((group, cells, height))
     # Keep each phase in the same column across the side and rear views.
-    widths = [max(row[i][2][2] - row[i][2][0] for _, row, _, _ in layout)
+    widths = [max(row[i][2][2] - row[i][2][0] for _, row, _ in layout)
               for i in range(len(layout[0][1]))]
-    sheet = Image.new('RGB', (sum(widths), sum(2 * (e[3] + 32) for e in layout)), BACKGROUND)
+    sheet = Image.new('RGB', (sum(widths), sum(2 * (height + 32) for _, _, height in layout)), BACKGROUND)
     draw = ImageDraw.Draw(sheet)
     y = 0
-    for group, cells, _, height in layout:
+    for group, cells, height in layout:
         for version, label in (('before', 'Procedural'), ('after', 'Keyframed')):
             x = 0
             for width, (frame, name, box) in zip(widths, cells):
