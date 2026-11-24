@@ -454,6 +454,27 @@ Options parse_options(int argc, char** argv) {
             options.hide_ui = true;
         } else if (arg == "--hide-vegetation") {
             options.hide_vegetation = true;
+        } else if (arg == "--env" && i + 1 < argc) {
+            // KEY=VALUE into the environment, for a device whose launcher
+            // passes arguments and nothing else (Android, through
+            // tools/android/run.sh): --env DRAGON_ABLATE=trees,grass. It
+            // reaches every switch read after the command line, which is all
+            // of them except the two main() reads first (DRAGON_LOG_TIME,
+            // DRAGON_LOG_FILE).
+            const std::string pair = argv[++i];
+            const size_t eq = pair.find('=');
+            if (eq != std::string::npos && eq > 0) {
+#ifdef DRAGON_XP
+                _putenv(pair.c_str());
+#else
+                const std::string key = pair.substr(0, eq);
+                const std::string value = pair.substr(eq + 1);
+                SDL_SetEnvironmentVariable(SDL_GetEnvironment(), key.c_str(), value.c_str(), true);
+                SDL_setenv_unsafe(key.c_str(), value.c_str(), 1);
+#endif
+            } else {
+                LOG_WARN("--env takes KEY=VALUE, not '%s'", pair.c_str());
+            }
         } else if (arg == "--telemetry") {
             options.telemetry_interval = 60;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -12099,7 +12120,11 @@ void App::render() {
     // pooled on the floor, as thick as the valley's hour makes it.
     if (atmosphere_.available() && atmosphere_settings_.enabled && !ablated("mist")) {
         const gfx::AtmosphereSettings& a = atmosphere_settings_;
-        scene.mist = core::Vec4{a.mist_density * time_of_day_.mist, material_.water_level, a.mist_height_m, a.mist_patches};
+        // An even mist where the terrain shades light (Terrain at Low and
+        // below, the phone's preset): the patches are three noises a pixel
+        // in every world shader, 1.8 ms of the K30's frame.
+        const float patches = tier_.budget.terrain_lite ? 0.0f : a.mist_patches;
+        scene.mist = core::Vec4{a.mist_density * time_of_day_.mist, material_.water_level, a.mist_height_m, patches};
     }
     world_.set_scene(scene);
     world_.set_detail_cull(tier_.min_draw_pixels, float(device_.world_height()), view_distance);

@@ -746,14 +746,17 @@ float4 valley_mist(float3 world_position, float3 ray, float dist) {
     // Banks and gaps 400-900 m across, drifting with the wind: one sample
     // where the ray ends (the densest part when it looks down into the
     // valley) and one half way (when it runs along the floor).
-    float2 drift = float2(3.0, 1.2) * scene.view_params.z;
-    float2 mid = lerp(eye.xz, world_position.xz, 0.5);
-    float patch_end = cloud_value((world_position.xz + drift) / 650.0) * 0.6 +
-                      cloud_value((world_position.xz - drift) / 260.0 + 3.7) * 0.4;
-    float patch_mid = cloud_value((mid + drift) / 650.0);
-    // Cut, not just varied, so there are gaps the ground shows through.
-    float bank = saturate((patch_end * 0.65 + patch_mid * 0.35 - 0.32) * 2.6);
-    depth *= max(lerp(1.0, 1.7 * bank, scene.mist.w), 0.0);
+    // An even mist (patches 0) skips the three noises.
+    if (scene.mist.w > 0.0) {
+        float2 drift = float2(3.0, 1.2) * scene.view_params.z;
+        float2 mid = lerp(eye.xz, world_position.xz, 0.5);
+        float patch_end = cloud_value((world_position.xz + drift) / 650.0) * 0.6 +
+                          cloud_value((world_position.xz - drift) / 260.0 + 3.7) * 0.4;
+        float patch_mid = cloud_value((mid + drift) / 650.0);
+        // Cut, not just varied, so there are gaps the ground shows through.
+        float bank = saturate((patch_end * 0.65 + patch_mid * 0.35 - 0.32) * 2.6);
+        depth *= max(lerp(1.0, 1.7 * bank, scene.mist.w), 0.0);
+    }
     float transmittance = exp(-depth);
     if (transmittance > 0.999) return float4(0.0, 0.0, 0.0, 1.0);
     float3 to_sun = normalize(scene.sun.xyz);

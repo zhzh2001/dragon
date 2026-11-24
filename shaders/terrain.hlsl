@@ -164,6 +164,11 @@ struct VertexOut {
     // y where sediment settled. The per-pixel tiers' vertex colour carries
     // it instead of a tint, which only the vertex-lit ones use.
     float2 erosion : TEXCOORD2;
+#ifdef TERRAIN_LITE
+    // The patch noise the mesh carries (VertexIn::uv), so the light path
+    // does not hash three octaves a pixel: 2 ms of a phone's frame.
+    float patches : TEXCOORD3;
+#endif
 };
 
 #ifdef VERTEX_STAGE
@@ -173,6 +178,9 @@ VertexOut vs_main(VertexIn input) {
     o.world_position = input.position;
     o.normal = input.normal;
     o.erosion = input.color.xy;
+#ifdef TERRAIN_LITE
+    o.patches = input.uv.x;
+#endif
     return o;
 }
 #endif
@@ -212,7 +220,8 @@ float modulate(float d, float strength) { return 1.0 + (d - 0.5) * 2.0 * strengt
 #define SCREE_FROM 0.3
 #define SCREE_TO 0.85
 
-float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail, float strength, float2 erosion) {
+float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail, float strength, float2 erosion,
+                      float mesh_patches) {
     // Colours come from the shared palette, so the ground is graded together
     // with the plants standing on it.
     const float3 SAND       = scene.palette[PALETTE_SAND].rgb;
@@ -232,7 +241,11 @@ float3 terrain_albedo(float3 world_position, float3 normal, TerrainDetail detail
 
     // Broad patches of dry/lush ground, plus fine grain that keeps large flat
     // areas from reading as a solid colour.
+#ifdef TERRAIN_LITE
+    float patches = mesh_patches;
+#else
     float patches = fbm(world_position.xz * 0.0055);
+#endif
     float grain = value_noise(world_position.xz * 0.09);
 
     // Each material wears its channel: 1 + (d - 0.5) * 2 * strength.
@@ -579,7 +592,11 @@ float4 fs_main(VertexOut input) : SV_Target {
     // mottle: at 0.3 of it the ground went flat as a carpet.
     detail_strength *= 1.0 - 0.35 * ground_scans;
 #endif
-    float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion);
+#ifdef TERRAIN_LITE
+    float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion, input.patches);
+#else
+    float3 albedo = terrain_albedo(input.world_position, normal, detail, detail_strength, input.erosion, 0.0);
+#endif
 #ifdef ATMOSPHERE
     albedo *= rock_tint * modulate(scan_detail, 0.9);
     // The forest floor (F7): where the canopy covers the ground, needles and
@@ -599,7 +616,15 @@ float4 fs_main(VertexOut input) : SV_Target {
 
     // The shared lighting path: same wrap, same ambient as everything else.
     float visibility = sun_visibility(input.world_position, normal, shadow_map, shadow_map_sampler);
+#ifdef TERRAIN_LITE
+    // The light path leaves out the bounce lost in shadow and the shade
+    // under each crown (below): together 4 ms of a 44 ms frame on the K30,
+    // more than their lookups cost anywhere else (docs/porting/MOBILE.md,
+    // "The phone's frame, taken apart").
+    float3 ambient = ambient_light(normal);
+#else
     float3 ambient = ambient_light_at(normal, input.world_position);
+#endif
 #ifdef USE_TERRAIN_SUN
     ambient *= terrain_sky(input.world_position);  // the gully sees less sky than the ridge
 #endif
@@ -610,6 +635,10 @@ float4 fs_main(VertexOut input) : SV_Target {
     // a shadow, and without this a tree there stood on evenly lit ground
     // and floated (playtest report 0011). Out to 600 m; past it the canopy
     // term above carries the forest.
+#ifdef TERRAIN_LITE
+    // Bound and unread, as the scans above are.
+    [branch] if (input.world_position.y < -1e30) ambient *= crown_shade_map.SampleLevel(crown_shade_map_sampler, (float2)0.0, 0.0).r;
+#else
     {
         float crown_half = scene.thermal_count.y;
         float2 crown_uv = input.world_position.xz / max(crown_half, 1.0) * 0.5 + 0.5;
@@ -627,6 +656,7 @@ float4 fs_main(VertexOut input) : SV_Target {
         // grass about them take part of it.
         visibility *= 1.0 - 0.5 * crown;
     }
+#endif
     // Past the shadow cascades no crown shades the ground: the canopy's
     // cover stands in for the shade under it.
     visibility *= 1.0 - 0.7 * canopy * smoothstep(1400.0, 2000.0, camera_distance);
@@ -654,8 +684,11 @@ float4 fs_main(VertexOut input) : SV_Target {
         // Chebyshev distance, because the map is square: this reaches 1 on all
         // four edges at once rather than only at the corners.
         float edge = max(abs(input.world_position.x), abs(input.world_position.z)) / half_extent;
-        float3 ray = normalize(input.world_position - scene.camera_position.xyz);
-        fogged = lerp(fogged, sky_color(ray), smoothstep(0.80, 0.99, edge));
+        // Only the outermost fifth looks the sky up: every pixel did.
+        if (edge > 0.80) {
+            float3 ray = normalize(input.world_position - scene.camera_position.xyz);
+            fogged = lerp(fogged, sky_color(ray), smoothstep(0.80, 0.99, edge));
+        }
     }
 
     return float4(scene_out(fogged), occlusion_share(ambient, direct + ambient));
