@@ -3,12 +3,12 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
 sys.dont_write_bytecode = True
 from PIL import Image
+from wingbeat.profiles import flight_value
 
 ROOT = Path(__file__).resolve().parents[2]
 MAIN = Path('~/src/game-claude')
@@ -19,36 +19,54 @@ REPORTS = {'tide2': {'0035': '271 13.9 6', '0036': '300 10.8 53'},
            'storm3': {'0037': '223 12.6 -1'}}
 
 
-def flap_period(model):
-    profile = ROOT / f'assets/{model}.glb.flight.cfg'
-    match = re.search(r'^flap_period\s+(\S+)', profile.read_text(), re.M)
-    if match:
-        return float(match[1])
-    flight = (ROOT / 'src/game/flight.h').read_text()
-    return float(re.search(r'float flap_period = ([\d.]+)f', flight)[1])
+STUDIES = {'gold-dragon': 28, 'silver-dragon': 22}
+
+
+def record_dir(model):
+    if model in STUDIES:
+        return ROOT / 'artifacts' / (model + '-integration') / 'wingbeat'
+    return ART / model
+
+
+def frames_dir(model, version):
+    if version == 'plate' or model in STUDIES:
+        return CACHE / model / version
+    return ART / model / version
 
 
 def views(model):
-    period = flap_period(model)
+    period = flight_value(ROOT, model, 'flap_period')
     beat = tuple(200 + round(i * 60 * period / 8) for i in range(8))
     groups = {}
-    for report, orbit in REPORTS[model].items():
+    orbits = ORBITS
+    rear = '0 16 14'
+    chase = (300, 313, 326, 339)
+    if model in STUDIES:
+        distance = STUDIES[model]
+        orbits = {}
+        for name, orbit in ORBITS.items():
+            angle, _, elevation = orbit.split()
+            orbits[name] = f'{angle} {distance} {elevation}'
+        rear = orbits['rear']
+        chase = (300, 316, 332, 348)
+        groups['report'] = (f'--studio 1 --inspect 240 {distance} -13', beat)
+    for report, orbit in REPORTS.get(model, {}).items():
         groups[f'report-{report}'] = ('--studio 1 --inspect ' + orbit, beat)
     for mode in ('cruise', 'climb'):
         effort = ' --flight flap_effort_bias=1' if mode == 'climb' else ''
-        for name, orbit in ORBITS.items():
+        for name, orbit in orbits.items():
             if mode == 'climb' and name in ('front', 'above'):
                 continue
             groups[f'{mode}-{name}'] = ('--studio 1 --inspect ' + orbit + effort, beat)
     groups.update({
-        'turn': ('--studio 2 --inspect 0 16 14', (230, 245, 260, 275)),
-        'glide': ('--studio 0 --inspect 0 16 14', (200,)),
-        'chase': ('--autopilot --course 1', (300, 313, 326, 339)),
+        'turn': ('--studio 2 --inspect ' + rear, (230, 245, 260, 275)),
+        'glide': ('--studio 0 --inspect ' + rear, (200,)),
+        'chase': ('--autopilot --course 1', chase),
         'takeoff': ('--input 0.2,0,0,1,0,0', (40, 52, 64, 76, 88, 100)),
         'head-flap': ('--studio 1 --inspect 90 3.5 0 --inspect-head', (beat[4],)),
         'head-glide': ('--studio 0 --inspect 90 3.5 0 --inspect-head', (200,)),
         'switch': (f'--models assets/embercrest-hero.glb,assets/{model}.glb '
-                   '--cycle-models 180 --studio 1 --inspect 0 16 14', (beat[4],)),
+                   '--cycle-models 180 --studio 1 --inspect ' + rear, (beat[4],)),
     })
     return groups
 
@@ -58,7 +76,7 @@ def frame_name(group, frames, index):
 
 
 def capture(model, version, group, frame, name, options, candidate=None):
-    directory = (CACHE if version == 'plate' else ART) / model / version
+    directory = frames_dir(model, version)
     if candidate:
         directory = CACHE / model / candidate / version
     directory.mkdir(parents=True, exist_ok=True)
@@ -72,7 +90,8 @@ def capture(model, version, group, frame, name, options, candidate=None):
         env['DRAGON_ABLATE'] = 'player'
     elif version == 'after':
         env['DRAGON_FLIGHT_CLIPS'] = str(clip)
-    args = ['./build/dragon-r11', '--headless', '--hide-ui', '--size', '1920x1080',
+    binary = './build/dragon-r12' if model in STUDIES else './build/dragon-r11'
+    args = [binary, '--headless', '--hide-ui', '--size', '1920x1080',
             '--sun', '55,60', '--model', f'assets/{model}.glb', *options.split(),
             '--frames', str(frame), '--screenshot', str(stem.with_suffix('.bmp'))]
     log = CACHE / model / version / (name + '.log')
@@ -99,7 +118,7 @@ def capture(model, version, group, frame, name, options, candidate=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=REPORTS)
+    parser.add_argument('model', choices=(*REPORTS, *STUDIES))
     parser.add_argument('version', choices=('before', 'after', 'plate'))
     parser.add_argument('groups', nargs='*')
     parser.add_argument('--jobs', type=int, choices=(1, 2), default=2)
@@ -114,9 +133,9 @@ if __name__ == '__main__':
             for group in args.groups or groups
             for options, frames in [groups[group]] for i, frame in enumerate(frames) if args.index is None or args.index == i]
     if args.version == 'plate':
-        jobs = [j for j in jobs if j[2].startswith(('cruise-', 'report-')) and j[4].endswith('-0')]
+        jobs = [j for j in jobs if j[2].startswith(('cruise-', 'report')) and j[4].endswith('-0')]
     if args.missing:
-        folder = (CACHE if args.version == 'plate' else ART) / args.model
+        folder = frames_dir(args.model, args.version).parent
         if args.candidate:
             folder = CACHE / args.model / args.candidate
         jobs = [j for j in jobs if not (folder / args.version / (j[4] + '.jpg')).is_file()]

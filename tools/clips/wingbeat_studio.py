@@ -10,6 +10,7 @@ import sys
 
 sys.dont_write_bytecode = True
 import numpy as np
+from wingbeat.profiles import profile_path
 from check_clip import accessor, parent_names, read_glb
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -82,8 +83,8 @@ def tunings(model):
     for header in ('src/anim/dragon_rig.h', 'src/game/flight.h'):
         values = re.findall(r'float (\w+) = (-?\d+(?:\.\d+)?)f;', (ROOT/header).read_text())
         params.update((key, float(raw)) for key, raw in values)
-    for suffix in ('.rig.cfg', '.flight.cfg'):
-        path = ROOT / f'assets/{model}.glb{suffix}'
+    for suffix in ('rig', 'flight'):
+        path = profile_path(ROOT, model, suffix)
         for line in path.read_text().splitlines():
             values = line.partition('#')[0].split()
             if values and values[0] in params:
@@ -143,6 +144,7 @@ class Studio:
             self.clips[action['name']] = keys
 
         config = json.loads((Path(__file__).parent/'wingbeat'/f'{model}.json').read_text())
+        self.fold_phases = [config[mode].get('fold_phase', 40/60) for mode in ('cruise', 'climb')]
         right_level = matrices(config['level_xyzw'])
         reflect = np.diag([-1., 1., 1.])
         self.wings = [self.wing('r', 1, right_level), self.wing('l', -1, reflect @ right_level @ reflect)]
@@ -175,9 +177,12 @@ class Studio:
             return self.names.index(f'wing_{stem}_{side}')
 
         arm = [joint(stem) for stem in ('root', 'arm', 'wrist')]
-        count = sum(n.startswith('wing_finger_') and n.endswith('a_'+side) for n in self.names)
-        segments = ('a', 'b', 'tip') if f'wing_finger_1tip_{side}' in self.names else ('a', 'b')
-        ribs = [[joint(f'finger_{i}{s}') for s in segments] for i in range(1, count+1)]
+        if f'wing_finger_01_01_{side}' in self.names:
+            ribs = [[joint(f'finger_{i:02d}_{k:02d}') for k in range(1, 4)] for i in range(1, 5)]
+        else:
+            count = sum(n.startswith('wing_finger_') and n.endswith('a_'+side) for n in self.names)
+            segments = ('a', 'b', 'tip') if f'wing_finger_1tip_{side}' in self.names else ('a', 'b')
+            ribs = [[joint(f'finger_{i}{s}') for s in segments] for i in range(1, count+1)]
         path = arm + ribs[0]
         end = 2*self.bind[path[-1]] - self.bind[path[-2]]
         lever = np.linalg.norm((self.bind[path] - end)[:, :2], axis=1)
@@ -317,7 +322,7 @@ def metrics(studio, climb):
     samples = list(studio.samples(climb))
     positions = np.stack([sample.positions for sample in samples])
     spans = np.ptp(positions[:, :, 0], axis=1)
-    distances = np.array([abs(sample.phase-40/60) for sample in samples])
+    distances = np.array([abs(sample.phase-studio.fold_phases[int(climb)]) for sample in samples])
     nearest = distances < distances.min()+1e-6
     print(f'{"Climb" if climb else "Cruise"} studio frames {samples[0].frame} to {samples[-1].frame}')
     for wing in studio.wings:
@@ -329,11 +334,11 @@ def metrics(studio, climb):
         print(f'{side} rib minima in metres', ' '.join(f'{x:.3f}' for x in distances))
     print('span at nearest sampled peak fold / widest', f'{spans[nearest].min()/spans.max():.3f}')
     # Use one complete cycle so drift from one beat to the next cannot move a reversal.
-    wraps = [i for i in range(1, len(samples)) if samples[i].phase < samples[i-1].phase - .5]
-    duration = wraps[1] - wraps[0]
-    start = wraps[0] - round(.2*duration)
-    if start < 0:
-        start += duration
+    duration = round(60 * studio.params['flap_period'])
+    start = next(i for i, s in enumerate(samples) if .80 <= s.phase < .80 + 1/duration + 1e-6)
+    if start + duration > len(samples):
+        # Include the same phases from the preceding beat.
+        start = 0
     cycle = samples[start:start + duration]
     wing = studio.wings[0]
     origin = np.stack([s.heads[wing.arm[0]] for s in cycle])
@@ -348,7 +353,7 @@ def metrics(studio, climb):
           f'{cycle[angles.argmax()].phase:.3f} {cycle[angles.argmin()].phase:.3f}')
     landmarks = [(studio.names[wing.arm[-1]], [s.heads[wing.arm[-1], 1] for s in cycle])]
     for index, rib in enumerate(wing.ribs, 1):
-        name = f'wing_finger_{index}tip_r'
+        name = studio.names[rib[-1]]
         landmarks.append((name, [s.fingertips[0][index-1, 1] for s in cycle]))
     for name, values in landmarks:
         heights = np.array(values) - origin[:, 1]
@@ -366,7 +371,7 @@ def metrics(studio, climb):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=('tide2', 'storm3'))
+    parser.add_argument('model', choices=('tide2', 'storm3', 'gold-dragon', 'silver-dragon'))
     args = parser.parse_args()
     rig = Studio(args.model)
     for effort in (False, True):

@@ -167,6 +167,80 @@ def right_pose(phase, cfg, down, points, level, glide_offset=0):
     return {'wing_'+k: v for k, v in pose.items()}
 
 
+def timed_stroke(phase, down):
+    """Return one at the shoulder crest and zero at the end of the power stroke."""
+    phase %= 1
+    if phase < down:
+        return (1 + math.cos(math.pi * phase / down)) / 2
+    return (1 - math.cos(math.pi * (phase-down) / (1-down))) / 2
+
+
+def lift_to(vector, height):
+    """Return the body roll that places this segment at the requested height."""
+    projected = math.hypot(vector.x, vector.y)
+    if abs(height) > projected + 1e-7:
+        raise ValueError(f'Wing segment cannot reach {height:.5f} with projected length {projected:.5f}')
+    return math.degrees(math.asin(max(-1, min(1, height/projected))) - math.atan2(vector.y, vector.x))
+
+
+def sail_pose(phase, cfg, params, points, level):
+    """Carry a bend from the upper arm through the wrist and along the four sail rays."""
+    down = params['downstroke']
+    cycle = math.tau * phase
+    beat = timed_stroke(phase, down)
+    fold = ((1 + math.cos(math.tau*(phase-cfg['fold_phase']))) / 2)**3
+    sweep = cfg['sweep'] * math.sin(cycle) + cfg['recovery_sweep'] * fold
+    twist = -cfg['pitch'] * math.sin(cycle)
+    def point(stem):
+        return points['wing_' + stem + '_r']
+    def frame(yaw, pitch):
+        return turn(Y, yaw) @ turn(X, pitch) @ level
+    def height(vector, delay, top, bottom):
+        fraction = timed_stroke(phase-delay/60, down)
+        segment = level @ vector
+        return ((turn(Z, top) @ segment).y*fraction +
+                (turn(Z, bottom) @ segment).y*(1-fraction))
+
+    upper = point('arm') - point('root')
+    lower = point('wrist') - point('arm')
+    neutral = level @ upper
+    arm_angle = (math.atan2(neutral.y, neutral.x) +
+                 math.radians(params['glide_offset_deg'] + cfg['bottom'] + (cfg['top']-cfg['bottom'])*beat))
+    root = frame(sweep, 0)
+    upper_swept = root @ upper
+    root = turn(Z, math.degrees(arm_angle - math.atan2(upper_swept.y, upper_swept.x))) @ root
+    forearm = frame(sweep + cfg['elbow']*fold, 0)
+    wrist_y = height(upper+lower, cfg['wrist_lag'], cfg['wrist_top'], cfg['wrist_bottom'])
+    forearm = turn(Z, lift_to(forearm @ lower, wrist_y - (root @ upper).y)) @ forearm
+
+    palm_yaw = sweep + (cfg['elbow']-cfg['wrist'])*fold
+    leading = 'finger_01_'
+    first = point(leading+'02') - point(leading+'01')
+    second = point(leading+'03') - point(leading+'02')
+    # The two halves of each ray cup under load and uncurl on the return.
+    bend = 7 * math.sin(cycle-.55)
+    def ray_frames(ray):
+        fan = cfg['fan'] * (2.5-ray)/3 * fold
+        spoke = frame(palm_yaw + fan, twist)
+        return turn(Z, bend) @ spoke, turn(Z, -bend) @ spoke
+
+    inner, outer = ray_frames(1)
+    tip_y = height(point(leading+'03')-point('root'), cfg['tip_lag'], cfg['tip_top'], cfg['tip_bottom'])
+    hand_roll = lift_to(inner @ first + outer @ second, tip_y-wrist_y)
+    palm_roll = hand_roll + 9*math.sin(cycle-.6)
+    pose = {'wing_root': root, 'wing_arm': forearm,
+            'wing_wrist': turn(Z, palm_roll) @ frame(palm_yaw, twist)}
+    for ray in range(1, 5):
+        stem = f'wing_finger_{ray:02d}_'
+        inner, outer = ray_frames(ray)
+        pose[stem+'01'] = turn(Z, hand_roll) @ inner
+        pose[stem+'02'] = turn(Z, hand_roll) @ outer
+        # The terminal bones carry skin beyond the fitted endpoints.
+        distal = 4*math.sin(cycle-1)
+        pose[stem+'03'] = pose[stem+'02'] @ level.inverted() @ turn(Z, distal) @ level
+    return pose
+
+
 def storm_foundation(points, rotations, nodes, bones, level, params):
     """Set an open palm over the retained shoulder and elbow rest rotations."""
     import numpy as np
@@ -221,7 +295,9 @@ def bake(rig, nodes, parents, rotations, points, params, level, name, foundation
     base.reset_pose(rig)
     tracks = {}
     for frame in range(61):
-        if foundation:
+        if 'fold_phase' in cfg:
+            pose = sail_pose(frame%60 / 60, cfg, params, points, level)
+        elif foundation:
             virtual, local, neutral = foundation
             # Pose keys use whole degrees relative to the measured frame-200 glide.
             pose = right_pose(frame%60 / 60, cfg, params['downstroke'], virtual,
@@ -257,7 +333,8 @@ def bake(rig, nodes, parents, rotations, points, params, level, name, foundation
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('model', choices=('tide2','storm3'))
+    parser.add_argument('model', choices=('tide2','storm3','gold-dragon','silver-dragon'))
+    parser.add_argument('--output', type=Path)
     parser.add_argument('--measure', action='store_true')
     parser.add_argument('--axes-only', action='store_true')
     args = parser.parse_args(sys.argv[sys.argv.index('--')+1:])
@@ -279,13 +356,13 @@ def main():
     if measure:
         params['level_xyzw'] = base.xyzw(level)
         params['axes'] = measure_axes(rig, nodes, parents, rotations, worlds, bones)
-    if measure or foundation:
+    if measure:
         path.write_text(json.dumps(params, indent=2)+'\n')
     if args.axes_only:
         return
     clips = {name: bake(rig, nodes, parents, rotations, points, params, level, name, foundation)
              for name in ('flap','flap_climb')}
-    output = ROOT/'assets/clips'/(model+'.flight.glb')
+    output = args.output or ROOT/'assets/clips'/(model+'.flight.glb')
     write(output, nodes, parents, clips)
     print('Wrote', output)
 

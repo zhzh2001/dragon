@@ -6,14 +6,14 @@ sys.dont_write_bytecode = True
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from wingbeat_render import ART, CACHE, REPORTS, frame_name, views
+from wingbeat_render import CACHE, REPORTS, STUDIES, frame_name, frames_dir, record_dir, views
 
 FONT = ImageFont.truetype('/System/Library/Fonts/Menlo.ttc', 18)
 BACKGROUND = (27, 31, 35)
 
 
 def image_path(model, version, name):
-    return (CACHE if version == 'plate' else ART) / model / version / (name + '.jpg')
+    return frames_dir(model, version) / (name + '.jpg')
 
 
 def load(model, version, name):
@@ -63,19 +63,22 @@ def comparison(model, groups, output):
         width = sum(b[2] - b[0] for _, _, b in cells)
         height = max(b[3] - b[1] for _, _, b in cells)
         layout.append((group, cells, width, height))
-    sheet = Image.new('RGB', (max(e[2] for e in layout), sum(2 * (e[3] + 32) for e in layout)), BACKGROUND)
+    # Keep each phase in the same column across the side and rear views.
+    widths = [max(row[i][2][2] - row[i][2][0] for _, row, _, _ in layout)
+              for i in range(len(layout[0][1]))]
+    sheet = Image.new('RGB', (sum(widths), sum(2 * (e[3] + 32) for e in layout)), BACKGROUND)
     draw = ImageDraw.Draw(sheet)
     y = 0
     for group, cells, _, height in layout:
         for version, label in (('before', 'Procedural'), ('after', 'Keyframed')):
             x = 0
-            for frame, name, box in cells:
+            for width, (frame, name, box) in zip(widths, cells):
                 crop = load(model, version, name).crop(box)
                 draw.text((x + 8, y + 4), f'{label}   {group}   {frame}', font=FONT)
-                sheet.paste(crop, (x, y + 32))
-                x += crop.width
+                sheet.paste(crop, (x + (width - crop.width) // 2, y + 32))
+                x += width
             y += height + 32
-    sheet.save(ART / model / output, quality=94, subsampling=0)
+    sheet.save(record_dir(model) / output, quality=94, subsampling=0)
 
 
 def overview(model):
@@ -95,7 +98,7 @@ def overview(model):
             cell(frame_name(group, frames, i), frame, row, i)
     for i, group in enumerate(g for g in groups if g not in rows):
         cell(group, groups[group][1][0], len(rows), i)
-    sheet.save(ART / model / 'views.jpg', quality=93)
+    sheet.save(record_dir(model) / 'views.jpg', quality=93)
 
 
 def review(model, version, groups):
@@ -114,7 +117,7 @@ def review(model, version, groups):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', choices=REPORTS)
+    parser.add_argument('model', choices=(*REPORTS, *STUDIES))
     parser.add_argument('--review', choices=('before', 'after'))
     parser.add_argument('groups', nargs='*')
     args = parser.parse_intermixed_args()
@@ -123,5 +126,8 @@ if __name__ == '__main__':
     else:
         for mode in ('cruise', 'climb'):
             comparison(args.model, [mode + '-side', mode + '-rear'], mode + '-before-after.jpg')
-        comparison(args.model, ['report-' + k for k in REPORTS[args.model]], 'report-views-before-after.jpg')
+        if args.model in STUDIES:
+            comparison(args.model, ['report'], 'report-view-before-after.jpg')
+        else:
+            comparison(args.model, ['report-' + k for k in REPORTS[args.model]], 'report-views-before-after.jpg')
         overview(args.model)
