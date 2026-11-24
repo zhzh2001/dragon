@@ -59,6 +59,10 @@ for tier in sm3 sm2 sm2-noshadows ff; do
   python3 tools/d3d9/bake_d3d9.py "$stage/shaders" --tier "$tier"
 done
 cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
+# Not the clips of models that do not ship (package_macos.sh). Until
+# 2026-11-24 this packager copied them all, the gold and silver studies'
+# among them; no XP package built that way was released.
+rm -f "$stage/assets/clips/"gold-dragon.* "$stage/assets/clips/"silver-dragon.* "$stage/assets/clips/"embercrest-hero-v4.*
 cp assets/props/*.glb "$stage/assets/props/"
 staged_models=""
 for s in $species; do
