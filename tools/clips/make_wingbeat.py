@@ -188,8 +188,14 @@ def sail_pose(phase, cfg, params, points, level):
     down = params['downstroke']
     cycle = math.tau * phase
     beat = timed_stroke(phase, down)
+    crescent = 'ray_fan_offset_deg' in params
+    if crescent:
+        beat = curve(phase, [(0, 1), (.08, .74), (down/2, cfg['power_mid']),
+                             (.32, .025), (down, 0), (.52, .13), (.70, .54), (.86, .88)])
     fold = ((1 + math.cos(math.tau*(phase-cfg['fold_phase']))) / 2)**3
     sweep = cfg['sweep'] * math.sin(cycle) + cfg['recovery_sweep'] * fold
+    if crescent:
+        sweep = -cfg['sweep'] * math.cos(cycle-.58) + cfg['recovery_sweep'] * fold
     twist = -cfg['pitch'] * math.sin(cycle)
     def point(stem):
         return points['wing_' + stem + '_r']
@@ -209,7 +215,7 @@ def sail_pose(phase, cfg, params, points, level):
     root = frame(sweep, 0)
     upper_swept = root @ upper
     root = turn(Z, math.degrees(arm_angle - math.atan2(upper_swept.y, upper_swept.x))) @ root
-    forearm = frame(sweep + cfg['elbow']*fold, 0)
+    forearm = frame(sweep + cfg['elbow']*fold, cfg.get('forearm_twist', 0)*math.sin(cycle))
     wrist_y = height(upper+lower, cfg['wrist_lag'], cfg['wrist_top'], cfg['wrist_bottom'])
     forearm = turn(Z, lift_to(forearm @ lower, wrist_y - (root @ upper).y)) @ forearm
 
@@ -218,23 +224,43 @@ def sail_pose(phase, cfg, params, points, level):
     first = point(leading+'02') - point(leading+'01')
     second = point(leading+'03') - point(leading+'02')
     # The two halves of each ray cup under load and uncurl on the return.
-    bend = 7 * math.sin(cycle-.55)
+    bend = cfg.get('ray_bend', 7) * math.sin(cycle-.55)
     def ray_frames(ray):
+        if crescent:
+            # The first two rays run nearly parallel. Keep their gap through the recovery fold.
+            fan = params['ray_fan_offset_deg'][ray-1] + cfg['fan']*params['ray_fan_closure_share'][ray-1]*fold
+            spoke = frame(palm_yaw, twist) @ turn(Y, fan)
+            if ray == 4 and cfg.get('inner_tilt'):
+                # Tilt the short attachment ray in its own vertical plane during recovery.
+                chord = point('finger_04_03') - point('finger_04_01')
+                hinge = Vector((-chord.z, 0, chord.x)).normalized()
+                spoke = spoke @ turn(hinge, cfg['inner_tilt'] * fold)
+            return spoke @ turn(X, bend), spoke @ turn(X, -bend)
         fan = cfg['fan'] * (2.5-ray)/3 * fold
         spoke = frame(palm_yaw + fan, twist)
         return turn(Z, bend) @ spoke, turn(Z, -bend) @ spoke
 
     inner, outer = ray_frames(1)
     tip_y = height(point(leading+'03')-point('root'), cfg['tip_lag'], cfg['tip_top'], cfg['tip_bottom'])
-    hand_roll = lift_to(inner @ first + outer @ second, tip_y-wrist_y)
-    palm_roll = hand_roll + 9*math.sin(cycle-.6)
-    pose = {'wing_root': root, 'wing_arm': forearm,
-            'wing_wrist': turn(Z, palm_roll) @ frame(palm_yaw, twist)}
+    if crescent:
+        # The crescent's longest ray curves aft. Lift its full length about its crosswise axis.
+        palm = frame(palm_yaw, twist)
+        knuckle = point(leading+'01') - point('wrist')
+        reach = palm @ knuckle + inner @ first + outer @ second
+        hinge = Vector((-reach.z, 0, reach.x)).normalized()
+        angle = math.asin((tip_y-wrist_y)/reach.length) - math.atan2(reach.y, math.hypot(reach.x, reach.z))
+        hand = Quaternion(hinge, angle)
+        palm = hand @ palm
+    else:
+        hand_roll = lift_to(inner @ first + outer @ second, tip_y-wrist_y)
+        hand = turn(Z, hand_roll)
+        palm = turn(Z, hand_roll + 9*math.sin(cycle-.6)) @ frame(palm_yaw, twist)
+    pose = {'wing_root': root, 'wing_arm': forearm, 'wing_wrist': palm}
     for ray in range(1, 5):
         stem = f'wing_finger_{ray:02d}_'
         inner, outer = ray_frames(ray)
-        pose[stem+'01'] = turn(Z, hand_roll) @ inner
-        pose[stem+'02'] = turn(Z, hand_roll) @ outer
+        pose[stem+'01'] = hand @ inner
+        pose[stem+'02'] = hand @ outer
         # The terminal bones carry skin beyond the fitted endpoints.
         distal = 4*math.sin(cycle-1)
         pose[stem+'03'] = pose[stem+'02'] @ level.inverted() @ turn(Z, distal) @ level

@@ -8,6 +8,7 @@ The shoulder sets the pace. The wrist and fingertips reach their highest and low
 A short turn at the bottom gives way to an open recovery. The wings slow as they approach the top.
 The generator mirrors the rotations in model space before converting them into each joint’s local axes.
 
+See the [gold wingbeat record](../../artifacts/gold-dragon-integration/wingbeat/README.md) and the [silver wingbeat record](../../artifacts/silver-dragon-integration/wingbeat/README.md).
 ## Tide2
 
 The seven-rib fan stays spread at both reversals. Its shoulder reaches the bottom halfway through the beat.
