@@ -121,8 +121,9 @@ half weight, gold and silver have keyframed wingbeats of their own, and
 the start screen over a game holds particles, sound and the rigs
 (`docs/showcase/PLAYTEST.md`, "The twelfth round"). The README has
 pictures and clips, and 0.4.0 packages were built and checked for a
-public release (`docs/RELEASE.md`). The export and the release wait on
-the user's word.
+public release (`docs/RELEASE.md`). The mirror was updated the same
+afternoon, and `v0.4.0` is a draft release there until the user
+publishes it.
 
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley

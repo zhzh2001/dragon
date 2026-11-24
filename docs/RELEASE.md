@@ -226,6 +226,13 @@ The export script takes `glob:` lines for this, so the JSON and text
 records beside the PNGs still go out. One push must stay under GitHub's
 2 GB.
 
+The export at `--ref 366ceb1` was pushed on 2026-11-24 at 13:59:
+`59978b5..32bb354`, 307 commits, a fast-forward. The mirror is 672
+commits and 2.27 GB. The push took 22 minutes at about 1 MB a second.
+`v0.4.0` is a draft release on the mirror's `main` with the three
+packages and the notes in `dist/notes-0.4.0.md`. It is public once the
+user has tried a download and pressed Publish.
+
 ## The README's pictures and clips
 
 `tools/release/make_demo_clips.sh` renders `docs/media/`: the hero still,
