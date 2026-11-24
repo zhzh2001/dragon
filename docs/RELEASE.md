@@ -314,6 +314,50 @@ What the builds turned up:
 - The APK carries one dragon, no rock kit and no landmarks. The Pi's
   start screen shows a "designs" row that does nothing there.
 
+## The new designs in every package (2026-11-24)
+
+The user's call: "include/use the new models for all releases, can skip
+some on mobile/pi if space limited". The desktop packages already load
+both designs. The other three carried the first designs alone, because a
+retro tier never loaded a second and the packagers listed the first
+seven.
+
+`roster_paths` (`src/app.cpp`) now puts a second design in its first's
+place where the first is not in the package, and on a retro tier asked
+for the new designs. A retro tier loads one design a species, not both:
+its machines hold seven dragons. The three packagers list
+`embercrest-hero rimefang frost3 blight2 stone2 storm3 tide2`. None was
+left out for space. By the packagers' own count the APK is 163 MB (177
+with the first designs) and the XP zip 240 MB as before. The Pi's
+tarball is 68 MB with the hero and its clips.
+
+| Package | Built from | Checked |
+|---|---|---|
+| `Dragon-0.4.0-android.apk` | `87082ed` | PASS on the Redmi K30 5G: installs over the copy, unpacks and removes 35 files of the older version, the eight reference frames on the hero against the Mac at the phone preset, a run from the start screen, the demo pilot for 7,200 frames at 31.9 fps |
+| `Dragon-0.4.0-xp.zip` | `c01a606` | PASS under Wine: the valley, a run from the start screen and a seven-dragon arena on sm3, a flap on sm2 and on ff, seven new designs in the roster. Not on a card yet |
+| `Dragon-0.4.0-pi.tar.gz` | `87082ed` | Not checked: the Pi stopped answering (no ping, no ssh) between the afternoon's check and this build. The hero renders on the ff tier on the Mac and under Wine |
+
+SHA-256: `48e25032…c66d1f` (Android), `e1d9be22…32e26` (XP),
+`39bf506e…51d531` (Pi).
+
+Faults this turned up:
+
+- The XP packager copied `assets/clips` whole, the gold and silver
+  studies' wingbeats among them. The other packagers strip them. Two XP
+  packages built that way on this day were never released.
+  `check_package.sh` now lists every package first and fails on a file
+  of a model that does not ship; the three released desktop packages
+  pass it.
+- The phone's unpack kept an older version's files
+  (`docs/porting/MOBILE.md`, "The phone preset at 30 fps").
+- The phone check's reference frames name the first Embercrest, which
+  the APK no longer has. They run on the hero.
+- The hero simplifies worse than the others at the bottom: 140,279
+  triangles to 1,193 on the ff tier is an error of 166% of its size by
+  meshoptimizer's measure, against 4 to 8% for the other six. It still
+  reads as the dragon. `artifacts/release-0.4.0/designs-retro-tiers.jpg`
+  has all six on sm3, sm2 and ff.
+
 ## Checklist before a public push or package
 
 - [ ] `tools/release/export_public.sh` passed its own checks.

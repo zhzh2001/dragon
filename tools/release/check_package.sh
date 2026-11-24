@@ -6,6 +6,7 @@
 #   tools/release/check_package.sh windows VERSION [HOST]   # default x99-windows
 #   tools/release/check_package.sh pi VERSION [HOST]        # default rpi
 #   tools/release/check_package.sh android VERSION          # the phone on adb
+#   tools/release/check_package.sh xp VERSION               # under Wine (WINE set); not a card
 #
 # Each takes dist/Dragon-VERSION-<platform>.* and, from the unpacked
 # package and never from the source tree:
@@ -22,6 +23,11 @@
 # check_package_android.sh): no reference frames on the Pi's fixed-function
 # tier, the phone's against the Mac at the phone's preset, no second render
 # on either, and on both a frame-rate floor under the demo pilot.
+#
+# Before any of that, every platform's package is listed and fails if it
+# holds a file of a model that does not ship: the gold and silver studies'
+# models and clips, the hero's fourth-version strikes (ATTRIBUTION.md). Two
+# XP packages carried the studies' clips on 2026-11-24, unreleased.
 #
 # It prints one PASS or FAIL line a step and exits non-zero on a FAIL. It
 # leaves the frames it rendered in dist/check-VERSION-<platform>/ to be
@@ -54,7 +60,46 @@ stage_root() { # directory
   cp assets/embercrest.glb assets/embercrest.glb.*.cfg "$1/assets/"
 }
 
+# What must be in no package. The studies' profiles under assets/species/
+# are public and stay.
 case $platform in
+  macos|windows|xp) package=dist/Dragon-$version-$platform.zip; listing=$(unzip -Z1 "$package") ;;
+  android) package=dist/Dragon-$version-android.apk; listing=$(unzip -Z1 "$package") ;;
+  linux|pi) package=dist/Dragon-$version-$platform.tar.gz; listing=$(tar tzf "$package") ;;
+  *) echo "unknown platform $platform" >&2; exit 2 ;;
+esac
+unshipped=$(echo "$listing" | grep -E '(gold-dragon|silver-dragon)[^/]*\.(glb|pack)$|clips/(gold-dragon|silver-dragon)\.|embercrest-hero-v4|/alt/|(^|/)dragon\.glb' || true)
+[ -z "$unshipped" ] && say PASS "no file of a model that does not ship, in $(echo "$listing" | wc -l | tr -d ' ') files" \
+  || say FAIL "files that must not ship: $(echo "$unshipped" | head -4 | tr '\n' ' ')"
+
+case $platform in
+xp)
+  # The D3D9 backend on Wine's wined3d: the package starts, loads its
+  # roster and draws on each tier. A card's driver is another matter
+  # (docs/porting/CARDS.md, "Which cards to run 0.4.0 on").
+  [ -n "${WINE:-}" ] || { say FAIL "set WINE to run the XP package"; exit 1; }
+  work=$HOME/.cache/dragon-xp-check; rm -rf "$work"; mkdir -p "$work"   # a short path: Wine
+  unzip -q "$package" -d "$work"
+  export WINEDEBUG=-all
+  [ -d "$(dirname "$WINE")/../../../Frameworks" ] && export DYLD_FALLBACK_LIBRARY_PATH=$(cd "$(dirname "$WINE")/../../../Frameworks" && pwd)
+  for run in "valley:--frames 60" "run:--menu-start 2 --frames 240 --hide-panels" \
+             "arena:--bots 6 --bot-range 95 --combat --frames 200 --hide-panels" \
+             "sm2:--tier sm2 --frames 120 --studio 1 --inspect 70 13 12 --hide-ui" \
+             "ff:--tier ff --frames 120 --studio 1 --inspect 70 13 12 --hide-ui"; do
+    name=${run%%:*}; args=${run#*:}
+    (cd "$work/Dragon" && PATH=/usr/bin:/bin "$WINE" dragon.exe --headless ${=args} --screenshot $name.bmp > "$out/$name.log" 2>&1) &
+    pid=$!
+    for i in $(seq 1 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+    if kill -0 $pid 2>/dev/null; then kill -9 $pid; say FAIL "$name did not finish in two minutes"; continue; fi
+    cp "$work/Dragon/$name.bmp" "$out/" 2>/dev/null || true
+    if [ -s "$out/$name.bmp" ] && ! grep -q ERROR "$out/$name.log"; then
+      say PASS "$name: $(grep -o 'model roster: [0-9]* entry(s), [a-z]* designs' "$out/$name.log" | head -1); $(grep -o 'frames: [^;]*' "$out/$name.log" | head -1)"
+    else
+      say FAIL "$name: $(grep -m2 ERROR "$out/$name.log" | cut -c1-160 | tr '\n' ' ')"
+    fi
+  done
+  rm -rf "$work"
+  ;;
 macos)
   zip=dist/Dragon-$version-macos.zip
   work=$(mktemp -d)

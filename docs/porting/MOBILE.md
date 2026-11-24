@@ -815,6 +815,40 @@ The phone now holds a development build signed with the release key,
 version code 681. The 0.4.0 APK's code is 679 and does not install over
 it. An APK built from a later commit does.
 
+## The phone preset at 30 fps (2026-11-24)
+
+The user's floor: "30 fps is minimum playable though, you can drop
+settings", and the new designs in every package. The APK now carries one
+design a species (the hero, Rimefang and the five later elementals),
+163 MB, so none was left out for space. Live on the K30, 1,500 frames of
+the demo pilot, the hero flying:
+
+| Phone preset with | Live |
+|---|---|
+| the world at 70%, as it was | 18.5 fps (the first designs) |
+| the world at 50% | 28.0 and 28.6 fps, median 32 ms |
+| ... and no valley mist | 30.9 fps |
+| ... and no sun glare or lens flare | 32.3 fps, median 28.2 ms |
+| ... and 20,000 triangles a dragon, not 5,000 | 28.3 fps |
+| a 540-line frame with the world at 50% | 38.5 fps, a 600 x 270 world |
+
+The preset is the fourth row: the world at 50% of the 720-line frame,
+the painted clouds without the mist (the Clouds setting's "Painted, no
+mist"), and the glare and flare gone with the bloom. The release check
+ran it for 7,200 frames at **31.9 fps**, median 28.4 ms, 1% low 97.9 ms,
+battery 32.8 to 33.7 C. The margin over the floor is two frames a
+second: the next feature a world shader gains takes it.
+
+The hero at 5,000 triangles is ragged about the head close up. 10,000
+is a clear step better and 20,000 little more; 20,000 costs 4 fps, and
+10,000 was not timed. `--graphics models=2` shows it.
+
+An update did not remove an older version's files, and the roster is
+whatever models are on the device: with the first designs still there
+the phone loaded thirteen dragons and ran at 22 fps. The unpack now
+removes what the new manifest does not list (35 files on the test
+phone).
+
 ## What every mobile target needs
 
 These are shared, and most of the M0 work is here, not in a renderer.

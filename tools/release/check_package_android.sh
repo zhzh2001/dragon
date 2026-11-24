@@ -46,15 +46,18 @@ else
   exit 0
 fi
 
-# The reference frames: the golden tool's own command lines, one a scene.
+# The reference frames: the golden tool's own command lines, one a scene,
+# on the hero. The scenes name the first Embercrest, which the APK does not
+# carry (one design a species); a later --model wins.
+hero="--model assets/embercrest-hero.glb"
 mkdir -p "$out/renders"
-"$python" tools/golden/golden.py commands --exe x | while read -r line; do
+"$python" tools/golden/golden.py commands --exe x --extra "$hero" | while read -r line; do
   name=$(echo "$line" | sed -E 's/.*--screenshot ([a-z-]+)\.bmp.*/\1/')
   args=$(echo "$line" | sed -E 's/^x //')
   # shellcheck disable=SC2086
   tools/android/run.sh --out "$out/renders" -- $args < /dev/null > "$out/renders/$name.txt" 2>&1
 done
-"$python" tools/golden/golden.py capture --out "$out/reference" --extra "--preset phone" > "$out/reference.log" 2>&1
+"$python" tools/golden/golden.py capture --out "$out/reference" --extra "--preset phone $hero" > "$out/reference.log" 2>&1
 if "$python" tools/golden/golden.py compare --set "$out/reference" --loose --renders "$out/renders" --out "$out/golden" > "$out/golden.log" 2>&1; then
   echo "PASS the eight reference frames, loose against the Mac at the phone preset"
 else

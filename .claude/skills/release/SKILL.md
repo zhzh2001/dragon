@@ -81,7 +81,9 @@ tools/release/package_pi.sh VERSION       # when the Pi is
 shasum -a 256 dist/Dragon-VERSION-*
 ```
 
-Each refuses a dirty tree. The Linux packager builds on x99 over ssh, so
+The desktop packages carry both designs of each species. The XP, Android
+and Pi packages carry one: the hero, Rimefang and the five later
+elementals. Each refuses a dirty tree. The Linux packager builds on x99 over ssh, so
 x99 must be up in CachyOS. Do not edit a packager while it runs: the shell
 reads the script as it goes. Commits after this point may change docs and
 the export tools, and nothing a package carries.
@@ -94,16 +96,20 @@ tools/release/check_package.sh linux VERSION       # x99, CachyOS
 tools/release/check_package.sh windows VERSION     # x99-windows
 tools/release/check_package.sh pi VERSION          # rpi
 tools/release/check_package.sh android VERSION     # the phone on adb
+tools/release/check_package.sh xp VERSION          # under Wine, WINE set
 ```
 
-Each unpacks the package and, from it alone, renders the eight reference
+Each first lists the package and fails on a file of a model that does not
+ship (the gold and silver studies). Then it unpacks the package and, from
+it alone, renders the eight reference
 frames, flies a flap, starts a run from the start screen, and runs beside
 a second render. Then look at the frames it leaves in
 `dist/check-VERSION-<platform>/`: a PASS on numbers is not a look.
 
 The Pi and the phone run their own lists and end on the demo pilot's
 frame rate. Under 30 fps either fails (`PI_FPS_FLOOR`,
-`PHONE_FPS_FLOOR`). The 0.4.0 phone package ran at 11.2 fps where
+`PHONE_FPS_FLOOR`): 30 is the user's least playable rate, and the phone
+preset may drop settings to hold it. The 0.4.0 phone package ran at 11.2 fps where
 October's ran at 33.8, and only this check measured it: the desktop
 gates cannot see a cost that only a phone's GPU pays. Build and check
 the small packages before the release is drafted, not after.
