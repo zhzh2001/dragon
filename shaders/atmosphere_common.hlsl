@@ -5,12 +5,15 @@
 //   transmittance   256 x 64   T from a height toward a zenith angle, to space
 //   multiscatter     32 x 32   the infinite-order scattering term, per height
 //                              and sun angle (Hillaire's psi_ms)
-//   frame atlas     256 x 232  per frame: the aerial-perspective froxels (32
+//   frame atlas     256 x 488  per frame: the aerial-perspective froxels (32
 //                              slices of 32 x 32 along the view frustum, an
 //                              8 x 4 grid of tiles, rows 0-127), the
-//                              sky-view map (256 x 96, rows 128-223), and
-//                              the sky light on nine normals (row 224: up,
-//                              then eight horizontal ones a 45 degrees apart)
+//                              sky-view map (256 x 96, rows 128-223), the
+//                              sky light on nine normals (row 224: up,
+//                              then eight horizontal ones a 45 degrees
+//                              apart), and the cloud cover map (256 x 256,
+//                              rows 232-487: scene_common.hlsl,
+//                              cloud_coverage)
 //
 // The world shaders read only the frame atlas (scene_common.hlsl, under
 // ATMOSPHERE): one texture, one slot. The RHI has no 3D textures and no
@@ -39,7 +42,9 @@ struct AtmosphereUniforms {
 
 #define ATMO_TRANSMITTANCE_SIZE float2(256.0, 64.0)
 #define ATMO_MULTISCATTER_SIZE float2(32.0, 32.0)
-#define ATMO_ATLAS_SIZE float2(256.0, 232.0)
+#define ATMO_ATLAS_SIZE float2(256.0, 488.0)
+#define ATMO_COVER_ROW 232.0
+#define ATMO_COVER_SIZE 256.0
 #define ATMO_AMBIENT_ROW 224.0
 #define ATMO_SKY_VIEW_SIZE float2(256.0, 96.0)
 #define ATMO_SKY_VIEW_ROW 128.0

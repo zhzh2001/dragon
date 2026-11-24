@@ -71,6 +71,10 @@ struct AtmosphereSettings {
     float cloud_base_m = 1500.0f;  // ~500 m over the highest peaks (981 m); at 2400 the layer read as far off
     float cloud_thickness_m = 1300.0f;
     float cloud_density = 1.0f;
+    // The cloud cover read from a map in the atlas (scene_common.hlsl,
+    // cloud_coverage) instead of computed at every pixel: 1 on, 0 off, for a
+    // before and after.
+    float cloud_map = 1.0f;
 
     // The valley mist (scene_common.hlsl, valley_mist; GAPS.md G9): its
     // density at the valley floor per metre, at a valley mist of 1 (a run's
@@ -83,8 +87,8 @@ struct AtmosphereSettings {
     // key=value[,key=value...] over these (--atmosphere): on, sky, aerial,
     // far, haze, haze_height, glow, rayleigh, ozone, fog, sky_light, disc,
     // altitude, albedo, ms, clouds, cloud_base, cloud_thickness,
-    // cloud_density, mist, mist_height, mist_patches. Unknown keys are
-    // logged and skipped.
+    // cloud_density, cloud_map, mist, mist_height, mist_patches. Unknown
+    // keys are logged and skipped.
     void parse(const std::string& list);
 };
 
@@ -110,6 +114,8 @@ public:
     // the atmosphere off or unavailable, x is 0 and the shaders fall back to
     // the analytic sky.
     void apply(SceneUniforms& scene, const AtmosphereSettings& settings) const;
+    // The cloud cover map's centre and scale for `scene` (SceneUniforms::cloud_map).
+    core::Vec4 cloud_map_for(const SceneUniforms& scene, const AtmosphereSettings& settings) const;
     // Outside any pass, before the main pass: the tables, as needed, then
     // the frame atlas for `scene` (after apply()).
     void update(Device& device, const SceneUniforms& scene, const AtmosphereSettings& settings);

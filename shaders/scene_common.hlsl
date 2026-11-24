@@ -91,6 +91,10 @@ struct SceneUniforms {
     float4 marks[24];
     float4 mark_looks[24];
     float4 mark_count;
+    // The cloud cover map in the atmosphere's atlas (cloud_coverage): xy
+    // its centre in world x and z, z one over its width in metres (0: no
+    // map, the function itself).
+    float4 cloud_map;
 };
 
 
@@ -291,10 +295,32 @@ float thermal_caps(float2 xz, float field) {
     // and a cap drew as one smooth white lump.
     return saturate(caps * (0.7 + 0.6 * field) * 1.3 - 0.2) * 0.72;
 }
-float cloud_coverage(float2 xz) {
+float cloud_coverage_of(float field, float caps) {
     float cover = scene.clouds.x;
+    return max(saturate((field - (1.0 - cover) * 0.85) / 0.18), caps);
+}
+// The cover map's texel for (x, z), in the atmosphere's atlas: r the field
+// and g the thermals' caps over 32 km about the view (gfx/atmosphere.cpp,
+// apply; atmosphere_frame.hlsl fills it each frame). The threshold is
+// applied after the read, so a cloud's edge stays as sharp as the function
+// draws it at 125 m a texel.
+float2 cloud_map_texel(float2 xz) { return ((xz - scene.cloud_map.xy) * scene.cloud_map.z + 0.5) * ATMO_COVER_SIZE; }
+float cloud_coverage(float2 xz) {
+#ifdef USE_ATMOSPHERE
+    // One read where the map reaches, the function past it. Every lit pixel
+    // of the world asks this once for its cloud shadow and the sky's slab
+    // sixteen times a pixel: on a phone the four octaves and the loop over
+    // the thermals were 20 ms of a 61 ms frame (docs/porting/MOBILE.md).
+    float2 texel = cloud_map_texel(xz);
+    float2 from_edge = min(texel, ATMO_COVER_SIZE - texel);
+    if (scene.cloud_map.z > 0.0 && min(from_edge.x, from_edge.y) > 1.0) {
+        float2 map = atmosphere_atlas.SampleLevel(atmosphere_atlas_sampler,
+                                                  (texel + float2(0.0, ATMO_COVER_ROW)) / ATMO_ATLAS_SIZE, 0.0).rg;
+        return cloud_coverage_of(map.r, map.g);
+    }
+#endif
     float field = cloud_field(xz);
-    return max(saturate((field - (1.0 - cover) * 0.85) / 0.18), thermal_caps(xz, field));
+    return cloud_coverage_of(field, thermal_caps(xz, field));
 }
 // The density at a point in the slab: the coverage, rounded at the base and
 // heaped toward the top, frayed by a finer noise.

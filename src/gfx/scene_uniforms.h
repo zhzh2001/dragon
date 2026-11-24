@@ -88,6 +88,10 @@ struct SceneUniforms {
     core::Vec4 marks[MAX_MARKS];
     core::Vec4 mark_looks[MAX_MARKS];
     core::Vec4 mark_count = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    // The cloud cover map in the atmosphere's atlas (gfx/atmosphere.h;
+    // scene_common.hlsl, cloud_coverage): xy its centre in world x and z,
+    // z one over its width in metres, 0 for no map (the function itself).
+    core::Vec4 cloud_map = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // Per-object transform plus procedural deformation parameters.

@@ -104,6 +104,7 @@ void AtmosphereSettings::parse(const std::string& list) {
                                 {"albedo", &ground_albedo}, {"ms", &multiscatter},
                                 {"clouds", &cloud_coverage}, {"cloud_base", &cloud_base_m},
                                 {"cloud_thickness", &cloud_thickness_m}, {"cloud_density", &cloud_density},
+                                {"cloud_map", &cloud_map},
                                 {"mist", &mist_density},    {"mist_height", &mist_height_m},
                                 {"mist_patches", &mist_patches}};
         bool found = false;
@@ -128,7 +129,7 @@ bool Atmosphere::init(Device* device, PipelineCache* pipelines) {
     rhi::Device& rhi = device->rhi();
     transmittance_ = make_target(rhi, 256, 64, "atmosphere transmittance");
     multiscatter_ = make_target(rhi, 32, 32, "atmosphere multiscatter");
-    atlas_ = make_target(rhi, 256, 232, "atmosphere atlas");
+    atlas_ = make_target(rhi, 256, 488, "atmosphere atlas");
     rhi::SamplerDesc info;
     info.min_filter = rhi::Filter::Linear;
     info.mag_filter = rhi::Filter::Linear;
@@ -185,14 +186,49 @@ AtmosphereUniforms Atmosphere::uniforms_for(const SceneUniforms& scene, const At
     return u;
 }
 
+// Where the cloud cover map sits (shaders/scene_common.hlsl, cloud_coverage):
+// 32 km wide, 125 m a texel. Two things read it. The sky's slab reads about
+// the camera. A lit pixel reads where the sun's ray to it crosses the layer,
+// which at a 19 degree sun is 5.7 km toward the sun. So the centre goes half
+// that way, at most 4 km: both then have 12 km about them, and past the map
+// the shaders compute the function as before.
+// The grid moves with the clouds' drift and snaps to whole texels in that
+// frame, so a texel's field value does not change as the camera moves or
+// the clouds drift: nothing shimmers.
+core::Vec4 Atmosphere::cloud_map_for(const SceneUniforms& scene, const AtmosphereSettings& s) const {
+    if (s.cloud_map < 0.5f || s.cloud_coverage <= 0.0f) return core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
+    const float width = 32000.0f;
+    const float texel = width / 256.0f;
+    const core::Vec3 sun = core::normalize(scene.sun.xyz());
+    core::Vec3 centre = scene.camera_position.xyz();
+    if (sun.y > 0.02f) {
+        const float middle = s.cloud_base_m + core::maxf(s.cloud_thickness_m, 10.0f) * 0.4f;
+        const float reach = core::maxf(middle - scene.camera_position.y, 0.0f) / sun.y;
+        const float horizontal = std::sqrt(sun.x * sun.x + sun.z * sun.z);
+        const float shift = core::minf(0.5f * reach * horizontal, 4000.0f);
+        if (horizontal > 1e-4f) {
+            centre.x += sun.x / horizontal * shift;
+            centre.z += sun.z / horizontal * shift;
+        }
+    }
+    // cloud_drift() in the shader: (9, 3) m/s by the scene's time.
+    const float drift_x = 9.0f * scene.view_params.z;
+    const float drift_z = 3.0f * scene.view_params.z;
+    const float x = std::floor((centre.x + drift_x) / texel + 0.5f) * texel - drift_x;
+    const float z = std::floor((centre.z + drift_z) / texel + 0.5f) * texel - drift_z;
+    return core::Vec4{x, z, 1.0f / width, 0.0f};
+}
+
 void Atmosphere::apply(SceneUniforms& scene, const AtmosphereSettings& s) const {
     if (!available() || !s.enabled) {
         scene.atmosphere = core::Vec4{0.0f, 0.0f, PLANET_RADIUS_KM, 0.0f};
         scene.atmosphere2 = core::Vec4{1.0f, 0.0f, PLANET_RADIUS_KM, 0.0f};
         scene.clouds = core::Vec4{0.0f, s.cloud_base_m, s.cloud_thickness_m, s.cloud_density};
+        scene.cloud_map = core::Vec4{0.0f, 0.0f, 0.0f, 0.0f};
         return;
     }
     scene.clouds = core::Vec4{s.cloud_coverage, s.cloud_base_m, core::maxf(s.cloud_thickness_m, 10.0f), s.cloud_density};
+    scene.cloud_map = cloud_map_for(scene, s);
     const AtmosphereUniforms u = uniforms_for(scene, s);
     scene.atmosphere = core::Vec4{s.sky_scale, u.radii.w, PLANET_RADIUS_KM + u.radii.z, s.valley_fog};
     scene.atmosphere2 = core::Vec4{u.sun_direction.w, s.sky_light, PLANET_RADIUS_KM, s.sun_disc};

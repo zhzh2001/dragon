@@ -1,8 +1,9 @@
 // The atmosphere's per-frame atlas (atmosphere_common.hlsl): the aerial
 // perspective froxels in rows 0-127, the sky-view map in rows 128-223, the
-// sky light on nine normals in row 224. One pass, branching on the row; all
-// three depend on the camera and the sun, so it runs every frame, before the
-// main pass: 57K texels, a few dozen steps each.
+// sky light on nine normals in row 224, the cloud cover map in rows 232-487.
+// One pass, branching on the row; all four depend on the camera, the sun or
+// the time, so it runs every frame, before the main pass: 57K texels of a
+// few dozen steps each, and 65K of the cloud field.
 #define ATMO_TABLE_PASS
 #define ATMO_TERRAIN_SHADOW  // the froxels' sun light, cut by the terrain (atmosphere_common.hlsl)
 #include "scene_common.hlsl"
@@ -15,6 +16,15 @@ TEXTURE2D(multiscatter_lut, 1);
 
 float4 fs_main(AtmoVertex input) : SV_Target {
     float2 pix = input.uv * ATMO_ATLAS_SIZE;  // the pixel centre (AtmoVertex)
+    if (pix.y >= ATMO_COVER_ROW) {
+        // The cloud cover map (scene_common.hlsl, cloud_coverage): the field
+        // and the thermals' caps at this texel's centre, unthresholded.
+        if (scene.cloud_map.z <= 0.0) return (float4)0.0;
+        float2 unit = float2(pix.x, pix.y - ATMO_COVER_ROW) / ATMO_COVER_SIZE;
+        float2 xz = scene.cloud_map.xy + (unit - 0.5) / scene.cloud_map.z;
+        float field = cloud_field(xz);
+        return float4(field, thermal_caps(xz, field), 0.0, 1.0);
+    }
     float3 sun = normalize(scene.sun.xyz);
     float r = atmosphere.radii.x + atmosphere.radii.z;
     float3 origin = float3(0.0, r, 0.0);
