@@ -115,6 +115,15 @@ playtest. Waiting on that playtest. Next, if the keyframes hold up in
 motion: wingbeats for the other three new designs
 (`tools/clips/README.md`).
 
+The twelfth round (2026-11-24, 13:30). The playtest of round eleven
+came back: "seems better now". Deepwake's and Squallfin's clips play at
+half weight, gold and silver have keyframed wingbeats of their own, and
+the start screen over a game holds particles, sound and the rigs
+(`docs/showcase/PLAYTEST.md`, "The twelfth round"). The README has
+pictures and clips, and 0.4.0 packages were built and checked for a
+public release (`docs/RELEASE.md`). The export and the release wait on
+the user's word.
+
 Later the same night (23:50) the playtester's second round was answered:
 the hero's fore legs trail (feedback 0016), F2 is a free camera, a valley
 has four herds and a run fields all six kinds, and frost, blight, tide

@@ -975,3 +975,78 @@ Not started, because each is a job and not a leftover: keyframed
 wingbeats for Shardmane, Geodeback and Ambersting, the crease at the
 hero's wrist under its clip, a stream of water that reads as water.
 `tools/clips/README.md` says how to add a wingbeat.
+
+## The twelfth round: the half mix, a held world, gold and silver's wingbeat, a README with pictures (2026-11-24, 13:30)
+
+The user, after playing round eleven: "a 0.5 mix for wingbeat seems to
+be good balance for deepwake and squallfin. the gold/silver wingbeat
+still unnatural, feel free to use codex. paused screen still plays
+sound and some animations. seems better now, consider packaging for
+public repo, with demo clips (gif or video) or images to put in
+README."
+
+| Report | Model | Note | Answer |
+|---|---|---|---|
+| 0038 | gold, studio flap | "paused here unnaturally" (the wing at the top) | A keyframed wingbeat with a check that no joint holds (`docs/ANIMATION.md`, the last section) |
+| 0039 | storm3, studio flap | "wingbeat too conservative now, need wider range" | The clip at half weight by default (`docs/ANIMATION.md`, "Half the clip over half the old beat") |
+| 0040 | tide2, studio flap | "this too" | The same |
+| 0041 | storm3 in the arena, the start screen open | "fire growing in paused menu" | Particles, sound and the rigs hold with the world (`docs/DIRECTION.md`, "A held world still moved and sounded") |
+
+What changed, in the order it can be seen:
+
+- Deepwake's and Squallfin's wings reach about halfway back down to
+  where the procedural beat put them, and the ribs keep the clearance:
+  1.29 m and 0.99 m from the centre plane, against 0.18 m and 0.27 m
+  before any clip.
+- Gold's and silver's wings cross the body's line: 2.2 m and 2.5 m
+  below the belly at the bottom of the cruise beat, where both stayed
+  above it. The tip lags the arm, and nothing holds at the top.
+- The start screen over a game is still and silent. A frozen fight
+  differed in 53,151 pixels over 400 frames, with the breath grown
+  into a ball. It now differs only by the speckle of 0.4 ms of flight.
+- The README opens with the hero, four clips and the six dragons
+  (`docs/media/`, `docs/RELEASE.md`, "The README's pictures and
+  clips").
+
+### Packaging, and what it turned up
+
+The first 0.4.0 packages were built to try the public release. Four
+faults came out of them, none from this round's play:
+
+| Fault | Since | Fix |
+|---|---|---|
+| The shader bake stopped: `rock` and `breath_stream` do not compile for a retro variant | The rock kit and the liquid stream, after 0.3.0 | Both are baked for the modern tier alone, with the other breath shaders |
+| No package carried the six second designs, which the modern tier shows by default | The designs, 2026-11-22 | The macOS, Windows and Linux packagers ship them at 2048² |
+| The Windows and Linux packages had no rock kit and no landmarks | The kits, after 0.3.0 | Both packagers copy the two directories |
+| The packaged macOS build hung, spinning, in 6 of 8 headless runs beside a second render. 0.3.0's did too | The GPU frame timer, before 0.3.0 | `docs/RELEASE.md`, "A hang beside another render" |
+
+### What was checked and what was not
+
+Checked: the 28 suites and the eight goldens after each engine change.
+The pause by frozen frames, as above. The half mix and both new clips
+by probe and by eight-frame sheets from the reports' camera. The
+macOS, Windows and Linux packages as `docs/RELEASE.md` records.
+
+Not checked: any of it in motion or by ear. A headless run has no
+sound, so the silence of a held world is read from the mixer's code.
+The emitters that spawn by the frame are still frame-rate dependent
+in play. The menu click fix of round eleven is still unclicked.
+
+### What to playtest
+
+1. Esc in an arena fight while a breath is in the air: nothing grows,
+   nothing sounds, the dragons hold still. Resume: the sound comes
+   back and the fight goes on from the same frame.
+2. Deepwake and Squallfin, the studio's flap and then in play: the
+   wingbeat at its new default. "keyframed wingbeat" at the top of the
+   Playtest panel now starts at 0.50 on these two.
+3. Gold and silver (M in practice), the studio's flap from report
+   0038's side: the wing crosses below the body, the tip trails the
+   arm, nothing pauses at the top. If it is too much, find the mix on
+   the same slider and say the number.
+4. The README: open `README.md` in a Markdown preview, or on GitHub
+   after a push. Whether the four clips are the right four.
+5. Still open from round eleven: the hero's body loops ("keyframed
+   body"), Squallfin's inner wing through a beat, the tide and blight
+   breath without a stream.
+

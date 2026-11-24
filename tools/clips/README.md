@@ -11,7 +11,8 @@ The engine reads keys as deltas from the rest pose
 | `embercrest.brake_bank.glb` | The first trial, 2026-11-04: a small overlay on the air brake. It did not read | `make_brake_bank.py` | `check_clip.py` | Below |
 | `embercrest-hero.attacks.glb` | The hero's bite, claw and tail strikes | `make_hero_attacks.py` | `check_hero_attacks.py` | `hero-attacks.md` |
 | `embercrest-hero.flight.glb` | The hero's wingbeat: `flap`, `flap_climb` | `make_hero_flight.py` | `check_hero_flight.py` | `hero-flight.md` |
-| `tide2.flight.glb`, `storm3.flight.glb` | Wingbeats for two more dragons | `make_wingbeat.py <model>`, poses in `wingbeat/<model>.json` | `check_wingbeat.py <model>` | `wingbeat.md` |
+| `tide2.flight.glb`, `storm3.flight.glb` | Wingbeats for two more dragons, played at half weight (`flap_clip 0.5` in each profile) | `make_wingbeat.py <model>`, poses in `wingbeat/<model>.json` | `check_wingbeat.py <model>` | `wingbeat.md` |
+| `gold-dragon.flight.glb`, `silver-dragon.flight.glb` | Wingbeats for the two local studies. Not in the public mirror or the packages | the same two tools | the same, with a no-hold check | `artifacts/gold-dragon-integration/wingbeat/README.md`, and silver's |
 | `embercrest-hero.body.glb` | The hero's neck, tail and legs: `flap_body`, `flap_climb_body`, `glide`, `walk`, `stand` | `make_hero_body.py` | `check_hero_body.py` | `hero-body.md` |
 
 The `*-brief.md` files are the briefs the Codex jobs were given. The

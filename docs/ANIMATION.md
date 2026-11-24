@@ -1773,3 +1773,59 @@ What is not right, from Codex's record and the renders:
   did not cause it and cannot fix it.
 - Not judged in motion. Loops on a clock repeat: whether 8 and 10
   seconds read as a habit is for the playtester.
+
+## Keyframed wingbeats for the gold and silver studies (2026-11-24)
+
+The playtester: "the gold/silver wingbeat still unnatural", and report
+0038 on gold in the studio's flap, the mark on the wing at the top of
+its stroke: "paused here unnaturally". Rendered from the report's
+camera, both procedural beats had the same three faults. The whole
+stroke was above the body's line. The wing moved as one stiff board,
+with no lag from arm to tip. And gold's held at the top for several
+frames before it dropped.
+
+The brief (`tools/clips/wingbeat-gold-silver-brief.md`) took the lesson
+of tide2 and storm3: its limits are loose walls, and one of them is a
+floor. A wing that never drops below the belly fails it. It also asked
+for a tenth check, that no joint stays slow for long, which is the
+pause as a number.
+
+Codex (gpt-6.2-astra, high, 249,039 tokens, about 51 minutes) added
+both models to `make_wingbeat.py` and `check_wingbeat.py`, with the
+no-hold check and a damaged export that it rejects. The rebuilt tide2
+and storm3 clips matched their committed keys.
+
+| | gold procedural | gold clip | silver procedural | silver clip |
+|---|---|---|---|---|
+| Wing's lowest skin from the belly, cruise | 0.57 m above | 2.22 m below | 1.02 m above | 2.51 m below |
+| The same in a climb | 0.43 m above | 2.77 m below | 0.63 m above | 2.83 m below |
+| Nearest rib to the centre plane, cruise | 0.87 m | 0.68 m | 1.17 m | 0.86 m |
+| Under the belly, nearest the centre | none there | 4.56 m | none there | 5.35 m |
+| Arm against the glide, top and bottom | | +45, -30 degrees | | +41, -33 |
+| Span at the peak fold | | 0.78 of widest | | 0.81 |
+| Longest run of slow keys on a joint (the limit is 4.8) | | 3 of 60 | | 4 of 60 |
+
+On silver, at mid downstroke the arm is level while the outer blade
+still points 61 degrees up: the wave the brief asked for. The wrist
+lags the shoulder by five keys of sixty and the tip by eight more.
+
+My own sheets, eight frames of a beat from the report's camera, the
+procedural beat above and the clip below, on the merged build:
+`main-session-report-view-before-over-after.jpg` in
+`artifacts/gold-dragon-integration/wingbeat/` and
+`artifacts/silver-dragon-integration/wingbeat/`. Codex's sheets and
+records are beside them. Both directories, the two clips and the two
+measurement files stay out of the public mirror and out of the
+packages (`ATTRIBUTION.md`, "Profiles of the undistributed studies").
+
+What is weaker:
+
+- At the bottom of gold's stroke the near sail drapes over the flank
+  from the report's camera, and hides the hind leg.
+- Silver's inner panel keeps a dark triangular fold, and a fine line of
+  background shows along the leading spar. Both were there under the
+  procedural beat.
+- Not judged in motion. If the full clip is too much, the Playtest
+  panel's "keyframed wingbeat" mixes it with the old beat, as it did
+  for tide2 and storm3.
+
