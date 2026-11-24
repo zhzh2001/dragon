@@ -3571,7 +3571,10 @@ void App::update(float dt) {
     // attacks farther apart but every actual swing still runs at full speed.
     if (!options_.bind_pose) {
         CORE_PROFILE("update: player rig");
-        dragon_rig_.update(dragon_state(), dt * (studio_active_ ? studio_time_scale_ : 1.0f));
+        // Not while the world is held: the rig's chains settle a little
+        // every call whatever the step, and a held dragon's tail and wing
+        // tips crept (2026-11-24).
+        if (!world_held_) dragon_rig_.update(dragon_state(), dt * (studio_active_ ? studio_time_scale_ : 1.0f));
     }
     // Re-place the first-person eye on THIS frame's head. The camera ran
     // before the rig, so it was holding last frame's head while the mesh
@@ -3594,7 +3597,7 @@ void App::update(float dt) {
         ghost_state.wing_tuck = ghost_sample.wing_tuck;
         ghost_state.angular_velocity = ghost_sample.angular_velocity;
         ghost_state.ground_clearance = 1000.0f;  // never extends its legs
-        ghost_rig_.update(ghost_state, dt);
+        if (!world_held_) ghost_rig_.update(ghost_state, dt);
     }
 
     push_telemetry(flight_.state());
@@ -9179,7 +9182,7 @@ void App::update_bots(float dt) {
                 if (!world_.skinned_in_view(model_at(bot->model).mesh, placed)) far = 0.1f;
             }
             if (bot->rig_dt >= far) {
-                bot->rig.update(bot->flight.state(), bot->rig_dt);
+                if (!world_held_) bot->rig.update(bot->flight.state(), bot->rig_dt);
                 bot->rig_dt = 0.0f;
             }
         }
@@ -12724,6 +12727,14 @@ void App::run() {
         // After the history, so the fps readout stays the real frame's.
         raw_dt_ = dt;
         dt = feedback_dt(dt);
+        // A held world (the start screen over a game, the feedback tool,
+        // DRAGON_FREEZE_AT) steps by a millionth of a second. What is
+        // counted by the frame and not by the second does not hold with it:
+        // nothing is born and nothing sounds until it moves again.
+        const bool held = dt <= 2e-6f;
+        world_held_ = held;
+        particles_.set_held(held);
+        audio_.set_held(held);
 
         mark = SDL_GetTicksNS();
         pump_events();

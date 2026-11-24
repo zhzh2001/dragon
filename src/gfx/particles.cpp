@@ -105,6 +105,7 @@ void ParticleSystem::shutdown() {
 }
 
 void ParticleSystem::spawn(const Particle& source) {
+    if (held_) return;
     Particle particle = source;
     if (density_ < 1.0f) {
         density_owed_ += density_;

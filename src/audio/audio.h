@@ -51,6 +51,11 @@ public:
     void set_flame_style(int style) { flame_style_.store(style, std::memory_order_relaxed); }
     void set_master(float volume) { master_.store(volume, std::memory_order_relaxed); }
     float master() const { return master_.load(std::memory_order_relaxed); }
+    // The world is held (the start screen over a game, the feedback tool):
+    // everything fades out in a few milliseconds and a new clip is not
+    // started. Until 2026-11-24 the wind and the breath kept sounding at
+    // the level of the frame the game was held on.
+    void set_held(bool held) { held_.store(held, std::memory_order_relaxed); }
 
     // `rate` is playback speed: 1 is as synthesized, lower is deeper and
     // slower. Cheap per-voice pitch, which is what makes one screech clip serve
@@ -85,6 +90,8 @@ private:
     float slosh_phase_ = 0.0f;
     float flame_hp_[2] = {0.0f, 0.0f};
     std::atomic<float> master_{0.6f};
+    std::atomic<bool> held_{false};
+    float held_gain_ = 1.0f;  // mixer thread: 1 playing, 0 held, ramped
 
     // Mixer-thread state (only touched inside mix()). Wind and flame carry a
     // filter per channel with independent noise, which is what makes the sound

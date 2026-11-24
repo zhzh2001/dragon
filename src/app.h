@@ -1392,6 +1392,7 @@ private:
     gfx::Lighting lighting_;
     gfx::TerrainMaterial material_;
     float time_seconds_ = 0.0f;
+    bool world_held_ = false;  // this frame's step is the held one (feedback_dt, DRAGON_FREEZE_AT)
 
     bool running_ = false;
     bool mouse_look_ = false;

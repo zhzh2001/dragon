@@ -71,6 +71,12 @@ public:
     // drawn at random, so a seed builds the same effects everywhere -- each
     // a little larger so a plume still reads as one.
     void set_density(float density) { density_ = density; }
+    // While the world is held (the start screen over a game, the feedback
+    // tool, DRAGON_FREEZE_AT) nothing is born. Several emitters spawn by
+    // the frame and not by the second, and with the step near nothing
+    // their particles piled up where they were born: a breath grew into a
+    // ball over the paused dragon (2026-11-24).
+    void set_held(bool held) { held_ = held; }
     void update(float dt);
     void clear() { count_ = 0; }
     int alive() const { return count_; }
@@ -108,6 +114,7 @@ private:
     std::vector<Particle> pool_;
     int count_ = 0;
     float density_ = 1.0f;
+    bool held_ = false;
     float density_owed_ = 0.0f;
 
     std::vector<Vertex> vertices_;

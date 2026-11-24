@@ -494,7 +494,7 @@ void Audio::shutdown() {
 }
 
 void Audio::play(Clip clip, float gain, float rate) {
-    if (!ready_ || gain < 0.01f) return;
+    if (!ready_ || gain < 0.01f || held_.load(std::memory_order_relaxed)) return;
     const std::vector<float>& samples = clips_[int(clip)];
     if (samples.empty()) return;
     // First inactive voice wins; a fight loud enough to exhaust twelve voices
@@ -515,6 +515,8 @@ void Audio::mix(float* out, uint32_t frames) {
     const float wind_target = wind_target_.load(std::memory_order_relaxed);
     const float flame_target = flame_target_.load(std::memory_order_relaxed);
     const int style = flame_style_.load(std::memory_order_relaxed);
+    const float held_target = held_.load(std::memory_order_relaxed) ? 0.0f : 1.0f;
+    float held_gain = held_gain_;
     // The playing voices, read once a buffer: an acquire per voice per
     // sample was a memory barrier each on the Pi 1B's ARMv6, 1.2 million a
     // second. A voice started now waits for the next buffer (10 ms).
@@ -675,9 +677,13 @@ void Audio::mix(float* out, uint32_t frames) {
             amb[1] = ambience_from_[1] + (ambience_to_[1] - ambience_from_[1]) * t;
             ambience_count_ = (ambience_count_ + 1) % kAmbienceStep;
         }
-        out[i * 2 + 0] = soft_clip((amb[0] + voices) * master);
-        out[i * 2 + 1] = soft_clip((amb[1] + voices) * master);
+        // A held world is silent: a ramp of about ten milliseconds, so the
+        // cut does not click.
+        held_gain += (held_target - held_gain) * 0.004f;
+        out[i * 2 + 0] = soft_clip((amb[0] + voices) * master * held_gain);
+        out[i * 2 + 1] = soft_clip((amb[1] + voices) * master * held_gain);
     }
+    held_gain_ = held_gain;
     wind_level_ = wind_level;
     flame_level_ = flame_level;
     gust_phase_ = gust_phase;
