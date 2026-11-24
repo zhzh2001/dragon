@@ -162,6 +162,59 @@ release tag points at the public mirror's `main`, not this repository.
 simply loads the rest. The two Sketchfab dragons are not shipped
 (`ATTRIBUTION.md`).
 
+## A hang beside another render (2026-11-24)
+
+The packaged macOS build, checked harder than the packager's one frame,
+stopped for ever in 6 of 8 headless runs when a second process was
+rendering on the same GPU. It spun at full CPU inside
+`SDL_WaitForGPUIdle`. The 0.3.0 package did the same in 4 of 6. Alone,
+neither hung in 8 runs, which is why no package check had seen it.
+
+The cause was two threads waiting inside SDL's GPU API at once. The
+frame timer (`SdlGpuDevice::run_gpu_timer`) waits on each frame's fence
+on a thread of its own. The main thread called `SDL_WaitForGPUIdle`
+meanwhile: every frame of a headless run, and in a window at every
+resize, restart and change of resolution. On Metal the idle wait then
+looped on a command buffer the fence wait had already recycled.
+
+`wait_idle` now drains the timer first (`drain_gpu_timer`): it blocks
+until the timer thread holds no fence and has none queued, and only
+then calls SDL. The two other main-thread fence waits do the same.
+After it, the macOS package ran 12 of 12 beside a second render, and
+the Linux package 8 of 8 on x99's 5060 Ti.
+
+The development build never showed it in thousands of runs. It links
+Homebrew's SDL 3.4.20 where a package builds 3.4.16, and it is not
+known which of the two differences, the version or the optimised
+build, hides the race. A package check is now more than one frame:
+run it beside another render.
+
+## The 0.4.0 packages (2026-11-24)
+
+Built for the first public update since 0.3.0. What changed in the
+packagers is in `docs/showcase/PLAYTEST.md`, "Packaging, and what it
+turned up".
+
+| Package | Size | Checked on | How |
+|---|---|---|---|
+| `Dragon-0.4.0-macos.zip` | CHECK | the M5 Mac, Metal | CHECK |
+| `Dragon-0.4.0-windows.zip` | CHECK | x99, Windows 10, the RTX 5060 Ti | CHECK |
+| `Dragon-0.4.0-linux.tar.gz` | CHECK | x99, CachyOS, the RTX 5060 Ti | CHECK |
+
+The sizes are about 330 MB over 0.3.0's: six more dragons at 20 MB
+each, and the rock kit and landmarks at 240 MB. The XP, Android and Pi
+packages were not rebuilt: the retro tiers' content did not change.
+
+The reference frames on Windows and Linux are compared against the
+Metal set with `--loose`. The `d3d12` and `vulkan` sets in
+`tests/golden/` date from 2026-11-02 and no longer match the picture.
+Recapture them on x99 when the picture settles.
+
+A trial export of `main` fast-forwards from the published mirror
+(`59978b5`). It adds 1.8 GB to the mirror's 1.1 GB: 1.29 GB of
+`artifacts/`, 263 MB of `assets/` (the rock kit, the landmarks), and
+236 MB of reference frames. One push must stay under GitHub's 2 GB.
+
 ## The README's pictures and clips
 
 `tools/release/make_demo_clips.sh` renders `docs/media/`: the hero still,
