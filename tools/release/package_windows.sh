@@ -58,6 +58,9 @@ cp -R assets/textures assets/fonts assets/species assets/clips "$stage/assets/"
 rm -f "$stage/assets/clips/"gold-dragon.* "$stage/assets/clips/"silver-dragon.* "$stage/assets/clips/"embercrest-hero-v4.*
 mkdir -p "$stage/assets/props"
 cp assets/props/*.glb "$stage/assets/props/"
+# The rock kit and the landmarks, the modern tier's: the packages up to
+# 0.3.0 predate both, and 0.4.0's first build left them out.
+cp -R assets/props/rockkit assets/props/landmarks "$stage/assets/props/"
 staged_models=""
 for s in $species $designs; do
   python3 tools/release/shrink_glb.py "assets/$s.glb" "$stage/assets/$s.glb" --max 2048
