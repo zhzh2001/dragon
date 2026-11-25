@@ -49,6 +49,12 @@ done
 # (tools/release/package_xp.sh has the same need). A shader shared with the
 # XP build that fxc refuses otherwise shows at the XP packager.
 if [ -n "${WINE:-}" ]; then
+  # macOS strips DYLD_* from the environment of a protected binary such as
+  # this script's shell, so the Wine library path is found from WINE itself
+  # (the Sikarugir layout), as package_xp.sh does.
+  if [ -d "$(dirname "$WINE")/../../../Frameworks" ]; then
+    export DYLD_FALLBACK_LIBRARY_PATH=$(cd "$(dirname "$WINE")/../../../Frameworks" && pwd)
+  fi
   for tier in sm3 sm2 ff; do
     step "the D3D9 bake, tier $tier" "$python" tools/d3d9/bake_d3d9.py "$scratch/d3d9" --tier $tier
   done
