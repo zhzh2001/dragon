@@ -60,7 +60,7 @@ local.
 | R7 (presets) | Seven presets, Ultra to Lowest; the Graphics panel; `tools/bench/presets.py` | Particle caps and fewer bots at the low presets; 30 fps on the SM3 floor card |
 | R8 (98 SE) | Not started | -- |
 | D3D11 | Done at feature levels 11, 10 and 9 (`porting/D3D11.md`) | The HD 5450 and Bay Trail boards; the shaders in the package |
-| **M0-M5 (mobile)** | Planned 2026-10-13; the Pi 1B and the K30 5G benched 2026-10-15 (`porting/MOBILE.md`, "Measured first") | Everything: start with M0, Android on the OnePlus Ace 3V |
+| **M0-M5 (mobile)** | The K30 5G runs the modern tier at a phone preset (M1) and the Pi 1B the ff tier (M4, M5), both from 2026-10-15. 0.4.0's APK is released at 32 fps on the K30 (`porting/MOBILE.md`, "The phone preset at 30 fps") | M0 on the OnePlus Ace 3V, M2 on the VisionFive 2; the Pi package with the hero unchecked; the phone's margin over 30 fps is two frames |
 
 **Loose ends a new session should know:**
 

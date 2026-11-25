@@ -4,7 +4,28 @@ What is built, in the order it was built. The plan these came from is
 `ROADMAP.md`; where the project goes next is `DIRECTION.md` and `FIDELITY.md`,
 and the ports are `PORTING.md` (an index into `docs/porting/`).
 
-## Latest — 2026-11-15: the showcase track
+## Latest — 2026-11-24: 0.4.0 released
+
+The first public update since 0.3.0: the start screen, the six new
+designs, the wilds, the keyframed animation and the breaths, in packages
+for macOS, Windows, Linux and Android (`RELEASE.md`, from "The 0.4.0
+packages" on). What the release settled:
+
+- A release is now a procedure with gates: `.claude/skills/release/`,
+  `tools/release/preflight.sh` and `tools/release/check_package.sh`.
+- The phone had fallen from 34 to 11 fps unmeasured. The cloud cover is
+  read from a map, the terrain's light path is lighter, and the phone
+  preset holds 32 fps at half the world's resolution
+  (`porting/MOBILE.md`, "The phone's frame, taken apart" and "The phone
+  preset at 30 fps"). The user's floor is 30.
+- Every package flies the new designs. A retro tier and a small package
+  load one design a species.
+
+Open after it: the XP package on real cards (`porting/CARDS.md`, "Which
+cards to run 0.4.0 on"), the Pi package with the hero, which the Pi was
+not up to check, and the phone's margin of two frames a second.
+
+## 2026-11-15: the showcase track
 
 Since 2026-11-14 the work is the modern tier's picture: a hero dragon, its
 animation and effects, then the world. Its state, what waits on the
